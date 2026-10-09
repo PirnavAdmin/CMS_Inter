@@ -116,7 +116,7 @@ export default function DriverHomePage({
           icon={RouteIcon}
           title="Today's Route"
           value={dashboardData?.routeInfo?.name || driverProfile.assignedRoute || "Not assigned"}
-          subtitle={dashboardData?.routeInfo?.details || "Code: ROUTE-01 • 24.5 km"}
+          subtitle={dashboardData?.route?.routeCode || dashboardData?.routeInfo?.details || "Route details not available"}
           tone="primary"
           onClick={() => onNavigateTab("route")}
         />
@@ -148,7 +148,7 @@ export default function DriverHomePage({
           icon={Sun}
           title="Morning Trip"
           value={dashboardData?.morningTrip?.status || morningTripStatus}
-          subtitle={dashboardData?.morningTrip?.time || "07:00 AM – 08:30 AM"}
+          subtitle={dashboardData?.morningTrip?.time || dashboardData?.assignment?.morningTripTime || "Trip time not available"}
           tone={(dashboardData?.morningTrip?.status || morningTripStatus) === "In Progress" ? "warning" : "success"}
           badge={(dashboardData?.morningTrip?.status || morningTripStatus) === "In Progress" ? "Live" : undefined}
           onClick={() => onNavigateTab("trips")}
@@ -157,7 +157,7 @@ export default function DriverHomePage({
           icon={Moon}
           title="Evening Trip"
           value={dashboardData?.eveningTrip?.status || eveningTripStatus}
-          subtitle={dashboardData?.eveningTrip?.time || "04:00 PM – 05:30 PM"}
+          subtitle={dashboardData?.eveningTrip?.time || dashboardData?.assignment?.eveningTripTime || "Trip time not available"}
           tone="purple"
           onClick={() => onNavigateTab("trips")}
         />
@@ -165,7 +165,7 @@ export default function DriverHomePage({
           icon={Navigation}
           title="GPS Status"
           value={dashboardData?.gpsStatus?.status || "Not available"}
-          subtitle={dashboardData?.gpsStatus?.signal || "Signal: 99.8% • 12 Sats"}
+          subtitle={dashboardData?.gpsStatus?.signal || "Signal data not available"}
           tone="success"
           badge={dashboardData?.gpsStatus?.status === "Online" ? "Live" : undefined}
           onClick={() => onNavigateTab("gps")}

@@ -1,3 +1,4 @@
+import { summarizeStudentAttendance } from "./dashboardStudentAttendance.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -545,66 +546,11 @@ export default function DashboardPage() {
       const res = await apiClient.get("/api/v1/attendance/admin/students", { params });
 
       if (studentAttSeq.current === seq) {
-        const payload = res.data?.data || res.data || [];
-        const rows = Array.isArray(payload) ? payload : [];
-
-        const STUDENT_LABEL = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
-        const studentStatus = (v) => STUDENT_LABEL[v] ?? (v === "Half-Day" ? "Half Day" : v) ?? "—";
-        const getVal = (o, ...keys) => keys.map((k) => o?.[k]).find((v) => v !== undefined && v !== null);
-        const studentSessionStatus = (row, session) => studentStatus(getVal(row, `${session}Status`, `${session}AttendanceStatus`, `${session}SessionStatus`, session, `${session}Attendance`));
-
-        const processedRows = rows.map(r => {
-          const m = studentSessionStatus(r, "morning");
-          const a = studentSessionStatus(r, "afternoon");
-          let finalStatus = "—";
-          if (m === "Present" && a === "Present") finalStatus = "Present";
-          else if (m === "Half Day" || a === "Half Day") finalStatus = "Half Day";
-          else if ((m === "Present" && a === "Absent") || (a === "Present" && m === "Absent")) finalStatus = "Half Day";
-          else if (m === "Present" || a === "Present") finalStatus = "Present";
-          else if (m === "Absent" || a === "Absent") finalStatus = "Absent";
-          else if (m === "Holiday" || a === "Holiday") finalStatus = "Holiday";
-          return { ...r, finalStatus };
-        }).filter(r => r.finalStatus !== "—" && r.finalStatus !== "Holiday");
-
-        const presentCount = processedRows.filter(r => r.finalStatus === "Present").length;
-        const absentCount = processedRows.filter(r => r.finalStatus === "Absent").length;
-        const halfDayCount = processedRows.filter(r => r.finalStatus === "Half Day").length;
-        const totalCount = processedRows.length;
-        const percentage = totalCount ? Math.round(((presentCount + 0.5 * halfDayCount) * 100) / totalCount) : 0;
-
-        let breakdownList = [];
-        if (viewByVal !== "Overall") {
-          const groupMap = {};
-          processedRows.forEach(r => {
-            let key = "Unknown";
-            if (viewByVal === "Academic Level") key = getVal(r, "levelName", "academicLevelName") || "Unknown";
-            if (viewByVal === "Group") key = getVal(r, "groupName") || "Unknown";
-            if (viewByVal === "Section") key = getVal(r, "sectionName") || "Unknown";
-            
-            if (!groupMap[key]) groupMap[key] = { name: key, total: 0, present: 0, absent: 0, halfDay: 0 };
-            groupMap[key].total++;
-            if (r.finalStatus === "Present") groupMap[key].present++;
-            if (r.finalStatus === "Absent") groupMap[key].absent++;
-            if (r.finalStatus === "Half Day") groupMap[key].halfDay++;
-          });
-          
-          breakdownList = Object.values(groupMap).map(g => ({
-            ...g,
-            percentage: g.total ? Math.round(((g.present + 0.5 * g.halfDay) * 100) / g.total) : 0
-          }));
-        }
-
+        const attendance = summarizeStudentAttendance(res.data, viewByVal);
         setStudentAttState({
           loading: false,
           error: null,
-          data: {
-            total: totalCount,
-            present: presentCount,
-            absent: absentCount,
-            halfDay: halfDayCount,
-            percentage: percentage,
-            breakdownList: breakdownList
-          },
+          data: attendance,
           timestamp: "Today"
         });
       }
@@ -1107,7 +1053,7 @@ export default function DashboardPage() {
       { name: "Half-day", value: halfDay, color: "#f59e0b" },
     ];
 
-    const breakdownList = data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
+    const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
     return { total, present, absent, halfDay, late: halfDay, percentage, chartData, breakdownList };
   }, [studentAttState.data]);

@@ -1,3 +1,4 @@
+import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import React from "react";
 import { Calendar } from "lucide-react";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
@@ -76,7 +77,7 @@ export default function FacultySidebar() {
   return (
     <aside className={`cms-sidebar ${sidebarOpen ? "open is-open" : ""}`}>
       <div className="cms-brand">
-        <img className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
+        <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges"  />
       </div>
 
       <nav className="cms-nav">

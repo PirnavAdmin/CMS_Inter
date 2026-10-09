@@ -1,3 +1,4 @@
+import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import React from "react";
 import {
   LayoutDashboard,
@@ -12,6 +13,9 @@ import {
   Bus,
   CalendarCheck,
   FileText,
+  Wallet,
+  CalendarDays,
+  Settings,
 } from "lucide-react";
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
 import { getDriverIdentity } from "../data/driverIdentity.js";
@@ -25,6 +29,9 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
     { id: "trips", label: "Trips", icon: Bus },
     { id: "attendance", label: "Attendance", icon: CalendarCheck },
     { id: "leave", label: "Leave Management", icon: FileText },
+    { id: "payslips", label: "My Payslips", icon: Wallet },
+    { id: "holidays", label: "Holidays", icon: CalendarDays },
+    { id: "settings", label: "Settings", icon: Settings },
     { id: "students", label: "Students", icon: Users },
     { id: "gps", label: "GPS Tracking", icon: Navigation },
     { id: "reports", label: "Reports", icon: FileBarChart2 },
@@ -35,7 +42,7 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
     <aside className={`dp-sidebar ${open ? "is-open" : ""}`}>
       <div className="dp-sidebar-brand">
         <div className="dp-brand-logo-wrap">
-          <img src={pirnavLogo} alt="Pirnav College" className="dp-brand-logo" />
+          <CampusBrandImage src={pirnavLogo} alt="Pirnav College" className="dp-brand-logo"  />
         </div>
         <button type="button" className="dp-sidebar-close-btn" onClick={onClose} aria-label="Close sidebar">
           <X size={18} />

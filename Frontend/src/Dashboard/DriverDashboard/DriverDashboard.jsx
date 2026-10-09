@@ -10,6 +10,9 @@ import DriverReportsPage from "./pages/DriverReportsPage.jsx";
 import DriverProfilePage from "./pages/DriverProfilePage.jsx";
 import DriverAttendancePage from "./pages/DriverAttendancePage.jsx";
 import DriverLeavePage from "./pages/DriverLeavePage.jsx";
+import DriverPayslipsPage from "./pages/DriverPayslipsPage.jsx";
+import DriverHolidaysPage from "./pages/DriverHolidaysPage.jsx";
+import DriverSettingsPage from "./pages/DriverSettingsPage.jsx";
 import { DriverDataProvider } from "./DriverDataContext.jsx";
 import "./DriverDashboard.css";
 import { clearAuthSession, getAuthUser } from "../../features/authStorage.js";
@@ -29,6 +32,9 @@ export default function DriverDashboard() {
     if (path.includes("/profile")) return "profile";
     if (path.includes("/attendance")) return "attendance";
     if (path.includes("/leave")) return "leave";
+    if (path.includes("/payslip")) return "payslips";
+    if (path.includes("/holiday")) return "holidays";
+    if (path.includes("/settings")) return "settings";
     return "home";
   };
 
@@ -152,6 +158,9 @@ export default function DriverDashboard() {
       {activeTab === "profile" && <DriverProfilePage />}
       {activeTab === "attendance" && <DriverAttendancePage />}
       {activeTab === "leave" && <DriverLeavePage />}
+      {activeTab === "payslips" && <DriverPayslipsPage />}
+      {activeTab === "holidays" && <DriverHolidaysPage />}
+      {activeTab === "settings" && <DriverSettingsPage />}
     </DriverLayout>
     </DriverDataProvider>
   );

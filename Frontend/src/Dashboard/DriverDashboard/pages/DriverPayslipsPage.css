@@ -1,0 +1,37 @@
+.dp-payslips { display: flex; flex-direction: column; gap: 24px; }
+.dp-payslips > .dp-page-header { padding-bottom: 20px; border-bottom: 2px solid var(--dp-primary); }
+.dp-payslip-years, .dp-payslip-period { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--dp-primary-soft); border-radius: 30px; color: var(--dp-primary-dark); font-size: 12px; font-weight: 700; }
+.dp-payslip-years select { border: 1px solid var(--dp-border); background: var(--dp-surface); color: var(--dp-text); border-radius: 6px; padding: 4px; }
+.dp-payslip-card { padding: 28px; border: 1px solid var(--dp-border); border-radius: 18px; background: var(--dp-surface); box-shadow: var(--dp-shadow); }
+.dp-payslip-card h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; margin: 0 0 20px; }
+.dp-payslip-card h2 svg { color: var(--dp-primary); }
+.dp-payslip-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.dp-payslip-card-head h2 { margin: 0; }
+.dp-payslip-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.dp-payslip-metrics > div { padding: 22px; border: 1px solid var(--dp-border); border-radius: 14px; display: flex; flex-direction: column; gap: 14px; }
+.dp-payslip-metrics span, .dp-payslip-muted { color: var(--dp-muted); font-size: 13px; }
+.dp-payslip-metrics strong { font-size: 27px; }
+.dp-payslips .gross { color: var(--dp-blue); }
+.dp-payslips .deductions, .dp-payslip-error { color: var(--dp-danger); }
+.dp-payslips .net { color: var(--dp-primary); }
+.dp-payslips .earnings { color: var(--dp-success); }
+.dp-payslip-actions { display: flex; gap: 12px; margin-top: 24px; }
+.dp-payslip-history-row { display: flex; align-items: center; gap: 16px; padding: 17px; border: 1px solid var(--dp-border); border-radius: 12px; margin-top: 12px; }
+.dp-payslip-history-row p { margin: 6px 0 0; color: var(--dp-muted); font-size: 12px; }
+.dp-payslip-calendar { display: grid; place-items: center; width: 38px; height: 44px; background: var(--dp-primary-soft); border-radius: 9px; color: var(--dp-primary); }
+.dp-payslip-row-actions { margin-left: auto; display: flex; gap: 8px; }
+.dp-payslip-modal { max-width: 720px; max-height: 90dvh; overflow-y: auto; }
+.dp-payslip-modal h2 { margin: 0; font-size: 20px; }
+.dp-payslip-modal .dp-modal-header p { color: var(--dp-muted); font-size: 12px; margin: 8px 0 0; }
+.dp-payslip-modal-body { padding: 26px; }
+.dp-payslip-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.dp-payslip-breakdown h3 { font-size: 13px; margin: 0 0 12px; }
+.dp-payslip-breakdown table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.dp-payslip-breakdown td, .dp-payslip-breakdown th { border: 1px solid var(--dp-border); padding: 12px; text-align: left; }
+.dp-payslip-breakdown td:last-child { text-align: right; white-space: nowrap; font-weight: 700; }
+.dp-payslip-total, .dp-payslip-net { background: var(--dp-primary-soft); }
+.dp-payslip-net { display: flex; justify-content: space-between; gap: 16px; margin-top: 24px; padding: 18px; border-radius: 10px; font-size: 13px; }
+.dp-payslip-error { padding: 16px; font-size: 13px; }
+.dp-payslips button:disabled { opacity: .5; cursor: not-allowed; }
+.dp-payslips button:focus-visible, .dp-payslips select:focus-visible { outline: 2px solid var(--dp-primary); outline-offset: 3px; }
+@media(max-width: 700px) { .dp-payslip-metrics, .dp-payslip-breakdown { grid-template-columns: 1fr; } .dp-payslip-card { padding: 20px 16px; } .dp-payslip-card-head { align-items: flex-start; flex-direction: column; } .dp-payslip-actions { flex-wrap: wrap; } }

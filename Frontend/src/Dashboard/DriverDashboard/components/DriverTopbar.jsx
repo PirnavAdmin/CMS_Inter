@@ -16,14 +16,16 @@ import {
 import { getDriverIdentity } from "../data/driverIdentity.js";
 import { useDriverData } from "../DriverDataContext.jsx";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
+import { isPayslipNotification } from "../data/driverPayslipNotifications.js";
 
 export default function DriverTopbar({
   onMenuToggle,
   onNavigateProfile,
+  onNavigatePayslips,
   onLogout,
   onSyncData,
 }) {
-  const { driverProfile, notifications, notificationError, connectionStatus, refresh, markAllRead } = useDriverData();
+  const { driverProfile, notifications, notificationError, refresh, markAllRead, markRead } = useDriverData();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [campusOpen, setCampusOpen] = useState(false);
@@ -34,6 +36,13 @@ export default function DriverTopbar({
   const campusOptions = activeCampuses?.length ? activeCampuses : campuses || [];
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const openNotification = (item) => {
+    if (!item.isRead && item.id != null) markRead(item.id);
+    if (isPayslipNotification(item)) {
+      setNotificationsOpen(false);
+      onNavigatePayslips?.();
+    }
+  };
 
   const currentDate = new Date().toLocaleDateString("en-IN", {
     weekday: "short",
@@ -201,13 +210,22 @@ export default function DriverTopbar({
                 )}
               </div>
               <div className="dp-notif-list">
-                <p className="dp-notif-item">Live updates: {connectionStatus}</p>
                 {notificationError && <p className="dp-notif-item" role="status">{notificationError}</p>}
                 {!notificationError && notifications.length === 0 && <p className="dp-notif-item">No notifications yet.</p>}
                 {notifications.map((item) => (
                   <div
                     key={item.id}
                     className={`dp-notif-item ${!item.isRead ? "is-unread" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${item.title || "Notification"}${item.isRead ? ", read" : ", mark as read"}`}
+                    onClick={() => openNotification(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openNotification(item);
+                      }
+                    }}
                   >
                     <div className="dp-notif-icon-box">
                       {item.tone === "warning" ? (
@@ -224,6 +242,7 @@ export default function DriverTopbar({
                         <small>{item.createdTime || item.createdAt ? new Date(item.createdTime || item.createdAt).toLocaleString("en-IN") : ""}</small>
                       </div>
                       <p>{item.message}</p>
+                      {isPayslipNotification(item) && <small>View My Payslips</small>}
                     </div>
                   </div>
                 ))}

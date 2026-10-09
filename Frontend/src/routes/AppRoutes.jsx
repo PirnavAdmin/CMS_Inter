@@ -31,6 +31,7 @@ import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
+import CampusImagesConfigurationPage from "@/components/pages/CampusImagesConfigurationPage.jsx";
 import RolesPermissionsPage from "@/components/pages/RolesPermissionsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
 import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
@@ -195,6 +196,9 @@ export default function AppRoutes() {
         <Route path="/dashboard/certificates" element={<CertificatesPage />} />
         <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
         <Route path="/dashboard/settings" element={<SettingsPage />} />
+        <Route path="/dashboard/settings/campus-images" element={<CampusImagesConfigurationPage />} />
+        <Route path="/dashboard/settings/landing-page" element={<CampusImagesConfigurationPage page="landing" />} />
+        <Route path="/dashboard/settings/login-page" element={<CampusImagesConfigurationPage page="login" />} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
         <Route path="/dashboard/settings/my-profile" element={<AdminProfilePage />} />
         <Route path="/dashboard/settings/profile" element={<AdminProfilePage />} />
