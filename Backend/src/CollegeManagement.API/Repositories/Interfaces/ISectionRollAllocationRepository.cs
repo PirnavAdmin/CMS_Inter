@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs;
+using CollegeManagement.API.DTOs;
 
 namespace CollegeManagement.API.Repositories.Interfaces
 {
@@ -25,7 +25,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
             PreviewRollNumberAllocationAsync(
                 SectionRollAllocationFilterRequest request);
 
-        Task<int> ConfirmRollNumberAllocationAsync(ConfirmRollNumberAllocationRequest request);
+        Task<int> ConfirmRollNumberAllocationAsync(ConfirmRollNumberAllocationRequest request); Task<(string Year, string Board, string BoardCode, string Level, string LevelCode, string Group, string GroupCode, string Program)> GetContextMetadataAsync(int? ayId, int? boardId, int? levelId, int? groupId, int? programId);
         Task<int> SaveRollNumberAllocationsAsync(List<RollNumberPreviewStudentDto> allocations);
 
         // =====================================================

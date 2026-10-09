@@ -1255,7 +1255,7 @@ namespace CollegeManagement.API.Services.Implementations
                 // Auto-generate employee ID if empty or validate uniqueness
                 if (string.IsNullOrWhiteSpace(empId))
                 {
-                    empId = await _staffRepository.GenerateNextEmployeeIdAsync(sType, campusId ?? 1);
+                    empId = await GetNextEmployeeIdAsync(sType, campusId ?? 1);
                 }
                 else if (toAdd.Any(x => x.EmployeeId == empId) || !await _staffRepository.IsEmployeeIdUniqueAsync(empId))
                 {

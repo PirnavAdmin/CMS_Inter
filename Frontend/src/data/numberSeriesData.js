@@ -1,29 +1,6 @@
-const NUMBER_SERIES_STORAGE_KEY = "pirnav_number_series_settings";
+const NUMBER_SERIES_STORAGE_KEY = "pirnav_number_series_settings_v4";
 
 export const FIXED_NUMBER_SERIES = [
-  
-  {
-    id: "student-roll-no",
-    key: "student-roll-no",
-    seriesCode: "ROLL_NO",
-    name: "Student Roll No.",
-    category: "Student Management",
-    description: "Sequence scoped per Campus + Group. Prefix auto-generated from group code (e.g. MPC → MPC-1).",
-    prefix: "",
-    format: "{SEQ}",
-    formatPattern: "{SEQ}",
-    numberLength: 2,
-    startNumber: 1,
-    isActive: true,
-    availablePlaceholders: ["{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}"],
-    sampleFormats: [
-      { format: "{SEQ}", example: "1" },
-      { format: "{PREFIX}{SEQ}", example: "MPC-1" },
-      { format: "{GROUP}-{SEQ}", example: "MPC-01" },
-      { format: "{YYYY}-{GROUP}-{SEQ}", example: "2026-MPC-001" }
-    ],
-    scopeNote: "Sequence resets per Campus + Group combination."
-  },
   {
     id: "teaching-staff-id",
     key: "teaching-staff-id",
@@ -36,9 +13,30 @@ export const FIXED_NUMBER_SERIES = [
     currentNumber: 0,
     totalGenerated: 0,
     currentExample: "PCTCH0001",
-    description: "Configure ID series for Teaching faculty and academic staff.",
+    description: "Configure ID series for Professors, Lecturers and Teaching staff.",
     status: "Active",
     allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}"],
+    sampleFormats: [
+      { format: "PCTCH{SEQ}", example: "PCTCH0001" },
+      { format: "TCH-{YYYY}-{SEQ}", example: "TCH-2026-0001" },
+      { format: "FAC-{DEPT}-{SEQ}", example: "FAC-MATH-0001" },
+    ],
+  },
+  {
+    id: "roll-no",
+      key: "roll-no",
+      seriesCode: "ROLL_NO",
+      name: "Roll Number",
+      category: "Student Management",
+      description: "Sequence resets uniquely per Campus + Board + Academic Year + Group + Program.",
+      prefix: "",
+      format: "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}",
+      numberLength: 4,
+      startNumber: 1,
+      currentNumber: 0,
+      currentSequence: 0,
+      isActive: true,
+      allowedTokens: ["{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{BOARD}", "{PROGRAM}", "{AY}"],
     sampleFormats: [
       { format: "PCTCH{SEQ}", example: "PCTCH0001" },
       { format: "TCH-{YYYY}-{SEQ}", example: "TCH-2026-0001" },
@@ -378,17 +376,31 @@ export function buildNumberFromFormat(format, seqNum, numberLength = 4, customTo
   // Series specific tokens
   result = result.replace(/{DEPT}/g, customTokens.DEPT || "MATH");
   result = result.replace(/{DESIG}/g, customTokens.DESIG || "HOD");
+  result = result.replace(/{PREFIX}/g, customTokens.PREFIX || "MAIN");
+  const grpStr = customTokens.GROUP || "GROUP";
+  result = result.replace(/{GROUP}/g, grpStr);
+  result = result.replace(/{GROUP:1}/g, grpStr.startsWith("[") ? grpStr : grpStr.substring(0, 1));
+  result = result.replace(/{SECTION}/g, customTokens.SECTION || "A");
+  
+  const campusStr = customTokens.CAMPUS || "M";
+  result = result.replace(/{CAMPUS}/g, campusStr.toUpperCase());
+  result = result.replace(/{CAMPUS:2}/g, campusStr.startsWith("[") ? campusStr : (campusStr.length >= 2 ? campusStr.substring(0, 2).toUpperCase() : campusStr.toUpperCase()));
+  
+  const prgStr = customTokens.PROGRAM || "PROGRAM";
+  result = result.replace(/{PROGRAM}/g, prgStr);
+  result = result.replace(/{PROGRAM:1}/g, prgStr.startsWith("[") ? prgStr : prgStr.substring(0, 1));
+  
+  const brdStr = customTokens.BOARD || "BIEAP";
+  result = result.replace(/{BOARD}/g, brdStr);
+  result = result.replace(/{BOARD:1}/g, brdStr.startsWith("[") ? brdStr : brdStr.substring(0, 1));
+  
   result = result.replace(/{STAFF}/g, customTokens.STAFF || "FAC");
   result = result.replace(/{AY}/g, customTokens.AY || `${year}-${year + 1}`);
-  result = result.replace(/{BOARD}/g, customTokens.BOARD || "BIEAP");
-  result = result.replace(/{GROUP}/g, customTokens.GROUP || "MPC");
   result = result.replace(/{LEVEL}/g, customTokens.LEVEL || "SR");
-  result = result.replace(/{SECTION}/g, customTokens.SECTION || "A");
   result = result.replace(/{EXAM}/g, customTokens.EXAM || "FINAL");
   result = result.replace(/{TYPE}/g, customTokens.TYPE || "FINAL");
   result = result.replace(/{YEAR}/g, customTokens.YEAR || String(year));
   result = result.replace(/{CERT}/g, customTokens.CERT || "CND");
-  result = result.replace(/{PREFIX}/g, customTokens.PREFIX || "FEE");
   result = result.replace(/{RANDOM}/g, randomVal);
 
   return result;
@@ -481,11 +493,11 @@ export function resetNumberSeriesSequence(id, newCurrentNumber = 0) {
 }
 
 // --- GET PREVIEW NEXT NUMBER FOR A SERIES ---
-export function getNextNumberPreview(series, overrideConfig = null) {
+export function getNextNumberPreview(series, overrideConfig = null, customTokens = {}) {
   if (!series) return "—";
   const cfg = overrideConfig || series;
-  const nextSeqNum = Number(cfg.currentNumber || 0) + 1;
-  return buildNumberFromFormat(cfg.format, nextSeqNum, cfg.numberLength);
+  const nextSeqNum = Number(cfg.currentSequence ?? cfg.currentNumber ?? 0) + 1;
+  return buildNumberFromFormat(cfg.format, nextSeqNum, cfg.numberLength, customTokens);
 }
 
 // --- FORMAT VALIDATION ENGINE ---
@@ -506,7 +518,8 @@ export function validateNumberSeries(format, numberLength, currentNumber, allowe
 
   // Extract all {TOKEN} patterns
   const tokens = format.match(/\{[^}]+\}/g) || [];
-  const unsupported = tokens.filter((t) => !allowedTokens.includes(t));
+  const coreSupportedTokens = ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{RANDOM}", "{PREFIX}", "{GROUP}", "{SECTION}", "{CAMPUS}"];
+  const unsupported = tokens.filter((t) => !allowedTokens.includes(t) && !coreSupportedTokens.includes(t));
 
   if (unsupported.length > 0) {
     return {

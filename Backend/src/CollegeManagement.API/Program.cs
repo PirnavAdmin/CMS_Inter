@@ -61,6 +61,7 @@ builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new NullableTimeOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 #endregion
 
@@ -535,6 +536,30 @@ app.MapControllers();
 app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var allRollNoConfigs = dbContext.NumberSeriesConfigurations
+        .Where(n => n.SeriesCode.StartsWith("ROLL_NO"))
+        .ToList();
+
+    bool dbModified = false;
+    foreach(var config in allRollNoConfigs)
+    {
+        if (config.FormatPattern != "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}")
+        {
+            config.FormatPattern = "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}";
+            config.Prefix = "";
+            dbModified = true;
+        }
+    }
+
+    if (dbModified)
+    {
+        dbContext.SaveChanges();
+    }
+}
 
 app.Run();
 

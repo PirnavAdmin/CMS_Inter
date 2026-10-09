@@ -76,7 +76,7 @@ namespace CollegeManagement.API.Services.Implementations
             var preview = await _repository.PreviewRollNumberAllocationAsync(request);
             if (preview == null || preview.Students.Count == 0) return preview;
 
-            var subCode = $"ROLL_NO|{request.CampusId}|{request.BoardId}|{request.AcademicYearId}|{request.GroupId}|{request.ProgramId}";
+            var subCode = $"ROLL_NO|{request.CampusId}|{request.BoardId}|{request.AcademicYearId}|{request.AcademicLevelId}|{request.GroupId}|{request.ProgramId}";
             var seriesDto = await _numberSeriesService.GetSeriesByCodeAsync(subCode, request.CampusId) 
                             ?? await _numberSeriesService.GetSeriesByCodeAsync("ROLL_NO", request.CampusId);
 
@@ -95,14 +95,25 @@ namespace CollegeManagement.API.Services.Implementations
                 campusCode = campus?.CampusCode ?? "";
             }
 
+            var meta = await _repository.GetContextMetadataAsync(
+                request.AcademicYearId, request.BoardId, request.AcademicLevelId, request.GroupId, request.ProgramId);
+
             var contextDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
             { 
-                GroupCode = groupCode,
+                GroupCode = meta.GroupCode ?? groupCode,
                 BoardId = request.BoardId,
                 AcademicYearId = request.AcademicYearId,
                 GroupId = request.GroupId,
                 ProgramId = request.ProgramId,
-                CampusCode = campusCode
+                AcademicLevelId = request.AcademicLevelId,
+                CampusCode = campusCode,
+                BoardCode = meta.BoardCode,
+                LevelCode = meta.LevelCode,
+                AcademicYear = meta.Year,
+                Board = meta.Board,
+                Level = meta.Level,
+                Group = meta.Group,
+                Program = meta.Program
             };
 
             var curSeq = seriesDto.CurrentSequence;
@@ -169,18 +180,29 @@ namespace CollegeManagement.API.Services.Implementations
                 campusCode = campus?.CampusCode ?? "";
             }
 
+            var meta = await _repository.GetContextMetadataAsync(
+                request.AcademicYearId, request.BoardId, request.AcademicLevelId, request.GroupId, request.ProgramId);
+
             foreach (var student in preview.Students)
             {
                 var rollResult = await _numberSeriesService.GenerateNextNumberAsync(
                     "ROLL_NO",
                     new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
                     { 
-                        GroupCode = groupCode,
+                        GroupCode = meta.GroupCode ?? groupCode,
                         BoardId = request.BoardId,
                         AcademicYearId = request.AcademicYearId,
                         GroupId = request.GroupId,
                         ProgramId = request.ProgramId,
-                        CampusCode = campusCode
+                        AcademicLevelId = request.AcademicLevelId,
+                        CampusCode = campusCode,
+                        BoardCode = meta.BoardCode,
+                        LevelCode = meta.LevelCode,
+                        AcademicYear = meta.Year,
+                        Board = meta.Board,
+                        Level = meta.Level,
+                        Group = meta.Group,
+                        Program = meta.Program
                     },
                     request.CampusId);
 

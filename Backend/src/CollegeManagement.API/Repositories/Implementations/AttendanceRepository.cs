@@ -539,7 +539,8 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<StudentAttendanceResponse>> GetAdminStudentsForAttendanceAsync(AttendanceSearchRequest request)
         {
-            DateTime date = DateTime.UtcNow.Date;
+            TimeZoneInfo indiaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+            DateTime date = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, indiaTimeZone).Date;
             if (request.FromDate.HasValue) date = request.FromDate.Value.Date;
             else if (!string.IsNullOrEmpty(request.AttendanceDate)) date = DateTime.Parse(request.AttendanceDate).Date;
             else if (!string.IsNullOrEmpty(request.Date)) date = DateTime.Parse(request.Date).Date;
@@ -575,8 +576,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.AdmissionNo,
                     s.RollNo,
                     s.StudentName,
-                    GroupName = s.GroupNavigation.GroupName,
-                    SectionName = s.SectionNavigation.SectionName
+                    AcademicLevelId = s.AcademicLevelId,
+                    AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : string.Empty,
+                    GroupId = s.GroupId,
+                    GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : string.Empty,
+                    SectionId = s.SectionId,
+                    SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : string.Empty
                 })
                 .ToListAsync();
 
@@ -612,9 +617,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             
             foreach (var student in students)
             {
-                var morningAtt = existingAttendances.FirstOrDefault(a => a.StudentId == student.StudentId && a.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Morning);
-                var afternoonAtt = existingAttendances.FirstOrDefault(a => a.StudentId == student.StudentId && a.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Afternoon);
-                var latestAtt = existingAttendances.Where(a => a.StudentId == student.StudentId).OrderByDescending(a => a.ModifiedAt).FirstOrDefault();
+                var morningAtt = existingAttendances
+                    .Where(a => a.StudentId == student.StudentId && a.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Morning)
+                    .OrderByDescending(a => a.ModifiedAt)
+                    .ThenByDescending(a => a.AttendanceId)
+                    .FirstOrDefault();
+                    
+                var afternoonAtt = existingAttendances
+                    .Where(a => a.StudentId == student.StudentId && a.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Afternoon)
+                    .OrderByDescending(a => a.ModifiedAt)
+                    .ThenByDescending(a => a.AttendanceId)
+                    .FirstOrDefault();
+                    
+                var latestAtt = existingAttendances
+                    .Where(a => a.StudentId == student.StudentId)
+                    .OrderByDescending(a => a.ModifiedAt)
+                    .ThenByDescending(a => a.AttendanceId)
+                    .FirstOrDefault();
                 
                 result.Add(new StudentAttendanceResponse
                 {
@@ -622,7 +641,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                     AdmissionNumber = student.AdmissionNo ?? "",
                     RollNumber = student.RollNo ?? "",
                     StudentName = student.StudentName,
+                    AcademicLevelId = student.AcademicLevelId,
+                    AcademicLevelName = student.AcademicLevelName ?? "",
+                    GroupId = student.GroupId,
                     GroupName = student.GroupName ?? "",
+                    SectionId = student.SectionId,
                     SectionName = student.SectionName ?? "",
                     MorningStatus = morningAtt?.Status,
                     AfternoonStatus = afternoonAtt?.Status,
