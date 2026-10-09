@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
+import { incrementSeriesSequence } from "@/data/numberSeriesData.js";
+import { generateNextNumber } from "@/api/numberSeriesApi.js";
 import {
   ArrowLeft,
   Building2,
@@ -3608,10 +3609,8 @@ function StaffList({ records = [], setRecords, forced }) {
         const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || row.boardName || activeBoardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
 
-        const empId = row.employeeId || generateNextNumber(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF" : "TEACHING_STAFF");
-        if (!row.employeeId) {
-          incrementSeriesSequence(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF" : "TEACHING_STAFF");
-        }
+        const empId = row.employeeId || (await generateNextNumber(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF_ID" : "TEACHING_STAFF_ID", {}, activeCampusId))?.generatedNumber;
+        // incrementSeriesSequence is obsolete; backend atomic generation handles it
 
         const payload = {
           employeeId: empId,

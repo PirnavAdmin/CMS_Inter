@@ -583,14 +583,10 @@ public class DashboardRepository : IDashboardRepository
                 .ToListAsync(ct);
 
             summary.TeachingStaff = staffList.Count(st =>
-                st.StaffType == "Teaching" ||
-                st.StaffType == "Both" ||
-                string.IsNullOrEmpty(st.StaffType) ||
-                !st.StaffType.ToLower().Contains("non"));
+                st.StaffType == "Teaching");
 
             summary.NonTeachingStaff = staffList.Count(st =>
-                !string.IsNullOrEmpty(st.StaffType) &&
-                st.StaffType.ToLower().Contains("non"));
+                st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching");
 
             // 3. Groups & Sections
             summary.TotalGroups = await _db.Groups.AsNoTracking()
@@ -868,11 +864,11 @@ public class DashboardRepository : IDashboardRepository
             string filter = (staffType ?? "all").ToLower();
             if (filter.Contains("non"))
             {
-                staffList = staffList.Where(st => !string.IsNullOrEmpty(st.StaffType) && st.StaffType.ToLower().Contains("non")).ToList();
+                staffList = staffList.Where(st => !string.IsNullOrEmpty(st.StaffType) && (st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching")).ToList();
             }
             else if (filter.Contains("teaching"))
             {
-                staffList = staffList.Where(st => st.StaffType == "Teaching" || st.StaffType == "Both" || string.IsNullOrEmpty(st.StaffType) || !st.StaffType.ToLower().Contains("non")).ToList();
+                staffList = staffList.Where(st => st.StaffType == "Teaching").ToList();
             }
 
             summary.TotalStaff = staffList.Count;

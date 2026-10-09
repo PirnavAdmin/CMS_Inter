@@ -5,6 +5,8 @@ import { Field, useForm } from "@/components/common/Ui.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { clearPasswordResetContext, loginUser } from "@/features/auth/services/authService.js";
 import { clearAuthSession, saveAuthSession } from "@/features/authStorage.js";
+import { useCampusImages } from "../../campusImages.js";
+import { getCampusContent } from "../../campusContent.js";
 
 const fields = [
   { name: "email", label: "Email or Mobile", type: "text", required: true, placeholder: "Admin@CMS.com", autoComplete: "username", full: true },
@@ -28,6 +30,7 @@ function saveRememberedCredentials(credentials) {
 }
 
 export default function Login() {
+  const content = getCampusContent(useCampusImages());
   const { values, errors, setValue, validate } = useForm(fields, {});
   const [busy, setBusy] = useState(false);
   const [remember, setRemember] = useState(false);
@@ -126,7 +129,7 @@ export default function Login() {
   };
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Sign in to the Pirnav College management system.">
+    <AuthLayout title={content.loginHeading} subtitle={content.loginDescription}>
       <form className={busy ? "auth-login-form is-busy" : "auth-login-form"} onSubmit={submit} noValidate autoComplete="on" aria-busy={busy}>
         {error ? <div className="cms-alert-error" role="alert">{error}</div> : null}
         <fieldset className="auth-login-fieldset" disabled={busy}>
@@ -156,7 +159,7 @@ export default function Login() {
             >Forgot password?</Link>
           </div>
           <button type="submit" className="cms-btn cms-btn-primary auth-submit-btn" disabled={busy}>
-            {busy ? "Signing in..." : "Login"}
+            {busy ? "Signing in..." : content.loginButton}
           </button>
         </fieldset>
       </form>
