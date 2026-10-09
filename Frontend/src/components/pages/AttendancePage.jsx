@@ -20,7 +20,7 @@ const dailyStudentStatus = (morning, afternoon) => {
 };
 const STAFF_STATUSES = ["Present", "Absent", "Leave", "Late"];
 const STUDENT_LABEL = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
-const STAFF_LABEL = { 1: "Present", 2: "Absent", 3: "Late", 4: "Leave", 5: "Holiday" };
+const STAFF_LABEL = { 0: "Present", 1: "Present", 2: "Absent", 3: "Late", 4: "Leave", 5: "Holiday" };
 const VALUE = {
   Present: 1,
   Absent: 2,
@@ -265,6 +265,7 @@ function Screen({ staff = false, say }) {
  const [loaded, setLoaded] = useState(() => Boolean(restoredState?.loaded));
  const [busy, setBusy] = useState(false);
  const [editing, setEditing] = useState(null);
+ const [editSaving, setEditSaving] = useState(false);
  const [search, setSearch] = useState(() => restoredState?.search || "");
  const [page, setPage] = useState(() => restoredState?.page || 1);
  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
@@ -336,7 +337,9 @@ function Screen({ staff = false, say }) {
          ...(f.status ? { status: VALUE[f.status] } : {}),
          ...(f.person ? { facultyId: num(f.person) } : {})
        });
-       setRows(asList(body(r)));
+       setRows(asList(body(r)).map((row) => ({ ...row,
+         status: Number(row.status) === 0 && row.isAttendanceMarked === false ? "Not Marked" : row.status,
+       })));
      } else {
        const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
          params: {
@@ -444,6 +447,7 @@ function Screen({ staff = false, say }) {
  };
 
  const save = async () => {
+   if (editSaving || !editing) return;
    const r = editing.record;
    if (!staff && (!STUDENT_SESSION_STATUSES.includes(editing.morning) || !STUDENT_SESSION_STATUSES.includes(editing.afternoon))) {
      return say("Choose Present or Absent for both sessions.", "error");
@@ -451,12 +455,14 @@ function Screen({ staff = false, say }) {
    const changed = staff
      ? editing.status !== staffStatus(r.status) || (editing.inTime || "") !== (get(r, "inTime") || "") || (editing.outTime || "") !== (get(r, "outTime") || "")
      : editing.morning !== studentSessionStatus(r, "morning") || editing.afternoon !== studentSessionStatus(r, "afternoon");
-   if (!changed) return setEditing(null);
-   if (!editing.remarks.trim()) return say("Reason / remark is required when attendance changes.", "error");
+   const remarkChanged = editing.remarks !== (get(r, "remarks", "remark") || "");
+   if (!staff && !changed && !remarkChanged) return say("No attendance changes to save.", "info");
+   if (changed && !editing.remarks.trim()) return say("Reason / remark is required when attendance changes.", "error");
+   setEditSaving(true);
    setBusy(true);
    try {
      if (staff) {
-       await apiClient.put(apiEndpoints.staffAttendance.update, {
+       const response = await apiClient.put(apiEndpoints.staffAttendance.update, {
          facultyId: get(r, "facultyId", "staffId", "id"),
          attendanceDate: f.date,
          campusId: num(navbarCampusId),
@@ -467,6 +473,9 @@ function Screen({ staff = false, say }) {
          outTime: editing.outTime || null,
          remarks: editing.remarks
        });
+       if (response.data?.status === false || response.data?.success === false || response.data?.isSuccess === false) {
+         throw new Error(response.data?.message || "Failed to update staff attendance.");
+       }
      } else {
        await apiClient.put(apiEndpoints.attendance.studentUpdate, {
          studentId: get(r, "studentId", "id"),
@@ -483,12 +492,13 @@ function Screen({ staff = false, say }) {
          remarks: editing.remarks
        });
      }
-     setEditing(null);
-     say(`${staff ? "Staff" : "Student"} attendance updated successfully.`);
      await load();
+     setEditing(null);
+     say(`${staff ? "Staff" : "Student"} attendance saved successfully.`);
    } catch (e) {
      say(getApiErrorMessage(e) || "Failed to update attendance.", "error");
    } finally {
+     setEditSaving(false);
      setBusy(false);
    }
  };
@@ -633,7 +643,7 @@ function Screen({ staff = false, say }) {
        </>
      ))}
      {editing ? (
-       <Edit editing={editing} setEditing={setEditing} staff={staff} date={f.date} save={save} close={() => setEditing(null)} busy={busy} />
+       <Edit editing={editing} setEditing={setEditing} staff={staff} date={f.date} save={save} close={() => { if (!editSaving) setEditing(null); }} busy={busy || editSaving} />
      ) : null}
    </>
  );
@@ -880,6 +890,15 @@ function Pill({ value, staff = false }) {
   return <span className={`att-status-pill ${cls}`}>{code}</span>;
 }
 
+function StaffTimeInput({ label, value, onChange, disabled }) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
+  const period = match ? (Number(match[1]) >= 12 ? "PM" : "AM") : "—";
+  return <Field label={label}><div className="att-staff-time-input">
+    <input type="time" aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+    <span className="att-time-period" aria-label={`${label} period`}>{period}</span>
+  </div></Field>;
+}
+
 function Edit({ editing, setEditing, staff, date, save, close, busy }) {
   const r = editing.record;
   return (
@@ -908,8 +927,8 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
               items={STAFF_STATUSES}
             />
             <div className="att-time-fields">
-              <Field label="In Time"><input type="time" value={editing.inTime} onChange={(e) => setEditing({ ...editing, inTime: e.target.value })} /></Field>
-              <Field label="Out Time"><input type="time" value={editing.outTime} onChange={(e) => setEditing({ ...editing, outTime: e.target.value })} /></Field>
+              <StaffTimeInput label="In Time" value={editing.inTime} disabled={busy} onChange={(value) => setEditing({ ...editing, inTime: value })} />
+              <StaffTimeInput label="Out Time" value={editing.outTime} disabled={busy} onChange={(value) => setEditing({ ...editing, outTime: value })} />
             </div>
           </>
         ) : (
