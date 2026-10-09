@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Download, Plus, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-import { SkeletonPage } from "@/components/common/Ui.jsx";
+import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
 import StudentDataTable from "../components/StudentDataTable.jsx";
 import StudentEmptyState from "../components/StudentEmptyState.jsx";
@@ -24,10 +24,12 @@ export default function StudentCertificates() {
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState("");
   const [error, setError] = useState("");
+  const [requestError, setRequestError] = useState("");
+  const [success, setSuccess] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ type: "", purpose: "", notes: "" });
   const load = useCallback(async () => {
-    if (!student?.studentId) return;
+    if (!student?.studentId) { setLoading(false); return; }
     setLoading(true); setError("");
     const [certResult, templateResult] = await Promise.allSettled([
       apiClient.get(studentApiEndpoints.certificates.list, { params: { search: student.admissionNo || student.studentId } }),
@@ -47,12 +49,15 @@ export default function StudentCertificates() {
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!student?.admissionNo || !form.type || !form.purpose.trim()) return;
-    setSaving(true); setError("");
+    if (saving) return;
+    const admissionNo = String(student?.admissionNo || "").trim();
+    if (!admissionNo) return setRequestError("Your admission number is unavailable. Please contact the college administrator.");
+    if (!form.type || !form.purpose.trim()) return setRequestError("Select a certificate type and enter its purpose.");
+    setSaving(true); setRequestError("");
     try {
-      await apiClient.post(studentApiEndpoints.certificates.generate, { admissionNo: student.admissionNo, certificateType: form.type, purpose: form.purpose.trim(), remarks: form.notes.trim() || null, requestDate: new Date().toISOString() });
-      setOpen(false); setForm({ type: "", purpose: "", notes: "" }); await load();
-    } catch (requestError) { setError(getApiErrorMessage(requestError)); }
+      await apiClient.post(studentApiEndpoints.certificates.generate, { admissionNo, certificateType: form.type, purpose: form.purpose.trim(), remarks: form.notes.trim() || null, requestDate: new Date().toISOString() });
+      setOpen(false); setForm({ type: "", purpose: "", notes: "" }); setSuccess("Certificate request submitted successfully."); await load();
+    } catch (failure) { setRequestError(getApiErrorMessage(failure)); }
     finally { setSaving(false); }
   };
   const download = async (row) => {
@@ -65,10 +70,12 @@ export default function StudentCertificates() {
     } catch (requestError) { setError(getApiErrorMessage(requestError)); }
     finally { setDownloading(""); }
   };
-  const templatesReady = templates.map((item) => String(read(item, "templateTitle", "TemplateTitle", "certificateType", "CertificateType", "name", "Name", "templateCode", "TemplateCode") || "")).filter(Boolean);
+  const templatesReady = [...new Set(templates.map((item) => String(read(item, "certificateType", "CertificateType", "title", "Title", "templateTitle", "TemplateTitle", "name", "Name", "templateCode", "TemplateCode") || "").trim()).filter(Boolean))];
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
   return <div className="sp-page">
-    <StudentPageHeader title="Certificates" subtitle="View and request your student certificates." action={<button className="sp-btn primary" type="button" onClick={() => { setForm((current) => ({ ...current, type: templatesReady[0] || "" })); setOpen(true); }} disabled={!templatesReady.length}><Plus size={16}/> Request Certificate</button>}/>
+    <StudentPageHeader title="Certificates" subtitle="View and request your student certificates." action={<button className="sp-btn primary" type="button" onClick={() => { setRequestError(""); setForm((current) => ({ ...current, type: templatesReady[0] || "" })); setOpen(true); }} disabled={!templatesReady.length}><Plus size={16}/> Request Certificate</button>}/>
+    {success ? <Toast message={success} type="success" onClose={() => setSuccess("")}/> : null}
+    {!templatesReady.length && !error ? <div className="sp-api-state">No active certificate templates are available. Please contact the college administrator.</div> : null}
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
     <StudentCard title="Certificate Requests" subtitle={`${rows.length} certificate request${rows.length === 1 ? "" : "s"}`}>
       {!rows.length && !error ? <StudentEmptyState title="No certificate requests" text="Your certificate requests and issued certificates will appear here."/> : <StudentDataTable columns={["Certificate No.", "Certificate Type", "Requested Date", "Purpose", "Status", "Action"]} rows={rows} empty="No certificate requests found for this student." renderCell={(value, row, column, index) => {
@@ -83,6 +90,6 @@ export default function StudentCertificates() {
       }}/>
       }
     </StudentCard>
-    {open ? <div className="sp-modal-backdrop"><form className="sp-modal" onSubmit={submit}><header><div><h2>Request Certificate</h2><p>Submit a certificate request for review.</p></div><button type="button" className="sp-icon-btn" onClick={() => setOpen(false)}><X size={18}/></button></header><label><span>Certificate Type</span><select required value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}><option value="">Select certificate type</option>{templatesReady.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label><span>Purpose</span><input required value={form.purpose} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}/></label><label><span>Additional Notes</span><textarea rows="3" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}/></label><footer><button type="button" className="sp-btn" onClick={() => setOpen(false)}>Cancel</button><button className="sp-btn primary" disabled={saving}>{saving ? "Submitting..." : "Submit Request"}</button></footer></form></div> : null}
+    {open ? <div className="sp-modal-backdrop"><form className="sp-modal" onSubmit={submit}><header><div><h2>Request Certificate</h2><p>Submit a certificate request for review.</p></div><button type="button" className="sp-icon-btn" disabled={saving} onClick={() => setOpen(false)}><X size={18}/></button></header>{requestError ? <div className="sp-api-state is-error" role="alert">{requestError}</div> : null}<label><span>Certificate Type</span><select required value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}><option value="">Select certificate type</option>{templatesReady.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label><span>Purpose</span><input required value={form.purpose} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}/></label><label><span>Additional Notes</span><textarea rows="3" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}/></label><footer><button type="button" className="sp-btn" disabled={saving} onClick={() => setOpen(false)}>Cancel</button><button className="sp-btn primary" disabled={saving}>{saving ? "Submitting..." : "Submit Request"}</button></footer></form></div> : null}
   </div>;
 }

@@ -174,7 +174,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
       setLoading(false);
     }
     setSeriesList(data);
-  }, [activeCampusId, activeBoardId, activeAYId]);
+  }, [activeCampusId, activeBoardId, activeAYId, selectedCampus?.campusCode]);
 
   useEffect(() => {
     fetchSeries();
@@ -497,7 +497,9 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
           localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
         }
       }
-    } catch (e) {}
+    } catch {
+      // Continue with the API save when the local deleted-series cache is unavailable.
+    }
     // Read, append, and save to local storage instantly
     try {
       const raw = localStorage.getItem('NumberSeries_Config') || sessionStorage.getItem('NumberSeries_Config');
@@ -507,7 +509,9 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
         parsed.push(tempConfig);
         localStorage.setItem('NumberSeries_Config', JSON.stringify(parsed));
       }
-    } catch (e) { }
+    } catch {
+      // Local caching is optional; persist the configuration through the API below.
+    }
 
     try {
       await numberSeriesApi.updateNumberSeries(data.seriesCode, {
@@ -630,7 +634,9 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                                 setToast({ message: "Series deleted successfully.", type: "success" });
                                 if (forceSyncLocal) forceSyncLocal();
                                 else onRefresh();
-                              } catch(e) {}
+                              } catch {
+                                setToast({ message: "Unable to update the saved series configuration.", type: "error" });
+                              }
                             }
                           }}
                         >
@@ -1161,7 +1167,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
       }
     }, 200);
     return () => clearTimeout(timer);
-  }, [formState.format, formState.numberLength, formState.prefix, series, selectedCampusId, liveValidation.valid]);
+  }, [formState.format, formState.numberLength, formState.prefix, series, selectedCampusId, selectedCampus?.campusCode, liveValidation.valid]);
 
   const livePreviewVal = apiPreview || localLivePreviewVal;
 
@@ -1371,7 +1377,9 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                                                     setToast({ message: "Series deleted successfully.", type: "success" });
                           if (forceSyncLocal) forceSyncLocal();
                           setTimeout(() => navigate("/dashboard/settings/number-series"), 50);
-                        } catch(e) {}
+                        } catch {
+                          setToast({ message: "Unable to update the saved series configuration.", type: "error" });
+                        }
                       }
                     }}
                   >
