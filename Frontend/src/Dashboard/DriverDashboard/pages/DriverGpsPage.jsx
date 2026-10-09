@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Navigation,
   Radio,
@@ -6,9 +6,9 @@ import {
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { getRoute, getGps } from "../../../api/transportDriverApi.js";
+import { getRoute, getGps, sendGpsLocation } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../components/common/Ui.jsx";
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -53,6 +53,17 @@ const busIcon = new L.divIcon({
   iconAnchor: [18, 18]
 });
 
+// Dynamic map center updater component
+const MapCenterUpdater = ({ center }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (center) {
+      map.setView(center, map.getZoom());
+    }
+  }, [center, map]);
+  return null;
+};
+
 export default function DriverGpsPage() {
   const [routeDetails, setRouteDetails] = useState(null);
   const [speed, setSpeed] = useState(0);
@@ -61,14 +72,14 @@ export default function DriverGpsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fallback realistic coordinates for Chennai if backend doesn't provide them
+  // Fallback realistic coordinates for Hyderabad if backend doesn't provide them
   const fallbackCoords = [
-    [13.0123, 80.2301], // 1
-    [13.0150, 80.2330], // 2
-    [13.0185, 80.2355], // 3
-    [13.0210, 80.2400], // 4
-    [13.0245, 80.2425], // 5
-    [13.0280, 80.2450]  // 6
+    [17.4450, 78.3800], // 1
+    [17.4480, 78.3830], // 2
+    [17.4510, 78.3850], // 3
+    [17.4530, 78.3880], // 4
+    [17.4560, 78.3910], // 5
+    [17.4590, 78.3940]  // 6
   ];
 
   useEffect(() => {
@@ -78,8 +89,21 @@ export default function DriverGpsPage() {
         const res = await getRoute();
         const data = res.data || res;
         
-        let details = data.routeDetails || data;
+        // Some APIs wrap the actual payload in a nested 'data' property
+        let details = data.data || data.routeDetails || data;
         
+        // Map backend pickupPoints to frontend expected stops format
+        if (details.pickupPoints && Array.isArray(details.pickupPoints)) {
+          details.stops = details.pickupPoints.map((p, index) => ({
+             id: p.pickupPointId || index,
+             name: p.stopName || p.pickupPointName || `Stop ${index + 1}`,
+             pickupTime: p.pickupTime ? p.pickupTime.toString() : "08:00 AM",
+             status: p.status || "Pending",
+             stopNumber: index + 1,
+             position: p.position
+          }));
+        }
+
         // Ensure stops have coordinates
         if (details.stops && details.stops.length > 0) {
           details.stops = details.stops.map((stop, index) => ({
@@ -115,28 +139,77 @@ export default function DriverGpsPage() {
     return () => clearInterval(interval);
   }, [isTracking]);
 
-  if (loading) return <div className="dp-page-container"><SkeletonPage variant="dashboard" columns={4} /></div>;
-  if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
-
   const stops = routeDetails?.stops || [];
   
-  // Calculate live bus position (approximate between last completed and next stop)
-  let livePos = [13.0170, 80.2340]; // Default live pos
+  const [livePos, setLivePos] = useState([17.4495, 78.3840]); // Default fallback live pos
+  
+  // Try to get actual browser location
+  useEffect(() => {
+    let watchId;
+    if ("geolocation" in navigator) {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const currentSpeed = position.coords.speed ? (position.coords.speed * 3.6).toFixed(1) : speed; // m/s to km/h
+          
+          setLivePos([lat, lng]);
+          if (position.coords.speed) setSpeed(currentSpeed);
+          
+          // Send the exact location of the driver to the backend
+          sendGpsLocation({ lat, lng, speed: currentSpeed, heading: position.coords.heading })
+            .catch(err => console.error("Failed to sync GPS to backend:", err));
+        },
+        (error) => {
+          console.warn("Geolocation error, using fallback location", error);
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 5000 }
+      );
+    }
+    return () => {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
   
   const completedStops = stops.filter(s => s.status === "Completed");
   const nextStop = stops.find(s => s.status === "Ongoing");
   
-  if (completedStops.length > 0 && nextStop) {
-    const lastCompleted = completedStops[completedStops.length - 1];
-    livePos = [
-      (lastCompleted.position[0] + nextStop.position[0]) / 2,
-      (lastCompleted.position[1] + nextStop.position[1]) / 2
-    ];
-  } else if (stops.length > 0) {
-    livePos = stops[0].position;
-  }
+  // If we couldn't get browser location, try to interpolate between stops
+  useEffect(() => {
+    if (livePos[0] === 17.4495 && livePos[1] === 78.3840) {
+      try {
+        if (completedStops.length > 0 && nextStop) {
+          const lastCompleted = completedStops[completedStops.length - 1];
+          // Ensure positions are arrays and have values
+          const lat1 = Number(Array.isArray(lastCompleted.position) ? lastCompleted.position[0] : lastCompleted.position?.lat);
+          const lng1 = Number(Array.isArray(lastCompleted.position) ? lastCompleted.position[1] : lastCompleted.position?.lng);
+          const lat2 = Number(Array.isArray(nextStop.position) ? nextStop.position[0] : nextStop.position?.lat);
+          const lng2 = Number(Array.isArray(nextStop.position) ? nextStop.position[1] : nextStop.position?.lng);
+          
+          if (!isNaN(lat1) && !isNaN(lat2) && !isNaN(lng1) && !isNaN(lng2)) {
+            setLivePos([(lat1 + lat2) / 2, (lng1 + lng2) / 2]);
+          }
+        } else if (stops.length > 0) {
+          const lat = Number(Array.isArray(stops[0].position) ? stops[0].position[0] : stops[0].position?.lat);
+          const lng = Number(Array.isArray(stops[0].position) ? stops[0].position[1] : stops[0].position?.lng);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            setLivePos([lat, lng]);
+          }
+        }
+      } catch (e) {
+        console.error("Interpolation error:", e);
+      }
+    }
+  }, [stops, completedStops, nextStop, livePos]);
 
-  const polylinePositions = stops.map(s => s.position);
+  const polylinePositions = stops.map(s => {
+    if (Array.isArray(s.position) && s.position.length >= 2) return [Number(s.position[0]), Number(s.position[1])];
+    if (s.position?.lat !== undefined) return [Number(s.position.lat), Number(s.position.lng)];
+    return null;
+  }).filter(p => p !== null && !isNaN(p[0]) && !isNaN(p[1]));
+
+  if (loading) return <div className="dp-page-container"><SkeletonPage variant="dashboard" columns={4} /></div>;
+  if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
 
   return (
     <div className="dp-page-container">
@@ -212,26 +285,35 @@ export default function DriverGpsPage() {
               
               <Polyline positions={polylinePositions} color="#2e8540" weight={6} opacity={0.7} />
               
-              {stops.map(stop => (
-                <Marker 
-                  key={stop.id} 
-                  position={stop.position}
-                  icon={getStopIcon(stop.status, stop.stopNumber)}
-                >
-                  <Popup>
-                    <strong>{stop.name}</strong><br/>
-                    Status: {stop.status}<br/>
-                    Time: {stop.pickupTime}
-                  </Popup>
-                </Marker>
-              ))}
+              {stops.map(stop => {
+                const pos = Array.isArray(stop.position) ? [Number(stop.position[0]), Number(stop.position[1])] : (stop.position?.lat !== undefined ? [Number(stop.position.lat), Number(stop.position.lng)] : null);
+                if (!pos || isNaN(pos[0]) || isNaN(pos[1])) return null;
+                return (
+                  <Marker 
+                    key={stop.id} 
+                    position={pos}
+                    icon={getStopIcon(stop.status, stop.stopNumber)}
+                  >
+                    <Popup>
+                      <strong>{stop.name}</strong><br/>
+                      Status: {stop.status}<br/>
+                      Time: {stop.pickupTime}
+                    </Popup>
+                  </Marker>
+                );
+              })}
               
-              <Marker position={livePos} icon={busIcon}>
-                <Popup>
-                  <strong>Live Bus Location</strong><br/>
-                  Speed: {speed} km/h
-                </Popup>
-              </Marker>
+              {livePos && !isNaN(livePos[0]) && !isNaN(livePos[1]) && (
+                <>
+                  <Marker position={livePos} icon={busIcon}>
+                    <Popup>
+                      <strong>Live Bus Location</strong><br/>
+                      Speed: {speed} km/h
+                    </Popup>
+                  </Marker>
+                  <MapCenterUpdater center={livePos} />
+                </>
+              )}
             </MapContainer>
           </div>
         </div>
@@ -239,7 +321,7 @@ export default function DriverGpsPage() {
         <div className="dp-card-footer dp-map-footer">
           <div className="dp-telemetry-item">
             <small>Latitude / Longitude</small>
-            <code>{livePos[0].toFixed(4)}° N, {livePos[1].toFixed(4)}° E</code>
+            <code>{livePos && !isNaN(livePos[0]) ? `${livePos[0].toFixed(4)}° N, ${livePos[1].toFixed(4)}° E` : 'Tracking...'}</code>
           </div>
           <div className="dp-telemetry-item">
             <small>Satellite Precision</small>
