@@ -7,8 +7,11 @@ using CollegeManagement.API.Services.Interfaces;
 namespace CollegeManagement.API.Services.Implementations {
     public class CampusTransferService : ICampusTransferService {
         private readonly ICampusTransferRepository _repository;
-        public CampusTransferService(ICampusTransferRepository repository) {
+        private readonly IFeeService _feeService;
+
+        public CampusTransferService(ICampusTransferRepository repository, IFeeService feeService) {
             _repository = repository;
+            _feeService = feeService;
         }
 
         public async Task<int> CreateTransferRequestAsync(CreateCampusTransferRequestDto dto, int requestedById) {
@@ -24,7 +27,20 @@ namespace CollegeManagement.API.Services.Implementations {
             return await _repository.GetTransferByIdAsync(transferId);
         }
         public async Task ApproveTransferAsync(int transferId, int actionedById, ActionCampusTransferDto dto) {
+            var transfer = await _repository.GetTransferByIdAsync(transferId);
             await _repository.ApproveTransferAsync(transferId, actionedById, dto.ActionRemarks);
+
+            if (transfer != null) {
+                try {
+                    await _feeService.ApplyCampusTransferFeeAsync(
+                        transfer.StudentId,
+                        transfer.ToCampusId,
+                        dto.DestinationFeeStructureId,
+                        dto.TransferPaidCredit);
+                } catch {
+                    // Log or handle non-fatal fee error
+                }
+            }
         }
         public async Task RejectTransferAsync(int transferId, int actionedById, ActionCampusTransferDto dto) {
             await _repository.RejectTransferAsync(transferId, actionedById, dto.ActionRemarks);

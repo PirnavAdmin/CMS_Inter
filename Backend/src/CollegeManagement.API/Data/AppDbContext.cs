@@ -9,14 +9,60 @@ using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Models.Holiday;
 using CollegeManagement.API.Models.Transport;
+using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using System.Collections.Generic;
 
 namespace CollegeManagement.API.Data
 {
+    public class AuditEntry
+    {
+        public EntityEntry Entry { get; }
+        public string? UserName { get; set; }
+        public int? UserId { get; set; }
+        public string? ActorRole { get; set; }
+        public string? IpAddress { get; set; }
+        public string? UserAgent { get; set; }
+        public string Action { get; set; } = string.Empty;
+        public string EntityName { get; set; } = string.Empty;
+        public int? EntityId { get; set; }
+        public string Module { get; set; } = "System";
+
+        public AuditEntry(EntityEntry entry)
+        {
+            Entry = entry;
+        }
+
+        public AuditLog ToAuditLog()
+        {
+            return new AuditLog
+            {
+                UserName = UserName ?? "System",
+                UserId = UserId,
+                ActorRole = ActorRole ?? "System",
+                IpAddress = IpAddress ?? "0.0.0.0",
+                UserAgent = UserAgent,
+                Action = Action,
+                EntityName = EntityName,
+                EntityId = EntityId,
+                Module = Module,
+                Severity = Action == "Delete" ? "Warning" : "Info",
+                Status = "Success",
+                Description = $"{Action} operation performed on {EntityName}{(EntityId != null ? $" (ID: {EntityId})" : "")}",
+                CreatedAt = DateTime.UtcNow
+            };
+        }
+    }
+
     public class AppDbContext : DbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options)
+        private readonly IHttpContextAccessor? _httpContextAccessor;
+
+        public AppDbContext(DbContextOptions<AppDbContext> options, IHttpContextAccessor? httpContextAccessor = null)
             : base(options)
         {
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public DbSet<User> Users { get; set; }
@@ -512,7 +558,7 @@ namespace CollegeManagement.API.Data
             modelBuilder.Entity<FeeStructureComponent>(entity =>
             {
                 entity.HasKey(x => x.FeeStructureComponentId);
-                entity.Property(x => x.Rule).IsRequired().HasMaxLength(20);
+                entity.Ignore(x => x.Rule);
                 entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
                 entity.Property(x => x.IsActive).HasDefaultValue(true);
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
@@ -1720,13 +1766,105 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             });
         }
 
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            var auditEntries = OnBeforeSaveChanges();
+            var result = await base.SaveChangesAsync(cancellationToken);
+            await OnAfterSaveChanges(auditEntries, cancellationToken);
+            return result;
+        }
+
+        private List<AuditEntry> OnBeforeSaveChanges()
+        {
+            var auditEntries = new List<AuditEntry>();
+            var httpContext = _httpContextAccessor?.HttpContext;
+            var userId = httpContext?.User?.FindFirstValue("UserId");
+            var role = httpContext?.User?.FindFirstValue(ClaimTypes.Role) ?? httpContext?.User?.FindFirstValue("role");
+            var ip = httpContext?.Connection?.RemoteIpAddress?.ToString();
+            var agent = httpContext?.Request?.Headers["User-Agent"].ToString();
+            var userName = httpContext?.User?.Identity?.Name ?? httpContext?.User?.FindFirstValue(ClaimTypes.Email);
+
+            foreach (var entry in ChangeTracker.Entries())
+            {
+                if (entry.Entity is AuditLog || entry.Entity is AttendanceAuditHistory || entry.State == EntityState.Detached || entry.State == EntityState.Unchanged)
+                    continue;
+
+                var entityName = entry.Entity.GetType().Name;
+                var action = entry.State == EntityState.Added ? "Create" :
+                             entry.State == EntityState.Modified ? "Update" : "Delete";
+
+                var auditEntry = new AuditEntry(entry)
+                {
+                    UserName = userName ?? "Unknown",
+                    UserId = int.TryParse(userId, out var uid) ? uid : null,
+                    ActorRole = role ?? "Unknown",
+                    IpAddress = ip,
+                    UserAgent = agent,
+                    Action = action,
+                    EntityName = entityName,
+                    Module = GetModuleFromEntity(entityName)
+                };
+
+                var primaryKey = entry.Metadata.FindPrimaryKey();
+                if (primaryKey != null)
+                {
+                    foreach (var property in primaryKey.Properties)
+                    {
+                        var value = entry.Property(property.Name).CurrentValue;
+                        if (value != null && int.TryParse(value.ToString(), out var pKey))
+                        {
+                            auditEntry.EntityId = pKey;
+                        }
+                    }
+                }
+                
+                auditEntries.Add(auditEntry);
+            }
+            
+            return auditEntries;
+        }
+        
+        private async Task OnAfterSaveChanges(List<AuditEntry> auditEntries, CancellationToken cancellationToken)
+        {
+            if (auditEntries == null || auditEntries.Count == 0)
+                return;
+
+            foreach (var auditEntry in auditEntries)
+            {
+                if (auditEntry.Entry.State == EntityState.Added || auditEntry.EntityId == null || auditEntry.EntityId == 0)
+                {
+                    var primaryKey = auditEntry.Entry.Metadata.FindPrimaryKey();
+                    if (primaryKey != null)
+                    {
+                        foreach (var property in primaryKey.Properties)
+                        {
+                            var value = auditEntry.Entry.Property(property.Name).CurrentValue;
+                            if (value != null && int.TryParse(value.ToString(), out var pKey))
+                            {
+                                auditEntry.EntityId = pKey;
+                            }
+                        }
+                    }
+                }
+                AuditLogs.Add(auditEntry.ToAuditLog());
+            }
+
+            await base.SaveChangesAsync(cancellationToken);
+        }
+
+        private string GetModuleFromEntity(string entityName)
+        {
+            return entityName switch
+            {
+                "User" or "Role" or "Permission" => "Authentication",
+                "Attendance" or "StaffAttendance" => "Attendance",
+                "Examination" or "Result" => "Examinations",
+                "FeePayment" or "StudentFee" => "Finance",
+                "Staff" or "Student" => "Administration",
+                "Holiday" => "Holiday Management",
+                "TransportRoute" or "TransportVehicle" => "Transport",
+                _ => "System"
+            };
+        }
+    }
 }
-}
-
-
-
-
-
-
-
-

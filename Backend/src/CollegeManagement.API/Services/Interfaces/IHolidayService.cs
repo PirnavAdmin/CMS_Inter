@@ -12,5 +12,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<HolidayResponse> CreateAsync(CreateHolidayRequest request);
         Task<HolidayResponse?> UpdateAsync(int id, UpdateHolidayRequest request);
         Task<bool> DeleteAsync(int id);
+        Task<byte[]> GenerateImportTemplateAsync();
+        Task<object> ImportHolidaysFromExcelAsync(byte[] fileBytes, bool validateOnly, int? currentUserId, int? campusId, int? academicYearId, int? boardId);
     }
 }

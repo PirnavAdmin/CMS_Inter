@@ -206,6 +206,10 @@ namespace CollegeManagement.API.DTOs.Promotion
         [Required]
         [MinLength(1)]
         public List<int> StudentIds { get; set; } = new();
+
+        public int? TargetFeeStructureId { get; set; }
+        public string? PaymentPlan { get; set; }
+        public int? NumberOfInstallments { get; set; }
     }
 
     public class PromotionExecutionStudentDto
@@ -291,6 +295,10 @@ namespace CollegeManagement.API.DTOs.Promotion
 
         [MaxLength(50)]
         public string? TargetMedium { get; set; }
+
+        public int? TargetFeeStructureId { get; set; }
+        public string? PaymentPlan { get; set; }
+        public int? NumberOfInstallments { get; set; }
     }
 
     // ============================================================
@@ -452,6 +460,10 @@ namespace CollegeManagement.API.DTOs.Promotion
         public int TargetGroupId { get; set; }
 
         public int TargetProgramId { get; set; }
+
+        public int? TargetFeeStructureId { get; set; }
+
+        public bool UpdateFees { get; set; } = true;
     }
 
     // ============================================================
