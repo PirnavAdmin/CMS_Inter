@@ -15,15 +15,22 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly ICampusRepository _repository;
         private readonly ILogger<CampusService> _logger;
+        private readonly ILookupCacheService _cache;
 
-        public CampusService(ICampusRepository repository, ILogger<CampusService> logger)
+        public CampusService(ICampusRepository repository, ILogger<CampusService> logger, ILookupCacheService cache)
         {
             _repository = repository;
             _logger = logger;
+            _cache = cache;
         }
 
         public async Task<IEnumerable<CampusDto>> GetAllCampusesAsync(string? search = null, bool? isActive = null, int? boardId = null, CancellationToken cancellationToken = default)
         {
+            if (string.IsNullOrWhiteSpace(search))
+            {
+                string cacheKey = $"lookup:campuses:all:{isActive}:{boardId}";
+                return await _cache.GetOrCreateAsync(cacheKey, () => _repository.GetAllCampusesAsync(search, isActive, boardId, cancellationToken));
+            }
             return await _repository.GetAllCampusesAsync(search, isActive, boardId, cancellationToken);
         }
 
@@ -55,7 +62,9 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ConflictException($"A campus branch with code '{dto.CampusCode.Trim().ToUpper()}' already exists.");
 
             _logger.LogInformation("Creating new campus branch {CampusName} ({CampusCode})", dto.CampusName, dto.CampusCode);
-            return await _repository.CreateCampusAsync(dto, cancellationToken);
+            var result = await _repository.CreateCampusAsync(dto, cancellationToken);
+            _cache.RemoveByPrefix("lookup:campuses");
+            return result;
         }
 
         public async Task<CampusDto> UpdateCampusAsync(UpdateCampusDto dto, CancellationToken cancellationToken = default)
@@ -82,6 +91,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             _logger.LogInformation("Updating campus branch {CampusId} - {CampusName}", dto.CampusId, dto.CampusName);
             var updated = await _repository.UpdateCampusAsync(dto, cancellationToken);
+            _cache.RemoveByPrefix("lookup:campuses");
             return updated ?? existing;
         }
 
@@ -101,7 +111,9 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException($"Cannot delete campus branch '{existing.CampusName}' because {existing.StudentCount} active student(s) are currently enrolled in it.");
 
             _logger.LogInformation("Deleting campus branch {CampusId} - {CampusName}", campusId, existing.CampusName);
-            return await _repository.DeleteCampusAsync(campusId, cancellationToken);
+            var res = await _repository.DeleteCampusAsync(campusId, cancellationToken);
+            if (res) _cache.RemoveByPrefix("lookup:campuses");
+            return res;
         }
 
         public async Task<bool> ToggleCampusStatusAsync(int campusId, CancellationToken cancellationToken = default)
@@ -114,7 +126,9 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new NotFoundException($"Campus with ID {campusId} was not found.");
 
             _logger.LogInformation("Toggling active status for campus {CampusId} (currently {IsActive})", campusId, existing.IsActive);
-            return await _repository.ToggleCampusStatusAsync(campusId, cancellationToken);
+            var res = await _repository.ToggleCampusStatusAsync(campusId, cancellationToken);
+            _cache.RemoveByPrefix("lookup:campuses");
+            return res;
         }
 
         public async Task<IEnumerable<AffiliatedBoardDto>> GetAffiliatedBoardsByCampusIdAsync(int campusId, CancellationToken cancellationToken = default)
@@ -122,12 +136,12 @@ namespace CollegeManagement.API.Services.Implementations
             if (campusId <= 0)
                 throw new ValidationException("Invalid Campus ID.");
 
-            return await _repository.GetAffiliatedBoardsByCampusIdAsync(campusId, cancellationToken);
+            return await _cache.GetOrCreateAsync($"lookup:campuses:{campusId}:boards", () => _repository.GetAffiliatedBoardsByCampusIdAsync(campusId, cancellationToken));
         }
 
         public async Task<IEnumerable<CampusHeaderDropdownDto>> GetActiveHeaderCampusesAsync(CancellationToken cancellationToken = default)
         {
-            return await _repository.GetActiveHeaderCampusesAsync(cancellationToken);
+            return await _cache.GetOrCreateAsync("lookup:campuses:header", () => _repository.GetActiveHeaderCampusesAsync(cancellationToken));
         }
 
         public async Task<CampusStatsDto> GetCampusStatsAsync(int? selectedCampusId = null, CancellationToken cancellationToken = default)

@@ -324,6 +324,13 @@ public class StudentPerformanceReportDto
     public string? Grade { get; set; }
 }
 
+public class AuditFieldChangeDto
+{
+    public string Field { get; set; } = string.Empty;
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+}
+
 public class AuditLogDto
 {
     public long AuditLogId { get; set; }
@@ -339,6 +346,9 @@ public class AuditLogDto
     public string? Ip { get; set; }
     public string? Device { get; set; }
     public string? Details { get; set; }
+    public List<AuditFieldChangeDto>? Changes { get; set; }
+    public Dictionary<string, object?>? UserInput { get; set; }
+    public string? RawPayload { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

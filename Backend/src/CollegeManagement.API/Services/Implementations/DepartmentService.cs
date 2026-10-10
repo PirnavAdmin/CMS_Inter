@@ -18,13 +18,16 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly IDepartmentRepository _departmentRepository;
         private readonly IDesignationRepository _designationRepository;
+        private readonly ILookupCacheService _cache;
 
         public DepartmentService(
             IDepartmentRepository departmentRepository,
-            IDesignationRepository designationRepository)
+            IDesignationRepository designationRepository,
+            ILookupCacheService cache)
         {
             _departmentRepository = departmentRepository;
             _designationRepository = designationRepository;
+            _cache = cache;
         }
 
         public async Task<IEnumerable<DepartmentResponseDto>> GetActiveDepartmentsAsync(int? campusId = null)
@@ -34,7 +37,8 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentsAsync(string? staffType = null, bool includeInactive = true, int? campusId = null)
         {
-            return await _departmentRepository.GetDepartmentDtosAsync(staffType, includeInactive, campusId);
+            string cacheKey = $"lookup:departments:{staffType}:{includeInactive}:{campusId}";
+            return await _cache.GetOrCreateAsync(cacheKey, () => _departmentRepository.GetDepartmentDtosAsync(staffType, includeInactive, campusId));
         }
 
         public async Task<DepartmentResponseDto?> GetByIdAsync(int id)
@@ -55,6 +59,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
 
             var created = await _departmentRepository.AddDepartmentAsync(dept);
+            _cache.RemoveByPrefix("lookup:departments");
             return new DepartmentResponseDto
             {
                 DepartmentId = created.DepartmentId,
@@ -92,6 +97,7 @@ namespace CollegeManagement.API.Services.Implementations
             var updated = await _departmentRepository.UpdateDepartmentAsync(existing);
             if (updated == null) return null;
 
+            _cache.RemoveByPrefix("lookup:departments");
             var deps = await _departmentRepository.GetDependenciesAsync(id);
             return new DepartmentResponseDto
             {
@@ -128,6 +134,7 @@ namespace CollegeManagement.API.Services.Implementations
                 return (false, "Failed to delete department.");
             }
 
+            _cache.RemoveByPrefix("lookup:departments");
             return (true, "Department deleted successfully.");
         }
 

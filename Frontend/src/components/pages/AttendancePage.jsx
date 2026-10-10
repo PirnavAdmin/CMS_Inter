@@ -20,12 +20,28 @@ const dailyStudentStatus = (morning, afternoon) => {
 };
 const STAFF_STATUSES = ["Present", "Absent", "Leave", "Late"];
 const STUDENT_LABEL = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
-const STAFF_LABEL = { 0: "Present", 1: "Present", 2: "Absent", 3: "Late", 4: "Leave", 5: "Holiday" };
+const STAFF_LABEL = {
+  0: "Present",
+  1: "Present",
+  2: "Absent",
+  3: "Late",
+  4: "Leave",
+  5: "Holiday",
+  6: "Leave",
+  Present: "Present",
+  Absent: "Absent",
+  Late: "Late",
+  Leave: "Leave",
+  Holiday: "Holiday",
+  HalfDay: "Leave",
+  "Half Day": "Leave",
+  "Half-Day": "Leave"
+};
 const VALUE = {
   Present: 1,
   Absent: 2,
   Late: 3,
-  Leave: 4,
+  Leave: 6,
   "Half Day": 4,
   "Half-Day": 4,
   Holiday: 5
@@ -42,7 +58,11 @@ const getTodayDate = () => {
   return `${y}-${m}-${day}`;
 };
 const studentStatus = (v) => STUDENT_LABEL[v] ?? (v === "Half-Day" ? "Half Day" : v) ?? "—";
-const staffStatus = (v) => STAFF_LABEL[v] ?? v ?? "—";
+const staffStatus = (v) => {
+  if (v == null || v === "" || v === "—") return "—";
+  if (v === "Not Marked") return "Not Marked";
+  return STAFF_LABEL[v] ?? STAFF_LABEL[Number(v)] ?? (STAFF_STATUSES.includes(v) ? v : "—");
+};
 const status = (v, staff = false) => staff ? staffStatus(v) : studentStatus(v);
 const studentSessionStatus = (row, session) => studentStatus(get(row, `${session}Status`, `${session}AttendanceStatus`, `${session}SessionStatus`, session, `${session}Attendance`));
 const attendancePercentage = (row) => {
@@ -271,6 +291,7 @@ function Screen({ staff = false, say }) {
  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
  const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
  const [dirty, setDirty] = useState(false);
+ const holidaysCacheRef = useRef(new Map());
  const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
  const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
@@ -306,55 +327,61 @@ function Screen({ staff = false, say }) {
    setBusy(true);
    setDirty(false);
    try {
-     try {
-       const holidays = await holidayApi.getHolidays({ boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId) });
-       const holidayList = Array.isArray(holidays) ? holidays : (holidays?.data || []);
-       const targetDate = f.date.slice(0, 10);
-       const match = holidayList.find((h) => {
-         const start = (h.startDate || h.StartDate || "").slice(0, 10);
-         const end = (h.endDate || h.EndDate || start).slice(0, 10);
-         return targetDate >= start && targetDate <= end;
-       });
-       setActiveHoliday(match || null);
-    } catch {
-      setActiveHoliday(null);
-    }
+     const holidayPromise = (async () => {
+       try {
+         const holidays = await holidayApi.getHolidays({ boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId) });
+         const holidayList = Array.isArray(holidays) ? holidays : (holidays?.data || []);
+         const targetDate = f.date.slice(0, 10);
+         const match = holidayList.find((h) => {
+           const start = (h.startDate || h.StartDate || "").slice(0, 10);
+           const end = (h.endDate || h.EndDate || start).slice(0, 10);
+           return targetDate >= start && targetDate <= end;
+         });
+         setActiveHoliday(match || null);
+       } catch {
+         setActiveHoliday(null);
+       }
+     })();
 
-     if (currentView === "Monthly Report") {
-       const r = await apiClient.get(staff ? apiEndpoints.staffAttendance.monthlyReport : apiEndpoints.attendance.studentMonthlyReport, { params: monthParams() });
-       setReport(body(r));
-     } else if (!staff && currentView === "Defaulters") {
-       const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, { params: { ...monthParams(), threshold: 75 } });
-       setRows(asList(body(r)));
-     } else if (staff) {
-       const r = await apiClient.post(apiEndpoints.staffAttendance.load, {
-         date: f.date,
-         campusId: num(navbarCampusId),
-         boardId: num(navbarBoardId),
-         academicYearId: num(navbarAcademicYearId),
-         departmentId: num(f.department),
-         staffType: staffType(f.type),
-         ...(f.status ? { status: VALUE[f.status] } : {}),
-         ...(f.person ? { facultyId: num(f.person) } : {})
-       });
-       setRows(asList(body(r)).map((row) => ({ ...row,
-         status: Number(row.status) === 0 && row.isAttendanceMarked === false ? "Not Marked" : row.status,
-       })));
-     } else {
-       const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
-         params: {
+     const fetchPromise = (async () => {
+       if (currentView === "Monthly Report") {
+         const r = await apiClient.get(staff ? apiEndpoints.staffAttendance.monthlyReport : apiEndpoints.attendance.studentMonthlyReport, { params: monthParams() });
+         setReport(body(r));
+       } else if (!staff && currentView === "Defaulters") {
+         const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, { params: { ...monthParams(), threshold: 75 } });
+         setRows(asList(body(r)));
+       } else if (staff) {
+         const r = await apiClient.post(apiEndpoints.staffAttendance.load, {
            date: f.date,
            campusId: num(navbarCampusId),
            boardId: num(navbarBoardId),
            academicYearId: num(navbarAcademicYearId),
-           academicLevelId: num(f.level),
-           groupId: num(f.group),
-           sectionId: num(f.section),
-           ...(f.program ? { programId: num(f.program) } : {})
-         }
-       });
-       setRows(asList(body(r)));
-     }
+           departmentId: num(f.department),
+           staffType: staffType(f.type),
+           ...(f.status ? { status: VALUE[f.status] } : {}),
+           ...(f.person ? { facultyId: num(f.person) } : {})
+         });
+         setRows(asList(body(r)).map((row) => ({ ...row,
+           status: Number(row.status) === 0 && row.isAttendanceMarked === false ? "Not Marked" : row.status,
+         })));
+       } else {
+         const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
+           params: {
+             date: f.date,
+             campusId: num(navbarCampusId),
+             boardId: num(navbarBoardId),
+             academicYearId: num(navbarAcademicYearId),
+             academicLevelId: num(f.level),
+             groupId: num(f.group),
+             sectionId: num(f.section),
+             ...(f.program ? { programId: num(f.program) } : {})
+           }
+         });
+         setRows(asList(body(r)));
+       }
+     })();
+
+     await Promise.all([holidayPromise, fetchPromise]);
      setLoaded(true);
    } catch (e) {
      say(getApiErrorMessage(e) || `Failed to load ${staff ? "staff" : "student"} attendance.`, "error");
@@ -456,8 +483,8 @@ function Screen({ staff = false, say }) {
      ? editing.status !== staffStatus(r.status) || (editing.inTime || "") !== (get(r, "inTime") || "") || (editing.outTime || "") !== (get(r, "outTime") || "")
      : editing.morning !== studentSessionStatus(r, "morning") || editing.afternoon !== studentSessionStatus(r, "afternoon");
    const remarkChanged = editing.remarks !== (get(r, "remarks", "remark") || "");
-   if (!staff && !changed && !remarkChanged) return say("No attendance changes to save.", "info");
-   if (changed && !editing.remarks.trim()) return say("Reason / remark is required when attendance changes.", "error");
+   if (!changed && !remarkChanged) return say("No attendance changes to save.", "info");
+   const effectiveRemarks = editing.remarks?.trim() || (changed ? `Status changed to ${staff ? editing.status : dailyStudentStatus(editing.morning, editing.afternoon)}` : (get(r, "remarks", "remark") || "Updated"));
    setEditSaving(true);
    setBusy(true);
    try {
@@ -467,11 +494,11 @@ function Screen({ staff = false, say }) {
          attendanceDate: f.date,
          campusId: num(navbarCampusId),
          departmentId: num(f.department) ?? get(r, "departmentId"),
-         staffType: staffType(f.type) ?? get(r, "staffType"),
-         status: VALUE[editing.status],
+         staffType: staffType(f.type) ?? get(r, "staffType") ?? 1,
+         status: VALUE[editing.status] || 1,
          inTime: editing.inTime || null,
          outTime: editing.outTime || null,
-         remarks: editing.remarks
+         remarks: effectiveRemarks
        });
        if (response.data?.status === false || response.data?.success === false || response.data?.isSuccess === false) {
          throw new Error(response.data?.message || "Failed to update staff attendance.");
@@ -622,13 +649,15 @@ function Screen({ staff = false, say }) {
              rows={pagedRows}
              staff={staff}
              emptyMessage={!staff && normalizedSearch ? "No students found matching your search." : undefined}
-             edit={(record) =>
+             edit={(record) => {
+               const s = staffStatus(record.status);
+               const initialStatus = STAFF_STATUSES.includes(s) ? s : "Present";
                setEditing(
                  staff
-                   ? { record, status: staffStatus(record.status), inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" }
+                   ? { record, status: initialStatus, inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" }
                    : { record, morning: studentSessionStatus(record, "morning"), afternoon: studentSessionStatus(record, "afternoon"), remarks: get(record, "remarks", "remark") || "" }
-               )
-             }
+               );
+             }}
              view={(record) => {
                const personId = staff ? get(record, "facultyId", "staffId", "id") : get(record, "studentId", "id");
                if (personId != null) navigate(`/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`, {
@@ -874,9 +903,14 @@ function Pill({ value, staff = false }) {
   } else if (norm === "Absent" || norm === "A") {
     code = "A";
     cls = "att-month-a";
-  } else if (norm === "Half Day" || norm === "Half-Day" || norm === "HD") {
-    code = "HD";
-    cls = "att-month-hd";
+  } else if (norm === "Half Day" || norm === "Half-Day" || norm === "HD" || norm === "HalfDay") {
+    if (staff) {
+      code = "L";
+      cls = "att-month-lv";
+    } else {
+      code = "HD";
+      cls = "att-month-hd";
+    }
   } else if (norm === "Leave" || norm === "LV" || norm === "L") {
     code = "L";
     cls = "att-month-lv";
@@ -922,7 +956,7 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
             <p>Current Status: {staffStatus(r.status)}</p>
             <Select
               label="New Status"
-              value={editing.status}
+              value={STAFF_STATUSES.includes(editing.status) ? editing.status : "Present"}
               onChange={(e) => setEditing({ ...editing, status: e.target.value })}
               items={STAFF_STATUSES}
             />

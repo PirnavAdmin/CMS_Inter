@@ -14,16 +14,21 @@ namespace CollegeManagement.API.Services.Implementations
     public class AttendanceTimingConfigService : IAttendanceTimingConfigService
     {
         private readonly IAttendanceTimingConfigRepository _repository;
+        private readonly ILookupCacheService _cache;
 
-        public AttendanceTimingConfigService(IAttendanceTimingConfigRepository repository)
+        public AttendanceTimingConfigService(IAttendanceTimingConfigRepository repository, ILookupCacheService cache)
         {
             _repository = repository;
+            _cache = cache;
         }
 
         public async Task<IEnumerable<TimingConfigResponse>> GetAllConfigsAsync()
         {
-            var entities = await _repository.GetAllAsync();
-            return entities.Select(MapToResponse).ToList();
+            return await _cache.GetOrCreateAsync("lookup:timingconfigs:all", async () =>
+            {
+                var entities = await _repository.GetAllAsync();
+                return entities.Select(MapToResponse).ToList();
+            });
         }
 
         public async Task<TimingConfigResponse?> GetConfigByIdAsync(int id)
@@ -34,8 +39,12 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<TimingConfigResponse?> GetEffectiveConfigAsync(StaffType? staffType, int? departmentId)
         {
-            var entity = await _repository.GetEffectiveConfigAsync(staffType, departmentId);
-            return entity == null ? null : MapToResponse(entity);
+            string cacheKey = $"lookup:timingconfigs:effective:{staffType}:{departmentId}";
+            return await _cache.GetOrCreateAsync(cacheKey, async () =>
+            {
+                var entity = await _repository.GetEffectiveConfigAsync(staffType, departmentId);
+                return entity == null ? null : MapToResponse(entity);
+            });
         }
 
         public async Task<TimingConfigResponse> CreateConfigAsync(CreateTimingConfigRequest request)
@@ -56,6 +65,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
 
             var created = await _repository.CreateAsync(entity);
+            _cache.RemoveByPrefix("lookup:timingconfigs");
             return MapToResponse(created);
         }
 
@@ -77,12 +87,15 @@ namespace CollegeManagement.API.Services.Implementations
             existing.IsActive = request.IsActive;
 
             var updated = await _repository.UpdateAsync(id, existing);
+            _cache.RemoveByPrefix("lookup:timingconfigs");
             return updated == null ? null : MapToResponse(updated);
         }
 
         public async Task<bool> DeleteConfigAsync(int id)
         {
-            return await _repository.DeleteAsync(id);
+            var res = await _repository.DeleteAsync(id);
+            if (res) _cache.RemoveByPrefix("lookup:timingconfigs");
+            return res;
         }
 
         private static TimeSpan ParseTime(string timeStr, TimeSpan fallback)
