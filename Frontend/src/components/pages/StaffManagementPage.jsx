@@ -5138,6 +5138,23 @@ function SendLink({ record, update, activity }) {
 // ----------------------------------------------------------------------
 // PENDING SUBMISSIONS & BULK RESEND (POST /api/v1/staff/bulk-send-links)
 // ----------------------------------------------------------------------
+function getStaffSubmissionTab(record) {
+  const normalize = (value) => String(value || "").replace(/[\s_-]/g, "").toLowerCase();
+  const status = normalize(record.profileStatus);
+  const review = normalize(record.reviewStatus);
+  if (status === "completed" || review === "approved") return null;
+  const correctionStatuses = ["needscorrection", "requestcorrection", "correctionrequested"];
+  if (correctionStatuses.includes(status) || correctionStatuses.includes(review) ||
+      (Boolean(record.correctionNote || record.correctionNotes) && status !== "submitted" && review !== "pending")) {
+    return "Needs Correction";
+  }
+  if (status === "submitted" || review === "pending" || Number(record.profileCompletion) === 100 || record.submittedAt || record.profileSubmittedAt) {
+    return "Submitted";
+  }
+  if (status === "inprogress" || (Number(record.profileCompletion) > 30 && Number(record.profileCompletion) < 100)) return "In Progress";
+  return "Link Sent";
+}
+
 function Pending({ records = [], setRecords, activity }) {
   const n = useNavigate();
   const tabs = ["Link Sent", "In Progress", "Needs Correction", "Submitted"];
@@ -5200,8 +5217,15 @@ function Pending({ records = [], setRecords, activity }) {
           if (!r) return;
           const norm = normalizeStaffRecord(r);
           const key = String(norm.id || norm.employeeId);
-          map.set(key, { ...(map.get(key) || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 });
-          if (norm.employeeId) map.set(String(norm.employeeId).trim().toLowerCase(), { ...(map.get(key) || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 });
+          const employeeKey = String(norm.employeeId || "").trim().toLowerCase();
+          const previous = map.get(key) || (employeeKey && map.get(employeeKey));
+          // A cached submission must not undo an administrator's review.
+          const reviewed = [previous, norm].find((item) => item && (getStaffSubmissionTab(item) === "Needs Correction" || getStaffSubmissionTab(item) === null));
+          const merged = reviewed
+            ? { ...norm, ...reviewed }
+            : { ...(previous || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 };
+          map.set(key, merged);
+          if (employeeKey) map.set(employeeKey, merged);
         });
       }
     } catch (e) { }
@@ -5215,6 +5239,12 @@ function Pending({ records = [], setRecords, activity }) {
         const empKey = norm.employeeId ? String(norm.employeeId).trim().toLowerCase() : "";
         const local = (idKey && map.get(idKey)) || (empKey && map.get(empKey));
         const merged = local ? { ...norm, ...local } : norm;
+        // Honor an explicit correction/approval returned by the server too.
+        if (getStaffSubmissionTab(norm) === "Needs Correction" || getStaffSubmissionTab(norm) === null) {
+          merged.profileStatus = norm.profileStatus;
+          merged.reviewStatus = norm.reviewStatus;
+          merged.correctionNote = norm.correctionNote || norm.correctionNotes || "";
+        }
         if (idKey) map.set(idKey, merged);
         if (empKey) map.set(empKey, merged);
       });
@@ -5243,40 +5273,14 @@ function Pending({ records = [], setRecords, activity }) {
   const tabCounts = useMemo(() => {
     const counts = { "Link Sent": 0, "In Progress": 0, "Needs Correction": 0, "Submitted": 0 };
     mergedTeachingList.forEach((r) => {
-      const status = String(r.profileStatus || "").trim();
-      if (status === "Completed") return;
-      if (status === "Submitted" || r.reviewStatus === "Pending" || r.profileCompletion === 100 || r.submittedAt || r.profileSubmittedAt) {
-        counts["Submitted"]++;
-      } else if (status === "Needs Correction" || r.correctionNote) {
-        counts["Needs Correction"]++;
-      } else if (status === "In Progress" || (Number(r.profileCompletion) > 30 && Number(r.profileCompletion) < 100)) {
-        counts["In Progress"]++;
-      } else {
-        counts["Link Sent"]++;
-      }
+      const submissionTab = getStaffSubmissionTab(r);
+      if (submissionTab) counts[submissionTab]++;
     });
     return counts;
   }, [mergedTeachingList]);
 
   const rows = useMemo(() => {
-    return mergedTeachingList.filter((r) => {
-      const status = String(r.profileStatus || "").trim();
-      if (status === "Completed") return false;
-
-      if (tab === "Submitted") {
-        return status === "Submitted" || r.reviewStatus === "Pending" || r.profileCompletion === 100 || Boolean(r.submittedAt || r.profileSubmittedAt);
-      }
-      if (tab === "Needs Correction") {
-        return status === "Needs Correction" || Boolean(r.correctionNote);
-      }
-      if (tab === "In Progress") {
-        return status === "In Progress" || (Number(r.profileCompletion) > 30 && Number(r.profileCompletion) < 100 && status !== "Submitted" && status !== "Needs Correction");
-      }
-      if (tab === "Link Sent") {
-        return status === "Link Sent" || status === "Pending" || !status || status === "Active" || Boolean(r.linkSent);
-      }
-      return false;
-    });
+    return mergedTeachingList.filter((r) => getStaffSubmissionTab(r) === tab);
   }, [mergedTeachingList, tab]);
 
   const pageSize = 10;
@@ -5462,10 +5466,10 @@ function Pending({ records = [], setRecords, activity }) {
                           <span style={{ fontSize: "11px", fontWeight: "600" }}>{tab === "Submitted" ? "100%" : `${r.profileCompletion || 30}%`}</span>
                         </div>
                       </td>
-                      <td><Badge value={tab === "Submitted" ? "Submitted" : r.profileStatus || "Link Sent"} /></td>
+                      <td><Badge value={getStaffSubmissionTab(r)} /></td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          {tab === "Submitted" || r.profileStatus === "Submitted" ? (
+                          {tab === "Submitted" ? (
                             <button
                               className="cms-btn cms-btn-primary"
                               style={{ padding: "5px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
@@ -5677,6 +5681,8 @@ function Review({ record, update, activity }) {
         profileStatus: "Completed",
         profileCompletion: 100,
         reviewStatus: "Approved",
+        correctionNote: "",
+        correctionNotes: "",
       });
       if (activity) activity(`${record.fullName} profile approved by administration`);
       n(`/dashboard/staff/${record.id}`);
@@ -5704,10 +5710,12 @@ function Review({ record, update, activity }) {
       update({
         ...record,
         profileStatus: "Needs Correction",
+        reviewStatus: "Needs Correction",
         correctionNote: note.trim(),
+        correctionNotes: note.trim(),
       });
       if (activity) activity(`${record.fullName} requested profile corrections: ${note.trim()}`);
-      n(`/dashboard/staff/${record.id}`);
+      n("/dashboard/staff/pending?tab=Needs%20Correction");
     } catch (err) {
       console.error("POST /api/v1/staff/{id}/admin-review failed", err);
       alert(getApiErrorMessage(err, "Failed to request correction. Please try again."));
