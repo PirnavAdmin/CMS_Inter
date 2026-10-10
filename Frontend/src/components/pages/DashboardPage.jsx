@@ -355,16 +355,15 @@ export default function DashboardPage() {
   const campusId = selectedCampusId || selectedCampus?.id || selectedCampus?.campusId;
   const boardId = selectedBoard?.id || selectedBoard?.code || selectedBoard?.boardId;
   const academicYearId = selectedAcademicYear?.id || selectedAcademicYear?.code || selectedAcademicYear?.academicYearId;
-  const todayDate = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todayDate = useMemo(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }, []);
 
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
   const [lastUpdated, setLastUpdated] = useState(() => formattedTimestamp());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
-
-  // Dropdown states
-  const [studentView, setStudentView] = useState("all");
-  const [staffType, setStaffType] = useState("all");
 
   // State objects for cards
   const [summaryState, setSummaryState] = useState({ loading: true, error: null, data: null });
@@ -525,17 +524,6 @@ export default function DashboardPage() {
     const seq = ++studentAttSeq.current;
     setStudentAttState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const viewByVal =
-        studentView === "all" || studentView === "Overall"
-          ? "Overall"
-          : studentView === "academic-level" || studentView === "Academic Level"
-            ? "Academic Level"
-            : studentView === "group" || studentView === "Group"
-              ? "Group"
-              : studentView === "section" || studentView === "Section"
-                ? "Section"
-                : studentView || "Overall";
-
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
@@ -546,100 +534,40 @@ export default function DashboardPage() {
       const res = await apiClient.get("/api/v1/attendance/admin/students", { params });
 
       if (studentAttSeq.current === seq) {
-        const payload = res.data?.data || res.data || [];
-        const rows = Array.isArray(payload) ? payload : [];
-
-        const STUDENT_LABEL = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
-        const studentStatus = (v) => STUDENT_LABEL[v] ?? (v === "Half-Day" ? "Half Day" : v) ?? "—";
-        const getVal = (o, ...keys) => keys.map((k) => o?.[k]).find((v) => v !== undefined && v !== null);
-        const studentSessionStatus = (row, session) => studentStatus(getVal(row, `${session}Status`, `${session}AttendanceStatus`, `${session}SessionStatus`, session, `${session}Attendance`));
-
-        const processedRows = rows.map(r => {
-          const m = studentSessionStatus(r, "morning");
-          const a = studentSessionStatus(r, "afternoon");
-          let finalStatus = "—";
-          if (m === "Present" && a === "Present") finalStatus = "Present";
-          else if (m === "Half Day" || a === "Half Day") finalStatus = "Half Day";
-          else if ((m === "Present" && a === "Absent") || (a === "Present" && m === "Absent")) finalStatus = "Half Day";
-          else if (m === "Present" || a === "Present") finalStatus = "Present";
-          else if (m === "Absent" || a === "Absent") finalStatus = "Absent";
-          else if (m === "Holiday" || a === "Holiday") finalStatus = "Holiday";
-          return { ...r, finalStatus };
-        });
-
-        const presentCount = processedRows.filter(r => r.finalStatus === "Present").length;
-        const absentCount = processedRows.filter(r => r.finalStatus === "Absent").length;
-        const halfDayCount = processedRows.filter(r => r.finalStatus === "Half Day").length;
-        const totalCount = processedRows.length;
-        const percentage = totalCount ? Math.round(((presentCount + 0.5 * halfDayCount) * 100) / totalCount) : 0;
-
-        let breakdownList = [];
-        if (viewByVal !== "Overall") {
-          const groupMap = {};
-          processedRows.forEach(r => {
-            let key = "Unknown";
-            if (viewByVal === "Academic Level") key = getVal(r, "levelName", "academicLevelName") || "Unknown";
-            if (viewByVal === "Group") key = getVal(r, "groupName") || "Unknown";
-            if (viewByVal === "Section") key = getVal(r, "sectionName") || "Unknown";
-            
-            if (!groupMap[key]) groupMap[key] = { name: key, total: 0, present: 0, absent: 0, halfDay: 0 };
-            groupMap[key].total++;
-            if (r.finalStatus === "Present") groupMap[key].present++;
-            if (r.finalStatus === "Absent") groupMap[key].absent++;
-            if (r.finalStatus === "Half Day") groupMap[key].halfDay++;
-          });
-          
-          breakdownList = Object.values(groupMap).map(g => ({
-            ...g,
-            percentage: g.total ? Math.round(((g.present + 0.5 * g.halfDay) * 100) / g.total) : 0
-          }));
-        }
-
-        setStudentAttState({
-          loading: false,
-          error: null,
-          data: attendance,
-          timestamp: "Today"
-        });
+        const attendance = summarizeStudentAttendance(res.data, "Overall");
+        setStudentAttState({ loading: false, error: null, data: attendance, timestamp: "Today" });
       }
     } catch (err) {
       if (studentAttSeq.current === seq) {
         setStudentAttState((prev) => ({ ...prev, loading: false, error: getApiErrorMessage(err, "Failed to load student attendance"), data: null }));
       }
     }
-  }, [campusId, boardId, academicYearId, studentView, todayDate]);
+  }, [campusId, boardId, academicYearId, todayDate]);
 
   // 5. POST /api/v1/staff-attendance/load
   const fetchStaffAttendance = useCallback(async () => {
     const seq = ++staffAttSeq.current;
     setStaffAttState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const staffTypeVal =
-        staffType === "all" || staffType === "All Staff"
-          ? "All Staff"
-          : staffType === "teaching" || staffType === "Teaching" || staffType === "Teaching Staff"
-            ? "Teaching Staff"
-            : staffType === "non-teaching" || staffType === "Non-Teaching" || staffType === "Non-Teaching Staff"
-              ? "Non-Teaching Staff"
-              : staffType || "All Staff";
-
-      const typeParam = staffTypeVal === "Teaching Staff" ? 1 : staffTypeVal === "Non-Teaching Staff" ? 2 : undefined;
-
       const payload = {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
-        ...(typeParam ? { staffType: typeParam } : {}),
+        ...(academicYearId ? { academicYearId } : {}),
         date: todayDate,
       };
 
       const res = await apiClient.post("/api/v1/staff-attendance/load", payload);
 
       if (staffAttSeq.current === seq) {
-        const resData = res.data?.data || res.data || [];
-        const rows = Array.isArray(resData) ? resData : [];
+        if (res.data?.success === false || res.data?.Success === false) {
+          throw new Error(res.data.message || res.data.Message || "Unable to load staff attendance.");
+        }
+        const resData = res.data?.data ?? res.data?.Data ?? res.data;
+        const rows = Array.isArray(resData) ? resData : resData?.items ?? resData?.Items ?? resData?.records;
+        if (!Array.isArray(rows)) throw new Error("The staff attendance API returned an unsupported response.");
 
         const STAFF_LABEL = { 1: "Present", 2: "Absent", 3: "Late", 4: "Leave", 5: "Holiday" };
-        const staffStatus = (v) => STAFF_LABEL[v] ?? v ?? "—";
+        const staffStatus = (v) => STAFF_LABEL[v] ?? ({ present: "Present", absent: "Absent", late: "Late", leave: "Leave", onleave: "Leave", holiday: "Holiday" })[String(v ?? "").toLowerCase().replace(/[\s_-]/g, "")];
 
         let presentCount = 0;
         let absentCount = 0;
@@ -647,7 +575,7 @@ export default function DashboardPage() {
         let onLeaveCount = 0;
 
         rows.forEach(r => {
-           const st = staffStatus(r.status);
+           const st = staffStatus(r.status ?? r.Status);
            if (st === "Present") presentCount++;
            else if (st === "Absent") absentCount++;
            else if (st === "Late") lateCount++;
@@ -676,7 +604,7 @@ export default function DashboardPage() {
         setStaffAttState((prev) => ({ ...prev, loading: false, error: getApiErrorMessage(err, "Failed to load staff attendance"), data: null }));
       }
     }
-  }, [campusId, boardId, staffType, todayDate]);
+  }, [campusId, boardId, academicYearId, todayDate]);
 
   // 6. GET /api/v1/dashboard/upcoming-holidays (with fallback to /api/v1/holidays)
   const fetchUpcomingHolidays = useCallback(async () => {
@@ -735,15 +663,16 @@ export default function DashboardPage() {
     fetchUpcomingExaminations();
   }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchUpcomingHolidays, fetchUpcomingExaminations]);
 
-  // Student View-By dropdown change effect -> Refresh ONLY Student Attendance card
+  // Refresh both overall attendance cards when their scope changes or this tab regains focus.
   useEffect(() => {
-    fetchStudentAttendance();
-  }, [fetchStudentAttendance]);
-
-  // Staff Type dropdown change effect -> Refresh ONLY Staff Attendance card
-  useEffect(() => {
-    fetchStaffAttendance();
-  }, [fetchStaffAttendance]);
+    const refreshAttendance = () => {
+      fetchStudentAttendance();
+      fetchStaffAttendance();
+    };
+    refreshAttendance();
+    window.addEventListener("focus", refreshAttendance);
+    return () => window.removeEventListener("focus", refreshAttendance);
+  }, [fetchStudentAttendance, fetchStaffAttendance]);
 
   // Full Refresh Dashboard handler
   const handleRefreshAll = useCallback(async () => {
@@ -1106,18 +1035,12 @@ export default function DashboardPage() {
     const data = staffAttState.data || {};
     const total = Number(metric(data, ["total", "totalStaff", "totalCount"]) ?? 0);
     const present = Number(metric(data, ["present", "presentCount"]) ?? 0);
-    let absent = metric(data, ["absent", "absentCount"]);
+    const absent = Number(metric(data, ["absent", "absentCount"]) ?? 0);
     const late = Number(metric(data, ["late", "lateCount"]) ?? 0);
     const onLeave = Number(metric(data, ["onLeave", "onLeaveCount", "leaveCount"]) ?? 0);
     let percentage = metric(data, ["percentage", "attendancePercentage"]);
     const teachingCount = metric(data, ["teachingCount", "teachingStaffCount"]);
     const nonTeachingCount = metric(data, ["nonTeachingCount", "nonTeachingStaffCount"]);
-
-    if ((absent === undefined || absent === null || (present === 0 && Number(absent) === 0 && late === 0 && onLeave === 0) || (present + Number(absent) + late + onLeave < total)) && total > 0) {
-      absent = Math.max(0, total - present - late - onLeave);
-    } else {
-      absent = Number(absent ?? 0);
-    }
 
     if (percentage === undefined || percentage === null || percentage === 0) {
       percentage = total > 0 ? Number((((present + 0.5 * late) / total) * 100).toFixed(1)) : 0;
@@ -1409,22 +1332,7 @@ export default function DashboardPage() {
 
           {/* Card 3: Students Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-attendance-today-card">
-            <CardHeader title="Students Attendance Overview (Today)">
-              <div className="dashboard-header-select-wrap">
-                <span className="dashboard-select-label">View By:</span>
-                <select
-                  className="dashboard-header-dropdown"
-                  value={studentView}
-                  onChange={(e) => setStudentView(e.target.value)}
-                  aria-label="Select View By"
-                >
-                  <option value="all">Overall</option>
-                  <option value="academic-level">Academic Level</option>
-                  <option value="group">Group</option>
-                  <option value="section">Section</option>
-                </select>
-              </div>
-            </CardHeader>
+            <CardHeader title="Students Attendance Overview (Today)" />
 
             {studentAttState.loading ? (
               <LoadingState label="Updating attendance..." />
@@ -1432,9 +1340,8 @@ export default function DashboardPage() {
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
-                {studentView === "all" ? (
-                  studentAttData.total === undefined && studentAttData.present === undefined ? (
-                    <EmptyState message="No student attendance data available for today." />
+                {studentAttData.total === 0 ? (
+                    <EmptyState message="No marked student attendance available for today." />
                   ) : (
                     <>
                       {/* Donut Chart & Side Status Legend (Centered Together) */}
@@ -1498,7 +1405,7 @@ export default function DashboardPage() {
                       {/* 5 Summary KPI Chips */}
                       <div className="dashboard-attendance-kpi-row">
                         <div className="att-kpi-chip">
-                          <small>Total Students</small>
+                          <small>Marked Students</small>
                           <strong>{formatNumber(studentAttData.total)}</strong>
                         </div>
                         <div className="att-kpi-chip text-present">
@@ -1520,39 +1427,12 @@ export default function DashboardPage() {
                       </div>
                     </>
                   )
-                ) : studentAttData.breakdownList.length === 0 ? (
-                  <EmptyState message={`No ${studentView} attendance records available.`} />
-                ) : (
-                  <div className="dashboard-attendance-breakdown-list">
-                    {studentAttData.breakdownList.map((item, idx) => {
-                      const name = item.name || item.groupName || item.sectionName || item.levelName || `Item ${idx + 1}`;
-                      const pct = Number(item.percentage ?? (item.total ? ((item.present / item.total) * 100).toFixed(1) : 0));
-                      const itemColor = item.color || "#22a447";
-                      const itemHd = item.halfDay ?? item.late;
-                      return (
-                        <div key={name || idx} className="att-breakdown-item">
-                          <div className="att-breakdown-head">
-                            <span className="att-breakdown-name" style={{ color: item.color || "inherit" }}>{name}</span>
-                            <span className="att-breakdown-pct">{pct}%</span>
-                          </div>
-                          <div className="att-progress-bar">
-                            <div className="att-progress-fill" style={{ width: `${Math.min(100, Math.max(0, pct))}%`, backgroundColor: itemColor }} />
-                          </div>
-                          <div className="att-breakdown-meta">
-                            <span>Present: <strong>{formatNumber(item.present)}</strong> / {formatNumber(item.total)}</span>
-                            <span>Absent: <strong>{formatNumber(item.absent)}</strong></span>
-                            {itemHd !== undefined ? <span>Half-day: <strong>{formatNumber(itemHd)}</strong></span> : null}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                }
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">
 
-                  <Link to={`/dashboard/attendance/student?view=details&viewBy=${studentView}`} className="dashboard-footer-btn">
+                  <Link to="/dashboard/attendance/student?view=details" className="dashboard-footer-btn">
                     View Attendance Details <ChevronRight size={14} />
                   </Link>
                 </div>
@@ -1565,24 +1445,13 @@ export default function DashboardPage() {
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Secondary Analytics">
           {/* Card 1: Staff Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-staff-attendance-card">
-            <CardHeader title="Staff Attendance Overview (Today)">
-              <select
-                className="dashboard-header-dropdown"
-                value={staffType}
-                onChange={(e) => setStaffType(e.target.value)}
-                aria-label="Staff Type"
-              >
-                <option value="all">All Staff</option>
-                <option value="teaching">Teaching Staff</option>
-                <option value="non-teaching">Non-Teaching Staff</option>
-              </select>
-            </CardHeader>
+            <CardHeader title="Staff Attendance Overview (Today)" />
 
             {staffAttState.loading ? (
               <LoadingState label="Updating staff attendance..." />
             ) : staffAttState.error ? (
               <ErrorState message={staffAttState.error} onRetry={fetchStaffAttendance} />
-            ) : staffAttData.total === undefined && staffAttData.present === undefined ? (
+            ) : staffAttData.total === 0 ? (
               <EmptyState message="No staff attendance data available for today." />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
@@ -1674,7 +1543,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {staffType === "all" && (staffAttData.teachingCount !== undefined || staffAttData.nonTeachingCount !== undefined) ? (
+                  {(staffAttData.teachingCount !== undefined || staffAttData.nonTeachingCount !== undefined) ? (
                     <div className="dashboard-staff-split-note">
                       <span>Teaching: <strong>{formatNumber(staffAttData.teachingCount)}</strong></span>
                       <span className="split-divider">|</span>
@@ -1708,7 +1577,7 @@ export default function DashboardPage() {
               <EmptyState message="No upcoming holidays scheduled." />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-info-list" style={{ paddingBottom: '20px' }}>
+                <div className="dashboard-info-list">
                   {holidaysList.map((item, index) => (
                     <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
@@ -1747,7 +1616,7 @@ export default function DashboardPage() {
               <EmptyState message="No upcoming examinations scheduled." />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-info-list" style={{ paddingBottom: '20px' }}>
+                <div className="dashboard-info-list">
                   {examsList.map((item, index) => (
                     <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
