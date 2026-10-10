@@ -1611,7 +1611,7 @@
   background-color: color-mix(in srgb, var(--cms-primary, #6f8400) 10%, #ffffff) !important;
 }
 
-.cms-searchable-select-option > div {
+.cms-searchable-select-option>div {
   display: flex !important;
   flex-direction: column !important;
   gap: 2px !important;
@@ -1784,4 +1784,405 @@
   background: rgba(111, 132, 0, 0.12);
   color: var(--cms-primary, #6f8400);
   margin-right: 4px;
+}
+
+/* ============================================================
+   Enhanced Modal Width & Professional Details/Preview Styling
+   ============================================================ */
+
+.cms-modal.exam-details-modal,
+.cms-modal.exam-preview-modal,
+.exam-modal.exam-details-modal,
+.exam-modal.exam-preview-modal {
+  width: min(1380px, calc(100vw - 40px)) !important;
+  max-width: 1380px !important;
+  max-height: calc(100vh - 40px) !important;
+  border-radius: 18px;
+  box-shadow: 0 20px 50px -10px rgba(15, 23, 42, 0.25), 0 0 1px 1px rgba(0, 0, 0, 0.05);
+}
+
+.exam-details-modal .cms-modal-body,
+.exam-preview-modal .cms-modal-body {
+  padding: 22px 26px !important;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Examination Details Summary Header Card */
+.exam-details-modal .exam-view-summary {
+  background: var(--cms-subtle, #f8fafc);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .exam-details-modal .exam-view-summary,
+.dark .exam-details-modal .exam-view-summary {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.exam-details-modal .exam-view-summary strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--cms-text, #0f172a);
+  letter-spacing: -0.2px;
+}
+
+.exam-details-modal .exam-view-summary p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--cms-text-secondary, #64748b);
+  line-height: 1.5;
+}
+
+/* Ensure the schedule table inside exam-details-modal displays full values without clipping */
+.exam-details-modal .cms-table-wrap,
+.exam-preview-modal .cms-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--cms-surface, #ffffff);
+}
+
+[data-theme="dark"] .exam-details-modal .cms-table-wrap,
+.dark .exam-details-modal .cms-table-wrap,
+[data-theme="dark"] .exam-preview-modal .cms-table-wrap,
+.dark .exam-preview-modal .cms-table-wrap {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+.exam-details-modal .exam-schedule-inner-table {
+  width: 100% !important;
+  min-width: 1000px !important;
+  table-layout: auto !important;
+}
+
+.exam-details-modal .exam-schedule-inner-table th,
+.exam-details-modal .exam-schedule-inner-table td {
+  width: auto !important;
+  max-width: none !important;
+  padding: 12px 14px !important;
+  font-size: 12.5px !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+}
+
+.exam-details-modal .exam-schedule-inner-table th {
+  background: var(--cms-subtle, #f1f5f9) !important;
+  font-weight: 600 !important;
+  color: var(--cms-text-secondary, #475569) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.4px !important;
+}
+
+[data-theme="dark"] .exam-details-modal .exam-schedule-inner-table th,
+.dark .exam-details-modal .exam-schedule-inner-table th {
+  background: #1e293b !important;
+  color: #94a3b8 !important;
+  border-bottom-color: #334155 !important;
+}
+
+/* Allow cells inside the details modal to show entire values rather than 2-line clamp */
+.exam-details-modal .exam-cell-two-lines {
+  display: block !important;
+  -webkit-line-clamp: unset !important;
+  line-clamp: unset !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  max-width: none !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+/* ============================================================
+   Second Reference Schedule Preview Modal & Document Layout
+   ============================================================ */
+
+.exam-preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Modal Action Bar */
+.exam-preview-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--cms-subtle, #f8fafc);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 12px 18px;
+}
+
+[data-theme="dark"] .exam-preview-action-bar,
+.dark .exam-preview-action-bar {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.exam-preview-meta-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--cms-text-secondary, #64748b);
+}
+
+.exam-preview-meta-info strong {
+  color: var(--cms-text, #0f172a);
+}
+
+[data-theme="dark"] .exam-preview-meta-info strong,
+.dark .exam-preview-meta-info strong {
+  color: #f8fafc;
+}
+
+.exam-preview-meta-sep {
+  color: var(--cms-muted, #94a3b8);
+}
+
+.exam-preview-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.exam-preview-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  background: #204070 !important;
+  color: #ffffff !important;
+  border: 1px solid #204070 !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.exam-preview-download-btn:hover:not(:disabled) {
+  background: #183359 !important;
+  border-color: #183359 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(32, 64, 112, 0.25);
+}
+
+.exam-preview-download-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Loading & Empty States */
+.exam-preview-loading-box,
+.exam-preview-empty-box {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--cms-text-secondary, #64748b);
+  background: var(--cms-surface, #ffffff);
+  border-radius: 12px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+}
+
+[data-theme="dark"] .exam-preview-loading-box,
+.dark .exam-preview-loading-box,
+[data-theme="dark"] .exam-preview-empty-box,
+.dark .exam-preview-empty-box {
+  background: #0f172a;
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+.exam-preview-loading-box p,
+.exam-preview-empty-box p {
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* The Reference Document View matching Screenshot 2 */
+.ref-doc-wrapper {
+  background: #ffffff;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  padding: 20px 24px 28px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  color: #1e293b;
+  font-family: inherit;
+}
+
+/* 1. Main Blue Title Banner */
+.ref-main-title-banner {
+  background: #204070;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+  padding: 10px 20px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+/* 2. Subheader Row: Generated On */
+.ref-gen-row {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid #94a3b8;
+  border-radius: 3px;
+  background: #ffffff;
+  min-height: 30px;
+  margin-bottom: 16px;
+}
+
+.ref-gen-label {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  border-right: 1px solid #94a3b8;
+  width: 220px;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+}
+
+.ref-gen-value {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  border-right: 1px solid #94a3b8;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+}
+
+.ref-gen-spacer {
+  flex: 1;
+  background: #ffffff;
+}
+
+/* 3. Examination Blocks */
+.ref-exams-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ref-exam-card {
+  border-radius: 4px;
+  border: 1px solid var(--theme-border);
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* 4 Cycling Themes */
+.ref-theme-blue {
+  --theme-header-bg: #cce3fd;
+  --theme-th-bg: #e2effe;
+  --theme-border: #9ec5f7;
+  --theme-text: #0f3567;
+}
+
+.ref-theme-green {
+  --theme-header-bg: #cbebd4;
+  --theme-th-bg: #e3f6ea;
+  --theme-border: #99dbab;
+  --theme-text: #134e28;
+}
+
+.ref-theme-orange {
+  --theme-header-bg: #fde2ca;
+  --theme-th-bg: #fff0e2;
+  --theme-border: #f8be8c;
+  --theme-text: #7a310c;
+}
+
+.ref-theme-purple {
+  --theme-header-bg: #e5dbf8;
+  --theme-th-bg: #f2edfc;
+  --theme-border: #c6b4ef;
+  --theme-text: #4c1d95;
+}
+
+.ref-exam-card-header {
+  padding: 8px 14px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--theme-text);
+  background-color: var(--theme-header-bg);
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.ref-exam-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ref-exam-table th {
+  background-color: var(--theme-th-bg);
+  color: var(--theme-text);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid var(--theme-border);
+}
+
+.ref-exam-table td {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #1e293b;
+  border: 1px solid var(--theme-border);
+  vertical-align: middle;
+  background: #ffffff;
+}
+
+.ref-exam-table tbody tr:hover td {
+  background-color: #f8fafc;
+}
+
+.ref-empty-schedule-cell {
+  text-align: center;
+  color: #64748b;
+  font-style: italic;
+  padding: 16px !important;
+}
+
+/* Edit Period Button Theme-Based Styling */
+.exam-edit-period-btn {
+  background: var(--cms-primary, #6f8400) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--cms-primary, #6f8400) !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.exam-edit-period-btn:hover {
+  background: var(--cms-primary-hover, #5b6d00) !important;
+  border-color: var(--cms-primary-hover, #5b6d00) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
 }

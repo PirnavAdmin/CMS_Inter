@@ -35,11 +35,13 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.Examination, opt => opt.Ignore())
                 .ForMember(dest => dest.Subject, opt => opt.Ignore())
                 .ForMember(dest => dest.Hall, opt => opt.MapFrom(src => src.Hall ?? src.RoomNumber ?? string.Empty))
-                .ForMember(dest => dest.Invigilator, opt => opt.MapFrom(src => src.Invigilator ?? src.InvigilatorName ?? string.Empty));
+                .ForMember(dest => dest.Invigilator, opt => opt.MapFrom(src => src.Invigilator ?? src.InvigilatorName ?? string.Empty))
+                .ForMember(dest => dest.IncludedSubjectIds, opt => opt.MapFrom(src => src.IncludedSubjectIds != null && src.IncludedSubjectIds.Any() ? string.Join(",", src.IncludedSubjectIds.Distinct()) : null));
 
             CreateMap<UpdateExamScheduleRequest, ExamSchedule>()
                 .ForMember(dest => dest.Examination, opt => opt.Ignore())
                 .ForMember(dest => dest.Subject, opt => opt.Ignore())
+                .ForMember(dest => dest.IncludedSubjectIds, opt => opt.MapFrom(src => src.IncludedSubjectIds != null && src.IncludedSubjectIds.Any() ? string.Join(",", src.IncludedSubjectIds.Distinct()) : null))
                 .ForAllMembers(opts => opts.Condition((src, dest, srcMember) => srcMember != null));
 
             #endregion
@@ -58,7 +60,10 @@ namespace CollegeManagement.API.Profiles
 
             CreateMap<ExamSchedule, ExamScheduleResponse>()
                 .ForMember(dest => dest.SubjectName, opt => opt.MapFrom(src => src.Subject != null ? src.Subject.SubjectName : string.Empty))
-                .ForMember(dest => dest.SubjectCode, opt => opt.MapFrom(src => src.Subject != null ? src.Subject.SubjectCode : string.Empty));
+                .ForMember(dest => dest.SubjectCode, opt => opt.MapFrom(src => src.Subject != null ? src.Subject.SubjectCode : string.Empty))
+                .ForMember(dest => dest.IncludedSubjectIds, opt => opt.MapFrom(src => src.IncludedSubjectIdList))
+                .ForMember(dest => dest.PatternName, opt => opt.MapFrom(src => src.PatternName))
+                .ForMember(dest => dest.GroupId, opt => opt.MapFrom(src => src.GroupId));
 
             CreateMap<HallTicket, HallTicketResponse>()
                 .ForMember(dest => dest.StudentName, opt => opt.MapFrom(src => src.Student != null ? src.Student.StudentName : string.Empty))

@@ -177,6 +177,7 @@ namespace CollegeManagement.API.Services.Implementations
             var exam = await _context.Examinations
                 .Include(e => e.Program)
                 .Include(e => e.AssessmentType)
+                .Include(e => e.ExamSchedules.Where(s => s.IsActive))
                 .FirstOrDefaultAsync(e => e.ExaminationId == request.ExamId);
 
             // Query all marks for this examination in the given context
@@ -209,7 +210,44 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException("No marks found for the specified examination criteria.");
             }
 
-            // Precondition Check: Check if any marks for this exam are NOT approved
+            // Precondition Check 1: Verify all required subjects have marks recorded
+            var scheduleSubjectIds = new HashSet<int>();
+            if (exam?.ExamSchedules != null)
+            {
+                foreach (var sch in exam.ExamSchedules.Where(s => s.IsActive))
+                {
+                    if (sch.SubjectId > 0) scheduleSubjectIds.Add(sch.SubjectId);
+                    foreach (var incId in sch.IncludedSubjectIdList)
+                    {
+                        if (incId > 0) scheduleSubjectIds.Add(incId);
+                    }
+                }
+            }
+
+            try
+            {
+                var conn = _context.Database.GetDbConnection();
+                var junctionSubjects = await Dapper.SqlMapper.QueryAsync<int>(conn,
+                    "SELECT SubjectId FROM ExaminationSubjects WHERE ExamId = @ExamId",
+                    new { ExamId = request.ExamId });
+                foreach (var sId in junctionSubjects)
+                {
+                    if (sId > 0) scheduleSubjectIds.Add(sId);
+                }
+            }
+            catch { }
+
+            if (scheduleSubjectIds.Any())
+            {
+                var recordedSubjectIds = marks.Select(m => m.SubjectId).Distinct().ToHashSet();
+                var missingSubjectIds = scheduleSubjectIds.Where(id => !recordedSubjectIds.Contains(id)).ToList();
+                if (missingSubjectIds.Any())
+                {
+                    throw new ValidationException($"Results cannot be generated. Marks are missing for {missingSubjectIds.Count} required subject(s).");
+                }
+            }
+
+            // Precondition Check 2: Check if any marks for this exam are NOT approved
             var hasUnapproved = marks.Any(m => m.Status != EvaluationStatus.APPROVED);
             if (hasUnapproved)
             {
@@ -1750,11 +1788,28 @@ namespace CollegeManagement.API.Services.Implementations
                 blockers.Add("No active students found matching the examination group.");
             }
 
-            var scheduleSubjectIds = exam.ExamSchedules
-                .Where(s => s.IsActive)
-                .Select(s => s.SubjectId)
-                .Distinct()
-                .ToList();
+            var scheduleSubjectIds = new HashSet<int>();
+            foreach (var sch in exam.ExamSchedules.Where(s => s.IsActive))
+            {
+                if (sch.SubjectId > 0) scheduleSubjectIds.Add(sch.SubjectId);
+                foreach (var incId in sch.IncludedSubjectIdList)
+                {
+                    if (incId > 0) scheduleSubjectIds.Add(incId);
+                }
+            }
+
+            try
+            {
+                var conn = _context.Database.GetDbConnection();
+                var junctionSubjects = await Dapper.SqlMapper.QueryAsync<int>(conn,
+                    "SELECT SubjectId FROM ExaminationSubjects WHERE ExamId = @ExamId",
+                    new { ExamId = exam.ExaminationId });
+                foreach (var sId in junctionSubjects)
+                {
+                    if (sId > 0) scheduleSubjectIds.Add(sId);
+                }
+            }
+            catch { }
 
             int reqSubjectCount = scheduleSubjectIds.Count;
             if (reqSubjectCount == 0)
@@ -1778,10 +1833,14 @@ namespace CollegeManagement.API.Services.Implementations
             int approvedCount = approvedSubjectGroups.Count;
             int totalExpectedEvaluations = reqSubjectCount * (sections.Any() ? sections.Count : 1);
 
-            bool allApproved = marks.Any() && marks.All(m => m.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED);
+            bool allApproved = marks.Any() && approvedCount >= totalExpectedEvaluations && marks.All(m => m.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED);
 
             if (!allApproved)
             {
+                if (approvedCount < totalExpectedEvaluations)
+                {
+                    blockers.Add($"{totalExpectedEvaluations - approvedCount} required subject evaluation(s) are pending approval or have not been recorded.");
+                }
                 int pendingCount = marks.Count(m => m.Status != CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED);
                 if (pendingCount > 0)
                 {

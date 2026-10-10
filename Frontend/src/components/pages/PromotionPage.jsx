@@ -13,12 +13,18 @@ import {
   promoteStudents,
   promoteSingleStudent,
   allocateProgram,
+  approveCampusTransfer,
+  getPromotionFeePreview,
+  getProgramFeePreview,
+  getCampusTransferFeePreview,
   allocateSection,
   allocateGroup,
   getPromotionHistory,
   rollbackPromotion,
   getPromotionReport,
 } from "@/features/promotion/services/promotionStore.js";
+import { EMPTY_FEE_CONFIG, FeePreviewStatus, PromotionFeePanel, ProgramFeeComparison, TransferFeePanel, useFeePreview } from "@/features/promotion/FeeTransitionPanels.jsx";
+import { normalizeFeePreview, programAllocationBatches, promotionFeePayload, selectFeeStructure } from "@/features/promotion/feeTransition.js";
 import "./PromotionPage.css";
 
 const EMPTY_SETUP = {
@@ -32,6 +38,15 @@ const EMPTY_HISTORY_FILTERS = {
 };
 
 const PROMOTION_STUDENT_PAGE_SIZE = 5;
+const preservePreview = (value) => value;
+const loadProgramFeePreviews = async (entries) => Promise.all(entries.map(async (entry) => {
+  try {
+    return { ...entry, fee: normalizeFeePreview(await getProgramFeePreview(entry.studentId, entry.targetProgramId)), error: "" };
+  } catch (error) {
+    return { ...entry, fee: null, error: `${getApiErrorMessage(error)}${error?.response?.status ? ` (HTTP ${error.response.status})` : ""}` };
+  }
+}));
+const loadTransferFeePreview = ({ transferId }) => getCampusTransferFeePreview(transferId);
 
 const read = (item, ...keys) => {
   const key = keys.find((candidate) => item?.[candidate] !== undefined && item?.[candidate] !== null);
@@ -215,6 +230,8 @@ export default function PromotionPage({ screen = "promotion" }) {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const [previewData, setPreviewData] = useState(null);
+  const [feeConfig, setFeeConfig] = useState(EMPTY_FEE_CONFIG);
+  const promotionPreviewRequest = useRef(0);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [individualStudent, setIndividualStudent] = useState(null);
@@ -609,16 +626,15 @@ export default function PromotionPage({ screen = "promotion" }) {
   }, [eligibilityFilter, search, students, localStudentPaging, studentsPage]);
 
   const selectedStudents = useMemo(() => students.filter((student) => selectedIds.includes(student.id) && isEligible(student)), [selectedIds, students]);
-  const eligibleStudents = useMemo(() => students.filter(isEligible), [students]);
-  const summary = useMemo(() => ({ eligible: eligibleStudents.length, ineligible: students.length - eligibleStudents.length }), [eligibleStudents.length, students.length]);
-
-  const buildPayload = () => ({
+  const feePreviewParams = {
+    campusId: numericId(activeCampusId),
     sourceAcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
     sourceAcademicLevelId: numericId(setup.fromLevel),
     sourceAcademicLevel: academicLevelLabel(setup.fromLevel),
     sourceGroupId: numericId(setup.group),
     sourceProgramId: numericId(setup.program),
     sourceSection: setup.fromSection,
+    targetBoardId: numericId(setup.board || selectedBoardId),
     targetAcademicYearId: numericId(setup.toYear || nextAcademicYearObj?.value),
     targetAcademicLevelId: numericId(setup.toLevel),
     targetAcademicLevel: academicLevelLabel(setup.toLevel),
@@ -626,7 +642,23 @@ export default function PromotionPage({ screen = "promotion" }) {
     targetProgramId: numericId(setup.toProgram),
     targetSection: setup.toSection,
     studentIds: selectedStudents.map((student) => numericId(student.id)).filter(Boolean),
-  });
+  };
+  const bulkFeePreview = useFeePreview(getPromotionFeePreview, feePreviewParams,
+    activeTab === "promotion" && Boolean(activeCampusId && feePreviewParams.targetBoardId && feePreviewParams.targetAcademicYearId
+      && setup.toLevel && setup.toGroup && selectedStudents.length));
+  const individualFeePreview = useFeePreview(getPromotionFeePreview,
+    { ...feePreviewParams, studentIds: individualStudent ? [numericId(individualStudent.id)] : [] },
+    Boolean(individualStudent && activeCampusId && feePreviewParams.targetBoardId && feePreviewParams.targetAcademicYearId && setup.toLevel && setup.toGroup));
+  const feePreviewKey = JSON.stringify(feePreviewParams);
+  useEffect(() => {
+    promotionPreviewRequest.current += 1;
+    setPreviewData(null);
+    setPreviewLoading(false);
+  }, [activeTab, feePreviewKey]);
+  const eligibleStudents = useMemo(() => students.filter(isEligible), [students]);
+  const summary = useMemo(() => ({ eligible: eligibleStudents.length, ineligible: students.length - eligibleStudents.length }), [eligibleStudents.length, students.length]);
+
+  const buildPayload = () => ({ ...feePreviewParams });
 
   const validatePromotion = () => {
     if (!nextAcademicYearObj && !setup.toYear) {
@@ -660,16 +692,19 @@ export default function PromotionPage({ screen = "promotion" }) {
 
   const openPreview = async () => {
     if (!validatePromotion()) return;
+    const request = ++promotionPreviewRequest.current;
     setPreviewLoading(true);
     setError("");
     try {
-      const data = await previewPromotion(buildPayload());
+      const [data] = await Promise.all([previewPromotion(buildPayload()), bulkFeePreview.refresh()]);
+      if (request !== promotionPreviewRequest.current) return;
       setPreviewData(unwrapObject(data));
     } catch (previewError) {
+      if (request !== promotionPreviewRequest.current) return;
       setPreviewData(null);
       setError(previewError?.code === "ECONNABORTED" ? "Promotion preview timed out. Please check that the promotion API is running and try again." : getApiErrorMessage(previewError));
     } finally {
-      setPreviewLoading(false);
+      if (request === promotionPreviewRequest.current) setPreviewLoading(false);
     }
   };
 
@@ -682,7 +717,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     if (submitting || !validatePromotion()) return;
     setSubmitting(true);
     try {
-      const res = await promoteStudents(buildPayload());
+      const res = await promoteStudents({ ...buildPayload(), ...promotionFeePayload(bulkFeePreview.data, feeConfig) });
       const batchId = read(unwrapObject(res), "promotionBatchId", "PromotionBatchId");
       setPreviewData(null);
       setToast(`Promotion completed successfully${batchId ? `. Batch ID: ${batchId}` : "."}`);
@@ -701,9 +736,13 @@ export default function PromotionPage({ screen = "promotion" }) {
     setSubmitting(true);
     try {
       await promoteSingleStudent(studentId, {
+        ...promotionFeePayload(individualFeePreview.data, feeConfig),
+        campusId: numericId(activeCampusId),
+        targetBoardId: numericId(setup.board || selectedBoardId),
         targetAcademicYearId: numericId(setup.toYear || nextAcademicYearObj?.value),
         targetAcademicLevel: academicLevelLabel(setup.toLevel),
         targetGroupId: numericId(setup.toGroup),
+        targetProgramId: numericId(setup.toProgram),
         targetSection: setup.toSection,
       });
       setIndividualStudent(null);
@@ -1061,6 +1100,8 @@ export default function PromotionPage({ screen = "promotion" }) {
               </div>
             </section>
 
+            {!isFinalYear ? <PromotionFeePanel state={bulkFeePreview} config={feeConfig} onChange={setFeeConfig} disabled={submitting} /> : null}
+
             <section className="cms-card promotion-card">
               <div className="cms-card-head promotion-table-head">
                 <div>
@@ -1308,7 +1349,7 @@ export default function PromotionPage({ screen = "promotion" }) {
               <button className="cms-btn cms-btn-ghost" onClick={() => setPreviewData(null)} disabled={submitting}>
                 Cancel
               </button>
-              <button className="cms-btn cms-btn-primary" onClick={confirmPromotion} disabled={submitting}>
+              <button className="cms-btn cms-btn-primary" onClick={confirmPromotion} disabled={submitting || bulkFeePreview.loading || !selectFeeStructure(bulkFeePreview.data, feeConfig.targetFeeStructureId)}>
                 {submitting ? "Promoting..." : "Confirm Promotion"}
               </button>
             </>
@@ -1343,6 +1384,7 @@ export default function PromotionPage({ screen = "promotion" }) {
             <div><span>Eligible Students</span><strong>{previewEligibleCount}</strong></div>
             <div><span>Not Eligible Students</span><strong>{read(previewData, "notEligibleCount", "NotEligibleCount", "ineligibleCount", "IneligibleCount") ?? 0}</strong></div>
           </div>
+          <PromotionFeePanel state={bulkFeePreview} config={feeConfig} onChange={setFeeConfig} disabled={submitting} />
           {previewStudents.length ? (
             <ul className="promotion-preview-list">
               {previewStudents.map((student, index) => (
@@ -1371,7 +1413,7 @@ export default function PromotionPage({ screen = "promotion" }) {
               <button
                 className="cms-btn cms-btn-primary"
                 onClick={promoteIndividual}
-                disabled={submitting}
+                disabled={submitting || individualFeePreview.loading || !selectFeeStructure(individualFeePreview.data, feeConfig.targetFeeStructureId)}
               >
                 {submitting ? "Promoting..." : "Promote Student"}
               </button>
@@ -1383,6 +1425,7 @@ export default function PromotionPage({ screen = "promotion" }) {
             <strong>{individualStudent.name}</strong>
             <p>{individualStudent.admissionNo}</p>
           </div>
+          <PromotionFeePanel state={individualFeePreview} config={feeConfig} onChange={setFeeConfig} disabled={submitting} />
         </Modal>
       ) : null}
 
@@ -1524,6 +1567,7 @@ function CampusTransferScreen({ onSuccess }) {
   const [requestPage, setRequestPage] = useState(1);
   const [detailRequest, setDetailRequest] = useState(null);
   const [approveRequest, setApproveRequest] = useState(null);
+  const transferFeeState = useFeePreview(loadTransferFeePreview, { transferId: approveRequest?.id }, Boolean(approveRequest));
   const [rejectRequest, setRejectRequest] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [rejectionError, setRejectionError] = useState("");
@@ -1658,7 +1702,7 @@ function CampusTransferScreen({ onSuccess }) {
     const approverName = approveRequest.requestedTo;
     
     try {
-      await apiClient.put(apiEndpoints.campusTransfers.approve(approveRequest.id));
+      await approveCampusTransfer(approveRequest.id);
       await fetchRequests();
       setNotification({ type: "approved", title: "Campus Transfer Request Approved", message: `${approveRequest.student?.name}'s campus transfer request to ${approveRequest.toCampus} has been approved.`, request: approveRequest });
       setApproveRequest(null);
@@ -1836,7 +1880,9 @@ function CampusTransferScreen({ onSuccess }) {
       ) : null}
 
       {detailRequest ? <CampusTransferDetailsModal request={detailRequest} canDecide={requestDirection === "received" && detailRequest.toCampus === activeCampusName} onClose={() => setDetailRequest(null)} onApprove={() => { setApproveRequest(detailRequest); setDetailRequest(null); }} onReject={() => { setRejectRequest(detailRequest); setDetailRequest(null); setRejectionReason(""); setRejectionError(""); }} /> : null}
-      {approveRequest ? <CampusTransferDecisionModal title="Approve Campus Transfer" request={approveRequest} message={`Approving this request will transfer the student to ${approveRequest.toCampus}.`} onClose={() => setApproveRequest(null)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setApproveRequest(null)}>Cancel</button><button className="cms-btn cms-btn-primary" onClick={confirmApproval}>Approve Request</button></>} /> : null}
+      {approveRequest ? <CampusTransferDecisionModal title="Approve Campus Transfer" request={approveRequest} message={`Approving this request will transfer the student to ${approveRequest.toCampus}.`} onClose={() => setApproveRequest(null)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setApproveRequest(null)}>Cancel</button><button className="cms-btn cms-btn-primary" onClick={confirmApproval}>Approve Request</button></>}>
+        <TransferFeePanel state={transferFeeState} transferCredit readOnly />
+      </CampusTransferDecisionModal> : null}
       {rejectRequest ? <CampusTransferDecisionModal title="Reject Campus Transfer" request={rejectRequest} onClose={() => setRejectRequest(null)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setRejectRequest(null)}>Cancel</button><button className="cms-btn cms-btn-danger" disabled={!rejectionReason.trim()} onClick={confirmRejection}>Reject Request</button></>}><div className={`cms-field campus-transfer-rejection${rejectionError ? " has-error" : ""}`}><label htmlFor="campus-transfer-rejection">Rejection Reason<span className="req">*</span></label><textarea id="campus-transfer-rejection" value={rejectionReason} onChange={(event) => { setRejectionReason(event.target.value); setRejectionError(""); }} onBlur={() => { if (!rejectionReason.trim()) setRejectionError("Rejection reason is required."); }} placeholder="Enter the reason for rejecting this transfer request" />{rejectionError ? <span className="cms-error">{rejectionError}</span> : null}</div></CampusTransferDecisionModal> : null}
     </>
   );
@@ -1968,6 +2014,7 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
   const [submitting, setSubmitting] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
+  const [feeConfig, setFeeConfig] = useState(EMPTY_FEE_CONFIG);
 
   useEffect(() => {
     if (preselectedStudent) setCurrentStudent(preselectedStudent);
@@ -1994,6 +2041,12 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
     || board?.academicLevelIds?.includes(asString(level.value))
     || board?.academicLevelNames?.some((name) => name.toLowerCase() === level.label.toLowerCase()));
   const targetLevelLabel = targetLevels.find((level) => level.value === asString(target.level))?.label;
+  const singleFeePreview = useFeePreview(getPromotionFeePreview, {
+    campusId: numericId(campusId), targetBoardId: numericId(selectedBoardId),
+    targetAcademicYearId: numericId(target.year), targetAcademicLevelId: numericId(target.level),
+    targetAcademicLevel: targetLevelLabel, targetGroupId: numericId(target.group), targetProgramId: numericId(target.program),
+    studentIds: currentStudent ? [numericId(currentStudent.id)] : [],
+  }, Boolean(currentStudent && campusId && selectedBoardId && target.year && target.level && target.group));
   const targetGroup = targetGroups.find((group) => group.value === asString(target.group));
   const targetPrograms = targetGroup?.programs || [];
   useEffect(() => {
@@ -2079,7 +2132,9 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
     try {
       const targetLevel = masters.levels.find((level) => level.value === asString(target.level))?.label || asString(target.level);
       await promoteSingleStudent(currentStudent.id, {
+        ...promotionFeePayload(singleFeePreview.data, feeConfig),
         campusId: numericId(campusId),
+        targetBoardId: numericId(selectedBoardId),
         targetAcademicYearId: numericId(target.year),
         targetAcademicLevel: targetLevel,
         targetGroupId: numericId(target.group),
@@ -2175,11 +2230,12 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
         </div>
       </div>
 
+      <PromotionFeePanel state={singleFeePreview} config={feeConfig} onChange={setFeeConfig} disabled={submitting} />
       <div className="promotion-actions">
         <button
           className="cms-btn cms-btn-ghost"
           type="button"
-          onClick={() => { setCurrentStudent(null); setTarget({ year: defaultNextYearId || "", level: "", group: "", program: "", section: "", medium: "English" }); }}
+          onClick={() => { setCurrentStudent(null); setFeeConfig(EMPTY_FEE_CONFIG); setTarget({ year: defaultNextYearId || "", level: "", group: "", program: "", section: "", medium: "English" }); }}
         >
           Reset
         </button>
@@ -2202,13 +2258,14 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
               <button className="cms-btn cms-btn-ghost" onClick={() => setConfirming(false)} disabled={submitting}>
                 Cancel
               </button>
-              <button className="cms-btn cms-btn-primary" onClick={executePromote} disabled={submitting}>
+              <button className="cms-btn cms-btn-primary" onClick={executePromote} disabled={submitting || singleFeePreview.loading || !selectFeeStructure(singleFeePreview.data, feeConfig.targetFeeStructureId)}>
                 {submitting ? "Promoting..." : "Confirm & Promote"}
               </button>
             </>
           }
         >
           <p>Are you sure you want to promote <strong>{currentStudent?.name}</strong> ({currentStudent?.admissionNo})?</p>
+          <PromotionFeePanel state={singleFeePreview} config={feeConfig} onChange={setFeeConfig} disabled={submitting} />
           <div style={{ marginTop: "10px", padding: "10px", background: "var(--cms-subtle)", borderRadius: "6px" }}>
             <div><strong>From:</strong> {currentStudent?.academicYear} • {currentStudent?.level} • {currentStudent?.group} • {currentStudent?.program}</div>
             <div style={{ marginTop: "4px" }}>
@@ -2231,6 +2288,7 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [allocationPage, setAllocationPage] = useState(1);
+  const [updateFees, setUpdateFees] = useState(true);
 
   const isProgram = activeTab === "program";
 
@@ -2272,6 +2330,13 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
     && (!section.program || section.program === asString(row.programId))
     && section.value !== asString(row.section)));
   const selectedRows = rows.filter((row) => selected.includes(row.id));
+  const programFeeEntries = selectedRows.map((row) => ({
+    studentId: numericId(row.id), targetProgramId: numericId(targetMap[row.id] || bulkTarget),
+  })).filter((row) => row.studentId && row.targetProgramId);
+  const programFeeState = useFeePreview(loadProgramFeePreviews, programFeeEntries,
+    isProgram && Boolean(programFeeEntries.length), preservePreview);
+  const programFeesReady = programFeeEntries.length === selectedRows.length && programFeeState.data
+    && programFeeState.data.every((entry) => !entry.error && selectFeeStructure(entry.fee)?.id);
   const commonOptions = (getOptions) => selectedRows.length ? getOptions(selectedRows[0]).filter((entry) =>
     selectedRows.every((row) => getOptions(row).some((option) => option.value === entry.value))) : [];
   const availablePrograms = commonOptions(programsForStudent);
@@ -2292,6 +2357,7 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
   };
 
   const handleSave = async () => {
+    if (saving) return;
     if (!selected.length) {
       setMessage("Please select at least one student.");
       return;
@@ -2324,24 +2390,15 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
       }
 
       if (isProgram) {
-        const byProgram = {};
-        for (const id of selected) {
-          const progId = numericId(targetMap[id] || bulkTarget);
-          if (!progId) {
-            throw new Error(`Please specify a target program for selected student ID: ${id}`);
-          }
-          if (!byProgram[progId]) byProgram[progId] = [];
-          byProgram[progId].push(id);
-        }
-
-        for (const [progIdStr, studentIds] of Object.entries(byProgram)) {
+        if (updateFees && !programFeesReady) throw new Error("Review fee previews for every selected student before saving.");
+        const batches = programAllocationBatches(programFeeEntries, programFeeState.data, updateFees);
+        for (const batch of batches) {
           const result = await allocateProgram({
             campusId: numericId(allocationCampusId),
-            studentIds,
+            ...batch,
             targetAcademicYearId: targetYearId,
             targetAcademicLevel,
             targetGroupId,
-            targetProgramId: Number(progIdStr),
           });
           if (read(result, "isSuccess", "IsSuccess", "success", "Success") === false) {
             throw new Error(read(result, "message", "Message") || "Program allocation failed.");
@@ -2529,10 +2586,20 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
         </div>
       </div>
 
+      {isProgram ? <section className="promotion-fee-panel" aria-label="Program fee adjustment">
+        <h3>Program Fee Adjustment</h3>
+        <label className="promotion-fee-checkbox"><input type="checkbox" checked={updateFees} disabled={saving}
+          onChange={(event) => setUpdateFees(event.target.checked)} />Update student fee structure and adjust installments</label>
+        {!programFeeEntries.length ? <p>Select students and a target program to view the fee difference.</p> : null}
+        <FeePreviewStatus state={programFeeState} />
+        {programFeeState.data?.map((entry) => <ProgramFeeComparison key={`${entry.studentId}:${entry.targetProgramId}`}
+          student={selectedRows.find((row) => numericId(row.id) === entry.studentId)?.student}
+          state={{ data: entry.fee, error: entry.error, loading: false, retry: programFeeState.retry }} />)}
+      </section> : null}
       <div className="promotion-actions promotion-allocation-save">
         <button
           className="cms-btn cms-btn-primary"
-          disabled={!selected.length || saving}
+          disabled={!selected.length || saving || (isProgram && updateFees && !programFeesReady)}
           onClick={handleSave}
         >
           {saving ? "Saving Allocation..." : `Save ${isProgram ? "Program" : "Section"} Allocation`}

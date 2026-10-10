@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { STUDENT_FEES_UPDATED_EVENT } from "@/features/promotion/services/promotionStore.js";
 import {
   AlertCircle,
   CalendarClock,
@@ -1948,6 +1949,7 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
         amount: value,
         paymentDate: date ? new Date(date).toISOString() : null,
         paymentMode: method,
+        receiptNumber: "",
         discount: discountValue,
         fine: fineValue,
         transactionReference: reference,
@@ -2381,9 +2383,45 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
 
 /* ----------------------------- Student ledger ---------------------------- */
 function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading = false, error = "" }) {
+  const { academicYears, selectedBoardId } = useAcademicContext();
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const campusId = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState({ academicYear: "", group: "", section: "", paymentPlan: "", feeStatus: "" });
+  const [filters, setFilters] = useState({ academicYear: String(masters.selectedAcademicYearId || ""), group: "", section: "", paymentPlan: "", feeStatus: "" });
+  const [dropdowns, setDropdowns] = useState({ key: "", years: [], groups: [], sections: [] });
   const [page, setPage] = useState(1);
+  const lookupKey = JSON.stringify([campusId || "", selectedBoardId || "", filters.academicYear, filters.group]);
+  useEffect(() => {
+    let active = true;
+    const [campus, board, year, group] = JSON.parse(lookupKey);
+    const params = cleanParams({ campusId: campus, boardId: board, academicYearId: year, isActive: true });
+    Promise.allSettled([
+      apiClient.get(apiEndpoints.academicYears.getAll),
+      apiClient.get(apiEndpoints.groups.getAll, { params }),
+      apiClient.get(apiEndpoints.sections.getAll, { params: { ...params, ...cleanParams({ groupId: group }), pageSize: 1000 } }),
+    ]).then(([years, groups, sections]) => {
+      if (!active) return;
+      setDropdowns((current) => ({
+        key: lookupKey,
+        years: years.status === "fulfilled" ? toSelectOptions(getCollection(years.value.data),
+          ["academicYearId", "AcademicYearId", "id", "Id"],
+          ["academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "label", "Label"])
+          : current.key === lookupKey ? current.years : [],
+        groups: groups.status === "fulfilled" ? getCollection(groups.value.data).map(groupOption).filter(Boolean)
+          : current.key === lookupKey ? current.groups : [],
+        sections: sections.status === "fulfilled" ? getCollection(sections.value.data).map((item) => {
+          const option = toSelectOptions([item], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"])[0];
+          return option ? { ...option,
+            academicYearId: textValue(item, "academicYearId", "AcademicYearId"),
+            academicYearName: textValue(item, "academicYearName", "AcademicYearName"),
+            groupId: textValue(item, "groupId", "GroupId"),
+            groupName: textValue(item, "groupName", "GroupName", "group", "Group"),
+          } : null;
+        }).filter(Boolean) : current.key === lookupKey ? current.sections : [],
+      }));
+    });
+    return () => { active = false; };
+  }, [lookupKey]);
   useEffect(() => {
     const nextAcademicYear = masters.selectedAcademicYearId ? String(masters.selectedAcademicYearId) : "";
     setFilters((current) => {
@@ -2397,19 +2435,34 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
     setPage(1);
   };
   const setFilter = (key) => (value) => {
-    setFilters((current) => ({ ...current, [key]: value, ...(key === "group" ? { section: "" } : {}) }));
+    setFilters((current) => ({ ...current, [key]: value,
+      ...(key === "academicYear" ? { group: "", section: "" } : key === "group" ? { section: "" } : {}) }));
     setPage(1);
   };
 
   const optionLabel = (list, value) => list?.find((option) => String(option.value) === String(value))?.label || "";
-  const selectedYearLabel = optionLabel(masters.years, filters.academicYear);
-  const selectedGroupLabel = optionLabel(masters.groups, filters.group);
-  const groupOptions = masters.groups.filter((item) => (
-    matchesAnyNormalized(filters.academicYear, selectedYearLabel, item.academicYearId, item.academicYearName)
+  const currentDropdowns = dropdowns.key === lookupKey ? dropdowns : { years: [], groups: [], sections: [] };
+  const yearOptions = uniqueOptionsByValue([...currentDropdowns.years, ...masters.years,
+    ...toSelectOptions(academicYears || [], ["academicYearId", "AcademicYearId", "id", "Id"],
+      ["academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "label", "Label"])]);
+  const accountGroups = accounts.filter((item) => item.group && item.group !== "-").map((item) => ({
+    value: String(item.groupId || item.group), label: item.group,
+    academicYearId: item.academicYearId, academicYearName: item.academicYear,
+  }));
+  const accountSections = accounts.filter((item) => item.section && item.section !== "-").map((item) => ({
+    value: String(item.sectionId || item.section), label: item.section,
+    academicYearId: item.academicYearId, academicYearName: item.academicYear,
+    groupId: item.groupId, groupName: item.group,
+  }));
+  const selectedYearLabel = optionLabel(yearOptions, filters.academicYear);
+  const allGroups = uniqueOptionsByValue([...currentDropdowns.groups, ...accountGroups]);
+  const selectedGroupLabel = optionLabel(allGroups, filters.group);
+  const groupOptions = allGroups.filter((item) => (
+    matchesContext(filters.academicYear, selectedYearLabel, item.academicYearId, item.academicYearName)
   ));
-  const sectionOptions = masters.sections.filter((item) => (
-    matchesAnyNormalized(filters.academicYear, selectedYearLabel, item.academicYearId, item.academicYearName)
-    && matchesAnyNormalized(filters.group, selectedGroupLabel, item.groupId, item.groupName)
+  const sectionOptions = uniqueOptionsByValue([...currentDropdowns.sections, ...accountSections]).filter((item) => (
+    matchesContext(filters.academicYear, selectedYearLabel, item.academicYearId, item.academicYearName)
+    && matchesContext(filters.group, selectedGroupLabel, item.groupId, item.groupName)
   ));
   const paymentPlanOptions = PAYMENT_PLANS.map((plan) => ({ value: plan, label: feeScheduleLabel(plan) }));
   const rows = applyFineRulesToAccounts(normalizeFeeAccountDataset(accounts.filter((item) => {
@@ -2443,7 +2496,7 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
           <input value={search} placeholder="Search by student name or admission number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
         <div className="cms-fee-filter-row">
-          <SelectFilter label="Academic Year" value={filters.academicYear} options={masters.years} onChange={setFilter("academicYear")} />
+          <SelectFilter label="Academic Year" value={filters.academicYear} options={yearOptions} onChange={setFilter("academicYear")} />
           <SelectFilter label="Group" value={filters.group} options={groupOptions} onChange={setFilter("group")} />
           <SelectFilter label="Section" value={filters.section} options={sectionOptions} onChange={setFilter("section")} />
           <SelectFilter label="Payment Plan" value={filters.paymentPlan} options={paymentPlanOptions} onChange={setFilter("paymentPlan")} />
@@ -4316,6 +4369,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   }, []);
 
   const loadFeeAccounts = useCallback(async (source) => {
+    feeDetailCacheRef.current.clear();
     const endpoint = source === "collection" ? apiEndpoints.fee.collection : apiEndpoints.fee.ledger;
     const requestId = (accountRequestRef.current[source] || 0) + 1;
     accountRequestRef.current = { ...accountRequestRef.current, [source]: requestId };
@@ -4662,13 +4716,31 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       : tab === "Student Fee Ledger"
         ? `${tab}:${ledgerTab}:${campusKey}:${ledgerTab === "Fee Collection" ? "" : selectedAcademicYearId || ""}`
         : `${tab}:${campusKey}:${boardYearKey}`;
-    if (loadedTabsRef.current.has(loadKey)) return;
+    if (tab !== "Student Fee Ledger" && loadedTabsRef.current.has(loadKey)) return;
     loadedTabsRef.current.add(loadKey);
     if (tab === "Overview") loadOverviewData();
     if (tab === "Fee Setup") loadFeeApiData();
     if (tab === "Student Fee Ledger" && ledgerTab === "Fee Collection") loadFeeAccounts("collection");
     if (tab === "Student Fee Ledger" && ledgerTab !== "Fee Collection") loadFeeAccounts("ledger");
   }, [ledgerTab, loadFeeAccounts, loadFeeApiData, loadOverviewData, selectedAcademicYearId, selectedBoardId, selectedCampusValue, tab]);
+
+  useEffect(() => {
+    const refreshFeeAccounts = () => {
+      feeDetailCacheRef.current.clear();
+      setSelectedDetail(null);
+      setSelectedDetailVersion((current) => current + 1);
+      if (tab === "Student Fee Ledger") {
+        loadFeeAccounts(ledgerTab === "Fee Collection" ? "collection" : "ledger");
+      }
+      if (tab === "Overview") loadOverviewData();
+    };
+    window.addEventListener(STUDENT_FEES_UPDATED_EVENT, refreshFeeAccounts);
+    window.addEventListener("focus", refreshFeeAccounts);
+    return () => {
+      window.removeEventListener(STUDENT_FEES_UPDATED_EVENT, refreshFeeAccounts);
+      window.removeEventListener("focus", refreshFeeAccounts);
+    };
+  }, [ledgerTab, loadFeeAccounts, loadOverviewData, tab]);
 
   useEffect(() => {
     if (tab !== "Student Fee Ledger" || ledgerTab !== "Payment History") return;
@@ -4751,6 +4823,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           onSaved={(saved) => {
             setCollecting(false);
             setToast(`Payment of ${formatCurrency(saved.amount)} recorded - receipt ${saved.receiptNo}`);
+            setReceipt(normalizeReceipt(saved, selected));
             setPaymentHistoryExtras((current) => [withPaymentContext(saved, [selected]), ...current]);
             setSelectedDetail(null);
             setSelectedDetailVersion((current) => current + 1);

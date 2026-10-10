@@ -1,6 +1,12 @@
 import apiClient from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 
+export const STUDENT_FEES_UPDATED_EVENT = "student-fees-updated";
+
+const notifyFeeAccountsChanged = () => {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(STUDENT_FEES_UPDATED_EVENT));
+};
+
 /**
  * Filter out empty string, null, or undefined params
  */
@@ -42,6 +48,7 @@ export const promoteStudents = async (payload) => {
   const res = await apiClient.post(apiEndpoints.promotions.create, payload, {
     timeout: 30000,
   });
+  notifyFeeAccountsChanged();
   return res.data?.data || res.data?.Data || res.data;
 };
 
@@ -54,6 +61,7 @@ export const promoteSingleStudent = async (studentId, payload) => {
     payload,
     { timeout: 20000 }
   );
+  notifyFeeAccountsChanged();
   return res.data?.data || res.data?.Data || res.data;
 };
 
@@ -66,6 +74,34 @@ export const allocateProgram = async (payload) => {
     payload,
     { timeout: 20000 }
   );
+  notifyFeeAccountsChanged();
+  return res.data?.data || res.data?.Data || res.data;
+};
+
+export const getPromotionFeePreview = async (payload) => {
+  const res = await apiClient.post(apiEndpoints.promotions.feePreview, payload, { timeout: 20000 });
+  return res.data?.data ?? res.data?.Data ?? res.data;
+};
+
+export const getProgramFeePreview = async (studentId, targetProgramId) => {
+  const res = await apiClient.get(apiEndpoints.promotions.programFeePreview(studentId, targetProgramId), { timeout: 20000 });
+  return res.data?.data ?? res.data?.Data ?? res.data;
+};
+
+export const getCampusTransferFeePreview = async (transferId) => {
+  const res = await apiClient.get(apiEndpoints.campusTransfers.feePreview(transferId), { timeout: 20000 });
+  return res.data?.data ?? res.data?.Data ?? res.data;
+};
+
+export const getTransferFeePreview = getCampusTransferFeePreview;
+
+export const approveCampusTransfer = async (transferId, payload = { actionRemarks: null }) => {
+  const res = await apiClient.put(
+    apiEndpoints.campusTransfers.approve(transferId),
+    payload,
+    { timeout: 20000 },
+  );
+  notifyFeeAccountsChanged();
   return res.data?.data || res.data?.Data || res.data;
 };
 
@@ -111,6 +147,7 @@ export const rollbackPromotion = async (payload) => {
   const res = await apiClient.post(apiEndpoints.promotions.rollback, payload, {
     timeout: 20000,
   });
+  notifyFeeAccountsChanged();
   return res.data?.data || res.data?.Data || res.data;
 };
 
@@ -126,11 +163,16 @@ export const getPromotionReport = async (params = {}) => {
 };
 
 export default {
+  getPromotionFeePreview,
+  getProgramFeePreview,
+  getCampusTransferFeePreview,
+  getTransferFeePreview,
   getEligibleStudents,
   previewPromotion,
   promoteStudents,
   promoteSingleStudent,
   allocateProgram,
+  approveCampusTransfer,
   allocateSection,
   allocateGroup,
   getPromotionHistory,

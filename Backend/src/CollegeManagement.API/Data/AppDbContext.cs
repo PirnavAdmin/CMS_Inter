@@ -1465,6 +1465,7 @@ namespace CollegeManagement.API.Data
             modelBuilder.Entity<Faculty>(entity =>
             {
                 entity.Ignore(f => f.Aadhaar);
+                entity.Ignore(f => f.BloodGroup);
                 entity.HasOne(f => f.DesignationRef)
                     .WithMany(d => d.Faculties)
                     .HasForeignKey(f => f.DesignationId)
