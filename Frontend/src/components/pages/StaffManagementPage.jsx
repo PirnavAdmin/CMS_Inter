@@ -42,6 +42,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
+import { staffProfileEditApi } from "@/api/staffProfileEditApi.js";
 import { loadCachedDepartments, loadCachedDesignations } from "./DepartmentManagementPage.jsx";
 import * as XLSX from "xlsx";
 import "./StaffManagementPage.css";
@@ -394,6 +395,10 @@ export const normalizeStaffRecord = (raw) => {
 
   const getDocStatus = (field, keyList) => {
     if (r[field]) return r[field];
+    if (Array.isArray(docs)) {
+       const found = docs.find(d => keyList.includes(d.type) || keyList.some(k => (d.type || "").toLowerCase().replace(/\s/g, '').includes(k.toLowerCase())));
+       if (found) return found.name || "Uploaded";
+    }
     for (const k of keyList) {
       if (docs[k]?.length) return docs[k][0]?.name || "Uploaded";
       if (r[k]) return typeof r[k] === "string" ? r[k] : "Uploaded";
@@ -2259,7 +2264,7 @@ function Field({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [localFile, setLocalFile] = useState(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState("");
-  if (!Array.isArray(item) || item.length < 2) return null;
+  const isValidItem = Array.isArray(item) && item.length >= 2;
   const name = item[0] || "";
   const label = item[1] || name || "";
   const type = item[2] || "text";
@@ -2575,6 +2580,8 @@ function Field({
     : undefined;
 
   const activePreviewUrl = localPreviewUrl || safeValues[name + "_previewUrl"] || "";
+
+  if (!isValidItem) return null;
 
   return (
     <label className={[type === "textarea" ? "is-wide" : "", layoutClass, hasError ? "has-field-error" : ""].filter(Boolean).join(" ")}>
@@ -2983,6 +2990,7 @@ function Dashboard({ records = [], loadingRecords = false }) {
   const [loading, setLoading] = useState(true);
   const [credModalOpen, setCredModalOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const [pendingEditsCount, setPendingEditsCount] = useState("...");
 
   useEffect(() => {
     let isMounted = true;
@@ -3007,7 +3015,23 @@ function Dashboard({ records = [], loadingRecords = false }) {
         if (isMounted) setLoading(false);
       }
     }
+    
+    async function fetchPendingEdits() {
+      try {
+        const res = await staffProfileEditApi.getAllRequests();
+        if (isMounted && res.data?.status) {
+          const count = res.data.data.filter(r => r.status === "Pending" || r.status === "Requested").length;
+          setPendingEditsCount(count);
+        } else if (isMounted) {
+          setPendingEditsCount(0);
+        }
+      } catch (e) {
+        if (isMounted) setPendingEditsCount(0);
+      }
+    }
+
     fetchStats();
+    fetchPendingEdits();
     return () => { isMounted = false; };
   }, [selectedBoard, selectedCampus]);
 
@@ -3050,6 +3074,7 @@ function Dashboard({ records = [], loadingRecords = false }) {
             ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
             ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
             ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
+            ["Profile Edit Requests", pendingEditsCount, credentialsGeneratorIcon, "/dashboard/staff-profile-edits"],
           ].map(([l, v, icon, to]) => (
             <article
               key={l}
@@ -3109,6 +3134,7 @@ function Dashboard({ records = [], loadingRecords = false }) {
               ["Send Profile Link", "/dashboard/staff/pending?tab=Link%20Sent"],
               ["View Pending Submissions", "/dashboard/staff/pending"],
               ["View All Staff", "/dashboard/staff/list"],
+              ["Staff Profile Edits", "/dashboard/staff-profile-edits"],
             ].map(([l, to]) => (
               <button
                 key={l}
@@ -3609,7 +3635,7 @@ function StaffList({ records = [], setRecords, forced }) {
         const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || row.boardName || activeBoardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
 
-        const empId = row.employeeId || (await generateNextNumber(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF_ID" : "TEACHING_STAFF_ID", {}, activeCampusId))?.generatedNumber;
+        const empId = row.employeeId || (await generateNextNumber(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF_ID" : "TEACHING_STAFF_ID", {}, selectedCampus?.campusId ?? selectedCampus?.id))?.generatedNumber;
         // incrementSeriesSequence is obsolete; backend atomic generation handles it
 
         const payload = {
@@ -4015,9 +4041,11 @@ function StaffList({ records = [], setRecords, forced }) {
                 ["Teaching", "Teaching Staff"],
                 ["Non-Teaching", "Non-Teaching Staff"],
                 ["Pending", "Pending Completion"],
+                ["Requests", "Profile Edits"],
               ].map(([v, l]) => (
-                <button className={tab === v ? "is-active" : ""} onClick={() => setTab(v)} key={v}>
+                <button className={tab === v ? "is-active" : ""} onClick={() => setTab(v)} key={v} style={{ position: 'relative' }}>
                   {l}
+                  {v === "Requests" && <span style={{ position: 'absolute', top: '8px', right: '4px', width: '6px', height: '6px', backgroundColor: 'var(--cms-red, #ef4444)', borderRadius: '50%' }}></span>}
                 </button>
               ))}
             </div>
@@ -4099,6 +4127,7 @@ function StaffList({ records = [], setRecords, forced }) {
               </button>
             </div>
           </div>
+          {tab !== "Requests" ? (
           <div className="staff-table-wrap">
             <table>
               <thead>
@@ -4165,21 +4194,26 @@ function StaffList({ records = [], setRecords, forced }) {
               </tbody>
             </table>
           </div>
-          <footer className="staff-pagination">
-            <span>
-              Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
-              {Math.min(page * size, totalRowsCount)} of {totalRowsCount}
-            </span>
-            <div>
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-                Prev
-              </button>
-              <strong>{page}</strong>
-              <button disabled={page * size >= totalRowsCount} onClick={() => setPage((p) => p + 1)}>
-                Next
-              </button>
-            </div>
-          </footer>
+          ) : (
+            <ProfileEditRequests />
+          )}
+          {tab !== "Requests" && (
+            <footer className="staff-pagination">
+              <span>
+                Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
+                {Math.min(page * size, totalRowsCount)} of {totalRowsCount}
+              </span>
+              <div>
+                <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+                  Prev
+                </button>
+                <strong>{page}</strong>
+                <button disabled={page * size >= totalRowsCount} onClick={() => setPage((p) => p + 1)}>
+                  Next
+                </button>
+              </div>
+            </footer>
+          )}
         </section>
       </main>
       {remove ? (
@@ -4352,6 +4386,24 @@ function TeachingForm({ records, setRecords, existing }) {
         targetId = res.data?.id || res.data?.staffId;
       }
       const record = { ...payload, id: targetId, profileCompletion: existing?.profileCompletion || 30, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
+      if (values.profilePhoto && targetId) {
+        try {
+          const formData = new FormData();
+          formData.append("file", values.profilePhoto, "profile.jpg");
+          formData.append("staffId", targetId);
+          await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, { headers: { "Content-Type": "multipart/form-data" } });
+          record.photoPath = `/api/v1/staff/photo/${targetId}`;
+        } catch(e) { console.error(e); }
+      }
+      if (values.profilePhoto && targetId) {
+        try {
+          const formData = new FormData();
+          formData.append("file", values.profilePhoto, "profile.jpg");
+          formData.append("staffId", targetId);
+          await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, { headers: { "Content-Type": "multipart/form-data" } });
+          record.photoPath = `/api/v1/staff/photo/${targetId}`;
+        } catch(e) { console.error(e); }
+      }
       if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
       window.dispatchEvent(new Event("staff-records-updated"));
@@ -5734,7 +5786,12 @@ function Review({ record, update, activity }) {
         <Back to="/dashboard/staff/pending" />
         <section className="staff-form-panel">
           <header>
-            <UserCheck />
+            {record.photoPath || record.photoUrl ? (
+              <img src={`/api/v1/staff/photo/${record.id}?t=${Date.now()}`} alt="Profile" style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--cms-primary)' }} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+            ) : null}
+            <div style={{ display: (record.photoPath || record.photoUrl) ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '60px', height: '60px', borderRadius: '50%', background: 'var(--cms-primary)', color: '#fff' }}>
+              <UserCheck size={30} />
+            </div>
             <div>
               <h2>{record.fullName || record.employeeId}</h2>
               <p>Submitted Profile Verification · {record.department} · {record.designation}</p>
@@ -6432,6 +6489,151 @@ export default function StaffManagementPage() {
       {page}
       {toast ? <Toast message={toast} onClose={() => setToast("")} /> : null}
     </>
+  );
+}
+
+function ProfileEditRequests() {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("Pending");
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [filter]);
+
+  const fetchRequests = async () => {
+    try {
+      setLoading(true);
+      const res = await staffProfileEditApi.getAllRequests();
+      if (res.data?.status) {
+        let allReqs = res.data.data || [];
+        if (filter === "Pending") {
+          allReqs = allReqs.filter(r => r.status === "Requested" || r.status === "SubmittedForReview");
+        } else if (filter === "Allowed") {
+          allReqs = allReqs.filter(r => r.status === "Allowed");
+        } else if (filter === "Approved") {
+          allReqs = allReqs.filter(r => r.status === "Approved");
+        }
+        setRequests(allReqs);
+      }
+    } catch (error) {
+      console.error("Failed to load requests", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showToast = (text, type = "success") => {
+    setToast({ text, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const handleGrantAccess = async (id) => {
+    try {
+      await staffProfileEditApi.grantProfileEdit(id);
+      showToast("Edit access granted successfully.");
+      fetchRequests();
+    } catch (e) {
+      showToast("Failed to grant access.", "error");
+    }
+  };
+
+  const handleApproveChanges = async (id) => {
+    try {
+      await staffProfileEditApi.approveProfileEdit(id);
+      showToast("Profile updates approved successfully.");
+      fetchRequests();
+    } catch (e) {
+      showToast("Failed to approve updates.", "error");
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "12px" }}>
+        {["Pending", "Allowed", "Approved", "All"].map(status => (
+          <button 
+            key={status} 
+            className={`cms-btn ${filter === status ? "cms-btn-primary" : "cms-btn-ghost"}`} 
+            onClick={() => setFilter(status)}
+          >
+            {status}
+          </button>
+        ))}
+      </div>
+
+      <div className="cms-table-wrap">
+        <table className="staff-table">
+          <thead>
+            <tr>
+              <th>Req ID</th>
+              <th>Staff Name</th>
+              <th>Reason</th>
+              <th>Requested Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: "center", padding: "20px" }}>Loading requests...</td>
+              </tr>
+            ) : requests.length === 0 ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: "center", padding: "20px", color: "var(--cms-muted)" }}>
+                  No requests found for this status.
+                </td>
+              </tr>
+            ) : (
+              requests.map((r) => (
+                <tr key={r.id}>
+                  <td className="cms-strong">REQ-{r.id}</td>
+                  <td>{r.staffName} (ID: {r.staffId})</td>
+                  <td>{r.requestReason || "-"}</td>
+                  <td>{new Date(r.requestedAt).toLocaleDateString()}</td>
+                  <td>
+                    <span className={`cms-badge cms-badge-${r.status === 'Approved' ? 'success' : r.status === 'Allowed' ? 'info' : 'warn'}`}>
+                      {r.status.replace(/([A-Z])/g, ' $1').trim()}
+                    </span>
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {r.status === "Requested" && (
+                        <button
+                          className="cms-action-btn primary"
+                          title="Grant Edit Access"
+                          onClick={() => handleGrantAccess(r.id)}
+                        >
+                          <Check size={14} /> Grant Access
+                        </button>
+                      )}
+                      {r.status === "SubmittedForReview" && (
+                        <button
+                          className="cms-action-btn success"
+                          title="Approve Profile Updates"
+                          onClick={() => handleApproveChanges(r.id)}
+                        >
+                          <Check size={14} /> Approve Changes
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {toast && (
+        <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`} style={{ position: "fixed", bottom: 20, right: 20, padding: "10px 20px", background: toast.type === "error" ? "#fef2f2" : "#f0fdf4", color: toast.type === "error" ? "#dc2626" : "#16a34a", border: `1px solid ${toast.type === "error" ? "#f87171" : "#86efac"}`, borderRadius: 8, display: "flex", gap: 10, alignItems: "center", zIndex: 9999, boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}>
+          {toast.type === "error" ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
+          {toast.text}
+        </div>
+      )}
+    </div>
   );
 }
 

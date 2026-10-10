@@ -40,6 +40,8 @@ import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
 import PayrollPage from "@/components/pages/PayrollPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
+import AdminReimbursementsPage from "@/components/pages/AdminReimbursementsPage.jsx";
+import AdminStaffProfileEditsPage from "@/components/pages/AdminStaffProfileEditsPage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
 import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
@@ -156,6 +158,8 @@ export default function AppRoutes() {
         <Route path="/dashboard/staff/:id/edit" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id/review" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id" element={<StaffManagementPage />} />
+        <Route path="/dashboard/staff-profile-edits" element={<AdminStaffProfileEditsPage />} />
+        <Route path="/dashboard/reimbursements" element={<AdminReimbursementsPage />} />
         <Route path="/dashboard/departments" element={<DepartmentManagementPage />} />
         <Route path="/dashboard/departments/add" element={<MasterFormPage kind="department" />} />
         <Route path="/dashboard/departments/:id/edit" element={<MasterFormPage kind="department" />} />

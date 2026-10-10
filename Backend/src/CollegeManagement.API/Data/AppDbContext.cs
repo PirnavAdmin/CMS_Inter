@@ -124,6 +124,8 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportStudentAttendance> TransportStudentAttendances { get; set; } = null!;
         public DbSet<TransportGpsTelemetry> TransportGpsTelemetries { get; set; } = null!;
         public DbSet<Staff> Staffs { get; set; }
+        public DbSet<StaffReimbursement> StaffReimbursements { get; set; }
+        public DbSet<StaffProfileEditRequest> StaffProfileEditRequests { get; set; }
         public DbSet<StaffSubjectAllocation> StaffSubjectAllocations { get; set; }
         public DbSet<Faculty> Faculties { get; set; }
         public DbSet<FacultySubjectAllocation> FacultySubjectAllocations { get; set; }
