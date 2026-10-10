@@ -342,6 +342,47 @@ namespace CollegeManagement.API.Repositories.Implementations
             return rows > 0;
         }
 
+        public async Task<List<int>> GetExaminationSubjectIdsAsync(int examinationId)
+        {
+            try
+            {
+                var subjectIds = await Connection.QueryAsync<int>(
+                    "SELECT SubjectId FROM ExaminationSubjects WHERE ExamId = @ExamId",
+                    new { ExamId = examinationId });
+                return subjectIds.ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to fetch ExaminationSubjects for Exam {ExamId}", examinationId);
+                return new List<int>();
+            }
+        }
+
+        public async Task SaveExaminationSubjectsAsync(int examinationId, IEnumerable<int> subjectIds)
+        {
+            if (examinationId <= 0) return;
+            var list = subjectIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            if (!list.Any()) return;
+
+            try
+            {
+                await Connection.ExecuteAsync(
+                    "DELETE FROM ExaminationSubjects WHERE ExamId = @ExamId",
+                    new { ExamId = examinationId });
+
+                foreach (var subId in list)
+                {
+                    await Connection.ExecuteAsync(
+                        "INSERT INTO ExaminationSubjects (ExamId, SubjectId, CreatedAt) VALUES (@ExamId, @SubjectId, NOW(6))",
+                        new { ExamId = examinationId, SubjectId = subId });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to save ExaminationSubjects for Exam {ExamId}", examinationId);
+            }
+        }
+
         #endregion
 
         #region Exam Schedule Methods
@@ -417,6 +458,35 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
 
                 schedule.ExamScheduleId = newId;
+
+                if (newId > 0)
+                {
+                    try
+                    {
+                        await Connection.ExecuteAsync(
+                            @"UPDATE ExamSchedules 
+                              SET PatternName = COALESCE(@PatternName, PatternName),
+                                  GroupId = COALESCE(@GroupId, GroupId),
+                                  IncludedSubjectIds = @IncludedSubjectIds,
+                                  ScheduleMode = COALESCE(@ScheduleMode, ScheduleMode),
+                                  ExamMode = COALESCE(@ExamMode, ExamMode)
+                              WHERE ScheduleId = @ScheduleId",
+                            new
+                            {
+                                PatternName = schedule.PatternName,
+                                GroupId = schedule.GroupId > 0 ? schedule.GroupId : (int?)null,
+                                IncludedSubjectIds = schedule.IncludedSubjectIds,
+                                ScheduleMode = schedule.ScheduleMode,
+                                ExamMode = schedule.ExamMode,
+                                ScheduleId = newId
+                            });
+                    }
+                    catch (Exception updateEx)
+                    {
+                        _logger?.LogWarning(updateEx, "Could not set custom pattern/group columns for Schedule {ScheduleId}", newId);
+                    }
+                }
+
                 _logger?.LogInformation("Successfully created ExamSchedule ID {ScheduleId} for Exam {ExamId}, Subject {SubId}",
                     newId, schedule.ExaminationId, schedule.SubjectId);
                 return schedule;
@@ -499,6 +569,29 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<ExamSchedule>> GetExamSchedulesAsync(int? examinationId)
         {
+            try
+            {
+                var query = _context.ExamSchedules
+                    .Include(s => s.Subject)
+                    .Include(s => s.Examination)
+                    .AsNoTracking();
+
+                if (examinationId.HasValue && examinationId.Value > 0)
+                {
+                    query = query.Where(s => s.ExaminationId == examinationId.Value);
+                }
+
+                var list = await query.ToListAsync();
+                if (list != null && list.Any())
+                {
+                    return list;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "EF query for ExamSchedules failed, falling back to stored procedure: {Message}", ex.Message);
+            }
+
             var p = new DynamicParameters();
             p.Add("p_ExaminationId", examinationId ?? 0);
             p.Add("p_CampusId", 0);
@@ -540,6 +633,31 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_UpdateExamSchedule",
                 p,
                 commandType: CommandType.StoredProcedure);
+
+            try
+            {
+                await Connection.ExecuteAsync(
+                    @"UPDATE ExamSchedules 
+                      SET PatternName = COALESCE(@PatternName, PatternName),
+                          GroupId = COALESCE(@GroupId, GroupId),
+                          IncludedSubjectIds = @IncludedSubjectIds,
+                          ScheduleMode = COALESCE(@ScheduleMode, ScheduleMode),
+                          ExamMode = COALESCE(@ExamMode, ExamMode)
+                      WHERE ScheduleId = @ScheduleId",
+                    new
+                    {
+                        PatternName = schedule.PatternName,
+                        GroupId = schedule.GroupId > 0 ? schedule.GroupId : (int?)null,
+                        IncludedSubjectIds = schedule.IncludedSubjectIds,
+                        ScheduleMode = schedule.ScheduleMode,
+                        ExamMode = schedule.ExamMode,
+                        ScheduleId = schedule.ExamScheduleId
+                    });
+            }
+            catch (Exception updateEx)
+            {
+                _logger?.LogWarning(updateEx, "Could not update custom pattern/group columns for Schedule {ScheduleId}", schedule.ExamScheduleId);
+            }
         }
 
         public async Task<bool> DeleteExamScheduleAsync(ExamSchedule schedule)

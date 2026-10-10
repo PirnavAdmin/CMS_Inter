@@ -55,9 +55,34 @@ namespace CollegeManagement.API.Models
         [StringLength(50)]
         public string ScheduleMode { get; set; } = "SUBJECT_WISE";
 
+        public int? GroupId { get; set; }
+
         public int? RoomId { get; set; }
 
         public int? InvigilatorId { get; set; }
+
+        [StringLength(100)]
+        public string? PatternName { get; set; }
+
+        public string? IncludedSubjectIds { get; set; }
+
+        [NotMapped]
+        public List<int> IncludedSubjectIdList
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(IncludedSubjectIds)) return new List<int>();
+                return IncludedSubjectIds
+                    .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out int id) ? id : 0)
+                    .Where(id => id > 0)
+                    .ToList();
+            }
+            set
+            {
+                IncludedSubjectIds = value != null && value.Any() ? string.Join(",", value.Distinct()) : null;
+            }
+        }
 
         [StringLength(100)]
         public string Hall { get; set; } = string.Empty;

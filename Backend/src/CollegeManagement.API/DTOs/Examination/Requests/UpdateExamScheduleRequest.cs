@@ -11,6 +11,9 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
         public TimeOnly? EndTime { get; set; }
         public string? SessionId { get; set; }
         public string? ScheduleMode { get; set; }
+        public string? PatternName { get; set; }
+        public int? GroupId { get; set; }
+        public System.Collections.Generic.List<int>? IncludedSubjectIds { get; set; }
         public int? RoomId { get; set; }
         public int? InvigilatorId { get; set; }
         public string? Hall { get; set; }
