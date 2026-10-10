@@ -172,6 +172,9 @@ export default function ResultProcessingPage() {
 
   const [apiAnalytics, setApiAnalytics] = useState(null);
   const [apiFailedStudents, setApiFailedStudents] = useState([]);
+  const [selectedAnalyticsExamKey, setSelectedAnalyticsExamKey] = useState("");
+  const [analyticsGroupFilter, setAnalyticsGroupFilter] = useState("all");
+  const [selectedExamAnalyticsApiData, setSelectedExamAnalyticsApiData] = useState(null);
 
   const toastRef = useRef(null);
 
@@ -436,7 +439,7 @@ export default function ResultProcessingPage() {
         setFilters((prev) => ({
           ...prev,
           board: String(nextBoard.boardId || nextBoard.id),
-          year: "",
+          year: String(selectedAcademicYearId || selectedAcademicYear?.id || prev.year || ""),
           level: "",
           group: "",
           program: "",
@@ -562,11 +565,12 @@ export default function ResultProcessingPage() {
         setGroups(groupsData.filter((g) => g.isActive === true || g.status === "Active"));
 
         // Auto-select active year matched from navbar or first active
-        const matchedYear = activeYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) || activeYears[0];
+        const matchedYear = activeYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) ||
+          (selectedAcademicYear ? { academicYearId: selectedAcademicYearId || selectedAcademicYear.id, academicYearName: selectedAcademicYear.name || selectedAcademicYear.academicYearName } : activeYears[0]);
         if (matchedYear) {
           setFilters((f) => ({ ...f, year: String(matchedYear.academicYearId || matchedYear.id) }));
-        } else {
-          setFilters((f) => ({ ...f, year: "" }));
+        } else if (selectedAcademicYear) {
+          setFilters((f) => ({ ...f, year: String(selectedAcademicYearId || selectedAcademicYear.id || "") }));
         }
       } catch (err) {
         showToast("Failed to load board academic hierarchy.", "error");
@@ -575,26 +579,54 @@ export default function ResultProcessingPage() {
     fetchBoardDependencies();
   }, [filters.board, effectiveCampusId, boards, selectedBoard, showToast, selectedAcademicYearId, selectedAcademicYear, matchesYear, isYearForBoard]);
 
-  // Sync year when navbar selected academic year changes or when academicYears changes
-  useEffect(() => {
-    if (!academicYears.length) return;
-    const matched = academicYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) || academicYears[0];
-    if (matched) {
-      const yId = String(matched.academicYearId || matched.id);
-      setFilters((f) => (f.year === yId ? f : { ...f, year: yId }));
+  // Merge academicYears with navbar selectedAcademicYear so it is always present
+  const resolvedAcademicYears = useMemo(() => {
+    const list = [...academicYears];
+    if (selectedAcademicYear) {
+      const sId = String(selectedAcademicYear.id || selectedAcademicYear.academicYearId || selectedAcademicYearId || "");
+      const sName = String(selectedAcademicYear.name || selectedAcademicYear.academicYearName || selectedAcademicYear.code || "").trim();
+      const exists = list.some((y) => matchesYear(y, sId, selectedAcademicYear));
+      if (!exists && sName) {
+        list.unshift({
+          id: sId || "1",
+          academicYearId: sId || "1",
+          name: sName,
+          academicYearName: sName,
+          code: selectedAcademicYear.code || sName,
+          isActive: true,
+        });
+      }
     }
-  }, [academicYears, selectedAcademicYearId, selectedAcademicYear, matchesYear]);
+    if (!list.length && contextAcademicYears.length > 0) {
+      return contextAcademicYears;
+    }
+    return list;
+  }, [academicYears, selectedAcademicYear, selectedAcademicYearId, contextAcademicYears, matchesYear]);
 
-  // 3. Group -> Program Dependency (NEW)
+  // Sync year strictly with navbar selected academic year
   useEffect(() => {
-    if (!filters.group) {
-      setPrograms([]);
-      return;
+    if (selectedAcademicYear) {
+      const pool = resolvedAcademicYears.length > 0 ? resolvedAcademicYears : academicYears;
+      const matched = pool.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) || pool[0];
+      const targetYearId = matched
+        ? String(matched.academicYearId || matched.id)
+        : String(selectedAcademicYearId || selectedAcademicYear.id || "");
+      if (targetYearId && filters.year !== targetYearId) {
+        setFilters((prev) => ({ ...prev, year: targetYearId }));
+      }
     }
-    const fetchGroupPrograms = async () => {
+  }, [selectedAcademicYear, selectedAcademicYearId, resolvedAcademicYears, academicYears, matchesYear, filters.year]);
+
+  // 3. Independent Programs List (Group-specific if selected, or all programs)
+  useEffect(() => {
+    const fetchPrograms = async () => {
       try {
-        const res = await apiClient.get(`/api/v1/groups/${filters.group}/programs`, {
-          params: { campusId: effectiveCampusId },
+        const url = filters.group ? `/api/v1/groups/${filters.group}/programs` : `/api/v1/programs`;
+        const res = await apiClient.get(url, {
+          params: {
+            campusId: effectiveCampusId,
+            ...(filters.board ? { boardId: filters.board } : {}),
+          },
           headers: {
             ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
           },
@@ -602,7 +634,7 @@ export default function ResultProcessingPage() {
         const raw = unwrap(res);
         const list = Array.isArray(raw) ? raw : (res.data?.items || res.data || []);
         const activePrograms = list.filter(
-          (p) => p.isActive === true || p.isActive !== false || p.status === "Active" || p.status === true,
+          (p) => p.isActive === true || p.isActive !== false || p.status === "Active" || p.status === true
         );
         const mappedPrograms = activePrograms.map((p, idx) => {
           const rawId = p.programId ?? p.ProgramId ?? p.id ?? p.Id ?? p.program_id;
@@ -620,41 +652,32 @@ export default function ResultProcessingPage() {
         });
         setPrograms(mappedPrograms);
       } catch (err) {
-        showToast("Failed to load programs for selected group.", "error");
+        if (filters.group) {
+          try {
+            const fallbackRes = await apiClient.get("/api/v1/programs", {
+              params: { campusId: effectiveCampusId },
+            });
+            const raw = unwrap(fallbackRes);
+            const list = Array.isArray(raw) ? raw : [];
+            if (list.length > 0) {
+              setPrograms(list.map((p, idx) => ({
+                ...p,
+                id: p.programId ?? p.id ?? idx + 1,
+                name: p.programName ?? p.name ?? "Regular",
+              })));
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
       }
     };
-    fetchGroupPrograms();
-  }, [filters.group, effectiveCampusId, showToast]);
+    fetchPrograms();
+  }, [filters.group, filters.board, effectiveCampusId]);
 
-  // Auto-sync child filter selections if they no longer exist in updated parent data lists
+  // 4. Completed Examinations (Independent - loads all completed exams for board/campus)
   useEffect(() => {
-    if (filters.year && academicYears.length > 0 && !academicYears.some((y) => String(y.academicYearId || y.id) === String(filters.year))) {
-      const fallback = academicYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) || academicYears[0];
-      setFilters((f) => ({ ...f, year: fallback ? String(fallback.academicYearId || fallback.id) : "", exam: "" }));
-    }
-  }, [academicYears, filters.year, selectedAcademicYearId, selectedAcademicYear, matchesYear]);
-
-  useEffect(() => {
-    if (filters.group && groups.length > 0 && !groups.some((g) => String(g.groupId || g.id) === String(filters.group))) {
-      setFilters((f) => ({ ...f, group: "", program: "", exam: "" }));
-    }
-  }, [groups, filters.group]);
-
-  useEffect(() => {
-    if (filters.program && programs.length > 0 && !programs.some((p) => String(p.programId ?? p.id) === String(filters.program))) {
-      setFilters((f) => ({ ...f, program: "", exam: "" }));
-    }
-  }, [programs, filters.program]);
-
-  useEffect(() => {
-    if (filters.exam && examinations.length > 0 && !examinations.some((e) => String(e.examinationId ?? e.id ?? e.examId) === String(filters.exam))) {
-      setFilters((f) => ({ ...f, exam: "" }));
-    }
-  }, [examinations, filters.exam]);
-
-  // 4. Completed Examinations Filter (Group/Program -> Completed Examinations)
-  useEffect(() => {
-    if (!filters.board || !filters.year || !filters.group) {
+    if (!filters.board) {
       setExaminations([]);
       return;
     }
@@ -665,9 +688,9 @@ export default function ResultProcessingPage() {
             campusId: effectiveCampusId,
             CampusId: effectiveCampusId,
             BoardId: filters.board,
-            AcademicYearId: filters.year,
+            AcademicYearId: filters.year || undefined,
             AcademicLevelId: filters.level || undefined,
-            GroupId: filters.group,
+            GroupId: filters.group || undefined,
             ProgramId: filters.program || undefined,
             status: "COMPLETED",
           },
@@ -680,18 +703,8 @@ export default function ResultProcessingPage() {
         const matchingItems = items.filter((e) => {
           const examBoardId = e.boardId ?? e.BoardId;
           if (examBoardId && String(examBoardId) !== String(filters.board)) return false;
-          if (filters.year) {
-            const selectedYearObj = academicYears.find((y) => String(y.academicYearId || y.id) === String(filters.year));
-            const effYearName = String(selectedYearObj?.name || selectedYearObj?.academicYearName || "").trim().toLowerCase();
-            const examYearId = String(e.academicYearId ?? e.AcademicYearId ?? e.yearId ?? "");
-            const examYearName = String(e.academicYearName || e.academicYear || "").trim().toLowerCase();
-            const idMatches = examYearId && examYearId === String(filters.year);
-            const nameMatches = effYearName && examYearName && (examYearName === effYearName || examYearName.includes(effYearName) || effYearName.includes(examYearName));
-            if (examYearId && !idMatches && !nameMatches) return false;
-          }
           return true;
         });
-        // STRICT FILTER: Completed Examinations
         const completedOnly = matchingItems.filter((e) => {
           const s = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
           return s === "COMPLETED" || s === "FINISHED" || s === "PUBLISHED" || e.isCompleted === true;
@@ -712,7 +725,7 @@ export default function ResultProcessingPage() {
       }
     };
     fetchCompletedExams();
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveCampusId, academicYears, showToast]);
+  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveCampusId, showToast]);
 
   // 5. Readiness & Evaluation Verification
   useEffect(() => {
@@ -777,57 +790,16 @@ export default function ResultProcessingPage() {
   const changeFilter = (key, value) => {
     const next = { ...filters, [key]: value };
     if (key === "board") {
-      next.year = "";
       next.level = "";
       next.group = "";
       next.program = "";
       next.exam = "";
-      setResultsGenerated(false);
-      setSectionSummaries([]);
-      setSelectedSectionDetails(null);
-      setSelectedStudentMemo(null);
-      setReadiness(null);
-    } else if (key === "year") {
-      next.level = "";
-      next.group = "";
-      next.program = "";
-      next.exam = "";
-      setResultsGenerated(false);
-      setSectionSummaries([]);
-      setSelectedSectionDetails(null);
-      setSelectedStudentMemo(null);
-      setReadiness(null);
-    } else if (key === "level") {
-      next.group = "";
-      next.program = "";
-      next.exam = "";
-      setResultsGenerated(false);
-      setSectionSummaries([]);
-      setSelectedSectionDetails(null);
-      setSelectedStudentMemo(null);
-      setReadiness(null);
-    } else if (key === "group") {
-      next.program = "";
-      next.exam = "";
-      setResultsGenerated(false);
-      setSectionSummaries([]);
-      setSelectedSectionDetails(null);
-      setSelectedStudentMemo(null);
-      setReadiness(null);
-    } else if (key === "program") {
-      next.exam = "";
-      setResultsGenerated(false);
-      setSectionSummaries([]);
-      setSelectedSectionDetails(null);
-      setSelectedStudentMemo(null);
-      setReadiness(null);
-    } else if (key === "exam") {
-      setResultsGenerated(false);
-      setSectionSummaries([]);
-      setSelectedSectionDetails(null);
-      setSelectedStudentMemo(null);
-      setReadiness(null);
     }
+    setResultsGenerated(false);
+    setSectionSummaries([]);
+    setSelectedSectionDetails(null);
+    setSelectedStudentMemo(null);
+    setReadiness(null);
     setFilters(next);
   };
 
@@ -1248,9 +1220,7 @@ export default function ResultProcessingPage() {
       try {
         const queryParams = {};
         if (effectiveCampusId) queryParams.campusId = effectiveCampusId;
-        if (bId > 0) queryParams.boardId = bId;
-        if (yId > 0) queryParams.academicYearId = yId;
-        if (gId > 0) queryParams.groupId = gId;
+        // Do not restrict by academicYearId or groupId so all previously published examinations across years are returned
 
         const pubRes = await apiClient.get("/api/v1/results/published", {
           params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
@@ -1459,10 +1429,14 @@ export default function ResultProcessingPage() {
     } finally {
       if (publishedFetchSequenceRef.current === requestSequence) setLoadingPublished(false);
     }
-  }, [selectedBoardId, selectedAcademicYearId, filters.board, filters.year, filters.group, applied.board, applied.year, applied.group, effectiveCampusId]);
+  }, [effectiveCampusId]);
 
   useEffect(() => {
-    if (viewMode === "published") {
+    fetchPublishedGroups();
+  }, [fetchPublishedGroups]);
+
+  useEffect(() => {
+    if (viewMode === "published" || viewMode === "analytics") {
       fetchPublishedGroups();
     }
   }, [viewMode, fetchPublishedGroups]);
@@ -1892,109 +1866,6 @@ export default function ResultProcessingPage() {
     };
   }, [apiAnalytics, apiFailedStudents, allCurrentStudents, sectionSummaries]);
 
-  /* ============================================================
-     TAB 6: REPORTS & FILE EXPORTS
-     ============================================================ */
-  const exportExcel = async (rows, filename) => {
-    const examId = applied.exam || filters.exam;
-    const boardId = applied.board || filters.board;
-    const academicYearId = applied.year || filters.year;
-    const academicLevelId = applied.level || filters.level;
-    const groupId = applied.group || filters.group;
-
-    try {
-      showToast("Downloading Results Excel file...");
-      const res = await apiClient.get("/api/v1/results/export-excel", {
-        params: {
-          campusId: effectiveCampusId || undefined,
-          boardId: boardId || undefined,
-          academicYearId: academicYearId || undefined,
-          academicLevelId: academicLevelId || undefined,
-          groupId: groupId || undefined,
-          examId: examId || undefined,
-        },
-        headers: {
-          ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-        },
-        responseType: "blob",
-      });
-      if (res.data && res.data.size > 0) {
-        downloadBlob(res.data, `${filename || "Results"}_${Date.now()}.xlsx`);
-        showToast("Results exported to Excel successfully!");
-        return;
-      }
-    } catch (err) {
-      console.warn("Backend Excel export fallback to client XLSX:", err);
-    }
-
-    // Client XLSX Fallback
-    if (!rows || !rows.length) return showToast("No records available to export.", "error");
-
-    const sorted = [...rows].sort((a, b) => {
-      const rankA = Number(a.rank ?? a.sectionRank ?? a.groupRank ?? 0);
-      const rankB = Number(b.rank ?? b.sectionRank ?? b.groupRank ?? 0);
-      if (rankA > 0 && rankB > 0 && rankA !== rankB) {
-        return rankA - rankB;
-      }
-      return (Number(b.total) || 0) - (Number(a.total) || 0);
-    });
-
-    const exportData = sorted.map((item, idx) => ({
-      Rank: item.rank || item.sectionRank || item.groupRank || idx + 1,
-      RollNo: item.rollNo || "—",
-      StudentName: item.studentName || "—",
-      Group: item.groupName || "—",
-      Section: item.sectionName || "—",
-      TotalMarks: item.total ?? 0,
-      Percentage: `${item.percentage}%`,
-      Grade: item.grade || "—",
-      Result: item.result || "—"
-    }));
-
-    const sheet = XLSX.utils.json_to_sheet(exportData);
-    const book = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(book, sheet, "Results");
-    XLSX.writeFile(book, `${filename || "Results"}.xlsx`);
-    showToast(`Exported ${sorted.length} records to ${filename || "Results"}.xlsx`);
-  };
-
-  /* ============================================================
-     REVALUATION WORKFLOW
-     ============================================================ */
-  const handleRevaluationSubmit = async (student, reason) => {
-    if (!student) return;
-    try {
-      showToast("Submitting revaluation request...");
-      const res = await apiClient.post(
-        "/api/v1/results/revaluation",
-        {
-          campusId: Number(effectiveCampusId) || 1,
-          resultId: student.resultId || student.id,
-          studentId: student.studentId || student.id,
-          reason: reason || "Student revaluation requested"
-        },
-        {
-          headers: {
-            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-          },
-        }
-      );
-      showToast("Revaluation request submitted successfully!");
-      const data = unwrapPayload(res);
-      if (data?.revaluationId) {
-        await apiClient.get(`/api/v1/results/revaluation/${data.revaluationId}`, {
-          params: { campusId: effectiveCampusId },
-          headers: {
-            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-          },
-        });
-      }
-    } catch (err) {
-      console.error("Revaluation submission error:", err);
-      showToast(getApiErrorMessage(err) || "Failed to submit revaluation request.", "error");
-    }
-  };
-
   const currentGroupObj = useMemo(() => {
     const targetGroupId = resultsGenerated ? (applied.group || filters.group) : (filters.group || applied.group);
     const found = groups.find((g) => String(g.groupId || g.id) === String(targetGroupId));
@@ -2046,6 +1917,574 @@ export default function ResultProcessingPage() {
     return { id: targetExamId || "", name: "Examination" };
   }, [filters.exam, applied.exam, examinations]);
 
+  // Analytics options (current session, previous year and current published examinations, approved examinations)
+  const analyticsExamOptions = useMemo(() => {
+    const opts = [];
+    const seenKeys = new Set();
+
+    // 1. Current session results (if generated)
+    if (resultsGenerated && currentExamObj?.id) {
+      const key = `current_${currentExamObj.id}`;
+      opts.push({
+        id: key,
+        name: `${currentExamObj.name} (Current Session)`,
+        examName: currentExamObj.name,
+        examId: currentExamObj.id,
+        type: "current",
+      });
+      seenKeys.add(key);
+    }
+
+    // 2. All published examinations from publishedGroups (includes previous years' results)
+    (publishedGroups || []).forEach((pg) => {
+      const examKey = String(pg.examId || pg.examName);
+      const optKey = `published_${examKey}`;
+      if (!seenKeys.has(optKey)) {
+        const yrStr = pg.academicYear && pg.academicYear !== "—" ? ` (${pg.academicYear})` : "";
+        opts.push({
+          id: optKey,
+          name: `${pg.examName}${yrStr}`,
+          examName: pg.examName,
+          examId: pg.examId,
+          type: "published",
+          academicYear: pg.academicYear,
+          groupData: pg,
+        });
+        seenKeys.add(optKey);
+      }
+    });
+
+    // 3. Approved examination evaluations from examinations list
+    (examinations || []).forEach((e) => {
+      const eId = String(e.examinationId ?? e.id ?? e.examId);
+      const key = `exam_${eId}`;
+      const eName = e.examName || e.examinationName || e.name || `Exam ${eId}`;
+      const alreadyInPublished = (publishedGroups || []).some((pg) => String(pg.examId) === eId);
+      const alreadyCurrent = resultsGenerated && String(currentExamObj?.id) === eId;
+      if (!alreadyInPublished && !alreadyCurrent && !seenKeys.has(key)) {
+        opts.push({
+          id: key,
+          name: `${eName} (Approved Evaluation)`,
+          examName: eName,
+          examId: eId,
+          type: "examination",
+          examData: e,
+        });
+        seenKeys.add(key);
+      }
+    });
+
+    return opts;
+  }, [resultsGenerated, currentExamObj, publishedGroups, examinations]);
+
+  // Default to generated results when results are generated; otherwise first available option
+  useEffect(() => {
+    if (resultsGenerated && currentExamObj?.id) {
+      setSelectedAnalyticsExamKey(`current_${currentExamObj.id}`);
+    } else if (analyticsExamOptions.length > 0) {
+      const exists = analyticsExamOptions.some((o) => o.id === selectedAnalyticsExamKey);
+      if (!exists) {
+        setSelectedAnalyticsExamKey(analyticsExamOptions[0].id);
+      }
+    }
+  }, [resultsGenerated, currentExamObj?.id, analyticsExamOptions, selectedAnalyticsExamKey]);
+
+  const handleSelectAnalyticsExam = (key) => {
+    setSelectedAnalyticsExamKey(key);
+    setAnalyticsGroupFilter("all");
+  };
+
+  const activeAnalyticsOption = useMemo(() => {
+    return (
+      analyticsExamOptions.find((o) => o.id === selectedAnalyticsExamKey) ||
+      analyticsExamOptions[0] ||
+      null
+    );
+  }, [analyticsExamOptions, selectedAnalyticsExamKey]);
+
+  // Available groups for the selected examination
+  const analyticsGroupOptions = useMemo(() => {
+    if (!activeAnalyticsOption) return [{ id: "all", name: "All Groups" }];
+    const set = new Set();
+
+    if (activeAnalyticsOption.type === "current") {
+      sectionSummaries.forEach((s) => {
+        if (s.groupName) set.add(s.groupName);
+      });
+      if (currentGroupObj?.name) set.add(currentGroupObj.name);
+      groups.forEach((g) => {
+        if (g.groupName || g.name) set.add(g.groupName || g.name);
+      });
+    } else if (activeAnalyticsOption.type === "published") {
+      const targetExamId = String(activeAnalyticsOption.examId || "");
+      const targetExamName = String(activeAnalyticsOption.examName || "").trim().toLowerCase();
+      (publishedGroups || []).forEach((pg) => {
+        const matchesThisExam =
+          (targetExamId && String(pg.examId) === targetExamId) ||
+          (targetExamName && String(pg.examName || "").trim().toLowerCase() === targetExamName);
+        if (matchesThisExam && pg.groupName) {
+          set.add(pg.groupName);
+        }
+      });
+    }
+
+    const items = Array.from(set).map((name) => ({ id: name, name }));
+    return [{ id: "all", name: "All Groups" }, ...items];
+  }, [activeAnalyticsOption, sectionSummaries, currentGroupObj, groups, publishedGroups]);
+
+  // Fetch API analytics and section student records when activeAnalyticsOption changes
+  useEffect(() => {
+    if (!activeAnalyticsOption) return;
+
+    if (activeAnalyticsOption.type === "current") {
+      fetchAnalyticsData();
+      return;
+    }
+
+    if (activeAnalyticsOption.type === "published") {
+      const targetExamId = String(activeAnalyticsOption.examId || "");
+      const targetExamName = String(activeAnalyticsOption.examName || "").trim().toLowerCase();
+      const matching = (publishedGroups || []).filter(
+        (pg) => (targetExamId && String(pg.examId) === targetExamId) || (targetExamName && String(pg.examName || "").trim().toLowerCase() === targetExamName)
+      );
+      if (!matching.length) return;
+
+      const firstPg = matching[0];
+      apiClient
+        .get("/api/v1/results/analytics", {
+          params: {
+            campusId: effectiveCampusId,
+            boardId: firstPg.boardId,
+            academicYearId: firstPg.academicYearId,
+            examId: firstPg.examId,
+          },
+          headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+        })
+        .then((res) => {
+          const payload = unwrapPayload(res);
+          if (payload) setSelectedExamAnalyticsApiData(payload);
+        })
+        .catch(() => setSelectedExamAnalyticsApiData(null));
+
+      // Fetch student rows for all sections of matching groups if not yet loaded
+      matching.forEach((pg) => {
+        const needsStudentRows = (pg.sections || []).some((s) => !s.studentRows || s.studentRows.length === 0);
+        if (needsStudentRows && pg.sections?.length > 0) {
+          Promise.all(
+            pg.sections.map((sec) =>
+              apiClient
+                .get(`/api/v1/results/sections/${sec.sectionId}`, {
+                  params: {
+                    campusId: effectiveCampusId,
+                    examId: pg.examId,
+                  },
+                  headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+                })
+                .then((res) => {
+                  const payload = unwrapPayload(res) || {};
+                  const sList = Array.isArray(payload) ? payload : (payload.students || []);
+                  return { sectionId: sec.sectionId, studentRows: sList };
+                })
+                .catch(() => ({ sectionId: sec.sectionId, studentRows: [] }))
+            )
+          ).then((sectionResults) => {
+            setPublishedGroups((prev) =>
+              prev.map((g) => {
+                if (String(g.examId) === String(pg.examId) && String(g.groupId) === String(pg.groupId)) {
+                  const updatedSections = (g.sections || []).map((s) => {
+                    const match = sectionResults.find((sr) => sr.sectionId === s.sectionId);
+                    if (match && match.studentRows.length > 0) {
+                      return { ...s, studentRows: match.studentRows };
+                    }
+                    return s;
+                  });
+                  return { ...g, sections: updatedSections };
+                }
+                return g;
+              })
+            );
+          });
+        }
+      });
+    } else if (activeAnalyticsOption.type === "examination") {
+      const e = activeAnalyticsOption.examData;
+      const targetExamId = e.examinationId ?? e.id ?? e.examId;
+      apiClient
+        .get("/api/v1/results/analytics", {
+          params: {
+            campusId: effectiveCampusId,
+            examId: targetExamId,
+          },
+          headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+        })
+        .then((res) => {
+          const payload = unwrapPayload(res);
+          if (payload) setSelectedExamAnalyticsApiData(payload);
+        })
+        .catch(() => setSelectedExamAnalyticsApiData(null));
+    }
+  }, [activeAnalyticsOption, effectiveCampusId, publishedGroups, fetchAnalyticsData]);
+
+  // Dynamically computed analytics data for the selected examination and group filter
+  const currentAnalyticsData = useMemo(() => {
+    if (!activeAnalyticsOption) {
+      return {
+        totalStudents: 0,
+        passedCount: 0,
+        failedCount: 0,
+        passPercentage: "0.00",
+        averageScore: "0.00",
+        passedList: [],
+        failedList: [],
+        subjectPerformance: [],
+      };
+    }
+
+    if (activeAnalyticsOption.type === "current") {
+      let students = [...allCurrentStudents];
+      if (analyticsGroupFilter && analyticsGroupFilter !== "all") {
+        students = students.filter(
+          (s) =>
+            (s.groupName && s.groupName.toLowerCase() === analyticsGroupFilter.toLowerCase()) ||
+            (s.group && s.group.toLowerCase() === analyticsGroupFilter.toLowerCase()) ||
+            (currentGroupObj?.name && currentGroupObj.name.toLowerCase() === analyticsGroupFilter.toLowerCase())
+        );
+      }
+
+      const totalStudents = students.length;
+      const passedStudents = students.filter((s) => s.result === "PASS");
+      const failedStudents = students.filter((s) => s.result === "FAIL");
+      const passedCount = passedStudents.length;
+      const failedCount = failedStudents.length;
+      const passPercentage = totalStudents > 0 ? ((passedCount / totalStudents) * 100).toFixed(2) : "0.00";
+      const averageScore =
+        totalStudents > 0
+          ? (students.reduce((sum, s) => sum + Number(s.percentage || 0), 0) / totalStudents).toFixed(2)
+          : "0.00";
+
+      const distinctSubjects = [];
+      sectionSummaries.forEach((sec) => {
+        (sec.subjectDefinitions || []).forEach((sd) => {
+          const id = sd.subjectId || sd.id;
+          if (!distinctSubjects.some((x) => x.subjectId === id)) {
+            distinctSubjects.push({
+              subjectId: id,
+              subjectName: sd.subjectName || sd.name || sd.shortName,
+              shortName: sd.shortName || sd.code || sd.name,
+            });
+          }
+        });
+      });
+      if (!distinctSubjects.length && students[0]?.subjects?.length) {
+        students[0].subjects.forEach((sd) => {
+          const id = sd.subjectId || sd.id;
+          if (!distinctSubjects.some((x) => x.subjectId === id)) {
+            distinctSubjects.push({
+              subjectId: id,
+              subjectName: sd.subjectName || sd.name || sd.shortName,
+              shortName: sd.shortName || sd.code || sd.name,
+            });
+          }
+        });
+      }
+
+      const subjectPerformance = distinctSubjects.map((sub) => {
+        const subMarks = students.map((s) => {
+          const found = s.subjects?.find((m) => m.subjectId === sub.subjectId || m.shortName === sub.shortName);
+          return found ? Number(found.obtainedMarks || 0) : 0;
+        });
+        const avg = subMarks.length ? (subMarks.reduce((a, b) => a + b, 0) / subMarks.length).toFixed(2) : 0;
+        const highest = subMarks.length ? Math.max(...subMarks, 0) : 0;
+        const lowest = subMarks.length ? Math.min(...subMarks, 0) : 0;
+        const passedSubCount = subMarks.filter((m) => m >= 35).length;
+        const passPct = subMarks.length ? ((passedSubCount / subMarks.length) * 100).toFixed(2) : 0;
+        return {
+          subjectId: sub.subjectId,
+          subjectName: sub.subjectName,
+          totalStudents: subMarks.length,
+          average: avg,
+          highest,
+          lowest,
+          passPercentage: passPct,
+        };
+      });
+
+      return {
+        totalStudents,
+        passedCount,
+        failedCount,
+        passPercentage,
+        averageScore,
+        passedList: passedStudents,
+        failedList: failedStudents,
+        subjectPerformance,
+      };
+    }
+
+    if (activeAnalyticsOption.type === "published") {
+      const targetExamId = String(activeAnalyticsOption.examId || "");
+      const targetExamName = String(activeAnalyticsOption.examName || "").trim().toLowerCase();
+
+      let matchingGroups = (publishedGroups || []).filter((pg) => {
+        const idMatches = targetExamId && String(pg.examId) === targetExamId;
+        const nameMatches = targetExamName && String(pg.examName || "").trim().toLowerCase() === targetExamName;
+        return idMatches || nameMatches;
+      });
+
+      if (!matchingGroups.length && activeAnalyticsOption.groupData) {
+        matchingGroups = [activeAnalyticsOption.groupData];
+      }
+
+      if (analyticsGroupFilter && analyticsGroupFilter !== "all") {
+        matchingGroups = matchingGroups.filter(
+          (pg) => pg.groupName && pg.groupName.toLowerCase() === analyticsGroupFilter.toLowerCase()
+        );
+      }
+
+      const pubStudents = matchingGroups.flatMap((pg) => (pg.sections || []).flatMap((s) => s.studentRows || []));
+
+      let totalStudents = 0;
+      let passedCount = 0;
+      let failedCount = 0;
+      let passedStudents = [];
+      let failedStudents = [];
+      let averageScore = "0.00";
+
+      if (pubStudents.length > 0) {
+        totalStudents = pubStudents.length;
+        passedStudents = pubStudents.filter((s) => s.result === "PASS");
+        failedStudents = pubStudents.filter((s) => s.result === "FAIL");
+        passedCount = passedStudents.length;
+        failedCount = failedStudents.length;
+        averageScore = (pubStudents.reduce((sum, s) => sum + Number(s.percentage || 0), 0) / totalStudents).toFixed(2);
+      } else {
+        totalStudents = matchingGroups.reduce((sum, g) => sum + Number(g.totalStudents || 0), 0);
+        passedCount = matchingGroups.reduce((sum, g) => sum + Number(g.passed || 0), 0);
+        failedCount = matchingGroups.reduce((sum, g) => sum + Number(g.failed || 0), 0);
+        let totalWeighted = 0;
+        let totalWeight = 0;
+        matchingGroups.forEach((g) => {
+          (g.sections || []).forEach((sec) => {
+            const cnt = Number(sec.studentCount || sec.studentsCount || 0);
+            const avg = Number(sec.average || 0);
+            if (cnt > 0 && avg > 0) {
+              totalWeighted += cnt * avg;
+              totalWeight += cnt;
+            }
+          });
+        });
+        averageScore = totalWeight > 0 ? (totalWeighted / totalWeight).toFixed(2) : "0.00";
+      }
+
+      const passPercentage = totalStudents > 0 ? ((passedCount / totalStudents) * 100).toFixed(2) : "0.00";
+
+      const distinctSubjects = [];
+      matchingGroups.forEach((pg) => {
+        (pg.sections || []).forEach((sec) => {
+          (sec.subjectDefinitions || []).forEach((sd) => {
+            const id = sd.subjectId || sd.id;
+            if (!distinctSubjects.some((x) => x.subjectId === id)) {
+              distinctSubjects.push({
+                subjectId: id,
+                subjectName: sd.subjectName || sd.name || sd.shortName,
+                shortName: sd.shortName || sd.code || sd.name,
+              });
+            }
+          });
+        });
+      });
+      if (!distinctSubjects.length && pubStudents[0]?.subjects?.length) {
+        pubStudents[0].subjects.forEach((sd) => {
+          const id = sd.subjectId || sd.id;
+          if (!distinctSubjects.some((x) => x.subjectId === id)) {
+            distinctSubjects.push({
+              subjectId: id,
+              subjectName: sd.subjectName || sd.name || sd.shortName,
+              shortName: sd.shortName || sd.code || sd.name,
+            });
+          }
+        });
+      }
+
+      let subjectPerformance = [];
+      if (pubStudents.length > 0 && distinctSubjects.length > 0) {
+        subjectPerformance = distinctSubjects.map((sub) => {
+          const subMarks = pubStudents.map((s) => {
+            const found = s.subjects?.find((m) => m.subjectId === sub.subjectId || m.shortName === sub.shortName);
+            return found ? Number(found.obtainedMarks || 0) : 0;
+          });
+          const avg = subMarks.length ? (subMarks.reduce((a, b) => a + b, 0) / subMarks.length).toFixed(2) : 0;
+          const highest = subMarks.length ? Math.max(...subMarks, 0) : 0;
+          const lowest = subMarks.length ? Math.min(...subMarks, 0) : 0;
+          const passedSubCount = subMarks.filter((m) => m >= 35).length;
+          const passPct = subMarks.length ? ((passedSubCount / subMarks.length) * 100).toFixed(2) : 0;
+          return {
+            subjectId: sub.subjectId,
+            subjectName: sub.subjectName,
+            totalStudents: subMarks.length || totalStudents,
+            average: avg,
+            highest,
+            lowest,
+            passPercentage: passPct,
+          };
+        });
+      } else if (
+        Array.isArray(selectedExamAnalyticsApiData?.subjectPerformance) &&
+        selectedExamAnalyticsApiData.subjectPerformance.length > 0
+      ) {
+        subjectPerformance = selectedExamAnalyticsApiData.subjectPerformance;
+      }
+
+      return {
+        totalStudents,
+        passedCount,
+        failedCount,
+        passPercentage,
+        averageScore,
+        passedList: passedStudents,
+        failedList: failedStudents,
+        subjectPerformance,
+      };
+    }
+
+    return {
+      totalStudents: selectedExamAnalyticsApiData?.totalStudents ?? 0,
+      passedCount: selectedExamAnalyticsApiData?.passedCount ?? 0,
+      failedCount: selectedExamAnalyticsApiData?.failedCount ?? 0,
+      passPercentage: selectedExamAnalyticsApiData?.passPercentage ?? "0.00",
+      averageScore: selectedExamAnalyticsApiData?.averageScore ?? "0.00",
+      passedList: [],
+      failedList: [],
+      subjectPerformance: selectedExamAnalyticsApiData?.subjectPerformance ?? [],
+    };
+  }, [activeAnalyticsOption, analyticsGroupFilter, allCurrentStudents, currentGroupObj, sectionSummaries, publishedGroups, selectedExamAnalyticsApiData]);
+
+  /* ============================================================
+     TAB 6: REPORTS & FILE EXPORTS (EXCEL WITH EXAM NAME ON TOP)
+     ============================================================ */
+  const exportExcel = async (rows, filename, customExamName) => {
+    if (!rows || !rows.length) return showToast("No records available to export.", "error");
+
+    const resolvedExamName = customExamName || currentExamObj?.name || "Examination Results";
+    const examHeaderTitle = resolvedExamName.toLowerCase().includes("result")
+      ? resolvedExamName
+      : `${resolvedExamName} Results`;
+
+    const sorted = [...rows].sort((a, b) => {
+      const rankA = Number(String(a.rank ?? a.sectionRank ?? a.groupRank ?? 0).replace(/[^0-9]/g, ""));
+      const rankB = Number(String(b.rank ?? b.sectionRank ?? b.groupRank ?? 0).replace(/[^0-9]/g, ""));
+      if (rankA > 0 && rankB > 0 && rankA !== rankB) {
+        return rankA - rankB;
+      }
+      return (Number(b.totalMarks ?? b.total) || 0) - (Number(a.totalMarks ?? a.total) || 0);
+    });
+
+    const headers = [
+      "Rank",
+      "Roll No",
+      "Student Name",
+      "Group",
+      "Program",
+      "Section",
+      "Total Marks",
+      "Percentage",
+      "Grade",
+      "Result",
+    ];
+
+    const dataRows = sorted.map((item, idx) => {
+      const rawRank = item.rank || item.sectionRank || item.groupRank || idx + 1;
+      const rankStr = String(rawRank).startsWith("#") ? String(rawRank) : `#${rawRank}`;
+      const rawPct =
+        item.percentage != null
+          ? item.percentage
+          : item.maximum
+          ? (item.total / item.maximum) * 100
+          : 0;
+      const pctStr = String(rawPct).endsWith("%")
+        ? String(rawPct)
+        : `${Number(rawPct).toFixed(2)}%`;
+
+      return [
+        rankStr,
+        item.rollNo || item.rollNumber || "—",
+        item.studentName || item.name || "—",
+        item.groupName || item.group || currentGroupObj?.name || "—",
+        item.programName || item.program || currentProgramObj?.name || "Regular",
+        item.sectionName || item.section || "—",
+        Number(item.totalMarks ?? item.total ?? 0),
+        pctStr,
+        item.grade || "—",
+        String(item.result || (item.grade === "F" ? "FAIL" : "PASS")).toUpperCase(),
+      ];
+    });
+
+    const aoa = [
+      [examHeaderTitle], // Row 1: Exam Name at top
+      [],                // Row 2: Blank row
+      headers,           // Row 3: Column headers
+      ...dataRows,       // Row 4+: Data rows
+    ];
+
+    const sheet = XLSX.utils.aoa_to_sheet(aoa);
+
+    sheet["!cols"] = [
+      { wch: 8 },  // Rank
+      { wch: 14 }, // Roll No
+      { wch: 24 }, // Student Name
+      { wch: 12 }, // Group
+      { wch: 18 }, // Program
+      { wch: 12 }, // Section
+      { wch: 14 }, // Total Marks
+      { wch: 14 }, // Percentage
+      { wch: 10 }, // Grade
+      { wch: 12 }, // Result
+    ];
+
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, "Results");
+    const safeFilename = `${filename || resolvedExamName || "Results"}.xlsx`.replace(/[\\/:*?"<>|]/g, "_");
+    XLSX.writeFile(book, safeFilename);
+    showToast(`Exported ${sorted.length} records to ${safeFilename}`);
+  };
+
+  /* ============================================================
+     REVALUATION WORKFLOW
+     ============================================================ */
+  const handleRevaluationSubmit = async (student, reason) => {
+    if (!student) return;
+    try {
+      showToast("Submitting revaluation request...");
+      const res = await apiClient.post(
+        "/api/v1/results/revaluation",
+        {
+          campusId: Number(effectiveCampusId) || 1,
+          resultId: student.resultId || student.id,
+          studentId: student.studentId || student.id,
+          reason: reason || "Student revaluation requested"
+        },
+        {
+          headers: {
+            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+          },
+        }
+      );
+      showToast("Revaluation request submitted successfully!");
+      const data = unwrapPayload(res);
+      if (data?.revaluationId) {
+        await apiClient.get(`/api/v1/results/revaluation/${data.revaluationId}`, {
+          params: { campusId: effectiveCampusId },
+          headers: {
+            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+          },
+        });
+      }
+    } catch (err) {
+      console.error("Revaluation submission error:", err);
+      showToast(getApiErrorMessage(err) || "Failed to submit revaluation request.", "error");
+    }
+  };
+
   return (
     <DashboardLayout
       title="Results Management"
@@ -2070,7 +2509,20 @@ export default function ResultProcessingPage() {
               }}
             >
               <FileText size={16} style={{ marginRight: 6 }} />
-              Results Processing
+              Result Processing
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === "rankList"}
+              className={`results-view-tab ${viewMode === "rankList" ? "is-active results-view-tab-active" : ""}`}
+              onClick={() => {
+                setViewMode("rankList");
+                setSelectedStudentMemo(null);
+              }}
+            >
+              <Award size={16} style={{ marginRight: 6 }} />
+              Rank List
             </button>
             <button
               type="button"
@@ -2087,19 +2539,6 @@ export default function ResultProcessingPage() {
             >
               <Globe size={16} style={{ marginRight: 6 }} />
               Published Results
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === "rankList"}
-              className={`results-view-tab ${viewMode === "rankList" ? "is-active results-view-tab-active" : ""}`}
-              onClick={() => {
-                setViewMode("rankList");
-                setSelectedStudentMemo(null);
-              }}
-            >
-              <Award size={16} style={{ marginRight: 6 }} />
-              Rank List
             </button>
             <button
               type="button"
@@ -2143,16 +2582,16 @@ export default function ResultProcessingPage() {
                     </Select>
                     <Select
                       label="Academic Year"
-                      value={filters.year}
+                      value={filters.year || selectedAcademicYearId || selectedAcademicYear?.id || ""}
                       disabled={true}
                       onChange={(v) => changeFilter("year", v)}
                     >
-                      <option value="">Select Academic Year</option>
-                      {academicYears.map((y) => {
+                      <option value="">{selectedAcademicYear?.name || "Select Academic Year"}</option>
+                      {resolvedAcademicYears.map((y) => {
                         const yId = y.academicYearId || y.id;
                         const yName = y.academicYearName || y.name;
                         return (
-                          <option key={yId} value={yId}>
+                          <option key={yId} value={String(yId)}>
                             {yName}
                           </option>
                         );
@@ -2161,7 +2600,7 @@ export default function ResultProcessingPage() {
                     <Select
                       label="Academic Level"
                       value={filters.level}
-                      disabled={!filters.year}
+                      disabled={false}
                       onChange={(v) => changeFilter("level", v)}
                     >
                       <option value="">Select Academic Level</option>
@@ -2169,7 +2608,7 @@ export default function ResultProcessingPage() {
                         const lId = l.academicLevelId || l.id;
                         const lName = l.levelName || l.name;
                         return (
-                          <option key={lId} value={lId}>
+                          <option key={lId} value={String(lId)}>
                             {lName}
                           </option>
                         );
@@ -2178,7 +2617,7 @@ export default function ResultProcessingPage() {
                     <Select
                       label="Group"
                       value={filters.group}
-                      disabled={!filters.level}
+                      disabled={false}
                       onChange={(v) => changeFilter("group", v)}
                     >
                       <option value="">Select Group</option>
@@ -2186,7 +2625,7 @@ export default function ResultProcessingPage() {
                         const gId = g.groupId || g.id;
                         const gName = g.groupName || g.name;
                         return (
-                          <option key={gId} value={gId}>
+                          <option key={gId} value={String(gId)}>
                             {gName}
                           </option>
                         );
@@ -2195,7 +2634,7 @@ export default function ResultProcessingPage() {
                     <Select
                       label="Program"
                       value={filters.program}
-                      disabled={!filters.group}
+                      disabled={false}
                       onChange={(v) => changeFilter("program", v)}
                     >
                       <option value="">{programs.length === 0 && filters.group ? "No Programs" : "Select Program"}</option>
@@ -2212,7 +2651,7 @@ export default function ResultProcessingPage() {
                     <Select
                       label="Examination"
                       value={filters.exam}
-                      disabled={!filters.group || (programs.length > 0 && !filters.program)}
+                      disabled={false}
                       onChange={(v) => changeFilter("exam", v)}
                     >
                       <option value="">Select Examination</option>
@@ -2264,7 +2703,8 @@ export default function ResultProcessingPage() {
                   onExcel={() =>
                     exportExcel(
                       sectionSummaries.flatMap((s) => s.studentRows || []),
-                      `${currentExamObj.name}-${currentGroupObj?.code || "Group"}${currentProgramObj?.code ? `-${currentProgramObj.code}` : ""}-Results`
+                      `${currentExamObj.name}-${currentGroupObj?.code || "Group"}${currentProgramObj?.code ? `-${currentProgramObj.code}` : ""}-Results`,
+                      currentExamObj.name
                     )
                   }
                 />
@@ -2278,7 +2718,8 @@ export default function ResultProcessingPage() {
                 onExcel={(rowsToExport) =>
                   exportExcel(
                     rowsToExport || selectedSectionDetails.studentRows || [],
-                    `${currentExamObj.name}-${selectedSectionDetails.sectionName}`
+                    `${currentExamObj.name}-${selectedSectionDetails.sectionName}`,
+                    currentExamObj.name
                   )
                 }
               />
@@ -2298,10 +2739,6 @@ export default function ResultProcessingPage() {
                 setSearch={setPublishedSearch}
                 statusFilter={publishedStatusFilter}
                 setStatusFilter={setPublishedStatusFilter}
-                groupFilter={publishedGroupFilter}
-                setGroupFilter={setPublishedGroupFilter}
-                examFilter={publishedExamFilter}
-                setExamFilter={setPublishedExamFilter}
                 onViewGroup={(group) => setSelectedPublishedGroup(group)}
               />
             )}
@@ -2324,7 +2761,8 @@ export default function ResultProcessingPage() {
                 onExcel={(rowsToExport) =>
                   exportExcel(
                     rowsToExport || selectedPublishedSection.studentRows || [],
-                    `${selectedPublishedGroup.examName}-${selectedPublishedSection.sectionName}`
+                    `${selectedPublishedGroup.examName}-${selectedPublishedSection.sectionName}`,
+                    selectedPublishedGroup.examName
                   )
                 }
               />
@@ -2354,14 +2792,20 @@ export default function ResultProcessingPage() {
           )
         )}
 
-        {/* TAB 4: ANALYTICS (Subject Analysis & Passed/Failed Modals) */}
+        {/* TAB 4: ANALYTICS (Subject Analysis & Passed/Failed Modals with Examination and Group Filters) */}
         {viewMode === "analytics" && !selectedStudentMemo && (
-          !resultsGenerated ? (
+          analyticsExamOptions.length === 0 ? (
             <PreGenerateNotice mode="analytics" onGoToGenerate={() => setViewMode("table")} />
           ) : (
             <AnalyticsView
-              data={analyticsData}
-              examName={currentExamObj.name}
+              data={currentAnalyticsData}
+              examName={activeAnalyticsOption?.examName || currentExamObj.name}
+              examOptions={analyticsExamOptions}
+              selectedExamKey={selectedAnalyticsExamKey}
+              onSelectExam={handleSelectAnalyticsExam}
+              groupOptions={analyticsGroupOptions}
+              selectedGroupFilter={analyticsGroupFilter}
+              onSelectGroup={setAnalyticsGroupFilter}
               onOpenModal={(type) => setAnalyticsModal(type)}
             />
           )
@@ -2383,7 +2827,7 @@ export default function ResultProcessingPage() {
             rows={rankListRecords}
             examName={currentExamObj.name}
             onClose={() => setShowRankPreview(false)}
-            onDownload={() => exportExcel(rankListRecords, "Rank-List-Export")}
+            onDownload={() => exportExcel(rankListRecords, "Rank-List-Export", currentExamObj.name)}
           />
         )}
 
@@ -2400,7 +2844,7 @@ export default function ResultProcessingPage() {
         {analyticsModal && (
           <AnalyticsStudentsModal
             type={analyticsModal}
-            rows={analyticsModal === "failed" ? analyticsData.failedList : analyticsData.passedList}
+            rows={analyticsModal === "failed" ? currentAnalyticsData.failedList : currentAnalyticsData.passedList}
             onClose={() => setAnalyticsModal(null)}
             onViewStudent={(student) => {
               setAnalyticsModal(null);
@@ -2521,19 +2965,245 @@ function PreGenerateNotice({ mode = "results", onGoToGenerate, group, program, e
   );
 }
 
-function Select({ label, value, disabled, onChange, children }) {
+function Select({
+  label,
+  value,
+  disabled = false,
+  onChange,
+  children,
+  options: propOptions,
+  placeholder,
+  compact = false,
+  hideLabel = false,
+  id,
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState(0);
+  const ref = useRef(null);
+  const inputRef = useRef(null);
+  const selectId = useMemo(
+    () => id || (label ? `select-${label.toLowerCase().replace(/[^a-z0-9]/g, "-")}` : `select-${Math.random().toString(36).substring(2, 7)}`),
+    [id, label]
+  );
+  const listId = `${selectId}-listbox`;
+
+  const options = useMemo(() => {
+    if (propOptions && Array.isArray(propOptions)) {
+      return propOptions.map((opt) => {
+        if (typeof opt === "string" || typeof opt === "number") {
+          return { id: String(opt), name: String(opt) };
+        }
+        return {
+          id: String(opt.id ?? opt.value ?? ""),
+          name: String(opt.name ?? opt.label ?? opt.title ?? opt.id ?? opt.value ?? ""),
+        };
+      });
+    }
+
+    const flatten = (nodes) => {
+      const res = [];
+      React.Children.forEach(nodes, (child) => {
+        if (!child) return;
+        if (Array.isArray(child)) {
+          res.push(...flatten(child));
+        } else if (child.type === React.Fragment) {
+          res.push(...flatten(child.props?.children));
+        } else if (child.type === "option") {
+          const val = child.props?.value !== undefined ? String(child.props.value) : "";
+          const text = child.props?.children != null ? String(child.props.children) : val;
+          res.push({ id: val, name: text });
+        }
+      });
+      return res;
+    };
+
+    return flatten(children);
+  }, [propOptions, children]);
+
+  const selected = options.find((item) => String(item.id) === String(value));
+  const filtered = useMemo(() => {
+    if (!query.trim()) return options;
+    const q = query.trim().toLowerCase();
+    return options.filter((item) => (item.name || "").toLowerCase().includes(q));
+  }, [options, query]);
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [query, options]);
+
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event) => {
+      if (!ref.current?.contains(event.target)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", outside);
+    return () => document.removeEventListener("mousedown", outside);
+  }, [open]);
+
+  const keyDown = (event) => {
+    if (disabled) return;
+    if (event.key === "Escape") {
+      setOpen(false);
+      setQuery("");
+    } else if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      if (filtered.length) {
+        setHighlight((current) =>
+          (current + (event.key === "ArrowDown" ? 1 : -1) + filtered.length) % filtered.length
+        );
+      }
+    } else if (event.key === "Enter") {
+      if (open && filtered[highlight]) {
+        event.preventDefault();
+        onChange(filtered[highlight].id);
+        setOpen(false);
+        setQuery("");
+      }
+    }
+  };
+
+  const displayName = selected ? selected.name : (placeholder || (label ? `Select ${label}` : "Select..."));
+  const fullText = selected?.name || displayName;
+
+  if (disabled) {
+    return (
+      <div className={`cms-field-group ${compact ? "cms-select-compact" : ""}`}>
+        {!hideLabel && label && (
+          <label className="cms-label" id={`${selectId}-label`}>
+            {label}
+          </label>
+        )}
+        <div className="cms-custom-select is-disabled" title={fullText}>
+          <div
+            className="cms-custom-select-combobox is-disabled"
+            role="combobox"
+            aria-disabled="true"
+            aria-label={label}
+            title={fullText}
+          >
+            <span
+              className="cms-custom-combobox-input"
+              style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: "34px" }}
+              title={fullText}
+            >
+              {fullText}
+            </span>
+            <span className="cms-select-arrow">⌄</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="cms-field-group">
-      <label className="cms-label">{label}</label>
-      <select
-        className="cms-select"
-        value={value}
-        disabled={disabled}
-        aria-label={label}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {children}
-      </select>
+    <div className={`cms-field-group ${compact ? "cms-select-compact" : ""}`}>
+      {!hideLabel && label && (
+        <label className="cms-label" id={`${selectId}-label`}>
+          {label}
+        </label>
+      )}
+      <div className={`cms-custom-select ${open ? "is-open" : ""}`} ref={ref}>
+        <div
+          className={`cms-custom-select-combobox ${open ? "is-focused" : ""}`}
+          title={fullText}
+          onClick={() => {
+            if (disabled) return;
+            if (!open) {
+              setOpen(true);
+              setQuery("");
+            }
+            inputRef.current?.focus();
+          }}
+        >
+          <input
+            ref={inputRef}
+            id={selectId}
+            type="text"
+            role="combobox"
+            aria-label={label}
+            aria-expanded={open}
+            aria-controls={listId}
+            disabled={disabled}
+            className="cms-custom-combobox-input"
+            value={open ? query : (selected?.name || "")}
+            placeholder={displayName}
+            title={fullText}
+            onFocus={() => {
+              if (disabled) return;
+              setQuery("");
+              setOpen(true);
+            }}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setHighlight(0);
+              if (!open) setOpen(true);
+            }}
+            onKeyDown={keyDown}
+          />
+          <button
+            type="button"
+            tabIndex={-1}
+            className="cms-select-arrow-btn"
+            disabled={disabled}
+            aria-label={open ? "Close menu" : "Open menu"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (disabled) return;
+              setOpen((prev) => {
+                const next = !prev;
+                if (next) {
+                  setQuery("");
+                  inputRef.current?.focus();
+                }
+                return next;
+              });
+            }}
+          >
+            <span className={`cms-select-arrow ${open ? "is-open" : ""}`}>⌄</span>
+          </button>
+        </div>
+
+        {open && !disabled && (
+          <div className="cms-custom-select-menu bay-style-menu" id={listId} role="listbox">
+            {filtered.length ? (
+              filtered.map((item, index) => {
+                const isItemSel = String(item.id) === String(value);
+                return (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isItemSel}
+                    className={`cms-custom-select-option ${isItemSel ? "selected" : ""} ${
+                      highlight === index ? "highlighted" : ""
+                    }`}
+                    key={item.id}
+                    title={item.name}
+                    onMouseEnter={() => setHighlight(index)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChange(item.id);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  >
+                    {item.name}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="cms-custom-select-empty">No matching options</div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2682,32 +3352,8 @@ function PublishedGroupsList({
   setSearch,
   statusFilter,
   setStatusFilter,
-  groupFilter,
-  setGroupFilter,
-  examFilter,
-  setExamFilter,
   onViewGroup,
 }) {
-  const groupOptions = useMemo(() => {
-    const list = [];
-    groups.forEach((g) => {
-      if (g.groupName && !list.includes(g.groupName)) {
-        list.push(g.groupName);
-      }
-    });
-    return list;
-  }, [groups]);
-
-  const examOptions = useMemo(() => {
-    const list = [];
-    groups.forEach((g) => {
-      if (g.examName && !list.includes(g.examName)) {
-        list.push(g.examName);
-      }
-    });
-    return list;
-  }, [groups]);
-
   const filtered = useMemo(() => {
     return groups.filter((g) => {
       const matchSearch =
@@ -2718,25 +3364,11 @@ function PublishedGroupsList({
 
       if (!matchSearch) return false;
 
-      if (groupFilter && groupFilter !== "all") {
-        const matchGroup =
-          g.groupName.toLowerCase().includes(groupFilter.toLowerCase()) ||
-          (g.groupCode && g.groupCode.toLowerCase() === groupFilter.toLowerCase());
-        if (!matchGroup) return false;
-      }
-
-      if (examFilter && examFilter !== "all") {
-        const matchExam =
-          g.examName.toLowerCase().includes(examFilter.toLowerCase()) ||
-          String(g.examId) === String(examFilter);
-        if (!matchExam) return false;
-      }
-
       if (statusFilter === "high_pass") return g.passRate >= 85;
       if (statusFilter === "low_pass") return g.passRate < 85;
       return true;
     });
-  }, [groups, search, groupFilter, examFilter, statusFilter]);
+  }, [groups, search, statusFilter]);
 
   return (
     <div className="cms-card">
@@ -2761,44 +3393,17 @@ function PublishedGroupsList({
             />
           </div>
           <div className="results-table-actions results-published-filters">
-            <select
-              className="cms-select results-filter-select"
-              value={groupFilter}
-              onChange={(e) => setGroupFilter(e.target.value)}
-              aria-label="Filter by Group"
-            >
-              <option value="all">All Groups</option>
-              {groupOptions.map((grp) => (
-                <option key={grp} value={grp}>
-                  {grp}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="cms-select results-filter-select"
-              value={examFilter}
-              onChange={(e) => setExamFilter(e.target.value)}
-              aria-label="Filter by Examination"
-            >
-              <option value="all">All Examinations</option>
-              {examOptions.map((ex) => (
-                <option key={ex} value={ex}>
-                  {ex}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="cms-select results-filter-select"
+            <Select
+              compact
+              hideLabel
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              aria-label="Filter by Pass Rate"
-            >
-              <option value="all">All Published Exams</option>
-              <option value="high_pass">High Pass Rate (≥ 85%)</option>
-              <option value="low_pass">Needs Attention (&lt; 85%)</option>
-            </select>
+              onChange={setStatusFilter}
+              options={[
+                { id: "all", name: "All Published Exams" },
+                { id: "high_pass", name: "High Pass Rate (≥ 85%)" },
+                { id: "low_pass", name: "Needs Attention (< 85%)" },
+              ]}
+            />
           </div>
         </div>
 
@@ -3035,19 +3640,20 @@ function SectionStudentsView({
             />
           </div>
           <div className="results-table-actions results-section-actions">
-            <select
-              className="cms-select results-student-filter-select"
+            <Select
+              compact
+              hideLabel
               value={resultFilter}
-              onChange={(e) => {
-                setResultFilter(e.target.value);
+              onChange={(v) => {
+                setResultFilter(v);
                 setPage(1);
               }}
-              aria-label="Filter by Result"
-            >
-              <option value="all">Select Result</option>
-              <option value="PASS">Pass</option>
-              <option value="FAIL">Fail</option>
-            </select>
+              options={[
+                { id: "all", name: "Select Result" },
+                { id: "PASS", name: "Pass" },
+                { id: "FAIL", name: "Fail" },
+              ]}
+            />
             <button className="cms-btn cms-btn-ghost" onClick={() => onExcel(filtered)}>
               <Download size={14} /> Export Excel
             </button>
@@ -3174,19 +3780,21 @@ function RankListView({
               }}
             />
           </div>
-          <div className="cms-field-group" style={{ width: 180 }}>
-            <select
-              className="cms-select"
+          <div className="cms-field-group" style={{ width: 200, minWidth: 160 }}>
+            <Select
+              compact
+              hideLabel
               value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value);
+              onChange={(v) => {
+                setFilter(v);
                 setPage(1);
               }}
-            >
-              <option value="all">All Results (Pass & Fail)</option>
-              <option value="pass">Passed Students Only</option>
-              <option value="fail">Failed Students Only</option>
-            </select>
+              options={[
+                { id: "all", name: "All Results (Pass & Fail)" },
+                { id: "pass", name: "Passed Students Only" },
+                { id: "fail", name: "Failed Students Only" },
+              ]}
+            />
           </div>
           <div className="results-rank-toolbar-spacer" />
           <button
@@ -3262,9 +3870,102 @@ function RankListView({
 }
 
 /* Analytics View with Passed/Failed Modals and Subject Performance */
-function AnalyticsView({ data, examName, onOpenModal }) {
+function AnalyticsView({
+  data,
+  examName,
+  examOptions = [],
+  selectedExamKey = "",
+  onSelectExam,
+  groupOptions = [],
+  selectedGroupFilter = "all",
+  onSelectGroup,
+  onOpenModal,
+}) {
   return (
     <div>
+      {/* Analytics Examination & Group Filter Toolbar */}
+      {examOptions.length > 0 && (
+        <div className="cms-card" style={{ marginBottom: 14 }}>
+          <div
+            className="cms-card-body"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 12,
+              padding: "12px 16px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", flex: "1 1 540px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 260px", maxWidth: 360 }}>
+                <label
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "var(--cms-text)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Examination:
+                </label>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <Select
+                    compact
+                    hideLabel
+                    value={selectedExamKey}
+                    onChange={onSelectExam}
+                    options={examOptions}
+                    placeholder="Select Examination to analyze"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "0 1 200px", minWidth: 160 }}>
+                <label
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: "var(--cms-text)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Group:
+                </label>
+                <div style={{ flex: 1, minWidth: 120 }}>
+                  <Select
+                    compact
+                    hideLabel
+                    value={selectedGroupFilter}
+                    onChange={onSelectGroup}
+                    options={groupOptions}
+                    placeholder="All Groups"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--cms-muted)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <BarChart2 size={15} color="var(--cms-primary)" />
+              <span>
+                Analyzing: <strong style={{ color: "var(--cms-text)" }}>{examName}</strong>
+                {selectedGroupFilter && selectedGroupFilter !== "all" && (
+                  <> · Group: <strong style={{ color: "var(--cms-text)" }}>{selectedGroupFilter}</strong></>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Overview Stat Cards */}
       <div className="results-analytics-grid">
         <div className="results-analytics-card">

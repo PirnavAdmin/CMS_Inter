@@ -312,7 +312,7 @@
   letter-spacing: 0.3px;
 }
 
-/* ---------- Custom Searchable Select ---------- */
+/* ---------- Custom Searchable Select (Matching First Reference Dropdown) ---------- */
 .cms-custom-select {
   position: relative;
   width: 100%;
@@ -326,6 +326,7 @@
   z-index: 100000 !important;
 }
 
+/* Disabled trigger for Board and Academic Year (matching Second Reference) */
 .cms-custom-select-trigger {
   display: flex;
   align-items: center;
@@ -334,8 +335,8 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 35px;
-  padding: 5px 9px;
+  height: 36px;
+  padding: 5px 10px;
   overflow: hidden;
   border: 1px solid var(--cms-border, #e6e7de);
   border-radius: 8px;
@@ -349,6 +350,7 @@
   box-sizing: border-box;
 }
 
+.cms-custom-select.is-disabled .cms-custom-select-trigger,
 .cms-custom-select-trigger:disabled {
   cursor: not-allowed;
   opacity: 0.65 !important;
@@ -363,74 +365,164 @@
   white-space: nowrap;
 }
 
+/* Combobox Container for all interactive dropdowns (matching First Reference without search icon) */
+.cms-custom-select-combobox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  overflow: visible;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 8px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cms-custom-select-combobox:hover:not(.is-disabled) {
+  border-color: #cbd5e1;
+}
+
+.cms-custom-select-combobox.is-focused,
+.cms-custom-select-combobox:focus-within {
+  border-color: var(--cms-primary, #6f8400) !important;
+  box-shadow: 0 0 0 3px var(--cms-primary-soft, rgba(111, 132, 0, 0.16)) !important;
+}
+
+.cms-custom-select-combobox.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.65 !important;
+  background-color: var(--cms-subtle, #f7f8ef) !important;
+}
+
+/* Input directly inside the combobox (no search icon) */
+.cms-custom-combobox-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--cms-text, #171a17);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-custom-select-combobox.is-focused .cms-custom-combobox-input {
+  cursor: text;
+}
+
+.cms-custom-combobox-input::placeholder {
+  color: var(--cms-text, #171a17);
+  opacity: 0.85;
+}
+
+.cms-custom-combobox-input:disabled {
+  cursor: not-allowed;
+  color: var(--cms-muted, #7b8275);
+}
+
+.cms-select-arrow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--cms-muted, #7b8275);
+}
+
+.cms-select-arrow-btn:disabled {
+  cursor: not-allowed;
+}
+
 .cms-select-arrow {
   flex: 0 0 auto;
   font-size: 10px;
+  color: var(--cms-muted, #7b8275);
+  transition: transform 0.2s ease;
 }
 
-/* High Z-Index Popup Menu floating cleanly without screen overflow */
-.cms-custom-select-menu {
+.cms-select-arrow.is-open {
+  transform: rotate(180deg);
+}
+
+/* Dropdown Menu (matching First Reference bay-level-options without search input inside) */
+.cms-custom-select-menu.bay-style-menu {
   position: absolute !important;
   z-index: 100000 !important;
   top: calc(100% + 4px);
   left: 0;
+  right: 0;
   width: 100%;
   min-width: 100%;
   max-width: 100%;
-  overflow: hidden;
-  padding: 5px;
-  border: 1px solid var(--cms-border, #e6e7de);
-  border-radius: 9px;
-  background: var(--cms-surface) !important;
-  opacity: 1 !important;
-  box-shadow: var(--cms-shadow-lg) !important;
-  box-sizing: border-box;
-}
-
-.cms-custom-select-search {
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  padding: 4px 8px;
-  border: 1px solid var(--cms-border, #e6e7de);
-  border-radius: 6px;
-  background: var(--cms-surface, #ffffff);
-  color: var(--cms-text, #171a17);
-  font: inherit;
-  font-size: 12px;
-}
-
-.cms-custom-select-options {
-  max-height: 200px;
-  overflow-x: hidden;
+  max-height: 220px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-top: 4px;
+  padding: 5px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 8px;
+  background: var(--cms-surface, #ffffff) !important;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.16) !important;
+  box-sizing: border-box;
 }
 
-.cms-custom-select-option {
-  display: block;
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option {
+  display: flex;
+  align-items: center;
   width: 100%;
-  min-width: 0;
-  padding: 6px 8px;
-  overflow: hidden;
+  min-height: 32px;
+  padding: 6px 10px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--cms-text, #171a17);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
   text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
 }
 
-.cms-custom-select-option:hover,
-.cms-custom-select-option.highlighted,
-.cms-custom-select-option.selected {
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option .cms-option-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option:hover,
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option.highlighted {
   background: var(--cms-primary-soft, #f1f4e2);
-  color: var(--cms-primary);
+  color: var(--cms-primary, #6f8400);
+}
+
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option.selected {
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary, #6f8400);
+  font-weight: 700;
 }
 
 .cms-custom-select-empty {
@@ -438,6 +530,10 @@
   color: var(--cms-muted, #7b8275);
   font-size: 12px;
   text-align: center;
+}
+
+.cms-entry-select-compact .cms-custom-select-combobox {
+  height: 34px;
 }
 
 /* ---------- Context Summary Box (Ref Screenshots 1-5) ---------- */

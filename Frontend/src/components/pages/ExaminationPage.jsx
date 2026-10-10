@@ -1,3 +1,4 @@
+// Examination Management Component
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -1032,66 +1033,305 @@ const calculateSuggestedEndDate = (startDateStr, subjectCount) => {
   return dates[dates.length - 1];
 };
 
-function directExportScheduleExcel(targetExams, schedules, groupsList = [], filename = "Scheduled_Examinations") {
-  const rows = targetExams.flatMap((exam) => {
-    const examSchedules = schedules.filter((s) => String(s.examId) === String(exam.id));
-    return examSchedules.map((s) => {
-      const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName);
-      const marksText = isObj
-        ? `${s.totalMarks || 100} (Pass: ${s.passPercentage || 35}%)`
-        : `${s.totalMarks || 100} (Pass: ${s.passingMarks || 35})`;
-      const hallText = s.roomName && s.roomName !== "—"
-        ? s.roomName
-        : (ensureArray(s.hallAssignments).map((a) => a.hallName || a.roomNumber || a.hallId).filter(Boolean).join(", ") || "—");
-      const invigilatorText = s.invigilatorName && s.invigilatorName !== "—"
-        ? s.invigilatorName
-        : (ensureArray(s.hallAssignments).flatMap((a) => a.invigilatorNames || a.invigilatorIds || []).filter(Boolean).join(", ") || "—");
+const resolveGroupText = (s, exam, groupsList = []) => {
+  const safeGroups = ensureArray(groupsList);
+  if (s?.groupName && s.groupName !== "—" && s.groupName !== "-") return s.groupName;
+  if (s?.groupDisplay && s.groupDisplay !== "—" && s.groupDisplay !== "-") return s.groupDisplay;
+  if (s?.groupId) {
+    const byId = nameOf(safeGroups, s.groupId);
+    if (byId && byId !== "—" && byId !== "-") return byId;
+  }
+  if (exam) {
+    if (exam.groupName && exam.groupName !== "—" && exam.groupName !== "-") return exam.groupName;
+    if (exam.group?.name && exam.group.name !== "—" && exam.group.name !== "-") return exam.group.name;
+    if (exam.group?.groupName && exam.group.groupName !== "—") return exam.group.groupName;
+    const ids = ensureArray(exam.groupIds || (exam.groupId ? [exam.groupId] : []));
+    if (ids.length > 0) {
+      const names = ids.map((gid) => nameOf(safeGroups, gid)).filter((n) => n && n !== "—" && n !== "-");
+      if (names.length > 0) return names.join(", ");
+    }
+    if (Array.isArray(exam.groups) && exam.groups.length > 0) {
+      const gNames = exam.groups.map((g) => g?.name || g?.groupName).filter(Boolean);
+      if (gNames.length > 0) return gNames.join(", ");
+    }
+    const foundG = ["BIPC", "MPC", "CEC", "HEC", "MEC"].find((g) =>
+      String(exam.name || exam.examName || "").toUpperCase().includes(g)
+    );
+    if (foundG) return foundG;
+  }
+  return "—";
+};
 
-      return {
-        "Exam Code": exam.code || "—",
-        "Exam Name": exam.name || "—",
-        "Group": nameOf(groupsList, s.groupId, "—"),
-        "Subject/Pattern": s.subjectName ? `${s.subjectName}${s.combinedSubjectsDisplay ? " (" + s.combinedSubjectsDisplay + ")" : (s.subjectCode && s.subjectCode !== s.subjectName ? " [" + s.subjectCode + "]" : "")}` : (s.patternName || "—"),
-        "Exam Date": d(s.date),
-        "Timing": `${s.startTime || "—"} - ${s.endTime || "—"}`,
-        "Marks": marksText,
-        "Hall/Room": hallText,
-        "Invigilator": invigilatorText,
-        "Mode": s.mode || (isObj ? "Objective" : "Written"),
-      };
+const resolveProgramText = (s, exam, programsList = []) => {
+  const safePrograms = ensureArray(programsList);
+  if (s?.programName && s.programName !== "—" && s.programName !== "-") return s.programName;
+  if (s?.programDisplay && s.programDisplay !== "—" && s.programDisplay !== "-") return s.programDisplay;
+  if (s?.programId) {
+    const byId = nameOf(safePrograms, s.programId);
+    if (byId && byId !== "—" && byId !== "-") return byId;
+  }
+  if (exam) {
+    if (exam.programName && exam.programName !== "—" && exam.programName !== "-") return exam.programName;
+    if (exam.program?.name && exam.program.name !== "—" && exam.program.name !== "-") return exam.program.name;
+    const ids = ensureArray(exam.programIds || (exam.programId ? [exam.programId] : []));
+    if (ids.length > 0) {
+      const names = ids.map((pid) => nameOf(safePrograms, pid)).filter((n) => n && n !== "—" && n !== "-");
+      if (names.length > 0) return names.join(", ");
+    }
+    if (Array.isArray(exam.programs) && exam.programs.length > 0) {
+      const pNames = exam.programs.map((p) => p?.name || p?.programName).filter(Boolean);
+      if (pNames.length > 0) return pNames.join(", ");
+    }
+  }
+  return "Regular";
+};
+
+// Format date to DD-MM-YYYY format matching Screenshot 2 reference
+function formatDDMMYYYY(val) {
+  if (!val) return "—";
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) return trimmed;
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+      const parts = trimmed.split("T")[0].split("-");
+      if (parts.length === 3) {
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+    }
+  }
+  try {
+    const dObj = new Date(val);
+    if (!isNaN(dObj.getTime())) {
+      const day = String(dObj.getDate()).padStart(2, "0");
+      const month = String(dObj.getMonth() + 1).padStart(2, "0");
+      const year = dObj.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+  } catch (_) { }
+  return String(val);
+}
+
+function resolveSubjectDisplay(s) {
+  if (s.subjectName) return s.subjectName;
+  if (s.patternName) return s.patternName;
+  return s.subjectCode || "—";
+}
+
+function resolveExamDateDisplay(s, exam) {
+  const rawDate = s.date || s.examDate || s.scheduleDate || s.examScheduleDate || exam?.startDate || exam?.date;
+  return formatDDMMYYYY(rawDate);
+}
+
+function resolveInvigilatorDisplay(s) {
+  if (s.invigilatorName && s.invigilatorName !== "—" && s.invigilatorName !== "-") {
+    return s.invigilatorName;
+  }
+  const assigned = ensureArray(s.hallAssignments)
+    .flatMap((a) => a.invigilatorNames || a.invigilatorIds || (a.invigilatorName ? [a.invigilatorName] : []))
+    .filter(Boolean);
+  if (assigned.length > 0) return assigned.join(", ");
+  return s.invigilator && s.invigilator !== "—" ? s.invigilator : "—";
+}
+
+function resolveRoomDisplay(s) {
+  if (s.roomName && s.roomName !== "—" && s.roomName !== "-") {
+    return s.roomName;
+  }
+  const assigned = ensureArray(s.hallAssignments)
+    .map((a) => a.hallName || a.roomNumber || a.roomName || a.hallId)
+    .filter(Boolean);
+  if (assigned.length > 0) return assigned.join(", ");
+  return s.hall || s.roomNumber || "—";
+}
+
+function resolveModeDisplay(s) {
+  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName) || s.mode === "Objective" || s.examMode === "Objective";
+  if (isObj) return "Objective";
+  const m = s.mode || s.examMode;
+  if (!m || m === "Written" || m === "Subjective") return "Subjective";
+  return m;
+}
+
+function directExportScheduleExcel(
+  targetExams,
+  schedules,
+  groupsList = [],
+  filename = "Examination_Schedules",
+  programsList = [],
+  academicYearsList = []
+) {
+  const safeExams = ensureArray(targetExams);
+  const safeSchedules = ensureArray(schedules);
+
+  if (!safeExams.length) return false;
+
+  const aoa = [];
+  const merges = [];
+  const titleRowIndices = [];
+  const genRowIndices = [];
+  const sectionRowIndices = [];
+  const headerRowIndices = [];
+
+  const headers = [
+    "Subject",
+    "Exam Date",
+    "Invigilator",
+    "Exam Hall / Room",
+    "Exam Mode",
+  ];
+
+  // 1. Top Title Row: "Examination Schedules" (Dark blue banner)
+  const titleRowIdx = aoa.length;
+  titleRowIndices.push(titleRowIdx);
+  aoa.push(["Examination Schedules", "", "", "", ""]);
+  merges.push({ s: { r: titleRowIdx, c: 0 }, e: { r: titleRowIdx, c: 4 } });
+
+  // 2. Subheader Row: "Generated On" | Date
+  const genRowIdx = aoa.length;
+  genRowIndices.push(genRowIdx);
+  const todayFormatted = formatDDMMYYYY(new Date());
+  aoa.push(["Generated On", todayFormatted, "", "", ""]);
+  merges.push({ s: { r: genRowIdx, c: 1 }, e: { r: genRowIdx, c: 4 } });
+
+  // Blank row separator below Generated On
+  aoa.push([]);
+
+  const THEMES = [
+    { headerFg: "0F3567", headerBg: "CCE3FD", thBg: "E2EFFE" }, // Blue
+    { headerFg: "134E28", headerBg: "CBEBD4", thBg: "E3F6EA" }, // Green
+    { headerFg: "7A310C", headerBg: "FDE2CA", thBg: "FFF0E2" }, // Orange
+    { headerFg: "4C1D95", headerBg: "E5DBF8", thBg: "F2EDFC" }, // Purple
+  ];
+
+  let hasAnyData = false;
+
+  safeExams.forEach((exam, examIdx) => {
+    let examSchedules = safeSchedules.filter((s) => {
+      const sExamId = normalizeId(s.examId ?? s.examinationId);
+      const eExamId = normalizeId(exam.id ?? exam.examinationId);
+      return sExamId && eExamId ? sExamId === eExamId : true;
     });
+    if (examSchedules.length === 0 && safeExams.length === 1) {
+      examSchedules = safeSchedules;
+    }
+
+    const theme = THEMES[examIdx % THEMES.length];
+    const examTitle = exam.name || exam.examName || "Examination";
+    const yearName = nameOf(academicYearsList, exam.yearId || exam.academicYearId) !== "—"
+      ? nameOf(academicYearsList, exam.yearId || exam.academicYearId)
+      : (exam.academicYearName || exam.yearName || "");
+
+    const examBanner = yearName && !examTitle.includes(yearName)
+      ? `${examTitle} (${yearName})`
+      : examTitle;
+
+    // Exam Title Header Row
+    const sectionRowIdx = aoa.length;
+    sectionRowIndices.push({ idx: sectionRowIdx, theme });
+    aoa.push([examBanner, "", "", "", ""]);
+    merges.push({ s: { r: sectionRowIdx, c: 0 }, e: { r: sectionRowIdx, c: 4 } });
+
+    // Table Column Header Row
+    const headerRowIdx = aoa.length;
+    headerRowIndices.push({ idx: headerRowIdx, theme });
+    aoa.push([...headers]);
+
+    // Data rows for this examination
+    if (examSchedules.length > 0) {
+      hasAnyData = true;
+      examSchedules.forEach((s) => {
+        const subjectText = resolveSubjectDisplay(s);
+        const dateText = resolveExamDateDisplay(s, exam);
+        const invigilatorText = resolveInvigilatorDisplay(s);
+        const roomText = resolveRoomDisplay(s);
+        const modeText = resolveModeDisplay(s);
+
+        aoa.push([
+          subjectText,
+          dateText,
+          invigilatorText,
+          roomText,
+          modeText,
+        ]);
+      });
+    } else {
+      const emptyRowIdx = aoa.length;
+      aoa.push(["No sessions scheduled for this examination", "", "", "", ""]);
+      merges.push({ s: { r: emptyRowIdx, c: 0 }, e: { r: emptyRowIdx, c: 4 } });
+    }
+
+    // Blank row separator before the next examination
+    aoa.push([]);
   });
 
-  if (!rows.length) return false;
+  const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+  worksheet["!merges"] = merges;
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+  worksheet["!cols"] = [
+    { wch: 34 }, // Subject
+    { wch: 16 }, // Exam Date
+    { wch: 28 }, // Invigilator
+    { wch: 28 }, // Exam Hall / Room
+    { wch: 18 }, // Exam Mode
+  ];
 
+  // Apply cell styling where supported
   const range = XLSX.utils.decode_range(worksheet["!ref"]);
+  const borderThin = {
+    top: { style: "thin", color: { rgb: "CBD5E1" } },
+    bottom: { style: "thin", color: { rgb: "CBD5E1" } },
+    left: { style: "thin", color: { rgb: "CBD5E1" } },
+    right: { style: "thin", color: { rgb: "CBD5E1" } },
+  };
+
   for (let R = range.s.r; R <= range.e.r; ++R) {
+    const isMainTitle = titleRowIndices.includes(R);
+    const isGenRow = genRowIndices.includes(R);
+    const sectionMatch = sectionRowIndices.find((item) => item.idx === R);
+    const headerMatch = headerRowIndices.find((item) => item.idx === R);
+
     for (let C = range.s.c; C <= range.e.c; ++C) {
       const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
       if (!worksheet[cellAddress]) continue;
-      worksheet[cellAddress].s = {
-        alignment: { horizontal: "center", vertical: "center" },
-      };
+
+      if (isMainTitle) {
+        worksheet[cellAddress].s = {
+          font: { bold: true, sz: 16, color: { rgb: "FFFFFF" } },
+          fill: { fgColor: { rgb: "204070" } },
+          alignment: { horizontal: "center", vertical: "center" },
+        };
+      } else if (isGenRow) {
+        worksheet[cellAddress].s = {
+          font: { bold: true, sz: 11, color: { rgb: "1E293B" } },
+          border: borderThin,
+          alignment: { horizontal: "left", vertical: "center" },
+        };
+      } else if (sectionMatch) {
+        worksheet[cellAddress].s = {
+          font: { bold: true, sz: 12, color: { rgb: sectionMatch.theme.headerFg } },
+          fill: { fgColor: { rgb: sectionMatch.theme.headerBg } },
+          border: borderThin,
+          alignment: { horizontal: "left", vertical: "center" },
+        };
+      } else if (headerMatch) {
+        worksheet[cellAddress].s = {
+          font: { bold: true, sz: 11, color: { rgb: headerMatch.theme.headerFg } },
+          fill: { fgColor: { rgb: headerMatch.theme.thBg } },
+          border: borderThin,
+          alignment: { horizontal: "left", vertical: "center" },
+        };
+      } else {
+        worksheet[cellAddress].s = {
+          font: { sz: 11, color: { rgb: "1E293B" } },
+          border: borderThin,
+          alignment: { horizontal: "left", vertical: "center" },
+        };
+      }
     }
   }
 
-  worksheet["!cols"] = [
-    { wch: 16 }, // Exam Code
-    { wch: 32 }, // Exam Name
-    { wch: 16 }, // Group
-    { wch: 30 }, // Subject/Pattern
-    { wch: 16 }, // Exam Date
-    { wch: 20 }, // Timing
-    { wch: 22 }, // Marks
-    { wch: 28 }, // Hall/Room
-    { wch: 32 }, // Invigilator
-    { wch: 16 }, // Mode
-  ];
-
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Schedule");
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Examination_Schedules");
   XLSX.writeFile(workbook, `${filename.replace(/\s+/g, "_")}.xlsx`);
   return true;
 }
@@ -1694,7 +1934,7 @@ const normalizeScheduleRecord = (
   programsList = [],
   studentsList = [],
 ) => {
-  const dateVal = s?.examDate ?? s?.date;
+  const dateVal = s?.examDate ?? s?.date ?? s?.scheduleDate ?? s?.examScheduleDate ?? examContext?.startDate ?? examContext?.date;
   const formattedDate = dateVal ? String(dateVal).split("T")[0] : "";
   const maxMarksVal = s?.maxMarks ?? s?.totalMarks ?? "100";
   const passMarksVal = s?.passingMarks ?? "35";
@@ -2899,6 +3139,7 @@ export default function ExaminationPage() {
 
   const [examId, setExamId] = useState("");
   const [detail, setDetail] = useState(null);
+  const [globalPreviewModal, setGlobalPreviewModal] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
   const [toast, setToast] = useState({ message: "", type: "success" });
   const [remove, setRemove] = useState(null);
@@ -3863,62 +4104,108 @@ export default function ExaminationPage() {
   const printSchedule = async (targetExam = null) => {
     const targetExams = targetExam
       ? [targetExam]
-      : exams.filter((item) => item.status === "SCHEDULED" || item.status === "COMPLETED");
-    const filename = targetExam ? `${targetExam.name}_Schedule` : "Scheduled_Examinations";
+      : exams.filter((item) => normalizeStatus(item.status) === "SCHEDULED");
+    const filename = targetExam ? `${targetExam.name}_Schedule` : "Examination_Schedules";
 
-    // Attempt backend export endpoint first if single exam export
-    if (targetExam && targetExam.id) {
-      try {
-        const res = await apiClient.get(`/api/v1/examinations/${targetExam.id}/export/excel`, {
-          responseType: "blob",
-          timeout: 6000,
-        });
-        if (res.data && res.data.size > 0) {
-          const blobUrl = window.URL.createObjectURL(new Blob([res.data]));
-          const link = document.createElement("a");
-          link.href = blobUrl;
-          link.setAttribute("download", `${filename.replace(/\s+/g, "_")}.xlsx`);
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          window.URL.revokeObjectURL(blobUrl);
-          showToast("Schedule exported to Excel successfully.", "success");
-          return;
-        }
-      } catch (_) {
-        // Fallback to client-side XLSX generation
-      }
+    if (!targetExams.length) {
+      showToast("No scheduled examinations are available to export.", "warning");
+      return;
     }
 
-    let currentSchedules = schedules;
-    if (currentSchedules.length === 0 && targetExams.length > 0) {
+    if (!targetExam) {
+      // Global schedule export: Open preview modal styled like reference; only download when user clicks modal download button
+      setGlobalPreviewModal({
+        targetExams,
+        schedules: [],
+        loading: true,
+      });
+
       try {
         const results = await Promise.all(
           targetExams.map((e) =>
             apiClient.get(`/api/v1/examinations/${e.id}/schedules`, {
               params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
               headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-            }).then((res) => unwrap(res)).catch(() => [])
+            }).then((res) =>
+              unwrap(res).map((entry) => ({
+                ...normalizeScheduleRecord(
+                  entry,
+                  e.groupIds?.[0] || e.groupId || groups[0]?.id,
+                  e,
+                  groups,
+                  eligibleSubjects,
+                  rooms,
+                  faculty,
+                  programs,
+                  students
+                ),
+                examId: e.id,
+                examinationId: e.id,
+                examCode: e.code,
+                examName: e.name,
+                examCategory: e.examCategory,
+                startDate: e.startDate,
+                endDate: e.endDate,
+                programId: entry.programId || e.programIds?.[0] || e.programId,
+                programName: entry.programName || e.programName || resolveProgramText(entry, e, programs),
+                groupId: entry.groupId || e.groupIds?.[0] || e.groupId,
+                groupName: entry.groupName || e.groupName || resolveGroupText(entry, e, groups),
+              }))
+            ).catch(() => [])
           )
         );
-        currentSchedules = results.flat().map((entry) => ({
-          ...entry,
-          examId: entry.examinationId || entry.examId,
+
+        const currentSchedules = results.flat();
+
+        setGlobalPreviewModal({
+          targetExams,
+          schedules: currentSchedules,
+          loading: false,
+        });
+      } catch (err) {
+        setGlobalPreviewModal(null);
+        showToast(getApiErrorMessage(err) || "Failed to load global schedules.", "error");
+      }
+      return;
+    }
+
+    // Single exam export flow
+    let currentSchedules = schedules.filter((s) => normalizeId(s.examId ?? s.examinationId) === normalizeId(targetExam.id));
+    if (currentSchedules.length === 0 && targetExam.id) {
+      try {
+        const schedRes = await apiClient.get(`/api/v1/examinations/${targetExam.id}/schedules`, {
+          params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
+          headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+        });
+        currentSchedules = unwrap(schedRes).map((entry) => ({
+          ...normalizeScheduleRecord(
+            entry,
+            targetExam.groupIds?.[0] || targetExam.groupId || groups[0]?.id,
+            targetExam,
+            groups,
+            eligibleSubjects,
+            rooms,
+            faculty,
+            programs,
+            students
+          ),
+          examinationId: targetExam.id,
+          examCode: targetExam.code,
+          examName: targetExam.name,
         }));
-        if (currentSchedules.length > 0) {
-          setSchedules((prev) => {
-            const map = new Map();
-            prev.forEach((s) => map.set(normalizeId(s.id), s));
-            currentSchedules.forEach((s) => map.set(normalizeId(s.id), s));
-            return Array.from(map.values());
-          });
-        }
       } catch (_) { }
     }
 
-    const ok = directExportScheduleExcel(targetExams, currentSchedules, groups, filename);
+    const ok = directExportScheduleExcel(
+      [targetExam],
+      currentSchedules,
+      groups,
+      filename,
+      programs,
+      academicYears.length > 0 ? academicYears : contextAcademicYears
+    );
     if (!ok) {
-      showToast("No scheduled examinations are available to export.", "warning");
+      showToast("No schedules are available to export for this examination.", "warning");
     } else {
       showToast("Schedule exported to Excel successfully.", "success");
     }
@@ -4936,7 +5223,7 @@ export default function ExaminationPage() {
                               <CalendarDays size={15} />
                             </button>
                           )}
-                          {["DRAFT", "SCHEDULED"].includes(e.status) && (
+                          {e.status === "DRAFT" && (
                             <button
                               className="cms-action-btn edit"
                               title="Edit Examination Scope"
@@ -5236,7 +5523,31 @@ export default function ExaminationPage() {
           academicYears={academicYears}
           academicLevels={academicLevels}
           groups={groups}
+          programs={programs}
           close={() => setDetail(null)}
+        />
+      )}
+
+      {globalPreviewModal && (
+        <GlobalSchedulePreviewModal
+          targetExams={globalPreviewModal.targetExams}
+          schedules={globalPreviewModal.schedules}
+          loading={globalPreviewModal.loading}
+          groups={groups}
+          programs={programs}
+          academicYears={academicYears.length > 0 ? academicYears : contextAcademicYears}
+          onClose={() => setGlobalPreviewModal(null)}
+          onExport={(filteredSchedules) => {
+            directExportScheduleExcel(
+              globalPreviewModal.targetExams,
+              filteredSchedules || globalPreviewModal.schedules,
+              groups,
+              "Examination_Schedules",
+              programs,
+              academicYears.length > 0 ? academicYears : contextAcademicYears
+            );
+            showToast("Examination schedules exported successfully.", "success");
+          }}
         />
       )}
 
@@ -5248,36 +5559,8 @@ export default function ExaminationPage() {
           onSave={async (period) => {
             try {
               const examId = editingExam.id;
-              // 1. Fetch current persisted schedules from backend
-              let existingSchedules = [];
-              try {
-                const schedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`);
-                existingSchedules = unwrap(schedRes);
-              } catch (e) {
-                existingSchedules = schedules.filter((s) => normalizeId(s.examId) === normalizeId(examId));
-              }
 
-              // 2. Identify schedules that fall outside the new examination window [period.startDate, period.endDate]
-              const outOfRange = existingSchedules.filter((s) => {
-                const sDate = canonicalDate(s.scheduleDate || s.examDate || s.date);
-                return sDate && (sDate < period.startDate || sDate > period.endDate);
-              });
-
-              // 3. If out of range schedules exist, delete them first from backend so PUT doesn't reject with 400
-              if (outOfRange.length > 0) {
-                for (const s of outOfRange) {
-                  const sId = s.examScheduleId || s.scheduleId || s.id;
-                  if (sId) {
-                    try {
-                      await deleteScheduleFromBackend(examId, sId);
-                    } catch (delErr) {
-                      // Silently continue deleting remaining
-                    }
-                  }
-                }
-              }
-
-              // 4. Update the examination record
+              // 1. Update the examination record with the new examination period [startDate, endDate]
               await apiClient.put(`/api/v1/examinations/${examId}`, {
                 campusId: Number(editingExam.campusId || effectiveCampusId) || 1,
                 examName: editingExam.name || editingExam.examName,
@@ -5308,66 +5591,163 @@ export default function ExaminationPage() {
                 scheduleMode: editingExam.scheduleMode,
               });
 
-              const outOfRangeIds = outOfRange.map((s) => normalizeId(s.examScheduleId || s.scheduleId || s.id)).filter(Boolean);
-              setSchedules((prev) => prev.filter((s) => !outOfRangeIds.includes(normalizeId(s.id))));
+              // Immediately sync exams in state with updated dates so currentExam reflects new period
+              setExams((prev) =>
+                prev.map((e) =>
+                  normalizeId(e.id) === normalizeId(examId)
+                    ? { ...e, startDate: period.startDate, endDate: period.endDate }
+                    : e
+                )
+              );
 
-              // 5. For combined/objective examinations, re-create the session on the new start date
+              // 2. Reschedule existing examination sessions to match the updated examination period
               const isComb = isCombinedExamination(editingExam);
-              if (isComb && outOfRange.length > 0) {
-                try {
-                  const targetGid = editingExam.groupIds?.[0] || editingExam.groupId;
-                  const firstSched = outOfRange[0];
-                  const remapped = [
-                    {
-                      id: "draft-recreated-entry",
-                      examId,
-                      groupId: targetGid,
-                      patternName: editingExam.examPattern || firstSched.patternName,
-                      includedSubjectIds: (editingExam.selectedSubjectIds || []).map(String),
-                      date: period.startDate,
-                      startTime: firstSched.startTime || "09:00:00",
-                      endTime: firstSched.endTime || "12:00:00",
-                      totalMarks: firstSched.totalMarks || firstSched.maxMarks || "300",
-                      passPercentage: firstSched.passPercentage || "40",
-                      passingMarks: firstSched.passingMarks || "35",
-                      hallAssignments: [
-                        {
-                          hallId: firstSched.roomId ? String(firstSched.roomId) : "",
-                          hallName: firstSched.roomNumber || firstSched.hall || "",
-                          candidateCount: Number(firstSched.candidateCount) || getRequiredCandidateStrength(editingExam, targetGid, programs, false, students) || 0,
-                          invigilatorIds: firstSched.invigilatorId ? [String(firstSched.invigilatorId)] : [],
-                        },
-                      ],
-                      roomId: firstSched.roomId,
-                      hall: firstSched.roomNumber || firstSched.hall,
-                      invigilatorId: firstSched.invigilatorId,
-                      invigilator: firstSched.invigilatorName || firstSched.invigilator,
-                      mode: firstSched.examMode || editingExam.examCategory || "Objective",
-                      scheduleMode: "PATTERN_WISE",
-                    },
-                  ];
-                  const filteredSchedules = schedules.filter((s) => !outOfRangeIds.includes(normalizeId(s.id)));
-                  await saveSchedulesToBackend(examId, remapped, faculty, rooms, effectiveCampusId, editingExam, masterPatterns, filteredSchedules);
-                } catch (recreateErr) {
-                  // If re-creation failed, schedules list will be reloaded
+              const userStart = formatTimeOnly(sch?.startTime || defaultSessionStartTime || "09:00");
+              const userEnd = formatTimeOnly(sch?.endTime || defaultSessionEndTime || "12:00", userStart);
+
+              let existingSchedules = [];
+              try {
+                const schedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`, {
+                  params: { campusId: effectiveCampusId, _t: Date.now() },
+                });
+                existingSchedules = unwrap(schedRes);
+              } catch (e) {
+                existingSchedules = schedules.filter((s) => normalizeId(s.examId) === normalizeId(examId));
+              }
+
+              // Deduplicate any redundant/duplicate schedules for the same subject/pattern
+              const seenMap = new Map();
+              const primarySchedules = [];
+              const duplicateSchedules = [];
+
+              for (const s of ensureArray(existingSchedules)) {
+                const key = `${s.groupId || "_"}_${s.subjectId || s.patternName || s.sessionId || s.id}`;
+                if (!seenMap.has(key)) {
+                  seenMap.set(key, s);
+                  primarySchedules.push(s);
+                } else {
+                  duplicateSchedules.push(s);
                 }
               }
 
-              // Reload fresh schedules from backend for this exam
-              try {
-                const schedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`);
-                const fallbackGid = editingExam?.groupIds?.[0] || editingExam?.groupId;
-                const freshRecords = unwrap(schedRes).map((entry) =>
-                  normalizeScheduleRecord(entry, fallbackGid, editingExam, groups, eligibleSubjects, rooms, faculty, programs, students)
-                );
-                setSchedules((prev) => [...prev.filter((s) => normalizeId(s.examId) !== normalizeId(examId)), ...freshRecords]);
-              } catch (reloadErr) {
-                // Keep filtered schedules
+              // Clean up duplicate schedule records from backend if any exist
+              for (const dup of duplicateSchedules) {
+                const dupId = dup.examScheduleId || dup.scheduleId || dup.id;
+                if (dupId) {
+                  try {
+                    await deleteScheduleFromBackend(examId, dupId);
+                  } catch (delErr) {
+                    console.warn("Could not remove duplicate schedule", dupId, delErr);
+                  }
+                }
               }
 
+              if (primarySchedules.length > 0) {
+                // Change dates of all existing schedules sequentially within the new examination period
+                const schedulesByGroup = {};
+                for (const s of primarySchedules) {
+                  const gid = String(s.groupId || s.courseGroupId || "default");
+                  if (!schedulesByGroup[gid]) schedulesByGroup[gid] = [];
+                  schedulesByGroup[gid].push(s);
+                }
+
+                for (const gid of Object.keys(schedulesByGroup)) {
+                  const groupList = schedulesByGroup[gid];
+                  groupList.sort((a, b) => {
+                    const da = canonicalDate(a.examDate || a.date || a.scheduleDate) || "";
+                    const db = canonicalDate(b.examDate || b.date || b.scheduleDate) || "";
+                    if (da !== db) return da.localeCompare(db);
+                    return (Number(a.subjectId) || 0) - (Number(b.subjectId) || 0);
+                  });
+
+                  const sequentialDates = generateSequentialExamDates(period.startDate, groupList.length);
+
+                  for (let i = 0; i < groupList.length; i++) {
+                    const s = groupList[i];
+                    const sId = s.examScheduleId || s.scheduleId || s.id;
+                    if (!sId) continue;
+                    const targetDate = isComb ? period.startDate : (sequentialDates[i] || period.startDate);
+
+                    const updatePayload = sanitizeUpdateScheduleDto({
+                      campusId: Number(effectiveCampusId || editingExam.campusId || s.campusId) || 1,
+                      subjectId: s.subjectId ? Number(s.subjectId) : undefined,
+                      examDate: targetDate,
+                      startTime: s.startTime || userStart,
+                      endTime: s.endTime || userEnd,
+                      sessionId: s.sessionId,
+                      scheduleMode: s.scheduleMode || (isComb ? "PATTERN_WISE" : "SUBJECT_WISE"),
+                      roomId: s.roomId ? Number(s.roomId) : undefined,
+                      hall: s.hall || s.roomNumber || "",
+                      invigilatorId: s.invigilatorId ? Number(s.invigilatorId) : undefined,
+                      invigilator: s.invigilator || s.invigilatorName || "",
+                      examMode: s.examMode || (isComb ? "Objective" : "Written"),
+                      maxMarks: s.maxMarks || s.totalMarks || 100,
+                      passingMarks: s.passingMarks || 35,
+                      hallAssignments: s.hallAssignments || [],
+                    });
+
+                    try {
+                      await apiClient.put(`/api/v1/examinations/${examId}/schedules/${sId}`, updatePayload);
+                    } catch (updateErr) {
+                      console.warn(`Could not update schedule ${sId} to date ${targetDate}:`, updateErr);
+                    }
+                  }
+                }
+              } else {
+                // If the examination had no existing schedules, auto-schedule across the new period
+                const targetGids = ensureArray(
+                  (editingExam.groupIds && editingExam.groupIds.length > 0)
+                    ? editingExam.groupIds
+                    : editingExam.groupId ? [editingExam.groupId] : []
+                ).map((id) => Number(id) || id).filter(Boolean);
+
+                const effectiveGids = targetGids.length > 0
+                  ? targetGids
+                  : (selectedGroupId ? [Number(selectedGroupId)] : []);
+
+                for (const gid of effectiveGids) {
+                  const selectedProgramIds = getSelectedProgramsForGroup(editingExam, gid);
+                  try {
+                    await apiClient.post(`/api/v1/examinations/${examId}/auto-schedule`, {
+                      groupId: Number(gid),
+                      academicLevelId: Number(editingExam.academicLevelId || editingExam.academicLevelIds?.[0] || editingExam.levelIds?.[0] || 0),
+                      academicLevelIds: ensureArray(editingExam.academicLevelIds || editingExam.levelIds || (editingExam.academicLevelId ? [editingExam.academicLevelId] : [])).map((id) => Number(id) || id),
+                      programId: selectedProgramIds.length === 1 ? (Number(selectedProgramIds[0]) || selectedProgramIds[0]) : undefined,
+                      programIds: selectedProgramIds.map((id) => Number(id) || id),
+                      totalMarks: Number(editingExam.totalMarks || sch?.totalMarks || 100),
+                      passingMarks: Number(editingExam.passingMarks || sch?.passingMarks || 35),
+                      scheduleMode: isComb ? "PATTERN_WISE" : "SUBJECT_WISE",
+                      defaultStartTime: userStart,
+                      defaultEndTime: userEnd,
+                      skipSundays: true,
+                      campusId: Number(effectiveCampusId || editingExam.campusId || 1),
+                      replaceExisting: true,
+                    });
+                  } catch (autoErr) {
+                    console.warn(`Could not auto-schedule group ${gid}:`, autoErr);
+                  }
+                }
+              }
+
+              // 3. Reset form state if editing was active
+              if (typeof setEditing === "function") setEditing(null);
+              if (typeof setErrors === "function") setErrors({});
+              setSch?.((prev) => ({
+                ...prev,
+                subjectId: "",
+                patternName: "",
+                date: "",
+                hallAssignments: [],
+              }));
+
+              // 4. Reload fresh normalized schedules from backend
+              await fetchSchedulesForExam(examId);
+
+              // 5. Reload examinations list
               await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
+
               setEditingExam(null);
-              showToast("Examination period updated successfully.", "success");
+              showToast("Examination period updated and schedules auto-scheduled successfully.", "success");
             } catch (err) {
               const errMsg = getApiErrorMessage(err) || "Failed to update examination period.";
               showToast(errMsg, "error");
@@ -8484,7 +8864,7 @@ function ScheduleSection({
               type="button"
               className="cms-btn cms-btn-ghost"
               onClick={() => {
-                const ok = directExportScheduleExcel([exam], schedules, groups, `${exam.name}_Schedule`);
+                const ok = directExportScheduleExcel([exam], schedules, groups, `${exam.name}_Schedule`, programs);
                 if (ok) {
                   showToast?.("Schedule exported to Excel successfully.", "success");
                 } else {
@@ -8545,12 +8925,12 @@ function ScheduleSection({
                     {onEditPeriod && (
                       <button
                         type="button"
-                        className="cms-btn cms-btn-ghost exam-mini-btn"
-                        style={{ padding: "2px 8px", fontSize: "11px", height: "auto" }}
+                        className="cms-btn cms-btn-primary exam-edit-period-btn"
+                        style={{ padding: "4px 10px", fontSize: "11px", height: "auto", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "600" }}
                         onClick={() => onEditPeriod(exam)}
                         title="Change examination time period dates"
                       >
-                        <Pencil size={11} style={{ marginRight: "3px" }} /> Edit Period
+                        <Pencil size={12} style={{ marginRight: "3px" }} /> Edit Period
                       </button>
                     )}
                   </span>
@@ -8905,7 +9285,7 @@ function ScheduleSection({
               <ScheduleTable
                 entries={groupEntries}
                 groups={groups}
-                canEdit={normalizeStatus(exam?.status) === "DRAFT" || !exam?.status || exam?.status === "Draft"}
+                canEdit={["DRAFT", "SCHEDULED"].includes(normalizeStatus(exam?.status)) || !exam?.status || exam?.status === "Draft"}
                 edit={onEdit}
                 remove={onRemove}
                 onEditHalls={(s) => setEditingHallsSchedule(s)}
@@ -9518,7 +9898,7 @@ function ScheduleTable({
   useEffect(() => setPage(1), [displayEntries.length]);
 
   const isExamScheduled = exam && normalizeStatus(exam.status) === "SCHEDULED";
-  const canEditAny = canEdit || isExamScheduled;
+  const canEditAny = Boolean(canEdit && (isExamScheduled || edit || remove));
 
   const handleToggleInlineEdit = (s) => {
     if (inlineEditId === s.id) {
@@ -9790,31 +10170,25 @@ function ScheduleTable({
                       </small>
                     </td>
                     <td>
-                      <span className="exam-cell-two-lines" title={nameOf(groups, s.groupId, "—")}>
-                        {nameOf(groups, s.groupId, "—")}
+                      <span className="exam-cell-two-lines" title={resolveGroupText(s, exam, groups)}>
+                        {resolveGroupText(s, exam, groups)}
                       </span>
+                      {(() => {
+                        const pName = resolveProgramText(s, exam, programs);
+                        if (!pName || pName === "—") return null;
+                        return (
+                          <small
+                            className="exam-muted"
+                            style={{ display: "block", fontSize: "11px", color: "var(--cms-muted)" }}
+                            title={pName}
+                          >
+                            {pName}
+                          </small>
+                        );
+                      })()}
                     </td>
                     <td>
                       <div>{d(s.date)}</div>
-                      {(() => {
-                        const sDate = canonicalDate(s.date || s.scheduleDate || s.examDate);
-                        const exStart = canonicalDate(exam?.startDate);
-                        const exEnd = canonicalDate(exam?.endDate);
-                        const isOutOfRange = Boolean(
-                          (exStart && sDate && sDate < exStart) ||
-                          (exEnd && sDate && sDate > exEnd)
-                        );
-                        if (!isOutOfRange) return null;
-                        return (
-                          <span
-                            className="cms-badge cms-badge-danger"
-                            style={{ fontSize: "10px", marginTop: "3px", display: "inline-block" }}
-                            title={`Exam date (${d(s.date)}) is outside examination period (${d(exStart)} to ${d(exEnd)})`}
-                          >
-                            Outside Period
-                          </span>
-                        );
-                      })()}
                     </td>
                     <td>
                       {s.startTime} - {s.endTime}
@@ -10259,10 +10633,163 @@ function EditHallsModal({ schedule, exam, schedules, rooms = [], onRefreshRooms 
   );
 }
 
-// ---------- EXAM DETAILS MODAL ----------
-function ExamDetails({ exam, schedules, boards = [], academicYears = [], academicLevels = [], groups = [], close }) {
+// ---------- GLOBAL SCHEDULE PREVIEW MODAL ----------
+function GlobalSchedulePreviewModal({
+  targetExams = [],
+  schedules = [],
+  loading = false,
+  groups = [],
+  programs = [],
+  academicYears = [],
+  onClose,
+  onExport,
+}) {
+  const todayFormatted = useMemo(() => formatDDMMYYYY(new Date()), []);
+  const THEMES = ["ref-theme-blue", "ref-theme-green", "ref-theme-orange", "ref-theme-purple"];
+
   return (
-    <Modal title="Examination Details" onClose={close} className="exam-modal">
+    <Modal
+      title="Examination Schedules Preview"
+      onClose={onClose}
+      className="exam-modal exam-preview-modal"
+    >
+      <div className="exam-preview-container">
+        {/* Top Action & Summary Bar */}
+        <div className="exam-preview-action-bar">
+          <div className="exam-preview-meta-info">
+            <span className="exam-preview-meta-text">
+              Scheduled Examinations: <strong>{targetExams.length}</strong>
+            </span>
+            <span className="exam-preview-meta-sep">•</span>
+            <span className="exam-preview-meta-text">
+              Total Sessions: <strong>{schedules.length}</strong>
+            </span>
+          </div>
+          <div className="exam-preview-action-buttons">
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary exam-preview-download-btn"
+              onClick={() => onExport(schedules)}
+              disabled={loading || schedules.length === 0}
+              title="Download Excel spreadsheet matching this layout"
+            >
+              <Award size={16} /> Download Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        {/* Loading State */}
+        {loading ? (
+          <div className="exam-preview-loading-box">
+            <RefreshCw size={26} className="cms-spin-icon" style={{ animation: "spin 1s linear infinite", margin: "0 auto 12px" }} />
+            <p>Loading examination schedules...</p>
+          </div>
+        ) : targetExams.length === 0 ? (
+          <div className="exam-preview-empty-box">
+            <p>No scheduled examinations found.</p>
+          </div>
+        ) : (
+          /* Document Sheet View matching Screenshot 2 reference */
+          <div className="ref-doc-wrapper">
+            {/* 1. Main Blue Title Banner */}
+            <div className="ref-main-title-banner">
+              Examination Schedules
+            </div>
+
+            {/* 2. Subheader Row: Generated On */}
+            <div className="ref-gen-row">
+              <div className="ref-gen-label">Generated On</div>
+              <div className="ref-gen-value">{todayFormatted}</div>
+              <div className="ref-gen-spacer" />
+            </div>
+
+            {/* 3. Examination Blocks */}
+            <div className="ref-exams-container">
+              {targetExams.map((exam, idx) => {
+                const themeClass = THEMES[idx % THEMES.length];
+                const examSchedules = schedules.filter((s) => {
+                  const sExamId = normalizeId(s.examId ?? s.examinationId);
+                  const eExamId = normalizeId(exam.id ?? exam.examinationId);
+                  return sExamId && eExamId ? sExamId === eExamId : true;
+                });
+
+                const examTitle = exam.name || exam.examName || "Examination";
+                const yearName = nameOf(academicYears, exam.yearId || exam.academicYearId) !== "—"
+                  ? nameOf(academicYears, exam.yearId || exam.academicYearId)
+                  : (exam.academicYearName || exam.yearName || "");
+
+                const examBanner = yearName && !examTitle.includes(yearName)
+                  ? `${examTitle} (${yearName})`
+                  : examTitle;
+
+                return (
+                  <div key={exam.id || idx} className={`ref-exam-card ${themeClass}`}>
+                    {/* Section Header */}
+                    <div className="ref-exam-card-header">
+                      {examBanner}
+                    </div>
+
+                    {/* Schedule Table */}
+                    <table className="ref-exam-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "24%" }}>Subject</th>
+                          <th style={{ width: "16%" }}>Exam Date</th>
+                          <th style={{ width: "24%" }}>Invigilator</th>
+                          <th style={{ width: "22%" }}>Exam Hall / Room</th>
+                          <th style={{ width: "14%" }}>Exam Mode</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {examSchedules.length > 0 ? (
+                          examSchedules.map((s, sIdx) => {
+                            const subjectText = resolveSubjectDisplay(s);
+                            const dateText = resolveExamDateDisplay(s, exam);
+                            const invigilatorText = resolveInvigilatorDisplay(s);
+                            const roomText = resolveRoomDisplay(s);
+                            const modeText = resolveModeDisplay(s);
+
+                            return (
+                              <tr key={s.id || sIdx}>
+                                <td>{subjectText}</td>
+                                <td>{dateText}</td>
+                                <td>{invigilatorText}</td>
+                                <td>{roomText}</td>
+                                <td>{modeText}</td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="ref-empty-schedule-cell">
+                              No sessions scheduled for this examination
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// ---------- EXAM DETAILS MODAL ----------
+function ExamDetails({ exam, schedules, boards = [], academicYears = [], academicLevels = [], groups = [], programs = [], close }) {
+  return (
+    <Modal title="Examination Details" onClose={close} className="exam-modal exam-details-modal">
       <section className="exam-view-summary">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
           <div>
@@ -10273,7 +10800,7 @@ function ExamDetails({ exam, schedules, boards = [], academicYears = [], academi
               Category: {exam.examCategory} · {nameOf(boards, exam.boardId)} · {nameOf(academicYears, exam.yearId)}
             </p>
             <p>
-              Pattern: {exam.examPattern} {exam.examType ? `· Type: ${exam.examType}` : ""} · Levels: {getLevelNames(exam, academicLevels)} · Groups:{" "}
+              Pattern: {exam.examPattern} {exam.examType ? `· Type: ${exam.examType}` : ""} · Levels: {getLevelNames(exam, academicLevels)} · Programs: {getProgramNames(exam, programs)} · Groups:{" "}
               {getGroupNames(exam, groups)}
             </p>
             <p>
@@ -10284,15 +10811,15 @@ function ExamDetails({ exam, schedules, boards = [], academicYears = [], academi
             <button
               type="button"
               className="cms-btn cms-btn-ghost"
-              style={{ fontSize: "12px", padding: "4px 10px", display: "flex", alignItems: "center", gap: "6px" }}
-              onClick={() => directExportScheduleExcel([exam], schedules, groups, `${exam.name}_Schedule`)}
+              style={{ fontSize: "12px", padding: "6px 12px", display: "flex", alignItems: "center", gap: "6px" }}
+              onClick={() => directExportScheduleExcel([exam], schedules, groups, `${exam.name}_Schedule`, programs)}
             >
               <Award size={14} /> Export Excel (.xlsx)
             </button>
           )}
         </div>
       </section>
-      <ScheduleTable entries={schedules} groups={groups} canEdit={false} />
+      <ScheduleTable entries={schedules} groups={groups} exam={exam} programs={programs} canEdit={false} />
     </Modal>
   );
 }
