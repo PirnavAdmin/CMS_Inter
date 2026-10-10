@@ -147,18 +147,67 @@ namespace CollegeManagement.API.Repositories.Implementations
                     await _context.SaveChangesAsync();
                 }
             }
+        }
 
+        public async Task<Admin?> UpdateProfileAsync(int id, string fullName, string email, string? phoneNumber, IDbConnection? connection = null, IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? Connection;
             try
             {
-                // Synchronize Users table using dual-write procedure
-                await Connection.ExecuteAsync(
-                    "sp_UpdateUserPasswordDualWrite",
-                    new { p_UserId = 0, p_PasswordHash = newPasswordHash, p_AdminId = id, p_StudentId = (int?)null },
+                return await conn.QueryFirstOrDefaultAsync<Admin>(
+                    "sp_UpdateAdminProfile",
+                    new
+                    {
+                        p_Id = id,
+                        p_FullName = fullName?.Trim() ?? string.Empty,
+                        p_Email = email?.Trim() ?? string.Empty,
+                        p_PhoneNumber = phoneNumber?.Trim() ?? string.Empty
+                    },
+                    transaction: transaction,
                     commandType: CommandType.StoredProcedure);
             }
             catch
             {
-                // Best effort sync
+                var admin = await _context.Admins.FindAsync(id);
+                if (admin != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(fullName)) admin.FullName = fullName.Trim();
+                    if (!string.IsNullOrWhiteSpace(email)) admin.Email = email.Trim();
+                    admin.PhoneNumber = phoneNumber?.Trim() ?? string.Empty;
+                    admin.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+                return admin;
+            }
+        }
+
+        public async Task<bool> UpdatePhotoAsync(int id, string photoPath, IDbConnection? connection = null, IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? Connection;
+            try
+            {
+                await conn.ExecuteAsync(
+                    "sp_UpdateAdminPhoto",
+                    new
+                    {
+                        p_Id = id,
+                        p_PhotoPath = photoPath?.Trim() ?? string.Empty
+                    },
+                    transaction: transaction,
+                    commandType: CommandType.StoredProcedure);
+                return true;
+            }
+            catch
+            {
+                var admin = await _context.Admins.FindAsync(id);
+                if (admin != null)
+                {
+                    admin.PhotoPath = photoPath?.Trim() ?? string.Empty;
+                    admin.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                    return true;
+                }
+                return false;
             }
         }
     }

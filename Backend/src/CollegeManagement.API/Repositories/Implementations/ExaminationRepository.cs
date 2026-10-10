@@ -24,6 +24,21 @@ namespace CollegeManagement.API.Repositories.Implementations
         private readonly AppDbContext _context;
         private readonly ILogger<ExaminationRepository>? _logger;
 
+        static ExaminationRepository()
+        {
+            try
+            {
+                SqlMapper.AddTypeHandler(new Helpers.DateOnlyTypeHandler());
+                SqlMapper.AddTypeHandler(new Helpers.NullableDateOnlyTypeHandler());
+                SqlMapper.AddTypeHandler(new Helpers.TimeOnlyTypeHandler());
+                SqlMapper.AddTypeHandler(new Helpers.NullableTimeOnlyTypeHandler());
+            }
+            catch
+            {
+                // Handlers already registered
+            }
+        }
+
         public ExaminationRepository(AppDbContext context, ILogger<ExaminationRepository>? logger = null)
         {
             _context = context;
@@ -194,18 +209,30 @@ namespace CollegeManagement.API.Repositories.Implementations
             pSchedules.Add("p_ExaminationId", examinationId);
             pSchedules.Add("p_CampusId", (int?)row.CampusId ?? 0);
 
-            var schedules = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
-                "sp_GetExamSchedulesByExamination",
-                (schedule, subject) =>
-                {
-                    schedule.Subject = subject;
-                    return schedule;
-                },
-                pSchedules,
-                splitOn: "SubjectName",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var schedules = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
+                    "sp_GetExamSchedulesByExamination",
+                    (schedule, subject) =>
+                    {
+                        schedule.Subject = subject;
+                        return schedule;
+                    },
+                    pSchedules,
+                    splitOn: "SubjectName",
+                    commandType: CommandType.StoredProcedure);
 
-            exam.ExamSchedules = schedules.ToList();
+                exam.ExamSchedules = schedules.ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "sp_GetExamSchedulesByExamination failed for Exam {Id}, falling back to EF query", examinationId);
+                exam.ExamSchedules = await _context.ExamSchedules
+                    .Include(s => s.Subject)
+                    .Where(s => s.ExaminationId == examinationId && s.IsActive)
+                    .AsNoTracking()
+                    .ToListAsync();
+            }
 
             return exam;
         }
@@ -547,13 +574,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (string.IsNullOrWhiteSpace(hall)) return false;
 
             var hallNorm = hall.Trim().ToLower();
-            return await _context.ExamSchedules.AnyAsync(s =>
-                s.IsActive &&
-                (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
-                s.ExamDate == examDate &&
-                (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
-                s.Hall.Trim().ToLower() == hallNorm &&
-                !(endTime <= s.StartTime || startTime >= s.EndTime));
+            return await _context.ExamSchedules
+                .AsNoTracking()
+                .AnyAsync(s =>
+                    s.IsActive &&
+                    (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
+                    s.ExamDate == examDate &&
+                    (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
+                    s.Hall.Trim().ToLower() == hallNorm &&
+                    !(endTime <= s.StartTime || startTime >= s.EndTime));
         }
 
         public async Task<bool> HasInvigilatorConflictAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, string invigilator, int? excludeScheduleId = null)
@@ -561,13 +590,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (string.IsNullOrWhiteSpace(invigilator)) return false;
 
             var invNorm = invigilator.Trim().ToLower();
-            return await _context.ExamSchedules.AnyAsync(s =>
-                s.IsActive &&
-                (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
-                s.ExamDate == examDate &&
-                (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
-                s.Invigilator.Trim().ToLower() == invNorm &&
-                !(endTime <= s.StartTime || startTime >= s.EndTime));
+            return await _context.ExamSchedules
+                .AsNoTracking()
+                .AnyAsync(s =>
+                    s.IsActive &&
+                    (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
+                    s.ExamDate == examDate &&
+                    (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
+                    s.Invigilator.Trim().ToLower() == invNorm &&
+                    !(endTime <= s.StartTime || startTime >= s.EndTime));
         }
 
         public async Task<IEnumerable<Models.Timetable.Room>> GetAvailableHallsAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, int? excludeScheduleId = null)
@@ -832,6 +863,17 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task AssignInvigilatorHallsAsync(int examScheduleId, IEnumerable<(int invigilatorId, string hallNumber)> assignments)
         {
             if (assignments == null || !assignments.Any()) return;
+
+            try
+            {
+                await Connection.ExecuteAsync(
+                    "DELETE FROM InvigilatorAssignments WHERE ExamScheduleId = @SchedId;",
+                    new { SchedId = examScheduleId });
+            }
+            catch (Exception delEx)
+            {
+                _logger?.LogWarning(delEx, "Failed to clear old assignments for Schedule {SchedId}", examScheduleId);
+            }
 
             foreach (var a in assignments)
             {

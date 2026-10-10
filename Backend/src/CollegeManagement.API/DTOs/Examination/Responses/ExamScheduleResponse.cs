@@ -41,5 +41,8 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
         public List<int>? IncludedSubjectIds { get; set; }
         public List<HallAssignmentDto>? HallAssignments { get; set; }
         public List<InvigilatorAssignmentResponse> InvigilatorAssignments { get; set; } = new();
+
+        public bool IsOutOfRange { get; set; } = false;
+        public string? RescheduleWarning { get; set; }
     }
 }

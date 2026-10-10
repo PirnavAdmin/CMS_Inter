@@ -419,17 +419,69 @@ function useLookups(initial = {}) {
     periods: [],
     rooms: [],
   });
+  const prevCampusRef = useRef(selectedCampusId);
+  const prevBoardRef = useRef(selectedBoardId);
+  const prevYearRef = useRef(selectedAcademicYearId);
+
   useEffect(() => {
     const campusId = String(selectedCampusId ?? initial?.campusId ?? "");
-    if (!campusId) return;
-    setValue((current) => String(current.campusId) === campusId
-      ? current
-      : {
+    const boardId = String(selectedBoardId ?? initial?.boardId ?? "");
+    const academicYearId = String(selectedAcademicYearId ?? initial?.academicYearId ?? "");
+
+    const campusChanged = prevCampusRef.current !== undefined && prevCampusRef.current !== selectedCampusId;
+    const boardChanged = prevBoardRef.current !== undefined && prevBoardRef.current !== selectedBoardId;
+    const yearChanged = prevYearRef.current !== undefined && prevYearRef.current !== selectedAcademicYearId;
+
+    prevCampusRef.current = selectedCampusId;
+    prevBoardRef.current = selectedBoardId;
+    prevYearRef.current = selectedAcademicYearId;
+
+    setValue((current) => {
+      if (campusChanged) {
+        return {
           ...EMPTY,
           campusId,
-          boardId: String(selectedBoardId ?? initial?.boardId ?? ""),
-          academicYearId: String(selectedAcademicYearId ?? initial?.academicYearId ?? ""),
-        });
+          boardId: boardId || "",
+          academicYearId: academicYearId || "",
+        };
+      }
+      if (boardChanged) {
+        return {
+          ...current,
+          boardId: boardId || "",
+          academicYearId: academicYearId || current.academicYearId || "",
+          academicLevelId: "",
+          groupId: "",
+          programId: "",
+          sectionId: "",
+        };
+      }
+      if (yearChanged) {
+        return {
+          ...current,
+          academicYearId: academicYearId || "",
+          academicLevelId: "",
+          groupId: "",
+          programId: "",
+          sectionId: "",
+        };
+      }
+
+      const nextCampus = current.campusId || campusId;
+      const nextBoard = current.boardId || boardId;
+      const nextYear = current.academicYearId || academicYearId;
+
+      if (current.campusId === nextCampus && current.boardId === nextBoard && current.academicYearId === nextYear) {
+        return current;
+      }
+
+      return {
+        ...current,
+        campusId: nextCampus,
+        boardId: nextBoard,
+        academicYearId: nextYear,
+      };
+    });
   }, [initial?.academicYearId, initial?.boardId, initial?.campusId, selectedAcademicYearId, selectedBoardId, selectedCampusId]);
   useEffect(() => {
     Promise.allSettled([
@@ -631,7 +683,7 @@ function useLookups(initial = {}) {
         : Promise.resolve({ data: [] }),
       apiClient.get(apiEndpoints.subjects.context, {
         params: {
-          boardId: value.boardId,
+          boardId: value.boardId || selectedBoardId || 0,
           groupId: value.groupId,
           academicLevelId: value.academicLevelId,
         },
@@ -1501,9 +1553,9 @@ function Generate({ goDraft, notify, initial }) {
       const response = await apiClient.post(
         apiEndpoints.timetable.generate,
         {
-          boardId: Number(value.boardId),
-          campusId: Number(value.campusId),
-          academicYearId: Number(value.academicYearId),
+          boardId: Number(value.boardId || selectedBoardId),
+          campusId: Number(value.campusId || selectedCampusId),
+          academicYearId: Number(value.academicYearId || selectedAcademicYearId),
           academicLevelId: Number(value.academicLevelId),
           groupId: Number(value.groupId),
           programId,

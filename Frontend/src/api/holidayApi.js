@@ -41,6 +41,32 @@ export const holidayApi = {
     const response = await apiClient.delete(apiEndpoints.holidays.delete(id));
     return response?.data;
   },
+
+  downloadTemplate: async () => {
+    const response = await apiClient.get("/api/v1/holidays/import/template", {
+      responseType: "blob",
+    });
+    return response.data;
+  },
+
+  importExcel: async (file, validateOnly = false, campusId, academicYearId, boardId) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    let url = "/api/v1/holidays/import/excel?validateOnly=" + validateOnly;
+    if (campusId) url += "&campusId=" + campusId;
+    if (academicYearId) url += "&academicYearId=" + academicYearId;
+    if (boardId) url += "&boardId=" + boardId;
+
+    const response = await apiClient.post(url, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
 };
 
 export default holidayApi;
+
+

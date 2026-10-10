@@ -213,6 +213,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
     public class GenerateTimetableRequestDto
     {
+        public int? CampusId { get; set; }
         public int BoardId { get; set; }
         public int AcademicLevelId { get; set; }
         public int AcademicYearId { get; set; }
