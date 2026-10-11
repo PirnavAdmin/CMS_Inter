@@ -12,6 +12,7 @@ using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
@@ -415,15 +416,14 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// </summary>
         public async Task<int> UpdateAttendanceAsync(Attendance attendance)
         {
-            var parameters = new DynamicParameters();
-            parameters.Add("p_AttendanceId", attendance.AttendanceId);
-            parameters.Add("p_Status", (byte)attendance.Status);
-            parameters.Add("p_Remarks", attendance.Remarks);
-
-            return await Connection.ExecuteAsync(
-                SpUpdateAttendance,
-                parameters,
-                commandType: CommandType.StoredProcedure);
+            var existing = await _context.Attendances.FindAsync(attendance.AttendanceId);
+            if (existing == null) return 0;
+            existing.Status = attendance.Status;
+            existing.Remarks = attendance.Remarks;
+            existing.ModifiedByUserId = attendance.ModifiedByUserId;
+            existing.ModifiedAt = DateTime.UtcNow;
+            existing.UpdatedAt = DateTime.UtcNow;
+            return await _context.SaveChangesAsync();
         }
 
         /// <summary>

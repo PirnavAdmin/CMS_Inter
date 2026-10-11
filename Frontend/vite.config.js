@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev";
+  const apiBaseUrl = env.VITE_API_BASE_URL || "http://localhost:5167";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => {
           target: apiBaseUrl,
           changeOrigin: true,
           secure: !isHttpsApi ? true : false,
-          agent: isHttpsApi ? new https.Agent({ keepAlive: false, rejectUnauthorized: false }) : undefined,
+          agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
           proxyTimeout: 120000,
           timeout: 120000,
           headers: {

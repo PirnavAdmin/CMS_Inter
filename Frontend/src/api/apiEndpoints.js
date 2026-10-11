@@ -491,6 +491,8 @@ export const apiEndpoints = {
     exportGroupExcel: "/api/v1/timetable/export/group-excel",
   },
   promotions: {
+    feePreview: "/api/v1/promotions/fee-preview",
+    programFeePreview: (studentId, targetProgramId) => `/api/v1/promotions/program-fee-preview?studentId=${encodeURIComponent(studentId)}&targetProgramId=${encodeURIComponent(targetProgramId)}`,
     eligible: "/api/v1/promotions/eligible",
     preview: "/api/v1/promotions/preview",
     create: "/api/v1/promotions",
@@ -503,6 +505,7 @@ export const apiEndpoints = {
     report: "/api/v1/promotions/report",
   },
   campusTransfers: {
+    feePreview: (id) => `/api/v1/promotions/campus-transfers/${encodeURIComponent(id)}/fee-preview`,
     create: "/api/v1/promotions/campus-transfers",
     sent: "/api/v1/promotions/campus-transfers/sent",
     received: "/api/v1/promotions/campus-transfers/received",

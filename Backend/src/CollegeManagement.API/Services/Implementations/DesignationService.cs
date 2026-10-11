@@ -16,20 +16,24 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IDesignationRepository _designationRepository;
         private readonly IDepartmentRepository _departmentRepository;
         private readonly IMapper _mapper;
+        private readonly ILookupCacheService _cache;
 
         public DesignationService(
             IDesignationRepository designationRepository,
             IDepartmentRepository departmentRepository,
-            IMapper mapper)
+            IMapper mapper,
+            ILookupCacheService cache)
         {
             _designationRepository = designationRepository;
             _departmentRepository = departmentRepository;
             _mapper = mapper;
+            _cache = cache;
         }
 
         public async Task<IEnumerable<DesignationResponseDto>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
         {
-            return await _designationRepository.GetAllDtosAsync(includeInactive, staffType, departmentId, campusId);
+            string cacheKey = $"lookup:designations:{includeInactive}:{staffType}:{departmentId}:{campusId}";
+            return await _cache.GetOrCreateAsync(cacheKey, () => _designationRepository.GetAllDtosAsync(includeInactive, staffType, departmentId, campusId));
         }
 
         public async Task<DesignationResponseDto?> GetByIdAsync(int id)
@@ -72,6 +76,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
 
             var created = await _designationRepository.AddAsync(entity);
+            _cache.RemoveByPrefix("lookup:designations");
             return new DesignationResponseDto
             {
                 Id = created.Id,
@@ -120,6 +125,7 @@ namespace CollegeManagement.API.Services.Implementations
             existing.IsActive = dto.IsActive;
 
             await _designationRepository.UpdateAsync(existing);
+            _cache.RemoveByPrefix("lookup:designations");
             int staffCount = await _designationRepository.GetAssignedStaffCountAsync(id);
 
             return new DesignationResponseDto
@@ -149,6 +155,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             await _designationRepository.DeleteAsync(id);
+            _cache.RemoveByPrefix("lookup:designations");
             return (true, "Designation deleted successfully.");
         }
 

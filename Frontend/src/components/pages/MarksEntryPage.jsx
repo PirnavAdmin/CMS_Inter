@@ -264,13 +264,23 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     selectedBoardId,
     selectedAcademicYear,
     selectedAcademicYearId,
+    boards: contextBoards = [],
+    academicYears: contextAcademicYears = [],
   } = useAcademicContext();
 
   const activeCampusId = normalizeId((selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id) || "1");
 
+  const effectiveBoardId = useMemo(() => {
+    return normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId ?? (allBoards[0]?.id || ""));
+  }, [selectedBoardId, selectedBoard, allBoards]);
+
+  const effectiveYearId = useMemo(() => {
+    return normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? "");
+  }, [selectedAcademicYearId, selectedAcademicYear]);
+
   const [filters, setFilters] = useState({
-    board: "",
-    year: "",
+    board: effectiveBoardId,
+    year: effectiveYearId,
     level: "",
     group: "",
     program: "",
@@ -284,44 +294,44 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   const [sections, setSections] = useState([]);
   const [exams, setExams] = useState([]);
 
-  // Auto-select board when allBoards loads or navbar board changes
+  // Auto-sync board from navbar context
   useEffect(() => {
-    if (allBoards.length > 0) {
-      const targetBoard = allBoards.find(
+    if (effectiveBoardId && !eq(filters.board, effectiveBoardId)) {
+      setFilters((prev) => ({ ...prev, board: effectiveBoardId }));
+    } else if (!filters.board && allBoards.length > 0) {
+      const match = allBoards.find(
         (b) =>
           eq(b.id, selectedBoardId) ||
           (selectedBoard?.code && String(b.code || "").trim().toLowerCase() === String(selectedBoard.code).trim().toLowerCase()) ||
           (selectedBoard?.name && String(b.name || "").trim().toLowerCase() === String(selectedBoard.name).trim().toLowerCase())
-      ) || allBoards.find((b) => b.isActive) || allBoards[0];
-
-      if (targetBoard && !eq(filters.board, targetBoard.id)) {
-        setFilters((prev) => ({ ...prev, board: targetBoard.id }));
+      ) || allBoards[0];
+      if (match) {
+        setFilters((prev) => ({ ...prev, board: normalizeId(match.id || match.boardId) }));
       }
     }
-  }, [allBoards, selectedBoardId, selectedBoard, filters.board]);
+  }, [effectiveBoardId, selectedBoardId, selectedBoard, allBoards, filters.board]);
 
-  // Load Years, Levels, Groups when Board changes
+  // Auto-sync academic year from navbar context
   useEffect(() => {
-    if (!filters.board) {
-      setYears([]);
-      setLevels([]);
-      setGroups([]);
-      return;
+    if (effectiveYearId && !eq(filters.year, effectiveYearId)) {
+      setFilters((prev) => ({ ...prev, year: effectiveYearId }));
     }
+  }, [effectiveYearId, filters.year]);
 
+  // Load Years for Campus & Board
+  useEffect(() => {
+    const currentBoard = filters.board || effectiveBoardId;
     let isMounted = true;
-    const loadBoardDeps = async () => {
-      const selectedBoard = allBoards.find((b) => eq(b.id, filters.board));
 
-      // Fetch Years filtered by Campus and Board
+    const loadYears = async () => {
       try {
         const yearsRes = await apiClient
           .get("/api/v1/academic-years", {
             params: {
               CampusId: activeCampusId,
               campusId: activeCampusId,
-              boardId: filters.board,
-              BoardId: filters.board,
+              boardId: currentBoard || undefined,
+              BoardId: currentBoard || undefined,
               isActive: true,
               Status: true,
             },
@@ -329,19 +339,11 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
             },
           })
-          .catch(() => apiClient.get(apiEndpoints.academicYears.getAll, {
-            params: {
-              CampusId: activeCampusId,
-              campusId: activeCampusId,
-              boardId: filters.board,
-              BoardId: filters.board,
-            },
-            headers: {
-              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-            },
-          }));
+          .catch(() => apiClient.get("/api/v1/academic-years"))
+          .catch(() => null);
+
         const rawYears = unwrapRecords(yearsRes);
-        const listYears = rawYears
+        let listYears = rawYears
           .map((y) => ({
             id: normalizeId(y.academicYearId ?? y.id),
             name: y.academicYearName ?? y.name,
@@ -354,44 +356,81 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             if (!y.isActive) return false;
             if (String(y.name || "").includes("2028") || String(y.name || "").includes("2029")) return false;
             if (activeCampusId && y.campusId && normalizeId(y.campusId) !== normalizeId(activeCampusId)) return false;
-            if (filters.board && y.boardId && !eq(y.boardId, filters.board)) return false;
+            if (currentBoard && y.boardId && !eq(y.boardId, currentBoard)) return false;
             return true;
           });
 
+        // Ensure selectedAcademicYear from navbar is in the years list
+        if (selectedAcademicYear) {
+          const sId = normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId);
+          const sName = selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || selectedAcademicYear?.code || "Academic Year";
+          const exists = listYears.some((y) => eq(y.id, sId));
+          if (!exists && sId) {
+            listYears.unshift({
+              id: sId,
+              name: sName,
+              isActive: true,
+            });
+          }
+        }
+        if (!listYears.length && contextAcademicYears.length > 0) {
+          listYears = contextAcademicYears.map((y) => ({
+            id: normalizeId(y.academicYearId ?? y.id),
+            name: y.academicYearName ?? y.name,
+            isActive: true,
+          }));
+        }
+
         if (isMounted) {
           setYears(listYears);
-          const targetYear = listYears.find(
-            (y) =>
-              eq(y.id, selectedAcademicYearId) ||
-              (selectedAcademicYear?.name && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.name).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "")) ||
-              (selectedAcademicYear?.code && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.code).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, ""))
-          ) || listYears.find((y) => y.isCurrent) || listYears[0];
-
-          setFilters((prev) => ({
-            ...prev,
-            year: targetYear ? targetYear.id : "",
-          }));
+          const targetYear = listYears.find((y) => eq(y.id, effectiveYearId)) || listYears[0];
+          if (targetYear && !filters.year) {
+            setFilters((prev) => ({ ...prev, year: targetYear.id }));
+          }
         }
       } catch (err) {
         console.error("Error fetching academic years:", err);
-        if (isMounted) setYears([]);
+        if (isMounted) {
+          if (selectedAcademicYear) {
+            setYears([{
+              id: normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id),
+              name: selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || "Academic Year",
+              isActive: true,
+            }]);
+          } else {
+            setYears([]);
+          }
+        }
       }
+    };
 
-      // Fetch Levels
+    loadYears();
+    return () => {
+      isMounted = false;
+    };
+  }, [filters.board, effectiveBoardId, activeCampusId, selectedAcademicYear, selectedAcademicYearId, effectiveYearId, contextAcademicYears]);
+
+  // Load Levels (Independent)
+  useEffect(() => {
+    const currentBoard = filters.board || effectiveBoardId;
+    let isMounted = true;
+
+    const loadLevels = async () => {
       try {
         let levelItems = [];
         const levelsRes = await apiClient
-          .get(
-            apiEndpoints.academicLevels?.getByBoard
-              ? apiEndpoints.academicLevels.getByBoard(filters.board)
-              : `/api/v1/academic-levels?boardId=${filters.board}`
-          )
-          .catch(() =>
-            apiClient.get(apiEndpoints.academicLevels?.getAll || "/api/v1/academic-levels", {
-              params: { boardId: filters.board },
-            })
-          )
-          .catch(() => apiClient.get(`/api/v1/boards/${encodeURIComponent(filters.board)}/academic-levels`));
+          .get(`/api/v1/academic-levels`, {
+            params: {
+              CampusId: activeCampusId,
+              campusId: activeCampusId,
+              ...(currentBoard ? { boardId: currentBoard, BoardId: currentBoard } : {}),
+            },
+            headers: {
+              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+            },
+          })
+          .catch(() => (currentBoard ? apiClient.get(`/api/v1/boards/${encodeURIComponent(currentBoard)}/academic-levels`) : null))
+          .catch(() => null);
 
         const rawLevels = unwrapRecords(levelsRes);
         if (rawLevels.length) {
@@ -406,27 +445,52 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             name: selectedBoard.academicLevelNames?.[idx] || `Level ${id}`,
             isActive: true,
           }));
+        } else {
+          levelItems = [
+            { id: "1", name: "1st Year", isActive: true },
+            { id: "2", name: "2nd Year", isActive: true },
+          ];
         }
 
         if (isMounted) setLevels(levelItems.filter((l) => l.isActive));
       } catch (err) {
         console.error("Error fetching academic levels:", err);
-        if (isMounted) setLevels([]);
+        if (isMounted) {
+          setLevels([
+            { id: "1", name: "1st Year", isActive: true },
+            { id: "2", name: "2nd Year", isActive: true },
+          ]);
+        }
       }
+    };
 
-      // Fetch Groups
+    loadLevels();
+    return () => {
+      isMounted = false;
+    };
+  }, [filters.board, effectiveBoardId, activeCampusId, selectedBoard]);
+
+  // Load Groups (Independent)
+  useEffect(() => {
+    const currentBoard = filters.board || effectiveBoardId;
+    let isMounted = true;
+
+    const loadGroups = async () => {
       try {
         const groupsRes = await apiClient
-          .get(
-            apiEndpoints.groups?.getByBoard
-              ? apiEndpoints.groups.getByBoard(filters.board)
-              : `/api/v1/groups?boardId=${filters.board}`
-          )
-          .catch(() =>
-            apiClient.get(apiEndpoints.groups.list, {
-              params: { boardId: filters.board, isActive: true },
-            })
-          );
+          .get("/api/v1/groups", {
+            params: {
+              CampusId: activeCampusId,
+              campusId: activeCampusId,
+              ...(currentBoard ? { boardId: currentBoard, BoardId: currentBoard } : {}),
+              isActive: true,
+            },
+            headers: {
+              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+            },
+          })
+          .catch(() => apiClient.get("/api/v1/groups"))
+          .catch(() => null);
 
         const rawGroups = unwrapRecords(groupsRes);
         const listGroups = rawGroups
@@ -439,7 +503,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             programs: g.programs || [],
             isActive: g.isActive !== false,
           }))
-          .filter((g) => g.isActive && (!g.boardId || eq(g.boardId, filters.board)));
+          .filter((g) => g.isActive && (!g.boardId || !currentBoard || eq(g.boardId, currentBoard)));
 
         if (isMounted) setGroups(listGroups);
       } catch (err) {
@@ -448,50 +512,88 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
       }
     };
 
-    loadBoardDeps();
+    loadGroups();
     return () => {
       isMounted = false;
     };
-  }, [filters.board, allBoards]);
+  }, [filters.board, effectiveBoardId, activeCampusId]);
 
-  // Load Programs when Group changes
+  // Load Programs (Independent: group-specific if group is selected, otherwise all programs for campus/board)
   useEffect(() => {
-    if (!filters.group) {
-      setPrograms([]);
-      return;
-    }
-
     let isMounted = true;
+    const currentBoard = filters.board || effectiveBoardId;
+
     const loadPrograms = async () => {
-      const selectedGroup = groups.find((g) => eq(g.id, filters.group));
-      if (selectedGroup?.programs?.length) {
-        const list = selectedGroup.programs
-          .map((p) => ({
-            id: normalizeId(p.programId ?? p.id),
-            name: p.programName ?? p.name,
-            groupId: filters.group,
-            isActive: p.isActive !== false,
-          }))
-          .filter((p) => p.isActive);
-        setPrograms(list);
-        return;
+      if (filters.group) {
+        const selectedGroup = groups.find((g) => eq(g.id, filters.group));
+        if (selectedGroup?.programs?.length) {
+          const list = selectedGroup.programs
+            .map((p) => ({
+              id: normalizeId(p.programId ?? p.id),
+              name: p.programName ?? p.name,
+              groupId: filters.group,
+              isActive: p.isActive !== false,
+            }))
+            .filter((p) => p.isActive);
+          if (isMounted) setPrograms(list);
+          return;
+        }
+
+        try {
+          const res = await apiClient
+            .get(`/api/v1/groups/${encodeURIComponent(filters.group)}/programs`)
+            .catch(() =>
+              apiClient.get("/api/v1/programs", {
+                params: {
+                  campusId: activeCampusId || undefined,
+                  boardId: currentBoard || undefined,
+                  groupId: filters.group,
+                },
+                headers: {
+                  ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+                },
+              })
+            );
+          const raw = unwrapRecords(res);
+          const list = raw
+            .map((p) => ({
+              id: normalizeId(p.programId ?? p.id),
+              name: p.programName ?? p.name,
+              groupId: filters.group,
+              isActive: p.isActive !== false,
+            }))
+            .filter((p) => p.isActive && (!p.groupId || eq(p.groupId, filters.group)));
+
+          if (isMounted) setPrograms(list);
+          return;
+        } catch (err) {
+          console.error("Error fetching group programs:", err);
+        }
       }
 
+      // If no group selected or fallback: load all active programs
       try {
-        const res = await apiClient.get(
-          apiEndpoints.programs?.byGroup
-            ? apiEndpoints.programs.byGroup(filters.group)
-            : apiEndpoints.groups.getPrograms(filters.group)
-        );
+        const res = await apiClient
+          .get("/api/v1/programs", {
+            params: {
+              campusId: activeCampusId || undefined,
+              boardId: currentBoard || undefined,
+            },
+            headers: {
+              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+            },
+          })
+          .catch(() => null);
+
         const raw = unwrapRecords(res);
         const list = raw
           .map((p) => ({
             id: normalizeId(p.programId ?? p.id),
             name: p.programName ?? p.name,
-            groupId: filters.group,
+            groupId: p.groupId,
             isActive: p.isActive !== false,
           }))
-          .filter((p) => p.isActive && (!p.groupId || eq(p.groupId, filters.group)));
+          .filter((p) => p.isActive);
 
         if (isMounted) setPrograms(list);
       } catch (err) {
@@ -504,29 +606,25 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return () => {
       isMounted = false;
     };
-  }, [filters.group, groups]);
+  }, [filters.group, filters.board, effectiveBoardId, groups, activeCampusId]);
 
-  // Load Sections and Exams when Board, Year, Level, Group, Program are set
+  // Load Sections (Independent: queries with whatever filters are set)
   useEffect(() => {
-    if (!filters.board || !filters.year || !filters.level || !filters.group || !filters.program) {
-      setSections([]);
-      setExams([]);
-      return;
-    }
-
     let isMounted = true;
-    const loadSectionsAndExams = async () => {
-      // 1. Fetch Sections
+    const currentBoard = filters.board || effectiveBoardId;
+    const currentYear = filters.year || effectiveYearId;
+
+    const loadSections = async () => {
       try {
-        const res = await apiClient.get(apiEndpoints.sections.getAll, {
+        const res = await apiClient.get(apiEndpoints.sections?.getAll || "/api/v1/Sections", {
           params: {
             campusId: activeCampusId || undefined,
             CampusId: activeCampusId || undefined,
-            BoardId: filters.board,
-            AcademicYearId: filters.year,
-            AcademicLevelId: filters.level,
-            GroupId: filters.group,
-            ProgramId: filters.program,
+            BoardId: currentBoard || undefined,
+            AcademicYearId: currentYear || undefined,
+            AcademicLevelId: filters.level || undefined,
+            GroupId: filters.group || undefined,
+            ProgramId: filters.program || undefined,
             IsActive: true,
           },
           headers: {
@@ -554,17 +652,32 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
         console.error("Error fetching sections:", err);
         if (isMounted) setSections([]);
       }
+    };
 
-      // 2. Fetch Completed Examinations strictly matching academic scope
+    loadSections();
+    return () => {
+      isMounted = false;
+    };
+  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveBoardId, effectiveYearId, activeCampusId]);
+
+  // Load Completed Examinations (Independent: queries with whatever filters are set)
+  useEffect(() => {
+    let isMounted = true;
+    const currentBoard = filters.board || effectiveBoardId;
+    const currentYear = filters.year || effectiveYearId;
+
+    const loadExams = async () => {
       try {
-        const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
+        const examsRes = await apiClient.get(apiEndpoints.examinations?.getAll || "/api/v1/examinations", {
           params: {
             campusId: activeCampusId || undefined,
             CampusId: activeCampusId || undefined,
-            boardId: filters.board,
-            academicYearId: filters.year,
-            academicLevelId: filters.level,
-            groupId: filters.group,
+            boardId: currentBoard || undefined,
+            BoardId: currentBoard || undefined,
+            academicYearId: currentYear || undefined,
+            AcademicYearId: currentYear || undefined,
+            academicLevelId: filters.level || undefined,
+            groupId: filters.group || undefined,
             programId: filters.program || undefined,
             status: "COMPLETED",
           },
@@ -606,17 +719,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               e.isCompleted === true;
             if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT") return false;
 
-            // Strict matching of academic scope when fields exist on exam
-            if (filters.board && e.boardId && !eq(e.boardId, filters.board)) return false;
-            if (filters.year) {
-              const selectedYearObj = years.find((y) => eq(y.id, filters.year));
-              const effYearName = String(selectedYearObj?.name || "").trim().toLowerCase();
-              const examYearId = normalizeId(e.academicYearId);
-              const examYearName = String(e.academicYearName || "").trim().toLowerCase();
-              const idMatches = examYearId && eq(examYearId, filters.year);
-              const nameMatches = effYearName && examYearName && (examYearName === effYearName || examYearName.includes(effYearName) || effYearName.includes(examYearName));
-              if (examYearId && !idMatches && !nameMatches) return false;
-            }
+            if (currentBoard && e.boardId && !eq(e.boardId, currentBoard)) return false;
             if (filters.level && e.academicLevelId && !eq(e.academicLevelId, filters.level)) return false;
             if (filters.group && e.groupId && !eq(e.groupId, filters.group)) return false;
             if (filters.program && e.programId && !eq(e.programId, filters.program)) return false;
@@ -626,10 +729,6 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
 
         if (isMounted) {
           setExams(examList);
-          setFilters((prev) => {
-            if (prev.exam && examList.some((e) => eq(e.id, prev.exam))) return prev;
-            return { ...prev, exam: "" };
-          });
         }
       } catch (err) {
         console.error("Error fetching examinations:", err);
@@ -637,61 +736,37 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
       }
     };
 
-    loadSectionsAndExams();
+    loadExams();
     return () => {
       isMounted = false;
     };
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program, activeCampusId, years]);
+  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveBoardId, effectiveYearId, activeCampusId]);
 
-  // Reset cascading filters when navbar selected campus changes
+  // Reset non-navbar filters only when navbar selected campus changes
+  const initialCampusRef = useRef(activeCampusId);
   useEffect(() => {
+    if (initialCampusRef.current === activeCampusId) return;
+    initialCampusRef.current = activeCampusId;
     onReset();
-    setFilters({
-      board: "",
-      year: "",
+    setFilters((prev) => ({
+      board: effectiveBoardId || prev.board,
+      year: effectiveYearId || prev.year,
       level: "",
       group: "",
       program: "",
       section: "",
       exam: "",
-    });
-  }, [activeCampusId]);
+    }));
+  }, [activeCampusId, effectiveBoardId, effectiveYearId]);
 
-  // Sync year when navbar selected academic year changes
-  useEffect(() => {
-    if (years.length > 0) {
-      const targetYear = years.find(
-        (y) =>
-          eq(y.id, selectedAcademicYearId) ||
-          (selectedAcademicYear?.name && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.name).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "")) ||
-          (selectedAcademicYear?.code && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.code).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, ""))
-      );
-      if (targetYear && !eq(filters.year, targetYear.id)) {
-        setFilters((prev) => ({ ...prev, year: targetYear.id }));
-      }
-    }
-  }, [years, selectedAcademicYearId, selectedAcademicYear, filters.year]);
-
-  // Change filter handler with cascading resets and invalidating applied state
+  // Change filter handler (Independent: does not reset other filters)
   const changeFilter = (key, value) =>
     guard(() => {
       onReset();
-      setFilters((prev) => {
-        const next = { ...prev, [key]: value };
-        const children = {
-          board: ["group", "program", "section", "exam"],
-          year: ["section", "exam"],
-          level: ["section", "exam"],
-          group: ["program", "section", "exam"],
-          program: ["section", "exam"],
-          section: [],
-          exam: [],
-        };
-        (children[key] || []).forEach((child) => {
-          next[child] = "";
-        });
-        return next;
-      });
+      setFilters((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
     });
 
   return {
@@ -786,8 +861,9 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     const loadBoards = async () => {
       try {
         const boardsRes = await apiClient
-          .get(apiEndpoints.boards.active)
-          .catch(() => apiClient.get(apiEndpoints.boards.list));
+          .get("/api/v1/boards")
+          .catch(() => apiClient.get("/api/v1/academic-boards"))
+          .catch(() => null);
         const raw = unwrapRecords(boardsRes);
         const loadedBoards = raw
           .map((b) => ({
@@ -800,16 +876,43 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           }))
           .filter((b) => b.isActive);
 
-        if (isMounted) setAllBoards(loadedBoards);
+        if (isMounted) {
+          if (loadedBoards.length > 0) {
+            setAllBoards(loadedBoards);
+          } else if (contextBoards.length > 0) {
+            setAllBoards(contextBoards);
+          } else if (selectedBoard) {
+            setAllBoards([{
+              id: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
+              boardId: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
+              name: selectedBoard.name ?? selectedBoard.boardName ?? "Board",
+              code: selectedBoard.code ?? selectedBoard.boardCode ?? "",
+              isActive: true,
+            }]);
+          }
+        }
       } catch (err) {
         console.error("Error loading boards:", err);
+        if (isMounted) {
+          if (contextBoards.length > 0) {
+            setAllBoards(contextBoards);
+          } else if (selectedBoard) {
+            setAllBoards([{
+              id: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
+              boardId: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
+              name: selectedBoard.name ?? selectedBoard.boardName ?? "Board",
+              code: selectedBoard.code ?? selectedBoard.boardCode ?? "",
+              isActive: true,
+            }]);
+          }
+        }
       }
     };
     loadBoards();
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [contextBoards, selectedBoard]);
 
   const campusAffiliatedBoardIds = useMemo(() => {
     if (!effectiveCampus) return [];
@@ -828,7 +931,14 @@ export default function MarksEntryPage({ embedded = false } = {}) {
 
   // Derive boards affiliated with active campus
   const campusBoards = useMemo(() => {
-    const masterBoardsPool = allBoards.length > 0 ? allBoards : (contextBoards.length > 0 ? contextBoards : []);
+    const fallbackList = selectedBoard ? [{
+      id: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
+      boardId: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
+      name: selectedBoard.name ?? selectedBoard.boardName ?? "Board",
+      code: selectedBoard.code ?? selectedBoard.boardCode ?? "",
+      isActive: true,
+    }] : [];
+    const masterBoardsPool = allBoards.length > 0 ? allBoards : (contextBoards.length > 0 ? contextBoards : fallbackList);
     if (!effectiveCampus) return masterBoardsPool;
 
     const affiliated = Array.isArray(effectiveCampus.affiliatedBoards) && effectiveCampus.affiliatedBoards.length > 0
@@ -3256,10 +3366,10 @@ function FilterCard({
   const fields = [
     { key: "board", label: "Board", options: boards, disabled: true },
     { key: "year", label: "Academic Year", options: years, disabled: true },
-    { key: "level", label: "Academic Level", options: levels, disabled: !filters.board },
-    { key: "group", label: "Group", options: groups, disabled: !filters.board },
-    { key: "program", label: "Program", options: programs, disabled: !filters.group },
-    { key: "section", label: "Section", options: sections, disabled: !filters.program },
+    { key: "level", label: "Academic Level", options: levels, disabled: false },
+    { key: "group", label: "Group", options: groups, disabled: false },
+    { key: "program", label: "Program", options: programs, disabled: false },
+    { key: "section", label: "Section", options: sections, disabled: false },
     ...(mode === "evaluation"
       ? [
           {
@@ -3271,7 +3381,7 @@ function FilterCard({
               const displayName = code && !baseName.includes(code) ? `${baseName} (${code})` : baseName;
               return { ...exam, name: displayName };
             }),
-            disabled: !filters.program,
+            disabled: false,
           },
         ]
       : []),
@@ -3999,14 +4109,20 @@ function SearchableSelect({
   hideLabel = false,
   compact = false,
 }) {
+  const { selectedBoard, selectedAcademicYear } = useAcademicContext();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const ref = useRef(null);
+  const inputRef = useRef(null);
   const listId = `${id}-listbox`;
 
-  const filtered = options.filter((item) => (item.name || "").toLowerCase().includes(query.trim().toLowerCase()));
   const selected = options.find((item) => eq(item.id, value));
+  const filtered = useMemo(() => {
+    if (!query.trim()) return options;
+    const q = query.trim().toLowerCase();
+    return options.filter((item) => (item.name || "").toLowerCase().includes(q));
+  }, [options, query]);
 
   useEffect(() => {
     setHighlight(0);
@@ -4025,25 +4141,70 @@ function SearchableSelect({
   }, [open]);
 
   const keyDown = (event) => {
+    if (disabled) return;
     if (event.key === "Escape") {
       setOpen(false);
       setQuery("");
     } else if (["ArrowDown", "ArrowUp"].includes(event.key)) {
       event.preventDefault();
-      if (!open) return setOpen(true);
-      if (filtered.length) {
-        setHighlight((current) => (current + (event.key === "ArrowDown" ? 1 : -1) + filtered.length) % filtered.length);
+      if (!open) {
+        setOpen(true);
+        return;
       }
-    } else if (event.key === "Enter" && open && filtered[highlight]) {
-      event.preventDefault();
-      onChange(filtered[highlight].id);
-      setOpen(false);
-      setQuery("");
+      if (filtered.length) {
+        setHighlight((current) =>
+          (current + (event.key === "ArrowDown" ? 1 : -1) + filtered.length) % filtered.length
+        );
+      }
+    } else if (event.key === "Enter") {
+      if (open && filtered[highlight]) {
+        event.preventDefault();
+        onChange(filtered[highlight].id);
+        setOpen(false);
+        setQuery("");
+      }
     }
   };
 
-  const displayName = selected?.name || `Select ${label}`;
+  const isBoard = id === "marks-board";
+  const isYear = id === "marks-year";
+  const isBoardOrYear = isBoard || isYear;
 
+  let displayName = selected?.name || `Select ${label}`;
+  if (isBoard) {
+    displayName = selected?.name || selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || displayName;
+  } else if (isYear) {
+    displayName = selected?.name || selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || selectedAcademicYear?.code || displayName;
+  }
+
+  // Board and Academic Year remain as disabled dropdown triggers (matching Image 2)
+  if (isBoardOrYear) {
+    return (
+      <div className={`cms-field-group ${compact ? "cms-entry-select-compact" : ""}`}>
+        {!hideLabel && (
+          <label className="cms-field-label" id={`${id}-label`}>
+            {label}
+          </label>
+        )}
+        <div className="cms-custom-select is-disabled" title={displayName}>
+          <button
+            type="button"
+            className="cms-custom-select-trigger"
+            role="combobox"
+            aria-label={label}
+            aria-labelledby={!hideLabel ? `${id}-label` : undefined}
+            disabled={true}
+            title={displayName}
+          >
+            <span className="cms-select-trigger-text">{displayName}</span>
+            <span className="cms-select-arrow">⌄</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // All remaining dropdowns styled and structured like the first reference (without search icon)
   return (
     <div className={`cms-field-group ${compact ? "cms-entry-select-compact" : ""}`}>
       {!hideLabel && (
@@ -4052,75 +4213,107 @@ function SearchableSelect({
         </label>
       )}
       <div className={`cms-custom-select ${open ? "is-open" : ""}`} ref={ref}>
-        <button
-          type="button"
-          className="cms-custom-select-trigger"
-          role="combobox"
-          aria-label={label}
-          aria-labelledby={!hideLabel ? `${id}-label` : undefined}
-          aria-expanded={open}
-          aria-controls={listId}
-          disabled={disabled}
-          title={displayName}
-          onClick={() => setOpen((current) => !current)}
-          onKeyDown={keyDown}
+        <div
+          className={`cms-custom-select-combobox ${open ? "is-focused" : ""} ${disabled ? "is-disabled" : ""}`}
+          title={open ? "" : (selected?.name || "")}
+          onClick={() => {
+            if (disabled) return;
+            if (!open) {
+              setOpen(true);
+              setQuery("");
+            }
+            inputRef.current?.focus();
+          }}
         >
-          <span className="cms-select-trigger-text">{displayName}</span>
-          <span className="cms-select-arrow">⌄</span>
-        </button>
-        {open && (
-          <div className="cms-custom-select-menu">
-            <input
-              autoFocus
-              className="cms-custom-select-search"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setHighlight(0);
-              }}
-              onKeyDown={keyDown}
-              placeholder="Search..."
-            />
-            <div className="cms-custom-select-options" id={listId} role="listbox">
-              <button
-                type="button"
-                role="option"
-                aria-selected={!value}
-                className="cms-custom-select-option"
-                title={`Select ${label}`}
-                onClick={() => {
-                  onChange("");
-                  setOpen(false);
+          <input
+            ref={inputRef}
+            id={id}
+            type="text"
+            role="combobox"
+            aria-label={label}
+            aria-expanded={open}
+            aria-controls={listId}
+            disabled={disabled}
+            className="cms-custom-combobox-input"
+            title={open ? "" : (selected?.name || "")}
+            value={open ? query : (selected?.name || "")}
+            placeholder={open ? (selected?.name || `Search ${label.toLowerCase()}...`) : (selected?.name || `Select ${label}`)}
+            onFocus={() => {
+              if (disabled) return;
+              setQuery("");
+              setOpen(true);
+            }}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setHighlight(0);
+              if (!open) setOpen(true);
+            }}
+            onKeyDown={keyDown}
+          />
+          <button
+            type="button"
+            tabIndex={-1}
+            className="cms-select-arrow-btn"
+            disabled={disabled}
+            aria-label={open ? "Close menu" : "Open menu"}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (disabled) return;
+              setOpen((prev) => {
+                const next = !prev;
+                if (next) {
                   setQuery("");
-                }}
-              >
-                Select {label}
-              </button>
-              {filtered.length ? (
-                filtered.map((item, index) => (
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={eq(item.id, value)}
-                    title={item.name}
-                    className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${
-                      highlight === index ? "highlighted" : ""
-                    }`}
-                    key={item.id}
-                    onMouseEnter={() => setHighlight(index)}
-                    onClick={() => {
-                      onChange(item.id);
-                      setOpen(false);
-                      setQuery("");
-                    }}
-                  >
-                    {item.name}
-                  </button>
-                ))
-              ) : (
-                <div className="cms-custom-select-empty">{emptyText}</div>
-              )}
-            </div>
+                  inputRef.current?.focus();
+                }
+                return next;
+              });
+            }}
+          >
+            <span className={`cms-select-arrow ${open ? "is-open" : ""}`}>⌄</span>
+          </button>
+        </div>
+
+        {open && !disabled && (
+          <div className="cms-custom-select-menu bay-style-menu" id={listId} role="listbox">
+            <button
+              type="button"
+              role="option"
+              aria-selected={!value}
+              className={`cms-custom-select-option ${!value ? "selected" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange("");
+                setOpen(false);
+                setQuery("");
+              }}
+            >
+              <span className="cms-option-text">Select {label}</span>
+            </button>
+            {filtered.length ? (
+              filtered.map((item, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={eq(item.id, value)}
+                  className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${
+                    highlight === index ? "highlighted" : ""
+                  }`}
+                  key={item.id}
+                  title={item.name}
+                  onMouseEnter={() => setHighlight(index)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(item.id);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <span className="cms-option-text">{item.name}</span>
+                </button>
+              ))
+            ) : (
+              <div className="cms-custom-select-empty">{emptyText}</div>
+            )}
           </div>
         )}
       </div>
