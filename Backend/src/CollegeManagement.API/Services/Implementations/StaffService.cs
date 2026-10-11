@@ -318,7 +318,28 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
-                throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
+            {
+                var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+                var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+                var prefix = isTeaching ? "PCTCH" : "PCNT";
+
+                // If this matches the auto-generated series format and was taken concurrently, safely fetch the next fresh ID
+                if (employeeId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, dto.CampusId ?? 1);
+                    if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber) && await _staffRepository.IsEmployeeIdUniqueAsync(generatedDto.GeneratedNumber))
+                    {
+                        employeeId = generatedDto.GeneratedNumber;
+                    }
+                    else
+                    {
+                        employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, dto.CampusId ?? 1);
+                    }
+                }
+
+                if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
+                    throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
+            }
 
             if (!string.IsNullOrWhiteSpace(dto.Email))
             {

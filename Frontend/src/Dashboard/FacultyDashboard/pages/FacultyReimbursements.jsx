@@ -3,7 +3,7 @@ import { Plus, Paperclip, Upload, Trash2, X, Loader2, AlertCircle, CheckCircle2 
 import "../styles/FacultyReimbursements.css";
 
 import { useFacultySafe } from "../FacultyContext.jsx";
-import { reimbursementApi } from "../../../api/reimbursementApi";
+import { reimbursementApi } from "@/api/staffApi";
 
 const STATUS_BADGE = {
   Approved: "cms-badge-active",

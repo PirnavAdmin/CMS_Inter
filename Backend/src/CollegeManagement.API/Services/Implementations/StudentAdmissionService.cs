@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Net.Mail;
@@ -180,8 +180,10 @@ namespace CollegeManagement.API.Services.Implementations
         // GENERATE ADMISSION NUMBER
         // =====================================================
 
-        public async Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
+        public async Task<string?> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null, bool isReferral = false)
         {
+            if (isReferral) return null;
+
             var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
             { 
                 Board = boardId?.ToString(),
@@ -246,6 +248,21 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 _logger.LogInformation("Student admission {AdmissionId} is already approved.", request.AdmissionId);
                 return true;
+            }
+
+            // Generate admission number if it was deferred (e.g. for referrals)
+            if (string.IsNullOrWhiteSpace(admission.AdmissionNo))
+            {
+                admission.AdmissionNo = await GenerateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId);
+                if (!string.IsNullOrWhiteSpace(admission.AdmissionNo))
+                {
+                    // Directly update the DB so the approval SP can use it
+                    var updateConn = _context.Database.GetDbConnection();
+                    if (updateConn.State != ConnectionState.Open) await updateConn.OpenAsync();
+                    await Dapper.SqlMapper.ExecuteAsync(updateConn,
+                        "UPDATE `StudentAdmissions` SET `AdmissionNo` = @AdmNo WHERE `AdmissionId` = @AdmId",
+                        new { AdmNo = admission.AdmissionNo, AdmId = admission.AdmissionId });
+                }
             }
 
             // 2. Open database connection and begin outer transaction for atomicity

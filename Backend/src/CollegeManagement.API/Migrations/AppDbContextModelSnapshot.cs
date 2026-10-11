@@ -212,11 +212,21 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("CreatedAt");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("Email");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)")
+                        .HasColumnName("FullName");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)")
@@ -227,6 +237,20 @@ namespace CollegeManagement.API.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("Password");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("PhoneNumber");
+
+                    b.Property<string>("PhotoPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("PhotoPath");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("UpdatedAt");
 
                     b.HasKey("Id");
 
@@ -1212,10 +1236,16 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ExamId");
 
+                    b.Property<int?>("GroupId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Hall")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<string>("IncludedSubjectIds")
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Invigilator")
                         .IsRequired()
@@ -1233,6 +1263,10 @@ namespace CollegeManagement.API.Migrations
 
                     b.Property<decimal>("PassingMarks")
                         .HasColumnType("decimal(65,30)");
+
+                    b.Property<string>("PatternName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
 
                     b.Property<int?>("RoomId")
                         .HasColumnType("int");
@@ -1408,10 +1442,6 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("int");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("BloodGroup")
-                        .HasMaxLength(10)
-                        .HasColumnType("varchar(10)");
 
                     b.Property<int?>("CampusId")
                         .HasColumnType("int");
@@ -1865,11 +1895,6 @@ namespace CollegeManagement.API.Migrations
                     b.Property<bool>("IsMandatory")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IsMandatory");
-
-                    b.Property<string>("Rule")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -4603,6 +4628,9 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsApproved")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsReferral")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsRejected")

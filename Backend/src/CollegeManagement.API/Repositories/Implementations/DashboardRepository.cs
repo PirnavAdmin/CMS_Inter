@@ -575,7 +575,10 @@ public class DashboardRepository : IDashboardRepository
         {
             // 1. Total Students from StudentAdmissions table as requested
             int totalStudents = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => s.Status == "Admitted" && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
                 .CountAsync(ct);
 
             summary.TotalStudents = totalStudents;
@@ -635,7 +638,10 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             var admissionDates = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => s.Status == "Admitted" && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
                 .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
                 .ToListAsync(ct);
 
@@ -672,7 +678,10 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             var genders = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => s.Status == "Admitted" && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
                 .Select(s => s.Gender ?? string.Empty)
                 .ToListAsync(ct);
 

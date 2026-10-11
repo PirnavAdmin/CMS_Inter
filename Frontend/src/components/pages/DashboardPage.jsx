@@ -487,7 +487,7 @@ export default function DashboardPage() {
 
         const mergedData = {
           ...(overviewData && typeof overviewData === "object" ? overviewData : {}),
-          trend: trendData?.trend || trendData?.items || trendData?.admissionTrend || overviewData?.trend || overviewData?.items || [],
+          trend: overviewData?.monthlyTrend || trendData?.monthlyTrend || trendData?.trend || trendData?.items || trendData?.admissionTrend || overviewData?.trend || overviewData?.items || [],
         };
         setOverviewState({ loading: false, error: null, data: mergedData });
       }
@@ -663,15 +663,10 @@ export default function DashboardPage() {
     fetchUpcomingExaminations();
   }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchUpcomingHolidays, fetchUpcomingExaminations]);
 
-  // Refresh both overall attendance cards when their scope changes or this tab regains focus.
+  // Load attendance cards when their scope changes
   useEffect(() => {
-    const refreshAttendance = () => {
-      fetchStudentAttendance();
-      fetchStaffAttendance();
-    };
-    refreshAttendance();
-    window.addEventListener("focus", refreshAttendance);
-    return () => window.removeEventListener("focus", refreshAttendance);
+    fetchStudentAttendance();
+    fetchStaffAttendance();
   }, [fetchStudentAttendance, fetchStaffAttendance]);
 
   // Full Refresh Dashboard handler
@@ -761,7 +756,7 @@ export default function DashboardPage() {
 
   // Students Overview Normalized Trend Data (Consecutive months from Academic Year start up to present month)
   const overviewChartData = useMemo(() => {
-    const raw = overviewState.data?.trend || overviewState.data?.admissionTrend || overviewState.data?.items || (Array.isArray(overviewState.data) ? overviewState.data : []);
+    const raw = overviewState.data?.monthlyTrend || overviewState.data?.trend || overviewState.data?.admissionTrend || overviewState.data?.items || (Array.isArray(overviewState.data) ? overviewState.data : []);
     if (!Array.isArray(raw)) return [];
 
     // 1. Build counts lookup from raw backend trend data

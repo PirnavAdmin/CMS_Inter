@@ -129,3 +129,77 @@ export const deleteStaffSubjectAllocation = (id) => {
 export const getStaffWorkload = (staffId) => {
   return api.get(`/api/v1/staff/workload/${staffId}`);
 };
+
+
+// ==================== LEAVE APIs ====================
+const LEAVE_BASE_URL = "/api/v1/staff-attendance/leave";
+
+export const leaveApi = {
+  createLeave: async (data) => {
+    return apiClient.post(LEAVE_BASE_URL, data);
+  },
+  
+  getStaffLeaves: async (params) => {
+    return apiClient.get(LEAVE_BASE_URL, { params });
+  },
+  
+  getLeaveDetails: async (leaveId) => {
+    return apiClient.get(`${LEAVE_BASE_URL}/${leaveId}`);
+  },
+  
+  actionLeave: async (leaveId, data) => {
+    return apiClient.post(`${LEAVE_BASE_URL}/${leaveId}/action`, data);
+  },
+  
+  getLeaveHistory: async (staffId) => {
+    return apiClient.get(`${LEAVE_BASE_URL}/history/staff/${staffId}`);
+  }
+};
+
+// ==================== REIMBURSEMENT APIs ====================
+// Ensure the endpoint exists in apiEndpoints (we can hardcode if needed, but better to extend)
+const REIMBURSEMENT_BASE_URL = "/api/v1/staff-reimbursements";
+
+export const reimbursementApi = {
+  createReimbursement: async (data) => {
+    return apiClient.post(REIMBURSEMENT_BASE_URL, data);
+  },
+
+  getReimbursementById: async (id) => {
+    return apiClient.get(`${REIMBURSEMENT_BASE_URL}/${id}`);
+  },
+
+  getAllReimbursements: async (params) => {
+    return apiClient.get(REIMBURSEMENT_BASE_URL, { params });
+  },
+
+  getReimbursementSummary: async (campusId) => {
+    return apiClient.get(`${REIMBURSEMENT_BASE_URL}/summary`, { params: { campusId } });
+  },
+
+  verifyReimbursement: async (id, data) => {
+    return apiClient.patch(`${REIMBURSEMENT_BASE_URL}/${id}/admin-verify`, data);
+  },
+
+  rejectReimbursement: async (id, data) => {
+    return apiClient.patch(`${REIMBURSEMENT_BASE_URL}/${id}/admin-reject`, data);
+  },
+
+  approveReimbursement: async (id, data) => {
+    return apiClient.patch(`${REIMBURSEMENT_BASE_URL}/${id}/accountant-approve`, data);
+  },
+
+  markReimbursementPaid: async (id, data) => {
+    return apiClient.patch(`${REIMBURSEMENT_BASE_URL}/${id}/mark-paid`, data);
+  },
+
+  uploadProofDocument: async (id, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient.post(`${REIMBURSEMENT_BASE_URL}/${id}/upload-proof`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+};

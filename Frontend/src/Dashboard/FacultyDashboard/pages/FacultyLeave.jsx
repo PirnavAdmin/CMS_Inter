@@ -3,7 +3,7 @@ import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2 } from "lucide-re
 import "../styles/FacultyLeave.css";
 
 import { useFacultySafe } from "../FacultyContext.jsx";
-import { leaveApi } from "../../../api/leaveApi";
+import { leaveApi } from "@/api/staffApi";
 
 const STATUS_BADGE = {
   Approved: "cms-badge-active",

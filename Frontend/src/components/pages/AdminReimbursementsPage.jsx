@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Check, X, Search, FileText, Download, CheckCircle, AlertCircle } from "lucide-react";
-import { reimbursementApi } from "../../api/reimbursementApi";
+import { reimbursementApi } from "@/api/staffApi";
 import DashboardLayout from "../layout/DashboardLayout";
 import "../../cms.css";
 

@@ -226,11 +226,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
                 else
                 {
-                    existing.CurrentSequence = existing.CurrentSequence < existing.StartNumber
-                        ? existing.StartNumber
-                        : existing.CurrentSequence + 1;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
+                    // Thread-safe atomic increment via database row update
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE `NumberSeriesConfigurations` SET `CurrentSequence` = CASE WHEN `CurrentSequence` < `StartNumber` THEN `StartNumber` ELSE `CurrentSequence` + 1 END, `UpdatedAt` = UTC_TIMESTAMP() WHERE `Id` = {0}",
+                        existing.Id);
+                    await _context.Entry(existing).ReloadAsync();
                 }
             }
 

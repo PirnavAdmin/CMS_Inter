@@ -90,6 +90,8 @@ public class StudentStrengthReportDto
     public string? SectionName { get; set; } = string.Empty;
     public string? BoardName { get; set; } = string.Empty;
     public int TotalStudents { get; set; }
+    public int MaximumStrength { get; set; }
+    public decimal UtilizationPercentage { get; set; }
     public int MaleStudents { get; set; }
     public int FemaleStudents { get; set; }
     public int OtherStudents { get; set; }

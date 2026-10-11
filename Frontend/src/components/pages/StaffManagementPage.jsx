@@ -42,9 +42,9 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
-import { staffProfileEditApi } from "@/api/staffProfileEditApi.js";
 import { loadCachedDepartments, loadCachedDesignations } from "./DepartmentManagementPage.jsx";
 import * as XLSX from "xlsx";
+import AdminReimbursementsPage from "./AdminReimbursementsPage.jsx";
 import "./StaffManagementPage.css";
 import totalStaffIcon from "@/assets/dashboard-3d/add-staff.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -2799,11 +2799,11 @@ function Field({
   );
 }
 
-function Back({ to = "/dashboard/staff", label = "Back" }) {
+function Back({ to, label = "Back" }) {
   const n = useNavigate();
   return (
-    <button className="staff-mock-back" onClick={() => n(to)}>
-      <ArrowLeft /> {label}
+    <button className="staff-mock-back" onClick={() => n(-1)}>
+      <ArrowLeft /> {label === "Back to Staff Management" ? "Back" : label}
     </button>
   );
 }
@@ -2990,7 +2990,6 @@ function Dashboard({ records = [], loadingRecords = false }) {
   const [loading, setLoading] = useState(true);
   const [credModalOpen, setCredModalOpen] = useState(false);
   const [toast, setToast] = useState("");
-  const [pendingEditsCount, setPendingEditsCount] = useState("...");
 
   useEffect(() => {
     let isMounted = true;
@@ -3013,25 +3012,10 @@ function Dashboard({ records = [], loadingRecords = false }) {
         console.warn("GET /api/v1/staff/dashboard-stats API offline, using local fallback data");
       } finally {
         if (isMounted) setLoading(false);
-      }
     }
-    
-    async function fetchPendingEdits() {
-      try {
-        const res = await staffProfileEditApi.getAllRequests();
-        if (isMounted && res.data?.status) {
-          const count = res.data.data.filter(r => r.status === "Pending" || r.status === "Requested").length;
-          setPendingEditsCount(count);
-        } else if (isMounted) {
-          setPendingEditsCount(0);
-        }
-      } catch (e) {
-        if (isMounted) setPendingEditsCount(0);
-      }
     }
 
     fetchStats();
-    fetchPendingEdits();
     return () => { isMounted = false; };
   }, [selectedBoard, selectedCampus]);
 
@@ -3043,17 +3027,18 @@ function Dashboard({ records = [], loadingRecords = false }) {
   // Dashboard stats are global aggregates; use campus-scoped staff records when a campus is selected.
   const hasStats = !selectedCampus && stats !== null && stats !== undefined;
   const isDataLoading = loading || loadingRecords;
+  const renderCount = (count) => isDataLoading ? <div className="cms-skeleton-text" style={{width: '40px', height: '24px', display: 'inline-block'}}></div> : count;
 
-  const totalCount = isDataLoading ? "Loading..." : safeRecords.filter((r) => !r?.status || r?.status === "Active").length;
-  const teachingCount = isDataLoading ? "Loading..." : safeRecords.filter((r) => {
+  const totalCount = safeRecords.filter((r) => !r?.status || r?.status === "Active").length;
+  const teachingCount = safeRecords.filter((r) => {
     if (r?.status && r.status !== "Active") return false;
     const s = String(r?.staffType || "").toLowerCase();
     return s.includes("teach") && !s.includes("non");
   }).length;
-  const nonTeachingCount = isDataLoading ? "Loading..." : (typeof totalCount === "number" && typeof teachingCount === "number" ? Math.max(0, totalCount - teachingCount) : 0);
-  const completedCount = isDataLoading ? "Loading..." : safeRecords.filter((r) => r?.profileStatus === "Completed").length;
-  const pendingCount = isDataLoading ? "Loading..." : (typeof totalCount === "number" ? Math.max(0, totalCount - completedCount) : 0);
-  const pct = typeof totalCount === "number" && totalCount > 0 && typeof completedCount === "number" ? Math.round((completedCount / totalCount) * 100) : 0;
+  const nonTeachingCount = Math.max(0, totalCount - teachingCount);
+  const completedCount = safeRecords.filter((r) => r?.profileStatus === "Completed").length;
+  const pendingCount = Math.max(0, totalCount - completedCount);
+  const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
     <DashboardLayout
@@ -3074,7 +3059,6 @@ function Dashboard({ records = [], loadingRecords = false }) {
             ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
             ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
             ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
-            ["Profile Edit Requests", pendingEditsCount, credentialsGeneratorIcon, "/dashboard/staff-profile-edits"],
           ].map(([l, v, icon, to]) => (
             <article
               key={l}
@@ -3090,7 +3074,7 @@ function Dashboard({ records = [], loadingRecords = false }) {
               <img className="staff-kpi-icon" src={icon} alt="" aria-hidden="true" width={32} height={32} />
               <span>
                 {l}
-                <strong>{v}</strong>
+                <strong>{isDataLoading ? <div className="cms-skeleton-text" style={{width: '30px', height: '20px', display: 'inline-block', verticalAlign: 'middle'}}></div> : v}</strong>
               </span>
             </article>
           ))}
@@ -3106,17 +3090,17 @@ function Dashboard({ records = [], loadingRecords = false }) {
             <div className="staff-donut-wrap">
               <div className="staff-donut" style={{ "--pct": `${pct * 3.6}deg` }}>
                 <span>
-                  <strong>{totalCount}</strong>Total Staff
+                  <strong>{isDataLoading ? <div className="cms-skeleton-text" style={{width: '40px', height: '28px', display: 'inline-block'}}></div> : totalCount}</strong>Total Staff
                 </span>
               </div>
               <div>
                 <p>
                   <i className="done" />
-                  Completed <strong>{completedCount}</strong>
+                  Completed <strong>{isDataLoading ? <div className="cms-skeleton-text" style={{width: '20px', height: '16px', display: 'inline-block', verticalAlign: 'middle'}}></div> : completedCount}</strong>
                 </p>
                 <p>
                   <i />
-                  Pending <strong>{pendingCount}</strong>
+                  Pending <strong>{isDataLoading ? <div className="cms-skeleton-text" style={{width: '20px', height: '16px', display: 'inline-block', verticalAlign: 'middle'}}></div> : pendingCount}</strong>
                 </p>
               </div>
             </div>
@@ -3134,7 +3118,6 @@ function Dashboard({ records = [], loadingRecords = false }) {
               ["Send Profile Link", "/dashboard/staff/pending?tab=Link%20Sent"],
               ["View Pending Submissions", "/dashboard/staff/pending"],
               ["View All Staff", "/dashboard/staff/list"],
-              ["Staff Profile Edits", "/dashboard/staff-profile-edits"],
             ].map(([l, to]) => (
               <button
                 key={l}
@@ -3213,7 +3196,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
           </div>
           <div className="metric-card">
             <span>Total Rows</span>
-            <strong>{totalCount}</strong>
+            <strong>{isDataLoading ? <div className="cms-skeleton-text" style={{width: '40px', height: '28px', display: 'inline-block'}}></div> : totalCount}</strong>
           </div>
           <div className="metric-card valid">
             <span>Valid Rows</span>
@@ -4041,11 +4024,10 @@ function StaffList({ records = [], setRecords, forced }) {
                 ["Teaching", "Teaching Staff"],
                 ["Non-Teaching", "Non-Teaching Staff"],
                 ["Pending", "Pending Completion"],
-                ["Requests", "Profile Edits"],
+                ["Reimbursements", "Reimbursements"],
               ].map(([v, l]) => (
                 <button className={tab === v ? "is-active" : ""} onClick={() => setTab(v)} key={v} style={{ position: 'relative' }}>
                   {l}
-                  {v === "Requests" && <span style={{ position: 'absolute', top: '8px', right: '4px', width: '6px', height: '6px', backgroundColor: 'var(--cms-red, #ef4444)', borderRadius: '50%' }}></span>}
                 </button>
               ))}
             </div>
@@ -4127,7 +4109,9 @@ function StaffList({ records = [], setRecords, forced }) {
               </button>
             </div>
           </div>
-          {tab !== "Requests" ? (
+          {tab === "Reimbursements" ? (
+            <AdminReimbursementsPage isTab={true} />
+          ) : (
           <div className="staff-table-wrap">
             <table>
               <thead>
@@ -4194,10 +4178,10 @@ function StaffList({ records = [], setRecords, forced }) {
               </tbody>
             </table>
           </div>
-          ) : (
-            <ProfileEditRequests />
           )}
-          {tab !== "Requests" && (
+
+
+          {tab !== "Reimbursements" && (
             <footer className="staff-pagination">
               <span>
                 Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
@@ -5684,7 +5668,12 @@ function Details({ record, records, setRecords, id }) {
       <main className="staff-mock-page">
         <Back to="/dashboard/staff/list" />
         <section className="staff-detail-head">
-          <UserRound />
+          {activeRecord?.photoPath || activeRecord?.photoUrl ? (
+            <img src={`/api/v1/staff/photo/${activeRecord.id}?t=${Date.now()}`} alt="Profile" style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--cms-primary)' }} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+          ) : null}
+          <div style={{ display: (activeRecord?.photoPath || activeRecord?.photoUrl) ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '60px', minHeight: '60px', width: '60px', height: '60px', borderRadius: '50%', background: 'var(--cms-primary)', color: '#fff' }}>
+            <UserRound size={30} />
+          </div>
           <div>
             <h2>{activeRecord.fullName || `${activeRecord.firstName || ""} ${activeRecord.lastName || ""}`.trim() || activeRecord.employeeId}</h2>
             <p>{activeRecord.employeeId} · {activeRecord.designation} · {activeRecord.department}</p>
@@ -6410,7 +6399,7 @@ export default function StaffManagementPage() {
           if (raw) localSubmitted = JSON.parse(raw);
         } catch (e) { }
 
-        const finalData = localSubmitted ? { ...(apiData || {}), ...localSubmitted } : apiData;
+        const finalData = apiData ? { ...(localSubmitted || {}), ...apiData } : localSubmitted;
         if (isMounted && finalData) {
           setLoadedStaff(finalData);
         }
@@ -6489,151 +6478,6 @@ export default function StaffManagementPage() {
       {page}
       {toast ? <Toast message={toast} onClose={() => setToast("")} /> : null}
     </>
-  );
-}
-
-function ProfileEditRequests() {
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("Pending");
-  const [toast, setToast] = useState(null);
-
-  useEffect(() => {
-    fetchRequests();
-  }, [filter]);
-
-  const fetchRequests = async () => {
-    try {
-      setLoading(true);
-      const res = await staffProfileEditApi.getAllRequests();
-      if (res.data?.status) {
-        let allReqs = res.data.data || [];
-        if (filter === "Pending") {
-          allReqs = allReqs.filter(r => r.status === "Requested" || r.status === "SubmittedForReview");
-        } else if (filter === "Allowed") {
-          allReqs = allReqs.filter(r => r.status === "Allowed");
-        } else if (filter === "Approved") {
-          allReqs = allReqs.filter(r => r.status === "Approved");
-        }
-        setRequests(allReqs);
-      }
-    } catch (error) {
-      console.error("Failed to load requests", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const showToast = (text, type = "success") => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 3500);
-  };
-
-  const handleGrantAccess = async (id) => {
-    try {
-      await staffProfileEditApi.grantProfileEdit(id);
-      showToast("Edit access granted successfully.");
-      fetchRequests();
-    } catch (e) {
-      showToast("Failed to grant access.", "error");
-    }
-  };
-
-  const handleApproveChanges = async (id) => {
-    try {
-      await staffProfileEditApi.approveProfileEdit(id);
-      showToast("Profile updates approved successfully.");
-      fetchRequests();
-    } catch (e) {
-      showToast("Failed to approve updates.", "error");
-    }
-  };
-
-  return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "12px" }}>
-        {["Pending", "Allowed", "Approved", "All"].map(status => (
-          <button 
-            key={status} 
-            className={`cms-btn ${filter === status ? "cms-btn-primary" : "cms-btn-ghost"}`} 
-            onClick={() => setFilter(status)}
-          >
-            {status}
-          </button>
-        ))}
-      </div>
-
-      <div className="cms-table-wrap">
-        <table className="staff-table">
-          <thead>
-            <tr>
-              <th>Req ID</th>
-              <th>Staff Name</th>
-              <th>Reason</th>
-              <th>Requested Date</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan="6" style={{ textAlign: "center", padding: "20px" }}>Loading requests...</td>
-              </tr>
-            ) : requests.length === 0 ? (
-              <tr>
-                <td colSpan="6" style={{ textAlign: "center", padding: "20px", color: "var(--cms-muted)" }}>
-                  No requests found for this status.
-                </td>
-              </tr>
-            ) : (
-              requests.map((r) => (
-                <tr key={r.id}>
-                  <td className="cms-strong">REQ-{r.id}</td>
-                  <td>{r.staffName} (ID: {r.staffId})</td>
-                  <td>{r.requestReason || "-"}</td>
-                  <td>{new Date(r.requestedAt).toLocaleDateString()}</td>
-                  <td>
-                    <span className={`cms-badge cms-badge-${r.status === 'Approved' ? 'success' : r.status === 'Allowed' ? 'info' : 'warn'}`}>
-                      {r.status.replace(/([A-Z])/g, ' $1').trim()}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {r.status === "Requested" && (
-                        <button
-                          className="cms-action-btn primary"
-                          title="Grant Edit Access"
-                          onClick={() => handleGrantAccess(r.id)}
-                        >
-                          <Check size={14} /> Grant Access
-                        </button>
-                      )}
-                      {r.status === "SubmittedForReview" && (
-                        <button
-                          className="cms-action-btn success"
-                          title="Approve Profile Updates"
-                          onClick={() => handleApproveChanges(r.id)}
-                        >
-                          <Check size={14} /> Approve Changes
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {toast && (
-        <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`} style={{ position: "fixed", bottom: 20, right: 20, padding: "10px 20px", background: toast.type === "error" ? "#fef2f2" : "#f0fdf4", color: toast.type === "error" ? "#dc2626" : "#16a34a", border: `1px solid ${toast.type === "error" ? "#f87171" : "#86efac"}`, borderRadius: 8, display: "flex", gap: 10, alignItems: "center", zIndex: 9999, boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}>
-          {toast.type === "error" ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
-          {toast.text}
-        </div>
-      )}
-    </div>
   );
 }
 
