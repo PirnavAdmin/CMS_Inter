@@ -26,6 +26,7 @@ namespace CollegeManagement.API.DTOs.Fees
         public string? StructureName { get; set; }
         public decimal TotalAmount { get; set; }
         public List<FeeStructureItemResponse> Components { get; set; } = new();
+        public List<FeeStructureResponse> AvailableFeeStructures { get; set; } = new();
         public int StudentsCount { get; set; }
         public int StudentsWithPriorArrears { get; set; }
         public decimal TotalPriorArrears { get; set; }

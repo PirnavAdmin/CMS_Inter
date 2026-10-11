@@ -56,8 +56,8 @@ namespace CollegeManagement.API.Services.Implementations
 
                 var auditLog = new AuditLog
                 {
-                    UserName = userName ?? "System",
-                    ActorRole = role,
+                    UserName = overrideUser ?? userName ?? "System",
+                    ActorRole = overrideRole ?? role,
                     Action = action,
                     EntityName = target, // Using EntityName column for target
                     Module = module,

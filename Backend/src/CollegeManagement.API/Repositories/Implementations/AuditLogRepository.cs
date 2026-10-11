@@ -47,7 +47,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return (items, totalCount);
         }
 
-        public async Task<AuditLogPagedResultDto> GetAuditLogsPagedAsync(string? query, string? module, string? severity, string? fromDate, string? toDate, int pageNumber = 1, int pageSize = 50)
+        public async Task<AuditLogPagedResultDto> GetAuditLogsPagedAsync(string? query, string? module, string? severity, string? role, string? fromDate, string? toDate, int pageNumber = 1, int pageSize = 50)
         {
             var dbQuery = _context.AuditLogs.AsNoTracking().AsQueryable();
 
@@ -56,6 +56,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var q = query.ToLower();
                 dbQuery = dbQuery.Where(x => 
                     (x.UserName != null && x.UserName.ToLower().Contains(q)) || 
+                    (x.ActorRole != null && x.ActorRole.ToLower().Contains(q)) ||
                     x.Action.ToLower().Contains(q) || 
                     x.EntityName.ToLower().Contains(q) || 
                     (x.Module != null && x.Module.ToLower().Contains(q)) ||
@@ -66,7 +67,33 @@ namespace CollegeManagement.API.Repositories.Implementations
                 dbQuery = dbQuery.Where(x => x.Module == module);
 
             if (!string.IsNullOrWhiteSpace(severity) && severity != "All severity")
-                dbQuery = dbQuery.Where(x => x.Severity == severity);
+            {
+                if (severity.Equals("Security alerts", StringComparison.OrdinalIgnoreCase) ||
+                    severity.Equals("Security alert", StringComparison.OrdinalIgnoreCase) ||
+                    severity.Equals("Alerts", StringComparison.OrdinalIgnoreCase) ||
+                    severity.Equals("Security", StringComparison.OrdinalIgnoreCase))
+                {
+                    dbQuery = dbQuery.Where(x => x.Severity != null && x.Severity != "Info");
+                }
+                else
+                {
+                    dbQuery = dbQuery.Where(x => x.Severity == severity);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(role) && role != "All roles")
+            {
+                if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Administrator", StringComparison.OrdinalIgnoreCase) ||
+                    role.Equals("Active administrators", StringComparison.OrdinalIgnoreCase))
+                {
+                    dbQuery = dbQuery.Where(x => x.ActorRole == "Administrator" || x.ActorRole == "Admin" || (x.UserName != null && x.UserName.ToLower().Contains("admin")));
+                }
+                else
+                {
+                    dbQuery = dbQuery.Where(x => x.ActorRole != null && x.ActorRole.ToLower() == role.ToLower());
+                }
+            }
 
             if (DateTime.TryParse(fromDate, out var fromDt))
                 dbQuery = dbQuery.Where(x => x.CreatedAt >= fromDt.Date);
@@ -82,11 +109,30 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var statsQuery = _context.AuditLogs.AsNoTracking().Where(x => x.CreatedAt >= today);
             
+            var adminLogs = await statsQuery
+                .Where(x => x.ActorRole == "Administrator" || x.ActorRole == "Admin" || (x.UserName != null && x.UserName.ToLower().Contains("admin")))
+                .ToListAsync();
+
+            var activeAdmins = adminLogs
+                .GroupBy(x => x.UserName ?? "Administrator")
+                .Select(g => new ActiveAdminInfoDto
+                {
+                    UserName = g.Key,
+                    Role = g.Select(x => x.ActorRole).FirstOrDefault(r => !string.IsNullOrEmpty(r)) ?? "Administrator",
+                    ActionCount = g.Count(),
+                    LastActive = g.Max(x => x.CreatedAt),
+                    LastIp = g.OrderByDescending(x => x.CreatedAt).Select(x => x.IpAddress).FirstOrDefault(),
+                    LastAction = g.OrderByDescending(x => x.CreatedAt).Select(x => x.Action).FirstOrDefault()
+                })
+                .OrderByDescending(x => x.LastActive)
+                .ToList();
+
             var stats = new AuditLogStatsDto
             {
                 EventsToday = await statsQuery.CountAsync(),
                 SecurityAlerts = await statsQuery.CountAsync(x => x.Severity != "Info"),
-                ActiveAdministrators = await statsQuery.Where(x => x.ActorRole == "Administrator" || x.ActorRole == "Admin").Select(x => x.UserName).Distinct().CountAsync()
+                ActiveAdministrators = activeAdmins.Count,
+                Administrators = activeAdmins
             };
 
             var distinctModules = await _context.AuditLogs.AsNoTracking().Where(x => x.Module != null).Select(x => x.Module!).Distinct().ToListAsync();
