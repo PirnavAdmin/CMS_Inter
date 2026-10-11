@@ -51,7 +51,7 @@ namespace CollegeManagement.API.Services.Implementations
                     try { staffId = _jwtTokenHelper.GetStaffId(user); } catch { /* Ignore */ }
                 }
 
-                var ipAddress = context?.Connection?.RemoteIpAddress?.ToString();
+                var ipAddress = ClientIpHelper.GetClientIpAddress(context);
                 var userAgent = context?.Request?.Headers["User-Agent"].ToString();
 
                 var auditLog = new AuditLog

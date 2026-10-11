@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using CollegeManagement.API.Helpers;
 
 namespace CollegeManagement.API.Data
 {
@@ -1977,7 +1978,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             var httpContext = _httpContextAccessor?.HttpContext;
             var userId = httpContext?.User?.FindFirstValue("UserId");
             var role = httpContext?.User?.FindFirstValue(ClaimTypes.Role) ?? httpContext?.User?.FindFirstValue("role");
-            var ip = httpContext?.Connection?.RemoteIpAddress?.ToString();
+            var ip = ClientIpHelper.GetClientIpAddress(httpContext);
             var agent = httpContext?.Request?.Headers["User-Agent"].ToString();
             var userName = httpContext?.User?.Identity?.Name ?? httpContext?.User?.FindFirstValue(ClaimTypes.Email);
 
