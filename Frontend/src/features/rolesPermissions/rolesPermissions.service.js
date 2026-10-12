@@ -1,6 +1,6 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { normalizeModuleKey, normalizePermissionPayload, normalizeRoleCode } from "./permissionUtils.jsx";
+import { normalizePermissionPayload, normalizeRoleCode } from "./permissionUtils.jsx";
 
 const rbacEndpoints = {
   roles: apiEndpoints.roles?.cards || apiEndpoints.roles?.list || "/api/v1/roles/cards",
@@ -9,7 +9,6 @@ const rbacEndpoints = {
   updateRole: apiEndpoints.roles?.update || ((id) => `/api/v1/roles/${id}`),
   deleteRole: apiEndpoints.roles?.delete || ((id) => `/api/v1/roles/${id}`),
   modules: apiEndpoints.roles?.modules || "/api/v1/roles/modules",
-  roleModules: apiEndpoints.roles?.roleModules || ((roleId) => `/api/v1/roles/${roleId}/modules`),
   rolePermissions: apiEndpoints.roles?.permissions || ((roleId) => `/api/v1/roles/${roleId}/permissions`),
   updateRolePermissions: apiEndpoints.roles?.updatePermissions || apiEndpoints.roles?.permissions || ((roleId) => `/api/v1/roles/${roleId}/permissions`),
   roleMembers: apiEndpoints.roles?.members || ((roleId) => `/api/v1/roles/${roleId}/members`),
@@ -160,35 +159,11 @@ export async function getModulesAndPermissions() {
   endpointRequired(rbacEndpoints.modules, "Permission modules");
   try {
     const response = await apiClient.get(rbacEndpoints.modules, { skipGlobalLoader: true });
-    return apiResult(normalizeApiArray(response.data).map(normalizePermissionModule));
+    return apiResult(normalizeApiArray(response.data));
   } catch (error) {
     throw apiError(error, "Unable to load permission modules.");
   }
 }
-
-export async function getRoleModules(roleId) {
-  const numericRoleId = resolveRoleId(roleId);
-  if (rbacEndpoints.roleModules && numericRoleId) {
-    try {
-      const endpoint = typeof rbacEndpoints.roleModules === "function"
-        ? rbacEndpoints.roleModules(numericRoleId)
-        : `${rbacEndpoints.roleModules}/${numericRoleId}/modules`;
-      const response = await apiClient.get(endpoint, { skipGlobalLoader: true });
-      return apiResult(normalizeApiArray(response.data).map(normalizePermissionModule));
-    } catch (error) {
-      throw apiError(error, "Unable to load modules configured for this role.");
-    }
-  }
-  throw new Error("Role modules API is not configured or the role ID is invalid.");
-}
-
-const normalizePermissionModule = (module = {}) => ({
-  ...module,
-  id: normalizeModuleKey(module?.id ?? module?.Id ?? module?.moduleId ?? module?.ModuleId ?? module?.name ?? module?.Name),
-  name: module?.name ?? module?.Name ?? module?.subModule ?? module?.SubModule ?? "",
-  section: module?.section ?? module?.Section ?? module?.categoryLabel ?? module?.CategoryLabel ?? "",
-  availableActions: module?.availableActions ?? module?.AvailableActions ?? [],
-});
 
 export async function getRolePermissions(roleId) {
   const numericRoleId = resolveRoleId(roleId);

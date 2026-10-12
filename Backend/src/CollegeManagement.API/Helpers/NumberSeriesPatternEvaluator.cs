@@ -79,14 +79,10 @@ namespace CollegeManagement.API.Helpers
             var cert = !string.IsNullOrWhiteSpace(context?.Cert) ? context.Cert : "CND";
             result = Regex.Replace(result, @"\{CERT\}", cert, RegexOptions.IgnoreCase);
 
-            var campusStr = !string.IsNullOrWhiteSpace(context?.CampusCode) ? context.CampusCode : "M";
-            var campus = campusStr.ToUpperInvariant();
-            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{CAMPUS\}", campus, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
             var type = !string.IsNullOrWhiteSpace(context?.Type) ? context.Type : "GEN";
             result = Regex.Replace(result, @"\{TYPE\}", type, RegexOptions.IgnoreCase);
 
-            var group = !string.IsNullOrWhiteSpace(context?.Group) ? context.Group : (!string.IsNullOrWhiteSpace(context?.GroupCode) ? context.GroupCode : "GROUP");
+            var group = !string.IsNullOrWhiteSpace(context?.Group) ? context.Group : (!string.IsNullOrWhiteSpace(context?.GroupCode) ? context.GroupCode : "MPC");
             result = Regex.Replace(result, @"\{GROUP\}", group, RegexOptions.IgnoreCase);
 
             var section = !string.IsNullOrWhiteSpace(context?.Section) ? context.Section : "A";
@@ -124,7 +120,7 @@ namespace CollegeManagement.API.Helpers
                 "TEACHING_STAFF_ID" or "EMPLOYEE_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}" },
                 "NON_TEACHING_STAFF_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}" },
                 "ADMISSION_NO" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{AY}", "{BOARD}" },
-                "ROLL_NO" => new List<string> { "{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{BOARD}", "{AY}", "{PROGRAM}" },
+                "ROLL_NO" => new List<string> { "{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}" },
                 "STUDENT_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}" },
                 "SECTION_NAME" => new List<string> { "{GROUP}", "{SECTION}", "{LEVEL}", "{BOARD}" },
                 "EXAM_CODE" => new List<string> { "{GROUP}", "{TYPE}", "{YEAR}", "{SEQ}", "{EXAM}" },

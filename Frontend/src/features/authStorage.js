@@ -40,7 +40,6 @@ export const clearAuthSession = () => {
       }
     });
   } catch { /* Storage unavailable */ }
-  window.dispatchEvent(new Event("cms-auth-session-updated"));
 };
 
 export const getAuthToken = () => {

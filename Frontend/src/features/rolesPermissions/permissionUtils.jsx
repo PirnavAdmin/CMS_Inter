@@ -8,12 +8,7 @@ const normalizeCode = (value = "") =>
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-export const normalizeModuleKey = (value = "") => String(value)
-  .trim()
-  .toLowerCase()
-  .replace(/&/g, "")
-  .replace(/[^a-z0-9]+/g, "-")
-  .replace(/^-+|-+$/g, "");
+const normalizeModuleKey = (value = "") => String(value).trim().toLowerCase();
 
 const normalizeActionKey = (value = "") => {
   const action = String(value).trim().toLowerCase();
@@ -81,7 +76,7 @@ export function hasRole(roleCode, user = getAuthUser()) {
 export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = getAuthUser()) {
   if (hasRole("SUPER_ADMIN", user) || hasRole("ADMIN", user)) return true;
   const source = permissions ?? user?.permissions ?? user?.rolePermissions;
-  if (!source) return false;
+  if (!source) return true;
   const permissionMap = toPermissionMap(source);
   const actions = permissionMap[normalizeModuleKey(moduleKey)];
   if (!Array.isArray(actions)) return false;
@@ -102,7 +97,7 @@ export function enforcePermissionDependencies(actions = []) {
       if (action !== ACTIONS.VIEW) next.delete(action);
     });
   }
-  return enforcePermissionDependencies([...next]);
+  return [...next];
 }
 
 export function togglePermissionAction(currentActions = [], actionKey, enabled) {

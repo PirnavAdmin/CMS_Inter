@@ -1,22 +1,44 @@
-const NUMBER_SERIES_STORAGE_KEY = "pirnav_number_series_settings_v4";
+const NUMBER_SERIES_STORAGE_KEY = "pirnav_number_series_settings";
 
 export const FIXED_NUMBER_SERIES = [
   
   {
-    id: "roll-no",
-      key: "roll-no",
-      seriesCode: "ROLL_NO",
-      name: "Roll Number",
-      category: "Student Management",
-      description: "Sequence resets uniquely per Campus + Board + Academic Year + Group + Program.",
-      prefix: "",
-      format: "{CAMPUS}-{GROUP}-{SEQ}",
-      numberLength: 4,
-      startNumber: 1,
-      currentNumber: 0,
-      currentSequence: 0,
-      isActive: true,
-      allowedTokens: ["{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{BOARD}", "{PROGRAM}", "{AY}"],
+    id: "student-roll-no",
+    key: "student-roll-no",
+    seriesCode: "ROLL_NO",
+    name: "Student Roll No.",
+    category: "Student Management",
+    description: "Sequence scoped per Campus + Group. Prefix auto-generated from group code (e.g. MPC → MPC-1).",
+    prefix: "",
+    format: "{SEQ}",
+    formatPattern: "{SEQ}",
+    numberLength: 2,
+    startNumber: 1,
+    isActive: true,
+    availablePlaceholders: ["{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}"],
+    sampleFormats: [
+      { format: "{SEQ}", example: "1" },
+      { format: "{PREFIX}{SEQ}", example: "MPC-1" },
+      { format: "{GROUP}-{SEQ}", example: "MPC-01" },
+      { format: "{YYYY}-{GROUP}-{SEQ}", example: "2026-MPC-001" }
+    ],
+    scopeNote: "Sequence resets per Campus + Group combination."
+  },
+  {
+    id: "teaching-staff-id",
+    key: "teaching-staff-id",
+    name: "Teaching Staff ID",
+    category: "Staff Management",
+    prefix: "PCTCH",
+    format: "PCTCH{SEQ}",
+    numberLength: 4,
+    startNumber: 1,
+    currentNumber: 0,
+    totalGenerated: 0,
+    currentExample: "PCTCH0001",
+    description: "Configure ID series for Teaching faculty and academic staff.",
+    status: "Active",
+    allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}"],
     sampleFormats: [
       { format: "PCTCH{SEQ}", example: "PCTCH0001" },
       { format: "TCH-{YYYY}-{SEQ}", example: "TCH-2026-0001" },
@@ -356,15 +378,10 @@ export function buildNumberFromFormat(format, seqNum, numberLength = 4, customTo
   // Series specific tokens
   result = result.replace(/{DEPT}/g, customTokens.DEPT || "MATH");
   result = result.replace(/{DESIG}/g, customTokens.DESIG || "HOD");
-  result = result.replace(/{PREFIX}/g, customTokens.PREFIX || "MAIN");
-  result = result.replace(/{GROUP}/g, customTokens.GROUP || "GROUP");
-  result = result.replace(/{SECTION}/g, customTokens.SECTION || "A");
-  const campusStr = customTokens.CAMPUS || "M";
-    result = result.replace(/{CAMPUS}/g, campusStr.toUpperCase());
   result = result.replace(/{STAFF}/g, customTokens.STAFF || "FAC");
   result = result.replace(/{AY}/g, customTokens.AY || `${year}-${year + 1}`);
   result = result.replace(/{BOARD}/g, customTokens.BOARD || "BIEAP");
-  result = result.replace(/{GROUP}/g, customTokens.GROUP || "GROUP");
+  result = result.replace(/{GROUP}/g, customTokens.GROUP || "MPC");
   result = result.replace(/{LEVEL}/g, customTokens.LEVEL || "SR");
   result = result.replace(/{SECTION}/g, customTokens.SECTION || "A");
   result = result.replace(/{EXAM}/g, customTokens.EXAM || "FINAL");
@@ -464,11 +481,11 @@ export function resetNumberSeriesSequence(id, newCurrentNumber = 0) {
 }
 
 // --- GET PREVIEW NEXT NUMBER FOR A SERIES ---
-export function getNextNumberPreview(series, overrideConfig = null, customTokens = {}) {
+export function getNextNumberPreview(series, overrideConfig = null) {
   if (!series) return "—";
   const cfg = overrideConfig || series;
-  const nextSeqNum = Number(cfg.currentSequence ?? cfg.currentNumber ?? 0) + 1;
-  return buildNumberFromFormat(cfg.format, nextSeqNum, cfg.numberLength, customTokens);
+  const nextSeqNum = Number(cfg.currentNumber || 0) + 1;
+  return buildNumberFromFormat(cfg.format, nextSeqNum, cfg.numberLength);
 }
 
 // --- FORMAT VALIDATION ENGINE ---
@@ -489,8 +506,7 @@ export function validateNumberSeries(format, numberLength, currentNumber, allowe
 
   // Extract all {TOKEN} patterns
   const tokens = format.match(/\{[^}]+\}/g) || [];
-  const coreSupportedTokens = ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{RANDOM}", "{PREFIX}", "{GROUP}", "{SECTION}", "{CAMPUS}"];
-  const unsupported = tokens.filter((t) => !allowedTokens.includes(t) && !coreSupportedTokens.includes(t));
+  const unsupported = tokens.filter((t) => !allowedTokens.includes(t));
 
   if (unsupported.length > 0) {
     return {

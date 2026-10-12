@@ -43,6 +43,16 @@ export const attendanceService = {
     return response.data;
   },
 
+  getStudentAttendanceSubjects: async (studentId) => {
+    const response = await apiClient.get(apiEndpoints.attendance.studentSubjects(studentId));
+    return response.data;
+  },
+
+  getStudentDailyLogs: async (studentId, params) => {
+    const response = await apiClient.get(apiEndpoints.attendance.studentDailyLogs(studentId), { params });
+    return response.data;
+  },
+
   getFacultySubjectAttendance: async (params) => {
     const response = await apiClient.get(apiEndpoints.attendance.facultySubject, { params });
     return response.data;

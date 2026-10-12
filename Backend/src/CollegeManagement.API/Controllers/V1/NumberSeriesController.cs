@@ -32,10 +32,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet]
         [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<NumberSeriesResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null, [FromQuery] bool includeSubCounters = false, [FromQuery] string? campusCode = null)
+        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null, [FromQuery] bool includeSubCounters = false)
         {
             campusId = GetCampusIdFromRequest(campusId);
-            var result = await _numberSeriesService.GetAllSeriesAsync(campusId, board, academicYear, includeSubCounters, campusCode);
+            var result = await _numberSeriesService.GetAllSeriesAsync(campusId, board, academicYear, includeSubCounters);
             return Ok(result);
         }
 
@@ -48,10 +48,10 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetByCode(string seriesCode, [FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null, [FromQuery] string? campusCode = null)
+        public async Task<IActionResult> GetByCode(string seriesCode, [FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null)
         {
             campusId = GetCampusIdFromRequest(campusId);
-            var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, campusId, board, academicYear, campusCode);
+            var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, campusId, board, academicYear);
             if (result == null)
             {
                 return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });
@@ -119,10 +119,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? prefix = null,
             [FromQuery] int? campusId = null,
             [FromQuery] string? board = null,
-            [FromQuery] string? academicYear = null, [FromQuery] string? campusCode = null)
+            [FromQuery] string? academicYear = null)
         {
             campusId = GetCampusIdFromRequest(campusId);
-            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix, campusId, board, academicYear, campusCode);
+            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix, campusId, board, academicYear);
             return Ok(preview);
         }
         private int? GetCampusIdFromRequest(int? queryCampusId)

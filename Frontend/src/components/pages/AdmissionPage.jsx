@@ -4715,12 +4715,6 @@ export default function AdmissionPage() {
   const setValue = (name, val) => {
     const field = fieldByName[name] || {};
     if (isPlaceholderOption(val)) return;
-
-    if (["campus", "board", "year"].includes(name)) {
-      setValues((v) => ({ ...v, [name]: val, admissionNo: "" }));
-      setErrors((e) => ({ ...e, [name]: undefined, admissionNo: undefined }));
-    }
-
     if (name === "feeItems") {
       setValues((v) => ({
         ...v, feeItems: val, installments: v.paymentPlan === "Installment Payment"

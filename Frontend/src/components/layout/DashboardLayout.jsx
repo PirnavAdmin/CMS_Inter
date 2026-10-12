@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
+  ReceiptIndianRupee,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -11,8 +12,6 @@ import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
-import { useEffectivePermissions } from "@/features/rolesPermissions/EffectivePermissionsContext.jsx";
-import { filterMenuByPermissions } from "@/features/rolesPermissions/permissionRoutes.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -24,6 +23,7 @@ import marksEvaluationIcon from "@/assets/sidebar-3d/marks-evaluation.png";
 import resultsIcon from "@/assets/sidebar-3d/results.png";
 import promotionIcon from "@/assets/sidebar-3d/promotion.png";
 import feeManagementIcon from "@/assets/sidebar-3d/fee-management.png";
+import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import certificatesIcon from "@/assets/sidebar-3d/certificates.png";
 import reportsAnalyticsIcon from "@/assets/sidebar-3d/reports-analytics.png";
 import sectionsIcon from "@/assets/dashboard-3d/total-sections.png";
@@ -59,6 +59,7 @@ export const adminIconAssets = {
   feeManagement: feeManagementIcon,
   paymentHistory: feeManagementIcon,
   payroll: generatedSidebarIcons.payroll,
+  reimbursement: reimbursementIcon,
   attendanceImpact: generatedSidebarIcons.staffAttendance,
   financialReports: reportsAnalyticsIcon,
   profile: studentsIcon,
@@ -74,6 +75,8 @@ const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
   "id & number series": settingsNumberSeriesIcon,
   templates: settingsTemplatesIcon,
   "audit logs": settingsAuditLogsIcon,
+  "faculty reimbursement": reimbursementIcon,
+  reimbursement: reimbursementIcon,
 });
 
 const PAGE_ICON_ROUTE_ALIASES = [
@@ -86,6 +89,8 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
+  { path: "/dashboard/reimbursement", icon: reimbursementIcon },
+  { path: "/dashboard/finance/reimbursement", icon: reimbursementIcon },
   { path: "/warden-dashboard/students", icon: studentsIcon },
   { path: "/warden-dashboard/rooms", icon: sectionsIcon },
   { path: "/warden-dashboard/beds", icon: sectionsIcon },
@@ -192,6 +197,7 @@ export const menu = [
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
       { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
+      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon },
     ],
   },
   {
@@ -459,11 +465,6 @@ function isPrincipalRole(role) {
   return normalized === "principal" || normalized.includes("principal");
 }
 
-function hasFullAccess(user) {
-  const role = String(user?.role || user?.roleCode || "").trim().toLowerCase();
-  return Boolean(user?.isAdmin) || role === "admin" || role === "super admin" || role === "super_admin";
-}
-
 function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
@@ -521,7 +522,6 @@ export default function DashboardLayout({
   const location = useLocation();
   const pathname = location.pathname;
   const user = readUser();
-  const { status: permissionStatus, canAccess } = useEffectivePermissions();
   const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
   const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
   const isWarden =
@@ -529,11 +529,7 @@ export default function DashboardLayout({
     pathname.startsWith("/warden") ||
     pathname.startsWith("/warden-dashboard") ||
     (typeof window !== "undefined" && (window.localStorage?.getItem("cms_role") === "warden" || window.sessionStorage?.getItem("cms_role") === "warden"));
-  const baseMenu = menuOverride || (isParent ? parentMenu : isWarden ? wardenMenu : isPrincipal ? principalMenu : menu);
-  const activeMenu = useMemo(
-    () => (isWarden ? baseMenu : filterMenuByPermissions(baseMenu, canAccess, hasFullAccess(user) ? "ready" : permissionStatus)),
-    [baseMenu, canAccess, permissionStatus, user, isWarden],
-  );
+  const activeMenu = menuOverride || (isParent ? parentMenu : isWarden ? wardenMenu : isPrincipal ? principalMenu : menu);
   const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isWarden ? wardenSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
   const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;

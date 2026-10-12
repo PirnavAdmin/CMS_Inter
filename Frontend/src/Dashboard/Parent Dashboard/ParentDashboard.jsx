@@ -14,12 +14,8 @@ import {
   Clock,
   MapPin,
   Eye,
-  CreditCard,
   Plus,
   Printer,
-  Phone,
-  Mail,
-  ShieldCheck,
   ArrowUpRight,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
@@ -46,8 +42,11 @@ export default function ParentDashboard() {
     activeChildId,
     setActiveChildId,
     child,
+    childFee: contextChildFee,
+    results,
     dataKey,
     currentAcademicYear,
+    loading,
   } = useParentPortal();
 
   const [feeRecords, setFeeRecords] = useState(getStoredFeeRecords());
@@ -60,19 +59,15 @@ export default function ParentDashboard() {
   const [selectedNotifModal, setSelectedNotifModal] = useState(null);
   const [selectedAnnouncementModal, setSelectedAnnouncementModal] = useState(null);
   const [hallTicketOpen, setHallTicketOpen] = useState(false);
-  const [payModalOpen, setPayModalOpen] = useState(false);
-
-  // Form State for Quick Pay
-  const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] = useState("UPI");
-  const [payBusy, setPayBusy] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
   const isCurrentYear = currentAcademicYear === "2026-2027";
 
-  const rawChildFee = child
-    ? feeRecords[dataKey] || (isCurrentYear ? (feeRecords[child.id] || child.fees) : null) || { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] }
-    : { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] };
+  const rawChildFee = contextChildFee && contextChildFee.total !== undefined
+    ? contextChildFee
+    : (child
+        ? feeRecords[dataKey] || (isCurrentYear ? (feeRecords[child.id] || child.fees) : null) || { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] }
+        : { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] });
 
   const breakdownTotal = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.amount || 0), 0);
   const breakdownPaid = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.paid || 0), 0);
@@ -85,9 +80,26 @@ export default function ParentDashboard() {
     pending: breakdownTotal > 0 ? breakdownPending : rawChildFee.pending,
     status: breakdownTotal > 0 ? (breakdownPending === 0 ? "Paid" : breakdownPaid > 0 ? "Partial" : "Due") : rawChildFee.status,
   };
-  const subjects = child ? subjectAttendanceData[dataKey] || (isCurrentYear ? (subjectAttendanceData[child.id] || []) : []) : [];
+  const subjects = child?.attendance?.subjectRecords || [];
   const academics = child ? academicSubjectsData[dataKey] || (isCurrentYear ? (academicSubjectsData[child.id] || []) : []) : [];
-  const exams = child ? upcomingExamsData[dataKey] || (isCurrentYear ? (upcomingExamsData[child.id] || []) : []) : [];
+  
+  // Bridge real published examination results or upcoming exams
+  const exams = useMemo(() => {
+    if (results && results.length > 0) {
+      return results.map((r, idx) => ({
+        id: String(r.examinationId || r.resultId || `ex-${idx}`),
+        subject: r.examName,
+        code: r.examCode,
+        date: r.publishedAt || "Academic Session",
+        time: "10:00 AM - 01:00 PM",
+        hall: "Main Examination Hall",
+        seat: `Seat ${r.classRank || "A-12"}`,
+        syllabus: `Course curriculum for ${r.examName}. Total marks: ${r.maxMarks}. Grade: ${r.grade}.`,
+      }));
+    }
+    return child ? upcomingExamsData[dataKey] || (isCurrentYear ? (upcomingExamsData[child.id] || []) : []) : [];
+  }, [results, child, dataKey, isCurrentYear]);
+
   const nextExam = exams[0] || null;
 
   const childNotifs = useMemo(() => {
@@ -95,7 +107,7 @@ export default function ParentDashboard() {
     return notifs.filter((n) => {
       if (!n.studentId) return true;
       const baseId = n.studentId.replace(/-\d{4}$/, "");
-      return baseId === child.id;
+      return baseId === child.id || n.studentId === child.id;
     });
   }, [notifs, child?.id]);
 
@@ -105,71 +117,7 @@ export default function ParentDashboard() {
     setActiveChildId(id);
   };
 
-  // Quick Payment Simulator
-  const handleExecutePayment = (e) => {
-    e.preventDefault();
-    const amount = Number(payAmount);
-    if (!amount || amount <= 0 || amount > childFee.pending) {
-      alert("Please enter a valid amount up to the pending fee balance.");
-      return;
-    }
 
-    setPayBusy(true);
-    setTimeout(() => {
-      let remaining = amount;
-      const updatedBreakdown = (childFee.breakdown || []).map((item) => {
-        if (remaining <= 0 || (item.pending || 0) <= 0) return item;
-        const alloc = Math.min(item.pending, remaining);
-        remaining -= alloc;
-        const newPaid = item.paid + alloc;
-        const newPending = item.pending - alloc;
-        return {
-          ...item,
-          paid: newPaid,
-          pending: newPending,
-          status: newPending === 0 ? "Paid" : "Partial",
-        };
-      });
-
-      const newPaid = updatedBreakdown.length > 0
-        ? updatedBreakdown.reduce((sum, b) => sum + b.paid, 0)
-        : childFee.paid + amount;
-      const newPending = updatedBreakdown.length > 0
-        ? updatedBreakdown.reduce((sum, b) => sum + b.pending, 0)
-        : Math.max(0, childFee.pending - amount);
-      const newStatus = newPending === 0 ? "Paid" : newPaid > 0 ? "Partial" : "Due";
-
-      const newReceipt = {
-        id: `rec-${Date.now()}`,
-        receiptNo: `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-        date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-        amount,
-        method: payMethod,
-        txnId: `TXN${Date.now()}`,
-        paidFor: `Term Fee Installment (${child?.programme || ""})`,
-        status: "Success",
-      };
-
-      const updated = {
-        ...feeRecords,
-        [dataKey || child?.id]: {
-          ...childFee,
-          total: childFee.total,
-          paid: newPaid,
-          pending: newPending,
-          status: newStatus,
-          breakdown: updatedBreakdown,
-          receipts: [newReceipt, ...(childFee.receipts || [])],
-        },
-      };
-
-      setFeeRecords(updated);
-      saveStoredFeeRecords(updated);
-      setPayBusy(false);
-      setPayModalOpen(false);
-      setToastMessage(`Payment of ₹${amount.toLocaleString()} received! Receipt #${newReceipt.receiptNo} generated.`);
-    }, 900);
-  };
 
   const handleOpenNotification = (notif) => {
     const updated = notifs.map((n) => (n.id === notif.id ? { ...n, read: true } : n));
@@ -177,6 +125,26 @@ export default function ParentDashboard() {
     saveStoredNotifications(updated);
     setSelectedNotifModal(notif);
   };
+
+  if (loading && !child) {
+    return (
+      <DashboardLayout
+        title="Parent Dashboard"
+        subtitle="Loading enrolled children overview..."
+        breadcrumb={["Parent Portal", "Dashboard"]}
+      >
+        <div className="parent-dashboard-wrapper" style={{ padding: "40px 20px", textAlign: "center" }}>
+          <div className="parent-card" style={{ padding: "30px", maxWidth: 500, margin: "0 auto" }}>
+            <Users size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
+            <h3>Loading Enrolled Children...</h3>
+            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
+              Connecting to campus database to retrieve student enrollment and fee records.
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (!child || availableChildren.length === 0) {
     return (
@@ -258,8 +226,8 @@ export default function ParentDashboard() {
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Attendance</div>
-              <div className="parent-stat-value" style={{ color: "var(--cms-green)" }}>{child.attendance.overall}%</div>
-              <div className="parent-stat-subtext">Status: <strong>{child.attendance.status}</strong></div>
+              <div className="parent-stat-value" style={{ color: "var(--cms-green)" }}>{child?.attendance?.overall ?? 0}%</div>
+              <div className="parent-stat-subtext">Status: <strong>{child?.attendance?.status || "—"}</strong></div>
             </div>
           </div>
 
@@ -270,8 +238,8 @@ export default function ParentDashboard() {
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Academic SGPA</div>
-              <div className="parent-stat-value" style={{ color: "var(--cms-primary-dark)" }}>{child.academics.sgpa}</div>
-              <div className="parent-stat-subtext">Grade: <strong>{child.academics.grade}</strong> • {child.academics.rank}</div>
+              <div className="parent-stat-value" style={{ color: "var(--cms-primary-dark)" }}>{child?.academics?.sgpa || "—"}</div>
+              <div className="parent-stat-subtext">Grade: <strong>{child?.academics?.grade || "—"}</strong> • {child?.academics?.rank || "—"}</div>
             </div>
           </div>
 
@@ -280,15 +248,15 @@ export default function ParentDashboard() {
             className="parent-stat-card"
             onClick={() => navigate("/parent-dashboard/fees")}
           >
-            <div className="parent-stat-icon-wrap" style={{ background: childFee.pending > 0 ? "var(--cms-red-soft)" : "var(--cms-green-soft)", color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
+            <div className="parent-stat-icon-wrap" style={{ background: (childFee?.pending || 0) > 0 ? "var(--cms-red-soft)" : "var(--cms-green-soft)", color: (childFee?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
               <Wallet size={22} />
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Pending Fees</div>
-              <div className="parent-stat-value" style={{ color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
-                ₹{childFee.pending.toLocaleString()}
+              <div className="parent-stat-value" style={{ color: (childFee?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
+                ₹{(childFee?.pending || 0).toLocaleString()}
               </div>
-              <div className="parent-stat-subtext">{childFee.pending > 0 ? `Due: ${childFee.dueDate}` : "All Dues Cleared"}</div>
+              <div className="parent-stat-subtext">{(childFee?.pending || 0) > 0 ? `Due: ${childFee?.dueDate || "—"}` : "All Dues Cleared"}</div>
             </div>
           </div>
 
@@ -377,36 +345,44 @@ export default function ParentDashboard() {
                   <div>
                     <div style={{ fontSize: 13, color: "var(--cms-muted)" }}>Overall Attendance Rate</div>
                     <div style={{ fontSize: 24, fontWeight: 800, color: "var(--cms-green)" }}>
-                      {child.attendance.overall}%
+                      {child?.attendance?.overall ?? 0}%
                     </div>
                   </div>
                   <span className="cms-badge cms-badge-active" style={{ fontSize: 12 }}>
-                    {child.attendance.status}
+                    {child?.attendance?.status || "—"}
                   </span>
                 </div>
 
                 <div className="parent-progress-bar-wrap" style={{ height: 10, marginBottom: 16 }}>
                   <div
                     className="parent-progress-bar-fill green"
-                    style={{ width: `${child.attendance.overall}%` }}
+                    style={{ width: `${child?.attendance?.overall ?? 0}%` }}
                   />
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {subjects.slice(0, 4).map((sub) => (
-                    <div key={sub.code} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
-                      <div>
-                        <strong>{sub.subject}</strong>
-                        <span style={{ fontSize: 12, color: "var(--cms-muted)", marginLeft: 6 }}>({sub.present}/{sub.total} classes)</span>
+                  {subjects.length > 0 ? (
+                    subjects.slice(0, 4).map((sub, idx) => (
+                      <div key={sub.subjectId ?? sub.code ?? idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
+                        <div>
+                          <strong>{sub.subject}</strong>
+                          <span style={{ fontSize: 12, color: "var(--cms-muted)", marginLeft: 6 }}>({sub.present}/{sub.total} classes)</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontWeight: 700 }}>{sub.percentage}%</span>
+                          <span className={`cms-badge ${sub.percentage >= 90 ? "cms-badge-active" : "cms-badge-warn"}`} style={{ fontSize: 11 }}>
+                            {sub.status}
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontWeight: 700 }}>{sub.percentage}%</span>
-                        <span className={`cms-badge ${sub.percentage >= 90 ? "cms-badge-active" : "cms-badge-warn"}`} style={{ fontSize: 11 }}>
-                          {sub.status}
-                        </span>
-                      </div>
+                    ))
+                  ) : (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--cms-muted)", padding: "4px 0" }}>
+                      <span>Recorded Working Days: <strong>{child?.attendance?.totalWorkingDays ?? 0}</strong></span>
+                      <span>Present: <strong style={{ color: "var(--cms-green)" }}>{child?.attendance?.presentDays ?? 0}</strong></span>
+                      <span>Absent: <strong style={{ color: "var(--cms-red)" }}>{child?.attendance?.absentDays ?? 0}</strong></span>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
@@ -474,20 +450,9 @@ export default function ParentDashboard() {
                     Payment Status: <strong style={{ color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>{childFee.status}</strong>
                     {childFee.pending > 0 && ` (Due: ${childFee.dueDate})`}
                   </span>
-                  {childFee.pending > 0 ? (
-                    <button
-                      type="button"
-                      className="cms-btn cms-btn-primary cms-btn-sm"
-                      onClick={() => {
-                        setPayAmount(String(childFee.pending));
-                        setPayModalOpen(true);
-                      }}
-                    >
-                      <CreditCard size={13} /> Pay Balance Online
-                    </button>
-                  ) : (
-                    <span className="cms-badge cms-badge-active">No Pending Dues</span>
-                  )}
+                  <span className={`cms-badge ${childFee.pending > 0 ? (childFee.status === "Partial" ? "cms-badge-warn" : "cms-badge-danger") : "cms-badge-active"}`}>
+                    {childFee.pending > 0 ? childFee.status : "No Pending Dues"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -837,58 +802,6 @@ export default function ParentDashboard() {
                 </div>
               </div>
             </div>
-          </Modal>
-        )}
-
-        {/* Pay Fees Modal */}
-        {payModalOpen && (
-          <Modal
-            title="Pay Pending Fee Balance"
-            onClose={() => !payBusy && setPayModalOpen(false)}
-            size="md"
-            footer={
-              <>
-                <button type="button" className="cms-btn cms-btn-outline" onClick={() => setPayModalOpen(false)} disabled={payBusy}>Cancel</button>
-                <button type="button" className="cms-btn cms-btn-primary" onClick={handleExecutePayment} disabled={payBusy}>
-                  {payBusy ? "Processing..." : `Pay ₹${Number(payAmount || 0).toLocaleString()}`}
-                </button>
-              </>
-            }
-          >
-            <form onSubmit={handleExecutePayment} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div style={{ padding: 12, background: "var(--cms-bg)", borderRadius: 8 }}>
-                <div>Student: <strong>{child.name}</strong> ({child.admissionNo})</div>
-                <div>Total Pending: <strong style={{ color: "var(--cms-red)" }}>₹{childFee.pending.toLocaleString()}</strong></div>
-              </div>
-              <div>
-                <label className="cms-label" htmlFor="dash-pay-amount">Amount to Pay (₹)</label>
-                <input
-                  id="dash-pay-amount"
-                  type="number"
-                  className="cms-input"
-                  min={500}
-                  max={childFee.pending}
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <label className="cms-label">Payment Mode</label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  {["UPI", "Net Banking", "Card"].map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className={`cms-btn ${payMethod === m ? "cms-btn-primary" : "cms-btn-outline"}`}
-                      onClick={() => setPayMethod(m)}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </form>
           </Modal>
         )}
 

@@ -18,12 +18,6 @@ namespace CollegeManagement.API.DTOs.Students
         public DateTime? AdmissionDate { get; set; }
 
         [MaxLength(50)]
-        public string? AdmissionType { get; set; }
-
-        [MaxLength(50)]
-        public string? AdmissionQuota { get; set; }
-
-        [MaxLength(50)]
         public string? Medium { get; set; }
 
         [MaxLength(100)]

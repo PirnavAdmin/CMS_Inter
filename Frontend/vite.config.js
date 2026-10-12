@@ -18,6 +18,9 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
+    optimizeDeps: {
+      include: ["@microsoft/signalr"],
+    },
     build: {
       chunkSizeWarningLimit: 1000,
       rolldownOptions: {
@@ -28,13 +31,6 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       allowedHosts: true,
       proxy: {
-        "/hubs/driverNotifications": {
-          target: apiBaseUrl,
-          changeOrigin: true,
-          secure: !isHttpsApi,
-          ws: true,
-          headers: { "ngrok-skip-browser-warning": "true" },
-        },
         "/api": {
           target: apiBaseUrl,
           changeOrigin: true,

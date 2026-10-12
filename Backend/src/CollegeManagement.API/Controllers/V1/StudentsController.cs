@@ -7,10 +7,13 @@ using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Dapper;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
@@ -524,11 +527,37 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
 
+        [HttpGet("my-children")]
+        [Authorize(Roles = "Parent")]
+        public async Task<IActionResult> GetMyChildren()
+        {
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(userIdStr, out int parentUserId)) return Unauthorized();
+
+            var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
+            var connection = dbContext.Database.GetDbConnection();
+            
+            if (connection.State != System.Data.ConnectionState.Open)
+            {
+                await connection.OpenAsync();
+            }
+            
+            // Using strongly typed DTO and CALL syntax to prevent MySqlConnector SP parameter issues and JSON serialization errors
+            var children = await connection.QueryAsync<CollegeManagement.API.DTOs.Students.Responses.ParentChildDto>(
+                "CALL sp_GetParentChildren(@ParentUserId);",
+                new { ParentUserId = parentUserId },
+                commandType: System.Data.CommandType.Text);
+
+            return Ok(new { success = true, data = children });
+        }
+
         // =========================================================
         // STUDENT DASHBOARD
         // =========================================================
 
         [HttpGet("{studentId:int}/dashboard")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [CollegeManagement.API.Filters.ParentStudentAuthorization]
         public async Task<IActionResult> GetDashboard(int studentId)
         {
             var dashboard = await _service.GetDashboardAsync(studentId);

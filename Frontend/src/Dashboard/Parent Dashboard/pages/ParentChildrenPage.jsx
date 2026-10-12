@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Users, GraduationCap, Calendar, CheckCircle2, ChevronRight, Phone, Mail, Award, BookOpen, Clock, ArrowLeft, Eye } from "lucide-react";
+import { Users, GraduationCap, Calendar, CheckCircle2, ChevronRight, Award, BookOpen, Clock, ArrowLeft, Eye } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useParentPortal, getChildForYear } from "../parentData.js";
 import { Modal } from "@/components/common/Ui.jsx";
@@ -13,16 +13,38 @@ export default function ParentChildrenPage() {
     availableChildren,
     activeChildId,
     setActiveChildId,
+    child,
     currentAcademicYear,
+    loading,
   } = useParentPortal();
   const [selectedChildModal, setSelectedChildModal] = useState(null);
 
   const activeBase = availableChildren.find((c) => c.id === (id || activeChildId)) || availableChildren[0];
-  const activeChild = activeBase ? getChildForYear(activeBase, currentAcademicYear) : null;
+  const activeChild = activeBase ? (activeBase.id === child?.id ? child : getChildForYear(activeBase, currentAcademicYear)) : null;
 
   const handleSelectChild = (childId) => {
     setActiveChildId(childId);
   };
+
+  if (loading && availableChildren.length === 0) {
+    return (
+      <DashboardLayout
+        title="My Children"
+        subtitle="Loading enrolled children profile and academic performance..."
+        breadcrumb={["Parent Portal", "My Children"]}
+      >
+        <div className="parent-dashboard-wrapper">
+          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
+            <Users size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
+            <h3>Loading Enrolled Children...</h3>
+            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
+              Connecting to student database to retrieve children profile details.
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (availableChildren.length === 0 || !activeChild) {
     return (
@@ -92,8 +114,8 @@ export default function ParentChildrenPage() {
                     <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Roll No: {child.roll} | Adm: {child.admissionNo}</span>
                   </div>
                 </div>
-                <span className={`cms-badge ${child.fees.status === "Paid" ? "cms-badge-active" : "cms-badge-warn"}`}>
-                  Fee: {child.fees.status}
+                <span className={`cms-badge ${(child?.fees?.status || "") === "Paid" ? "cms-badge-active" : "cms-badge-warn"}`}>
+                  Fee: {child?.fees?.status || "—"}
                 </span>
               </div>
               <div className="parent-card-body">
@@ -108,29 +130,19 @@ export default function ParentChildrenPage() {
                   </div>
                   <div className="parent-meta-item">
                     <span className="parent-meta-label">Overall Attendance</span>
-                    <span className="parent-meta-val" style={{ color: "var(--cms-green)" }}>{child.attendance.overall}% ({child.attendance.status})</span>
+                    <span className="parent-meta-val" style={{ color: "var(--cms-green)" }}>{child?.attendance?.overall ?? 0}% ({child?.attendance?.status || "—"})</span>
                   </div>
                   <div className="parent-meta-item">
                     <span className="parent-meta-label">Current SGPA</span>
-                    <span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)" }}>{child.academics.sgpa} / 10.0</span>
+                    <span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)" }}>{child?.academics?.sgpa || "—"} / 10.0</span>
                   </div>
                 </div>
 
                 <div style={{ padding: "12px 14px", background: "var(--cms-bg)", borderRadius: 10, marginBottom: 16 }}>
                   <div style={{ fontSize: 12, color: "var(--cms-muted)", marginBottom: 4, fontWeight: 600 }}>CLASS TEACHER / MENTOR</div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div>
-                      <strong style={{ fontSize: 13.5 }}>{child.mentor}</strong>
-                      <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{child.mentorDesignation}</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <a href={`tel:${child.mentorMobile}`} className="cms-btn cms-btn-sm cms-btn-outline" title="Call Mentor">
-                        <Phone size={13} />
-                      </a>
-                      <a href={`mailto:${child.mentorEmail}`} className="cms-btn cms-btn-sm cms-btn-outline" title="Email Mentor">
-                        <Mail size={13} />
-                      </a>
-                    </div>
+                  <div>
+                    <strong style={{ fontSize: 13.5 }}>{child.mentor}</strong>
+                    <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{child.mentorDesignation}</div>
                   </div>
                 </div>
 
@@ -198,9 +210,9 @@ export default function ParentChildrenPage() {
                 <div className="parent-meta-item"><span className="parent-meta-label">Blood Group</span><span className="parent-meta-val">{selectedChildModal.bloodGroup}</span></div>
                 <div className="parent-meta-item"><span className="parent-meta-label">Board</span><span className="parent-meta-val">{selectedChildModal.board}</span></div>
                 <div className="parent-meta-item"><span className="parent-meta-label">Academic Year</span><span className="parent-meta-val">{selectedChildModal.academicYear}</span></div>
-                <div className="parent-meta-item"><span className="parent-meta-label">Attendance</span><span className="parent-meta-val" style={{ color: "var(--cms-green)" }}>{selectedChildModal.attendance.overall}% ({selectedChildModal.attendance.presentDays}/{selectedChildModal.attendance.totalWorkingDays} days)</span></div>
-                <div className="parent-meta-item"><span className="parent-meta-label">Academic Standing</span><span className="parent-meta-val">SGPA {selectedChildModal.academics.sgpa} ({selectedChildModal.academics.grade})</span></div>
-                <div className="parent-meta-item"><span className="parent-meta-label">Fee Status</span><span className="parent-meta-val" style={{ color: selectedChildModal.fees.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>{selectedChildModal.fees.status} (Pending: ₹{selectedChildModal.fees.pending.toLocaleString()})</span></div>
+                <div className="parent-meta-item"><span className="parent-meta-label">Attendance</span><span className="parent-meta-val" style={{ color: "var(--cms-green)" }}>{selectedChildModal?.attendance?.overall ?? 0}% ({selectedChildModal?.attendance?.presentDays ?? 0}/{selectedChildModal?.attendance?.totalWorkingDays ?? 0} days)</span></div>
+                <div className="parent-meta-item"><span className="parent-meta-label">Academic Standing</span><span className="parent-meta-val">SGPA {selectedChildModal?.academics?.sgpa || "—"} ({selectedChildModal?.academics?.grade || "—"})</span></div>
+                <div className="parent-meta-item"><span className="parent-meta-label">Fee Status</span><span className="parent-meta-val" style={{ color: (selectedChildModal?.fees?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>{selectedChildModal?.fees?.status || "—"} (Pending: ₹{(selectedChildModal?.fees?.pending || 0).toLocaleString()})</span></div>
               </div>
             </div>
           </Modal>
@@ -212,9 +224,9 @@ export default function ParentChildrenPage() {
 
 export function ParentChildDetailsRoute() {
   const { id } = useParams();
-  const { availableChildren, activeChildId, currentAcademicYear, setActiveChildId } = useParentPortal();
+  const { availableChildren, activeChildId, currentAcademicYear, setActiveChildId, child: contextChild } = useParentPortal();
   const baseChild = availableChildren.find((c) => c.id === id) || availableChildren[0];
-  const child = baseChild ? getChildForYear(baseChild, currentAcademicYear) : null;
+  const child = (baseChild && baseChild.id === contextChild?.id) ? contextChild : (baseChild ? getChildForYear(baseChild, currentAcademicYear) : null);
 
   useEffect(() => {
     if (child?.id && activeChildId !== child.id) {
@@ -278,12 +290,12 @@ export function ParentChildDetailsRoute() {
 
             <h3 style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--cms-muted)", marginBottom: 14 }}>Academic & Attendance Status</h3>
             <div className="parent-profile-meta-grid" style={{ marginBottom: 24 }}>
-              <div className="parent-meta-item"><span className="parent-meta-label">Overall Attendance</span><span className="parent-meta-val" style={{ color: "var(--cms-green)", fontWeight: 700 }}>{child.attendance?.overall}% ({child.attendance?.status})</span></div>
-              <div className="parent-meta-item"><span className="parent-meta-label">Days Present</span><span className="parent-meta-val">{child.attendance?.presentDays} / {child.attendance?.totalWorkingDays} days</span></div>
-              <div className="parent-meta-item"><span className="parent-meta-label">Current SGPA</span><span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)", fontWeight: 700 }}>{child.academics?.sgpa} ({child.academics?.grade || "A+"})</span></div>
-              <div className="parent-meta-item"><span className="parent-meta-label">Class Rank</span><span className="parent-meta-val">{child.academics?.rank}</span></div>
-              <div className="parent-meta-item"><span className="parent-meta-label">Fee Account</span><span className="parent-meta-val" style={{ color: (child.fees?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)", fontWeight: 600 }}>{child.fees?.status} (₹{child.fees?.paid?.toLocaleString()} paid)</span></div>
-              <div className="parent-meta-item"><span className="parent-meta-label">Pending Fee Balance</span><span className="parent-meta-val" style={{ color: (child.fees?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)", fontWeight: 700 }}>₹{child.fees?.pending?.toLocaleString()}</span></div>
+              <div className="parent-meta-item"><span className="parent-meta-label">Overall Attendance</span><span className="parent-meta-val" style={{ color: "var(--cms-green)", fontWeight: 700 }}>{child?.attendance?.overall ?? 0}% ({child?.attendance?.status || "—"})</span></div>
+              <div className="parent-meta-item"><span className="parent-meta-label">Days Present</span><span className="parent-meta-val">{child?.attendance?.presentDays ?? 0} / {child?.attendance?.totalWorkingDays ?? 0} days</span></div>
+              <div className="parent-meta-item"><span className="parent-meta-label">Current SGPA</span><span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)", fontWeight: 700 }}>{child?.academics?.sgpa || "—"} ({child?.academics?.grade || "A+"})</span></div>
+              <div className="parent-meta-item"><span className="parent-meta-label">Class Rank</span><span className="parent-meta-val">{child?.academics?.rank || "—"}</span></div>
+              <div className="parent-meta-item"><span className="parent-meta-label">Fee Account</span><span className="parent-meta-val" style={{ color: (child?.fees?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)", fontWeight: 600 }}>{child?.fees?.status || "—"} (₹{(child?.fees?.paid || 0).toLocaleString()} paid)</span></div>
+              <div className="parent-meta-item"><span className="parent-meta-label">Pending Fee Balance</span><span className="parent-meta-val" style={{ color: (child?.fees?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)", fontWeight: 700 }}>₹{(child?.fees?.pending || 0).toLocaleString()}</span></div>
             </div>
 
             <h3 style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--cms-muted)", marginBottom: 14 }}>Personal Information</h3>
@@ -296,16 +308,10 @@ export function ParentChildDetailsRoute() {
             </div>
 
             <h3 style={{ fontSize: 14, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--cms-muted)", marginBottom: 14 }}>Assigned Mentor & Class In-Charge</h3>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 16, background: "var(--cms-bg)", borderRadius: 12 }}>
-              <div>
-                <strong style={{ fontSize: 15, display: "block" }}>{child.mentor}</strong>
-                <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>{child.mentorDesignation}</span>
-                <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 4 }}>Phone: {child.mentorMobile} | Email: {child.mentorEmail}</div>
-              </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <a href={`tel:${child.mentorMobile}`} className="cms-btn cms-btn-outline"><Phone size={14} /> Call Mentor</a>
-                <Link to="/parent-dashboard/communication" className="cms-btn cms-btn-primary" style={{ textDecoration: "none" }}><Mail size={14} /> Send Message</Link>
-              </div>
+            <div style={{ padding: 16, background: "var(--cms-bg)", borderRadius: 12 }}>
+              <strong style={{ fontSize: 15, display: "block" }}>{child.mentor}</strong>
+              <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>{child.mentorDesignation}</span>
+              <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 4 }}>Phone: {child.mentorMobile} | Email: {child.mentorEmail}</div>
             </div>
           </div>
         </div>
