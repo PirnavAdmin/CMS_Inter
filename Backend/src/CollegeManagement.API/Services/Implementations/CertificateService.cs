@@ -124,9 +124,38 @@ public class CertificateService : ICertificateService
             throw new ArgumentException("Purpose is required.");
 
         var student = await _context.Students
-            .FirstOrDefaultAsync(s => s.AdmissionNo == request.AdmissionNo, ct);
+            .FirstOrDefaultAsync(s => s.AdmissionNo == request.AdmissionNo.Trim(), ct);
 
-        if (student != null && string.IsNullOrWhiteSpace(request.CertificateNo))
+        if (student == null)
+        {
+            var admission = await _context.StudentAdmissions
+                .FirstOrDefaultAsync(sa => sa.AdmissionNo == request.AdmissionNo.Trim(), ct);
+
+            if (admission != null)
+            {
+                throw new InvalidOperationException(
+                    $"Student with Admission Number '{request.AdmissionNo}' is registered under admission status '{admission.Status}' and has not completed formal enrollment into Students table. Please complete student enrollment before generating certificates.");
+            }
+
+            throw new ArgumentException($"Student with Admission Number '{request.AdmissionNo}' was not found.");
+        }
+
+        if (!student.IsActive)
+        {
+            throw new InvalidOperationException($"Student '{student.StudentName}' (Admission No: {student.AdmissionNo}) is marked as inactive and is ineligible for certificate generation.");
+        }
+
+        if (!student.SectionId.HasValue || student.SectionId <= 0)
+        {
+            throw new InvalidOperationException($"Student '{student.StudentName}' (Admission No: {student.AdmissionNo}) does not have a section allocated. Section allocation is required before certificate generation.");
+        }
+
+        if (string.IsNullOrWhiteSpace(student.RollNo))
+        {
+            throw new InvalidOperationException($"Student '{student.StudentName}' (Admission No: {student.AdmissionNo}) does not have a roll number generated. Roll number is required before certificate generation.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CertificateNo))
         {
             var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
             { 
@@ -134,14 +163,14 @@ public class CertificateService : ICertificateService
                 AcademicYear = student.AcademicYearId?.ToString()
             };
             
-            var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("CERTIFICATE_NUMBER", reqDto, student.CampusId ?? 1);
+            var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("CERTIFICATE_NO", reqDto, student.CampusId ?? 1);
             if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
             {
                 request.CertificateNo = generatedDto.GeneratedNumber;
             }
-            else
+            if (string.IsNullOrWhiteSpace(request.CertificateNo))
             {
-                request.CertificateNo = $"CERT-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 5).ToUpper()}";
+                request.CertificateNo = $"CERT-{DateTime.UtcNow:yyyy}-{Guid.NewGuid().ToString().Substring(0, 5).ToUpper()}";
             }
         }
 

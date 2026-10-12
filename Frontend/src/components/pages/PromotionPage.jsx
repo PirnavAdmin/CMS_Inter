@@ -74,6 +74,7 @@ const numericId = (value) => {
 const compactParams = (values) => Object.fromEntries(Object.entries(values).filter(([, value]) => isPresent(value) && !Number.isNaN(value)));
 const unique = (values) => [...new Set(values.filter(Boolean).map(String))];
 const option = (value, label) => ({ value: asString(value), label: asString(label ?? value) });
+const uniqueOptions = (options) => [...new Map((options || []).map((entry) => [asString(entry.value), entry])).values()];
 const isSecondYearLevel = (value) => /\b(?:2nd|second)\s+year\b/i.test(asString(value));
 const academicYearRange = (year) => {
   const match = asString(year).match(/\b(\d{4})\s*[-/]\s*(\d{4})\b/);
@@ -2026,55 +2027,130 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
     }
   }, [defaultNextYearId, target.year]);
 
-  const change = (name, value) => {
-    setTarget((current) => ({
-      ...current,
-      ...(["year", "level"].includes(name) ? { group: "", program: "", section: "" } : {}),
-      ...(name === "group" ? { program: "", section: "" } : {}),
-      ...(name === "program" ? { section: "" } : {}),
-      [name]: value,
-    }));
-  };
-
   const board = masters.boards.find((entry) => entry.value === asString(selectedBoardId));
   const targetLevels = masters.levels.filter((level) => level.board === asString(selectedBoardId)
     || board?.academicLevelIds?.includes(asString(level.value))
     || board?.academicLevelNames?.some((name) => name.toLowerCase() === level.label.toLowerCase()));
   const targetLevelLabel = targetLevels.find((level) => level.value === asString(target.level))?.label;
+
+  // Fallback groups from masters.groups for the current board
+  const fallbackGroups = useMemo(() => {
+    return (masters?.groups || []).filter((g) => !g.board || g.board === asString(selectedBoardId));
+  }, [masters?.groups, selectedBoardId]);
+
+  // Load groups for the board (groups represent academic streams under a Board, decoupled from level/year)
+  useEffect(() => {
+    let active = true;
+    if (!selectedBoardId) {
+      setTargetGroups([]);
+      return;
+    }
+    if (fallbackGroups.length > 0) {
+      setTargetGroups(fallbackGroups);
+    }
+    setGroupsLoading(true);
+    apiClient.get(apiEndpoints.groups.list, { params: {
+      BoardId: numericId(selectedBoardId),
+    } }).then(({ data }) => {
+      if (!active) return;
+      const loaded = unwrap(data).map((item) => ({
+        ...option(read(item, "groupId", "GroupId", "id", "Id"), read(item, "groupName", "GroupName", "name", "Name")),
+        board: asString(read(item, "boardId", "BoardId")),
+        programs: unwrap(item, ["programs", "Programs"]).map((program) => option(read(program, "programId", "ProgramId", "id", "Id"), read(program, "programName", "ProgramName", "name", "Name"))).filter((program) => numericId(program.value)),
+      })).filter((item) => numericId(item.value));
+      if (loaded.length > 0) {
+        setTargetGroups(loaded);
+      }
+    }).catch((err) => {
+      if (active && fallbackGroups.length === 0) setError(getApiErrorMessage(err));
+    }).finally(() => {
+      if (active) setGroupsLoading(false);
+    });
+    return () => { active = false; };
+  }, [selectedBoardId, fallbackGroups]);
+
+  const availableGroups = targetGroups.length ? targetGroups : fallbackGroups;
+  const targetGroup = availableGroups.find((group) => asString(group.value) === asString(target.group));
+  const targetPrograms = targetGroup?.programs || [];
+
+  // Auto-default Target Destination (Level, Group, Program) based on selected student
+  useEffect(() => {
+    if (!currentStudent) return;
+    setTarget((prev) => {
+      const updated = { ...prev };
+      let changed = false;
+
+      // 1. Target Academic Year
+      if (!updated.year && defaultNextYearId) {
+        updated.year = defaultNextYearId;
+        changed = true;
+      }
+
+      // 2. Target Academic Level (promote to 2nd year if currently in 1st year)
+      if (!updated.level && targetLevels.length > 0) {
+        const nextLevel = targetLevels.find((l) => isSecondYearLevel(l.label))
+          || (targetLevels.length === 1 ? targetLevels[0] : null);
+        if (nextLevel) {
+          updated.level = nextLevel.value;
+          changed = true;
+        }
+      }
+
+      // 3. Target Group (match student's current stream)
+      if (!updated.group && availableGroups.length > 0) {
+        const matchedGroup = availableGroups.find((g) =>
+          asString(g.value) === asString(currentStudent.groupId)
+          || g.label.trim().toLowerCase() === asString(currentStudent.group).trim().toLowerCase()
+        ) || availableGroups[0];
+        if (matchedGroup) {
+          updated.group = matchedGroup.value;
+          changed = true;
+
+          // 4. Target Program (match student's current program)
+          if (!updated.program && matchedGroup.programs?.length > 0) {
+            const matchedProg = matchedGroup.programs.find((p) =>
+              asString(p.value) === asString(currentStudent.programId)
+              || p.label.trim().toLowerCase() === asString(currentStudent.program).trim().toLowerCase()
+            ) || matchedGroup.programs[0];
+            if (matchedProg) {
+              updated.program = matchedProg.value;
+            }
+          }
+        }
+      }
+
+      return changed ? updated : prev;
+    });
+  }, [currentStudent, targetLevels, availableGroups, defaultNextYearId]);
+
+  const change = (name, value) => {
+    setTarget((current) => {
+      const next = { ...current, [name]: value };
+      if (name === "year" || name === "level") {
+        next.section = "";
+      } else if (name === "group") {
+        const grp = availableGroups.find((g) => asString(g.value) === asString(value));
+        const matchedProg = grp?.programs?.find((p) =>
+          asString(p.value) === asString(currentStudent?.programId)
+          || p.label.trim().toLowerCase() === asString(currentStudent?.program).trim().toLowerCase()
+        ) || grp?.programs?.[0];
+        next.program = matchedProg?.value || "";
+        next.section = "";
+      } else if (name === "program") {
+        next.section = "";
+      }
+      return next;
+    });
+  };
+
   const singleFeePreview = useFeePreview(getPromotionFeePreview, {
     campusId: numericId(campusId), targetBoardId: numericId(selectedBoardId),
     targetAcademicYearId: numericId(target.year), targetAcademicLevelId: numericId(target.level),
     targetAcademicLevel: targetLevelLabel, targetGroupId: numericId(target.group), targetProgramId: numericId(target.program),
     studentIds: currentStudent ? [numericId(currentStudent.id)] : [],
   }, Boolean(currentStudent && campusId && selectedBoardId && target.year && target.level && target.group));
-  const targetGroup = targetGroups.find((group) => group.value === asString(target.group));
-  const targetPrograms = targetGroup?.programs || [];
-  useEffect(() => {
-    let active = true;
-    setTargetGroups([]);
-    setGroupsLoading(false);
-    if (!campusId || !selectedBoardId || !target.year || !target.level || !targetLevelLabel) return;
-    setGroupsLoading(true);
-    apiClient.get(apiEndpoints.groups.list, { params: {
-      CampusId: numericId(campusId), BoardId: numericId(selectedBoardId),
-      AcademicYearId: numericId(target.year), AcademicLevelId: numericId(target.level),
-    } }).then(({ data }) => {
-      if (!active) return;
-      const matches = (item, keys, expected) => !isPresent(read(item, ...keys)) || asString(read(item, ...keys)) === asString(expected);
-      setTargetGroups(unwrap(data).filter((item) =>
-        matches(item, ["campusId", "CampusId"], campusId)
-        && matches(item, ["boardId", "BoardId"], selectedBoardId)
-        && matches(item, ["academicYearId", "AcademicYearId"], target.year)
-        && matches(item, ["academicLevelId", "AcademicLevelId"], target.level)
-        && matches(item, ["academicLevel", "AcademicLevel", "academicLevelName", "AcademicLevelName"], targetLevelLabel)
-      ).map((item) => ({
-        ...option(read(item, "groupId", "GroupId", "id", "Id"), read(item, "groupName", "GroupName", "name", "Name")),
-        programs: unwrap(item, ["programs", "Programs"]).map((program) => option(read(program, "programId", "ProgramId", "id", "Id"), read(program, "programName", "ProgramName", "name", "Name"))),
-      })).filter((item) => numericId(item.value)));
-    }).catch((err) => { if (active) setError(getApiErrorMessage(err)); })
-      .finally(() => { if (active) setGroupsLoading(false); });
-    return () => { active = false; };
-  }, [campusId, selectedBoardId, target.year, target.level, targetLevelLabel]);
+
+  // Load sections matching target configuration
   useEffect(() => {
     let active = true;
     setTargetSections([]);
@@ -2088,20 +2164,58 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
       if (!active) return;
       const filters = [["campusId", campusId], ["boardId", selectedBoardId], ["academicYearId", target.year],
         ["academicLevelId", target.level], ["groupId", target.group], ["programId", target.program]];
-      setTargetSections(unwrap(data).filter((item) => filters.every(([key, value]) => {
+      const list = unwrap(data).filter((item) => filters.every(([key, value]) => {
         const actual = read(item, key, key[0].toUpperCase() + key.slice(1));
         return !isPresent(actual) || asString(actual) === asString(value);
-      })).map((item) => option(read(item, "sectionName", "SectionName", "name", "Name"))).filter((item) => item.value));
-    }).catch((err) => { if (active) setError(getApiErrorMessage(err)); })
-      .finally(() => { if (active) setSectionsLoading(false); });
+      })).map((item) => option(read(item, "sectionName", "SectionName", "name", "Name"))).filter((item) => item.value);
+
+      const uniqueList = uniqueOptions(list);
+      if (uniqueList.length > 0) {
+        setTargetSections(uniqueList);
+      } else {
+        const fallback = (masters?.sections || []).filter((s) =>
+          (!s.campus || s.campus === asString(campusId))
+          && (!s.board || s.board === asString(selectedBoardId))
+          && (!s.year || s.year === asString(target.year))
+          && (!s.level || s.level === asString(target.level))
+          && (!s.group || s.group === asString(target.group))
+          && (!s.program || s.program === asString(target.program))
+        ).map((s) => option(s.label || s.value));
+        setTargetSections(uniqueOptions(fallback));
+      }
+    }).catch((err) => {
+      if (!active) return;
+      const fallback = (masters?.sections || []).filter((s) =>
+        (!s.campus || s.campus === asString(campusId))
+        && (!s.board || s.board === asString(selectedBoardId))
+        && (!s.year || s.year === asString(target.year))
+        && (!s.level || s.level === asString(target.level))
+        && (!s.group || s.group === asString(target.group))
+        && (!s.program || s.program === asString(target.program))
+      ).map((s) => option(s.label || s.value));
+      setTargetSections(uniqueOptions(fallback));
+    }).finally(() => { if (active) setSectionsLoading(false); });
     return () => { active = false; };
-  }, [campusId, selectedBoardId, target.year, target.level, target.group, target.program]);
+  }, [campusId, selectedBoardId, target.year, target.level, target.group, target.program, masters?.sections]);
+
+  // Auto-select section if matches current student's section or if single option available
+  useEffect(() => {
+    if (targetSections.length > 0 && !target.section) {
+      const match = targetSections.find((s) => s.value.toLowerCase() === asString(currentStudent?.section).toLowerCase());
+      if (match) {
+        setTarget((t) => ({ ...t, section: match.value }));
+      } else if (targetSections.length === 1) {
+        setTarget((t) => ({ ...t, section: targetSections[0].value }));
+      }
+    }
+  }, [targetSections, target.section, currentStudent?.section]);
+
   const targetYearLabel = masters.years.find((year) => year.value === asString(target.year))?.label;
 
   const fields = [
     { name: "year", label: "Target Academic Year", type: "select", options: uniqueAcademicYearsByName(masters.years, (year) => year.label), required: true },
     { name: "level", label: "Target Academic Level", type: "select", options: targetLevels, required: true, disabled: !selectedBoardId || !target.year },
-    { name: "group", label: "Target Group", type: "select", options: targetGroups, required: true, disabled: !target.level || groupsLoading },
+    { name: "group", label: "Target Group", type: "select", options: availableGroups, required: true, disabled: !target.level || groupsLoading },
     { name: "program", label: "Target Program", type: "select", options: targetPrograms, required: true, disabled: !target.group || groupsLoading },
     { name: "section", label: "Target Section", type: "select", options: targetSections, required: true, disabled: !target.program || sectionsLoading },
     { name: "medium", label: "Target Medium", type: "select", options: [option("English")], required: true },
@@ -2109,6 +2223,7 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
 
   const handleSearchSelect = (student) => {
     setCurrentStudent(student);
+    setTarget((t) => ({ ...t, level: "", group: "", program: "", section: "" }));
     setSearchTerm("");
     setError("");
   };
@@ -2173,6 +2288,7 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
               onChange={(e) => {
                 const selected = allStudents.find((s) => String(s.id) === String(e.target.value));
                 setCurrentStudent(selected || null);
+                setTarget((t) => ({ ...t, level: "", group: "", program: "", section: "" }));
                 setError("");
               }}
               style={{

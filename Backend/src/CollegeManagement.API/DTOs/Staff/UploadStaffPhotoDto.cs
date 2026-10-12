@@ -14,7 +14,19 @@ namespace CollegeManagement.API.DTOs.Staff
             set => StaffId = value;
         }
 
-        [Required(ErrorMessage = "Photo file is required.")]
-        public IFormFile Photo { get; set; } = null!;
+        private IFormFile? _photo;
+        private IFormFile? _file;
+
+        public IFormFile Photo
+        {
+            get => _photo ?? _file!;
+            set => _photo = value;
+        }
+
+        public IFormFile? File
+        {
+            get => _file ?? _photo;
+            set => _file = value;
+        }
     }
 }

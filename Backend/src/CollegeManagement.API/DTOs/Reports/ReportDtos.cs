@@ -354,11 +354,22 @@ public class AuditLogDto
     public DateTime CreatedAt { get; set; }
 }
 
+public class ActiveAdminInfoDto
+{
+    public string UserName { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public int ActionCount { get; set; }
+    public DateTime LastActive { get; set; }
+    public string? LastIp { get; set; }
+    public string? LastAction { get; set; }
+}
+
 public class AuditLogStatsDto
 {
     public int EventsToday { get; set; }
     public int SecurityAlerts { get; set; }
     public int ActiveAdministrators { get; set; }
+    public List<ActiveAdminInfoDto> Administrators { get; set; } = new();
 }
 
 public class AuditLogPagedResultDto

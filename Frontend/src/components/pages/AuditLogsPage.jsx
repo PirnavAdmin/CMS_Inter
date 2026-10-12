@@ -20,6 +20,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   UserCheck,
+  Users,
   X
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -101,6 +102,9 @@ export default function AuditLogsPage() {
   const [query, setQuery] = useState("");
   const [module, setModule] = useState("All modules");
   const [severity, setSeverity] = useState("All severity");
+  const [role, setRole] = useState("All roles");
+  const [activeCard, setActiveCard] = useState(null);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [selected, setSelected] = useState(null);
   const [copied, setCopied] = useState(false);
 
@@ -139,6 +143,7 @@ export default function AuditLogsPage() {
           query: query || undefined,
           module: module !== "All modules" ? module : undefined,
           severity: severity !== "All severity" ? severity : undefined,
+          role: role !== "All roles" ? role : undefined,
           fromDate: fDate,
           toDate: tDate,
           pageNumber: page,
@@ -163,7 +168,47 @@ export default function AuditLogsPage() {
     
     const timeoutId = setTimeout(fetchLogs, 300);
     return () => clearTimeout(timeoutId);
-  }, [query, module, severity, date, isRange, fromDate, toDate, page, pageSize]);
+  }, [query, module, severity, role, date, isRange, fromDate, toDate, page, pageSize]);
+
+  const handleCardClick = (cardType) => {
+    if (cardType === "today") {
+      if (activeCard === "today" && date === getTodayDate() && !isRange) {
+        setActiveCard(null);
+        setDate("");
+      } else {
+        setActiveCard("today");
+        setIsRange(false);
+        setDate(getTodayDate());
+        setFromDate("");
+        setToDate("");
+        setSeverity("All severity");
+        setModule("All modules");
+        setRole("All roles");
+        setQuery("");
+      }
+      setPage(1);
+    } else if (cardType === "security") {
+      if (activeCard === "security") {
+        setActiveCard(null);
+        setSeverity("All severity");
+      } else {
+        setActiveCard("security");
+        setSeverity("Security alerts");
+        setRole("All roles");
+      }
+      setPage(1);
+    } else if (cardType === "admin") {
+      if (activeCard === "admin") {
+        setActiveCard(null);
+        setRole("All roles");
+      } else {
+        setActiveCard("admin");
+        setRole("Administrator");
+        setSeverity("All severity");
+      }
+      setPage(1);
+    }
+  };
 
   const exportCsv = () => {
     const rows = [["Log ID", "Timestamp", "Actor", "Role", "Action", "Module", "Target", "Severity", "Status", "IP Address"]]
@@ -191,12 +236,39 @@ export default function AuditLogsPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const stats = [
-    { label: "Events today", value: statsData?.eventsToday || 0, icon: ShieldCheck, tone: "green" },
-    { label: "Security alerts", value: statsData?.securityAlerts || 0, icon: ShieldAlert, tone: "amber" },
-    { label: "Active administrators", value: statsData?.activeAdministrators || 0, icon: UserCheck, tone: "blue" },
+    {
+      type: "today",
+      label: "Events today",
+      value: statsData?.eventsToday || 0,
+      icon: ShieldCheck,
+      tone: "green",
+      hint: "Filter today's events"
+    },
+    {
+      type: "security",
+      label: "Security alerts",
+      value: statsData?.securityAlerts || 0,
+      icon: ShieldAlert,
+      tone: "amber",
+      hint: "Filter security alerts"
+    },
+    {
+      type: "admin",
+      label: "Active administrators",
+      value: statsData?.activeAdministrators || 0,
+      icon: UserCheck,
+      tone: "blue",
+      hint: "Filter administrator logs"
+    },
   ];
 
-  const dateDescription = isRange && fromDate && toDate
+  const dateDescription = activeCard === "today"
+    ? `Live audit data for Today (${formatDisplayDate(getTodayDate())}) · filtered from top card.`
+    : activeCard === "security"
+    ? "Filtered to show security alerts (warnings and critical security events)."
+    : activeCard === "admin"
+    ? "Filtered to show events performed by active administrators."
+    : isRange && fromDate && toDate
     ? `Live audit data from ${formatDisplayDate(fromDate)} to ${formatDisplayDate(toDate)}.`
     : date
     ? `Live audit data for ${date === getTodayDate() ? "Today (" + formatDisplayDate(date) + ")" : formatDisplayDate(date)}.`
@@ -214,17 +286,95 @@ export default function AuditLogsPage() {
           </button>
         </div>
 
-        <section className="audit-stat-grid">
-          {stats.map(({ label, value, icon: Icon, tone }) => (
-            <article className={"audit-stat audit-stat-" + tone} key={label}>
-              <Icon size={18} />
-              <div>
-                <span>{label}</span>
-                <strong>{value}</strong>
+        <section className="audit-stat-grid" aria-label="Audit summary metrics">
+          {stats.map(({ type, label, value, icon: Icon, tone, hint }) => {
+            const isActive = activeCard === type;
+            return (
+              <div
+                key={type}
+                className={`audit-stat audit-stat-${tone} ${isActive ? "is-active" : ""}`}
+                onClick={() => handleCardClick(type)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleCardClick(type);
+                  }
+                }}
+                title={isActive ? "Click to clear active filter" : hint}
+              >
+                <div className="audit-stat-icon-wrap">
+                  <Icon size={20} />
+                </div>
+                <div className="audit-stat-content">
+                  <div className="audit-stat-header">
+                    <span>{label}</span>
+                    {isActive ? (
+                      <span className="audit-stat-active-badge">Active</span>
+                    ) : (
+                      <span className="audit-stat-click-hint">Filter</span>
+                    )}
+                  </div>
+                  <strong>{value}</strong>
+                  <span className="audit-stat-footer-text">
+                    {isActive ? "Click to reset" : hint}
+                  </span>
+                </div>
+                {type === "admin" && (
+                  <button
+                    type="button"
+                    className="audit-stat-sub-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowAdminModal(true);
+                    }}
+                    title="View active administrators list"
+                  >
+                    View details
+                  </button>
+                )}
               </div>
-            </article>
-          ))}
+            );
+          })}
         </section>
+
+        {activeCard && (
+          <div className={`audit-active-filter-bar audit-active-filter-${activeCard}`}>
+            <div className="audit-active-filter-info">
+              <span className="audit-active-filter-label">Filtered by:</span>
+              <strong>
+                {activeCard === "today" && `Events Today (${statsData?.eventsToday || 0})`}
+                {activeCard === "security" && `Security Alerts (${statsData?.securityAlerts || 0})`}
+                {activeCard === "admin" && `Active Administrators (${statsData?.activeAdministrators || 0})`}
+              </strong>
+              <span>— showing matching records below</span>
+            </div>
+            <div className="audit-active-filter-actions">
+              {activeCard === "admin" && (
+                <button
+                  type="button"
+                  className="audit-filter-action-btn"
+                  onClick={() => setShowAdminModal(true)}
+                >
+                  <Users size={13} /> View Active Admins
+                </button>
+              )}
+              <button
+                type="button"
+                className="audit-clear-filter-btn"
+                onClick={() => {
+                  if (activeCard === "security") setSeverity("All severity");
+                  if (activeCard === "admin") setRole("All roles");
+                  setActiveCard(null);
+                  setPage(1);
+                }}
+              >
+                <X size={13} /> Clear filter
+              </button>
+            </div>
+          </div>
+        )}
 
         <section className="audit-log-panel">
           <div className="audit-panel-head">
@@ -408,12 +558,40 @@ export default function AuditLogsPage() {
             <label className="audit-select-filter">
               <select
                 value={severity}
-                onChange={(event) => { setSeverity(event.target.value); setPage(1); }}
+                onChange={(event) => {
+                  setSeverity(event.target.value);
+                  if (activeCard === "security" && event.target.value !== "Security alerts") {
+                    setActiveCard(null);
+                  }
+                  setPage(1);
+                }}
               >
                 <option>All severity</option>
+                <option>Security alerts</option>
                 <option>Info</option>
                 <option>Warning</option>
                 <option>Critical</option>
+              </select>
+            </label>
+
+            <label className="audit-select-filter">
+              <UserCheck size={14} />
+              <select
+                value={role}
+                onChange={(event) => {
+                  setRole(event.target.value);
+                  if (activeCard === "admin" && event.target.value !== "Administrator") {
+                    setActiveCard(null);
+                  }
+                  setPage(1);
+                }}
+                aria-label="Filter by role"
+              >
+                <option>All roles</option>
+                <option>Administrator</option>
+                <option>Staff</option>
+                <option>Faculty</option>
+                <option>Student</option>
               </select>
             </label>
           </div>
@@ -572,6 +750,92 @@ export default function AuditLogsPage() {
             </div>
           </div>
         </section>
+
+        {showAdminModal && (
+          <div className="audit-modal-backdrop" role="presentation" onMouseDown={() => setShowAdminModal(false)}>
+            <section
+              className="audit-detail-modal audit-admin-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="active-admin-title"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <div className="audit-modal-header">
+                <div className="audit-modal-title-group">
+                  <div className="audit-modal-tags">
+                    <span className="audit-severity audit-severity-info">Administrator Activity</span>
+                    <span className="audit-id-badge">Today</span>
+                  </div>
+                  <h2 id="active-admin-title">Active Administrators Today</h2>
+                  <p className="audit-modal-subdesc">
+                    Administrators who have performed authenticated operations or logged in today.
+                  </p>
+                </div>
+                <button
+                  className="audit-modal-close"
+                  type="button"
+                  onClick={() => setShowAdminModal(false)}
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="audit-admin-list">
+                {statsData?.administrators && statsData.administrators.length > 0 ? (
+                  statsData.administrators.map((admin, idx) => (
+                    <article key={admin.userName || idx} className="audit-admin-card">
+                      <div className="audit-admin-avatar">
+                        <UserCheck size={20} />
+                      </div>
+                      <div className="audit-admin-details">
+                        <div className="audit-admin-name-row">
+                          <strong>{admin.userName}</strong>
+                          <span className="audit-target-chip">{admin.role || "Administrator"}</span>
+                        </div>
+                        <div className="audit-admin-meta-row">
+                          <span><strong>{admin.actionCount}</strong> action{admin.actionCount === 1 ? "" : "s"} today</span>
+                          <span>·</span>
+                          <span>Last active: <strong>{formatLocalTime(admin.lastActive)}</strong></span>
+                        </div>
+                        {admin.lastIp && (
+                          <div className="audit-admin-ip-row">
+                            <small>IP: <code>{admin.lastIp}</code></small>
+                            {admin.lastAction && <small>· Action: {admin.lastAction}</small>}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-primary audit-admin-filter-btn"
+                        onClick={() => {
+                          setQuery(admin.userName);
+                          setRole("Administrator");
+                          setActiveCard("admin");
+                          setShowAdminModal(false);
+                          setPage(1);
+                        }}
+                      >
+                        View Activity
+                      </button>
+                    </article>
+                  ))
+                ) : (
+                  <div className="audit-admin-empty">
+                    <UserCheck size={28} />
+                    <p>No administrators currently recorded as active today.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="audit-modal-footer">
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setShowAdminModal(false)}>
+                  Close
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
 
         {selected && (
           <div className="audit-modal-backdrop" role="presentation" onMouseDown={() => setSelected(null)}>

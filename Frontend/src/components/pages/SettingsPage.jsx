@@ -114,7 +114,7 @@ export default function SettingsPage() {
       image: auditLogsImage,
       to: "/dashboard/settings/audit-logs",
       buttonText: "View Audit Logs",
-      primary: false,
+      primary: true,
     },
   ];
 

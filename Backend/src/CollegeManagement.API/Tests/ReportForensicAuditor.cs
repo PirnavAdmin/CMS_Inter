@@ -192,6 +192,7 @@ public class ReportForensicAuditor
             cmd.Parameters.AddWithValue("p_SectionId", DBNull.Value);
             cmd.Parameters.AddWithValue("p_FromDate", DBNull.Value);
             cmd.Parameters.AddWithValue("p_ToDate", DBNull.Value);
+            cmd.Parameters.AddWithValue("p_CampusId", DBNull.Value);
 
             using var reader = await cmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())

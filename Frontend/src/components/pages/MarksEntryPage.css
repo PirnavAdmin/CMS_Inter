@@ -437,6 +437,24 @@
   color: var(--cms-muted, #7b8275);
 }
 
+.cms-custom-combobox-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--cms-text, #171a17);
+  user-select: none;
+  -webkit-user-select: none;
+  text-align: left;
+}
+
+.cms-custom-combobox-value.is-placeholder {
+  color: var(--cms-muted, #7b8275);
+}
+
 .cms-select-arrow-btn {
   display: flex;
   align-items: center;

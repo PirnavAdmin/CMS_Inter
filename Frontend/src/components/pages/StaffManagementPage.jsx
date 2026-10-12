@@ -4373,19 +4373,11 @@ function TeachingForm({ records, setRecords, existing }) {
       if (values.profilePhoto && targetId) {
         try {
           const formData = new FormData();
+          formData.append("photo", values.profilePhoto, "profile.jpg");
           formData.append("file", values.profilePhoto, "profile.jpg");
           formData.append("staffId", targetId);
           await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, { headers: { "Content-Type": "multipart/form-data" } });
-          record.photoPath = `/api/v1/staff/photo/${targetId}`;
-        } catch(e) { console.error(e); }
-      }
-      if (values.profilePhoto && targetId) {
-        try {
-          const formData = new FormData();
-          formData.append("file", values.profilePhoto, "profile.jpg");
-          formData.append("staffId", targetId);
-          await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, { headers: { "Content-Type": "multipart/form-data" } });
-          record.photoPath = `/api/v1/staff/photo/${targetId}`;
+          record.photoPath = `/api/v1/staff/photo/${targetId}?t=${Date.now()}`;
         } catch(e) { console.error(e); }
       }
       if (!existing) incrementSeriesSequence("employee-id");

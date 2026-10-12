@@ -1,4 +1,4 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -33,18 +33,21 @@ namespace CollegeManagement.API.Controllers.V1
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
 
-            // Extract SourceCampusId
-            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
-                int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+            // Extract SourceCampusId if not explicitly provided
+            if (!request.SourceCampusId.HasValue || request.SourceCampusId.Value <= 0)
             {
-                request.SourceCampusId = cId;
-            }
-            else
-            {
-                var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
-                if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
                 {
-                    request.SourceCampusId = claimCampusId;
+                    request.SourceCampusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        request.SourceCampusId = claimCampusId;
+                    }
                 }
             }
 
@@ -123,8 +126,7 @@ namespace CollegeManagement.API.Controllers.V1
 
                 if (campusId <= 0) return BadRequest(new { message = "Campus context is required." });
 
-                var all = await _service.GetAllAsync(null); // getting all and filtering in memory since we don't have a specific DB query yet
-                var outgoing = all.Where(x => x.SourceCampusId == campusId && x.CampusId != campusId).ToList();
+                var outgoing = await _service.GetOutgoingRequestsAsync(campusId);
                 return Ok(outgoing);
             }
             catch (Exception ex)
@@ -150,8 +152,7 @@ namespace CollegeManagement.API.Controllers.V1
 
                 if (campusId <= 0) return BadRequest(new { message = "Campus context is required." });
 
-                var all = await _service.GetAllAsync(campusId);
-                var incoming = all.Where(x => x.SourceCampusId != null && x.SourceCampusId != campusId).ToList();
+                var incoming = await _service.GetIncomingRequestsAsync(campusId);
                 return Ok(incoming);
             }
             catch (Exception ex)
@@ -313,13 +314,18 @@ namespace CollegeManagement.API.Controllers.V1
 
 
         [HttpPost("{id:int}/approve-request")]
-        public async Task<IActionResult> ApproveRequest(int id, [FromBody] ApproveStudentAdmissionRequest request)
+        public async Task<IActionResult> ApproveRequest(int id, [FromBody] ApproveStudentAdmissionRequest? request)
         {
             try
             {
-                var success = await _service.ApproveAdmissionRequestAsync(id, request.Remarks);
+                var remarks = request?.Remarks;
+                var success = await _service.ApproveAdmissionRequestAsync(id, remarks);
                 if (!success) return BadRequest(new { message = "Could not approve request." });
                 return Ok(new { message = "Request approved successfully." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -328,13 +334,22 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("{id:int}/reject-request")]
-        public async Task<IActionResult> RejectRequest(int id, [FromBody] RejectStudentAdmissionRequest request)
+        public async Task<IActionResult> RejectRequest(int id, [FromBody] RejectStudentAdmissionRequest? request)
         {
+            if (request == null || string.IsNullOrWhiteSpace(request.RejectionReason))
+            {
+                return BadRequest(new { message = "Rejection reason is required." });
+            }
+
             try
             {
-                var success = await _service.RejectAdmissionRequestAsync(id, request.RejectionReason, request.Remarks);
+                var success = await _service.RejectAdmissionRequestAsync(id, request.RejectionReason.Trim(), request.Remarks);
                 if (!success) return BadRequest(new { message = "Could not reject request." });
                 return Ok(new { message = "Request rejected successfully." });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -405,36 +420,83 @@ namespace CollegeManagement.API.Controllers.V1
 
             return Ok(bloodGroups);
         }
-        //generatenumber//
+        // =========================================================
+        // PREVIEW / GENERATE ADMISSION NUMBER (LIVE PREVIEW - NON-INCREMENTING)
+        // =========================================================
+
+        /// <summary>
+        /// Live preview of next admission number (non-incrementing, read-only).
+        /// POST: api/v1/student-admissions/preview-number
+        /// POST: api/v1/student-admissions/generate-number
+        /// </summary>
+        [HttpPost("preview-number")]
         [HttpPost("generate-number")]
-        public async Task<IActionResult> GenerateAdmissionNumber([FromBody] GenerateAdmissionNumberRequestDto? request = null, [FromQuery] int? campusId = null)
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> PreviewAdmissionNumber(
+            [FromBody] GenerateAdmissionNumberRequestDto? request, 
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null)
         {
-            if (!campusId.HasValue || campusId <= 0)
+            return await ExecuteAdmissionNumberPreviewAsync(request, campusId, boardId, academicYearId);
+        }
+
+        /// <summary>
+        /// Live preview of next admission number via query parameters (non-incrementing, read-only).
+        /// GET: api/v1/student-admissions/preview-number
+        /// GET: api/v1/student-admissions/generate-number
+        /// </summary>
+        [HttpGet("preview-number")]
+        [HttpGet("generate-number")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> PreviewAdmissionNumberGet(
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null)
+        {
+            return await ExecuteAdmissionNumberPreviewAsync(null, campusId, boardId, academicYearId);
+        }
+
+        private async Task<IActionResult> ExecuteAdmissionNumberPreviewAsync(
+            GenerateAdmissionNumberRequestDto? request,
+            int? queryCampusId,
+            int? queryBoardId,
+            int? queryAcademicYearId)
+        {
+            var resolvedCampusId = request?.CampusId ?? queryCampusId;
+            if (!resolvedCampusId.HasValue || resolvedCampusId <= 0)
             {
-                if (request?.CampusId.HasValue == true && request.CampusId > 0)
-                {
-                    campusId = request.CampusId.Value;
-                }
-                else if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
                     int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
                 {
-                    campusId = cId;
+                    resolvedCampusId = cId;
                 }
                 else
                 {
                     var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
                     if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
                     {
-                        campusId = claimCampusId;
+                        resolvedCampusId = claimCampusId;
                     }
                 }
             }
 
-            var admissionNumber = await _service.GenerateAdmissionNumberAsync(campusId, request?.BoardId, request?.AcademicYearId);
+            var resolvedBoardId = request?.BoardId ?? queryBoardId;
+            var resolvedAcademicYearId = request?.AcademicYearId ?? queryAcademicYearId;
+
+            var admissionNumber = await _service.GetAdmissionNumberPreviewAsync(resolvedCampusId, resolvedBoardId, resolvedAcademicYearId);
 
             return Ok(new
             {
-                admissionNumber
+                success = true,
+                data = new
+                {
+                    admissionNo = admissionNumber,
+                    admissionNumber = admissionNumber,
+                    generatedNumber = admissionNumber
+                },
+                admissionNumber = admissionNumber,
+                admissionNo = admissionNumber
             });
         }
 

@@ -448,6 +448,28 @@
   font-size: 20px;
 }
 
+.results-analytics-card-skeleton {
+  pointer-events: none;
+  user-select: none;
+}
+
+.results-analytics-card-skeleton .cms-skeleton {
+  color: transparent !important;
+  min-height: auto;
+  border-radius: 4px;
+}
+
+.results-subject-performance-table .cms-skeleton-table-row td {
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+
+.results-subject-performance-table .cms-skeleton-table-row .cms-skeleton {
+  height: 12px;
+  min-height: 12px;
+  border-radius: 4px;
+}
+
 .results-analytics-empty {
   margin: 4px 0;
   padding: 14px;
