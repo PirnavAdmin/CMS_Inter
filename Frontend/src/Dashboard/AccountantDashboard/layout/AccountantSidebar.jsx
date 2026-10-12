@@ -1,7 +1,7 @@
-import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import { NavLink } from "react-router-dom";
 import { BarChart3, CalendarCheck, CircleUserRound, History, LayoutDashboard, ReceiptText, WalletCards } from "lucide-react";
 import logo from "@/assets/pirnav-colleges-logo.png";
+import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 
 const groups = [
   ["ACCOUNTANT PORTAL", [["Dashboard", "", LayoutDashboard]]],
@@ -9,6 +9,7 @@ const groups = [
     ["Fee Management", "fees", ReceiptText],
     ["Payment History", "payments", History],
     ["Payroll", "payroll", WalletCards],
+    ["Reimbursement", "reimbursement", reimbursementIcon],
     ["Attendance Impact", "payroll/attendance-impact", CalendarCheck],
     ["Financial Reports", "reports", BarChart3],
   ]],
@@ -18,7 +19,7 @@ const groups = [
 export default function AccountantSidebar({ open, onClose }) {
   return (
     <aside className={`sp-sidebar ${open ? "is-open" : ""}`}>
-      <div className="sp-brand"><CampusBrandImage src={logo} alt="Pirnav Colleges"  /></div>
+      <div className="sp-brand"><img src={logo} alt="Pirnav Colleges" /></div>
       <nav>
         {groups.map(([heading, links]) => (
           <section key={heading}>
@@ -31,7 +32,17 @@ export default function AccountantSidebar({ open, onClose }) {
                 onClick={onClose}
                 className={({ isActive }) => isActive ? "is-active" : ""}
               >
-                <Icon className="accountant-nav-icon" size={19} aria-hidden="true" />
+                {typeof Icon === "string" ? (
+                  <img
+                    className="accountant-nav-icon cms-nav-3d-icon"
+                    src={Icon}
+                    alt=""
+                    aria-hidden="true"
+                    style={{ width: 19, height: 19, objectFit: "contain", verticalAlign: "middle" }}
+                  />
+                ) : (
+                  <Icon className="accountant-nav-icon" size={19} aria-hidden="true" />
+                )}
                 <span>{label}</span>
               </NavLink>
             ))}

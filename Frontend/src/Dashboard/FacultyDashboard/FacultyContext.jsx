@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-// No mock data
+import { facultyMockData } from "./data/facultyMockData.js";
 import { getAuthUser } from "@/features/authStorage.js";
 import * as staffApi from "@/api/staffApi.js";
 
@@ -31,14 +31,7 @@ export const persistStaffProfile = (data) => {
 const getInitialProfileData = () => {
   try {
     const authUser = getAuthUser();
-    const baseUser = {
-      id: "", employeeId: "", firstName: "", lastName: "", fullName: "", email: "", mobile: "",
-      designation: "", department: "", role: "Faculty",
-      maritalStatus: "", dob: "", gender: "", aadhaar: "", pan: "", bloodGroup: "",
-      dateOfJoining: "", bankName: "", accountHolder: "", accountNumber: "", ifsc: "",
-      branch: "", accountType: "", houseNumber: "", street: "", city: "", district: "",
-      state: "", pin: "", country: "", uanNumber: "", pfNumber: "", experience: [], documents: []
-    };
+    const baseUser = facultyMockData.user;
     let mergedUser = { ...baseUser };
 
     if (authUser) {
@@ -88,7 +81,7 @@ const getInitialProfileData = () => {
 
     return mergedUser;
   } catch {
-    return {};
+    return facultyMockData.user;
   }
 };
 
@@ -185,9 +178,6 @@ export function FacultyProvider({ children }) {
           if (apiStaff && typeof apiStaff === "object") {
             setProfileData((current) => {
               const updated = { ...current, ...apiStaff };
-              if (apiStaff.photoPath || apiStaff.photoUrl) {
-                updated.photoUrl = "/api/v1/staff/photo/" + apiStaff.id + "?t=" + Date.now();
-              }
               if (apiStaff.firstName || apiStaff.lastName) {
                 updated.fullName = `${apiStaff.firstName || ""} ${apiStaff.lastName || ""}`.trim();
               }
@@ -231,8 +221,8 @@ export function FacultyProvider({ children }) {
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   // Board & Academic Year Dropdowns
-  const boards = [];
-  const academicYears = [];
+  const boards = facultyMockData.boards;
+  const academicYears = facultyMockData.academicYears;
   const [selectedBoard, setSelectedBoard] = useState(boards[0] || null);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicYears[0] || null);
   const boardsLoading = false;

@@ -158,8 +158,6 @@ namespace CollegeManagement.API.Models
         [MaxLength(50)]
         public string? ScholarshipStatus { get; set; }
 
-        public bool IsReferral { get; set; }
-
         // Status
         [MaxLength(30)]
         public string Status { get; set; } = "Pending";

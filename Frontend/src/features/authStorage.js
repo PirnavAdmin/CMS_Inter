@@ -1,4 +1,13 @@
-const AUTH_KEYS = ["token", "user", "role", "cms-parent-active-child"];
+const AUTH_KEYS = [
+  "token",
+  "user",
+  "role",
+  "cms-parent-active-child",
+  "cms_auth",
+  "cms_role",
+  "cms_username",
+  "cms_warden_outpasses",
+];
 
 const storageValue = (storage, key) => {
   try { return storage?.getItem(key) ?? null; }
@@ -8,13 +17,6 @@ const storageValue = (storage, key) => {
 export const getAuthItem = (key) => {
   if (typeof window === "undefined") return null;
   return storageValue(window.sessionStorage, key) ?? storageValue(window.localStorage, key);
-};
-
-export const getAuthToken = () => getAuthItem("token") || "";
-
-export const getAuthUser = () => {
-  try { return JSON.parse(getAuthItem("user") || "null"); }
-  catch { return null; }
 };
 
 export const clearAuthSession = () => {
@@ -40,18 +42,56 @@ export const clearAuthSession = () => {
   } catch { /* Storage unavailable */ }
 };
 
+export const getAuthToken = () => {
+  const item = getAuthItem("token");
+  if (!item || typeof item !== "string") return "";
+  const cleaned = item.trim().replace(/^Bearer\s+/i, "").replace(/^["']|["']$/g, "").trim();
+  if (!cleaned || cleaned === "undefined" || cleaned === "null") return "";
+  // Invalidate any lingering mock or unauthenticated dummy tokens
+  if (cleaned.includes("-auth-token-") || cleaned.startsWith("mock-") || cleaned.includes(".sig_")) {
+    clearAuthSession();
+    return "";
+  }
+  return cleaned;
+};
+
+export const getAuthUser = () => {
+  try { return JSON.parse(getAuthItem("user") || "null"); }
+  catch { return null; }
+};
+
+
 export const saveAuthSession = ({ token, user, role }, persistent) => {
   clearAuthSession();
   if (!token || typeof window === "undefined") return;
+  const rawToken = String(token).replace(/^Bearer\s+/i, "").replace(/^["']|["']$/g, "").trim();
+  if (!rawToken || rawToken === "undefined" || rawToken === "null") return;
   const storage = persistent ? window.localStorage : window.sessionStorage;
-  storage.setItem("token", String(token));
+  storage.setItem("token", rawToken);
   storage.setItem("user", JSON.stringify(user));
-  storage.setItem("role", String(role ?? user?.role ?? ""));
+  const normalizedRole = String(role ?? user?.role ?? "");
+  storage.setItem("role", normalizedRole);
+
+  const isWarden =
+    normalizedRole.toLowerCase().includes("warden") ||
+    String(user?.email || "").toLowerCase().includes("warden");
+  if (isWarden) {
+    try {
+      window.localStorage.setItem("cms_auth", "true");
+      window.localStorage.setItem("cms_role", "warden");
+      window.localStorage.setItem("cms_username", user?.email || "Warden@CMS.com");
+      window.sessionStorage.setItem("cms_auth", "true");
+      window.sessionStorage.setItem("cms_role", "warden");
+      window.sessionStorage.setItem("cms_username", user?.email || "Warden@CMS.com");
+    } catch {}
+  }
+  window.dispatchEvent(new Event("cms-auth-session-updated"));
 };
 
 export const updateAuthToken = (token) => {
   if (!token || typeof window === "undefined") return;
-  const rawToken = String(token).replace(/^Bearer\s+/i, "").trim();
+  const rawToken = String(token).replace(/^Bearer\s+/i, "").replace(/^["']|["']$/g, "").trim();
+  if (!rawToken || rawToken === "undefined" || rawToken === "null") return;
   if (window.localStorage.getItem("token")) {
     window.localStorage.setItem("token", rawToken);
   }

@@ -16,8 +16,6 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<IEnumerable<ExaminationResponse>> GetExaminationResponsesAsync(ExaminationSearchRequestDto filter);
         Task UpdateExaminationAsync(Examination examination);
         Task<bool> DeleteExaminationAsync(Examination examination);
-        Task<List<int>> GetExaminationSubjectIdsAsync(int examinationId);
-        Task SaveExaminationSubjectsAsync(int examinationId, IEnumerable<int> subjectIds);
 
         Task<ExamSchedule> CreateExamScheduleAsync(ExamSchedule schedule);
         Task<ExamSchedule?> GetExamScheduleByIdAsync(int examScheduleId);

@@ -15,30 +15,16 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly ISectionRepository _sectionRepository;
         private readonly IMapper _mapper;
-        private readonly ILookupCacheService? _cacheService;
 
-        public SectionService(ISectionRepository sectionRepository, IMapper mapper, ILookupCacheService? cacheService = null)
+        public SectionService(ISectionRepository sectionRepository, IMapper mapper)
         {
             _sectionRepository = sectionRepository;
             _mapper = mapper;
-            _cacheService = cacheService;
         }
 
         public async Task<IEnumerable<SectionResponse>> GetAllSectionsAsync(SectionFilterDto? filter = null)
         {
-            if (_cacheService == null)
-            {
-                return await _sectionRepository.GetAllSectionsAsync(filter);
-            }
-
-            string cacheKey = filter == null
-                ? "sections:all"
-                : $"sections:{filter.CampusId}_{filter.BoardId}_{filter.AcademicYearId}_{filter.AcademicLevelId}_{filter.GroupId}_{filter.ProgramId}_{filter.GroupProgramId}_{filter.InchargeId}_{filter.IsActive}_{filter.SearchTerm}_{filter.Page}_{filter.PageSize}";
-
-            return await _cacheService.GetOrCreateAsync(
-                cacheKey,
-                async () => await _sectionRepository.GetAllSectionsAsync(filter),
-                TimeSpan.FromMinutes(10));
+            return await _sectionRepository.GetAllSectionsAsync(filter);
         }
 
         public async Task<SectionResponse?> GetSectionByIdAsync(int id)
@@ -133,8 +119,6 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 throw new InvalidOperationException("Failed to retrieve created section details.");
             }
-
-            _cacheService?.RemoveByPrefix("sections:");
             return createdSection;
         }
 
@@ -296,8 +280,6 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 throw new NotFoundException($"Section with ID {id} not found after update.");
             }
-
-            _cacheService?.RemoveByPrefix("sections:");
             return updatedSection;
         }
 
@@ -309,25 +291,12 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new NotFoundException($"Section with ID {id} not found.");
             }
 
-            var deleted = await _sectionRepository.DeleteSectionAsync(id);
-            if (deleted)
-            {
-                _cacheService?.RemoveByPrefix("sections:");
-            }
-            return deleted;
+            return await _sectionRepository.DeleteSectionAsync(id);
         }
 
         public async Task<IEnumerable<SectionResponse>> GetSectionsByGroupAsync(int groupId)
         {
-            if (_cacheService == null)
-            {
-                return await _sectionRepository.GetSectionsByGroupAsync(groupId);
-            }
-
-            return await _cacheService.GetOrCreateAsync(
-                $"sections:group:{groupId}",
-                async () => await _sectionRepository.GetSectionsByGroupAsync(groupId),
-                TimeSpan.FromMinutes(10));
+            return await _sectionRepository.GetSectionsByGroupAsync(groupId);
         }
 
         private static string NormalizeSectionName(string name)

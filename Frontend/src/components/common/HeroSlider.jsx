@@ -1,28 +1,21 @@
 import { useEffect, useState } from "react";
 import { heroSlides } from "@/data/heroSlides.js";
-import { useCampusImages } from "../../features/campusImages.js";
 import "./HeroSlider.css";
 
 export default function HeroSlider({ variant = "card" }) {
-  const images = useCampusImages();
-  const configuredImage = variant === "bg" ? images.loginImage : images.heroImage;
-  const slides = configuredImage ? [{ src: configuredImage, alt: "Campus image" }] : heroSlides;
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    if (slides.length <= 1) return;
-    const id = window.setInterval(() => setIndex((current) => (current + 1) % slides.length), 2000);
+    const id = window.setInterval(() => setIndex((current) => (current + 1) % heroSlides.length), 2000);
     return () => window.clearInterval(id);
-  }, [slides.length]);
-
-  const activeIndex = index % slides.length;
+  }, []);
 
   const isBackground = variant === "bg" || variant === "hero-bg";
 
   return (
     <div className={`cms-slider ${isBackground ? "is-bg" : ""} ${variant === "hero-bg" ? "is-hero-bg" : ""}`} role="region" aria-label="College highlights">
       <div className="cms-slider-frame">
-        {slides.map((slide, slideIndex) => (
+        {heroSlides.map((slide, slideIndex) => (
           <img
             key={slide.src}
             src={slide.src}
@@ -30,20 +23,20 @@ export default function HeroSlider({ variant = "card" }) {
             width={1600}
             height={1000}
             loading={slideIndex === 0 ? "eager" : "lazy"}
-            className={`cms-slide ${slideIndex === activeIndex ? "is-active" : ""}`}
-            aria-hidden={slideIndex === activeIndex ? undefined : true}
+            className={`cms-slide ${slideIndex === index ? "is-active" : ""}`}
+            aria-hidden={slideIndex === index ? undefined : true}
           />
         ))}
         {isBackground ? <span className="cms-slide-overlay" /> : null}
       </div>
       <div className="cms-slider-dots">
-        {slides.length > 1 && slides.map((slide, slideIndex) => (
+        {heroSlides.map((slide, slideIndex) => (
           <button
             key={slide.src}
             type="button"
-            className={`cms-slider-dot ${slideIndex === activeIndex ? "is-active" : ""}`}
+            className={`cms-slider-dot ${slideIndex === index ? "is-active" : ""}`}
             aria-label={`Show slide ${slideIndex + 1}`}
-            aria-current={slideIndex === activeIndex ? "true" : undefined}
+            aria-current={slideIndex === index ? "true" : undefined}
             onClick={() => setIndex(slideIndex)}
           />
         ))}

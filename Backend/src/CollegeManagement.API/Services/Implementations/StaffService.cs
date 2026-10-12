@@ -318,28 +318,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
-            {
-                var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-                var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-                var prefix = isTeaching ? "PCTCH" : "PCNT";
-
-                // If this matches the auto-generated series format and was taken concurrently, safely fetch the next fresh ID
-                if (employeeId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, dto.CampusId ?? 1);
-                    if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber) && await _staffRepository.IsEmployeeIdUniqueAsync(generatedDto.GeneratedNumber))
-                    {
-                        employeeId = generatedDto.GeneratedNumber;
-                    }
-                    else
-                    {
-                        employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, dto.CampusId ?? 1);
-                    }
-                }
-
-                if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
-                    throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
-            }
+                throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
 
             if (!string.IsNullOrWhiteSpace(dto.Email))
             {
@@ -1077,18 +1056,19 @@ namespace CollegeManagement.API.Services.Implementations
 
             var relativePath = $"/uploads/staff-documents/{fileName}";
 
-            var docList = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson);
+            var docList = DeserializeList<StaffDocumentItem>(staff.DocumentsJson);
             // Remove existing item of same documentType if present
-            docList.RemoveAll(d => string.Equals(d.type, documentType, StringComparison.OrdinalIgnoreCase));
+            docList.RemoveAll(d => string.Equals(d.DocumentType, documentType, StringComparison.OrdinalIgnoreCase));
 
-            docList.Add(new StaffDocumentPayloadItem
+            docList.Add(new StaffDocumentItem
             {
-                id = System.Guid.NewGuid().ToString(),
-                type = documentType,
-                name = file.FileName,
-                size = (file.Length / 1024.0 / 1024.0).ToString("0.00") + " MB",
-                url = relativePath,
-                format = ext.TrimStart('.').ToUpper()
+                DocumentType = documentType,
+                DocumentName = file.FileName,
+                FileName = fileName,
+                FilePath = relativePath,
+                FileType = ext.TrimStart('.').ToUpper(),
+                FileSizeBytes = file.Length,
+                UploadedAt = DateTime.UtcNow
             });
 
             staff.DocumentsJson = JsonSerializer.Serialize(docList);
@@ -1113,15 +1093,15 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {staffId} not found.");
 
-            var docList = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson);
-            var item = docList.FirstOrDefault(d => string.Equals(d.type, documentType, StringComparison.OrdinalIgnoreCase));
+            var docList = DeserializeList<StaffDocumentItem>(staff.DocumentsJson);
+            var item = docList.FirstOrDefault(d => string.Equals(d.DocumentType, documentType, StringComparison.OrdinalIgnoreCase));
             if (item != null)
             {
                 // Attempt to delete physical file
                 try
                 {
                     var webRoot = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-                    var physicalPath = Path.Combine(webRoot, item.url.TrimStart('/'));
+                    var physicalPath = Path.Combine(webRoot, item.FilePath.TrimStart('/'));
                     if (File.Exists(physicalPath))
                     {
                         File.Delete(physicalPath);
@@ -1275,7 +1255,7 @@ namespace CollegeManagement.API.Services.Implementations
                 // Auto-generate employee ID if empty or validate uniqueness
                 if (string.IsNullOrWhiteSpace(empId))
                 {
-                    empId = await GetNextEmployeeIdAsync(sType, campusId ?? 1);
+                    empId = await _staffRepository.GenerateNextEmployeeIdAsync(sType, campusId ?? 1);
                 }
                 else if (toAdd.Any(x => x.EmployeeId == empId) || !await _staffRepository.IsEmployeeIdUniqueAsync(empId))
                 {
@@ -1751,10 +1731,8 @@ namespace CollegeManagement.API.Services.Implementations
                 await dto.Photo.CopyToAsync(stream);
             }
 
-            var newPhotoPath = $"/uploads/staff-photos/{fileName}";
-            await _staffRepository.UpdatePhotoPathAsync(staff.Id, newPhotoPath);
-            
-            staff.PhotoPath = newPhotoPath;
+            staff.PhotoPath = $"/uploads/staff-photos/{fileName}";
+            await _staffRepository.UpdateAsync(staff);
             return _mapper.Map<StaffResponseDto>(staff);
         }
 
@@ -1992,21 +1970,21 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             // Documents
-            var docList = dto.DocumentsList != null && dto.DocumentsList.Any() ? dto.DocumentsList : DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson);
+            var docList = dto.DocumentsList != null && dto.DocumentsList.Any() ? dto.DocumentsList : DeserializeList<StaffDocumentItem>(staff.DocumentsJson);
             dto.DocumentsList = docList;
             foreach (var d in docList)
             {
-                var type = d.type?.ToLowerInvariant() ?? "";
-                if (type.Contains("aadhaar")) dto.AadhaarDocument = d.name;
-                else if (type.Contains("pan")) dto.PanDocument = d.name;
-                else if (type.Contains("qualif")) dto.QualificationCertificate = d.name;
-                else if (type.Contains("exp")) dto.ExperienceCertificate = d.name;
-                else if (type.Contains("resume")) dto.Resume = d.name;
-                else if (type.Contains("bank")) dto.BankProof = d.name;
-                else if (type.Contains("driv")) dto.DrivingLicence = d.name;
-                else if (type.Contains("photo")) dto.Photo = d.name;
-                else if (type.Contains("sign")) dto.Signature = d.name;
-                else dto.OtherDocuments = d.name;
+                var type = d.DocumentType?.ToLowerInvariant() ?? "";
+                if (type.Contains("aadhaar")) dto.AadhaarDocument = d.FileName;
+                else if (type.Contains("pan")) dto.PanDocument = d.FileName;
+                else if (type.Contains("qualif")) dto.QualificationCertificate = d.FileName;
+                else if (type.Contains("exp")) dto.ExperienceCertificate = d.FileName;
+                else if (type.Contains("resume")) dto.Resume = d.FileName;
+                else if (type.Contains("bank")) dto.BankProof = d.FileName;
+                else if (type.Contains("driv")) dto.DrivingLicence = d.FileName;
+                else if (type.Contains("photo")) dto.Photo = d.FileName;
+                else if (type.Contains("sign")) dto.Signature = d.FileName;
+                else dto.OtherDocuments = d.FileName;
             }
 
             // Dynamic Role-Specific / Department Specific details
@@ -2028,9 +2006,9 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 foreach (var d in docList)
                 {
-                    if (!string.IsNullOrWhiteSpace(d.type) && !string.IsNullOrWhiteSpace(d.name))
+                    if (!string.IsNullOrWhiteSpace(d.DocumentType) && !string.IsNullOrWhiteSpace(d.FileName))
                     {
-                        dto.DocumentsMap[d.type] = d.name;
+                        dto.DocumentsMap[d.DocumentType] = d.FileName;
                     }
                 }
             }
@@ -2101,11 +2079,6 @@ namespace CollegeManagement.API.Services.Implementations
                 staff.EmergencyContactJson = JsonSerializer.Serialize(dto.Emergency);
             }
 
-            if (dto.Documents != null && dto.Documents.Any())
-            {
-                staff.DocumentsJson = JsonSerializer.Serialize(dto.Documents);
-            }
-
             if (dto.Employment != null)
             {
                 if (dto.Employment.DepartmentId.HasValue) staff.DepartmentId = dto.Employment.DepartmentId.Value;
@@ -2124,7 +2097,30 @@ namespace CollegeManagement.API.Services.Implementations
                 staff.DepartmentSpecificJson = JsonSerializer.Serialize(dto.DepartmentSpecific);
             }
 
-
+            if (dto.Documents != null && dto.Documents.Any())
+            {
+                var docList = DeserializeList<StaffDocumentItem>(staff.DocumentsJson);
+                foreach (var kvp in dto.Documents)
+                {
+                    if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                    {
+                        docList.RemoveAll(d => string.Equals(d.DocumentType, kvp.Key, StringComparison.OrdinalIgnoreCase));
+                        docList.Add(new StaffDocumentItem
+                        {
+                            DocumentType = kvp.Key,
+                            DocumentName = kvp.Value,
+                            FileName = kvp.Value,
+                            FilePath = $"/uploads/staff-documents/{kvp.Value}",
+                            FileType = Path.GetExtension(kvp.Value).TrimStart('.').ToUpper(),
+                            UploadedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+                if (docList.Any())
+                {
+                    staff.DocumentsJson = JsonSerializer.Serialize(docList);
+                }
+            }
         }
 
         private static void SyncFlattenedPropertiesToJson(
@@ -2253,19 +2249,19 @@ namespace CollegeManagement.API.Services.Implementations
             }
             else
             {
-                var docList = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson);
+                var docList = DeserializeList<StaffDocumentItem>(staff.DocumentsJson);
                 void AddOrUpdateDoc(string type, string? fileName)
                 {
                     if (string.IsNullOrWhiteSpace(fileName)) return;
-                    docList.RemoveAll(d => string.Equals(d.type, type, StringComparison.OrdinalIgnoreCase));
-                    docList.Add(new StaffDocumentPayloadItem
+                    docList.RemoveAll(d => string.Equals(d.DocumentType, type, StringComparison.OrdinalIgnoreCase));
+                    docList.Add(new StaffDocumentItem
                     {
-                        id = System.Guid.NewGuid().ToString(),
-                        type = type,
-                        name = fileName,
-                        size = "Unknown",
-                        url = $"/uploads/staff-documents/{fileName}",
-                        format = Path.GetExtension(fileName).TrimStart('.').ToUpper()
+                        DocumentType = type,
+                        DocumentName = fileName,
+                        FileName = fileName,
+                        FilePath = $"/uploads/staff-documents/{fileName}",
+                        FileType = Path.GetExtension(fileName).TrimStart('.').ToUpper(),
+                        UploadedAt = DateTime.UtcNow
                     });
                 }
 
@@ -2400,7 +2396,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             // 5. Documents Upload (15%)
-            var docs = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson);
+            var docs = DeserializeList<StaffDocumentItem>(staff.DocumentsJson);
             if (docs.Count >= 2)
             {
                 score += 15;

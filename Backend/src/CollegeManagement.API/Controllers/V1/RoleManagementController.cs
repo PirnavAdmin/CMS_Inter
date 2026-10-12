@@ -73,6 +73,48 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// Retrieves only modules configured/applicable for a specific role.
+        /// </summary>
+        [HttpGet("{roleId:int}/modules")]
+        public async Task<IActionResult> GetRoleModules(int roleId)
+        {
+            try
+            {
+                var modules = await _roleManagementService.GetModulesForRoleAsync(roleId);
+                return Ok(new { success = true, data = modules });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Configures/updates applicable modules for a specific role.
+        /// </summary>
+        [HttpPut("{roleId:int}/modules")]
+        public async Task<IActionResult> SetRoleModules(int roleId, [FromBody] UpdateRoleModulesRequest request)
+        {
+            try
+            {
+                var success = await _roleManagementService.SetModulesForRoleAsync(roleId, request);
+                return Ok(new { success = true, message = "Role modules configured successfully" });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Retrieves a single role by ID.
         /// </summary>
         [HttpGet("{id:int}")]

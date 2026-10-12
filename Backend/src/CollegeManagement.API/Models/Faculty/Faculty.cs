@@ -49,7 +49,6 @@ namespace CollegeManagement.API.Models.Faculty
         [StringLength(150)]
         public string Email { get; set; } = string.Empty;
 
-        [NotMapped]
         [StringLength(10)]
         public string? BloodGroup { get; set; }
 

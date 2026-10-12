@@ -1,4 +1,5 @@
 import { Outlet } from "react-router-dom";
+import { ReceiptIndianRupee } from "lucide-react";
 import DashboardLayout, { adminIconAssets } from "@/components/layout/DashboardLayout.jsx";
 import "../../StudentDashboard/StudentDashboard.css";
 import "../AccountantDashboard.css";
@@ -16,6 +17,7 @@ const accountantMenu = [
       { to: "/accountant-dashboard/fees", label: "Fee Management", icon: adminIconAssets.feeManagement },
       { to: "/accountant-dashboard/payments", label: "Payment History", icon: adminIconAssets.paymentHistory },
       { to: "/accountant-dashboard/payroll", label: "Payroll", icon: adminIconAssets.payroll },
+      { to: "/accountant-dashboard/reimbursement", label: "Reimbursement", icon: adminIconAssets.reimbursement },
       { to: "/accountant-dashboard/payroll/attendance-impact", label: "Attendance Impact", icon: adminIconAssets.attendanceImpact },
       { to: "/accountant-dashboard/reports", label: "Financial Reports", icon: adminIconAssets.financialReports },
     ],

@@ -61,25 +61,7 @@ builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new NullableTimeOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
-        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
-#endregion
-
-#region Response Compression
-builder.Services.AddResponseCompression(options =>
-{
-    options.EnableForHttps = true;
-    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
-    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
-});
-builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProviderOptions>(options =>
-{
-    options.Level = System.IO.Compression.CompressionLevel.Fastest;
-});
-builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProviderOptions>(options =>
-{
-    options.Level = System.IO.Compression.CompressionLevel.Fastest;
-});
 #endregion
 
 #region CORS
@@ -112,7 +94,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         connectionString,
         serverVersion,
         mySqlOptions => mySqlOptions
-            .CommandTimeout(120)));;
+            .CommandTimeout(120)
+            .EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(3),
+                errorNumbersToAdd: null)));
 
 builder.Services.AddSingleton<DatabaseContext>();
 
@@ -212,7 +198,6 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
-builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
 #endregion
 
 #region Services
@@ -247,7 +232,6 @@ builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
 builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
-builder.Services.AddScoped<IStaffReimbursementService, StaffReimbursementService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IStudentAdmissionService, StudentAdmissionService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
@@ -313,8 +297,6 @@ builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");
 });
-// Background Services
-builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 #endregion
 
 #region Email Configuration
@@ -447,7 +429,6 @@ forwardedHeadersOptions.KnownNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
-app.UseResponseCompression();
 app.UseCors("AllowFrontend");
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
@@ -559,34 +540,7 @@ app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifi
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var allRollNoConfigs = dbContext.NumberSeriesConfigurations
-        .Where(n => n.SeriesCode.StartsWith("ROLL_NO"))
-        .ToList();
-
-    bool dbModified = false;
-    foreach(var config in allRollNoConfigs)
-    {
-        if (config.FormatPattern != "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}")
-        {
-            config.FormatPattern = "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}";
-            config.Prefix = "";
-            dbModified = true;
-        }
-    }
-
-    if (dbModified)
-    {
-        dbContext.SaveChanges();
-    }
-}
-
 app.Run();
-
-
-
 
 
 

@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using CollegeManagement.API.DTOs.Promotion;
-using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -16,13 +15,7 @@ namespace CollegeManagement.API.Controllers.V1
     public class PromotionsController : ControllerBase
     {
         private readonly IPromotionService _service;
-        private readonly IFeeService _feeService;
-
-        public PromotionsController(IPromotionService service, IFeeService feeService)
-        {
-            _service = service;
-            _feeService = feeService;
-        }
+        public PromotionsController(IPromotionService service) => _service = service;
 
         private string GetCurrentUserName()
         {
@@ -30,17 +23,6 @@ namespace CollegeManagement.API.Controllers.V1
                 ?? User.FindFirst(ClaimTypes.Email)?.Value 
                 ?? User.Identity?.Name 
                 ?? "System";
-        }
-
-        [HttpPost("fee-preview")]
-        public async Task<IActionResult> PromotionFeePreview([FromBody] PromotionFeePreviewRequest request)
-            => Ok(await _feeService.PreviewPromotionFeeAsync(request));
-
-        [HttpGet("program-fee-preview")]
-        public async Task<IActionResult> ProgramFeePreview([FromQuery] int studentId, [FromQuery] int targetProgramId)
-        {
-            var result = await _feeService.PreviewProgramFeeAdjustmentAsync(studentId, targetProgramId);
-            return result == null ? NotFound() : Ok(result);
         }
 
         [HttpGet("eligible")]
