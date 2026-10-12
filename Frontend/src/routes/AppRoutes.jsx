@@ -32,6 +32,7 @@ import InventoryManagementPage from "@/components/pages/InventoryManagement/Inve
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
+import CampusImagesConfigurationPage from "@/components/pages/CampusImagesConfigurationPage.jsx";
 import RolesPermissionsPage from "@/components/pages/RolesPermissionsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
 import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
@@ -41,6 +42,7 @@ import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPag
 import PayrollPage from "@/components/pages/PayrollPage.jsx";
 import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
+import AdminReimbursementsPage from "@/components/pages/AdminReimbursementsPage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
 import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
@@ -186,6 +188,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/staff/:id/edit" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id/review" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id" element={<StaffManagementPage />} />
+        <Route path="/dashboard/reimbursements" element={<AdminReimbursementsPage />} />
         <Route path="/dashboard/departments" element={<DepartmentManagementPage />} />
         <Route path="/dashboard/departments/add" element={<MasterFormPage kind="department" />} />
         <Route path="/dashboard/departments/:id/edit" element={<MasterFormPage kind="department" />} />
@@ -232,6 +235,9 @@ export default function AppRoutes() {
         <Route path="/dashboard/certificates" element={<CertificatesPage />} />
         <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
         <Route path="/dashboard/settings" element={<SettingsPage />} />
+        <Route path="/dashboard/settings/campus-images" element={<CampusImagesConfigurationPage />} />
+        <Route path="/dashboard/settings/landing-page" element={<CampusImagesConfigurationPage page="landing" />} />
+        <Route path="/dashboard/settings/login-page" element={<CampusImagesConfigurationPage page="login" />} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
         <Route path="/dashboard/settings/my-profile" element={<AdminProfilePage />} />
         <Route path="/dashboard/settings/profile" element={<AdminProfilePage />} />
@@ -300,7 +306,6 @@ export default function AppRoutes() {
 
         {/* Faculty Reimbursement Canonical & Finance Routes */}
         <Route path="/dashboard/reimbursement" element={<ReimbursementPage />} />
-        <Route path="/dashboard/reimbursements" element={<ReimbursementPage />} />
         <Route path="/dashboard/finance/reimbursement" element={<ReimbursementPage />} />
 
         {/* Backward-Compatible Staff Salary Aliases */}
