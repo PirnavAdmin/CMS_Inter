@@ -1,0 +1,14 @@
+.dp-holidays { display: flex; flex-direction: column; gap: 20px; }
+.dp-holidays-card { border: 1px solid var(--dp-border); border-radius: 16px; background: var(--dp-surface); box-shadow: var(--dp-shadow); overflow: hidden; }
+.dp-holidays-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; border-bottom: 1px solid var(--dp-border); }
+.dp-holidays-card-head h2 { margin: 0; font-size: 15px; font-weight: 750; }
+.dp-holidays-table-wrap { padding: 16px 18px; overflow-x: auto; }
+.dp-holidays-table { width: 100%; min-width: 540px; border-collapse: collapse; text-align: left; font-size: 13px; }
+.dp-holidays-table th { padding: 14px; background: var(--dp-soft); color: var(--dp-muted); font-size: 11px; font-weight: 750; }
+.dp-holidays-table td { padding: 14px; border-bottom: 1px solid var(--dp-border); color: var(--dp-text); }
+.dp-holidays-table th:first-child { width: 40%; }
+.dp-holidays-table th:last-child { width: 20%; }
+.dp-holidays-error { margin: 16px 18px 0; color: var(--dp-danger); font-size: 13px; }
+.dp-holidays button:disabled { opacity: .5; cursor: not-allowed; }
+.dp-holidays button:focus-visible { outline: 2px solid var(--dp-primary); outline-offset: 3px; }
+@media (max-width: 600px) { .dp-holidays-table-wrap { padding: 12px; } }
