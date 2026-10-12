@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Net.Mail;
@@ -64,18 +64,6 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ArgumentNullException(nameof(request));
 
             ValidateCreateRequest(request);
-
-            // ---------------------------------------------
-            // Allocate Admission Number Atomically on Submission
-            // ---------------------------------------------
-            if (!request.IsReferral)
-            {
-                var allocatedNumber = await AllocateAdmissionNumberAsync(request.CampusId, request.BoardId, request.AcademicYearId);
-                if (!string.IsNullOrWhiteSpace(allocatedNumber))
-                {
-                    request.AdmissionNo = allocatedNumber;
-                }
-            }
 
             // ---------------------------------------------
             // Save only Student Photo
@@ -189,124 +177,18 @@ namespace CollegeManagement.API.Services.Implementations
         //generate//
 
         // =====================================================
-        // PREVIEW ADMISSION NUMBER (NON-MUTATING)
+        // GENERATE ADMISSION NUMBER
         // =====================================================
 
-        public async Task<string?> GetAdmissionNumberPreviewAsync(int? campusId = null, int? boardId = null, int? academicYearId = null, bool isReferral = false)
+        public async Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            if (isReferral) return null;
-
-            try
-            {
-                var preview = await _numberSeriesService.GetLivePreviewAsync(
-                    "ADMISSION_NO", 
-                    pattern: null, 
-                    numberLength: null, 
-                    prefix: null, 
-                    campusId: campusId, 
-                    board: boardId?.ToString(), 
-                    academicYear: academicYearId?.ToString());
-
-                if (!string.IsNullOrWhiteSpace(preview))
-                {
-                    return preview;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "GetLivePreviewAsync failed for admission number preview, falling back to repository calculation.");
-            }
-
-            return await _repository.GenerateAdmissionNumberAsync(campusId, boardId, academicYearId);
-        }
-
-        // =====================================================
-        // GENERATE ADMISSION NUMBER (PREVIEW / SEQUENCE)
-        // =====================================================
-
-        public async Task<string?> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null, bool isReferral = false)
-        {
-            if (isReferral) return null;
-
-            string? boardStr = boardId?.ToString();
-            if (boardId.HasValue && boardId.Value > 0)
-            {
-                var b = await _context.Boards.AsNoTracking().FirstOrDefaultAsync(x => x.BoardId == boardId.Value);
-                if (b != null) boardStr = b.BoardCode ?? b.BoardName;
-            }
-
-            string? ayStr = academicYearId?.ToString();
-            if (academicYearId.HasValue && academicYearId.Value > 0)
-            {
-                var ay = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(x => x.AcademicYearId == academicYearId.Value);
-                if (ay != null) ayStr = ay.AcademicYearName;
-            }
-
-            string? campusCode = null;
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                var c = await _context.Campuses.AsNoTracking().FirstOrDefaultAsync(x => x.CampusId == campusId.Value);
-                if (c != null) campusCode = c.CampusCode ?? c.CampusName;
-            }
-
-            // Live preview WITHOUT mutating the database sequence counter
-            var previewNumber = await _numberSeriesService.GetLivePreviewAsync(
-                "ADMISSION_NO",
-                campusId: campusId,
-                board: boardStr,
-                academicYear: ayStr,
-                campusCode: campusCode);
-
-            if (!string.IsNullOrWhiteSpace(previewNumber))
-            {
-                return previewNumber;
-            }
-
-            // Fallback to repository if number series configuration doesn't exist
-            return await _repository.GenerateAdmissionNumberAsync(campusId, boardId, academicYearId);
-        }
-
-        // =====================================================
-        // ALLOCATE ADMISSION NUMBER (MUTATING - INCREMENTS SEQUENCE ON RECORD CREATION)
-        // =====================================================
-
-        public async Task<string?> AllocateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
-        {
-            string? boardStr = boardId?.ToString();
-            string? boardCode = null;
-            if (boardId.HasValue && boardId.Value > 0)
-            {
-                var b = await _context.Boards.AsNoTracking().FirstOrDefaultAsync(x => x.BoardId == boardId.Value);
-                if (b != null)
-                {
-                    boardStr = b.BoardName;
-                    boardCode = b.BoardCode ?? b.BoardName;
-                }
-            }
-
-            string? ayStr = academicYearId?.ToString();
-            if (academicYearId.HasValue && academicYearId.Value > 0)
-            {
-                var ay = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(x => x.AcademicYearId == academicYearId.Value);
-                if (ay != null) ayStr = ay.AcademicYearName;
-            }
-
-            string? campusCode = null;
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                var c = await _context.Campuses.AsNoTracking().FirstOrDefaultAsync(x => x.CampusId == campusId.Value);
-                if (c != null) campusCode = c.CampusCode ?? c.CampusName;
-            }
-
             var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
             { 
-                Board = boardStr,
-                BoardCode = boardCode,
-                AcademicYear = ayStr,
-                CampusCode = campusCode
+                Board = boardId?.ToString(),
+                AcademicYear = academicYearId?.ToString()
             };
             
-            // Atomically generate and increment sequence in NumberSeriesConfigurations
+            // Generate next number purely from the NumberSeriesSequences table for global continuity
             var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
             
             if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
@@ -319,54 +201,29 @@ namespace CollegeManagement.API.Services.Implementations
         }
 
         // =====================================================
-        // APPROVE / REJECT ADMISSION REQUESTS (CROSS-CAMPUS REFERRALS)
+        // APPROVE (ATOMIC STUDENT DOMAIN + CENTRALIZED USER PROVISIONING)
         // =====================================================
-
-        public async Task<IEnumerable<StudentAdmissionResponseDto>> GetOutgoingRequestsAsync(int campusId)
-        {
-            return await _repository.GetOutgoingRequestsAsync(campusId);
-        }
-
-        public async Task<IEnumerable<StudentAdmissionResponseDto>> GetIncomingRequestsAsync(int campusId)
-        {
-            return await _repository.GetIncomingRequestsAsync(campusId);
-        }
 
         public async Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks)
         {
-            var admission = await _repository.GetByIdAsync(admissionId);
-            if (admission == null)
-                throw new KeyNotFoundException($"Admission request with ID {admissionId} not found.");
-
-            // Generate an admission number for the target campus if one is not yet assigned
-            string admissionNo = admission.AdmissionNo ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(admissionNo))
-            {
-                var generated = await GenerateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId, isReferral: false);
-                if (!string.IsNullOrWhiteSpace(generated))
-                {
-                    admissionNo = generated;
-                }
-            }
-
-            var result = await _repository.ApproveAdmissionRequestAsync(admissionId, admissionNo, remarks);
+            var result = await _repository.ApproveAdmissionRequestAsync(admissionId, remarks);
             if (result)
             {
-                await _auditLoggingService.LogAsync("Request Approved", "Admissions", admissionNo, "Info", "Success", remarks);
+                var admission = await _repository.GetByIdAsync(admissionId);
+                if (admission != null)
+                    await _auditLoggingService.LogAsync("Request Approved", "Admissions", admission.AdmissionNo, "Info", "Success", remarks);
             }
             return result;
         }
 
         public async Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks)
         {
-            var admission = await _repository.GetByIdAsync(admissionId);
-            if (admission == null)
-                throw new KeyNotFoundException($"Admission request with ID {admissionId} not found.");
-
             var result = await _repository.RejectAdmissionRequestAsync(admissionId, rejectionReason, remarks);
             if (result)
             {
-                await _auditLoggingService.LogAsync("Request Rejected", "Admissions", admission.AdmissionNo, "Warning", "Success", rejectionReason + " - " + remarks);
+                var admission = await _repository.GetByIdAsync(admissionId);
+                if (admission != null)
+                    await _auditLoggingService.LogAsync("Request Rejected", "Admissions", admission.AdmissionNo, "Warning", "Success", rejectionReason + " - " + remarks);
             }
             return result;
         }
@@ -389,21 +246,6 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 _logger.LogInformation("Student admission {AdmissionId} is already approved.", request.AdmissionId);
                 return true;
-            }
-
-            // Generate admission number if it was deferred (e.g. for referrals)
-            if (string.IsNullOrWhiteSpace(admission.AdmissionNo))
-            {
-                admission.AdmissionNo = await AllocateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId);
-                if (!string.IsNullOrWhiteSpace(admission.AdmissionNo))
-                {
-                    // Directly update the DB so the approval SP can use it
-                    var updateConn = _context.Database.GetDbConnection();
-                    if (updateConn.State != ConnectionState.Open) await updateConn.OpenAsync();
-                    await Dapper.SqlMapper.ExecuteAsync(updateConn,
-                        "UPDATE `StudentAdmissions` SET `AdmissionNo` = @AdmNo WHERE `AdmissionId` = @AdmId",
-                        new { AdmNo = admission.AdmissionNo, AdmId = admission.AdmissionId });
-                }
             }
 
             // 2. Open database connection and begin outer transaction for atomicity

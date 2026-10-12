@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.DTOs.TransportDriver.Attendance;
 using CollegeManagement.API.Services.Interfaces.Transport;
-using CollegeManagement.API.Helpers;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -38,7 +37,7 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
-                var ipAddress = ClientIpHelper.GetClientIpAddress(HttpContext);
+                var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
                 await _driverAttendanceService.PunchAsync(staffId, true, request, deviceId, ipAddress);
                 return Ok(new { success = true, data = "Checked in successfully" });
             }
@@ -53,7 +52,7 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
-                var ipAddress = ClientIpHelper.GetClientIpAddress(HttpContext);
+                var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
                 await _driverAttendanceService.PunchAsync(staffId, false, request, deviceId, ipAddress);
                 return Ok(new { success = true, data = "Checked out successfully" });
             }

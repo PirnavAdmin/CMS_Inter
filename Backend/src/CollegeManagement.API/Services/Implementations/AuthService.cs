@@ -260,7 +260,8 @@ namespace CollegeManagement.API.Services.Implementations
                     target: user.Email,
                     severity: "Info",
                     status: "Success",
-                    details: $"Successful login for {user.Email}", overrideUser: user.FullName ?? user.Email, overrideRole: user.Role?.RoleName ?? "Unknown");
+                    details: $"Successful login for {user.Email}"
+                );
 
                 return new AuthResult
                 {
@@ -1165,5 +1166,3 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
-
-

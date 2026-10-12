@@ -1,4 +1,3 @@
-import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import { NavLink } from "react-router-dom";
 import logo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -37,7 +36,7 @@ export default function StudentSidebar({ open, onClose }) {
   return (
     <aside className={`sp-sidebar ${open ? "is-open" : ""}`}>
       <div className="sp-brand">
-        <CampusBrandImage src={logo} alt="Pirnav Colleges"  />
+        <img src={logo} alt="Pirnav Colleges" />
       </div>
       <nav>
         {groups.map(([heading, links]) => (

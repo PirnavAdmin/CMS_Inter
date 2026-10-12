@@ -13,17 +13,8 @@ namespace CollegeManagement.API.Controllers.V1 {
     [Authorize]
     public class CampusTransfersController : ControllerBase {
         private readonly ICampusTransferService _service;
-        private readonly IFeeService _feeService;
-        public CampusTransfersController(ICampusTransferService service, IFeeService feeService) {
+        public CampusTransfersController(ICampusTransferService service) {
             _service = service;
-            _feeService = feeService;
-        }
-
-        [HttpGet("{id}/fee-preview")]
-        public async Task<IActionResult> GetTransferFeePreview(int id) {
-            var result = await _feeService.PreviewCampusTransferFeeAsync(id);
-            if (result == null) return NotFound(new { message = "Transfer record not found." });
-            return Ok(result);
         }
 
         private int GetCurrentUserId() => int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");

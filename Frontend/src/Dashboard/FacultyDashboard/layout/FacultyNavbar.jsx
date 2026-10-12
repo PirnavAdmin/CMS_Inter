@@ -148,14 +148,6 @@ export default function FacultyNavbar() {
   const [profileDropOpen, setProfileDropOpen] = useState(false);
   const profileDropRef = useRef(null);
 
-  // Real-time photo refresh listener
-  const [photoTimestamp, setPhotoTimestamp] = useState(Date.now());
-  useEffect(() => {
-    const onPhotoUpdated = () => setPhotoTimestamp(Date.now());
-    window.addEventListener("faculty-photo-updated", onPhotoUpdated);
-    return () => window.removeEventListener("faculty-photo-updated", onPhotoUpdated);
-  }, []);
-
   // Board & Academic Year Selection Handlers
   const handleBoardSelect = (board) => {
     if (academicSetSelectedBoard) academicSetSelectedBoard(board);
@@ -517,20 +509,7 @@ export default function FacultyNavbar() {
         {/* Profile Avatar & Dropdown */}
         <div style={{ position: "relative" }} ref={profileDropRef}>
           <button className="cms-profile-btn" onClick={() => setProfileDropOpen((p) => !p)}>
-            
-            {profileData.photoPath || profileData.photoUrl ? (
-              <img 
-                src={profileData.photoUrl || `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${photoTimestamp}`} 
-                alt="Profile" 
-                className="cms-avatar" 
-                style={{ objectFit: 'cover' }} 
-                onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} 
-              />
-            ) : null}
-            <div className="cms-avatar" style={{ display: (profileData.photoPath || profileData.photoUrl) ? 'none' : 'flex' }}>
-              {initials}
-            </div>
-
+            <div className="cms-avatar">{initials}</div>
             <div className="cms-profile-meta">
               <strong>
                 {profileData.fullName ||

@@ -349,9 +349,9 @@ export const normalizeDesignation = (row) => {
   };
 };
 
-const PAGE_SIZE = 5;
-const DepartmentTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={4} />);
-const DesignationTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={5} />);
+const PAGE_SIZE = 6;
+const DepartmentTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={3} />);
+const DesignationTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={4} />);
 
 function Pager({ page, total, onChange }) {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -1257,7 +1257,7 @@ export default function DepartmentManagementPage() {
                   title="Download Departments & Designations Excel Template"
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} />
-                  {downloadingTemplate ? "Downloading..." : "Download Template"}
+                  {downloadingTemplate ? "Downloading..." : "Download Template Excel"}
                 </button>
                 <button
                   type="button"
@@ -1301,57 +1301,45 @@ export default function DepartmentManagementPage() {
                   {departmentsLoading ? (
                     <DepartmentTableSkeleton />
                   ) : visibleDepartments.length > 0 ? (
-                    <>
-                      {visibleDepartments.map((item) => (
-                        <tr key={item.id || item.name}>
-                          <td>
-                            <span className="master-code-badge" title={item.code || item.departmentCode || ""}>
-                              {item.code || item.departmentCode || "—"}
-                            </span>
-                          </td>
-                          <td>
-                            <strong title={item.name}>{item.name}</strong>
-                            <small>{item.staffType}</small>
-                          </td>
-                          <td>
-                            <StatusBadge value={item.status} />
-                          </td>
-                          <td>
-                            <div className="master-row-actions">
-                              <button
-                                className="master-icon-button"
-                                aria-label={`View ${item.name}`}
-                                onClick={() => navigate(`/dashboard/departments/${item.id}/view`, { state: { department: item } })}
-                              >
-                                <Eye />
-                              </button>
-                              <button
-                                className="master-icon-button"
-                                aria-label={`Edit ${item.name}`}
-                                onClick={() => navigate(`/dashboard/departments/${item.id}/edit`)}
-                              >
-                                <Pencil />
-                              </button>
-                              <button
-                                className="master-icon-button is-delete"
-                                aria-label={`Delete ${item.name}`}
-                                onClick={() => setPendingDeleteDept(item)}
-                              >
-                                <Trash2 />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {Array.from({ length: Math.max(0, PAGE_SIZE - visibleDepartments.length) }).map((_, idx) => (
-                        <tr key={`dept-filler-${idx}`} className="master-filler-row" aria-hidden="true">
-                          <td>&nbsp;</td>
-                          <td>&nbsp;</td>
-                          <td>&nbsp;</td>
-                          <td>&nbsp;</td>
-                        </tr>
-                      ))}
-                    </>
+                    visibleDepartments.map((item) => (
+                      <tr key={item.id || item.name}>
+                        <td>
+                          <span className="master-code-badge">{item.code || item.departmentCode || "—"}</span>
+                        </td>
+                        <td>
+                          <strong>{item.name}</strong>
+                          <small>{item.staffType}</small>
+                        </td>
+                        <td>
+                          <StatusBadge value={item.status} />
+                        </td>
+                        <td>
+                          <div className="master-row-actions">
+                            <button
+                              className="master-icon-button"
+                              aria-label={`View ${item.name}`}
+                              onClick={() => navigate(`/dashboard/departments/${item.id}/view`, { state: { department: item } })}
+                            >
+                              <Eye />
+                            </button>
+                            <button
+                              className="master-icon-button"
+                              aria-label={`Edit ${item.name}`}
+                              onClick={() => navigate(`/dashboard/departments/${item.id}/edit`)}
+                            >
+                              <Pencil />
+                            </button>
+                            <button
+                              className="master-icon-button is-delete"
+                              aria-label={`Delete ${item.name}`}
+                              onClick={() => setPendingDeleteDept(item)}
+                            >
+                              <Trash2 />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   ) : (
                     <EmptyTable
                       colSpan={4}
@@ -1384,7 +1372,7 @@ export default function DepartmentManagementPage() {
                   title="Download Departments & Designations Excel Template"
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} />
-                  {downloadingTemplate ? "Downloading..." : "Download Template"}
+                  {downloadingTemplate ? "Downloading..." : "Download Template Excel"}
                 </button>
                 <button
                   type="button"
@@ -1429,66 +1417,53 @@ export default function DepartmentManagementPage() {
                   {designationsLoading ? (
                     <DesignationTableSkeleton />
                   ) : visibleDesignations.length > 0 ? (
-                    <>
-                      {visibleDesignations.map((item) => (
-                        <tr key={item.id || item.name}>
-                          <td>
-                            <span className="master-code-badge" title={item.code || item.designationCode || ""}>
-                              {item.code || item.designationCode || "—"}
-                            </span>
-                          </td>
-                          <td>
-                            <strong title={item.name}>{item.name}</strong>
-                            <small>{item.staffType}</small>
-                          </td>
-                          <td>
-                            <span className="master-text-secondary" title={item.departmentName || "All Departments"}>
-                              {item.departmentName || "All Departments"}
-                            </span>
-                          </td>
-                          <td>
-                            <StatusBadge value={item.status} />
-                          </td>
-                          <td>
-                            <div className="master-row-actions">
-                              <button
-                                className="master-icon-button"
-                                aria-label={`View ${item.name}`}
-                                onClick={() => navigate(`/dashboard/designations/${item.id}/view`, { state: { designation: item } })}
-                              >
-                                <Eye />
-                              </button>
-                              <button
-                                className="master-icon-button"
-                                aria-label={`Edit ${item.name}`}
-                                onClick={() => navigate(`/dashboard/designations/${item.id}/edit`)}
-                              >
-                                <Pencil />
-                              </button>
-                              <button
-                                className="master-icon-button is-delete"
-                                aria-label={`Delete ${item.name}`}
-                                onClick={() => setPendingDeleteDesig(item)}
-                              >
-                                <Trash2 />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {Array.from({ length: Math.max(0, PAGE_SIZE - visibleDesignations.length) }).map((_, idx) => (
-                        <tr key={`desig-filler-${idx}`} className="master-filler-row" aria-hidden="true">
-                          <td>&nbsp;</td>
-                          <td>&nbsp;</td>
-                          <td>&nbsp;</td>
-                          <td>&nbsp;</td>
-                          <td>&nbsp;</td>
-                        </tr>
-                      ))}
-                    </>
+                    visibleDesignations.map((item) => (
+                      <tr key={item.id || item.name}>
+                        <td>
+                          <span className="master-code-badge">{item.code || item.designationCode || "—"}</span>
+                        </td>
+                        <td>
+                          <strong>{item.name}</strong>
+                          <small>{item.staffType}</small>
+                        </td>
+                        <td>
+                          <span className="master-text-secondary">
+                            {item.departmentName || "All Departments"}
+                          </span>
+                        </td>
+                        <td>
+                          <StatusBadge value={item.status} />
+                        </td>
+                        <td>
+                          <div className="master-row-actions">
+                            <button
+                              className="master-icon-button"
+                              aria-label={`View ${item.name}`}
+                              onClick={() => navigate(`/dashboard/designations/${item.id}/view`, { state: { designation: item } })}
+                            >
+                              <Eye />
+                            </button>
+                            <button
+                              className="master-icon-button"
+                              aria-label={`Edit ${item.name}`}
+                              onClick={() => navigate(`/dashboard/designations/${item.id}/edit`)}
+                            >
+                              <Pencil />
+                            </button>
+                            <button
+                              className="master-icon-button is-delete"
+                              aria-label={`Delete ${item.name}`}
+                              onClick={() => setPendingDeleteDesig(item)}
+                            >
+                              <Trash2 />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   ) : (
                     <EmptyTable
-                      colSpan={5}
+                      colSpan={4}
                       text={
                         designationQuery
                           ? "No designations match your search."

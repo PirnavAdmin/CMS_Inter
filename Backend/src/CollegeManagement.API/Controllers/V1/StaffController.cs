@@ -329,11 +329,10 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 12. POST/PUT /api/v1/staff/{id}/save-profile-draft
+        /// 12. POST /api/v1/staff/{id}/save-profile-draft
         /// Saves profile section draft by staff ID.
         /// </summary>
         [HttpPost("{id:int}/save-profile-draft")]
-        [HttpPut("{id:int}/save-profile-draft")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraft(int id, [FromBody] UpdateStaffProfileSectionDto dto)
@@ -343,11 +342,10 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 13. POST/PUT /api/v1/staff/token/{token}/save-profile-draft
+        /// 13. POST /api/v1/staff/token/{token}/save-profile-draft
         /// Saves profile section draft by secure token.
         /// </summary>
         [HttpPost("token/{token}/save-profile-draft")]
-        [HttpPut("token/{token}/save-profile-draft")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraftByToken(string token, [FromBody] UpdateStaffProfileSectionDto dto)
@@ -672,7 +670,7 @@ namespace CollegeManagement.API.Controllers.V1
             var isNonTeachingFallback = string.Equals(effectiveStaffType?.Replace("-", "").Replace("_", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var fallback = isNonTeachingFallback
                 ? new[] { "Administrative Officer", "Office Assistant", "Clerk", "Receptionist", "Senior Accountant", "Accountant", "Cashier", "Fee Collection Executive", "Librarian", "Assistant Librarian", "Library Assistant", "Bus Driver", "Van Driver", "Driver", "Bus Attendant", "Transport In-charge", "Chief Warden", "Hostel Warden", "Assistant Warden", "Cook", "Mess Manager", "Security Officer", "Security Supervisor", "Security Guard", "CCTV Operator", "Electrician", "Plumber", "AC Technician", "Maintenance Supervisor", "System Administrator", "IT Support Specialist", "Network Engineer", "HR Manager", "HR Executive", "Housekeeping Supervisor", "Store Keeper", "Inventory Executive", "Lab Assistant", "Attender / Peon" }
-                : new[] { "Junior Lecturer", "Senior Lecturer", "Head of Department (HOD)", "Lecturer", "Lab Demonstrator", "Physical Director (PD)", "Academic Coordinator", "Vice Principal", "Subject Teacher", "Professor", "Associate Professor", "Assistant Professor" };
+                : new[] { "Junior Lecturer", "Lecturer", "Senior Lecturer", "Subject Teacher", "Head of Department (HOD)", "Academic Coordinator", "Vice Principal", "Professor", "Associate Professor", "Assistant Professor" };
 
             var desigStaffType = isNonTeachingFallback ? "Non-Teaching" : "Teaching";
             return Ok(fallback.Select((name, i) => new { id = i + 1, name, designationName = name, code = name.ToUpperInvariant(), designationCode = name.ToUpperInvariant(), staffType = desigStaffType }));

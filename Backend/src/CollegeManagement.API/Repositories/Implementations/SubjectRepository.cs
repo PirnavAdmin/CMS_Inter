@@ -128,20 +128,9 @@ namespace CollegeManagement.API.Repositories
 
         public async Task<IEnumerable<Subject>> GetByContextAsync(int boardId, int groupId, int academicLevelId)
         {
-            var query = _context.Subjects
+            var subjects = await _context.Subjects
                 .AsNoTracking()
-                .AsQueryable();
-
-            if (boardId > 0)
-                query = query.Where(s => s.BoardId == 0 || s.BoardId == boardId);
-
-            if (groupId > 0)
-                query = query.Where(s => s.GroupId == 0 || s.GroupId == groupId);
-
-            if (academicLevelId > 0)
-                query = query.Where(s => s.AcademicLevelId == 0 || s.AcademicLevelId == academicLevelId);
-
-            var subjects = await query
+                .Where(s => (boardId == 0 || s.BoardId == boardId) && (groupId == 0 || s.GroupId == groupId) && (academicLevelId == 0 || s.AcademicLevelId == academicLevelId))
                 .OrderBy(s => s.SubjectId)
                 .ToListAsync();
 

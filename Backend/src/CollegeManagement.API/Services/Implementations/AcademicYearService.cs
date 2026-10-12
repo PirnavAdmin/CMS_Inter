@@ -15,21 +15,16 @@ namespace CollegeManagement.API.Services.Implementations
     public class AcademicYearService : IAcademicYearService
     {
         private readonly IAcademicYearRepository _repository;
-        private readonly ILookupCacheService _cache;
 
-        public AcademicYearService(IAcademicYearRepository repository, ILookupCacheService cache)
+        public AcademicYearService(IAcademicYearRepository repository)
         {
             _repository = repository;
-            _cache = cache;
         }
 
         public async Task<IEnumerable<AcademicYearResponseDto>> GetAllAsync()
         {
-            return await _cache.GetOrCreateAsync("lookup:academicyears:all", async () =>
-            {
-                var years = await _repository.GetAllAsync();
-                return years.Select(MapToResponseDto).ToList();
-            });
+            var years = await _repository.GetAllAsync();
+            return years.Select(MapToResponseDto);
         }
 
         public async Task<PagedAcademicYearResponseDto> GetPagedAsync(AcademicYearSearchRequestDto request)
@@ -55,11 +50,8 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<IEnumerable<AcademicYearResponseDto>> GetActiveAsync()
         {
-            return await _cache.GetOrCreateAsync("lookup:academicyears:active", async () =>
-            {
-                var years = await _repository.GetAllAsync();
-                return years.Where(y => y.IsActive).Select(MapToResponseDto).ToList();
-            });
+            var years = await _repository.GetAllAsync();
+            return years.Where(y => y.IsActive).Select(MapToResponseDto);
         }
 
         public async Task<AcademicYearResponseDto?> GetByIdAsync(int id)
@@ -86,7 +78,6 @@ namespace CollegeManagement.API.Services.Implementations
             };
 
             await _repository.AddAsync(academicYear);
-            _cache.RemoveByPrefix("lookup:academicyears");
             var reloaded = await _repository.GetByIdAsync(academicYear.AcademicYearId);
             return MapToResponseDto(reloaded ?? academicYear);
         }
@@ -112,7 +103,6 @@ namespace CollegeManagement.API.Services.Implementations
             academicYear.Description = dto.Description?.Trim();
 
             await _repository.UpdateAsync(academicYear);
-            _cache.RemoveByPrefix("lookup:academicyears");
             var reloaded = await _repository.GetByIdAsync(id);
             return MapToResponseDto(reloaded ?? academicYear);
         }
@@ -126,7 +116,6 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             await _repository.DeleteAsync(academicYear);
-            _cache.RemoveByPrefix("lookup:academicyears");
             return true;
         }
 

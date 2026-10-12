@@ -24,7 +24,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public int? CampusId { get; set; } = 1; 
         public int? SourceCampusId { get; set; }
         public int? AdmittedById { get; set; }
-        public bool IsReferral { get; set; }
 
         [Required]
         public int BoardId { get; set; }

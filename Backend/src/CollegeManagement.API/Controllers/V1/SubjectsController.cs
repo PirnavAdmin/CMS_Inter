@@ -145,9 +145,9 @@ namespace CollegeManagement.API.Controllers
         {
             string? deptName = await ResolveDepartmentNameAsync(department, departmentId);
 
-            if ((boardId.HasValue && boardId.Value > 0) || (groupId.HasValue && groupId.Value > 0) || (academicLevelId.HasValue && academicLevelId.Value > 0))
+            if (boardId.HasValue && groupId.HasValue && academicLevelId.HasValue)
             {
-                var contextSubjects = await _service.GetByContextAsync(boardId ?? 0, groupId ?? 0, academicLevelId ?? 0);
+                var contextSubjects = await _service.GetByContextAsync(boardId.Value, groupId.Value, academicLevelId.Value);
                 return Ok(ApplyDepartmentFilter(contextSubjects, deptName));
             }
 
@@ -182,18 +182,8 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int groupId,
             [FromQuery] int academicLevelId)
         {
-            if (groupId <= 0 && (boardId <= 0 || academicLevelId <= 0))
-                return BadRequest(new { message = "Valid GroupId or BoardId and AcademicLevelId are required." });
-
-            if (boardId <= 0 && groupId > 0)
-            {
-                var group = await _db.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.GroupId == groupId);
-                if (group != null)
-                {
-                    boardId = group.BoardId;
-                    if (academicLevelId <= 0) academicLevelId = group.AcademicLevelId;
-                }
-            }
+            if (boardId <= 0 || groupId <= 0 || academicLevelId <= 0)
+                return BadRequest(new { message = "Valid BoardId, GroupId, and AcademicLevelId are required." });
 
             var subjects = await _service.GetByContextAsync(boardId, groupId, academicLevelId);
             return Ok(subjects);

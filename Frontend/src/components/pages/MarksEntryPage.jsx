@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../layout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { getAuthToken } from "@/features/authStorage.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -34,13 +35,13 @@ const buildMarksPayload = (workspace, evalId, campusId = null) => {
     const theory = isAbsent
       ? 0
       : workspace?.mode === "OBJECTIVE"
-        ? Math.round(Number(row.obtainedMarks || 0))
-        : Math.round(Number(row.theory || 0));
+      ? Math.round(Number(row.obtainedMarks || 0))
+      : Math.round(Number(row.theory || 0));
     const total = isAbsent
       ? 0
       : workspace?.mode === "OBJECTIVE"
-        ? Math.round(Number(row.obtainedMarks || 0))
-        : Math.round(Number(row.total || 0));
+      ? Math.round(Number(row.obtainedMarks || 0))
+      : Math.round(Number(row.total || 0));
 
     return {
       campusId: effectiveCampusId,
@@ -81,13 +82,13 @@ const buildAdminMarksPayload = (workspace, campusId = null) => {
     const theory = isAbsent
       ? 0
       : workspace?.mode === "OBJECTIVE"
-        ? Number(row.obtainedMarks || 0)
-        : Number(row.theory || 0);
+      ? Number(row.obtainedMarks || 0)
+      : Number(row.theory || 0);
     const total = isAbsent
       ? 0
       : workspace?.mode === "OBJECTIVE"
-        ? Number(row.obtainedMarks || 0)
-        : Number(row.total || 0);
+      ? Number(row.obtainedMarks || 0)
+      : Number(row.total || 0);
 
     return {
       campusId: effectiveCampusId,
@@ -123,7 +124,7 @@ const unwrapRecords = (response) => {
 
 const validateMarksConfiguration = (config) =>
   config?.mode === "REGULAR" &&
-    Number(config.internalMax || 0) + Number(config.practicalMax || 0) + Number(config.theoryMax || 0) !==
+  Number(config.internalMax || 0) + Number(config.practicalMax || 0) + Number(config.theoryMax || 0) !==
     Number(config.maxMarks || 0)
     ? "Configured component maxima do not equal Total Maximum Marks."
     : "";
@@ -144,10 +145,10 @@ const validateMarksRows = (workspace, complete) => {
       workspace.mode === "OBJECTIVE"
         ? [["obtainedMarks", workspace.maxMarks]]
         : [
-          ["internal", workspace.internalMax],
-          ...(workspace.practicalMax ? [["practical", workspace.practicalMax]] : []),
-          ["theory", workspace.theoryMax],
-        ];
+            ["internal", workspace.internalMax],
+            ...(workspace.practicalMax ? [["practical", workspace.practicalMax]] : []),
+            ["theory", workspace.theoryMax],
+          ];
     const list = [];
     fields.forEach(([key, max]) => {
       if (row[key] === "" || row[key] === null || row[key] === undefined) {
@@ -174,158 +175,6 @@ const calculateStudentSubjectResult = (row, workspace) => {
   };
 };
 
-const formatExamDropdownLabel = (exam) => {
-  if (!exam) return "Examination";
-  const examId = normalizeId(exam.id ?? exam.examinationId ?? exam.examId);
-  const rawName = exam.name || exam.examName || "Examination";
-  const cleanedName = rawName.replace(/\s*\((?:COMPLETED|SCHEDULED|DRAFT|FINISHED|PUBLISHED)\)/gi, "").trim();
-  return examId ? `${cleanedName} (ID: ${examId})` : cleanedName;
-};
-
-const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) => {
-  const sectionId = filters.section;
-  if (!sectionId) return [];
-
-  const studentMap = new Map();
-
-  const addRecords = (records) => {
-    (records || []).forEach((s) => {
-      const sId = normalizeId(s.studentId ?? s.id);
-      if (!sId) return;
-      if (s.isActive === false || String(s.status || "").toLowerCase() === "inactive") return;
-      if (!studentMap.has(sId)) {
-        studentMap.set(sId, {
-          studentId: sId,
-          admissionNo: s.admissionNo ?? s.admissionNumber ?? "",
-          rollNo: String(s.rollNumber ?? s.rollNo ?? s.roll ?? "").trim(),
-          studentName: s.studentName ?? s.fullName ?? s.name ?? "Student",
-          isActive: true,
-          allocatedDate: s.allocatedDate || s.allocationDate || s.assignedDate || s.createdAt || s.createdDate || s.admissionDate || null,
-        });
-      }
-    });
-  };
-
-  // Section Students API call matching Student Management (/api/v1/students)
-  try {
-    const fetchSize = 100;
-    for (let pageNumber = 1; ; pageNumber += 1) {
-      const params = {
-        boardId: filters.board ? Number(filters.board) : undefined,
-        academicYearId: filters.year ? Number(filters.year) : undefined,
-        ...(filters.level ? { academicLevelId: Number(filters.level) } : {}),
-        ...(filters.group ? { groupId: Number(filters.group) } : {}),
-        ...(filters.program ? { programId: Number(filters.program) } : {}),
-        sectionId: Number(sectionId) || sectionId,
-        campusId: campusId ? Number(campusId) : undefined,
-        pageNumber,
-        pageSize: fetchSize,
-      };
-      const res = await apiClient.get(apiEndpoints.students?.list || "/api/v1/students", {
-        params,
-        skipGlobalLoader: true,
-      });
-      const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
-      const batch = Array.isArray(payload)
-        ? payload
-        : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
-      addRecords(batch);
-      const total = payload.totalCount ?? payload.TotalCount;
-      if (!batch.length || (total != null ? studentMap.size >= Number(total) : batch.length < fetchSize)) break;
-    }
-  } catch (err) {
-    console.warn("Notice: could not query students endpoint:", err);
-  }
-
-  const list = Array.from(studentMap.values());
-  list.sort((a, b) => {
-    if (a.rollNo && b.rollNo) {
-      const cmp = a.rollNo.localeCompare(b.rollNo, undefined, { numeric: true });
-      if (cmp !== 0) return cmp;
-    }
-    return (a.studentName || "").localeCompare(b.studentName || "");
-  });
-
-  return list;
-};
-
-const reconcileRosterWithMarks = (roster = [], marks = [], config = {}, existingRows = []) => {
-  const marksMap = new Map();
-  (marks || []).forEach((m) => {
-    const sId = normalizeId(m.studentId ?? m.id);
-    if (sId) marksMap.set(sId, m);
-  });
-
-  const existingMap = new Map();
-  (existingRows || []).forEach((r) => {
-    const sId = normalizeId(r.studentId);
-    if (sId) existingMap.set(sId, r);
-  });
-
-  return (roster || []).map((student) => {
-    const sId = normalizeId(student.studentId ?? student.id);
-    const existing = existingMap.get(sId);
-    const mark = marksMap.get(sId);
-
-    // If existing in-memory row was modified by user, preserve user input
-    if (
-      existing &&
-      (existing.dirty ||
-        existing.internal !== "" ||
-        existing.theory !== "" ||
-        existing.obtainedMarks !== "" ||
-        existing.absent)
-    ) {
-      return {
-        ...existing,
-        rollNo: String(student.rollNo || existing.rollNo || ""),
-        studentName: student.studentName || existing.studentName || "Student",
-        markId: existing.markId ?? mark?.markId,
-      };
-    }
-
-    // If saved mark record exists from backend
-    if (mark) {
-      const isAbsent = Boolean(mark.isAbsent || mark.absent);
-      const internal = isAbsent ? "" : (mark.internalMarks ?? mark.internal ?? "");
-      const practical = isAbsent ? "" : (mark.practicalMarks ?? mark.practical ?? (config?.practicalMax ? "" : 0));
-      const theory = isAbsent ? "" : (mark.theoryMarks ?? mark.theory ?? "");
-      const obtained = isAbsent ? "" : (mark.obtainedMarks ?? mark.totalMarks ?? mark.total ?? "");
-      const total = isAbsent ? "" : (mark.totalMarks ?? mark.total ?? obtained);
-
-      return {
-        markId: mark.markId,
-        studentId: sId,
-        rollNo: String(student.rollNo || mark.rollNo || ""),
-        studentName: student.studentName || mark.studentName || "Student",
-        internal,
-        practical,
-        theory,
-        obtainedMarks: obtained,
-        total,
-        absent: isAbsent,
-        remarks: mark.remarks || "",
-        autoAbsentRemark: false,
-      };
-    }
-
-    // Newly eligible student or student without marks record
-    return {
-      studentId: sId,
-      rollNo: String(student.rollNo || ""),
-      studentName: student.studentName || "Student",
-      internal: "",
-      practical: config?.practicalMax ? "" : 0,
-      theory: "",
-      obtainedMarks: "",
-      total: "",
-      absent: false,
-      remarks: "",
-      autoAbsentRemark: false,
-    };
-  });
-};
-
 const calculateEvaluationStatistics = (workspace) => {
   if (!workspace?.rows?.length) {
     const totalCount = Number(workspace?.totalStudents ?? workspace?.studentsCount ?? 0);
@@ -349,7 +198,7 @@ const calculateEvaluationStatistics = (workspace) => {
     };
   }
   const values = workspace.rows
-    .filter((row) => !row.absent && (row.total !== "" || row.obtainedMarks !== ""))
+    .filter((row) => !row.absent)
     .map((row) => Number(workspace.mode === "OBJECTIVE" ? row.obtainedMarks : row.total))
     .filter(Number.isFinite);
   return {
@@ -357,18 +206,18 @@ const calculateEvaluationStatistics = (workspace) => {
     average: values.length
       ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)
       : workspace?.averageMarks !== undefined && workspace?.averageMarks !== null
-        ? String(workspace.averageMarks)
-        : workspace?.average ?? "—",
+      ? String(workspace.averageMarks)
+      : workspace?.average ?? "—",
     highest: values.length
       ? Math.max(...values)
       : workspace?.highestMarks !== undefined && workspace?.highestMarks !== null
-        ? String(workspace.highestMarks)
-        : workspace?.highest ?? "—",
+      ? String(workspace.highestMarks)
+      : workspace?.highest ?? "—",
     lowest: values.length
       ? Math.min(...values)
       : workspace?.lowestMarks !== undefined && workspace?.lowestMarks !== null
-        ? String(workspace.lowestMarks)
-        : workspace?.lowest ?? "—",
+      ? String(workspace.lowestMarks)
+      : workspace?.lowest ?? "—",
   };
 };
 
@@ -405,7 +254,7 @@ const isLegalStatusTransition = (from, to) =>
   }[from] || []).includes(to);
 
 // Reusable Hook for Independent Academic Cascading Filters
-function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => { }) {
+function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => {}, isActive = true) {
   const {
     selectedCampus,
     selectedCampusId,
@@ -416,23 +265,13 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     selectedBoardId,
     selectedAcademicYear,
     selectedAcademicYearId,
-    boards: contextBoards = [],
-    academicYears: contextAcademicYears = [],
   } = useAcademicContext();
 
   const activeCampusId = normalizeId((selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id) || "1");
 
-  const effectiveBoardId = useMemo(() => {
-    return normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId ?? (allBoards[0]?.id || ""));
-  }, [selectedBoardId, selectedBoard, allBoards]);
-
-  const effectiveYearId = useMemo(() => {
-    return normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? "");
-  }, [selectedAcademicYearId, selectedAcademicYear]);
-
   const [filters, setFilters] = useState({
-    board: effectiveBoardId,
-    year: effectiveYearId,
+    board: "",
+    year: "",
     level: "",
     group: "",
     program: "",
@@ -444,46 +283,54 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   const [groups, setGroups] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [sections, setSections] = useState([]);
+  const [sectionsLoading, setSectionsLoading] = useState(false);
+  const [sectionsError, setSectionsError] = useState(null);
   const [exams, setExams] = useState([]);
+  const [examsLoading, setExamsLoading] = useState(false);
+  const [examsError, setExamsError] = useState(null);
 
-  // Auto-sync board from navbar context
+  // Auto-select board when allBoards loads or navbar board changes
   useEffect(() => {
-    if (effectiveBoardId && !eq(filters.board, effectiveBoardId)) {
-      setFilters((prev) => ({ ...prev, board: effectiveBoardId }));
-    } else if (!filters.board && allBoards.length > 0) {
-      const match = allBoards.find(
+    if (!isActive) return;
+    if (allBoards.length > 0) {
+      const targetBoard = allBoards.find(
         (b) =>
           eq(b.id, selectedBoardId) ||
           (selectedBoard?.code && String(b.code || "").trim().toLowerCase() === String(selectedBoard.code).trim().toLowerCase()) ||
           (selectedBoard?.name && String(b.name || "").trim().toLowerCase() === String(selectedBoard.name).trim().toLowerCase())
-      ) || allBoards[0];
-      if (match) {
-        setFilters((prev) => ({ ...prev, board: normalizeId(match.id || match.boardId) }));
+      ) || allBoards.find((b) => b.isActive) || allBoards[0];
+
+      if (targetBoard && !eq(filters.board, targetBoard.id)) {
+        setFilters((prev) => (eq(prev.board, targetBoard.id) ? prev : { ...prev, board: targetBoard.id }));
       }
     }
-  }, [effectiveBoardId, selectedBoardId, selectedBoard, allBoards, filters.board]);
+  }, [isActive, allBoards, selectedBoardId, filters.board]);
 
-  // Auto-sync academic year from navbar context
+  // Load Years, Levels, Groups when Board changes
   useEffect(() => {
-    if (effectiveYearId && !eq(filters.year, effectiveYearId)) {
-      setFilters((prev) => ({ ...prev, year: effectiveYearId }));
+    if (!isActive || !filters.board) {
+      setYears([]);
+      setLevels([]);
+      setGroups([]);
+      return;
     }
-  }, [effectiveYearId, filters.year]);
 
-  // Load Years for Campus & Board
-  useEffect(() => {
-    const currentBoard = filters.board || effectiveBoardId;
+    const authToken = getAuthToken();
+    if (!authToken) return;
+
     let isMounted = true;
+    const loadBoardDeps = async () => {
+      const selectedBoardItem = allBoards.find((b) => eq(b.id, filters.board));
 
-    const loadYears = async () => {
+      // Fetch Years filtered by Campus and Board
       try {
         const yearsRes = await apiClient
           .get("/api/v1/academic-years", {
             params: {
               CampusId: activeCampusId,
               campusId: activeCampusId,
-              boardId: currentBoard || undefined,
-              BoardId: currentBoard || undefined,
+              boardId: filters.board,
+              BoardId: filters.board,
               isActive: true,
               Status: true,
             },
@@ -491,11 +338,19 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
             },
           })
-          .catch(() => apiClient.get("/api/v1/academic-years"))
-          .catch(() => null);
-
+          .catch(() => apiClient.get(apiEndpoints.academicYears.getAll, {
+            params: {
+              CampusId: activeCampusId,
+              campusId: activeCampusId,
+              boardId: filters.board,
+              BoardId: filters.board,
+            },
+            headers: {
+              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+            },
+          }));
         const rawYears = unwrapRecords(yearsRes);
-        let listYears = rawYears
+        const listYears = rawYears
           .map((y) => ({
             id: normalizeId(y.academicYearId ?? y.id),
             name: y.academicYearName ?? y.name,
@@ -508,81 +363,43 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             if (!y.isActive) return false;
             if (String(y.name || "").includes("2028") || String(y.name || "").includes("2029")) return false;
             if (activeCampusId && y.campusId && normalizeId(y.campusId) !== normalizeId(activeCampusId)) return false;
-            if (currentBoard && y.boardId && !eq(y.boardId, currentBoard)) return false;
+            if (filters.board && y.boardId && !eq(y.boardId, filters.board)) return false;
             return true;
           });
 
-        // Ensure selectedAcademicYear from navbar is in the years list
-        if (selectedAcademicYear) {
-          const sId = normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId);
-          const sName = selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || selectedAcademicYear?.code || "Academic Year";
-          const exists = listYears.some((y) => eq(y.id, sId));
-          if (!exists && sId) {
-            listYears.unshift({
-              id: sId,
-              name: sName,
-              isActive: true,
-            });
-          }
-        }
-        if (!listYears.length && contextAcademicYears.length > 0) {
-          listYears = contextAcademicYears.map((y) => ({
-            id: normalizeId(y.academicYearId ?? y.id),
-            name: y.academicYearName ?? y.name,
-            isActive: true,
-          }));
-        }
-
         if (isMounted) {
           setYears(listYears);
-          const targetYear = listYears.find((y) => eq(y.id, effectiveYearId)) || listYears[0];
-          if (targetYear && !filters.year) {
-            setFilters((prev) => ({ ...prev, year: targetYear.id }));
+          const targetYear = listYears.find(
+            (y) =>
+              eq(y.id, selectedAcademicYearId) ||
+              (selectedAcademicYear?.name && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.name).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "")) ||
+              (selectedAcademicYear?.code && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.code).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, ""))
+          ) || listYears.find((y) => y.isCurrent) || listYears[0];
+
+          if (targetYear && !eq(filters.year, targetYear.id)) {
+            setFilters((prev) => (eq(prev.year, targetYear.id) ? prev : { ...prev, year: targetYear.id }));
           }
         }
       } catch (err) {
         console.error("Error fetching academic years:", err);
-        if (isMounted) {
-          if (selectedAcademicYear) {
-            setYears([{
-              id: normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id),
-              name: selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || "Academic Year",
-              isActive: true,
-            }]);
-          } else {
-            setYears([]);
-          }
-        }
+        if (isMounted) setYears([]);
       }
-    };
 
-    loadYears();
-    return () => {
-      isMounted = false;
-    };
-  }, [filters.board, effectiveBoardId, activeCampusId, selectedAcademicYear, selectedAcademicYearId, effectiveYearId, contextAcademicYears]);
-
-  // Load Levels (Independent)
-  useEffect(() => {
-    const currentBoard = filters.board || effectiveBoardId;
-    let isMounted = true;
-
-    const loadLevels = async () => {
+      // Fetch Levels
       try {
         let levelItems = [];
         const levelsRes = await apiClient
-          .get(`/api/v1/academic-levels`, {
-            params: {
-              CampusId: activeCampusId,
-              campusId: activeCampusId,
-              ...(currentBoard ? { boardId: currentBoard, BoardId: currentBoard } : {}),
-            },
-            headers: {
-              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-            },
-          })
-          .catch(() => (currentBoard ? apiClient.get(`/api/v1/boards/${encodeURIComponent(currentBoard)}/academic-levels`) : null))
-          .catch(() => null);
+          .get(
+            apiEndpoints.academicLevels?.getByBoard
+              ? apiEndpoints.academicLevels.getByBoard(filters.board)
+              : `/api/v1/academic-levels?boardId=${filters.board}`
+          )
+          .catch(() =>
+            apiClient.get(apiEndpoints.academicLevels?.getAll || "/api/v1/academic-levels", {
+              params: { boardId: filters.board },
+            })
+          )
+          .catch(() => apiClient.get(`/api/v1/boards/${encodeURIComponent(filters.board)}/academic-levels`));
 
         const rawLevels = unwrapRecords(levelsRes);
         if (rawLevels.length) {
@@ -591,58 +408,33 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             name: l.levelName ?? l.name,
             isActive: l.isActive !== false,
           }));
-        } else if (selectedBoard?.academicLevelIds?.length) {
-          levelItems = selectedBoard.academicLevelIds.map((id, idx) => ({
+        } else if (selectedBoardItem?.academicLevelIds?.length) {
+          levelItems = selectedBoardItem.academicLevelIds.map((id, idx) => ({
             id: normalizeId(id),
-            name: selectedBoard.academicLevelNames?.[idx] || `Level ${id}`,
+            name: selectedBoardItem.academicLevelNames?.[idx] || `Level ${id}`,
             isActive: true,
           }));
-        } else {
-          levelItems = [
-            { id: "1", name: "1st Year", isActive: true },
-            { id: "2", name: "2nd Year", isActive: true },
-          ];
         }
 
         if (isMounted) setLevels(levelItems.filter((l) => l.isActive));
       } catch (err) {
         console.error("Error fetching academic levels:", err);
-        if (isMounted) {
-          setLevels([
-            { id: "1", name: "1st Year", isActive: true },
-            { id: "2", name: "2nd Year", isActive: true },
-          ]);
-        }
+        if (isMounted) setLevels([]);
       }
-    };
 
-    loadLevels();
-    return () => {
-      isMounted = false;
-    };
-  }, [filters.board, effectiveBoardId, activeCampusId, selectedBoard]);
-
-  // Load Groups (Independent)
-  useEffect(() => {
-    const currentBoard = filters.board || effectiveBoardId;
-    let isMounted = true;
-
-    const loadGroups = async () => {
+      // Fetch Groups
       try {
         const groupsRes = await apiClient
-          .get("/api/v1/groups", {
-            params: {
-              CampusId: activeCampusId,
-              campusId: activeCampusId,
-              ...(currentBoard ? { boardId: currentBoard, BoardId: currentBoard } : {}),
-              isActive: true,
-            },
-            headers: {
-              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-            },
-          })
-          .catch(() => apiClient.get("/api/v1/groups"))
-          .catch(() => null);
+          .get(
+            apiEndpoints.groups?.getByBoard
+              ? apiEndpoints.groups.getByBoard(filters.board)
+              : `/api/v1/groups?boardId=${filters.board}`
+          )
+          .catch(() =>
+            apiClient.get(apiEndpoints.groups.list, {
+              params: { boardId: filters.board, isActive: true },
+            })
+          );
 
         const rawGroups = unwrapRecords(groupsRes);
         const listGroups = rawGroups
@@ -655,7 +447,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             programs: g.programs || [],
             isActive: g.isActive !== false,
           }))
-          .filter((g) => g.isActive && (!g.boardId || !currentBoard || eq(g.boardId, currentBoard)));
+          .filter((g) => g.isActive && (!g.boardId || eq(g.boardId, filters.board)));
 
         if (isMounted) setGroups(listGroups);
       } catch (err) {
@@ -664,88 +456,53 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
       }
     };
 
-    loadGroups();
+    loadBoardDeps();
     return () => {
       isMounted = false;
     };
-  }, [filters.board, effectiveBoardId, activeCampusId]);
+  }, [isActive, filters.board]);
 
-  // Load Programs (Independent: group-specific if group is selected, otherwise all programs for campus/board)
+  // Load Programs when Group changes
   useEffect(() => {
+    if (!isActive || !filters.group) {
+      setPrograms([]);
+      return;
+    }
+
+    const authToken = getAuthToken();
+    if (!authToken) return;
+
     let isMounted = true;
-    const currentBoard = filters.board || effectiveBoardId;
-
     const loadPrograms = async () => {
-      if (filters.group) {
-        const selectedGroup = groups.find((g) => eq(g.id, filters.group));
-        if (selectedGroup?.programs?.length) {
-          const list = selectedGroup.programs
-            .map((p) => ({
-              id: normalizeId(p.programId ?? p.id),
-              name: p.programName ?? p.name,
-              groupId: filters.group,
-              isActive: p.isActive !== false,
-            }))
-            .filter((p) => p.isActive);
-          if (isMounted) setPrograms(list);
-          return;
-        }
-
-        try {
-          const res = await apiClient
-            .get(`/api/v1/groups/${encodeURIComponent(filters.group)}/programs`)
-            .catch(() =>
-              apiClient.get("/api/v1/programs", {
-                params: {
-                  campusId: activeCampusId || undefined,
-                  boardId: currentBoard || undefined,
-                  groupId: filters.group,
-                },
-                headers: {
-                  ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-                },
-              })
-            );
-          const raw = unwrapRecords(res);
-          const list = raw
-            .map((p) => ({
-              id: normalizeId(p.programId ?? p.id),
-              name: p.programName ?? p.name,
-              groupId: filters.group,
-              isActive: p.isActive !== false,
-            }))
-            .filter((p) => p.isActive && (!p.groupId || eq(p.groupId, filters.group)));
-
-          if (isMounted) setPrograms(list);
-          return;
-        } catch (err) {
-          console.error("Error fetching group programs:", err);
-        }
+      const selectedGroup = groups.find((g) => eq(g.id, filters.group));
+      if (selectedGroup?.programs?.length) {
+        const list = selectedGroup.programs
+          .map((p) => ({
+            id: normalizeId(p.programId ?? p.id),
+            name: p.programName ?? p.name,
+            groupId: filters.group,
+            isActive: p.isActive !== false,
+          }))
+          .filter((p) => p.isActive);
+        setPrograms(list);
+        return;
       }
 
-      // If no group selected or fallback: load all active programs
       try {
-        const res = await apiClient
-          .get("/api/v1/programs", {
-            params: {
-              campusId: activeCampusId || undefined,
-              boardId: currentBoard || undefined,
-            },
-            headers: {
-              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-            },
-          })
-          .catch(() => null);
-
+        const res = await apiClient.get(
+          apiEndpoints.programs?.byGroup
+            ? apiEndpoints.programs.byGroup(filters.group)
+            : apiEndpoints.groups.getPrograms(filters.group)
+        );
         const raw = unwrapRecords(res);
         const list = raw
           .map((p) => ({
             id: normalizeId(p.programId ?? p.id),
             name: p.programName ?? p.name,
-            groupId: p.groupId,
+            groupId: filters.group,
             isActive: p.isActive !== false,
           }))
-          .filter((p) => p.isActive);
+          .filter((p) => p.isActive && (!p.groupId || eq(p.groupId, filters.group)));
 
         if (isMounted) setPrograms(list);
       } catch (err) {
@@ -758,31 +515,68 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return () => {
       isMounted = false;
     };
-  }, [filters.group, filters.board, effectiveBoardId, groups, activeCampusId]);
+  }, [isActive, filters.group, groups]);
 
-  // Load Sections (Independent: queries with whatever filters are set)
+  // Load Sections when Board is selected (STEP 8, 9, 10)
   useEffect(() => {
+    if (!isActive || !filters.board) {
+      setSections([]);
+      setSectionsLoading(false);
+      setSectionsError(null);
+      return;
+    }
+
+    const authToken = getAuthToken();
+    if (!authToken) {
+      setSections([]);
+      setSectionsLoading(false);
+      return;
+    }
+
     let isMounted = true;
-    const currentBoard = filters.board || effectiveBoardId;
-    const currentYear = filters.year || effectiveYearId;
+    setSectionsLoading(true);
+    setSectionsError(null);
 
     const loadSections = async () => {
       try {
-        const res = await apiClient.get(apiEndpoints.sections?.getAll || "/api/v1/Sections", {
-          params: {
-            campusId: activeCampusId || undefined,
-            CampusId: activeCampusId || undefined,
-            BoardId: currentBoard || undefined,
-            AcademicYearId: currentYear || undefined,
-            AcademicLevelId: filters.level || undefined,
-            GroupId: filters.group || undefined,
-            ProgramId: filters.program || undefined,
-            IsActive: true,
-          },
-          headers: {
-            ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-          },
-        });
+        const params = {
+          campusId: activeCampusId || undefined,
+          CampusId: activeCampusId || undefined,
+          BoardId: filters.board,
+          boardId: filters.board,
+          IsActive: true,
+          isActive: true,
+        };
+        if (filters.year) {
+          params.AcademicYearId = filters.year;
+          params.academicYearId = filters.year;
+        }
+        if (filters.level) {
+          params.AcademicLevelId = filters.level;
+          params.academicLevelId = filters.level;
+        }
+        if (filters.group) {
+          params.GroupId = filters.group;
+          params.groupId = filters.group;
+        }
+        if (filters.program) {
+          params.ProgramId = filters.program;
+          params.programId = filters.program;
+        }
+
+        const res = await apiClient
+          .get(apiEndpoints.sections.getAll, {
+            params,
+            headers: {
+              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+            },
+          })
+          .catch(() => apiClient.get("/api/v1/sections", {
+            params,
+            headers: {
+              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+            },
+          }));
         const raw = unwrapRecords(res);
         const list = raw
           .map((s) => ({
@@ -799,10 +593,25 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           }))
           .filter((s) => s.isActive);
 
-        if (isMounted) setSections(list);
+        if (isMounted) {
+          setSections(list);
+          setSectionsLoading(false);
+          setFilters((prev) => (prev.section && !list.some((s) => eq(s.id, prev.section)) ? { ...prev, section: "" } : prev));
+        }
       } catch (err) {
-        console.error("Error fetching sections:", err);
-        if (isMounted) setSections([]);
+        if (!isMounted) return;
+        const status = err?.response?.status;
+        if (status === 401) {
+          setSectionsError("Session expired. Please sign in again.");
+        } else if (status === 403) {
+          setSectionsError("You do not have permission to view sections.");
+        } else if (status >= 500) {
+          setSectionsError("Server error loading sections. Please try again later.");
+        } else {
+          setSectionsError(getApiErrorMessage(err) || "Failed to load sections.");
+        }
+        setSections([]);
+        setSectionsLoading(false);
       }
     };
 
@@ -810,30 +619,39 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return () => {
       isMounted = false;
     };
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveBoardId, effectiveYearId, activeCampusId]);
+  }, [isActive, filters.board, filters.year, filters.level, filters.group, filters.program]);
 
-  // Load Completed Examinations (Independent: queries with whatever filters are set)
+  // Load Completed Examinations strictly matching academic scope
   useEffect(() => {
+    if (!isActive || !filters.board || !filters.year || !filters.level || !filters.group || !filters.program) {
+      setExams([]);
+      setExamsLoading(false);
+      setExamsError(null);
+      return;
+    }
+
+    const authToken = getAuthToken();
+    if (!authToken) {
+      setExams([]);
+      setExamsLoading(false);
+      return;
+    }
+
     let isMounted = true;
-    const currentBoard = filters.board || effectiveBoardId;
-    const currentYear = filters.year || effectiveYearId;
+    setExamsLoading(true);
+    setExamsError(null);
 
     const loadExams = async () => {
       try {
-        const examsRes = await apiClient.get(apiEndpoints.examinations?.getAll || "/api/v1/examinations", {
+        const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
           params: {
             campusId: activeCampusId || undefined,
             CampusId: activeCampusId || undefined,
-            boardId: currentBoard || undefined,
-            BoardId: currentBoard || undefined,
-            academicYearId: currentYear || undefined,
-            AcademicYearId: currentYear || undefined,
-            academicLevelId: filters.level || undefined,
-            AcademicLevelId: filters.level || undefined,
-            groupId: filters.group || undefined,
-            GroupId: filters.group || undefined,
+            boardId: filters.board,
+            academicYearId: filters.year,
+            academicLevelId: filters.level,
+            groupId: filters.group,
             programId: filters.program || undefined,
-            ProgramId: filters.program || undefined,
             status: "COMPLETED",
           },
           headers: {
@@ -846,15 +664,13 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             const rawStatus = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
             const examCode = e.examCode ?? e.code ?? "";
             const examName = e.examName ?? e.examinationName ?? e.name ?? "Examination";
-            const examId = normalizeId(e.examinationId ?? e.id ?? e.examId);
             return {
-              id: examId,
-              examinationId: examId,
+              id: normalizeId(e.examinationId ?? e.id ?? e.examId),
               code: examCode,
               examCode: examCode,
               name: examName,
               examName: examName,
-              status: rawStatus,
+              status: rawStatus || (e.isCompleted ? "COMPLETED" : "DRAFT"),
               boardId: normalizeId(e.boardId ?? e.BoardId),
               academicYearId: normalizeId(e.academicYearId ?? e.AcademicYearId ?? e.yearId),
               academicYearName: e.academicYearName ?? e.academicYear ?? "",
@@ -863,17 +679,28 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               programId: normalizeId(e.programId ?? e.ProgramId),
               schedules: e.schedules || e.examinationSchedules || [],
               isActive: e.isActive !== false,
-              isCompleted: Boolean(e.isCompleted || rawStatus === "COMPLETED"),
+              isCompleted: Boolean(e.isCompleted),
             };
           })
           .filter((e) => {
             if (!e.isActive) return false;
-            // STRICT FILTER: Only genuinely Completed Examinations
-            const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-            if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+            const isCompleted =
+              e.status === "COMPLETED" ||
+              e.status === "FINISHED" ||
+              e.status === "PUBLISHED" ||
+              e.isCompleted === true;
+            if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT") return false;
 
-            if (currentBoard && e.boardId && !eq(e.boardId, currentBoard)) return false;
-            if (currentYear && e.academicYearId && !eq(e.academicYearId, currentYear)) return false;
+            if (filters.board && e.boardId && !eq(e.boardId, filters.board)) return false;
+            if (filters.year) {
+              const selectedYearObj = years.find((y) => eq(y.id, filters.year));
+              const effYearName = String(selectedYearObj?.name || "").trim().toLowerCase();
+              const examYearId = normalizeId(e.academicYearId);
+              const examYearName = String(e.academicYearName || "").trim().toLowerCase();
+              const idMatches = examYearId && eq(examYearId, filters.year);
+              const nameMatches = effYearName && examYearName && (examYearName === effYearName || examYearName.includes(effYearName) || effYearName.includes(examYearName));
+              if (examYearId && !idMatches && !nameMatches) return false;
+            }
             if (filters.level && e.academicLevelId && !eq(e.academicLevelId, filters.level)) return false;
             if (filters.group && e.groupId && !eq(e.groupId, filters.group)) return false;
             if (filters.program && e.programId && !eq(e.programId, filters.program)) return false;
@@ -883,16 +710,28 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
 
         if (isMounted) {
           setExams(examList);
+          setExamsLoading(false);
           setFilters((prev) => {
-            if (prev.exam && !examList.some((e) => eq(e.id, prev.exam))) {
-              return { ...prev, exam: "" };
-            }
-            return prev;
+            if (!prev.exam) return prev;
+            if (examList.some((e) => eq(e.id, prev.exam))) return prev;
+            return { ...prev, exam: "" };
           });
         }
       } catch (err) {
+        if (!isMounted) return;
         console.error("Error fetching examinations:", err);
-        if (isMounted) setExams([]);
+        const status = err?.response?.status;
+        if (status === 401) {
+          setExamsError("Session expired. Please sign in again.");
+        } else if (status === 403) {
+          setExamsError("You do not have permission to view examinations.");
+        } else if (status >= 500) {
+          setExamsError("Server error loading examinations.");
+        } else {
+          setExamsError(getApiErrorMessage(err) || "Failed to load examinations.");
+        }
+        setExams([]);
+        setExamsLoading(false);
       }
     };
 
@@ -900,37 +739,52 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return () => {
       isMounted = false;
     };
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveBoardId, effectiveYearId, activeCampusId]);
+  }, [isActive, filters.board, filters.year, filters.level, filters.group, filters.program, activeCampusId, years]);
 
-  // Reset non-navbar filters only when navbar selected campus changes
-  const initialCampusRef = useRef(activeCampusId);
+  // Reset cascading filters when navbar selected campus changes
   useEffect(() => {
-    if (initialCampusRef.current === activeCampusId) return;
-    initialCampusRef.current = activeCampusId;
     onReset();
-    setFilters((prev) => ({
-      board: effectiveBoardId || prev.board,
-      year: effectiveYearId || prev.year,
+    setFilters({
+      board: "",
+      year: "",
       level: "",
       group: "",
       program: "",
       section: "",
       exam: "",
-    }));
-  }, [activeCampusId, effectiveBoardId, effectiveYearId]);
+    });
+  }, [activeCampusId]);
 
-  // Change filter handler (Clears dependent section/exam when higher-level context changes)
+  // Sync year when navbar selected academic year changes
+  useEffect(() => {
+    if (!isActive) return;
+    if (years.length > 0 && selectedAcademicYearId) {
+      const targetYear = years.find((y) => eq(y.id, selectedAcademicYearId));
+      if (targetYear && !eq(filters.year, targetYear.id)) {
+        setFilters((prev) => (eq(prev.year, targetYear.id) ? prev : { ...prev, year: targetYear.id }));
+      }
+    }
+  }, [isActive, years, selectedAcademicYearId, filters.year]);
+
+  // Change filter handler with cascading resets and invalidating applied state
   const changeFilter = (key, value) =>
     guard(() => {
       onReset();
       setFilters((prev) => {
+        if (prev[key] === value) return prev;
         const next = { ...prev, [key]: value };
-        if (key === "level" || key === "group" || key === "program") {
-          next.section = "";
-          next.exam = "";
-        } else if (key === "section") {
-          next.exam = "";
-        }
+        const children = {
+          board: ["group", "program", "section", "exam"],
+          year: ["section", "exam"],
+          level: ["section", "exam"],
+          group: ["program", "section", "exam"],
+          program: ["section", "exam"],
+          section: [],
+          exam: [],
+        };
+        (children[key] || []).forEach((child) => {
+          next[child] = "";
+        });
         return next;
       });
     });
@@ -943,7 +797,11 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     groups,
     programs,
     sections,
+    sectionsLoading,
+    sectionsError,
     exams,
+    examsLoading,
+    examsError,
     setExams,
     changeFilter,
   };
@@ -961,10 +819,10 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   const {
     selectedBoard = null,
     selectedBoardId = null,
-    setSelectedBoard = () => { },
+    setSelectedBoard = () => {},
     selectedAcademicYear = null,
     selectedAcademicYearId = null,
-    setSelectedAcademicYear = () => { },
+    setSelectedAcademicYear = () => {},
     boards: contextBoards = [],
     academicYears: contextAcademicYears = [],
   } = academicCtx;
@@ -1027,9 +885,8 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     const loadBoards = async () => {
       try {
         const boardsRes = await apiClient
-          .get("/api/v1/boards")
-          .catch(() => apiClient.get("/api/v1/academic-boards"))
-          .catch(() => null);
+          .get(apiEndpoints.boards.active)
+          .catch(() => apiClient.get(apiEndpoints.boards.list));
         const raw = unwrapRecords(boardsRes);
         const loadedBoards = raw
           .map((b) => ({
@@ -1042,43 +899,16 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           }))
           .filter((b) => b.isActive);
 
-        if (isMounted) {
-          if (loadedBoards.length > 0) {
-            setAllBoards(loadedBoards);
-          } else if (contextBoards.length > 0) {
-            setAllBoards(contextBoards);
-          } else if (selectedBoard) {
-            setAllBoards([{
-              id: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
-              boardId: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
-              name: selectedBoard.name ?? selectedBoard.boardName ?? "Board",
-              code: selectedBoard.code ?? selectedBoard.boardCode ?? "",
-              isActive: true,
-            }]);
-          }
-        }
+        if (isMounted) setAllBoards(loadedBoards);
       } catch (err) {
         console.error("Error loading boards:", err);
-        if (isMounted) {
-          if (contextBoards.length > 0) {
-            setAllBoards(contextBoards);
-          } else if (selectedBoard) {
-            setAllBoards([{
-              id: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
-              boardId: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
-              name: selectedBoard.name ?? selectedBoard.boardName ?? "Board",
-              code: selectedBoard.code ?? selectedBoard.boardCode ?? "",
-              isActive: true,
-            }]);
-          }
-        }
       }
     };
     loadBoards();
     return () => {
       isMounted = false;
     };
-  }, [contextBoards, selectedBoard]);
+  }, []);
 
   const campusAffiliatedBoardIds = useMemo(() => {
     if (!effectiveCampus) return [];
@@ -1097,14 +927,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
 
   // Derive boards affiliated with active campus
   const campusBoards = useMemo(() => {
-    const fallbackList = selectedBoard ? [{
-      id: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
-      boardId: normalizeId(selectedBoard.id ?? selectedBoard.boardId),
-      name: selectedBoard.name ?? selectedBoard.boardName ?? "Board",
-      code: selectedBoard.code ?? selectedBoard.boardCode ?? "",
-      isActive: true,
-    }] : [];
-    const masterBoardsPool = allBoards.length > 0 ? allBoards : (contextBoards.length > 0 ? contextBoards : fallbackList);
+    const masterBoardsPool = allBoards.length > 0 ? allBoards : (contextBoards.length > 0 ? contextBoards : []);
     if (!effectiveCampus) return masterBoardsPool;
 
     const affiliated = Array.isArray(effectiveCampus.affiliatedBoards) && effectiveCampus.affiliatedBoards.length > 0
@@ -1220,7 +1043,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   const [validationResult, setValidationResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false));
+  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false), tab === "entry");
 
   // Helper to load schedules & search evaluations for an examination in Marks Entry
   const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
@@ -1254,12 +1077,12 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       practicalMax: Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
       theoryMax: Number(
         s.theoryMax ??
-        Math.max(
-          0,
-          Number(s.maxMarks || 100) -
-          Number(s.internalMax ?? 20) -
-          Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
-        )
+          Math.max(
+            0,
+            Number(s.maxMarks || 100) -
+              Number(s.internalMax ?? 20) -
+              Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
+          )
       ),
       facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
       facultyId: s.invigilatorId || s.facultyId || "",
@@ -1340,6 +1163,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               m.isActive !== false
           );
 
+          let loadedRows = prev[key]?.rows?.length ? prev[key].rows : [];
           let evalStatus = ev ? String(ev.status || "DRAFT").trim().toUpperCase() : "NOT STARTED";
 
           if (subjMarks.length > 0) {
@@ -1347,9 +1171,38 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               ev?.status ||
               subjMarks[0].evaluationStatus ||
               (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
+            loadedRows = subjMarks.map((m) => {
+              const secStudent = studentList.find((s) => eq(s.studentId, m.studentId));
+              return {
+                markId: m.markId,
+                studentId: m.studentId,
+                rollNo: String(m.rollNo || secStudent?.rollNo || ""),
+                studentName: m.studentName || secStudent?.studentName || "Student",
+                internal: m.internalMarks ?? m.internal ?? "",
+                practical: m.practicalMarks ?? m.practical ?? 0,
+                theory: m.theoryMarks ?? m.theory ?? "",
+                obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
+                total: m.totalMarks ?? m.total ?? "",
+                absent: Boolean(m.isAbsent || m.absent),
+                remarks: m.remarks || "",
+                autoAbsentRemark: false,
+              };
+            });
+          } else if (!loadedRows.length) {
+            loadedRows = (studentList || []).map((s) => ({
+              studentId: s.studentId,
+              rollNo: s.rollNo,
+              studentName: s.studentName,
+              internal: "",
+              practical: config.practicalMax ? "" : 0,
+              theory: "",
+              obtainedMarks: "",
+              total: "",
+              absent: false,
+              remarks: "",
+              autoAbsentRemark: false,
+            }));
           }
-
-          const reconciledRows = reconcileRosterWithMarks(studentList, subjMarks, config, prev[key]?.rows);
 
           next[key] = {
             evaluationId: ev?.evaluationId || `${config.subjectId}_${sectionId}_${examId}`,
@@ -1375,14 +1228,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             highest: ev?.highestMarks !== undefined && ev?.highestMarks !== null ? String(ev.highestMarks) : "—",
             lowestMarks: ev?.lowestMarks,
             lowest: ev?.lowestMarks !== undefined && ev?.lowestMarks !== null ? String(ev.lowestMarks) : "—",
-            totalStudents: studentList.length,
-            presentStudents: subjMarks.filter((m) => !m.isAbsent && !m.absent && (m.obtainedMarks !== "" || m.totalMarks !== "" || m.total !== "")).length,
-            absentStudents: subjMarks.filter((m) => Boolean(m.isAbsent || m.absent)).length,
-            studentsCount: studentList.length,
-            rows: reconciledRows,
+            totalStudents: ev?.totalStudents ?? loadedRows.length,
+            presentStudents: ev?.presentStudents ?? 0,
+            absentStudents: ev?.absentStudents ?? 0,
+            studentsCount: ev?.totalStudents || loadedRows.length,
+            rows: loadedRows,
             dirty: false,
             validationErrors: {},
-            rowVersion: ev?.rowVersion || prev[key]?.rowVersion || 0,
             updatedAt: ev?.lastSubmittedAt || ev?.updatedAt || new Date().toISOString(),
           };
         });
@@ -1400,16 +1252,27 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     setProcessing("ENTER_MARKS");
     setLoadingWorkspace(true);
     try {
-      const effectiveEntryFilters = {
-        board: entry.filters.board || effectiveBoardId,
-        year: entry.filters.year || effectiveYearId,
-        level: entry.filters.level,
-        group: entry.filters.group,
-        program: entry.filters.program,
-        section: entry.filters.section,
-      };
-      // 1. Fetch Students for the selected section matching Student Management
-      const studentList = await fetchAuthoritativeSectionStudents(effectiveEntryFilters, effectiveCampusId);
+      // 1. Fetch Students for the selected section
+      const studentsRes = await apiClient
+        .get(apiEndpoints.students.getBySection(entry.filters.section), {
+          params: { campusId: effectiveCampusId || undefined }
+        })
+        .catch(() => apiClient.get(`/api/v1/students/section/${entry.filters.section}`, {
+          params: { campusId: effectiveCampusId || undefined }
+        }));
+      const rawStudents = unwrapRecords(studentsRes);
+      const studentList = (rawStudents || [])
+        .map((s) => ({
+          studentId: s.studentId ?? s.id,
+          admissionNo: s.admissionNo ?? "",
+          rollNo: String(s.rollNo ?? s.rollNumber ?? ""),
+          studentName: s.studentName ?? s.fullName ?? s.name ?? "Student",
+          isActive: s.isActive !== false,
+          allocatedDate: s.allocatedDate || s.allocationDate || s.assignedDate || s.createdAt || s.createdDate || s.admissionDate || null,
+        }))
+        .filter((s) => s.isActive)
+        .sort((a, b) => a.rollNo.localeCompare(b.rollNo, undefined, { numeric: true }));
+
       setEntryStudents(studentList);
 
       // 2. Fetch Completed Examinations strictly matching academic scope
@@ -1417,20 +1280,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         params: {
           campusId: effectiveCampusId || undefined,
           CampusId: effectiveCampusId || undefined,
-          boardId: effectiveEntryFilters.board,
-          BoardId: effectiveEntryFilters.board,
-          academicYearId: effectiveEntryFilters.year,
-          AcademicYearId: effectiveEntryFilters.year,
-          academicLevelId: effectiveEntryFilters.level,
-          AcademicLevelId: effectiveEntryFilters.level,
-          groupId: effectiveEntryFilters.group,
-          GroupId: effectiveEntryFilters.group,
-          programId: effectiveEntryFilters.program || undefined,
-          ProgramId: effectiveEntryFilters.program || undefined,
+          boardId: entry.filters.board,
+          academicYearId: entry.filters.year,
+          academicLevelId: entry.filters.level,
+          groupId: entry.filters.group,
+          programId: entry.filters.program || undefined,
           status: "COMPLETED",
-          Status: "COMPLETED",
         },
-        skipGlobalLoader: true,
       });
       const rawExams = unwrapRecords(examsRes);
       const examList = (rawExams || [])
@@ -1438,15 +1294,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           const rawStatus = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
           const examCode = e.examCode ?? e.code ?? "";
           const examName = e.examName ?? e.examinationName ?? e.name ?? "Examination";
-          const examId = normalizeId(e.examinationId ?? e.id ?? e.examId);
           return {
-            id: examId,
-            examinationId: examId,
+            id: normalizeId(e.examinationId ?? e.id ?? e.examId),
             code: examCode,
             examCode: examCode,
             name: examName,
             examName: examName,
-            status: rawStatus,
+            status: rawStatus || (e.isCompleted ? "COMPLETED" : "DRAFT"),
             startDate: e.startDate || e.examStartDate || e.examDate || null,
             endDate: e.endDate || e.examEndDate || e.completionDate || null,
             boardId: normalizeId(e.boardId ?? e.BoardId),
@@ -1456,14 +1310,17 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             programId: normalizeId(e.programId ?? e.ProgramId),
             schedules: e.schedules || e.examinationSchedules || [],
             isActive: e.isActive !== false,
-            isCompleted: Boolean(e.isCompleted || rawStatus === "COMPLETED"),
+            isCompleted: Boolean(e.isCompleted),
           };
         })
         .filter((e) => {
           if (!e.isActive) return false;
-          // STRICT FILTER: Only genuinely Completed Examinations
-          const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-          if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+          const isCompleted =
+            e.status === "COMPLETED" ||
+            e.status === "FINISHED" ||
+            e.status === "PUBLISHED" ||
+            e.isCompleted === true;
+          if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT") return false;
 
           if (entry.filters.board && e.boardId && !eq(e.boardId, entry.filters.board)) return false;
           if (entry.filters.year && e.academicYearId && !eq(e.academicYearId, entry.filters.year)) return false;
@@ -1533,9 +1390,9 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     }
 
     const currentWs = workspaces[workspaceKey];
-    if (currentWs && currentWs.rows?.length === entryStudents.length && !currentWs.dirty) {
+    if (currentWs && currentWs.rows?.length) {
       setLoadingWorkspace(false);
-      return; // already fully loaded and reconciled
+      return; // already loaded
     }
 
     const fetchId = ++activeFetchRef.current;
@@ -1549,13 +1406,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       let rowVer = 0;
 
       try {
-        let rawMarks = [];
         // 1. Authoritative: Fetch student marks directly from /api/v1/marks/exam/{entryExamId}
+        let allExamMarks = [];
         try {
           const marksRes = await apiClient
             .get(`/api/v1/marks/exam/${entryExamId}`, { params: { campusId: effectiveCampusId } })
             .catch(() => apiClient.get(`/api/v1/marks?examinationId=${entryExamId}`, { params: { campusId: effectiveCampusId } }).catch(() => null));
-          const allExamMarks = unwrapRecords(marksRes) || [];
+          allExamMarks = unwrapRecords(marksRes) || [];
           const subjMarks = allExamMarks.filter(
             (m) =>
               eq(m.subjectId, config.subjectId) &&
@@ -1563,18 +1420,34 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               m.isActive !== false
           );
           if (subjMarks.length) {
-            rawMarks = subjMarks;
             evalStatus =
               subjMarks[0].evaluationStatus ||
               currentWs?.status ||
               (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
+            loadedRows = subjMarks.map((m) => {
+              const secStudent = entryStudents.find((s) => eq(s.studentId, m.studentId));
+              return {
+                markId: m.markId,
+                studentId: m.studentId,
+                rollNo: String(m.rollNo || secStudent?.rollNo || ""),
+                studentName: m.studentName || secStudent?.studentName || "Student",
+                internal: m.internalMarks ?? m.internal ?? "",
+                practical: m.practicalMarks ?? m.practical ?? 0,
+                theory: m.theoryMarks ?? m.theory ?? "",
+                obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
+                total: m.totalMarks ?? m.total ?? "",
+                absent: Boolean(m.isAbsent || m.absent),
+                remarks: m.remarks || "",
+                autoAbsentRemark: false,
+              };
+            });
           }
         } catch (err) {
           console.warn("Could not query exam marks:", err);
         }
 
         // 2. Only if marks table has no rows and an existing evaluation is confirmed by search, query evaluation students
-        if (!rawMarks.length && currentWs?.evaluationId && currentWs.status !== "NOT STARTED") {
+        if (!loadedRows.length && currentWs?.evaluationId && currentWs.status !== "NOT STARTED") {
           try {
             const evalStudentsUrl = apiEndpoints.evaluations?.students
               ? apiEndpoints.evaluations.students(evalId)
@@ -1585,20 +1458,43 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             rowVer = resData.rowVersion || rowVer;
             const markItems = resData.students || resData.marksList || [];
             if (markItems.length) {
-              rawMarks = markItems;
+              loadedRows = markItems.map((m) => ({
+                markId: m.markId,
+                studentId: m.studentId,
+                rollNo: String(m.rollNo || ""),
+                studentName: m.studentName || "",
+                internal: m.internalMarks ?? m.internal ?? "",
+                practical: m.practicalMarks ?? m.practical ?? 0,
+                theory: m.theoryMarks ?? m.theory ?? "",
+                obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
+                total: m.totalMarks ?? m.total ?? "",
+                absent: Boolean(m.isAbsent || m.absent),
+                remarks: m.remarks || "",
+                autoAbsentRemark: false,
+              }));
             }
           } catch {
             // Evaluation records not yet initialized
           }
         }
 
-        // Reconcile complete authoritative section roster with marks
-        loadedRows = reconcileRosterWithMarks(
-          entryStudents,
-          rawMarks,
-          config,
-          currentWs?.rows
-        );
+        // 3. Fallback when marks have not been entered yet for this subject:
+        if (!loadedRows.length) {
+          // Show the section students to enter marks!
+          loadedRows = (entryStudents || []).map((s) => ({
+            studentId: s.studentId,
+            rollNo: s.rollNo,
+            studentName: s.studentName,
+            internal: "",
+            practical: config.practicalMax ? "" : 0,
+            theory: "",
+            obtainedMarks: "",
+            total: "",
+            absent: false,
+            remarks: "",
+            autoAbsentRemark: false,
+          }));
+        }
 
         if (fetchId !== activeFetchRef.current) return;
 
@@ -1719,13 +1615,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             const theoMarks = isAbsent
               ? 0
               : ws.mode === "OBJECTIVE"
-                ? Math.round(Number(row.obtainedMarks || 0))
-                : Math.round(Number(row.theory || 0));
+              ? Math.round(Number(row.obtainedMarks || 0))
+              : Math.round(Number(row.theory || 0));
             const totalMarks = isAbsent
               ? 0
               : ws.mode === "OBJECTIVE"
-                ? Math.round(Number(row.obtainedMarks || 0))
-                : Math.round(Number(row.total || 0));
+              ? Math.round(Number(row.obtainedMarks || 0))
+              : Math.round(Number(row.total || 0));
 
             return {
               campusId,
@@ -1772,14 +1668,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
 
   // Update cell in Marks Entry
   const updateRow = (studentId, field, value) => {
-    if (!workspace) return;
-    const currentRow = workspace.rows?.find((r) => eq(r.studentId, studentId));
-    const isNewStudentRow = !currentRow?.markId;
-    const isAllowed =
-      editableStatuses.includes(workspace.status) ||
-      editingKey === workspaceKey ||
-      (workspace.status === "SUBMITTED" && isNewStudentRow);
-    if (!isAllowed) return;
+    if (!workspace || (!editableStatuses.includes(workspace.status) && editingKey !== workspaceKey)) return;
     setWorkspaces((all) => {
       const current = all[workspaceKey];
       if (!current) return all;
@@ -1794,27 +1683,27 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             if (field === "absent") {
               return value
                 ? {
-                  ...row,
-                  absent: true,
-                  internal: 0,
-                  practical: 0,
-                  theory: 0,
-                  obtainedMarks: 0,
-                  total: 0,
-                  remarks: row.remarks || "Absent",
-                  autoAbsentRemark: !row.remarks,
-                }
+                    ...row,
+                    absent: true,
+                    internal: 0,
+                    practical: 0,
+                    theory: 0,
+                    obtainedMarks: 0,
+                    total: 0,
+                    remarks: row.remarks || "Absent",
+                    autoAbsentRemark: !row.remarks,
+                  }
                 : {
-                  ...row,
-                  absent: false,
-                  internal: "",
-                  practical: current.practicalMax ? "" : 0,
-                  theory: "",
-                  obtainedMarks: "",
-                  total: "",
-                  remarks: row.autoAbsentRemark ? "" : row.remarks,
-                  autoAbsentRemark: false,
-                };
+                    ...row,
+                    absent: false,
+                    internal: "",
+                    practical: current.practicalMax ? "" : 0,
+                    theory: "",
+                    obtainedMarks: "",
+                    total: "",
+                    remarks: row.autoAbsentRemark ? "" : row.remarks,
+                    autoAbsentRemark: false,
+                  };
             }
             const next = { ...row, [field]: field === "remarks" ? value.slice(0, 250) : value };
             if (field === "remarks") next.autoAbsentRemark = false;
@@ -1983,22 +1872,22 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       templateRows.length
         ? templateRows
         : [
-          {
-            "Roll No": "MPC2501",
-            "Student Name": "Aarav Sharma",
-            ...(workspace.mode === "REGULAR"
-              ? {
-                [`Internal (Max ${workspace.internalMax})`]: 15,
-                ...(workspace.practicalMax > 0 ? { [`Practical (Max ${workspace.practicalMax})`]: 20 } : {}),
-                [`Theory (Max ${workspace.theoryMax})`]: 50,
-              }
-              : {
-                [`Obtained Marks (Max ${workspace.maxMarks})`]: 85,
-              }),
-            "Absent": "No",
-            "Remarks": "Good",
-          },
-        ]
+            {
+              "Roll No": "MPC2501",
+              "Student Name": "Aarav Sharma",
+              ...(workspace.mode === "REGULAR"
+                ? {
+                    [`Internal (Max ${workspace.internalMax})`]: 15,
+                    ...(workspace.practicalMax > 0 ? { [`Practical (Max ${workspace.practicalMax})`]: 20 } : {}),
+                    [`Theory (Max ${workspace.theoryMax})`]: 50,
+                  }
+                : {
+                    [`Obtained Marks (Max ${workspace.maxMarks})`]: 85,
+                  }),
+              "Absent": "No",
+              "Remarks": "Good",
+            },
+          ]
     );
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Marks");
@@ -2085,10 +1974,10 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           let practical = isAbsent
             ? 0
             : workspace.practicalMax
-              ? pracVal !== undefined && pracVal !== ""
-                ? String(pracVal)
-                : targetStudent.practical
-              : 0;
+            ? pracVal !== undefined && pracVal !== ""
+              ? String(pracVal)
+              : targetStudent.practical
+            : 0;
           let theory = isAbsent ? 0 : theoVal !== undefined && theoVal !== "" ? String(theoVal) : targetStudent.theory;
           let total = isAbsent ? 0 : "";
 
@@ -2213,9 +2102,9 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       }));
       return notify(
         configError ||
-        (!workspace.rows.length
-          ? "No active students are available for the selected section."
-          : "Complete and correct all marks before continuing."),
+          (!workspace.rows.length
+            ? "No active students are available for the selected section."
+            : "Complete and correct all marks before continuing."),
         "error"
       );
     }
@@ -2278,9 +2167,9 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       }));
       return notify(
         configError ||
-        (!workspace.rows.length
-          ? "No active students are available for the selected section."
-          : "Complete and correct all marks before continuing."),
+          (!workspace.rows.length
+            ? "No active students are available for the selected section."
+            : "Complete and correct all marks before continuing."),
         "error"
       );
     }
@@ -2412,7 +2301,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   const [evaluationSearch, setEvaluationSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
 
-  const evalState = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEvalApplied(false));
+  const evalState = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEvalApplied(false), tab === "evaluation");
 
   // Handle Switching Between Main Tabs: Reset cascading filters from scratch (preserving Board and Year)
   const handleTabChange = (nextTab) => {
@@ -2448,12 +2337,15 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         setEvalApplied(false);
         setEvalConfigs([]);
         setEvalStudents([]);
+        setBackendAnalysis([]);
         setSelectedEvaluation(null);
         setSelectedStudent(null);
         setEvalSubTab("evaluation");
         setEvaluationPage(1);
         setStudentPage(1);
         setDetailPage(1);
+        setEvaluationSearch("");
+        setStudentSearch("");
       }
     });
   };
@@ -2463,17 +2355,35 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     if (!evalState.filters.section || !evalState.filters.exam || processing) return;
     setProcessing("CHECK_EVALUATIONS");
     try {
-      const effectiveEvalFilters = {
-        board: evalState.filters.board || effectiveBoardId,
-        year: evalState.filters.year || effectiveYearId,
-        level: evalState.filters.level,
-        group: evalState.filters.group,
-        program: evalState.filters.program,
-        section: evalState.filters.section,
-        exam: evalState.filters.exam,
-      };
-      // 1. Fetch Students matching Student Management
-      const studentList = await fetchAuthoritativeSectionStudents(effectiveEvalFilters, effectiveCampusId);
+      // 1. Fetch Students
+      const studRes = await apiClient
+        .get(apiEndpoints.students.getBySection(evalState.filters.section), {
+          params: { campusId: effectiveCampusId || undefined },
+          headers: {
+            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+          },
+        })
+        .catch(() =>
+          apiClient.get(`/api/v1/students/section/${evalState.filters.section}`, {
+            params: { campusId: effectiveCampusId || undefined },
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          })
+        );
+      const rawStudents = unwrapRecords(studRes);
+      const studentList = (rawStudents || [])
+        .map((s) => ({
+          studentId: s.studentId ?? s.id,
+          admissionNo: s.admissionNo ?? "",
+          rollNo: String(s.rollNo ?? s.rollNumber ?? ""),
+          studentName: s.studentName ?? s.fullName ?? s.name ?? "Student",
+          isActive: s.isActive !== false,
+          allocatedDate: s.allocatedDate || s.allocationDate || s.assignedDate || s.createdAt || s.createdDate || s.admissionDate || null,
+        }))
+        .filter((s) => s.isActive)
+        .sort((a, b) => a.rollNo.localeCompare(b.rollNo, undefined, { numeric: true }));
+
       setEvalStudents(studentList);
 
       // 2. Fetch Exam details & schedules/configs
@@ -2486,7 +2396,6 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               headers: {
                 ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
               },
-              skipGlobalLoader: true,
             })
             .catch(() => null);
           const detail = detailRes?.data || detailRes;
@@ -2512,12 +2421,12 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         practicalMax: Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
         theoryMax: Number(
           s.theoryMax ??
-          Math.max(
-            0,
-            Number(s.maxMarks || 100) -
-            Number(s.internalMax ?? 20) -
-            Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
-          )
+            Math.max(
+              0,
+              Number(s.maxMarks || 100) -
+                Number(s.internalMax ?? 20) -
+                Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
+            )
         ),
         facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
         facultyId: s.invigilatorId || s.facultyId || "",
@@ -2525,118 +2434,104 @@ export default function MarksEntryPage({ embedded = false } = {}) {
 
       setEvalConfigs(configs);
 
-      // 3. Search evaluations & fetch marks
+      // 3. Search evaluations
       const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
-      const [evalSearchRes, marksRes] = await Promise.all([
-        apiClient
-          .post(
-            evalSearchUrl,
-            {
-              campusId: Number(effectiveCampusId) || 1,
-              boardId: Number(evalState.filters.board),
-              academicYearId: Number(evalState.filters.year),
-              academicLevelId: Number(evalState.filters.level),
-              groupId: Number(evalState.filters.group),
-              sectionId: Number(evalState.filters.section),
-              examinationId: Number(evalState.filters.exam),
+      const evalSearchRes = await apiClient
+        .post(
+          evalSearchUrl,
+          {
+            campusId: Number(effectiveCampusId) || 1,
+            boardId: Number(evalState.filters.board),
+            academicYearId: Number(evalState.filters.year),
+            academicLevelId: Number(evalState.filters.level),
+            groupId: Number(evalState.filters.group),
+            sectionId: Number(evalState.filters.section),
+            examinationId: Number(evalState.filters.exam),
+          },
+          {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
             },
-            {
-              headers: {
-                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-              },
-            }
-          )
-          .catch(() =>
-            apiClient.get("/api/v1/faculty/evaluations", {
-              headers: {
-                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-              },
-            }).catch(() => null)
-          ),
-        apiClient
-          .get(`/api/v1/marks/exam/${evalState.filters.exam}`, {
-            params: { campusId: effectiveCampusId },
+          }
+        )
+        .catch(() =>
+          apiClient.get("/api/v1/faculty/evaluations", {
             headers: {
               ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
             },
           })
-          .catch(() => null),
-      ]);
-
-      const existingEvals = unwrapRecords(evalSearchRes) || [];
-      const allExamMarks = unwrapRecords(marksRes) || [];
-      const evalMap = {};
-
-      configs.forEach((config) => {
-        const key = evaluationKey({
-          examinationId: evalState.filters.exam,
-          sectionId: evalState.filters.section,
-          subjectId: config.subjectId,
-        });
-
-        const ev = existingEvals.find((e) => {
-          const parts = String(e.evaluationId || "").split("_");
-          const evSubId = normalizeId(e.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
-          const evSecId = normalizeId(e.sectionId ?? (parts.length >= 3 ? parts[1] : evalState.filters.section));
-          const evExamId = normalizeId(e.examinationId ?? e.examId ?? (parts.length >= 3 ? parts[2] : evalState.filters.exam));
-          return eq(evSubId, config.subjectId) && eq(evSecId, evalState.filters.section) && eq(evExamId, evalState.filters.exam);
-        });
-
-        const subjMarks = allExamMarks.filter(
-          (m) =>
-            eq(m.subjectId, config.subjectId) &&
-            (!m.sectionId || eq(m.sectionId, evalState.filters.section)) &&
-            m.isActive !== false
         );
 
-        let evalStatus = ev ? String(ev.status || "DRAFT").trim().toUpperCase() : "NOT STARTED";
-        if (subjMarks.length > 0 && evalStatus === "NOT STARTED") {
-          evalStatus =
-            subjMarks[0].evaluationStatus ||
-            (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
-        }
-
-        const reconciledRows = reconcileRosterWithMarks(studentList, subjMarks, config);
-        const presentCount = subjMarks.filter(
-          (m) => !m.isAbsent && !m.absent && (m.obtainedMarks !== "" || m.totalMarks !== "" || m.total !== "")
-        ).length;
-        const absentCount = subjMarks.filter((m) => Boolean(m.isAbsent || m.absent)).length;
+      const existingEvals = unwrapRecords(evalSearchRes);
+      const evalMap = {};
+      existingEvals.forEach((ev) => {
+        const parts = String(ev.evaluationId || "").split("_");
+        const evSubId = normalizeId(ev.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
+        const evSecId = normalizeId(ev.sectionId ?? (parts.length >= 3 ? parts[1] : evalState.filters.section));
+        const evExamId = normalizeId(ev.examinationId ?? ev.examId ?? (parts.length >= 3 ? parts[2] : evalState.filters.exam));
+        const key = evaluationKey({ examinationId: evExamId, sectionId: evSecId, subjectId: evSubId });
 
         evalMap[key] = {
-          evaluationId: ev?.evaluationId || `${config.subjectId}_${evalState.filters.section}_${evalState.filters.exam}`,
-          examinationId: evalState.filters.exam,
-          sectionId: evalState.filters.section,
-          subjectId: config.subjectId,
-          facultyId: config.facultyId || ev?.facultyId || "1",
-          faculty: { name: config.facultyName || ev?.facultyName || "Assigned Faculty", employeeCode: ev?.facultyCode || "" },
-          subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
-          status: evalStatus,
-          mode: config.mode,
-          maxMarks: config.maxMarks,
-          internalMax: config.internalMax,
-          practicalMax: config.practicalMax,
-          theoryMax: config.theoryMax,
-          passPercentage: config.passPercentage,
-          rejectionReason: ev?.rejectionReason || "",
-          adminReviewMessage: ev?.adminReviewMessage || "",
-          remarks: ev?.remarks || "",
-          averageMarks: ev?.averageMarks,
-          average: ev?.averageMarks !== undefined && ev?.averageMarks !== null ? String(ev.averageMarks) : "—",
-          highestMarks: ev?.highestMarks,
-          highest: ev?.highestMarks !== undefined && ev?.highestMarks !== null ? String(ev.highestMarks) : "—",
-          lowestMarks: ev?.lowestMarks,
-          lowest: ev?.lowestMarks !== undefined && ev?.lowestMarks !== null ? String(ev.lowestMarks) : "—",
-          totalStudents: studentList.length,
-          presentStudents: presentCount,
-          absentStudents: absentCount,
-          studentsCount: studentList.length,
-          rows: reconciledRows,
+          evaluationId:
+            ev.evaluationId || `${evSubId}_${evSecId}_${evExamId}`,
+          examinationId: evExamId,
+          sectionId: evSecId,
+          subjectId: evSubId,
+          facultyId: ev.facultyId,
+          faculty: { name: ev.facultyName || "Assigned Faculty", employeeCode: ev.facultyCode || "" },
+          subject: { id: evSubId, name: ev.subjectName || `Subject ${evSubId}`, code: ev.subjectCode || "" },
+          status: String(ev.status || "DRAFT").trim().toUpperCase(),
+          mode: ev.examPattern === "OBJECTIVE" || ev.mode === "OBJECTIVE" ? "OBJECTIVE" : "REGULAR",
+          maxMarks: Number(ev.subjectMaxMarks || ev.totalMarks || ev.maxMarks || 100),
+          internalMax: Number(ev.internalMax ?? 20),
+          practicalMax: Number(ev.practicalMax ?? (ev.isPractical ? 30 : 0)),
+          theoryMax: Number(ev.theoryMax ?? (ev.isPractical ? 50 : 80)),
+          passPercentage: Number(ev.examPassPercentage || ev.passPercentage || 35),
+          rejectionReason: ev.rejectionReason || "",
+          adminReviewMessage: ev.adminReviewMessage || "",
+          remarks: ev.remarks || "",
+          averageMarks: ev.averageMarks,
+          average: ev.averageMarks !== undefined && ev.averageMarks !== null ? String(ev.averageMarks) : "—",
+          highestMarks: ev.highestMarks,
+          highest: ev.highestMarks !== undefined && ev.highestMarks !== null ? String(ev.highestMarks) : "—",
+          lowestMarks: ev.lowestMarks,
+          lowest: ev.lowestMarks !== undefined && ev.lowestMarks !== null ? String(ev.lowestMarks) : "—",
+          totalStudents: ev.totalStudents ?? studentList.length,
+          presentStudents: ev.presentStudents ?? 0,
+          absentStudents: ev.absentStudents ?? 0,
+          studentsCount: ev.totalStudents || studentList.length,
+          rows: ev.rows || [],
           dirty: false,
           validationErrors: {},
-          updatedAt: ev?.lastSubmittedAt || ev?.updatedAt || new Date().toISOString(),
+          updatedAt: ev.lastSubmittedAt || ev.updatedAt || new Date().toISOString(),
         };
       });
 
+      // Synchronize evalConfigs with any returned evaluations not present in schedules
+      const updatedConfigs = [...configs];
+      existingEvals.forEach((ev) => {
+        const parts = String(ev.evaluationId || "").split("_");
+        const evSubId = normalizeId(ev.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
+        if (evSubId && !updatedConfigs.some((c) => eq(c.subjectId, evSubId))) {
+          updatedConfigs.push({
+            id: `cfg-${evalState.filters.exam}-${evSubId}`,
+            examinationId: evalState.filters.exam,
+            sectionId: evalState.filters.section,
+            subjectId: evSubId,
+            subjectName: ev.subjectName || `Subject ${evSubId}`,
+            subjectCode: ev.subjectCode || "",
+            mode: ev.examPattern === "OBJECTIVE" || ev.mode === "OBJECTIVE" ? "OBJECTIVE" : "REGULAR",
+            maxMarks: Number(ev.subjectMaxMarks || ev.totalMarks || ev.maxMarks || 100),
+            passPercentage: Number(ev.examPassPercentage || ev.passPercentage || 35),
+            internalMax: Number(ev.internalMax ?? 20),
+            practicalMax: Number(ev.practicalMax ?? (ev.isPractical ? 30 : 0)),
+            theoryMax: Number(ev.theoryMax ?? (ev.isPractical ? 50 : 80)),
+            facultyName: ev.facultyName || "",
+            facultyId: ev.facultyId || "",
+          });
+        }
+      });
+      setEvalConfigs(updatedConfigs);
       setWorkspaces((prev) => ({ ...prev, ...evalMap }));
 
       // 4. Fetch Student Analysis if available
@@ -2693,6 +2588,20 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       if (ws && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())) {
         items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
         seenSubjects.add(normalizeId(config.subjectId));
+      }
+    });
+
+    // Also collect any evaluations in workspaces for this exam & section not in evalConfigs
+    Object.values(workspaces || {}).forEach((ws) => {
+      if (
+        ws &&
+        eq(ws.examinationId, evalState.filters.exam) &&
+        eq(ws.sectionId, evalState.filters.section) &&
+        !seenSubjects.has(normalizeId(ws.subjectId)) &&
+        ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())
+      ) {
+        items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
+        seenSubjects.add(normalizeId(ws.subjectId));
       }
     });
 
@@ -2841,11 +2750,11 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         const subjectResults = evalConfigs.map((config) => {
           const ws =
             workspaces[
-            evaluationKey({
-              examinationId: evalState.filters.exam,
-              sectionId: evalState.filters.section,
-              subjectId: config.subjectId,
-            })
+              evaluationKey({
+                examinationId: evalState.filters.exam,
+                sectionId: evalState.filters.section,
+                subjectId: config.subjectId,
+              })
             ];
           const row = ws?.rows?.find((item) => eq(item.studentId, student.studentId));
           if (row) hasAnyExamRecord = true;
@@ -2867,11 +2776,11 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         const anyConfigHasRows = evalConfigs.some((c) => {
           const ws =
             workspaces[
-            evaluationKey({
-              examinationId: evalState.filters.exam,
-              sectionId: evalState.filters.section,
-              subjectId: c.subjectId,
-            })
+              evaluationKey({
+                examinationId: evalState.filters.exam,
+                sectionId: evalState.filters.section,
+                subjectId: c.subjectId,
+              })
             ];
           return ws?.rows?.length > 0;
         });
@@ -2901,28 +2810,28 @@ export default function MarksEntryPage({ embedded = false } = {}) {
 
   const analysis = backendAnalysis.length
     ? backendAnalysis.map((item) => ({
-      studentId: item.studentId,
-      rollNo: item.rollNo,
-      studentName: item.studentName,
-      totalObtained: item.totalMarks ?? item.total ?? 0,
-      totalMaximum: item.maxTotal ?? item.maximum ?? 100,
-      percentage: Number(item.percentage || 0),
-      grade: item.grade || "F",
-      result: item.result || "FAIL",
-      subjectResults: (item.subjects || []).map((s) => ({
-        subjectId: s.subjectId,
-        subjectName: s.subjectName,
-        subjectCode: s.subjectCode,
-        mode: "REGULAR",
-        obtained: s.marks,
-        maxMarks: 100,
-        passPercentage: 35,
-        percentage: s.marks,
-        grade: grade(s.marks),
-        result: s.marks >= 35 ? "PASS" : "FAIL",
-        isAbsent: false,
-      })),
-    }))
+        studentId: item.studentId,
+        rollNo: item.rollNo,
+        studentName: item.studentName,
+        totalObtained: item.totalMarks ?? item.total ?? 0,
+        totalMaximum: item.maxTotal ?? item.maximum ?? 100,
+        percentage: Number(item.percentage || 0),
+        grade: item.grade || "F",
+        result: item.result || "FAIL",
+        subjectResults: (item.subjects || []).map((s) => ({
+          subjectId: s.subjectId,
+          subjectName: s.subjectName,
+          subjectCode: s.subjectCode,
+          mode: "REGULAR",
+          obtained: s.marks,
+          maxMarks: 100,
+          passPercentage: 35,
+          percentage: s.marks,
+          grade: grade(s.marks),
+          result: s.marks >= 35 ? "PASS" : "FAIL",
+          isAbsent: false,
+        })),
+      }))
     : fallbackAnalysis;
 
   // View Detailed Student Analysis Report
@@ -3011,411 +2920,419 @@ export default function MarksEntryPage({ embedded = false } = {}) {
 
   const content = (
     <div className={`cms-marks-entry ${embedded ? "cms-marks-entry-embedded" : ""}`}>
-      {toast && (
-        <div className={`cms-toast-banner cms-toast-${toast.type}`} aria-live="polite">
-          {toast.text}
+        {toast && (
+          <div className={`cms-toast-banner cms-toast-${toast.type}`} aria-live="polite">
+            {toast.text}
+          </div>
+        )}
+
+        {/* Hidden Excel File Input for Bulk Import */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx, .xls, .csv"
+          onChange={handleExcelImport}
+          className="cms-file-input-hidden"
+          style={{ display: "none" }}
+        />
+
+        {/* ======================================================== */}
+        {/* MAIN NAVIGATION TABS (Globally only 2 Tabs)              */}
+        {/* ======================================================== */}
+        <div className="cms-tabs-row">
+          <div className="cms-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "entry"}
+              className={tab === "entry" ? "active" : ""}
+              onClick={() => handleTabChange("entry")}
+            >
+              Marks Entry
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "evaluation"}
+              className={tab === "evaluation" ? "active" : ""}
+              onClick={() => handleTabChange("evaluation")}
+            >
+              Marks Evaluation
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* Hidden Excel File Input for Bulk Import */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".xlsx, .xls, .csv"
-        onChange={handleExcelImport}
-        className="cms-file-input-hidden"
-        style={{ display: "none" }}
-      />
+        {/* ======================================================== */}
+        {/* TAB 1: MARKS ENTRY WORKFLOW                              */}
+        {/* ======================================================== */}
+        {tab === "entry" && (
+          <>
+            {/* Filter Card (6 Dropdowns + Enter Marks Action Button) */}
+            <FilterCard
+              mode="entry"
+              filters={entry.filters}
+              boards={campusBoards.length > 0 ? campusBoards : allBoards}
+              years={entry.years}
+              levels={entry.levels}
+              groups={entry.groups}
+              programs={entry.programs}
+              sections={entry.sections}
+              sectionsLoading={entry.sectionsLoading}
+              sectionsError={entry.sectionsError}
+              changeFilter={entry.changeFilter}
+              actionLabel="Enter Marks"
+              onAction={applyEntryContext}
+              actionDisabled={
+                !entry.filters.board ||
+                !entry.filters.year ||
+                !entry.filters.level ||
+                !entry.filters.group ||
+                !entry.filters.program ||
+                !entry.filters.section
+              }
+              processing={processing === "ENTER_MARKS"}
+              title="Academic Context"
+              subtitle="Select the academic scope before opening Marks Entry."
+            />
 
-      {/* ======================================================== */}
-      {/* MAIN NAVIGATION TABS (Globally only 2 Tabs)              */}
-      {/* ======================================================== */}
-      <div className="cms-tabs-row">
-        <div className="cms-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "entry"}
-            className={tab === "entry" ? "active" : ""}
-            onClick={() => handleTabChange("entry")}
-          >
-            Marks Entry
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "evaluation"}
-            className={tab === "evaluation" ? "active" : ""}
-            onClick={() => handleTabChange("evaluation")}
-          >
-            Marks Evaluation
-          </button>
-        </div>
-      </div>
+            {!entryApplied ? (
+              <Empty text="Select all academic filters and click Enter Marks." />
+            ) : (
+              <>
+                <Context
+                  context={{ ...entry.filters, exam: entryExamId }}
+                  masters={{
+                    groups: entry.groups,
+                    programs: entry.programs,
+                    sections: entry.sections,
+                    exams: entry.exams,
+                  }}
+                />
 
-      {/* ======================================================== */}
-      {/* TAB 1: MARKS ENTRY WORKFLOW                              */}
-      {/* ======================================================== */}
-      {tab === "entry" && (
-        <>
-          {/* Filter Card (6 Dropdowns + Enter Marks Action Button) */}
-          <FilterCard
-            mode="entry"
-            filters={entry.filters}
-            boards={campusBoards.length > 0 ? campusBoards : allBoards}
-            years={entry.years}
-            levels={entry.levels}
-            groups={entry.groups}
-            programs={entry.programs}
-            sections={entry.sections}
-            changeFilter={entry.changeFilter}
-            actionLabel="Enter Marks"
-            onAction={applyEntryContext}
-            actionDisabled={
-              !entry.filters.board ||
-              !entry.filters.year ||
-              !entry.filters.level ||
-              !entry.filters.group ||
-              !entry.filters.program ||
-              !entry.filters.section
-            }
-            processing={processing === "ENTER_MARKS"}
-            title="Academic Context"
-            subtitle="Select the academic scope before opening Marks Entry."
-          />
+                {/* Marks Entry Workspace (Ref Screenshot 5) */}
+                <Entry
+                  exams={entry.exams}
+                  examId={entryExamId}
+                  changeExam={changeEntryExam}
+                  subjectOptions={entrySubjectOptions}
+                  subjectId={entrySubjectId}
+                  changeSubject={(value) =>
+                    guard(() => {
+                      setEntrySubjectId(value);
+                      setEntryPage(1);
+                    })
+                  }
+                  workspace={workspace}
+                  editing={editingKey === workspaceKey}
+                  entryPage={entryPage}
+                  entryPageSize={entryPageSize}
+                  setEntryPage={setEntryPage}
+                  setEntryPageSize={setEntryPageSize}
+                  updateRow={updateRow}
+                  processing={processing}
+                  loadingWorkspace={loadingWorkspace}
+                  onBulkImport={() => {
+                    setBulkFile(null);
+                    setValidationResult(null);
+                    setShowBulkModal(true);
+                  }}
+                  onEdit={startSubmittedEdit}
+                  onCancelEdit={cancelSubmittedEdit}
+                  onSaveChanges={saveSubmittedEdit}
+                  onSave={saveSingleDraft}
+                  onSubmit={submitSingleSubject}
+                />
+              </>
+            )}
+          </>
+        )}
 
-          {!entryApplied ? (
-            <Empty text="Select all academic filters and click Enter Marks." />
-          ) : (
-            <>
-              <Context
-                context={{ ...entry.filters, exam: entryExamId }}
-                masters={{
-                  groups: entry.groups,
-                  programs: entry.programs,
-                  sections: entry.sections,
-                  exams: entry.exams,
-                }}
-              />
+        {/* ======================================================== */}
+        {/* TAB 2: MARKS EVALUATION (WITH INNER SUB-TABS)            */}
+        {/* ======================================================== */}
+        {tab === "evaluation" && (
+          <>
+            {/* Filter Card (7 Dropdowns + Check Evaluations Action Button) */}
+            <FilterCard
+              mode="evaluation"
+              filters={evalState.filters}
+              boards={campusBoards.length > 0 ? campusBoards : allBoards}
+              years={evalState.years}
+              levels={evalState.levels}
+              groups={evalState.groups}
+              programs={evalState.programs}
+              sections={evalState.sections}
+              sectionsLoading={evalState.sectionsLoading}
+              sectionsError={evalState.sectionsError}
+              exams={evalState.exams}
+              examsLoading={evalState.examsLoading}
+              examsError={evalState.examsError}
+              changeFilter={evalState.changeFilter}
+              actionLabel="Check Evaluations"
+              onAction={applyEvalContext}
+              actionDisabled={
+                !evalState.filters.board ||
+                !evalState.filters.year ||
+                !evalState.filters.level ||
+                !evalState.filters.group ||
+                !evalState.filters.program ||
+                !evalState.filters.section ||
+                !evalState.filters.exam
+              }
+              processing={processing === "CHECK_EVALUATIONS"}
+              title="Academic Context & Examination"
+              subtitle="Select the academic scope and completed examination to check evaluations."
+            />
 
-              {/* Marks Entry Workspace (Ref Screenshot 5) */}
-              <Entry
-                exams={entry.exams}
-                examId={entryExamId}
-                changeExam={changeEntryExam}
-                subjectOptions={entrySubjectOptions}
-                subjectId={entrySubjectId}
-                changeSubject={(value) =>
-                  guard(() => {
-                    setEntrySubjectId(value);
-                    setEntryPage(1);
-                  })
-                }
-                workspace={workspace}
-                editing={editingKey === workspaceKey}
-                entryPage={entryPage}
-                entryPageSize={entryPageSize}
-                setEntryPage={setEntryPage}
-                setEntryPageSize={setEntryPageSize}
-                updateRow={updateRow}
-                processing={processing}
-                loadingWorkspace={loadingWorkspace}
-                onBulkImport={() => {
-                  setBulkFile(null);
-                  setValidationResult(null);
-                  setShowBulkModal(true);
-                }}
-                onEdit={startSubmittedEdit}
-                onCancelEdit={cancelSubmittedEdit}
-                onSaveChanges={saveSubmittedEdit}
-                onSave={saveSingleDraft}
-                onSubmit={submitSingleSubject}
-              />
-            </>
-          )}
-        </>
-      )}
+            {!evalApplied ? (
+              <Empty text="Select all 7 filters and click Check Evaluations to view submitted marks." />
+            ) : (
+              <>
+                <Context
+                  context={evalState.filters}
+                  masters={{
+                    groups: evalState.groups,
+                    programs: evalState.programs,
+                    sections: evalState.sections,
+                    exams: evalState.exams,
+                  }}
+                />
 
-      {/* ======================================================== */}
-      {/* TAB 2: MARKS EVALUATION (WITH INNER SUB-TABS)            */}
-      {/* ======================================================== */}
-      {tab === "evaluation" && (
-        <>
-          {/* Filter Card (7 Dropdowns + Check Evaluations Action Button) */}
-          <FilterCard
-            mode="evaluation"
-            filters={evalState.filters}
-            boards={campusBoards.length > 0 ? campusBoards : allBoards}
-            years={evalState.years}
-            levels={evalState.levels}
-            groups={evalState.groups}
-            programs={evalState.programs}
-            sections={evalState.sections}
-            exams={evalState.exams}
-            changeFilter={evalState.changeFilter}
-            actionLabel="Check Evaluations"
-            onAction={applyEvalContext}
-            actionDisabled={
-              !evalState.filters.board ||
-              !evalState.filters.year ||
-              !evalState.filters.level ||
-              !evalState.filters.group ||
-              !evalState.filters.program ||
-              !evalState.filters.section ||
-              !evalState.filters.exam
-            }
-            processing={processing === "CHECK_EVALUATIONS"}
-            title="Academic Context & Examination"
-            subtitle="Select the academic scope and completed examination to check evaluations."
-          />
-
-          {!evalApplied ? (
-            <Empty text="Select all 7 filters and click Check Evaluations to view submitted marks." />
-          ) : (
-            <>
-              <Context
-                context={evalState.filters}
-                masters={{
-                  groups: evalState.groups,
-                  programs: evalState.programs,
-                  sections: evalState.sections,
-                  exams: evalState.exams,
-                }}
-              />
-
-              {/* Sub-Tab 1: Faculty Evaluations */}
-              {evalSubTab === "evaluation" &&
-                (selectedEvaluation ? (
-                  <EvaluationDetails
-                    item={selectedEvaluation}
-                    page={detailPage}
-                    pageSize={detailPageSize}
-                    setPageSize={setDetailPageSize}
-                    setPage={setDetailPage}
-                    onBack={() => setSelectedEvaluation(null)}
-                    onAction={(action) =>
-                      action === "APPROVE" ? transition(action) : (setModal(action), setMessage(""))
-                    }
-                    processing={processing}
-                  />
-                ) : (
-                  <EvaluationList
-                    rows={evalFilteredEvaluations}
-                    search={evaluationSearch}
-                    setSearch={(value) => {
-                      setEvaluationSearch(value);
-                      setEvaluationPage(1);
-                    }}
-                    page={evaluationPage}
-                    pageSize={evaluationPageSize}
-                    setPageSize={setEvaluationPageSize}
-                    setPage={setEvaluationPage}
-                    onView={async (item) => {
-                      let targetItem = item;
-                      const key = evaluationKey(item);
-                      let markItems = [];
-                      const evalId =
-                        item.evaluationId ||
-                        `${item.subjectId}_${item.sectionId || evalState.filters.section}_${item.examinationId || evalState.filters.exam
-                        }`;
-                      try {
-                        const evalStudentsUrl = apiEndpoints.evaluations?.students
-                          ? apiEndpoints.evaluations.students(evalId)
-                          : `/api/v1/evaluations/${evalId}/students`;
-                        try {
-                          const res = await apiClient.get(evalStudentsUrl, { params: { campusId: effectiveCampusId } });
-                          markItems = res.data?.students || res.data?.marksList || [];
-                        } catch {
-                          // If evaluation endpoint records not ready, load from marks table
-                          const marksRes = await apiClient.get(
-                            `/api/v1/marks/exam/${item.examinationId || evalState.filters.exam}`,
-                            { params: { campusId: effectiveCampusId } }
-                          );
-                          const allExamMarks = unwrapRecords(marksRes);
-                          markItems = allExamMarks.filter(
-                            (m) =>
-                              eq(m.subjectId, item.subjectId) &&
-                              eq(m.sectionId, item.sectionId || evalState.filters.section) &&
-                              m.isActive !== false
-                          );
-                        }
-
-                        const rows = reconcileRosterWithMarks(evalStudents, markItems, item, item.rows);
-                        targetItem = {
-                          ...item,
-                          rows,
-                          totalStudents: evalStudents.length,
-                          studentsCount: evalStudents.length,
-                        };
-                        setWorkspaces((all) => ({
-                          ...all,
-                          [key]: {
-                            ...all[key],
-                            rows,
-                            totalStudents: evalStudents.length,
-                            studentsCount: evalStudents.length,
-                          },
-                        }));
-                      } catch (err) {
-                        console.warn("Notice: could not fetch evaluation student details:", err);
+                {/* Sub-Tab 1: Faculty Evaluations */}
+                {evalSubTab === "evaluation" &&
+                  (selectedEvaluation ? (
+                    <EvaluationDetails
+                      item={selectedEvaluation}
+                      page={detailPage}
+                      pageSize={detailPageSize}
+                      setPageSize={setDetailPageSize}
+                      setPage={setDetailPage}
+                      onBack={() => setSelectedEvaluation(null)}
+                      onAction={(action) =>
+                        action === "APPROVE" ? transition(action) : (setModal(action), setMessage(""))
                       }
+                      processing={processing}
+                    />
+                  ) : (
+                    <EvaluationList
+                      rows={evalFilteredEvaluations}
+                      search={evaluationSearch}
+                      setSearch={(value) => {
+                        setEvaluationSearch(value);
+                        setEvaluationPage(1);
+                      }}
+                      page={evaluationPage}
+                      pageSize={evaluationPageSize}
+                      setPageSize={setEvaluationPageSize}
+                      setPage={setEvaluationPage}
+                      onView={async (item) => {
+                        let targetItem = item;
+                        if (!item.rows?.length) {
+                          const evalId =
+                            item.evaluationId ||
+                            `${item.subjectId}_${item.sectionId || evalState.filters.section}_${
+                              item.examinationId || evalState.filters.exam
+                            }`;
+                          try {
+                            const evalStudentsUrl = apiEndpoints.evaluations?.students
+                              ? apiEndpoints.evaluations.students(evalId)
+                              : `/api/v1/evaluations/${evalId}/students`;
+                            let markItems = [];
+                            try {
+                              const res = await apiClient.get(evalStudentsUrl, { params: { campusId: effectiveCampusId } });
+                              markItems = res.data?.students || res.data?.marksList || [];
+                            } catch {
+                              // If evaluation endpoint records not ready, load from marks table
+                              const marksRes = await apiClient.get(
+                                `/api/v1/marks/exam/${item.examinationId || evalState.filters.exam}`,
+                                { params: { campusId: effectiveCampusId } }
+                              );
+                              const allExamMarks = unwrapRecords(marksRes);
+                              markItems = allExamMarks.filter(
+                                (m) =>
+                                  eq(m.subjectId, item.subjectId) &&
+                                  eq(m.sectionId, item.sectionId || evalState.filters.section) &&
+                                  m.isActive !== false
+                              );
+                            }
 
-                      setSelectedEvaluation(targetItem);
-                      setDetailPage(1);
-                    }}
-                    readiness={evalReadiness}
-                    onBulk={setModal}
-                    processing={processing}
-                    subTab={evalSubTab}
-                    setSubTab={(st) => {
-                      setEvalSubTab(st);
-                      setSelectedEvaluation(null);
-                      setSelectedStudent(null);
-                    }}
-                  />
-                ))}
+                            if (markItems.length) {
+                              const rows = markItems.map((m) => ({
+                                markId: m.markId,
+                                studentId: m.studentId,
+                                rollNo: String(m.rollNo || ""),
+                                studentName: m.studentName || "",
+                                internal: m.internalMarks ?? m.internal ?? "",
+                                practical: m.practicalMarks ?? m.practical ?? 0,
+                                theory: m.theoryMarks ?? m.theory ?? "",
+                                obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
+                                total: m.totalMarks ?? m.total ?? "",
+                                absent: Boolean(m.isAbsent || m.absent),
+                                remarks: m.remarks || "",
+                              }));
+                              targetItem = { ...item, rows };
+                              const key = evaluationKey(item);
+                              setWorkspaces((all) => ({ ...all, [key]: { ...all[key], rows } }));
+                            }
+                          } catch (err) {
+                            console.warn("Notice: could not fetch evaluation student details:", err);
+                          }
+                        }
+                        setSelectedEvaluation(targetItem);
+                        setDetailPage(1);
+                      }}
+                      readiness={evalReadiness}
+                      onBulk={setModal}
+                      processing={processing}
+                      subTab={evalSubTab}
+                      setSubTab={(st) => {
+                        setEvalSubTab(st);
+                        setSelectedEvaluation(null);
+                        setSelectedStudent(null);
+                      }}
+                    />
+                  ))}
 
-              {/* Sub-Tab 2: Student Analysis */}
-              {evalSubTab === "students" &&
-                (selectedStudent ? (
-                  <StudentDetails
-                    student={selectedStudent}
-                    page={detailPage}
-                    pageSize={detailPageSize}
-                    setPageSize={setDetailPageSize}
-                    setPage={setDetailPage}
-                    onBack={() => setSelectedStudent(null)}
-                  />
-                ) : evalReadiness.readyForResults || backendAnalysis.length > 0 ? (
-                  <StudentList
-                    rows={filteredStudents}
-                    subjects={evalConfigs}
-                    search={studentSearch}
-                    setSearch={(value) => {
-                      setStudentSearch(value);
-                      setStudentPage(1);
-                    }}
-                    page={studentPage}
-                    pageSize={studentPageSize}
-                    setPageSize={setStudentPageSize}
-                    setPage={setStudentPage}
-                    onView={handleViewStudentDetails}
-                    subTab={evalSubTab}
-                    setSubTab={(st) => {
-                      setEvalSubTab(st);
-                      setSelectedEvaluation(null);
-                      setSelectedStudent(null);
-                    }}
-                    processing={processing}
-                  />
-                ) : (
-                  <section className="cms-card cms-main-card">
-                    <div className="cms-eval-table-toolbar">
-                      <div className="cms-eval-toolbar-left">
-                        <div className="cms-subtab-pill-group">
-                          <button
-                            type="button"
-                            className={`cms-subtab-pill-btn ${evalSubTab === "evaluation" ? "active" : ""}`}
-                            onClick={() => setEvalSubTab("evaluation")}
-                          >
-                            Evaluation
-                          </button>
-                          <button
-                            type="button"
-                            className={`cms-subtab-pill-btn ${evalSubTab === "students" ? "active" : ""}`}
-                            onClick={() => setEvalSubTab("students")}
-                          >
-                            Student Analysis
-                          </button>
+                {/* Sub-Tab 2: Student Analysis */}
+                {evalSubTab === "students" &&
+                  (selectedStudent ? (
+                    <StudentDetails
+                      student={selectedStudent}
+                      page={detailPage}
+                      pageSize={detailPageSize}
+                      setPageSize={setDetailPageSize}
+                      setPage={setDetailPage}
+                      onBack={() => setSelectedStudent(null)}
+                    />
+                  ) : evalReadiness.readyForResults || backendAnalysis.length > 0 ? (
+                    <StudentList
+                      rows={filteredStudents}
+                      subjects={evalConfigs}
+                      search={studentSearch}
+                      setSearch={(value) => {
+                        setStudentSearch(value);
+                        setStudentPage(1);
+                      }}
+                      page={studentPage}
+                      pageSize={studentPageSize}
+                      setPageSize={setStudentPageSize}
+                      setPage={setStudentPage}
+                      onView={handleViewStudentDetails}
+                      subTab={evalSubTab}
+                      setSubTab={(st) => {
+                        setEvalSubTab(st);
+                        setSelectedEvaluation(null);
+                        setSelectedStudent(null);
+                      }}
+                    />
+                  ) : (
+                    <section className="cms-card cms-main-card">
+                      <div className="cms-eval-table-toolbar">
+                        <div className="cms-eval-toolbar-left">
+                          <div className="cms-subtab-pill-group">
+                            <button
+                              type="button"
+                              className={`cms-subtab-pill-btn ${evalSubTab === "evaluation" ? "active" : ""}`}
+                              onClick={() => setEvalSubTab("evaluation")}
+                            >
+                              Evaluation
+                            </button>
+                            <button
+                              type="button"
+                              className={`cms-subtab-pill-btn ${evalSubTab === "students" ? "active" : ""}`}
+                              onClick={() => setEvalSubTab("students")}
+                            >
+                              Student Analysis
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <Empty text="Student analysis will be available after all required subject evaluations are approved (or once generated in the backend)." />
-                  </section>
-                ))}
-            </>
-          )}
-        </>
-      )}
+                      <Empty text="Student analysis will be available after all required subject evaluations are approved (or once generated in the backend)." />
+                    </section>
+                  ))}
+              </>
+            )}
+          </>
+        )}
 
-      {/* ======================================================== */}
-      {/* MODALS & OVERLAYS                                        */}
-      {/* ======================================================== */}
-      {pending && (
-        <Confirm
-          title="Unsaved Marks"
-          text="Unsaved marks exist. Discard them and continue?"
-          onCancel={() => setPending(null)}
-          onConfirm={() => {
-            const action = pending;
-            setWorkspaces((all) =>
-              Object.fromEntries(
-                Object.entries(all).map(([key, value]) => [
-                  key,
-                  value.dirty ? snapshots.current[key] || { ...value, dirty: false } : value,
-                ])
-              )
-            );
-            setPending(null);
-            notify("Unsaved marks discarded.", "info");
-            action();
-          }}
-        />
-      )}
+        {/* ======================================================== */}
+        {/* MODALS & OVERLAYS                                        */}
+        {/* ======================================================== */}
+        {pending && (
+          <Confirm
+            title="Unsaved Marks"
+            text="Unsaved marks exist. Discard them and continue?"
+            onCancel={() => setPending(null)}
+            onConfirm={() => {
+              const action = pending;
+              setWorkspaces((all) =>
+                Object.fromEntries(
+                  Object.entries(all).map(([key, value]) => [
+                    key,
+                    value.dirty ? snapshots.current[key] || { ...value, dirty: false } : value,
+                  ])
+                )
+              );
+              setPending(null);
+              notify("Unsaved marks discarded.", "info");
+              action();
+            }}
+          />
+        )}
 
-      {["VERIFY", "REJECT"].includes(modal) && (
-        <Message
-          action={modal}
-          value={message}
-          setValue={setMessage}
-          onCancel={() => setModal(null)}
-          onConfirm={() => transition(modal)}
-          processing={Boolean(processing)}
-        />
-      )}
+        {["VERIFY", "REJECT"].includes(modal) && (
+          <Message
+            action={modal}
+            value={message}
+            setValue={setMessage}
+            onCancel={() => setModal(null)}
+            onConfirm={() => transition(modal)}
+            processing={Boolean(processing)}
+          />
+        )}
 
-      {modal === "VERIFY_ALL" && (
-        <Confirm
-          title="Verify Submitted"
-          text="Verify all submitted evaluations for this section?"
-          onCancel={() => setModal(null)}
-          onConfirm={() => bulkTransition("SUBMITTED", "VERIFIED")}
-          processing={Boolean(processing)}
-        />
-      )}
+        {modal === "VERIFY_ALL" && (
+          <Confirm
+            title="Verify Submitted"
+            text="Verify all submitted evaluations for this section?"
+            onCancel={() => setModal(null)}
+            onConfirm={() => bulkTransition("SUBMITTED", "VERIFIED")}
+            processing={Boolean(processing)}
+          />
+        )}
 
-      {modal === "APPROVE_ALL" && (
-        <Confirm
-          title="Approve Verified"
-          text="Approve all verified evaluations for this section?"
-          onCancel={() => setModal(null)}
-          onConfirm={() => bulkTransition("VERIFIED", "APPROVED")}
-          processing={Boolean(processing)}
-        />
-      )}
+        {modal === "APPROVE_ALL" && (
+          <Confirm
+            title="Approve Verified"
+            text="Approve all verified evaluations for this section?"
+            onCancel={() => setModal(null)}
+            onConfirm={() => bulkTransition("VERIFIED", "APPROVED")}
+            processing={Boolean(processing)}
+          />
+        )}
 
-      {showBulkModal && (
-        <BulkImportModal
-          workspace={workspace}
-          file={bulkFile}
-          setFile={setBulkFile}
-          isDragging={isDragging}
-          setIsDragging={setIsDragging}
-          isValidating={isValidating}
-          validationResult={validationResult}
-          setValidationResult={setValidationResult}
-          isImporting={isImporting}
-          onDownloadTemplate={downloadMarksTemplate}
-          onValidate={validateBulkFile}
-          onApply={handleApplyBulkImport}
-          onClose={() => {
-            setShowBulkModal(false);
-            setBulkFile(null);
-            setValidationResult(null);
-          }}
-        />
-      )}
-    </div>
+        {showBulkModal && (
+          <BulkImportModal
+            workspace={workspace}
+            file={bulkFile}
+            setFile={setBulkFile}
+            isDragging={isDragging}
+            setIsDragging={setIsDragging}
+            isValidating={isValidating}
+            validationResult={validationResult}
+            setValidationResult={setValidationResult}
+            isImporting={isImporting}
+            onDownloadTemplate={downloadMarksTemplate}
+            onValidate={validateBulkFile}
+            onApply={handleApplyBulkImport}
+            onClose={() => {
+              setShowBulkModal(false);
+              setBulkFile(null);
+              setValidationResult(null);
+            }}
+          />
+        )}
+      </div>
   );
 
   return embedded ? content : (
@@ -3435,7 +3352,11 @@ function FilterCard({
   groups,
   programs,
   sections,
+  sectionsLoading = false,
+  sectionsError = null,
   exams,
+  examsLoading = false,
+  examsError = null,
   changeFilter,
   actionLabel,
   onAction,
@@ -3447,22 +3368,35 @@ function FilterCard({
   const fields = [
     { key: "board", label: "Board", options: boards, disabled: true },
     { key: "year", label: "Academic Year", options: years, disabled: true },
-    { key: "level", label: "Academic Level", options: levels, disabled: false },
-    { key: "group", label: "Group", options: groups, disabled: false },
-    { key: "program", label: "Program", options: programs, disabled: false },
-    { key: "section", label: "Section", options: sections, disabled: false },
+    { key: "level", label: "Academic Level", options: levels, disabled: !filters.board },
+    { key: "group", label: "Group", options: groups, disabled: !filters.board },
+    { key: "program", label: "Program", options: programs, disabled: !filters.group },
+    {
+      key: "section",
+      label: "Section",
+      options: sections,
+      disabled: !filters.program || sectionsLoading,
+      loading: sectionsLoading,
+      error: sectionsError,
+      emptyText: sectionsLoading ? "Loading sections..." : "No sections available",
+    },
     ...(mode === "evaluation"
       ? [
-        {
-          key: "exam",
-          label: "Completed Examination",
-          options: (exams || []).map((exam) => ({
-            ...exam,
-            name: formatExamDropdownLabel(exam),
-          })),
-          disabled: false,
-        },
-      ]
+          {
+            key: "exam",
+            label: "Completed Examination",
+            options: (exams || []).map((exam) => {
+              const code = exam.code || exam.examCode || "";
+              const baseName = exam.name || exam.examName || "Examination";
+              const displayName = code && !baseName.includes(code) ? `${baseName} (${code})` : baseName;
+              return { ...exam, name: displayName };
+            }),
+            disabled: !filters.program || examsLoading,
+            loading: examsLoading,
+            error: examsError,
+            emptyText: examsLoading ? "Loading examinations..." : "No completed examinations available",
+          },
+        ]
       : []),
   ];
 
@@ -3493,6 +3427,9 @@ function FilterCard({
             value={filters[field.key]}
             options={field.options}
             disabled={field.disabled}
+            loading={field.loading}
+            error={field.error}
+            emptyText={field.emptyText}
             onChange={(value) => changeFilter(field.key, value)}
           />
         ))}
@@ -3571,10 +3508,12 @@ function Entry({
             id="marks-examination"
             label="EXAMINATION"
             value={examId}
-            options={exams.map((exam) => ({
-              ...exam,
-              name: formatExamDropdownLabel(exam),
-            }))}
+            options={exams.map((exam) => {
+              const code = exam.code || exam.examCode || "";
+              const baseName = exam.name || exam.examName || "Examination";
+              const displayName = code && !baseName.includes(code) ? `${baseName} (${code})` : baseName;
+              return { ...exam, name: displayName };
+            })}
             compact
             onChange={changeExam}
           />
@@ -3618,68 +3557,39 @@ function Entry({
         </div>
       </div>
 
-      {!workspace ? (
-        loadingWorkspace ? (
-          <div className="cms-table-wrap">
-            <table className="cms-table">
-              <thead>
-                <tr>
-                  <th>ROLL NO</th>
-                  <th>STUDENT</th>
-                  <th>INTERNAL / 20</th>
-                  <th>THEORY / 80</th>
-                  <th>TOTAL / 100</th>
-                  <th>PERCENTAGE</th>
-                  <th>ABSENT</th>
-                  <th>REMARKS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: 6 }, (_, index) => (
-                  <SkeletonRow key={index} columns={8} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <Empty
-            text={
-              subjectOptions.length
-                ? "Select a Subject to load its marks workspace."
-                : "No subjects are configured for the selected examination."
-            }
-          />
-        )
+      {!workspace && !loadingWorkspace ? (
+        <Empty
+          text={
+            subjectOptions.length
+              ? "Select a Subject to load its marks workspace."
+              : "No subjects are configured for the selected examination."
+          }
+        />
       ) : (
         <>
-          {validateMarksConfiguration(workspace) && (
-            <div className="cms-config-error">{validateMarksConfiguration(workspace)}</div>
-          )}
-          {!workspace?.rows?.length && !loadingWorkspace && (
-            <div className="cms-config-error">No active students are available for the selected section.</div>
+          {loadingWorkspace ? <SkeletonPage variant="table" columns={6} rows={8} /> : (
+            <>
+              {validateMarksConfiguration(workspace) && (
+                <div className="cms-config-error">{validateMarksConfiguration(workspace)}</div>
+              )}
+              {!workspace?.rows?.length && (
+                <div className="cms-config-error">No active students are available for the selected section.</div>
+              )}
+            </>
           )}
 
-          <div className="cms-entry-toolbar">
-            <div className="cms-config-summary">
-              <Badge status={workspace.status} />
-              <span>
-                {workspace.faculty?.name || "Faculty"}
-                {workspace.facultyId ? ` (EMP-${workspace.facultyId})` : ""} · {workspace.mode} · Maximum{" "}
-                {workspace.maxMarks} · Pass {workspace.passPercentage}%
-              </span>
-            </div>
-            {workspace.status === "SUBMITTED" && !editing && !blocked && !loadingWorkspace && (
-              <div className="cms-entry-edit-action">
-                {workspace.dirty ? (
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    disabled={Boolean(processing)}
-                    onClick={onSaveChanges}
-                  >
-                    {processing === "SAVE_EDIT" ? "Saving..." : "Save Submitted Marks"}
-                  </button>
-                ) : (
+          {workspace && (
+            <div className="cms-entry-toolbar">
+              <div className="cms-config-summary">
+                <Badge status={workspace.status} />
+                <span>
+                  {workspace.faculty?.name || "Faculty"}
+                  {workspace.facultyId ? ` (EMP-${workspace.facultyId})` : ""} · {workspace.mode} · Maximum{" "}
+                  {workspace.maxMarks} · Pass {workspace.passPercentage}%
+                </span>
+              </div>
+              {workspace.status === "SUBMITTED" && !editing && !blocked && !loadingWorkspace && (
+                <div className="cms-entry-edit-action">
                   <button
                     type="button"
                     className="cms-btn cms-btn-secondary"
@@ -3688,10 +3598,10 @@ function Entry({
                   >
                     Edit Submitted Marks
                   </button>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <Table
             heads={[
@@ -3699,11 +3609,11 @@ function Entry({
               "STUDENT",
               ...(workspace?.mode === "REGULAR"
                 ? [
-                  `INTERNAL / ${workspace?.internalMax ?? 20}`,
-                  ...(workspace?.practicalMax ? [`PRACTICAL / ${workspace?.practicalMax}`] : []),
-                  `THEORY / ${workspace?.theoryMax ?? (Number(workspace?.maxMarks || 100) - Number(workspace?.internalMax || 20))}`,
-                  `TOTAL / ${workspace?.maxMarks || 100}`,
-                ]
+                    `INTERNAL / ${workspace?.internalMax ?? 20}`,
+                    ...(workspace?.practicalMax ? [`PRACTICAL / ${workspace?.practicalMax}`] : []),
+                    `THEORY / ${workspace?.theoryMax ?? (Number(workspace?.maxMarks || 100) - Number(workspace?.internalMax || 20))}`,
+                    `TOTAL / ${workspace?.maxMarks || 100}`,
+                  ]
                 : ["OBTAINED", `TOTAL / ${workspace?.maxMarks || 100}`]),
               "PERCENTAGE",
               "ABSENT",
@@ -3713,7 +3623,7 @@ function Entry({
             {loadingWorkspace ? (
               <LoadingRow
                 span={workspace?.mode === "REGULAR" ? (workspace?.practicalMax ? 8 : 7) : 6}
-                count={Math.min(6, pageSize || 5)}
+                text="Loading students and marks..."
               />
             ) : rows.length ? (
               rows.map((row) => (
@@ -3721,7 +3631,7 @@ function Entry({
                   key={row.studentId}
                   row={row}
                   workspace={workspace}
-                  locked={(locked && Boolean(row.markId)) || blocked}
+                  locked={locked || blocked}
                   update={(field, value) => updateRow(row.studentId, field, value)}
                 />
               ))
@@ -3733,29 +3643,25 @@ function Entry({
             )}
           </Table>
 
-          {!loadingWorkspace && (
-            <DynamicPagination
-              page={entryPage}
-              pageSize={pageSize}
-              setPageSize={setEntryPageSize}
-              totalItems={workspace?.rows?.length || 0}
-              setPage={setEntryPage}
-              summaryText={lockedText}
-            />
-          )}
+          <DynamicPagination
+            page={entryPage}
+            pageSize={pageSize}
+            setPageSize={setEntryPageSize}
+            totalItems={workspace?.rows?.length || 0}
+            setPage={setEntryPage}
+            summaryText={lockedText}
+          />
 
-          {(editing || (workspace?.status === "SUBMITTED" && workspace?.dirty)) && (
+          {editing && (
             <div className="cms-marks-actions">
-              {editing && (
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-secondary"
-                  disabled={Boolean(processing)}
-                  onClick={onCancelEdit}
-                >
-                  Cancel Edit
-                </button>
-              )}
+              <button
+                type="button"
+                className="cms-btn cms-btn-secondary"
+                disabled={Boolean(processing)}
+                onClick={onCancelEdit}
+              >
+                Cancel Edit
+              </button>
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
@@ -3812,8 +3718,8 @@ function MarkRow({ row, workspace, locked, update }) {
         {row.absent
           ? "ABS"
           : row.total === ""
-            ? "—"
-            : `${result?.percentage !== undefined && Number.isFinite(Number(result.percentage)) ? Number(result.percentage).toFixed(2) : "0.00"}%`}
+          ? "—"
+          : `${result?.percentage !== undefined && Number.isFinite(Number(result.percentage)) ? Number(result.percentage).toFixed(2) : "0.00"}%`}
       </td>
       <td className="cms-cell-center">
         <input
@@ -3911,9 +3817,7 @@ function EvaluationList({
         </div>
       </div>
       <Table className="cms-table-eval" heads={["SUBJECT", "FACULTY", "STUDENTS", "AVERAGE / MAXIMUM", "HIGHEST", "LOWEST", "STATUS", "ACTIONS"]}>
-        {processing === "CHECK_EVALUATIONS" ? (
-          <LoadingRow span={8} count={5} />
-        ) : shown.length ? (
+        {shown.length ? (
           shown.map((item) => (
             <tr key={evaluationKey(item)}>
               <td>
@@ -4074,7 +3978,6 @@ function StudentList({
   onView,
   subTab,
   setSubTab,
-  processing,
 }) {
   const currentLimit = pageSize || 5;
   const shown = rows.slice((page - 1) * currentLimit, page * currentLimit);
@@ -4118,9 +4021,7 @@ function StudentList({
           "ACTIONS",
         ]}
       >
-        {processing === "CHECK_EVALUATIONS" ? (
-          <LoadingRow span={7 + subjects.length} count={5} />
-        ) : shown.length ? (
+        {shown.length ? (
           shown.map((student) => (
             <tr key={student.studentId}>
               <td className="cms-cell-center">{student.rollNo}</td>
@@ -4219,25 +4120,21 @@ function SearchableSelect({
   value,
   options = [],
   disabled,
+  loading = false,
+  error = null,
   onChange,
   emptyText = "No matching options",
   hideLabel = false,
   compact = false,
 }) {
-  const { selectedBoard, selectedAcademicYear } = useAcademicContext();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const ref = useRef(null);
-  const inputRef = useRef(null);
   const listId = `${id}-listbox`;
 
+  const filtered = options.filter((item) => (item.name || "").toLowerCase().includes(query.trim().toLowerCase()));
   const selected = options.find((item) => eq(item.id, value));
-  const filtered = useMemo(() => {
-    if (!query.trim()) return options;
-    const q = query.trim().toLowerCase();
-    return options.filter((item) => (item.name || "").toLowerCase().includes(q));
-  }, [options, query]);
 
   useEffect(() => {
     setHighlight(0);
@@ -4256,69 +4153,27 @@ function SearchableSelect({
   }, [open]);
 
   const keyDown = (event) => {
-    if (disabled) return;
     if (event.key === "Escape") {
       setOpen(false);
       setQuery("");
     } else if (["ArrowDown", "ArrowUp"].includes(event.key)) {
       event.preventDefault();
-      if (!open) {
-        setOpen(true);
-        return;
-      }
+      if (!open) return setOpen(true);
       if (filtered.length) {
-        setHighlight((current) =>
-          (current + (event.key === "ArrowDown" ? 1 : -1) + filtered.length) % filtered.length
-        );
+        setHighlight((current) => (current + (event.key === "ArrowDown" ? 1 : -1) + filtered.length) % filtered.length);
       }
-    } else if (event.key === "Enter") {
-      if (open && filtered[highlight]) {
-        event.preventDefault();
-        onChange(filtered[highlight].id);
-        setOpen(false);
-        setQuery("");
-      }
+    } else if (event.key === "Enter" && open && filtered[highlight]) {
+      event.preventDefault();
+      onChange(filtered[highlight].id);
+      setOpen(false);
+      setQuery("");
     }
   };
 
-  const isBoard = id === "marks-board";
-  const isYear = id === "marks-year";
-  const isBoardOrYear = isBoard || isYear;
+  const displayName = loading
+    ? `Loading ${label}...`
+    : selected?.name || `Select ${label}`;
 
-  let displayName = selected?.name || `Select ${label}`;
-  if (isBoard) {
-    displayName = selected?.name || selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || displayName;
-  } else if (isYear) {
-    displayName = selected?.name || selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || selectedAcademicYear?.code || displayName;
-  }
-
-  // Board and Academic Year remain as disabled dropdown triggers (matching Image 2)
-  if (isBoardOrYear) {
-    return (
-      <div className={`cms-field-group ${compact ? "cms-entry-select-compact" : ""}`}>
-        {!hideLabel && (
-          <label className="cms-field-label" id={`${id}-label`}>
-            {label}
-          </label>
-        )}
-        <div className="cms-custom-select is-disabled">
-          <button
-            type="button"
-            className="cms-custom-select-trigger"
-            role="combobox"
-            aria-label={label}
-            aria-labelledby={!hideLabel ? `${id}-label` : undefined}
-            disabled={true}
-          >
-            <span className="cms-select-trigger-text">{displayName}</span>
-            <span className="cms-select-arrow">⌄</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // All remaining dropdowns styled and structured like the first reference (without search icon)
   return (
     <div className={`cms-field-group ${compact ? "cms-entry-select-compact" : ""}`}>
       {!hideLabel && (
@@ -4327,114 +4182,95 @@ function SearchableSelect({
         </label>
       )}
       <div className={`cms-custom-select ${open ? "is-open" : ""}`} ref={ref}>
-        <div
-          tabIndex={disabled ? -1 : 0}
+        <button
+          type="button"
+          className={`cms-custom-select-trigger ${loading ? "is-loading" : ""} ${error ? "has-error" : ""}`}
           role="combobox"
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          aria-controls={listId}
           aria-label={label}
-          className={`cms-custom-select-combobox ${open ? "is-focused" : ""} ${disabled ? "is-disabled" : ""}`}
-          onClick={() => {
-            if (disabled) return;
-            setOpen((prev) => !prev);
-            setQuery("");
-          }}
-          onKeyDown={(e) => {
-            if (disabled) return;
-            if (!open && (e.key === "Enter" || e.key === "ArrowDown" || e.key === " ")) {
-              e.preventDefault();
-              setOpen(true);
-              setQuery("");
-            }
-          }}
+          aria-labelledby={!hideLabel ? `${id}-label` : undefined}
+          aria-expanded={open}
+          aria-controls={listId}
+          disabled={disabled || loading}
+          title={displayName}
+          onClick={() => setOpen((current) => !current)}
+          onKeyDown={keyDown}
         >
-          {open ? (
+          <span className="cms-select-trigger-text">{displayName}</span>
+          <span className="cms-select-arrow">{loading ? "⋯" : "⌄"}</span>
+        </button>
+        {open && !loading && (
+          <div className="cms-custom-select-menu">
             <input
-              ref={inputRef}
-              id={id}
-              type="text"
-              role="searchbox"
-              aria-label={label}
               autoFocus
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              disabled={disabled}
-              className="cms-custom-combobox-input"
+              className="cms-custom-select-search"
               value={query}
-              placeholder={selected?.name || `Search ${label.toLowerCase()}...`}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                setQuery(e.target.value);
+              onChange={(event) => {
+                setQuery(event.target.value);
                 setHighlight(0);
               }}
               onKeyDown={keyDown}
+              placeholder="Search..."
             />
-          ) : (
-            <span className={`cms-custom-combobox-value ${!selected ? "is-placeholder" : ""}`}>
-              {selected?.name || `Select ${label}`}
-            </span>
-          )}
-          <button
-            type="button"
-            tabIndex={-1}
-            className="cms-select-arrow-btn"
-            disabled={disabled}
-            aria-label={open ? "Close menu" : "Open menu"}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (disabled) return;
-              setOpen((prev) => !prev);
-              setQuery("");
-            }}
-          >
-            <span className={`cms-select-arrow ${open ? "is-open" : ""}`}>⌄</span>
-          </button>
-        </div>
-
-        {open && !disabled && (
-          <div className="cms-custom-select-menu bay-style-menu" id={listId} role="listbox">
-            <button
-              type="button"
-              role="option"
-              aria-selected={!value}
-              className={`cms-custom-select-option ${!value ? "selected" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange("");
-                setOpen(false);
-                setQuery("");
-              }}
-            >
-              <span className="cms-option-text">Select {label}</span>
-            </button>
-            {filtered.length ? (
-              filtered.map((item, index) => (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={eq(item.id, value)}
-                  className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${highlight === index ? "highlighted" : ""
+            <div className="cms-custom-select-options" id={listId} role="listbox">
+              <button
+                type="button"
+                role="option"
+                aria-selected={!value}
+                className="cms-custom-select-option"
+                title={`Select ${label}`}
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                  setQuery("");
+                }}
+              >
+                Select {label}
+              </button>
+              {filtered.length ? (
+                filtered.map((item, index) => (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={eq(item.id, value)}
+                    title={item.name}
+                    className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${
+                      highlight === index ? "highlighted" : ""
                     }`}
-                  key={item.id}
-                  onMouseEnter={() => setHighlight(index)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange(item.id);
-                    setOpen(false);
-                    setQuery("");
-                  }}
-                >
-                  <span className="cms-option-text">{item.name}</span>
-                </button>
-              ))
-            ) : (
-              <div className="cms-custom-select-empty">{emptyText}</div>
-            )}
+                    key={item.id}
+                    onMouseEnter={() => setHighlight(index)}
+                    onClick={() => {
+                      onChange(item.id);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  >
+                    {item.name}
+                  </button>
+                ))
+              ) : (
+                <div className="cms-custom-select-empty">{emptyText}</div>
+              )}
+            </div>
           </div>
         )}
       </div>
+      {error && (
+        <span
+          className="cms-field-error-text"
+          style={{
+            color: "var(--danger-color, #ef4444)",
+            fontSize: "0.72rem",
+            marginTop: "4px",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            lineHeight: 1.2,
+          }}
+        >
+          <AlertCircle size={12} style={{ flexShrink: 0 }} />
+          <span>{error}</span>
+        </span>
+      )}
     </div>
   );
 }
@@ -4524,13 +4360,7 @@ const EmptyRow = ({ span, text }) => (
     </td>
   </tr>
 );
-const LoadingRow = ({ span, count = 5 }) => (
-  <>
-    {Array.from({ length: count }, (_, idx) => (
-      <SkeletonRow key={idx} columns={span} />
-    ))}
-  </>
-);
+const LoadingRow = ({ span }) => <SkeletonRow columns={span} />;
 
 const IconEye = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

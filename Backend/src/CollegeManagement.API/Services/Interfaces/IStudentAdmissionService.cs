@@ -1,4 +1,4 @@
-using CollegeManagement.API.DTOs.StudentAdmission;
+﻿using CollegeManagement.API.DTOs.StudentAdmission;
 
 namespace CollegeManagement.API.Services.Interfaces
 {
@@ -19,17 +19,13 @@ namespace CollegeManagement.API.Services.Interfaces
             UpdateStudentAdmissionRequest request);
         Task<IEnumerable<string>> GetBloodGroupsAsync();
         //generate//
-        Task<string?> GetAdmissionNumberPreviewAsync(int? campusId = null, int? boardId = null, int? academicYearId = null, bool isReferral = false);
-        Task<string?> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null, bool isReferral = false);
-        Task<string?> AllocateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
+        Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
 
 
         // Verify / Approve / Reject
         Task<bool> VerifyAsync(
             VerifyStudentAdmissionRequest request);
 
-        Task<IEnumerable<StudentAdmissionResponseDto>> GetOutgoingRequestsAsync(int campusId);
-        Task<IEnumerable<StudentAdmissionResponseDto>> GetIncomingRequestsAsync(int campusId);
         Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks);
         Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks);
         Task<bool> ApproveAsync(

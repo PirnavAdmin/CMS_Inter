@@ -26,7 +26,7 @@ namespace CollegeManagement.API.Services.Implementations
             _jwtTokenHelper = jwtTokenHelper;
         }
 
-        public async Task LogAsync(string action, string module, string target, string severity = "Info", string status = "Success", string? details = null, string? overrideUser = null, string? overrideRole = null)
+        public async Task LogAsync(string action, string module, string target, string severity = "Info", string status = "Success", string? details = null)
         {
             try
             {
@@ -51,13 +51,13 @@ namespace CollegeManagement.API.Services.Implementations
                     try { staffId = _jwtTokenHelper.GetStaffId(user); } catch { /* Ignore */ }
                 }
 
-                var ipAddress = ClientIpHelper.GetClientIpAddress(context);
+                var ipAddress = context?.Connection?.RemoteIpAddress?.ToString();
                 var userAgent = context?.Request?.Headers["User-Agent"].ToString();
 
                 var auditLog = new AuditLog
                 {
-                    UserName = overrideUser ?? userName ?? "System",
-                    ActorRole = overrideRole ?? role,
+                    UserName = userName ?? "System",
+                    ActorRole = role,
                     Action = action,
                     EntityName = target, // Using EntityName column for target
                     Module = module,
@@ -80,4 +80,3 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
-

@@ -6,12 +6,10 @@ namespace CollegeManagement.API.Services
     public class GroupService : IGroupService
     {
         private readonly IGroupRepository _groupRepository;
-        private readonly CollegeManagement.API.Services.Interfaces.ILookupCacheService _cache;
 
-        public GroupService(IGroupRepository groupRepository, CollegeManagement.API.Services.Interfaces.ILookupCacheService cache)
+        public GroupService(IGroupRepository groupRepository)
         {
             _groupRepository = groupRepository;
-            _cache = cache;
         }
 
         // =========================================================
@@ -25,17 +23,6 @@ namespace CollegeManagement.API.Services
             int? academicLevelId,
             bool? isActive)
         {
-            if (string.IsNullOrWhiteSpace(search))
-            {
-                string key = $"lookup:groups:all:{boardId}:{academicYearId}:{academicLevelId}:{isActive}";
-                return _cache.GetOrCreateAsync(key, () => _groupRepository.GetAllAsync(
-                    search,
-                    boardId,
-                    academicYearId,
-                    academicLevelId,
-                    isActive));
-            }
-
             return _groupRepository.GetAllAsync(
                 search,
                 boardId,
@@ -61,57 +48,56 @@ namespace CollegeManagement.API.Services
         public Task<List<GroupListItemDto>> GetByBoardAsync(
             int boardId)
         {
-            return _cache.GetOrCreateAsync($"lookup:groups:board:{boardId}", () => _groupRepository.GetByBoardAsync(boardId));
+            return _groupRepository.GetByBoardAsync(
+                boardId);
         }
 
         // =========================================================
         // CREATE GROUP
         // =========================================================
 
-        public async Task<GroupResponse> CreateAsync(
+        public Task<GroupResponse> CreateAsync(
             CreateGroupRequest request)
         {
-            var res = await _groupRepository.CreateAsync(request);
-            _cache.RemoveByPrefix("lookup:groups");
-            return res;
+            return _groupRepository.CreateAsync(
+                request);
         }
 
         // =========================================================
         // UPDATE GROUP
         // =========================================================
 
-        public async Task<GroupResponse?> UpdateAsync(
+        public Task<GroupResponse?> UpdateAsync(
             int groupId,
             UpdateGroupRequest request)
         {
-            var res = await _groupRepository.UpdateAsync(groupId, request);
-            _cache.RemoveByPrefix("lookup:groups");
-            return res;
+            return _groupRepository.UpdateAsync(
+                groupId,
+                request);
         }
 
         // =========================================================
         // DELETE GROUP
         // =========================================================
 
-        public async Task<bool> DeleteAsync(
+        public Task<bool> DeleteAsync(
             int groupId)
         {
-            var res = await _groupRepository.DeleteAsync(groupId);
-            if (res) _cache.RemoveByPrefix("lookup:groups");
-            return res;
+            return _groupRepository.DeleteAsync(
+                groupId);
         }
 
         // =========================================================
         // ACTIVATE / DEACTIVATE
         // =========================================================
 
-        public async Task<bool> ActivateAsync(
+        public Task<bool> ActivateAsync(
             int groupId,
             bool isActive = true)
         {
-            var res = await _groupRepository.ActivateAsync(groupId, isActive);
-            _cache.RemoveByPrefix("lookup:groups");
-            return res;
+            return _groupRepository.ActivateAsync(
+                groupId,
+                isActive);
         }
 
         // =========================================================

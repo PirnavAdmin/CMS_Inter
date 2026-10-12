@@ -345,7 +345,6 @@
 
 .dashboard-row-three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: stretch;
 }
 
 .dashboard-card {
@@ -359,9 +358,9 @@
 }
 
 .dashboard-row-three > .dashboard-card {
-  height: 250px;
-  min-height: 250px;
-  max-height: 250px;
+  height: 226px;
+  min-height: 226px;
+  max-height: 226px;
   box-sizing: border-box;
 }
 
@@ -500,6 +499,7 @@
 .dashboard-area-chart-wrap:active {
   cursor: grabbing;
 }
+
 .dashboard-area-chart-wrap::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -866,7 +866,6 @@
   padding-top: 3px;
   border-top: 1px solid var(--cms-border);
   font-size: 9.5px;
-  margin-top: auto;
 }
 
 .dashboard-footer-time {
@@ -898,7 +897,7 @@
   gap: 4px;
   overflow-y: auto;
   min-height: 0;
-  flex: 1;
+  max-height: 175px;
   padding-right: 2px;
 }
 
@@ -1004,35 +1003,6 @@
 .dashboard-exams-card {
   display: flex;
   flex-direction: column;
-}
-
-:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-card-head {
-  flex-shrink: 0;
-}
-
-:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-info-list {
-  flex: 1;
-  min-height: 0;
-  max-height: 100%;
-  overflow-y: auto;
-}
-
-:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-info-item,
-:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-days-badge {
-  flex-shrink: 0;
-}
-
-:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-info-content strong,
-:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-info-content small,
-:is(.dashboard-holiday-card, .dashboard-exams-card) :is(.holiday-type-pill, .exam-type-pill) {
-  white-space: normal;
-  overflow: visible;
-  overflow-wrap: anywhere;
-  max-width: 100%;
-}
-
-:is(.dashboard-holiday-card, .dashboard-exams-card) :is(.dashboard-holiday-meta, .dashboard-exam-meta) {
-  flex-wrap: wrap;
 }
 
 .dashboard-holiday-item,
@@ -1268,13 +1238,14 @@
 .dashboard-page-skeleton .dashboard-kpi-card { min-height: 118px; display: flex; align-items: flex-start; gap: 13px; }
 .dashboard-page-skeleton .dashboard-quick-actions { display: grid; gap: 14px; }
 .dashboard-page-skeleton .dashboard-quick-actions-list { min-height: 54px; }
-.dashboard-skeleton-chart { height: 145px; width: 100%; margin-bottom: 12px; border-radius: 10px; }
-.dashboard-skeleton-donut { width: 88px; height: 88px; margin: 4px auto 14px; border-radius: 50%; }
-.dashboard-skeleton-chips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; margin-top: auto; }
-.dashboard-skeleton-chips .cms-skeleton { height: 28px; }
-.dashboard-skeleton-list { display: grid; align-content: start; gap: 8px; flex: 1; min-height: 0; height: 180px; }
-.dashboard-skeleton-list > div { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: start; gap: 8px; }
-.dashboard-skeleton-list-icon { width: 26px; height: 26px; border-radius: 6px; }
+.dashboard-skeleton-chart { height: 166px; width: 100%; margin-bottom: 18px; border-radius: 10px; }
+.dashboard-skeleton-list { min-height: 250px; }
+.dashboard-skeleton-donut { width: 142px; height: 142px; margin: 4px auto 22px; border-radius: 50%; }
+.dashboard-skeleton-chips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.dashboard-skeleton-chips .cms-skeleton { height: 38px; }
+.dashboard-skeleton-list { display: grid; align-content: start; gap: 14px; }
+.dashboard-skeleton-list > div { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 10px; }
+.dashboard-skeleton-list-icon { width: 30px; height: 30px; border-radius: 8px; }
 
 .dashboard-spinner {
   width: 18px;

@@ -19,7 +19,6 @@ import {
   ZoomIn,
   ZoomOut,
   RefreshCw,
-  AlertCircle,
 } from "lucide-react";
 import { useFaculty } from "../FacultyContext.jsx";
 import { facultyMockData } from "../data/facultyMockData.js";
@@ -277,7 +276,7 @@ export default function FacultyProfile() {
   });
 
   const [newDoc, setNewDoc] = useState({
-    type: "",
+    type: "Aadhaar Card Copy",
     title: "",
     file: null,
   });
@@ -544,23 +543,6 @@ export default function FacultyProfile() {
       ctx.restore();
 
       const croppedDataUrl = outCanvas.toDataURL("image/jpeg", 0.92);
-      
-      if (profileData.id) {
-        outCanvas.toBlob((blob) => {
-          if (blob) {
-            const formData = new FormData();
-            formData.append("photo", blob, "profile.jpg");
-            formData.append("file", blob, "profile.jpg");
-            formData.append("staffId", profileData.id);
-            apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, {
-              headers: { "Content-Type": "multipart/form-data" },
-            }).then(() => {
-              window.dispatchEvent(new CustomEvent("faculty-photo-updated", { detail: { staffId: profileData.id } }));
-            }).catch(e => console.error("Photo upload failed:", e));
-          }
-        }, "image/jpeg", 0.92);
-      }
-
       setProfileData((prev) => {
         const updated = { ...prev, photoUrl: croppedDataUrl };
         persistStaffProfile(updated);
@@ -976,12 +958,53 @@ export default function FacultyProfile() {
   };
 
   const validateCurrentProfileStep = () => {
-    // Draft progression is non-blocking so faculty can fill sections incrementally
+    const requiredByStep = {
+      1: [
+        ["firstName", "First name"],
+        ["lastName", "Last name"],
+        ["gender", "Gender"],
+        ["maritalStatus", "Marital status"],
+        ["dob", "Date of birth"],
+        ["mobile", "Phone number"],
+        ["email", "Email"],
+        ["aadhaar", "Aadhaar number"],
+        ["pan", "PAN number"],
+        ["department", "Department"],
+        ["designation", "Designation"],
+        ["dateOfJoining", "Date of joining"],
+      ],
+      2: [
+        ["bankName", "Bank name"],
+        ["accountHolder", "Account holder name"],
+        ["accountNumber", "Account number"],
+        ["ifsc", "IFSC code"],
+        ["branch", "Branch name"],
+        ["accountType", "Account type"],
+      ],
+      3: [
+        ["houseNumber", "House number"],
+        ["street", "Street / area"],
+        ["city", "City / village"],
+        ["pin", "Pincode"],
+        ["district", "District"],
+        ["state", "State"],
+        ["country", "Country"],
+      ],
+    };
+    const fallbacks = { houseNumber: "address", street: "streetArea", city: "cityVillage", pin: "pincode" };
+    const missing = (requiredByStep[profileStep] || [])
+      .filter(([key]) => !String(profileData[key] ?? profileData[fallbacks[key]] ?? "").trim())
+      .map(([, label]) => label);
+    if (missing.length) {
+      notify(`Complete the required fields: ${missing.join(", ")}.`, "error");
+      return false;
+    }
     return true;
   };
 
   const handleSaveAndNext = async () => {
     if (isEditingProfile) {
+      if (!validateCurrentProfileStep()) return;
       persistStaffProfile(profileData);
 
       try {
@@ -1043,39 +1066,19 @@ export default function FacultyProfile() {
         }
 
         if (sectionName && profileData.id) {
-          const draftPayload = { sectionName, ...payload };
-          let draftRes = null;
-          try {
-            draftRes = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(profileData.id), draftPayload);
-          } catch {
-            try {
-              draftRes = await apiClient.put(apiEndpoints.faculty.saveProfileDraft(profileData.id), draftPayload);
-            } catch (err) {
-              console.warn("Draft save API notice:", err);
-            }
-          }
-          if (draftRes?.data) {
-            const returned = draftRes.data;
-            if (returned.profileCompletionPercentage !== undefined || returned.profileCompletion !== undefined) {
-              const newPct = returned.profileCompletionPercentage ?? returned.profileCompletion;
-              setProfileData((prev) => ({
-                ...prev,
-                profileCompletionPercentage: newPct,
-                profileCompletion: newPct,
-                profileStatus: returned.profileStatus || prev.profileStatus,
-              }));
-            }
-          }
+          await apiClient.put(apiEndpoints.faculty.saveProfileDraft(profileData.id), {
+            sectionName,
+            ...payload,
+          });
         }
       } catch (e) {
         console.error("Failed to save profile section:", e);
       }
 
-      notify(`Step ${profileStep} (${PROFILE_STEPS[profileStep - 1]?.title || "Section"}) saved!`);
+      notify(`Step ${profileStep} (${PROFILE_STEPS[profileStep - 1].title}) updated!`);
     }
     if (profileStep < 6) {
       setProfileStep((s) => s + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -1152,35 +1155,6 @@ export default function FacultyProfile() {
         </div>
       </div>
 
-      {/* Needs Correction Alert Banner */}
-      {(profileData?.profileStatus === "NeedsCorrection" || profileData?.correctionNotes) && (
-        <div
-          style={{
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            borderLeft: "5px solid #ef4444",
-            borderRadius: "8px",
-            padding: "16px 20px",
-            marginBottom: "16px",
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "14px",
-          }}
-        >
-          <div style={{ color: "#ef4444", marginTop: 2 }}>
-            <AlertCircle size={22} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, color: "#991b1b", fontSize: 15, marginBottom: 4 }}>
-              Profile Correction Requested by Administration
-            </div>
-            <p style={{ color: "#7f1d1d", fontSize: 13.5, margin: 0, lineHeight: 1.5 }}>
-              {profileData.correctionNotes || "Please review and update the required details or re-upload documents, then click 'Submit Profile' below."}
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Staff Identity Strip with Profile Photo Edit - Compact Single-Line Layout */}
       <div className="cms-card sp-profile-summary-card">
         <div className="cms-card-body sp-profile-summary-body">
@@ -1253,10 +1227,7 @@ export default function FacultyProfile() {
               type="button"
               key={step.id}
               className={`sp-wizard-step ${isActive ? "active" : ""} ${isCompleted ? "completed" : ""}`}
-              onClick={() => {
-                setProfileStep(step.id);
-                window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
+              onClick={() => setProfileStep(step.id)}
               title={`View ${step.title}`}
             >
               <div className="sp-wizard-num">{isCompleted ? <Check size={14} /> : step.id}</div>
@@ -1364,15 +1335,9 @@ export default function FacultyProfile() {
                   </label>
                   <SelectInput
                     value={profileData.maritalStatus || "Single"}
-                    disabled={!isEditingProfile}
+                    disabled={true}
                     placeholder="Select Marital Status"
                     options={["Single", "Married", "Divorced", "Widowed"]}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({
-                        ...prev,
-                        maritalStatus: typeof e === "object" ? e?.target?.value : e,
-                      }))
-                    }
                   />
                 </div>
                 <div className="cms-field">
@@ -1381,16 +1346,9 @@ export default function FacultyProfile() {
                   </label>
                   <input
                     type="tel"
-                    maxLength={10}
                     value={profileData.mobile || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({
-                        ...prev,
-                        mobile: e.target.value.replace(/\D/g, "").slice(0, 10),
-                      }))
-                    }
-                    placeholder="Enter 10-digit mobile number"
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="cms-field">
@@ -1460,16 +1418,10 @@ export default function FacultyProfile() {
                 <div className="cms-field">
                   <label>Blood Group</label>
                   <SelectInput
-                    value={profileData.bloodGroup || ""}
-                    disabled={!isEditingProfile}
+                    value={profileData.bloodGroup || "O-"}
+                    disabled={true}
                     placeholder="Select Blood Group"
                     options={["O-", "O+", "A+", "A-", "B+", "B-", "AB+", "AB-"]}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({
-                        ...prev,
-                        bloodGroup: typeof e === "object" ? e?.target?.value : e,
-                      }))
-                    }
                   />
                 </div>
 
@@ -1486,35 +1438,27 @@ export default function FacultyProfile() {
                   />
                 </div>
                 <div className="cms-field">
-                  <label>Aadhaar Number</label>
+                  <label>
+                    Aadhaar Number <span className="req">*</span>
+                  </label>
                   <input
                     type="text"
-                    maxLength={12}
+                    maxLength={14}
                     value={profileData.aadhaar || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({
-                        ...prev,
-                        aadhaar: e.target.value.replace(/\D/g, "").slice(0, 12),
-                      }))
-                    }
-                    placeholder="Enter 12-digit Aadhaar number"
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="cms-field">
-                  <label>PAN Number</label>
+                  <label>
+                    PAN Number <span className="req">*</span>
+                  </label>
                   <input
                     type="text"
                     maxLength={10}
                     value={profileData.pan || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({
-                        ...prev,
-                        pan: e.target.value.toUpperCase().slice(0, 10),
-                      }))
-                    }
-                    placeholder="Enter 10-digit PAN number"
+                    readOnly
+                    disabled
                   />
                 </div>
               </div>
@@ -1561,8 +1505,8 @@ export default function FacultyProfile() {
                     type="text"
                     value={profileData.accountHolder || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, accountHolder: e.target.value }))}
-                    placeholder="Enter account holder name"
+                    onChange={(e) => setProfileData({ ...profileData, accountHolder: e.target.value })}
+                    placeholder="e.g. Devendra Kumar Gummadi"
                   />
                 </div>
                 <div className="cms-field">
@@ -1571,8 +1515,8 @@ export default function FacultyProfile() {
                     type="text"
                     value={profileData.accountNumber || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, accountNumber: e.target.value.replace(/\D/g, "") }))}
-                    placeholder="Enter account number"
+                    onChange={(e) => setProfileData({ ...profileData, accountNumber: e.target.value })}
+                    placeholder="e.g. 38920194823482"
                   />
                 </div>
 
@@ -1584,8 +1528,8 @@ export default function FacultyProfile() {
                     maxLength={11}
                     value={profileData.ifsc || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, ifsc: e.target.value.toUpperCase() }))}
-                    placeholder="Enter IFSC code"
+                    onChange={(e) => setProfileData({ ...profileData, ifsc: e.target.value.toUpperCase() })}
+                    placeholder="e.g. SBIN0001234"
                   />
                 </div>
                 <div className="cms-field">
@@ -1594,21 +1538,16 @@ export default function FacultyProfile() {
                     type="text"
                     value={profileData.branch || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, branch: e.target.value }))}
-                    placeholder="Enter branch name"
+                    onChange={(e) => setProfileData({ ...profileData, branch: e.target.value })}
+                    placeholder="e.g. Guntur Main Branch"
                   />
                 </div>
                 <div className="cms-field">
                   <label>Account Type</label>
                   <SelectInput
-                    value={profileData.accountType || ""}
+                    value={profileData.accountType || "Salary Account"}
                     disabled={!isEditingProfile}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({
-                        ...prev,
-                        accountType: typeof e === "object" ? e?.target?.value : e,
-                      }))
-                    }
+                    onChange={(e) => setProfileData({ ...profileData, accountType: e.target.value })}
                     placeholder="Select Account Type"
                     options={["Salary Account", "Savings Account", "Current Account"]}
                   />
@@ -1622,13 +1561,9 @@ export default function FacultyProfile() {
                     value={profileData.uanNumber || profileData.pfNumber || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) =>
-                      setProfileData((prev) => ({
-                        ...prev,
-                        uanNumber: e.target.value,
-                        pfNumber: e.target.value,
-                      }))
+                      setProfileData({ ...profileData, uanNumber: e.target.value, pfNumber: e.target.value })
                     }
-                    placeholder="Enter PF / UAN number"
+                    placeholder="e.g. 200982349812"
                   />
                 </div>
               </div>
@@ -1653,10 +1588,10 @@ export default function FacultyProfile() {
                   </label>
                   <input
                     type="text"
-                    value={profileData.houseNumber || ""}
+                    value={profileData.houseNumber || profileData.address || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, houseNumber: e.target.value }))}
-                    placeholder="Enter house / flat number"
+                    onChange={(e) => setProfileData({ ...profileData, houseNumber: e.target.value, address: e.target.value })}
+                    placeholder="e.g. 15-18-387"
                   />
                 </div>
                 <div className="cms-field">
@@ -1665,10 +1600,10 @@ export default function FacultyProfile() {
                   </label>
                   <input
                     type="text"
-                    value={profileData.street || ""}
+                    value={profileData.street || profileData.streetArea || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, street: e.target.value }))}
-                    placeholder="Enter street / area"
+                    onChange={(e) => setProfileData({ ...profileData, street: e.target.value, streetArea: e.target.value })}
+                    placeholder="e.g. Brindavan Gardens"
                   />
                 </div>
                 <div className="cms-field">
@@ -1679,14 +1614,8 @@ export default function FacultyProfile() {
                     type="text"
                     value={profileData.city || profileData.cityVillage || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({
-                        ...prev,
-                        city: e.target.value,
-                        cityVillage: e.target.value,
-                      }))
-                    }
-                    placeholder="Enter city / village"
+                    onChange={(e) => setProfileData({ ...profileData, city: e.target.value, cityVillage: e.target.value })}
+                    placeholder="e.g. Guntur"
                   />
                 </div>
 
@@ -1707,20 +1636,8 @@ export default function FacultyProfile() {
                     maxLength={6}
                     value={profileData.pin || profileData.pincode || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => {
-                      const pinVal = e.target.value.replace(/\D/g, "").slice(0, 6);
-                      const prefix = pinVal.slice(0, 3);
-                      const matched = PIN_LOOKUP[prefix];
-                      setProfileData((prev) => ({
-                        ...prev,
-                        pin: pinVal,
-                        pincode: pinVal,
-                        district: matched ? matched.district : prev.district,
-                        state: matched ? matched.state : prev.state,
-                        country: matched ? matched.country : (prev.country || "India"),
-                      }));
-                    }}
-                    placeholder="Enter 6-digit PIN code"
+                    onChange={(e) => handlePincodeChange(e.target.value)}
+                    placeholder="Enter 6-digit PIN (e.g. 522007)"
                   />
                 </div>
                 <div className="cms-field">
@@ -1731,8 +1648,8 @@ export default function FacultyProfile() {
                     type="text"
                     value={profileData.district || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, district: e.target.value }))}
-                    placeholder="Enter district (or auto-filled from PIN)"
+                    onChange={(e) => setProfileData({ ...profileData, district: e.target.value })}
+                    placeholder="Auto-filled from PIN (e.g. Guntur)"
                   />
                 </div>
                 <div className="cms-field">
@@ -1743,8 +1660,8 @@ export default function FacultyProfile() {
                     type="text"
                     value={profileData.state || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, state: e.target.value }))}
-                    placeholder="Enter state (or auto-filled from PIN)"
+                    onChange={(e) => setProfileData({ ...profileData, state: e.target.value })}
+                    placeholder="Auto-filled from PIN (e.g. Andhra Pradesh)"
                   />
                 </div>
 
@@ -1757,8 +1674,8 @@ export default function FacultyProfile() {
                     type="text"
                     value={profileData.country || "India"}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, country: e.target.value }))}
-                    placeholder="Enter country"
+                    onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
+                    placeholder="e.g. India"
                   />
                 </div>
               </div>
@@ -1800,7 +1717,7 @@ export default function FacultyProfile() {
                       value={newExp.institution}
                       disabled={!isEditingProfile}
                       onChange={(e) => setNewExp({ ...newExp, institution: e.target.value })}
-                      placeholder="Enter institution / college name"
+                      placeholder="e.g. Sri Chaitanya Junior College"
                     />
                   </div>
                   <div className="cms-field">
@@ -1810,7 +1727,7 @@ export default function FacultyProfile() {
                       value={newExp.designation}
                       disabled={!isEditingProfile}
                       onChange={(e) => setNewExp({ ...newExp, designation: e.target.value })}
-                      placeholder="Enter designation"
+                      placeholder="e.g. Lecturer Mathematics"
                     />
                   </div>
                   <div className="cms-field">
@@ -1847,13 +1764,11 @@ export default function FacultyProfile() {
                   <div className="cms-field">
                     <label>Total Experience</label>
                     <input
-                      type="number"
-                      min="0"
-                      step="1"
+                      type="text"
                       value={newExp.totalExp}
                       disabled={!isEditingProfile}
                       onChange={(e) => setNewExp({ ...newExp, totalExp: e.target.value })}
-                      placeholder="Enter total experience in years"
+                      placeholder="e.g. 2 Years 6 Months"
                     />
                   </div>
                 </div>
@@ -2038,7 +1953,7 @@ export default function FacultyProfile() {
                       value={newDoc.title}
                       disabled={!isEditingProfile}
                       onChange={(e) => setNewDoc({ ...newDoc, title: e.target.value })}
-                      placeholder="Enter document title or description"
+                      placeholder="e.g. Degree Certificate (Original Copy)"
                     />
                   </div>
                   <div className="cms-field full">
@@ -2072,20 +1987,14 @@ export default function FacultyProfile() {
                           }
 
                           try {
-                            let serverDocUrl = null;
                             try {
                               const formData = new FormData();
                               formData.append("file", newDoc.file);
                               formData.append("documentType", newDoc.type);
                               if (profileData.id) {
-                                const uploadRes = await apiClient.post(apiEndpoints.faculty.uploadDocument(profileData.id), formData, {
+                                await apiClient.post(apiEndpoints.faculty.uploadDocument(profileData.id), formData, {
                                   headers: { "Content-Type": "multipart/form-data" },
                                 });
-                                const serverDocs = uploadRes?.data?.documents || [];
-                                const match = serverDocs.find((d) => (d.type || d.documentType) === newDoc.type);
-                                if (match?.url) {
-                                  serverDocUrl = match.url;
-                                }
                               }
                             } catch (err) {
                               console.warn("Server upload notice (saving locally):", err);
@@ -2099,9 +2008,9 @@ export default function FacultyProfile() {
                               size: `${(newDoc.file.size / 1024).toFixed(1)} KB`,
                               date: new Date().toISOString().split("T")[0],
                               status: "Uploaded",
-                              url: serverDocUrl || URL.createObjectURL(newDoc.file),
+                              url: URL.createObjectURL(newDoc.file),
                             };
-                            const updatedDocs = [...safeDocuments.filter((d) => (d.type || d.name) !== newDoc.type), docRecord];
+                            const updatedDocs = [...safeDocuments, docRecord];
                             setProfileData({ ...profileData, documents: updatedDocs });
                             persistStaffProfile({ ...profileData, documents: updatedDocs });
                             setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
@@ -2561,14 +2470,7 @@ export default function FacultyProfile() {
                 className="sp-preview-footer"
                 style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}
               >
-                <button
-                  type="button"
-                  className="sp-btn-back"
-                  onClick={() => {
-                    setProfileStep(5);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                >
+                <button type="button" className="sp-btn-back" onClick={() => setProfileStep(5)}>
                   <ChevronLeft size={16} /> Back
                 </button>
                 <button
@@ -2612,10 +2514,7 @@ export default function FacultyProfile() {
                     borderRadius: "8px",
                     cursor: "pointer",
                   }}
-                  onClick={() => {
-                    setProfileStep((s) => Math.max(1, s - 1));
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
+                  onClick={() => setProfileStep((s) => Math.max(1, s - 1))}
                 >
                   <ChevronLeft size={16} /> Previous
                 </button>
@@ -2647,10 +2546,7 @@ export default function FacultyProfile() {
                       borderRadius: "8px",
                       fontWeight: 600,
                     }}
-                    onClick={() => {
-                      setProfileStep((s) => Math.min(6, s + 1));
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
+                    onClick={() => setProfileStep((s) => Math.min(6, s + 1))}
                   >
                     Next <ChevronRight size={16} />
                   </button>

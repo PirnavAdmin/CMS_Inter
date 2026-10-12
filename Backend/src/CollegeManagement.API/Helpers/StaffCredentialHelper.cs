@@ -76,54 +76,5 @@ namespace CollegeManagement.API.Helpers
                 </div>
             </div>";
         }
-
-        /// <summary>
-        /// Builds the official HTML notification email when an Admin requests profile corrections.
-        /// </summary>
-        public static string BuildCorrectionRequestedEmailHtml(
-            string staffName,
-            string employeeId,
-            string correctionNotes,
-            string portalUrl,
-            string institutionName)
-        {
-            var safeName = HtmlEncoder.Default.Encode(staffName);
-            var safeEmpId = HtmlEncoder.Default.Encode(string.IsNullOrWhiteSpace(employeeId) ? "N/A" : employeeId);
-            var safeNotes = HtmlEncoder.Default.Encode(string.IsNullOrWhiteSpace(correctionNotes) ? "Please review your submitted profile details and uploaded certificates." : correctionNotes);
-            var safePortalUrl = HtmlEncoder.Default.Encode(string.IsNullOrWhiteSpace(portalUrl) ? "http://localhost:5173" : portalUrl);
-            var safeInstitution = HtmlEncoder.Default.Encode(string.IsNullOrWhiteSpace(institutionName) ? "College Management System" : institutionName);
-
-            return $@"
-            <div style=""font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);"">
-                <div style=""background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%); color: #ffffff; padding: 28px 24px; text-align: center;"">
-                    <h2 style=""margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px; color: #ffffff;"">{safeInstitution}</h2>
-                    <p style=""margin: 6px 0 0 0; font-size: 14px; opacity: 0.95; color: #fecaca;"">Staff Profile Verification — Action Required</p>
-                </div>
-                <div style=""padding: 28px 24px; color: #1e293b; line-height: 1.6;"">
-                    <p style=""font-size: 16px; margin-top: 0;"">Dear <strong>{safeName}</strong>,</p>
-                    <p style=""font-size: 14px; color: #334155; margin: 12px 0 20px 0;"">
-                        Your submitted staff profile for Employee ID <strong>{safeEmpId}</strong> has been reviewed by the administration. A few corrections or missing documents require your attention before your profile can be approved.
-                    </p>
-                    
-                    <div style=""background: #fef2f2; border-left: 4px solid #ef4444; border-radius: 6px; padding: 16px; margin: 20px 0;"">
-                        <div style=""font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #b91c1c; margin-bottom: 8px;"">Reviewer Notes &amp; Required Corrections:</div>
-                        <p style=""font-size: 14px; color: #7f1d1d; margin: 0; white-space: pre-line; line-height: 1.5;"">{safeNotes}</p>
-                    </div>
-
-                    <p style=""font-size: 14px; color: #334155; margin: 16px 0;"">
-                        Please log into the Staff Portal, navigate to <strong>My Profile</strong>, update the required information or re-upload documents, and click <strong>Submit Profile</strong>.
-                    </p>
-
-                    <div style=""text-align: center; margin: 28px 0;"">
-                        <a href=""{safePortalUrl}"" style=""background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 12px 32px; font-weight: 600; border-radius: 8px; display: inline-block; font-size: 15px; box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.3);"">Log in &amp; Update Profile</a>
-                    </div>
-
-                    <hr style=""border: none; border-top: 1px solid #f1f5f9; margin: 24px 0;"">
-                    <p style=""font-size: 12px; color: #94a3b8; margin-bottom: 0;"">
-                        Regards,<br><strong style=""color: #475569;"">{safeInstitution} Administration</strong>
-                    </p>
-                </div>
-            </div>";
-        }
     }
 }

@@ -538,8 +538,19 @@ namespace CollegeManagement.API.Services.Implementations
 
                     var affectedRows = await _repository.UpdateAttendanceAsync(attendance);
 
-                    // Audit logging is automatically handled by AppDbContext.SaveChangesAsync()
+                    // Old Audit logging
+                    var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
                     var prefix = isLocked ? "[ADMIN OVERRIDE] " : "";
+                    var audit = new AuditLog
+                    {
+                        UserName = userName,
+                        Action = "UPDATE",
+                        EntityName = "Attendance",
+                        EntityId = request.AttendanceId,
+                        Description = prefix + $"Status updated from '{oldStatus}' to '{request.Status}'.",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    await _auditLogRepository.InsertAsync(audit, dbTransaction);
 
                     // Phase 3 Mandatory AttendanceAuditHistory
                     _context.AttendanceAuditHistories.Add(new AttendanceAuditHistory

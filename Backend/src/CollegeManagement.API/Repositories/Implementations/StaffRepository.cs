@@ -483,12 +483,13 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task UpdatePhotoPathAsync(int id, string photoPath)
         {
-            var parameters = new DynamicParameters();
-            parameters.Add("@p_Id", id);
-            parameters.Add("@p_PhotoPath", photoPath);
-
-            using var connection = _context.Database.GetDbConnection();
-            await connection.ExecuteAsync("sp_UpdateStaffPhotoPath", parameters, commandType: CommandType.StoredProcedure);
+            var staff = await _context.Staffs.FindAsync(id);
+            if (staff != null)
+            {
+                staff.PhotoPath = photoPath;
+                staff.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
         }
 
         public async Task SoftDeleteAsync(Staff staff)

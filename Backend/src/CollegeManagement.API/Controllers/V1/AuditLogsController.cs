@@ -25,13 +25,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? query, 
             [FromQuery] string? module, 
             [FromQuery] string? severity, 
-            [FromQuery] string? role, 
             [FromQuery] string? fromDate, 
             [FromQuery] string? toDate, 
             [FromQuery] int pageNumber = 1, 
             [FromQuery] int pageSize = 50)
         {
-            var result = await _auditLogRepository.GetAuditLogsPagedAsync(query, module, severity, role, fromDate, toDate, pageNumber, pageSize);
+            var result = await _auditLogRepository.GetAuditLogsPagedAsync(query, module, severity, fromDate, toDate, pageNumber, pageSize);
             return Ok(result);
         }
     }

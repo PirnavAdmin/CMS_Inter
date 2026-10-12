@@ -35,7 +35,6 @@ export default function DriverLayout({
         <DriverTopbar
           onMenuToggle={() => setSidebarOpen((prev) => !prev)}
           onNavigateProfile={() => onSelectTab("profile")}
-          onNavigatePayslips={() => onSelectTab("payslips")}
           onLogout={onLogout}
           onSyncData={onSyncData}
         />
@@ -44,3 +43,4 @@ export default function DriverLayout({
     </div>
   );
 }
+
