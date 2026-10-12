@@ -22,15 +22,12 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
         public int AcademicLevelId { get; set; }
         public string AcademicLevel { get; set; } = string.Empty;
         public string AcademicLevelName { get => AcademicLevel; set => AcademicLevel = value; }
-        public List<int> AcademicLevelIds { get; set; } = new();
 
         public int GroupId { get; set; }
         public string GroupName { get; set; } = string.Empty;
-        public List<int> GroupIds { get; set; } = new();
 
         public int? ProgramId { get; set; }
         public string ProgramName { get; set; } = "All Programs";
-        public List<int> ProgramIds { get; set; } = new();
 
         public int AssessmentTypeId { get; set; }
         public string ExamType { get; set; } = string.Empty;
@@ -42,10 +39,6 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
         public string? ExamPattern { get; set; }
         public string? Pattern { get => ExamPattern; set => ExamPattern = value; }
         public string? PatternName { get => ExamPattern; set => ExamPattern = value; }
-        public string? ExamCategory { get; set; }
-        public string? Category { get => ExamCategory; set => ExamCategory = value; }
-        public string ScheduleMode { get; set; } = "SUBJECT_WISE";
-
         public int? TotalMarks { get; set; }
         public decimal? PassPercentage { get; set; }
         public string? Description { get; set; }
@@ -59,14 +52,6 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
         public int ExamDurationMinutes { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
-
-        public List<int> SelectedSubjectIds { get; set; } = new();
-        public List<int> UnscheduledSubjectIds { get; set; } = new();
-
-        public bool RequiresRescheduling { get; set; } = false;
-        public int OutOfRangeScheduleCount { get; set; } = 0;
-        public List<int> OutOfRangeScheduleIds { get; set; } = new();
-        public string? ReschedulingMessage { get; set; }
 
         public List<ExamScheduleResponse> Schedules { get; set; } = new();
     }

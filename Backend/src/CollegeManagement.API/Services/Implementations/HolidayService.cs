@@ -1,5 +1,3 @@
-using System.IO;
-using System.Collections.Generic;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -16,34 +14,19 @@ namespace CollegeManagement.API.Services.Implementations
     public class HolidayService : IHolidayService
     {
         private readonly IHolidayRepository _holidayRepository;
-        private readonly ILookupCacheService _cache;
 
-        public HolidayService(IHolidayRepository holidayRepository, ILookupCacheService cache)
+        public HolidayService(IHolidayRepository holidayRepository)
         {
             _holidayRepository = holidayRepository;
-            _cache = cache;
         }
 
         public async Task<HolidaySummaryResponse> GetSummaryAsync(int? campusId, int? academicYearId, int? boardId)
         {
-            return await _cache.GetOrCreateAsync($"lookup:holidays:summary:{campusId}:{academicYearId}:{boardId}", () => _holidayRepository.GetSummaryAsync(campusId, academicYearId, boardId));
+            return await _holidayRepository.GetSummaryAsync(campusId, academicYearId, boardId);
         }
 
         public async Task<(IEnumerable<HolidayResponse> Items, int TotalCount, int TotalPages)> GetPagedHolidaysAsync(HolidayFilterRequest filter)
         {
-            if (string.IsNullOrWhiteSpace(filter.Search) && filter.Page <= 1)
-            {
-                string cacheKey = $"lookup:holidays:list:{filter.CampusId}:{filter.AcademicYearId}:{filter.BoardId}:{filter.Month}:{filter.FromDate}:{filter.ToDate}:{filter.Type}:{filter.Status}:{filter.PageSize}";
-                return await _cache.GetOrCreateAsync(cacheKey, async () =>
-                {
-                    var (cItems, cCount) = await _holidayRepository.GetPagedHolidaysAsync(filter);
-                    var cSize = filter.PageSize < 1 ? 10 : filter.PageSize;
-                    var cPages = Math.Max(1, (int)Math.Ceiling((double)cCount / cSize));
-                    var cDtos = cItems.Select(MapToResponse).ToList();
-                    return ((IEnumerable<HolidayResponse>)cDtos, cCount, cPages);
-                });
-            }
-
             var (items, totalCount) = await _holidayRepository.GetPagedHolidaysAsync(filter);
             var pageSize = filter.PageSize < 1 ? 10 : filter.PageSize;
             var totalPages = Math.Max(1, (int)Math.Ceiling((double)totalCount / pageSize));
@@ -93,7 +76,6 @@ namespace CollegeManagement.API.Services.Implementations
             };
 
             var created = await _holidayRepository.CreateAsync(entity);
-            _cache.RemoveByPrefix("lookup:holidays");
             return MapToResponse(created);
         }
 
@@ -132,15 +114,12 @@ namespace CollegeManagement.API.Services.Implementations
             existing.BoardId = request.BoardId;
 
             var updated = await _holidayRepository.UpdateAsync(id, existing);
-            _cache.RemoveByPrefix("lookup:holidays");
             return updated == null ? null : MapToResponse(updated);
         }
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var res = await _holidayRepository.DeleteAsync(id);
-            if (res) _cache.RemoveByPrefix("lookup:holidays");
-            return res;
+            return await _holidayRepository.DeleteAsync(id);
         }
 
         private static void ValidateHolidayRequest(CreateHolidayRequest request)
@@ -210,76 +189,5 @@ namespace CollegeManagement.API.Services.Implementations
                 UpdatedAt = holiday.UpdatedAt
             };
         }
-            public async Task<byte[]> GenerateImportTemplateAsync()
-        {
-            var dataList = new List<Dictionary<string, object>>
-            {
-                new Dictionary<string, object> { { "HolidayName", "New Year" }, { "HolidayType", "National Holiday" }, { "DateType", "Single Date" }, { "StartDate", "2027-01-01" }, { "EndDate", "" }, { "AppliesTo", "All Students & Staff" }, { "Description", "New Year Celebration" }, { "Status", "Active" } }
-            };
-            using var ms = new MemoryStream();
-            await MiniExcelLibs.MiniExcel.SaveAsAsync(ms, dataList, true, "Holiday_Template");
-            return ms.ToArray();
-        }
-
-        public async Task<object> ImportHolidaysFromExcelAsync(byte[] fileBytes, bool validateOnly, int? currentUserId, int? campusId, int? academicYearId, int? boardId)
-        {
-            using var ms = new MemoryStream(fileBytes);
-            var rows = await MiniExcelLibs.MiniExcel.QueryAsync(ms, useHeaderRow: true);
-            var holidays = new List<Holiday>();
-            var errors = new List<string>();
-            var validCount = 0;
-            var invalidCount = 0;
-            int rowIndex = 2;
-            foreach(var r in rows)
-            {
-                var row = (IDictionary<string, object>)r;
-                if (!row.ContainsKey("HolidayName") || string.IsNullOrWhiteSpace(row["HolidayName"]?.ToString())) { invalidCount++; errors.Add($"Row {rowIndex}: HolidayName is required."); rowIndex++; continue; }
-                if (!row.ContainsKey("StartDate") || string.IsNullOrWhiteSpace(row["StartDate"]?.ToString())) { invalidCount++; errors.Add($"Row {rowIndex}: StartDate is required."); rowIndex++; continue; }
-                
-                DateTime start;
-                if (!DateTime.TryParse(row["StartDate"].ToString(), out start)) { invalidCount++; errors.Add($"Row {rowIndex}: StartDate is invalid."); rowIndex++; continue; }
-                
-                DateTime? end = null;
-                if (row.ContainsKey("EndDate") && !string.IsNullOrWhiteSpace(row["EndDate"]?.ToString()))
-                {
-                    if (DateTime.TryParse(row["EndDate"].ToString(), out var e)) end = e;
-                }
-                
-                validCount++;
-                if (!validateOnly)
-                {
-                    holidays.Add(new Holiday
-                    {
-                        HolidayName = row["HolidayName"].ToString() ?? "",
-                        HolidayType = row.ContainsKey("HolidayType") ? row["HolidayType"]?.ToString() : "",
-                        DateType = row.ContainsKey("DateType") ? row["DateType"]?.ToString() ?? "Single Date" : "Single Date",
-                        StartDate = start,
-                        EndDate = end ?? start,
-                        AppliesTo = row.ContainsKey("AppliesTo") ? row["AppliesTo"]?.ToString() ?? "All Students & Staff" : "All Students & Staff",
-                        Description = row.ContainsKey("Description") ? row["Description"]?.ToString() : "",
-                        Status = row.ContainsKey("Status") ? row["Status"]?.ToString() ?? "Active" : "Active",
-                        CampusId = campusId,
-                        AcademicYearId = academicYearId,
-                        BoardId = boardId,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    });
-                }
-                rowIndex++;
-            }
-            if (!validateOnly && holidays.Any())
-            {
-                await _holidayRepository.CreateRangeAsync(holidays);
-            }
-            return new Dictionary<string, object>
-            {
-                { "success", true },
-                { "message", "Processed successfully" },
-                { "validRows", validCount },
-                { "invalidRows", invalidCount },
-                { "errors", errors }
-            };
-        }
     }
 }
-

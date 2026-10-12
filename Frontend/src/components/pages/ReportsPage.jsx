@@ -157,12 +157,11 @@ function activeAcademicYearOptions(payload) {
 }
 
 function formatMetric(value, { currency = false, suffix = "" } = {}) {
-  if (value === undefined || value === null || Number.isNaN(Number(value))) return "No Data";
-  const num = Number(value);
+  if (value === undefined || value === null || Number.isNaN(value) || value === 0) return "No Data";
   if (currency) {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(num);
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
   }
-  const formatted = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 }).format(num);
+  const formatted = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 }).format(value);
   return `${formatted}${suffix}`;
 }
 

@@ -15,12 +15,10 @@ import {
 } from "lucide-react";
 import { driverProfile, notificationsList } from "../data/driverMockData.js";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
-import { isPayslipNotification } from "../data/driverPayslipNotifications.js";
 
 export default function DriverTopbar({
   onMenuToggle,
   onNavigateProfile,
-  onNavigatePayslips,
   onLogout,
   onSyncData,
 }) {

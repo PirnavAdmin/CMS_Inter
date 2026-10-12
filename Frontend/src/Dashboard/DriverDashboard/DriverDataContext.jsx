@@ -6,7 +6,6 @@ import { getAuthToken } from "../../features/authStorage.js";
 import { env } from "../../config/env.js";
 import { getDriverIdentity } from "./data/driverIdentity.js";
 import { assignmentProfile, normalizeDriverRoute, unwrapDriverData } from "./data/driverData.js";
-import useDriverIdleLogout from "./useDriverIdleLogout.js";
 
 const DriverDataContext = createContext(null);
 export const useDriverData = () => useContext(DriverDataContext);
@@ -22,20 +21,6 @@ export function DriverDataProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notificationError, setNotificationError] = useState("");
-  const [savedPreferences, setSavedPreferences] = useState(null);
-  const applySavedPreferences = useCallback((preferences) => {
-    if (preferences) setSavedPreferences({ ...preferences, autoLogoutMinutes: Number(preferences.autoLogoutMinutes) });
-  }, []);
-  useDriverIdleLogout(savedPreferences?.autoLogoutMinutes);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    apiClient.get("/api/v1/transport/driver/settings", { signal: controller.signal })
-      .then(unwrapDriverData)
-      .then((data) => { if (!controller.signal.aborted) applySavedPreferences(data.preferences); })
-      .catch(() => { /* Settings page reports failures; never activate preview preferences. */ });
-    return () => controller.abort();
-  }, [applySavedPreferences]);
   const mounted = useRef(false);
   const pending = useRef(null);
   const refreshAgain = useRef(false);
@@ -66,7 +51,7 @@ export function DriverDataProvider({ children }) {
         const value = notificationResult.value;
         const items = Array.isArray(value) ? value : value.items;
         if (Array.isArray(items)) {
-          setNotifications(items.map((item) => ({ ...item, isRead: item.isRead ?? (item.readTime != null) })));
+          setNotifications(items);
           setNotificationError("");
         } else setNotificationError("The notification API returned an unsupported response.");
       } else {
@@ -120,10 +105,7 @@ export function DriverDataProvider({ children }) {
     };
     connection.on("ReceiveNotification", (notification) => {
       if (stopped) return;
-      if (notification?.id != null) {
-        setNotifications((previous) => [{ ...notification, isRead: notification.isRead ?? false }, ...previous.filter((item) => item.id !== notification.id)]);
-      }
-      setLiveMessage(notification?.message || notification?.title || "You have a new driver notification.");
+      setLiveMessage(notification?.message || "Your driver assignment was updated.");
       clearTimeout(messageTimer);
       messageTimer = setTimeout(() => setLiveMessage(""), 6000);
       refresh();
@@ -141,22 +123,16 @@ export function DriverDataProvider({ children }) {
     };
   }, [refresh]);
 
-  const markRead = async (id) => {
-    try {
-      unwrapDriverData(await apiClient.put(`/api/v1/transport/drivers/notifications/${encodeURIComponent(id)}/read`));
-      if (!mounted.current) return false;
-      setNotifications((previous) => previous.map((item) => item.id === id ? { ...item, isRead: true } : item));
-      setNotificationError("");
-      return true;
-    } catch { if (mounted.current) setNotificationError("Unable to mark notifications as read. Please try again."); return false; }
-  };
-
   const markAllRead = async () => {
-    await Promise.all(notifications.filter((item) => !item.isRead && item.id != null).map((item) => markRead(item.id)));
+    try {
+      unwrapDriverData(await apiClient.post("/api/v1/transport/driver/notifications/read-all"));
+      setNotifications((previous) => previous.map((item) => ({ ...item, isRead: true })));
+      setNotificationError("");
+    } catch { setNotificationError("Unable to mark notifications as read. Please try again."); }
   };
 
   const driverProfile = getDriverIdentity(assignmentProfile(dashboard, { ...profile, ...dashboard.driverProfile }));
-  return <DriverDataContext.Provider value={{ dashboard, driverProfile, routeDetails, routeError, connectionStatus, notifications, loading, error, notificationError, refresh, markAllRead, markRead, applySavedPreferences }}>
+  return <DriverDataContext.Provider value={{ dashboard, driverProfile, routeDetails, routeError, connectionStatus, notifications, loading, error, notificationError, refresh, markAllRead }}>
     {liveMessage && <div className="dp-floating-toast" role="status" aria-live="polite">{liveMessage}</div>}
     {children}
   </DriverDataContext.Provider>;

@@ -6,7 +6,7 @@ import { Field, SkeletonPage, SkeletonRow, SkeletonText, Toast, useConfirmDialog
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-import {  getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES, normalizeApiTemplate, extractCleanCertificateBody  } from "./TemplatesPage.jsx";
+import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES, normalizeApiTemplate } from "@/components/pages/TemplatesPage.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
 import principalSignatureImg from "@/assets/signature.png";
@@ -29,7 +29,7 @@ const MAX_PURPOSE_LENGTH = 160;
 const MAX_REMARKS_LENGTH = 240;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const workflowSteps = ["Generated", "Reviewed", "Approved", "Issued"];
-const statusChoices = ["All", "Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"];
+const statusChoices = ["All", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"];
 
 const CERTIFICATE_TYPES = ["Bonafide Certificate", "Study Certificate", "Conduct Certificate", "Transfer Certificate", "Others"];
 const CERTIFICATE_BASE = "/api/v1/certificates";
@@ -834,8 +834,102 @@ export const FALLBACK_PLACEHOLDERS = {
   custom_body: "has demonstrated commendable academic performance and exemplary conduct",
 };
 
-// extractCleanCertificateBody is imported from @/utils/templateUtils
+export function extractCleanCertificateBody(rawContent) {
+  if (!rawContent) return "";
+  let str = String(rawContent).trim();
 
+  // If contains HTML markup
+  if (/<[a-z][\s\S]*>/i.test(str)) {
+    if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(str, "text/html");
+        
+        // Remove style, script, head, headers, footers
+        const elementsToRemove = doc.querySelectorAll(
+          "h1, h2, h3, h4, h5, h6, header, footer, style, script, head"
+        );
+        elementsToRemove.forEach((el) => el.remove());
+
+        // Replace br with newline
+        doc.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+
+        // Replace p, div, tr, li with newlines
+        doc.querySelectorAll("p, div, tr, li").forEach((el) => {
+          el.prepend(document.createTextNode("\n"));
+          el.append(document.createTextNode("\n"));
+        });
+
+        str = doc.body.textContent || "";
+      } catch {
+        // Fallback regex parsing if DOMParser fails
+        str = str.replace(/<style[\s\S]*?<\/style>/gi, "");
+        str = str.replace(/<script[\s\S]*?<\/script>/gi, "");
+        str = str.replace(/<h[1-6][\s\S]*?<\/h[1-6]>/gi, "");
+        str = str.replace(/<header[\s\S]*?<\/header>/gi, "");
+        str = str.replace(/<footer[\s\S]*?<\/footer>/gi, "");
+        str = str.replace(/<br\s*\/?>/gi, "\n");
+        str = str.replace(/<\/p>|<\/div>|<\/tr>|<\/li>/gi, "\n");
+        str = str.replace(/<[^>]+>/g, " ");
+      }
+    } else {
+      str = str.replace(/<style[\s\S]*?<\/style>/gi, "");
+      str = str.replace(/<script[\s\S]*?<\/script>/gi, "");
+      str = str.replace(/<h[1-6][\s\S]*?<\/h[1-6]>/gi, "");
+      str = str.replace(/<header[\s\S]*?<\/header>/gi, "");
+      str = str.replace(/<footer[\s\S]*?<\/footer>/gi, "");
+      str = str.replace(/<br\s*\/?>/gi, "\n");
+      str = str.replace(/<\/p>|<\/div>|<\/tr>|<\/li>/gi, "\n");
+      str = str.replace(/<[^>]+>/g, " ");
+    }
+  }
+
+  // Remove any remaining tags
+  str = str.replace(/<[^>]+>/g, " ");
+
+  // Strip known leaked legacy header phrases
+  str = str.replace(/BOARD OF INTERMEDIATE EDUCATION[,\s]+ANDHRA PRADESH\s+(?:STUDY\s*&\s*BONAFIDE|BONAFIDE|STUDY)\s+CERTIFICATE/gi, "");
+  str = str.replace(/COLLEGE TRANSFER CERTIFICATE\s*\([^)]*\)/gi, "");
+  str = str.replace(/BIEAP STUDY & BONAFIDE CERTIFICATE/gi, "");
+
+  // Strip known leaked legacy footer phrases
+  str = str.replace(/Date:\s*\d{2}\/\d{2}\/\d{4}\s*Place:\s*[A-Za-z\s]+PRINCIPAL\s*\([^)]*\)/gi, "");
+  str = str.replace(/PRINCIPAL\s*\([^)]*\)/gi, "");
+  str = str.replace(/SIGNATURE OF PRINCIPAL/gi, "");
+  str = str.replace(/\(College Seal\)/gi, "");
+
+  // Clean lines, eliminate header/footer artifacts
+  const cleanLines = str
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => {
+      if (!line) return false;
+      const lower = line.toLowerCase();
+      if (
+        lower.startsWith("college name") ||
+        lower.startsWith("college address") ||
+        lower.includes("recognized by board") ||
+        lower.includes("office seal") ||
+        lower.includes("college seal") ||
+        lower.includes("principal / head") ||
+        lower.includes("principal signature") ||
+        lower.includes("authorized signature") ||
+        lower.includes("scan to verify") ||
+        lower.includes("certificate no:") ||
+        lower.includes("issued by") ||
+        lower.startsWith("signature of principal") ||
+        lower.startsWith("principal (college seal)")
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+  let joined = cleanLines.join("\n\n").trim();
+  joined = joined.replace(/\s+([,.:;])/g, "$1");
+  joined = joined.replace(/([,.:;])(?=[^\s\d])/g, "$1 ");
+  return joined.trim();
+}
 
 export function renderTemplateWithRecord(text, record = {}) {
   if (!text) return "";
@@ -1632,7 +1726,7 @@ export default function CertificatesPage() {
   const [studentRows, setStudentRows] = useState([]);
   const [bulkStudentRows, setBulkStudentRows] = useState([]);
   const [activeTemplates, setActiveTemplates] = useState([]);
-  const [workflowStats, setWorkflowStats] = useState({ totalCount: 0, requestedCount: 0, generatedCount: 0, reviewedCount: 0, approvedCount: 0, issuedCount: 0, cancelledCount: 0 });
+  const [workflowStats, setWorkflowStats] = useState({ totalCount: 0, generatedCount: 0, reviewedCount: 0, approvedCount: 0, issuedCount: 0, cancelledCount: 0 });
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loadingBulkStudents, setLoadingBulkStudents] = useState(false);
   const [loadingList, setLoadingList] = useState(true);
@@ -1806,7 +1900,6 @@ export default function CertificatesPage() {
       const data = unwrapSinglePayload(response?.data) || {};
       setWorkflowStats({
         totalCount: Number(pick(data, ["totalCount", "TotalCount"])) || 0,
-        requestedCount: Number(pick(data, ["requestedCount", "RequestedCount"])) || 0,
         generatedCount: Number(pick(data, ["generatedCount", "GeneratedCount"])) || 0,
         reviewedCount: Number(pick(data, ["reviewedCount", "ReviewedCount"])) || 0,
         approvedCount: Number(pick(data, ["approvedCount", "ApprovedCount"])) || 0,
@@ -1825,7 +1918,6 @@ export default function CertificatesPage() {
       }
       setWorkflowStats({
         totalCount: list.length,
-        requestedCount: list.filter((r) => r.status === "Requested").length,
         generatedCount: list.filter((r) => r.status === "Generated").length,
         reviewedCount: list.filter((r) => r.status === "Reviewed").length,
         approvedCount: list.filter((r) => r.status === "Approved").length,
@@ -2411,21 +2503,6 @@ export default function CertificatesPage() {
     }
   };
 
-  
-  const handleGenerateFromRequest = async (row) => {
-    if (!row || !row.id) return;
-    try {
-      setBusyAction({ id: row.id, action: "generate" });
-      await apiClient.patch(CERTIFICATE_API.base + `/${row.id}/generate`);
-      setToast(`Certificate ${row.number || row.type} successfully generated from request.`);
-      await fetchCertificates();
-    } catch (err) {
-      alert(`Error generating certificate: ${err.message || "Unknown error"}`);
-    } finally {
-      setBusyAction({ id: null, action: null });
-    }
-  };
-
   const handleWorkflowChange = async (row, action) => {
     if (!row || busyAction.id) return;
     const actionMap = {
@@ -2894,56 +2971,56 @@ export default function CertificatesPage() {
     }
   };
 
-  const openPrintPreview = async (record) => {
+  const openPrintPreview = (record) => {
     if (!record) return;
-    
-    let serverData = null;
-    try {
-      const resolvedId = await resolveServerCertificateId(record);
-      if (resolvedId) {
-        const previewRes = await apiClient.get(CERTIFICATE_API.preview(resolvedId));
-        serverData = unwrapSinglePayload(previewRes.data);
-      }
-    } catch {
-      // Fallback
-    }
-
     const template = getCertificateTemplate(record.type, record);
-    if (serverData) {
-      setPrintPreview({
-        ...record,
-        heading: template?.heading || record.type || "Certificate",
-        borderColor: template?.borderColor || "#1e3a8a",
-        badgeBgColor: template?.badgeBgColor || "#1e3a8a",
-        badgeTextColor: template?.badgeTextColor || "#ffffff",
-        orientation: template?.orientation || record.orientation || "landscape",
-        signatureType: template?.signatureType || "Principal",
-        serverCertificateId: serverData.certificateId || record.serverCertificateId,
-        certificateId: serverData.certificateId || record.certificateId,
-        number: serverData.certificateNumber || record.number,
-        status: serverData.status || record.status,
-        issue: serverData.issueDate || record.issue,
-        requestDate: serverData.requestDate || record.requestDate,
-        remarks: serverData.remarks !== undefined ? serverData.remarks : (record.remarks || ""),
-        signature: serverData.signature || record.signature || principalSignatureImg,
-        paragraphOne: serverData.paragraphOne || template?.paragraphOne || "",
-        paragraphTwo: serverData.paragraphTwo || template?.paragraphTwo || "",
-        ...(serverData.dataPayload || {})
-      });
-    } else {
-      setPrintPreview({
-        ...record,
-        heading: template?.heading || record.type || "Certificate",
-        paragraphOne: template?.paragraphOne || "",
-        paragraphTwo: template?.paragraphTwo || "",
-        borderColor: template?.borderColor || "#1e3a8a",
-        badgeBgColor: template?.badgeBgColor || "#1e3a8a",
-        badgeTextColor: template?.badgeTextColor || "#ffffff",
-        orientation: template?.orientation || record.orientation || "landscape",
-        signatureType: template?.signatureType || "Principal",
-        signature: record.signature || principalSignatureImg,
-      });
-    }
+    const preHydrated = {
+      ...record,
+      heading: template?.heading || record.type || "Certificate",
+      paragraphOne: template?.paragraphOne || "",
+      paragraphTwo: template?.paragraphTwo || "",
+      borderColor: template?.borderColor || "#1e3a8a",
+      badgeBgColor: template?.badgeBgColor || "#1e3a8a",
+      badgeTextColor: template?.badgeTextColor || "#ffffff",
+      orientation: template?.orientation || record.orientation || "landscape",
+      signatureType: template?.signatureType || "Principal",
+      signature: record.signature || principalSignatureImg,
+    };
+
+    setPrintPreview(preHydrated);
+
+    (async () => {
+      const requestId = ++detailsRequestRef.current;
+      try {
+        const resolvedId = await resolveServerCertificateId(record);
+        if (!resolvedId) return;
+
+        const previewRes = await apiClient.get(CERTIFICATE_API.preview(resolvedId), { skipGlobalLoader: true });
+        if (requestId !== detailsRequestRef.current) return;
+        const previewData = unwrapSinglePayload(previewRes.data);
+        if (previewData) {
+          setPrintPreview((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              serverCertificateId: previewData.certificateId || prev.serverCertificateId,
+              certificateId: previewData.certificateId || prev.certificateId,
+              number: previewData.certificateNumber || prev.number,
+              status: previewData.status || prev.status,
+              issue: previewData.issueDate || prev.issue,
+              requestDate: previewData.requestDate || prev.requestDate,
+              remarks: prev.remarks !== undefined ? prev.remarks : (previewData.remarks || ""),
+              signature: previewData.signature || prev.signature || principalSignatureImg,
+              paragraphOne: previewData.paragraphOne || prev.paragraphOne,
+              paragraphTwo: previewData.paragraphTwo || prev.paragraphTwo,
+              ...(previewData.dataPayload || {})
+            };
+          });
+        }
+      } catch {
+        // Fallback gracefully without overriding
+      }
+    })();
   };
 
   const filtered = useMemo(() => {
@@ -3108,7 +3185,7 @@ export default function CertificatesPage() {
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const normalizedWorkflowQuery = workflowQuery.trim().toLowerCase();
   const actionRows = rows.filter((row) => {
-    const isWorkflowRecord = ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(row.status);
+    const isWorkflowRecord = ["Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(row.status);
     const matchesStatus = workflowStatusFilter === "All" || row.status === workflowStatusFilter;
     const matchesSearch = !normalizedWorkflowQuery || [
       row.number,
@@ -3649,7 +3726,6 @@ export default function CertificatesPage() {
             </div>
             <div className="cert-workflow-summary" aria-label="Certificate workflow summary">
               {[
-                ["Requested", `${workflowStats.requestedCount} Request${workflowStats.requestedCount === 1 ? "" : "s"}`],
                 ["Generated", `${workflowStats.generatedCount} Pending`],
                 ["Reviewed", `${workflowStats.reviewedCount} Pending`],
                 ["Approved", `${workflowStats.approvedCount} Ready to issue`],
@@ -3719,7 +3795,7 @@ export default function CertificatesPage() {
                             type="button"
                             className="cms-action-btn cert-workflow-step"
                             style={workflowButtonStyle("approve", ["Generated", "Reviewed"].includes(row.status) && hasServerCertificateId(row) && !isRowBusy(row.id))}
-                            onClick={() => row.status === "Requested" ? handleGenerateFromRequest(row) : handleWorkflowChange(row, row.status === "Generated" ? "review" : "approve")}
+                            onClick={() => handleWorkflowChange(row, row.status === "Generated" ? "review" : "approve")}
                             disabled={!(["Generated", "Reviewed"].includes(row.status)) || !hasServerCertificateId(row) || isRowBusy(row.id)}
                             title={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
                             aria-label={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}

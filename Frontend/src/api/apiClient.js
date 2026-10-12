@@ -1,6 +1,6 @@
 import axios from "axios";
-import { env } from "../config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
+import { env } from "@/config/env.js";
+import { clearAuthSession, getAuthToken, updateAuthToken } from "@/features/authStorage.js";
 
 let activeApiRequests = 0;
 const apiLoadingListeners = new Set();
@@ -84,11 +84,16 @@ export const getApiErrorMessage = (error) => {
   if (data?.Detail) return data.Detail;
   if (error?.response?.status === 401) return "Your session has expired. Please sign in again.";
   if (error?.response?.status === 403) return "Your account is not permitted to access this resource.";
+  if (error?.response?.status === 404) return "Requested resource not found on backend (HTTP 404).";
+  if (error?.response?.status === 502 || error?.response?.status === 504) return "Backend proxy unreachable. Please check API connection.";
+  if (error?.code === "ECONNABORTED" || error?.message?.includes?.("timeout")) return "Request timed out. Backend may be overloaded or unreachable.";
   if (error?.response?.status) return `Request failed (HTTP ${error.response.status}).`;
   if (error?.message === "Network Error") return "Backend is not reachable. Please check API connection or Vite proxy.";
   if (error?.message) return error.message;
   return "Something went wrong. Please try again.";
 };
+
+const recentApiErrorLogTimes = new Map();
 
 const apiClient = axios.create({
   baseURL: env.useDevProxy ? "" : env.apiBaseUrl,
@@ -124,7 +129,14 @@ apiClient.interceptors.request.use(
     }
     beginApiLoading(config);
     const token = getStoredAccessToken();
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      if (typeof config.headers?.set === "function") {
+        config.headers.set("Authorization", `Bearer ${token}`);
+      } else {
+        if (!config.headers) config.headers = {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
     try {
       const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
@@ -133,12 +145,16 @@ apiClient.interceptors.request.use(
     }
     if (import.meta.env.DEV) {
       const expiry = token ? getJwtExpiryState(token) : {};
+      const hasAuthHeader = Boolean(
+        config.headers?.Authorization?.startsWith?.("Bearer ") ||
+        (typeof config.headers?.get === "function" && config.headers.get("Authorization")?.startsWith("Bearer "))
+      );
       console.log("API request:", {
         url: config.url,
-        method: config.method,
+        method: (config.method || "GET").toUpperCase(),
         hasToken: Boolean(token),
         tokenLength: token.length || 0,
-        hasBearer: Boolean(config.headers?.Authorization?.startsWith("Bearer ")),
+        hasBearer: hasAuthHeader,
         tokenExpired: expiry.isJwt ? expiry.isExpired : undefined,
       });
     }
@@ -185,7 +201,9 @@ apiClient.interceptors.response.use(
           error.response?.data?.message ||
           error.response?.data?.Message ||
           error.response?.data?.error ||
-          error.response?.data?.title;
+          error.response?.data?.title ||
+          getApiErrorMessage(error) ||
+          error.message;
         console.error("API response error:", {
           url: originalRequest?.url,
           method: originalRequest?.method,
@@ -202,13 +220,36 @@ apiClient.interceptors.response.use(
 
     // Handle 401 Unauthorized with automatic token refresh
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
+      const isWardenSession =
+        typeof window !== "undefined" &&
+        (window.location.pathname.startsWith("/warden") ||
+          window.localStorage.getItem("cms_role") === "warden" ||
+          window.localStorage.getItem("cms_auth") === "true");
+
+      if (isWardenSession) {
+        // Do not force logout or redirect for Warden on API 401: allow component to use fallback/mock data
+        return Promise.reject(error);
+      }
+
+      const currentToken = getStoredAccessToken();
+      const isMockToken = Boolean(
+        currentToken &&
+        (currentToken.includes("-auth-token-") || currentToken.startsWith("mock-") || currentToken.startsWith("parent-") || currentToken.startsWith("warden-"))
+      );
+      if (isMockToken) {
+        clearAuthSession();
+        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          window.location.assign("/login");
+        }
+        return Promise.reject(error);
+      }
+
       if (originalRequest._retry) {
         clearAuthSession();
         if (window.location.pathname !== "/login") window.location.assign("/login");
         return Promise.reject(error);
       }
 
-      const currentToken = getStoredAccessToken();
       if (!currentToken) {
         clearAuthSession();
         if (window.location.pathname !== "/login") window.location.assign("/login");
@@ -221,9 +262,14 @@ apiClient.interceptors.response.use(
         return new Promise((resolve, reject) => {
           subscribeTokenRefresh((newToken, refreshError) => {
             if (refreshError || !newToken) {
-              return reject(error);
+              return reject(refreshError || error);
             }
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            if (typeof originalRequest.headers?.set === "function") {
+              originalRequest.headers.set("Authorization", `Bearer ${newToken}`);
+            } else {
+              if (!originalRequest.headers) originalRequest.headers = {};
+              originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            }
             resolve(apiClient(originalRequest));
           });
         });
@@ -258,13 +304,20 @@ apiClient.interceptors.response.use(
         isRefreshing = false;
         onTokenRefreshed(newAccessToken);
 
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        if (typeof originalRequest.headers?.set === "function") {
+          originalRequest.headers.set("Authorization", `Bearer ${newAccessToken}`);
+        } else {
+          if (!originalRequest.headers) originalRequest.headers = {};
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        }
         return apiClient(originalRequest);
       } catch (refreshErr) {
         isRefreshing = false;
         onTokenRefreshFailed(refreshErr);
         clearAuthSession();
-        if (window.location.pathname !== "/login") window.location.assign("/login");
+        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          window.location.assign("/login");
+        }
         return Promise.reject(refreshErr);
       }
     }

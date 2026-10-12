@@ -1,6 +1,3 @@
-using System;
-using System.Text.Json.Serialization;
-
 namespace CollegeManagement.API.DTOs.Payroll
 {
     public class PayrollEmployeeDto
@@ -49,20 +46,11 @@ namespace CollegeManagement.API.DTOs.Payroll
         public string? PaymentMode { get; set; }
         public string? BankName { get; set; }
         public string? AccountNumber { get; set; }
-
         public string? IFSCCode { get; set; }
-
-        [JsonIgnore]
         public string? IfscCode { get => IFSCCode; set => IFSCCode = value; }
-
         public string? PANNumber { get; set; }
-
-        [JsonIgnore]
         public string? PanNumber { get => PANNumber; set => PANNumber = value; }
-
         public string? UANNumber { get; set; }
-
-        [JsonIgnore]
         public string? UanNumber { get => UANNumber; set => UANNumber = value; }
     }
 }

@@ -509,20 +509,7 @@ export default function FacultyNavbar() {
         {/* Profile Avatar & Dropdown */}
         <div style={{ position: "relative" }} ref={profileDropRef}>
           <button className="cms-profile-btn" onClick={() => setProfileDropOpen((p) => !p)}>
-            
-            {profileData.photoPath || profileData.photoUrl ? (
-              <img 
-                src={profileData.photoUrl || `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}?t=${Date.now()}`} 
-                alt="Profile" 
-                className="cms-avatar" 
-                style={{ objectFit: 'cover' }} 
-                onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} 
-              />
-            ) : null}
-            <div className="cms-avatar" style={{ display: (profileData.photoPath || profileData.photoUrl) ? 'none' : 'flex' }}>
-              {initials}
-            </div>
-
+            <div className="cms-avatar">{initials}</div>
             <div className="cms-profile-meta">
               <strong>
                 {profileData.fullName ||

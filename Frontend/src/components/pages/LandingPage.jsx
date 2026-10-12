@@ -1,11 +1,8 @@
-import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import { Link } from "react-router-dom";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import HeroSlider from "@/components/common/HeroSlider.jsx";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import logo from "@/assets/pirnav-colleges-logo.png";
-import { useCampusImages } from "../../features/campusImages.js";
-import { getCampusContent } from "../../features/campusContent.js";
 import "./LandingPage.css";
 
 const quickLinks = [
@@ -16,29 +13,28 @@ const quickLinks = [
 const modules = ["Admissions", "Attendance", "Exams", "Fees", "Reports"];
 
 export default function LandingPage() {
-  const content = getCampusContent(useCampusImages());
   return (
     <div className="cms-landing">
       <header className="cms-landing-nav">
         <div className="cms-landing-brand">
-          <span className="landing-brand-logo"><CampusBrandImage slot="headerLogo" src={logo} alt={`${content.collegeName} logo`} /></span>
+          <span className="landing-brand-logo"><img src={logo} alt="Pirnav College logo" /></span>
         </div>
-        <div className="landing-header-actions"><ThemeToggle /><Link to="/login" className="landing-login-btn">{content.landingLoginButton}</Link></div>
+        <div className="landing-header-actions"><ThemeToggle /><Link to="/login" className="landing-login-btn">Login</Link></div>
       </header>
 
       <section className="landing-hero-banner">
         <HeroSlider variant="hero-bg" />
         <div className="landing-hero-content cms-anim-up">
-          <span className="cms-eyebrow"><CheckCircle2 size={14} /> {content.landingBadge}</span>
-          <h1>{content.landingHeadline}</h1>
-          <p>{content.landingDescription}</p>
+          <span className="cms-eyebrow"><CheckCircle2 size={14} /> A smarter campus starts here</span>
+          <h1>Learn, grow and succeed with a connected college experience.</h1>
+          <p>Bring students, faculty, academics, examinations, fees and administration together in one clear, reliable platform built for Pirnav College.</p>
           <div className="landing-trust-points" aria-label="Platform benefits">
-            <span><CheckCircle2 size={15} /> {content.landingBenefit1}</span>
-            <span><CheckCircle2 size={15} /> {content.landingBenefit2}</span>
-            <span><CheckCircle2 size={15} /> {content.landingBenefit3}</span>
+            <span><CheckCircle2 size={15} /> Faster daily operations</span>
+            <span><CheckCircle2 size={15} /> Clear academic visibility</span>
+            <span><CheckCircle2 size={15} /> Better student outcomes</span>
           </div>
           <div className="cms-hero-actions landing-hero-actions">
-            <Link to="/login" className="cms-btn landing-start-btn">{content.landingButton} <ArrowRight size={16} /></Link>
+            <Link to="/login" className="cms-btn landing-start-btn">Get Started <ArrowRight size={16} /></Link>
           </div>
         </div>
       </section>
@@ -46,9 +42,9 @@ export default function LandingPage() {
       <footer className="landing-footer">
         <div className="landing-footer-inner">
           <div className="landing-footer-brand">
-            <span className="landing-footer-logo"><CampusBrandImage slot="footerLogo" src={logo} alt={`${content.collegeName} logo`} /></span>
+            <span className="landing-footer-logo"><img src={logo} alt="Pirnav College logo" /></span>
             <div>
-              <p>{content.footerDescription}</p>
+              <p>One connected platform for academics, admissions, administration and student success.</p>
             </div>
           </div>
           <div className="landing-footer-col">
@@ -61,12 +57,12 @@ export default function LandingPage() {
           </div>
           <div className="landing-footer-col">
             <h2>Contact</h2>
-            <span>{content.contactAddress}</span>
-            <a href={`mailto:${content.contactEmail}`}>{content.contactEmail}</a>
-            <a href={`tel:${content.contactPhone.replace(/[^+\d]/g, "")}`}>{content.contactPhone}</a>
+            <span>Vijayawada, Andhra Pradesh</span>
+            <a href="mailto:support@pirnavcollege.com">support@pirnavcollege.com</a>
+            <a href="tel:+919398649798">+91 9398649798</a>
           </div>
         </div>
-        <div className="landing-footer-bottom">&copy; {new Date().getFullYear()} {content.collegeName}. All rights reserved.</div>
+        <div className="landing-footer-bottom">&copy; 2026 Pirnav College. All rights reserved.</div>
       </footer>
     </div>
   );

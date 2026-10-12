@@ -28,21 +28,6 @@ const formatTime = (value) => {
 
 const PAGE_SIZE = 5;
 
-// Date-only exams remain scheduled throughout their last day when no end time is supplied.
-const effectiveStatus = (status, dates, now) => {
-  const normalized = String(status || "Scheduled").trim().toUpperCase();
-  if (["COMPLETED", "CANCELLED", "CANCELED"].includes(normalized)) return normalized;
-  const endings = dates.map(({ date, endTime }) => {
-    const ending = dateValue(date);
-    if (!ending) return null;
-    const time = String(endTime || "").match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-    if (time && Number(time[1]) < 24 && Number(time[2]) < 60) ending.setHours(Number(time[1]), Number(time[2]), Number(time[3] || 0), 0);
-    else ending.setHours(23, 59, 59, 999);
-    return ending.getTime();
-  }).filter((value) => value != null);
-  return endings.length && Math.max(...endings) < now ? "COMPLETED" : normalized;
-};
-
 function Pagination({ page, total, label, onChange }) {
   if (!total) return null;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -59,11 +44,6 @@ export default function StudentExaminations() {
   const [upcomingPage, setUpcomingPage] = useState(1);
   const [schedulePage, setSchedulePage] = useState(1);
   const [completedPage, setCompletedPage] = useState(1);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -94,21 +74,14 @@ export default function StudentExaminations() {
     const completedRows = [];
     const scheduleRows = [];
     examinations.forEach((exam) => {
-      const examSchedules = exam.schedules || [];
-      const status = effectiveStatus(exam.status, [
-        { date: exam.endDate || exam.startDate },
-        ...examSchedules.map((schedule) => ({ date: schedule.examDate, endTime: schedule.endTime })),
-      ], now);
-      const displayedExam = { ...exam, status };
-      (status === "COMPLETED" ? completedRows : upcomingRows).push(displayedExam);
-      examSchedules.forEach((schedule) => scheduleRows.push({ exam: displayedExam, schedule: {
-        ...schedule,
-        status: effectiveStatus(schedule.status || exam.status, [{ date: schedule.examDate, endTime: schedule.endTime }], now),
-      } }));
+      const status = String(exam.status || "").trim().toUpperCase();
+      // Completion follows the API status; past dates do not complete an exam.
+      (status === "COMPLETED" ? completedRows : upcomingRows).push(exam);
+      exam.schedules.forEach((schedule) => scheduleRows.push({ exam, schedule }));
     });
     scheduleRows.sort((left, right) => String(left.schedule.examDate || "").localeCompare(String(right.schedule.examDate || "")));
     return { upcoming: upcomingRows, completed: completedRows, schedules: scheduleRows };
-  }, [examinations, now]);
+  }, [examinations]);
 
   const examRows = (items) => items.map((exam) => [exam.examName, exam.examType || exam.assessmentTypeName, `${formatDate(exam.startDate)} - ${formatDate(exam.endDate)}`, exam.status]);
   const scheduleRows = schedules.map(({ exam, schedule }) => [
@@ -121,8 +94,7 @@ export default function StudentExaminations() {
     schedule.maxMarks ?? "—",
     schedule.status || exam.status,
   ]);
-  const currentPage = (rows, page) => Math.min(page, Math.max(1, Math.ceil(rows.length / PAGE_SIZE)));
-  const pageRows = (rows, page) => rows.slice((currentPage(rows, page) - 1) * PAGE_SIZE, currentPage(rows, page) * PAGE_SIZE);
+  const pageRows = (rows, page) => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const upcomingRows = examRows(upcoming);
   const completedRows = examRows(completed);
 
@@ -133,9 +105,9 @@ export default function StudentExaminations() {
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
     {!loading && !error && !examinations.length ? <StudentCard><StudentEmptyState icon={CalendarX} title="No examinations available" text="There are no scheduled or published examinations for your academic context."/></StudentCard> : null}
     {!loading && !error && examinations.length ? <>
-      <StudentCard title="Upcoming Exams" subtitle="Scheduled and published examinations"><StudentDataTable columns={["Exam Name", "Exam Type", "Dates", "Status"]} rows={pageRows(upcomingRows, upcomingPage)} statusColumns={[3]} empty="No upcoming examinations."/><Pagination page={currentPage(upcomingRows, upcomingPage)} total={upcomingRows.length} label="examinations" onChange={setUpcomingPage}/></StudentCard>
-      <StudentCard title="Exam Timetable / Schedule"><StudentDataTable columns={["Exam Name", "Exam Type", "Subject", "Exam Date", "Time", "Room / Hall", "Maximum Marks", "Status"]} rows={pageRows(scheduleRows, schedulePage)} statusColumns={[7]} empty="No examination schedule is available."/><Pagination page={currentPage(scheduleRows, schedulePage)} total={scheduleRows.length} label="schedules" onChange={setSchedulePage}/></StudentCard>
-      <StudentCard title="Completed Exams"><StudentDataTable columns={["Exam Name", "Exam Type", "Dates", "Status"]} rows={pageRows(completedRows, completedPage)} statusColumns={[3]} empty="No completed examinations."/><Pagination page={currentPage(completedRows, completedPage)} total={completedRows.length} label="examinations" onChange={setCompletedPage}/></StudentCard>
+      <StudentCard title="Upcoming Exams" subtitle="Scheduled and published examinations"><StudentDataTable columns={["Exam Name", "Exam Type", "Dates", "Status"]} rows={pageRows(upcomingRows, upcomingPage)} statusColumns={[3]} empty="No upcoming examinations."/><Pagination page={upcomingPage} total={upcomingRows.length} label="examinations" onChange={setUpcomingPage}/></StudentCard>
+      <StudentCard title="Exam Timetable / Schedule"><StudentDataTable columns={["Exam Name", "Exam Type", "Subject", "Exam Date", "Time", "Room / Hall", "Maximum Marks", "Status"]} rows={pageRows(scheduleRows, schedulePage)} statusColumns={[7]} empty="No examination schedule is available."/><Pagination page={schedulePage} total={scheduleRows.length} label="schedules" onChange={setSchedulePage}/></StudentCard>
+      <StudentCard title="Completed Exams"><StudentDataTable columns={["Exam Name", "Exam Type", "Dates", "Status"]} rows={pageRows(completedRows, completedPage)} statusColumns={[3]} empty="No completed examinations."/><Pagination page={completedPage} total={completedRows.length} label="examinations" onChange={setCompletedPage}/></StudentCard>
     </> : null}
 
   </div>;

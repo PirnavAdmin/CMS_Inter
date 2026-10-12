@@ -115,7 +115,7 @@ namespace CollegeManagement.API.DTOs.Staff
         // Dynamic Role-Specific & Non-Teaching Fields
         public Dictionary<string, object>? DepartmentSpecific { get; set; }
         public Dictionary<string, object>? CustomFields => DepartmentSpecific;
-        public List<StaffDocumentPayloadItem>? Documents { get; set; }
+        public Dictionary<string, string>? Documents { get; set; }
 
         // Transport / Driver Specific
         public bool IsDriver { get; set; }

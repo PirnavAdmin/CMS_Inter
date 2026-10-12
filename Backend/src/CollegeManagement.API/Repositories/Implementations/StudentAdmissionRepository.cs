@@ -1,4 +1,4 @@
-using CollegeManagement.API.Data;
+﻿using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
@@ -213,11 +213,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_HostelRoom = request.HostelRoom,
                     p_HostelBed = request.HostelBed,
                     p_HallTicketNumber = request.HallTicketNumber,
-                    p_AdmittedById = request.AdmittedById,
-                    p_CampusId = request.CampusId,
-                    p_SourceCampusId = request.SourceCampusId,
-                    p_IsReferral = request.IsReferral,
-                    p_Status = request.IsReferral ? "Referred" : "Pending"
+                    p_AdmittedById = request.AdmittedById
                 },
                 commandType: CommandType.StoredProcedure);
 

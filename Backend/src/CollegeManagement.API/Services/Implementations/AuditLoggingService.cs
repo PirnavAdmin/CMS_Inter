@@ -26,7 +26,7 @@ namespace CollegeManagement.API.Services.Implementations
             _jwtTokenHelper = jwtTokenHelper;
         }
 
-        public async Task LogAsync(string action, string module, string target, string severity = "Info", string status = "Success", string? details = null, string? overrideUser = null, string? overrideRole = null)
+        public async Task LogAsync(string action, string module, string target, string severity = "Info", string status = "Success", string? details = null)
         {
             try
             {
@@ -80,4 +80,3 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
-

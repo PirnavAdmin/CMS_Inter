@@ -158,11 +158,10 @@ public class DashboardRepository : IDashboardRepository
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
-            // Bypassing SP to rely on updated EF Core logic which uses StudentAdmissions
-            // if (summary != null && (summary.TotalStudents > 0 || summary.TeachingStaff > 0 || summary.TotalGroups > 0 || summary.TotalSections > 0))
-            // {
-            //     return summary;
-            // }
+            if (summary != null && (summary.TotalStudents > 0 || summary.TeachingStaff > 0 || summary.TotalGroups > 0 || summary.TotalSections > 0))
+            {
+                return summary;
+            }
         }
         catch
         {
@@ -218,11 +217,10 @@ public class DashboardRepository : IDashboardRepository
                 };
             }
 
-            // Bypassing SP to rely on updated EF Core logic
-            // if (overview.TotalStudents > 0)
-            // {
-            //     return overview;
-            // }
+            if (overview.TotalStudents > 0)
+            {
+                return overview;
+            }
         }
         catch
         {
@@ -312,11 +310,10 @@ public class DashboardRepository : IDashboardRepository
                 summary.Breakdown = breakdown;
             }
 
-            // Bypassing SP to rely on updated EF Core logic which only calculates overall attendance
-            // if (summary.TotalStudents > 0 || summary.Present > 0 || summary.Absent > 0)
-            // {
-            //     return summary;
-            // }
+            if (summary.TotalStudents > 0 || summary.Present > 0 || summary.Absent > 0)
+            {
+                return summary;
+            }
         }
         catch
         {
@@ -350,11 +347,10 @@ public class DashboardRepository : IDashboardRepository
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
-            // Bypassing SP to rely on updated EF Core logic which only calculates overall attendance
-            // if (summary != null && (summary.TotalStaff > 0 || summary.Present > 0))
-            // {
-            //     return summary;
-            // }
+            if (summary != null && (summary.TotalStaff > 0 || summary.Present > 0))
+            {
+                return summary;
+            }
         }
         catch
         {
@@ -573,12 +569,9 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            // 1. Total Students from StudentAdmissions table as requested
-            int totalStudents = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+            // 1. Total Students from Students table
+            int totalStudents = await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                 .CountAsync(ct);
 
             summary.TotalStudents = totalStudents;
@@ -590,10 +583,14 @@ public class DashboardRepository : IDashboardRepository
                 .ToListAsync(ct);
 
             summary.TeachingStaff = staffList.Count(st =>
-                st.StaffType == "Teaching");
+                st.StaffType == "Teaching" ||
+                st.StaffType == "Both" ||
+                string.IsNullOrEmpty(st.StaffType) ||
+                !st.StaffType.ToLower().Contains("non"));
 
             summary.NonTeachingStaff = staffList.Count(st =>
-                st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching");
+                !string.IsNullOrEmpty(st.StaffType) &&
+                st.StaffType.ToLower().Contains("non"));
 
             // 3. Groups & Sections
             summary.TotalGroups = await _db.Groups.AsNoTracking()
@@ -637,11 +634,8 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var admissionDates = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+            var admissionDates = await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                 .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
                 .ToListAsync(ct);
 
@@ -677,11 +671,8 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var genders = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+            var genders = await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                 .Select(s => s.Gender ?? string.Empty)
                 .ToListAsync(ct);
 
@@ -874,16 +865,15 @@ public class DashboardRepository : IDashboardRepository
                 .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value))
                 .ToListAsync(ct);
 
-            // Force all staff calculation as requested
-            // string filter = (staffType ?? "all").ToLower();
-            // if (filter.Contains("non"))
-            // {
-            //     staffList = staffList.Where(st => !string.IsNullOrEmpty(st.StaffType) && (st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching")).ToList();
-            // }
-            // else if (filter.Contains("teaching"))
-            // {
-            //     staffList = staffList.Where(st => st.StaffType == "Teaching").ToList();
-            // }
+            string filter = (staffType ?? "all").ToLower();
+            if (filter.Contains("non"))
+            {
+                staffList = staffList.Where(st => !string.IsNullOrEmpty(st.StaffType) && st.StaffType.ToLower().Contains("non")).ToList();
+            }
+            else if (filter.Contains("teaching"))
+            {
+                staffList = staffList.Where(st => st.StaffType == "Teaching" || st.StaffType == "Both" || string.IsNullOrEmpty(st.StaffType) || !st.StaffType.ToLower().Contains("non")).ToList();
+            }
 
             summary.TotalStaff = staffList.Count;
 

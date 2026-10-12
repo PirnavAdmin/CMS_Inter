@@ -212,21 +212,11 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("CreatedAt");
-
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("Email");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("varchar(150)")
-                        .HasColumnName("FullName");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)")
@@ -237,20 +227,6 @@ namespace CollegeManagement.API.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("Password");
-
-                    b.Property<string>("PhoneNumber")
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("PhoneNumber");
-
-                    b.Property<string>("PhotoPath")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)")
-                        .HasColumnName("PhotoPath");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("UpdatedAt");
 
                     b.HasKey("Id");
 
@@ -1236,16 +1212,10 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("int")
                         .HasColumnName("ExamId");
 
-                    b.Property<int?>("GroupId")
-                        .HasColumnType("int");
-
                     b.Property<string>("Hall")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
-
-                    b.Property<string>("IncludedSubjectIds")
-                        .HasColumnType("longtext");
 
                     b.Property<string>("Invigilator")
                         .IsRequired()
@@ -1263,10 +1233,6 @@ namespace CollegeManagement.API.Migrations
 
                     b.Property<decimal>("PassingMarks")
                         .HasColumnType("decimal(65,30)");
-
-                    b.Property<string>("PatternName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
 
                     b.Property<int?>("RoomId")
                         .HasColumnType("int");
@@ -1442,6 +1408,10 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("int");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BloodGroup")
+                        .HasMaxLength(10)
+                        .HasColumnType("varchar(10)");
 
                     b.Property<int?>("CampusId")
                         .HasColumnType("int");
@@ -1895,6 +1865,11 @@ namespace CollegeManagement.API.Migrations
                     b.Property<bool>("IsMandatory")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("IsMandatory");
+
+                    b.Property<string>("Rule")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -3624,99 +3599,6 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("StaffCampusAssignments", (string)null);
                 });
 
-            modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffReimbursement", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AcademicYear")
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)");
-
-                    b.Property<string>("AccountantNotes")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<DateTime?>("AccountantProcessedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("AccountantProcessedBy")
-                        .HasColumnType("int");
-
-                    b.Property<string>("AdminNotes")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<DateTime?>("AdminReviewedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("AdminReviewedBy")
-                        .HasColumnType("int");
-
-                    b.Property<decimal?>("ApprovedAmount")
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ClaimCategory")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("ClaimNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<decimal>("ClaimedAmount")
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("longtext");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<DateTime?>("PaidAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("PaymentReference")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("ProofDocumentPath")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<int>("StaffId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<DateTime>("SubmittedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StaffId");
-
-                    b.ToTable("StaffReimbursements");
-                });
-
             modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffSubjectAllocation", b =>
                 {
                     b.Property<int>("Id")
@@ -4628,9 +4510,6 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsApproved")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<bool>("IsReferral")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<bool>("IsRejected")
@@ -5566,31 +5445,12 @@ namespace CollegeManagement.API.Migrations
                     b.Property<long?>("AssignmentId")
                         .HasColumnType("bigint");
 
-                    b.Property<int?>("CampusId")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedTime")
                         .HasColumnType("datetime(6)");
-
-                    b.Property<string>("EventKey")
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<bool>("IsDelivered")
-                        .HasColumnType("tinyint(1)");
 
                     b.Property<string>("Message")
                         .IsRequired()
                         .HasColumnType("longtext");
-
-                    b.Property<int?>("PayrollMonth")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PayrollYear")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("PayslipId")
-                        .HasColumnType("int");
 
                     b.Property<DateTime?>("ReadTime")
                         .HasColumnType("datetime(6)");
@@ -5610,35 +5470,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("NotificationId");
 
-                    b.ToTable("TransportDriverNotifications");
-                });
-
-            modelBuilder.Entity("CollegeManagement.API.Models.Transport.DriverPreference", b =>
-                {
-                    b.Property<int>("StaffId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("AutoLogoutMinutes")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<bool>("EmailAttendanceAlerts")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<bool>("SmsUrgentAlerts")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<bool>("TripReminders")
-                        .HasColumnType("tinyint(1)");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("StaffId");
-
-                    b.ToTable("DriverPreferences");
+                    b.ToTable("DriverNotifications");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Transport.TransportGpsTelemetry", b =>
@@ -7388,17 +7220,6 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("Staff");
                 });
 
-            modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffReimbursement", b =>
-                {
-                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
-                        .WithMany()
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Staff");
-                });
-
             modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffSubjectAllocation", b =>
                 {
                     b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
@@ -8002,17 +7823,6 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("SubstituteStaff");
 
                     b.Navigation("Timetable");
-                });
-
-            modelBuilder.Entity("CollegeManagement.API.Models.Transport.DriverPreference", b =>
-                {
-                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
-                        .WithMany()
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Staff");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Transport.TransportGpsTelemetry", b =>
