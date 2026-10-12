@@ -65,6 +65,7 @@ builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new NullableTimeOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 #endregion
 
@@ -202,6 +203,7 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
+builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
 builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 #endregion
 
@@ -237,6 +239,7 @@ builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
 builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
+builder.Services.AddScoped<IStaffReimbursementService, StaffReimbursementService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IStudentAdmissionService, StudentAdmissionService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
@@ -305,6 +308,8 @@ builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");
 });
+// Background Services
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 #endregion
 
 #region Email Configuration
