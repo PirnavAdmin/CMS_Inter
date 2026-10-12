@@ -204,16 +204,9 @@
 }
 
 .cms-nav-link svg {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
-}
-
-.cms-nav-link svg.cms-nav-3d-icon {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
-  filter: none;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
 }
 
 .cms-nav-3d-icon {
@@ -234,10 +227,6 @@
 
 .cms-nav-link.is-active .cms-nav-3d-icon {
   filter: drop-shadow(0 2px 2px rgb(0 0 0 / 22%));
-}
-
-.cms-nav-link.is-active svg.cms-nav-3d-icon {
-  filter: none;
 }
 
 .cms-nav-label {

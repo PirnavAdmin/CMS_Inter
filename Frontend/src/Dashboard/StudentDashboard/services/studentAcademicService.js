@@ -195,6 +195,7 @@ export const changeCurrentStudentPassword = (data) => apiClient.post(studentApiE
 
 export const getStudentExaminations = async (student) => {
   const params = {
+    CampusId: student.campusId,
     BoardId: student.boardId,
     AcademicYearId: student.academicYearId,
     AcademicLevelId: student.academicLevelId,
@@ -205,21 +206,27 @@ export const getStudentExaminations = async (student) => {
     if (!params[key]) delete params[key];
   });
 
-  const response = await apiClient.get(studentApiEndpoints.examinations.list, { params });
+  const examinationEndpoint = apiEndpoints.examinations.getAll;
+  const response = await apiClient.get(examinationEndpoint, { params });
   const payload = getPayload(response.data);
-  const examinations = Array.isArray(payload) ? payload : [];
+  const rows = (value) => Array.isArray(value) ? value : value?.items ?? value?.Items ?? [];
+  const inStudentScope = (record) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => {
+    const actual = record[key] ?? record[key[0].toUpperCase() + key.slice(1)];
+    return actual == null || !student[key] || String(actual) === String(student[key]);
+  });
+  const examinations = rows(payload).filter(inStudentScope);
   const visible = examinations.filter((exam) => ["SCHEDULED", "PUBLISHED", "COMPLETED"].includes(String(exam.status || "").trim().toUpperCase()));
 
   return Promise.all(visible.map(async (exam) => {
-    const examinationId = exam.examinationId ?? exam.examId;
+    const examinationId = exam.examinationId ?? exam.examId ?? exam.id;
     if (!examinationId) return { ...exam, schedules: [] };
     const [detailResponse, scheduleResponse] = await Promise.all([
-      apiClient.get(studentApiEndpoints.examinations.getById(examinationId)),
-      apiClient.get(studentApiEndpoints.examinations.schedules(examinationId)),
+      apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}`),
+      apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}/schedules`),
     ]);
     const detail = getPayload(detailResponse.data) || {};
     const schedules = getPayload(scheduleResponse.data);
-    return { ...exam, ...detail, schedules: Array.isArray(schedules) ? schedules : [] };
+    return { ...exam, ...detail, schedules: rows(schedules).filter(inStudentScope) };
   }));
 };
 

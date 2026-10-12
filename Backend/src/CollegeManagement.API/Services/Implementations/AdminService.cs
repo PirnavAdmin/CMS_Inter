@@ -31,6 +31,12 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IConfiguration _configuration;
         private readonly ILogger<AdminService> _logger;
         private readonly IAuthService? _authService;
+        private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment? _environment;
+
+        private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".webp"
+        };
 
         public AdminService(
             IAdminRepository adminRepository,
@@ -41,7 +47,8 @@ namespace CollegeManagement.API.Services.Implementations
             AppDbContext context,
             IConfiguration configuration,
             ILogger<AdminService> logger,
-            IAuthService? authService = null)
+            IAuthService? authService = null,
+            Microsoft.AspNetCore.Hosting.IWebHostEnvironment? environment = null)
         {
             _adminRepository = adminRepository;
             _otpRepository = otpRepository;
@@ -52,6 +59,7 @@ namespace CollegeManagement.API.Services.Implementations
             _configuration = configuration;
             _logger = logger;
             _authService = authService;
+            _environment = environment;
         }
 
         public async Task<IEnumerable<AdminDto>> GetAllAdminsAsync()
@@ -60,8 +68,15 @@ namespace CollegeManagement.API.Services.Implementations
             return admins.Select(a => new AdminDto
             {
                 Id = a.Id,
+                FullName = a.FullName,
                 Email = a.Email,
-                IsActive = a.IsActive
+                PhoneNumber = a.PhoneNumber,
+                PhotoPath = a.PhotoPath,
+                RoleId = 2,
+                RoleName = "Admin",
+                IsActive = a.IsActive,
+                CreatedAt = a.CreatedAt,
+                UpdatedAt = a.UpdatedAt
             });
         }
 
@@ -73,8 +88,158 @@ namespace CollegeManagement.API.Services.Implementations
             return new AdminDto
             {
                 Id = admin.Id,
+                FullName = admin.FullName,
                 Email = admin.Email,
-                IsActive = admin.IsActive
+                PhoneNumber = admin.PhoneNumber,
+                PhotoPath = admin.PhotoPath,
+                RoleId = 2,
+                RoleName = "Admin",
+                IsActive = admin.IsActive,
+                CreatedAt = admin.CreatedAt,
+                UpdatedAt = admin.UpdatedAt
+            };
+        }
+
+        public async Task<AdminDto?> GetProfileAsync(int adminId)
+        {
+            return await GetAdminByIdAsync(adminId);
+        }
+
+        public async Task<(bool Success, string Message, AdminDto? Data)> UpdateProfileAsync(int adminId, UpdateAdminProfileRequest request)
+        {
+            if (request == null)
+            {
+                return (false, "Update request cannot be null.", null);
+            }
+
+            var admin = await _adminRepository.GetByIdAsync(adminId);
+            if (admin == null)
+            {
+                return (false, $"Admin with ID {adminId} not found.", null);
+            }
+
+            var normalizedEmail = request.Email?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(normalizedEmail) || !normalizedEmail.Contains('@'))
+            {
+                return (false, "A valid email address is required.", null);
+            }
+
+            // Check if email changed and if another admin already uses it
+            if (!string.Equals(admin.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                var existing = await _adminRepository.GetByEmailAsync(normalizedEmail);
+                if (existing != null && existing.Id != adminId)
+                {
+                    return (false, $"Email '{normalizedEmail}' is already registered to another administrator.", null);
+                }
+            }
+
+            var updatedAdmin = await _adminRepository.UpdateProfileAsync(
+                adminId,
+                request.FullName?.Trim() ?? admin.FullName,
+                normalizedEmail,
+                request.PhoneNumber?.Trim() ?? admin.PhoneNumber);
+
+            if (updatedAdmin == null)
+            {
+                return (false, "Failed to update admin profile.", null);
+            }
+
+            var dto = new AdminDto
+            {
+                Id = updatedAdmin.Id,
+                FullName = updatedAdmin.FullName,
+                Email = updatedAdmin.Email,
+                PhoneNumber = updatedAdmin.PhoneNumber,
+                PhotoPath = updatedAdmin.PhotoPath,
+                RoleId = 2,
+                RoleName = "Admin",
+                IsActive = updatedAdmin.IsActive,
+                CreatedAt = updatedAdmin.CreatedAt,
+                UpdatedAt = updatedAdmin.UpdatedAt
+            };
+
+            return (true, "Admin profile updated successfully.", dto);
+        }
+
+        public async Task<AdminPhotoUploadResultDto> UploadPhotoAsync(int adminId, Microsoft.AspNetCore.Http.IFormFile file, System.Threading.CancellationToken ct = default)
+        {
+            var admin = await _adminRepository.GetByIdAsync(adminId);
+            if (admin == null)
+            {
+                return new AdminPhotoUploadResultDto
+                {
+                    Status = false,
+                    Message = $"Admin with ID {adminId} not found.",
+                    AdminId = adminId
+                };
+            }
+
+            if (file == null || file.Length == 0)
+            {
+                return new AdminPhotoUploadResultDto
+                {
+                    Status = false,
+                    Message = "No photo file uploaded or file is empty.",
+                    AdminId = adminId
+                };
+            }
+
+            var ext = System.IO.Path.GetExtension(file.FileName);
+            if (string.IsNullOrWhiteSpace(ext) || !AllowedImageExtensions.Contains(ext))
+            {
+                return new AdminPhotoUploadResultDto
+                {
+                    Status = false,
+                    Message = "Invalid image format. Only JPG, JPEG, PNG, and WEBP formats are supported.",
+                    AdminId = adminId
+                };
+            }
+
+            if (file.Length > 3 * 1024 * 1024)
+            {
+                return new AdminPhotoUploadResultDto
+                {
+                    Status = false,
+                    Message = "Photo file size cannot exceed 3 MB.",
+                    AdminId = adminId
+                };
+            }
+
+            var rootPath = _environment?.WebRootPath ?? System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadsFolder = System.IO.Path.Combine(rootPath, "uploads", "admin-photos");
+            if (!System.IO.Directory.Exists(uploadsFolder))
+            {
+                System.IO.Directory.CreateDirectory(uploadsFolder);
+            }
+
+            var uniqueFileName = $"admin_photo_{adminId}_{DateTime.UtcNow.Ticks}{ext}";
+            var physicalPath = System.IO.Path.Combine(uploadsFolder, uniqueFileName);
+
+            using (var stream = new System.IO.FileStream(physicalPath, System.IO.FileMode.Create))
+            {
+                await file.CopyToAsync(stream, ct);
+            }
+
+            var relativeUrl = $"/uploads/admin-photos/{uniqueFileName}";
+            var updateSuccess = await _adminRepository.UpdatePhotoAsync(adminId, relativeUrl);
+
+            if (!updateSuccess)
+            {
+                return new AdminPhotoUploadResultDto
+                {
+                    Status = false,
+                    Message = "Failed to update profile photo reference in database.",
+                    AdminId = adminId
+                };
+            }
+
+            return new AdminPhotoUploadResultDto
+            {
+                Status = true,
+                Message = "Profile photo uploaded successfully.",
+                PhotoUrl = relativeUrl,
+                AdminId = adminId
             };
         }
 

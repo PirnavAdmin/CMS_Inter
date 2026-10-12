@@ -1,9 +1,9 @@
+import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
-  Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
-  ReceiptIndianRupee,
+  Building2, LayoutDashboard, Users, BarChart3,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -12,6 +12,7 @@ import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
+import { reimbursementApi } from "@/api/staffApi";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -23,7 +24,6 @@ import marksEvaluationIcon from "@/assets/sidebar-3d/marks-evaluation.png";
 import resultsIcon from "@/assets/sidebar-3d/results.png";
 import promotionIcon from "@/assets/sidebar-3d/promotion.png";
 import feeManagementIcon from "@/assets/sidebar-3d/fee-management.png";
-import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import certificatesIcon from "@/assets/sidebar-3d/certificates.png";
 import reportsAnalyticsIcon from "@/assets/sidebar-3d/reports-analytics.png";
 import sectionsIcon from "@/assets/dashboard-3d/total-sections.png";
@@ -59,7 +59,6 @@ export const adminIconAssets = {
   feeManagement: feeManagementIcon,
   paymentHistory: feeManagementIcon,
   payroll: generatedSidebarIcons.payroll,
-  reimbursement: reimbursementIcon,
   attendanceImpact: generatedSidebarIcons.staffAttendance,
   financialReports: reportsAnalyticsIcon,
   profile: studentsIcon,
@@ -75,8 +74,6 @@ const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
   "id & number series": settingsNumberSeriesIcon,
   templates: settingsTemplatesIcon,
   "audit logs": settingsAuditLogsIcon,
-  "faculty reimbursement": reimbursementIcon,
-  reimbursement: reimbursementIcon,
 });
 
 const PAGE_ICON_ROUTE_ALIASES = [
@@ -89,18 +86,6 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
-  { path: "/dashboard/reimbursement", icon: reimbursementIcon },
-  { path: "/dashboard/finance/reimbursement", icon: reimbursementIcon },
-  { path: "/warden-dashboard/students", icon: studentsIcon },
-  { path: "/warden-dashboard/rooms", icon: sectionsIcon },
-  { path: "/warden-dashboard/beds", icon: sectionsIcon },
-  { path: "/warden-dashboard/allocations", icon: allocateSectionIcon },
-  { path: "/warden-dashboard/leave-requests", icon: generatedSidebarIcons.staffLeave },
-  { path: "/warden-dashboard/complaints", icon: settingsAuditLogsIcon },
-  { path: "/warden-dashboard/attendance", icon: attendanceIcon },
-  { path: "/warden-dashboard/reports", icon: reportsAnalyticsIcon },
-  { path: "/warden-dashboard/profile", icon: staffIcon },
-  { path: "/warden-dashboard", icon: dashboardIcon },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -182,6 +167,7 @@ export const menu = [
       { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll },
     ],
   },
   {
@@ -197,7 +183,6 @@ export const menu = [
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
       { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
-      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon },
     ],
   },
   {
@@ -248,20 +233,6 @@ export const parentMenu = [
   },
 ];
 
-export const wardenMenu = [
-  { section: "Warden Dashboard", items: [{ to: "/warden-dashboard", label: "Overview", icon: dashboardIcon }] },
-  { section: "Hostel Management", items: [
-    { to: "/warden-dashboard/students", label: "Students", icon: studentsIcon },
-    { to: "/warden-dashboard/rooms", label: "Rooms / Beds", icon: sectionsIcon },
-    { to: "/warden-dashboard/allocations", label: "Allocations", icon: allocateSectionIcon },
-    { to: "/warden-dashboard/leave-requests", label: "Leave Requests", icon: generatedSidebarIcons.staffLeave },
-    { to: "/warden-dashboard/complaints", label: "Complaints", icon: settingsAuditLogsIcon },
-    { to: "/warden-dashboard/attendance", label: "Attendance", icon: attendanceIcon },
-    { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
-    { to: "/warden-dashboard/profile", label: "Profile", icon: staffIcon },
-  ] },
-];
-
 export const principalMenu = [
   {
     section: "Overview",
@@ -272,6 +243,7 @@ export const principalMenu = [
     items: [
       { to: "/dashboard/students", label: "Students", icon: studentsIcon },
       { to: "/dashboard/staff", label: "Staff", icon: staffIcon },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll },
       { to: "/dashboard/attendance/student", label: "Student Attendance", icon: attendanceIcon },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/sections", label: "Classes & Sections", icon: sectionsIcon },
@@ -308,7 +280,9 @@ const EMPTY_CAMPUS_CONTEXT = Object.freeze({
   selectedCampus: null,
   setSelectedCampus: () => undefined,
 });
-const MOCK_NOTIFICATIONS = [];
+const MOCK_NOTIFICATIONS = [
+  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/dashboard/reimbursements", label: "reimbursements" }
+];
 const PARENT_NOTIFICATIONS = [
   { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
   { id: "pn-2", title: "Upcoming Examinations", count: 5, to: "/parent-dashboard/examinations", label: "exam timetable" },
@@ -364,12 +338,6 @@ const parentSearchIndex = [
   { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
 ];
 
-const wardenSearchIndex = wardenMenu.flatMap((g) =>
-  g.items.flatMap((item) => [
-    { to: item.to, label: item.label, section: g.section },
-  ]),
-);
-
 const breadcrumbLinkForLabel = (label) =>
   searchIndex.find((item) => item.label.toLowerCase() === String(label).toLowerCase())?.to;
 
@@ -403,13 +371,7 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  const activeMenus = pathname.startsWith("/parent-dashboard")
-    ? parentMenu
-    : pathname.startsWith("/principal-dashboard")
-    ? principalMenu
-    : pathname.startsWith("/warden") || pathname.startsWith("/warden-dashboard")
-    ? wardenMenu
-    : menu;
+  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : pathname.startsWith("/principal-dashboard") ? principalMenu : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
@@ -511,6 +473,8 @@ export default function DashboardLayout({
   const [yearOpen, setYearOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [liveNotifications, setLiveNotifications] = useState([]);
+  const [hasViewedNotifications, setHasViewedNotifications] = useState(false);
   const actionsRef = useRef(null);
   const searchRef = useRef(null);
   const campusRef = useRef(null);
@@ -524,13 +488,8 @@ export default function DashboardLayout({
   const user = readUser();
   const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
   const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
-  const isWarden =
-    String(user?.role || "").toLowerCase().includes("warden") ||
-    pathname.startsWith("/warden") ||
-    pathname.startsWith("/warden-dashboard") ||
-    (typeof window !== "undefined" && (window.localStorage?.getItem("cms_role") === "warden" || window.sessionStorage?.getItem("cms_role") === "warden"));
-  const activeMenu = menuOverride || (isParent ? parentMenu : isWarden ? wardenMenu : isPrincipal ? principalMenu : menu);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isWarden ? wardenSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
+  const activeMenu = menuOverride || (isParent ? parentMenu : isPrincipal ? principalMenu : menu);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
   const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
   const canManageAcademicContext = !isParent && !menuOverride;
@@ -548,14 +507,53 @@ export default function DashboardLayout({
     const menuLabels = pageMenuItem?.labels ?? [];
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
+  useEffect(() => {
+    if (!isParent) {
+      const fetchLiveNotifications = async () => {
+        try {
+          const res = await reimbursementApi.getAllReimbursements({ status: "Pending" });
+          if (res.data?.status && res.data.data?.length > 0) {
+            setLiveNotifications([{
+              id: "admin-notif-1",
+              title: "New Staff Reimbursement Request",
+              count: res.data.data.length,
+              to: "/dashboard/reimbursements",
+              label: "reimbursements"
+            }]);
+          } else {
+            setLiveNotifications([]);
+          }
+        } catch (e) {
+          console.error("Failed to fetch pending reimbursements", e);
+        }
+      };
+      
+      fetchLiveNotifications();
 
-  const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
+      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim)
+      const channel = new BroadcastChannel("cms_notifications");
+      channel.onmessage = (event) => {
+        if (event.data?.type === "NEW_REIMBURSEMENT") {
+          setHasViewedNotifications(false);
+          fetchLiveNotifications();
+        }
+      };
+
+      return () => {
+        channel.close();
+      };
+    }
+  }, [isParent]);
+
+  const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
-  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : isPrincipal ? "Principal" : "CMS Admin"));
-  const profileRole = isWarden ? "Hostel Warden" : isPrincipal ? "Principal" : (user?.role || "admin");
-  const pendingActionCount = currentNotifications.reduce((total, item) => total + item.count, 0);
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
+  const profileRole = user?.role || "admin";
+  
+  const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
+  const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
 
   const rememberSidebarScroll = () => {
     const scrollTop = sidebarNavRef.current?.scrollTop || 0;
@@ -649,23 +647,6 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
-    if (basePath === "/warden-dashboard" || basePath === "/warden") {
-      return (
-        pathname === "/warden-dashboard" ||
-        pathname === "/warden-dashboard/overview" ||
-        pathname === "/warden" ||
-        pathname === "/warden/overview"
-      );
-    }
-    if (basePath === "/warden-dashboard/rooms") {
-      return (
-        pathname === "/warden-dashboard/rooms" ||
-        pathname.startsWith("/warden-dashboard/rooms/") ||
-        pathname === "/warden-dashboard/beds" ||
-        pathname.startsWith("/warden-dashboard/beds/")
-      );
-    }
-    if (basePath === "/principal-dashboard") return pathname === "/principal-dashboard";
     if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
     if (basePath === "/dashboard/settings") {
@@ -701,7 +682,7 @@ export default function DashboardLayout({
     <div className={`cms-shell ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`}>
       <aside className={`cms-sidebar ${ready && navOpen ? "is-open" : ""}`}>
         <div className="cms-brand">
-          <img className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
+          <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges"  />
         </div>
         <nav className="cms-nav" ref={sidebarNavRef} onScroll={rememberSidebarScroll}>
           {activeMenu.map((group) => (
@@ -1088,6 +1069,9 @@ export default function DashboardLayout({
                 onClick={() => {
                   setNotifOpen((open) => !open);
                   setProfileOpen(false);
+                  if (!notifOpen) {
+                    setHasViewedNotifications(true);
+                  }
                 }}
               >
                 <NavbarIcon src={navbarNotificationsIcon} />

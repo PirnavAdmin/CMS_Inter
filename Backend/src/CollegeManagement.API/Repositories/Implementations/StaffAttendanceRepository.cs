@@ -67,16 +67,19 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var facultyList = await query
+                .AsNoTracking()
                 .Include(f => f.DepartmentRef)
                 .Include(f => f.DesignationRef)
                 .OrderBy(f => f.FirstName)
                 .ThenBy(f => f.LastName)
                 .ToListAsync();
 
-            // Find existing attendances for today across sessions
+            // Find existing attendances for today across sessions using range for index seek
+            var nextDate = targetDate.AddDays(1);
             var attendancesForDate = await _context.StaffAttendances
+                .AsNoTracking()
                 .Include(a => a.StaffAttendanceSession)
-                .Where(a => a.StaffAttendanceSession.AttendanceDate.Date == targetDate
+                .Where(a => a.StaffAttendanceSession.AttendanceDate >= targetDate && a.StaffAttendanceSession.AttendanceDate < nextDate
                             && (!request.StaffType.HasValue || a.StaffAttendanceSession.StaffType == request.StaffType.Value)
                             && (!request.CampusId.HasValue || a.StaffAttendanceSession.CampusId == request.CampusId.Value)
                             && a.IsActive)
@@ -131,7 +134,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 if (markedEntry != null)
                 {
-                    resolvedStatus = markedEntry.Status;
+                    resolvedStatus = (markedEntry.Status == AttendanceStatus.HalfDay || (byte)markedEntry.Status == 4)
+                        ? AttendanceStatus.Leave
+                        : markedEntry.Status;
                     isMarked = true;
                 }
                 else if (leaveEntry != null)
@@ -223,7 +228,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             foreach (var entry in request.StaffAttendances)
             {
-                var effectiveStatus = entry.Status;
+                var effectiveStatus = (entry.Status == AttendanceStatus.HalfDay || (byte)entry.Status == 4)
+                    ? AttendanceStatus.Leave
+                    : entry.Status;
                 var effectiveRemarks = entry.Remarks;
 
                 if (timingConfig != null)
@@ -330,7 +337,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                     .OrderBy(c => c.StaffType == request.StaffType ? 1 : 2)
                     .FirstOrDefaultAsync();
 
-                var effectiveStatus = request.Status;
+                var effectiveStatus = (request.Status == AttendanceStatus.HalfDay || (byte)request.Status == 4)
+                    ? AttendanceStatus.Leave
+                    : request.Status;
                 var effectiveRemarks = request.Remarks;
 
                 if (timingConfig != null)
@@ -432,7 +441,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                     .OrderBy(c => c.StaffType == request.StaffType ? 1 : 2)
                     .FirstOrDefaultAsync();
 
-                var effectiveStatus = request.Status;
+                var effectiveStatus = (request.Status == AttendanceStatus.HalfDay || (byte)request.Status == 4)
+                    ? AttendanceStatus.Leave
+                    : request.Status;
                 var effectiveRemarks = request.Remarks;
 
                 if (timingConfig != null)
@@ -678,12 +689,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                                 lateCount++;
                                 break;
                             case AttendanceStatus.Leave:
+                            case AttendanceStatus.HalfDay:
                                 dailyStatus.Add("LV");
                                 leaveCount++;
                                 break;
                             default:
-                                dailyStatus.Add("P");
-                                presentCount++;
+                                dailyStatus.Add("-");
                                 break;
                         }
                     }

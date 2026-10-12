@@ -6,6 +6,9 @@ import { apiEndpoints } from "./apiEndpoints.js";
  */
 const unwrapResponse = (res) => {
   const payload = res?.data !== undefined ? res.data : res;
+  if (payload?.success === false || payload?.Success === false) {
+    throw new Error(payload.message || payload.Message || "The Payroll API rejected the request.");
+  }
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return payload;
   for (const key of ["items", "Items", "records", "Records", "results", "Results", "$values", "data", "Data", "payload", "Payload"]) {

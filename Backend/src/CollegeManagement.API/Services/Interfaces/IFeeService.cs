@@ -45,4 +45,13 @@ public interface IFeeService
     Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
     Task<FeeReportResponse> GetDailyReportAsync(int? campusId, DateTime? date);
     Task<FeeReportResponse> GetMonthlyReportAsync(int? campusId, int? year, int? month);
+
+    // ---------------- Fee Transition & Lifecycle Helpers ----------------
+    Task<FeeStructureResponse?> GetMatchingFeeStructureAsync(int? campusId, int boardId, int academicYearId, int? academicLevelId, int groupId, int? programId = null);
+    Task<PromotionFeePreviewResponse> PreviewPromotionFeeAsync(PromotionFeePreviewRequest request);
+    Task<StudentFeeResponse?> AssignPromotionFeeAsync(int studentId, int feeStructureId, string? paymentPlan = "Full Payment", int numberOfInstallments = 1, string performedBy = "System");
+    Task<CampusTransferFeePreviewDto?> PreviewCampusTransferFeeAsync(int transferId);
+    Task ApplyCampusTransferFeeAsync(int studentId, int toCampusId, int? destinationFeeStructureId, bool transferPaidCredit = true, string performedBy = "System");
+    Task<ProgramFeeAdjustmentPreviewDto?> PreviewProgramFeeAdjustmentAsync(int studentId, int targetProgramId);
+    Task ApplyProgramFeeAdjustmentAsync(int studentId, int targetProgramId, int? targetFeeStructureId = null, string performedBy = "System");
 }

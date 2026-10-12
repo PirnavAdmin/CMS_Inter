@@ -1,3 +1,4 @@
+import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import React from "react";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
@@ -8,7 +9,6 @@ import attendanceIcon from "@/assets/dashboard-3d/mark-attendance.png";
 import marksEvaluationIcon from "@/assets/sidebar-3d/marks-evaluation.png";
 import examinationIcon from "@/assets/dashboard-3d/create-exam.png";
 import feeManagementIcon from "@/assets/sidebar-3d/fee-management.png";
-import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import managementIconsSprite from "@/assets/sidebar-3d/management-icons-sprite.png";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
 import { useFaculty } from "../FacultyContext.jsx";
@@ -46,9 +46,9 @@ export const NAV_ITEMS = [
   { id: "marks", label: "Marks Entry", icon: marksEvaluationIcon, group: "ACADEMICS" },
   { id: "examduties", label: "Exam Duties", icon: examinationIcon, group: "ACADEMICS" },
   { id: "myattendance", label: "My Attendance", icon: generatedSidebarIcons.staffAttendance, group: "HR & FINANCE" },
-  { id: "leave", label: "Faculty Leave", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
+  { id: "leave", label: "Staff Leave", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
   { id: "salary", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll, group: "HR & FINANCE" },
-  { id: "reimbursements", label: "Reimbursements", icon: reimbursementIcon, group: "HR & FINANCE" },
+  { id: "reimbursements", label: "Reimbursements", icon: feeManagementIcon, group: "HR & FINANCE" },
   { id: "holidays", label: "Holidays", icon: holidayManagementIcon, group: "HR & FINANCE" },
   { id: "settings", label: "Settings", icon: generalSettingsIcon, group: "ADMINISTRATION" },
 ];
@@ -77,7 +77,7 @@ export default function FacultySidebar() {
   return (
     <aside className={`cms-sidebar ${sidebarOpen ? "open is-open" : ""}`}>
       <div className="cms-brand">
-        <img className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
+        <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges"  />
       </div>
 
       <nav className="cms-nav">

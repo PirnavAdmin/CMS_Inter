@@ -148,17 +148,18 @@
   pointer-events: none;
 }
 
-.cms-searchable-select-trigger {
+.cms-searchable-select-trigger,
+.cms-searchable-select-combobox {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   max-width: 100%;
   height: 32px;
   overflow: hidden;
-  padding: 4px 9px;
+  padding: 0 8px 0 10px;
   border: 1px solid var(--cms-border, #cbd5e1);
   border-radius: 8px;
   background: var(--cms-surface, #ffffff);
@@ -168,12 +169,74 @@
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.cms-searchable-select-trigger:hover:not(:disabled),
+.cms-searchable-select-combobox:hover:not(.is-disabled) {
+  border-color: #94a3b8;
 }
 
 .cms-searchable-select-trigger:focus,
-.cms-searchable-select.is-open .cms-searchable-select-trigger {
-  border-color: var(--cms-primary, #0f766e);
-  box-shadow: 0 0 0 2px var(--cms-primary-soft, #e8f5f3);
+.cms-searchable-select.is-open .cms-searchable-select-trigger,
+.cms-searchable-select-combobox.is-focused,
+.cms-searchable-select-combobox:focus-within,
+.cms-searchable-select.is-open .cms-searchable-select-combobox {
+  border-color: var(--cms-primary, #6f8400) !important;
+  box-shadow: 0 0 0 2px var(--cms-primary-soft, rgba(111, 132, 0, 0.16)) !important;
+}
+
+.cms-searchable-select-combobox.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  background-color: var(--cms-subtle, #f8fafc);
+}
+
+.cms-searchable-combobox-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--cms-text, #10203c);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cms-searchable-select-combobox.is-focused .cms-searchable-combobox-input {
+  cursor: text;
+}
+
+.cms-searchable-combobox-input::placeholder {
+  color: var(--cms-text, #10203c);
+  opacity: 0.85;
+}
+
+.cms-searchable-combobox-input:disabled {
+  cursor: not-allowed;
+  color: var(--cms-muted, #64748b);
+}
+
+.cms-select-arrow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--cms-muted, #64748b);
+  flex: 0 0 auto;
+}
+
+.cms-select-arrow-btn:disabled {
+  cursor: not-allowed;
 }
 
 .cms-searchable-select-label {
@@ -190,129 +253,95 @@
   transition: transform 0.2s ease;
 }
 
+.cms-select-arrow.is-open,
 .cms-searchable-select.is-open .cms-select-arrow {
   transform: rotate(180deg);
 }
 
+/* Dropdown Menu (matching First Reference: clean list without inner search box) */
 .cms-searchable-select-menu {
   position: absolute;
   z-index: 10030;
   top: calc(100% + 4px);
   left: 0;
+  right: 0;
   width: 100%;
   min-width: 100%;
   max-width: 100%;
-  overflow: hidden;
-  max-height: 230px;
-  padding: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 5px;
   border: 1px solid var(--cms-border, #cbd5e1);
-  border-radius: 10px;
-  background: var(--cms-surface-solid, #ffffff);
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+  border-radius: 8px;
+  background: var(--cms-surface-solid, #ffffff) !important;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.16) !important;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   isolation: isolate;
   box-sizing: border-box;
 }
 
-.cms-searchable-select-search {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  min-height: 30px;
-  padding: 3px 7px;
-  border: 1px solid var(--cms-border, #cbd5e1);
-  border-radius: 6px;
-  background: #f8fafc;
-  box-sizing: border-box;
-  width: 100%;
-}
-
-.cms-searchable-select-search input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font-size: 11.5px;
-  color: var(--cms-text, #10203c);
-}
-
-.cms-search-clear-btn {
-  border: 0;
-  background: transparent;
-  color: var(--cms-muted, #64748b);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  padding: 2px;
-}
-
-/* Dropdown list limited to ~5 visible items with fixed height scrolling */
-.cms-searchable-select-options {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: 176px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overscroll-behavior: contain;
-}
-
-.cms-searchable-select-options::-webkit-scrollbar {
+.cms-searchable-select-menu::-webkit-scrollbar {
   width: 5px;
 }
 
-.cms-searchable-select-options::-webkit-scrollbar-track {
+.cms-searchable-select-menu::-webkit-scrollbar-track {
   background: #f1f5f9;
   border-radius: 4px;
 }
 
-.cms-searchable-select-options::-webkit-scrollbar-thumb {
+.cms-searchable-select-menu::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 4px;
 }
 
-.cms-searchable-select-options::-webkit-scrollbar-thumb:hover {
+.cms-searchable-select-menu::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
 
+/* Dropdown Option Items */
 .cms-select-option {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
   min-width: 0;
   flex: 0 0 auto;
-  min-height: 28px;
-  padding: 5px 8px;
+  min-height: 32px;
+  padding: 6px 10px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--cms-text, #10203c);
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
 }
 
 .cms-select-option:hover,
-.cms-select-option.is-highlighted,
+.cms-select-option.is-highlighted {
+  background: var(--cms-primary-soft, #f1f4e2) !important;
+  color: var(--cms-primary, #6f8400) !important;
+}
+
 .cms-select-option.is-selected {
-  background: var(--cms-primary-soft, #e8f5f3);
-  color: var(--cms-primary, #0f766e);
-  font-weight: 600;
+  background: var(--cms-primary-soft, #f1f4e2) !important;
+  color: var(--cms-primary, #6f8400) !important;
+  font-weight: 700 !important;
 }
 
 .cms-select-empty {
-  padding: 10px;
+  padding: 10px 8px;
   text-align: center;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--cms-muted, #64748b);
 }
 
@@ -327,7 +356,9 @@
 
 .cms-field.has-error input,
 .cms-field.has-error .cms-sec-native-select,
-.cms-field.has-error .cms-searchable-select-trigger {
+.cms-field.has-error .cms-searchable-select-trigger,
+.cms-field.has-error .cms-searchable-select-combobox,
+.cms-searchable-select.has-error .cms-searchable-select-combobox {
   border-color: var(--cms-red) !important;
   box-shadow: 0 0 0 2px var(--cms-red-soft) !important;
 }
@@ -763,7 +794,8 @@
 
 .cms-bulk-section-row .cms-field { min-width: 0; margin: 0; }
 .cms-bulk-section-row .cms-field input,
-.cms-bulk-section-row .cms-searchable-select-trigger { height: 32px; min-height: 32px; }
+.cms-bulk-section-row .cms-searchable-select-trigger,
+.cms-bulk-section-row .cms-searchable-select-combobox { height: 32px; min-height: 32px; }
 .cms-bulk-section-row > .cms-sec-action-btn { width: 32px; height: 32px; margin: 0; }
 
 .cms-bulk-room-preview {
@@ -786,7 +818,8 @@
 .cms-bulk-room-allocation-row .cms-field { min-width: 0; margin: 0; }
 .cms-bulk-room-allocation-row .cms-field label { font-size: 9.5px; }
 .cms-bulk-room-allocation-row .cms-field input,
-.cms-bulk-room-allocation-row .cms-searchable-select-trigger { box-sizing: border-box; width: 100%; height: 30px; min-height: 30px; }
+.cms-bulk-room-allocation-row .cms-searchable-select-trigger,
+.cms-bulk-room-allocation-row .cms-searchable-select-combobox { box-sizing: border-box; width: 100%; height: 30px; min-height: 30px; }
 .cms-bulk-room-allocation-row .cms-field input[readonly] { overflow: hidden; background: var(--cms-subtle, #f8fafc); text-overflow: ellipsis; white-space: nowrap; }
 .cms-bulk-room-allocation-row .cms-searchable-select-menu { max-width: 100%; }
 .cms-bulk-room-pagination { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; color: var(--cms-muted, #64748b); font-size: 11px; }

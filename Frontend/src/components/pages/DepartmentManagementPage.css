@@ -334,6 +334,18 @@
   min-width: 0;
   overflow: hidden;
 }
+.master-grid > .master-card {
+  display: flex;
+  flex-direction: column;
+}
+.master-grid > .master-card > .master-table-wrap {
+  flex: 1;
+}
+.master-grid > .master-card > .master-pager {
+  margin-top: auto;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
 .master-card header {
   justify-content: space-between;
   min-height: 52px;

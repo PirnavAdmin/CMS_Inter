@@ -2,9 +2,13 @@ import { Link } from "react-router-dom";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import HeroSlider from "@/components/common/HeroSlider.jsx";
 import { heroCopy } from "@/data/heroSlides.js";
+import { useCampusImages } from "../features/campusImages.js";
+import { getCampusContent } from "../features/campusContent.js";
 import "@/features/auth/styles/auth.css";
 
 export default function AuthLayout({ title, subtitle, children, cardClass = "" }) {
+  const images = useCampusImages();
+  const content = getCampusContent(images);
   return (
     <div className="cms-auth">
       <div className="cms-auth-bg">
@@ -12,8 +16,9 @@ export default function AuthLayout({ title, subtitle, children, cardClass = "" }
       </div>
       <aside className="cms-auth-aside">
         <div className="cms-anim-up cms-auth-hero-copy">
-          <h2 className="cms-auth-hero-title">{heroCopy.headline}</h2>
-          <p className="cms-auth-hero-desc">{heroCopy.subtitle}</p>
+          {images.loginLogo && <img src={images.loginLogo} alt={`${content.loginCollegeName} logo`} style={{ maxWidth: 240, maxHeight: 100, objectFit: "contain", marginBottom: 20 }} />}
+          <h2 className="cms-auth-hero-title">{images.loginCollegeName ?? heroCopy.headline}</h2>
+          <p className="cms-auth-hero-desc">{images.loginTagline ?? heroCopy.subtitle}</p>
         </div>
       </aside>
 

@@ -87,3 +87,46 @@
 .sp-holiday-toolbar,.sp-holiday-filters,.sp-holiday-calendar-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sp-holiday-toolbar{justify-content:space-between}.sp-holiday-filters select{max-width:100%;padding:8px 10px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-surface);color:var(--sp-text);font:inherit;font-size:12px}.sp-holiday-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(310px,1fr);gap:12px;align-items:start}.sp-holiday-layout>.sp-card{min-width:0}.sp-holiday-layout .sp-table td{white-space:normal;min-width:85px;vertical-align:top}.sp-holiday-layout .sp-table td:first-child{min-width:140px;font-weight:650}.sp-holiday-layout .sp-table td:nth-child(5){min-width:140px;color:var(--sp-muted)}.sp-holiday-layout.is-calendar-view{grid-template-columns:minmax(0,1fr)}.sp-holiday-layout.is-calendar-view .sp-holiday-calendar{grid-row:1}.sp-holiday-calendar .sp-card-head{flex-wrap:wrap}.sp-holiday-calendar-actions .sp-btn{min-height:30px;padding:4px 8px;font-size:10px}.sp-holiday-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}.sp-holiday-calendar-grid>small{text-align:center;text-transform:uppercase;color:var(--sp-muted);font-size:10px;padding:8px 0}.sp-holiday-calendar-grid>button{position:relative;display:grid;place-items:center;min-height:42px;border:1px solid transparent;border-radius:9px;background:var(--sp-surface);color:var(--sp-text);font:inherit;font-size:12px;cursor:pointer}.sp-holiday-calendar-grid>button:hover{border-color:var(--sp-border);background:var(--sp-soft)}.sp-holiday-calendar-grid>button.is-outside{opacity:.4}.sp-holiday-calendar-grid>button.has-holiday.is-national{background:var(--sp-primary-soft);color:var(--sp-primary-dark)}.sp-holiday-calendar-grid>button.has-holiday.is-festival{background:color-mix(in srgb,var(--sp-surface) 82%,#efa31c);color:var(--sp-text)}.sp-holiday-calendar-grid>button.has-holiday.is-other{background:color-mix(in srgb,var(--sp-surface) 85%,#9873d2)}.sp-holiday-calendar-grid>button.is-today{box-shadow:inset 0 0 0 2px var(--sp-primary);font-weight:800}.sp-holiday-calendar-grid>button.is-selected{outline:2px solid var(--sp-primary);outline-offset:1px}.sp-holiday-calendar-grid>button i{position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:currentColor}.sp-holiday-legend{display:flex;gap:15px;flex-wrap:wrap;margin-top:16px;color:var(--sp-muted);font-size:10px}.sp-holiday-legend span{display:flex;align-items:center;gap:5px}.sp-holiday-legend i{width:6px;height:6px;border-radius:50%;background:var(--sp-primary)}.sp-holiday-legend .is-festival i{background:#efa31c}.sp-holiday-legend .is-other i{background:#9873d2}.sp-holiday-type,.sp-holiday-status{display:inline-block;padding:4px 7px;border-radius:6px;background:var(--sp-primary-soft);color:var(--sp-primary-dark);font-size:10px;font-weight:650}.sp-holiday-type.is-festival{background:color-mix(in srgb,var(--sp-surface) 85%,#efa31c);color:var(--sp-text)}.sp-holiday-type.is-other{background:var(--sp-soft);color:var(--sp-muted)}.sp-holiday-status.is-past{background:var(--sp-soft);color:var(--sp-muted)}.sp-holiday-clear{border:0;background:transparent;color:var(--sp-primary-dark);font:inherit;text-decoration:underline;cursor:pointer}.sp-holidays-page button:focus-visible,.sp-holidays-page select:focus-visible{outline:2px solid var(--sp-primary);outline-offset:2px}
 @media(max-width:1100px){.sp-holiday-layout{grid-template-columns:minmax(0,1fr)}.sp-holiday-calendar{max-width:100%}}
 @media(max-width:620px){.sp-holiday-toolbar{align-items:stretch;flex-direction:column}.sp-holiday-filters select{flex:1;min-width:0}.sp-holiday-toolbar .sp-actions .sp-btn{flex:1}.sp-holiday-calendar-grid{gap:3px}}
+
+/* Profile presentation: native section selectors preserve existing form state. */
+.sp-profile-page:has(.sp-profile-tabs){row-gap:8px;align-content:start}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-sections{margin:0;padding:0}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-tabs+.sp-profile-sections{margin-top:-4px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-section{margin:0}
+.sp-profile-page:has(.sp-profile-tabs) .section-personal .sp-profile-fields:not(.is-form) .sp-profile-value:nth-child(n){border:0;padding:0}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-parent{border-top:0}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-academic-row+.sp-profile-academic-row{border-top:0;margin-top:0;padding-top:0}
+.sp-profile-tabs{display:flex;gap:0;padding:4px;border:1px solid var(--sp-border);border-radius:10px;background:var(--sp-surface);overflow-x:auto}
+.sp-profile-tabs label{position:relative;flex:1;min-width:max-content;cursor:pointer}
+.sp-profile-tabs input{position:absolute;opacity:0;width:1px;height:1px}
+.sp-profile-tabs span{display:flex;align-items:center;justify-content:center;gap:8px;text-align:center;padding:11px 16px;border-radius:7px;color:var(--sp-muted);font-size:13px;font-weight:650}
+.sp-profile-tabs input:checked+span{background:var(--sp-primary);color:#fff}
+.sp-profile-tabs input:focus-visible+span{outline:2px solid var(--sp-primary);outline-offset:2px}
+.sp-profile-tabs input:disabled+span{cursor:not-allowed}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-section,
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-academic,
+.sp-profile-page:has(.sp-profile-tabs)>.sp-documents{display:none}
+.sp-profile-page:has(.sp-profile-tabs input[value="personal"]:checked) .section-personal,
+.sp-profile-page:has(.sp-profile-tabs input[value="contact"]:checked) .section-contact,
+.sp-profile-page:has(.sp-profile-tabs input[value="previousSchool"]:checked) .section-previousSchool,
+.sp-profile-page:has(.sp-profile-tabs input[value="academic"]:checked) .sp-profile-academic,
+.sp-profile-page:has(.sp-profile-tabs input[value="documents"]:checked)>.sp-documents{display:block}
+.sp-profile-page:has(.sp-profile-tabs input[value="academic"]:checked) .sp-profile-sections,
+.sp-profile-page:has(.sp-profile-tabs input[value="documents"]:checked) .sp-profile-sections{display:none}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-fields,
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-fields.is-form{grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 20px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-value,
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-value:nth-child(n){position:relative;align-items:flex-end;padding:0;border:0;grid-column:auto;gap:8px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-value small{margin-bottom:6px;font-size:12px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-value strong{display:flex;align-items:center;min-height:44px;box-sizing:border-box;margin:0;padding:10px 12px;border:1px solid var(--sp-border);border-radius:8px;background:var(--sp-soft);font-size:13px;font-weight:500}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-field-icon{display:none}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-input{grid-column:auto}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-input>span{font-size:12px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-input input,
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-input select{min-height:44px;font-size:13px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-section .sp-card-body{padding:20px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-section .sp-card-head{padding:14px 20px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-academic .sp-card-body{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 20px}
+.sp-profile-page:has(.sp-profile-tabs) .sp-profile-academic-row{display:contents}
+@media(max-width:900px){.sp-profile-page:has(.sp-profile-tabs) .sp-profile-fields,.sp-profile-page:has(.sp-profile-tabs) .sp-profile-fields.is-form,.sp-profile-page:has(.sp-profile-tabs) .sp-profile-academic .sp-card-body{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.sp-profile-page:has(.sp-profile-tabs) .sp-profile-fields,.sp-profile-page:has(.sp-profile-tabs) .sp-profile-fields.is-form,.sp-profile-page:has(.sp-profile-tabs) .sp-profile-academic .sp-card-body{grid-template-columns:minmax(0,1fr)}.sp-profile-tabs span{padding:10px 12px;font-size:12px}}

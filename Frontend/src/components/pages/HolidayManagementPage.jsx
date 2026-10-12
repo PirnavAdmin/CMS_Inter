@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2, FileUp } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
+import { holidayRecords } from "@/data/mockData.js";
 import "./HolidayManagementPage.css";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
 import nationalHolidaysIcon from "@/assets/sidebar-3d/holiday-national.svg";
@@ -48,9 +49,16 @@ function todayIso() {
 }
 
 function getHolidayLifecycleStatus(holiday) {
-  if (holiday.lifecycleStatus) return holiday.lifecycleStatus;
+  if (holiday.lifecycleStatus && holiday.lifecycleStatus !== "Active") return holiday.lifecycleStatus;
   if (holiday.status === "Inactive") return "Inactive";
-  return getHolidayEndDate(holiday) < todayIso() ? "Completed" : "Active";
+  
+  const start = getHolidayStartDate(holiday);
+  const end = getHolidayEndDate(holiday);
+  const today = todayIso();
+  
+  if (end < today) return "Completed";
+  if (start > today) return "Upcoming";
+  return "Active";
 }
 
 function dateRange(holiday) {
@@ -165,8 +173,8 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
 export default function HolidayManagementPage() {
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
-  const [holidays, setHolidays] = useState([]);
-  const [summary, setSummary] = useState({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
+  const [holidays, setHolidays] = useState(holidayRecords);
+  const [summary, setSummary] = useState({ total: 8, national: 3, festival: 5, upcoming: 7, completed: 1 });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
@@ -176,6 +184,11 @@ export default function HolidayManagementPage() {
   const [type, setType] = useState("All");
   const [status, setStatus] = useState("All");
   const [page, setPage] = useState(1);
+  const [importModal, setImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importValidation, setImportValidation] = useState(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
   const [formHoliday, setFormHoliday] = useState(undefined);
   const [viewHoliday, setViewHoliday] = useState(null);
   const [deleteHoliday, setDeleteHoliday] = useState(null);
@@ -186,49 +199,28 @@ export default function HolidayManagementPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {
-        campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
-        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
-        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
-      };
+      setHolidays([]);
       const [summaryRes, listRes] = await Promise.allSettled([
-        holidayApi.getSummary(params),
-        holidayApi.getHolidays({ ...params, page: 1, pageSize: 100 }),
+        holidayApi.getSummary({ campusId: selectedCampusId || undefined, academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined }),
+        holidayApi.getHolidays({ campusId: selectedCampusId || undefined, academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined, page: 1, pageSize: 100 }),
       ]);
 
       if (summaryRes.status === "fulfilled" && summaryRes.value) {
         setSummary(summaryRes.value);
-      } else {
-        setSummary({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
       }
 
-      if (listRes.status === "fulfilled") {
-        const val = listRes.value;
-        const rawItems = Array.isArray(val?.data?.data)
-          ? val.data.data
-          : Array.isArray(val?.data)
-          ? val.data
-          : Array.isArray(val)
-          ? val
-          : [];
-        const items = selectedCampusId
-          ? rawItems.filter((holiday) => {
-              const campusId = holiday?.campusId ?? holiday?.CampusId;
-              return campusId == null || String(campusId) === String(selectedCampusId);
-            })
-          : rawItems;
-        setHolidays(items);
-      } else {
-        setHolidays([]);
+      if (listRes.status === "fulfilled" && Array.isArray(listRes.value?.data) && listRes.value.data.length > 0) {
+        setHolidays(listRes.value.data.filter((holiday) => {
+          const campusId = holiday?.campusId ?? holiday?.CampusId;
+          return selectedCampusId == null || selectedCampusId === "" || campusId == null || String(campusId) === String(selectedCampusId);
+        }));
       }
     } catch (err) {
-      console.error("Holiday API load error:", err);
-      setHolidays([]);
-      setSummary({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
+      console.warn("Using local holiday data fallback:", err);
     } finally {
       setLoading(false);
     }
-  }, [selectedCampusId, selectedAcademicYearId, selectedBoardId]);
+  }, [selectedAcademicYearId, selectedBoardId, selectedCampusId]);
 
   useEffect(() => {
     loadData();
@@ -335,17 +327,9 @@ export default function HolidayManagementPage() {
     try {
       setSaving(true);
       const payload = {
-        holidayName: values.holidayName,
-        holidayType: values.holidayType,
-        appliesTo: values.appliesTo,
-        dateType: values.dateType,
-        startDate: values.startDate,
-        endDate: values.dateType === "Date Range" && values.endDate ? values.endDate : values.startDate,
-        status: values.status || "Active",
-        description: values.description || "",
-        campusId: selectedCampusId ? Number(selectedCampusId) : 0,
-        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : 0,
-        boardId: selectedBoardId ? Number(selectedBoardId) : 0,
+        ...values,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : null,
+        boardId: selectedBoardId ? Number(selectedBoardId) : null,
       };
 
       if (formHoliday?.id) {
@@ -379,15 +363,73 @@ export default function HolidayManagementPage() {
     }
   };
 
-  return (
-    <DashboardLayout
+  const downloadHolidayTemplate = async () => {
+    try {
+      setImportBusy("template");
+      const blob = await holidayApi.downloadTemplate();
+      const url = window.URL.createObjectURL(new Blob([blob]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "Holiday_ImportTemplate.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      setToast({ message: "Failed to download template", type: "error" });
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const validateHolidayImport = async () => {
+    if (!importFile) return;
+    try {
+      setImportBusy("validate");
+      const result = await holidayApi.importExcel(importFile, true, selectedCampusId, selectedAcademicYearId, selectedBoardId);
+      setImportValidation(result);
+      if (!result?.success) {
+        setToast({ message: result?.message || "Validation failed", type: "error" });
+      }
+    } catch (err) {
+      setToast({ message: "Validation failed", type: "error" });
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const importHolidays = async () => {
+    if (!importFile) return;
+    try {
+      setImportBusy("import");
+      const result = await holidayApi.importExcel(importFile, false, selectedCampusId, selectedAcademicYearId, selectedBoardId);
+      setImportValidation(result);
+      if (result?.success) {
+        setImportSuccess(true);
+        setToast({ message: "Holidays imported successfully!", type: "success" });
+        loadData();
+      } else {
+        setToast({ message: result?.message || "Import failed", type: "error" });
+      }
+    } catch (err) {
+      setToast({ message: "Import failed", type: "error" });
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  return (    <DashboardLayout
       title="Holiday Management"
       subtitle="Manage holidays for the selected academic year."
       breadcrumb={["Academic"]}
       actions={
-        <button type="button" className="cms-btn cms-btn-primary" onClick={() => setFormHoliday(null)}>
-          <Plus size={16} /> Add Holiday
-        </button>
+        <div style={{ display: "flex", gap: "12px" }}>
+          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setImportModal(true)}>
+            <FileUp size={16} /> Import Holidays
+          </button>
+          <button type="button" className="cms-btn cms-btn-primary" onClick={() => setFormHoliday(null)}>
+            <Plus size={16} /> Add Holiday
+          </button>
+        </div>
       }
     >
       <div className="holiday-page">
@@ -539,7 +581,102 @@ export default function HolidayManagementPage() {
         />
       ) : null}
 
+      {importModal && (
+        <Modal
+          title="Holiday Import"
+          size="md"
+          onClose={() => !importBusy && setImportModal(false)}
+          footer={<>
+            <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(importBusy)} onClick={() => setImportModal(false)}>Cancel</button>
+            {importValidation?.success && !importSuccess && <button className="cms-btn cms-btn-primary" type="button" disabled={Boolean(importBusy) || (importValidation?.invalidRows || 0) > 0} onClick={importHolidays}>{importBusy === "import" ? "Importing..." : "Import Holidays"}</button>}
+          </>}
+        >
+          <div className="student-import-modal">
+            <div className="student-import-actions">
+              <section className="student-import-step">
+                <div className="student-import-step-head"><b>1</b><div><h4>Download Import Template</h4><p>Download the Excel template and fill in the holiday details.</p></div></div>
+                <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(importBusy)} onClick={downloadHolidayTemplate}>{importBusy === "template" ? "Downloading..." : "Download Import Template"}</button>
+              </section>
+              <section className="student-import-step">
+                <div className="student-import-step-head"><b>2</b><div><h4>Upload Holiday File</h4><p>Choose the completed .xlsx file containing holiday records.</p></div></div>
+                <label className="cms-btn cms-btn-ghost">Choose Excel File
+                  <input type="file" accept=".xlsx" hidden onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    setImportFile(file);
+                    setImportValidation(null);
+                    setImportSuccess(false);
+                  }} />
+                </label>
+                {importFile ? <p className="cms-muted student-import-filename">Selected file: {importFile.name}</p> : null}
+              </section>
+              <section className="student-import-step">
+                <div className="student-import-step-head"><b>3</b><div><h4>Validate File</h4><p>Check the file and review validation results before importing.</p></div></div>
+                <button className="cms-btn cms-btn-primary" type="button" disabled={!importFile || Boolean(importBusy)} onClick={validateHolidayImport}>{importBusy === "validate" ? "Validating..." : "Validate File"}</button>
+              </section>
+            </div>
+            {importSuccess ? <p className="cms-success-message" role="status">? Holidays imported successfully</p> : null}
+            {importValidation ? <ImportValidation result={importValidation} /> : null}
+          </div>
+        </Modal>
+      )}
+
       <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: "", type: "success" })} />
     </DashboardLayout>
   );
 }
+
+
+
+function ImportValidation({ result }) {
+  const resultErrors = result?.errors || [];
+  const resultRows = result?.rows || [];
+  const rows = resultRows.length ? resultRows : resultErrors.map((error) => ({
+    rowNumber: "-",
+    holidayName: "-",
+    status: false,
+    errors: [error]
+  }));
+  const total = result?.totalRows ?? rows.length;
+  const valid = result?.validRows ?? "�";
+  const invalid = result?.invalidRows ?? "�";
+  
+  return (
+    <div className="student-import-results">
+      <div className="student-import-summary">
+        <span>Total Rows <b>{total}</b></span>
+        <span>Valid Rows <b>{valid}</b></span>
+        <span>Invalid Rows <b>{invalid}</b></span>
+      </div>
+      {rows.length ? (
+        <div className="cms-table-wrap">
+          <table className="cms-table">
+            <thead>
+              <tr>
+                <th>Row Number</th>
+                <th>Holiday Name</th>
+                <th>Status</th>
+                <th>Errors</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={row?.rowNumber ?? index}>
+                  <td>{row?.rowNumber ?? index + 1}</td>
+                  <td>{row?.holidayName ?? "�"}</td>
+                  <td>{row?.status === false ? "Invalid" : "Valid"}</td>
+                  <td>{Array.isArray(row?.errors) ? row.errors.join(", ") : (row?.errors ?? "�")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+
+
+
+
+

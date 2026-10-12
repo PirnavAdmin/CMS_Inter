@@ -177,7 +177,7 @@ namespace CollegeManagement.API.Services.Implementations
                 
                 int presentDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Present);
                 int lateDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Late);
-                int leaveDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Leave);
+                int leaveDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Leave || r.Status == Enums.AttendanceStatus.HalfDay);
                 int absentDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Absent);
 
                 months.Add(new CollegeManagement.API.DTOs.Attendance.Responses.MonthlyOverviewItem
