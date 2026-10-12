@@ -440,6 +440,7 @@ export const apiEndpoints = {
     bulkRollNumbers: "/api/v1/student-admissions/bulk-roll-numbers",
     bloodGroups: "/api/v1/student-admissions/blood-groups",
     generateNumber: "/api/v1/student-admissions/generate-number",
+    previewNumber: "/api/v1/student-admissions/preview-number",
   },
   location: {
     byPincode: (pincode) => `/api/v1/locations/pincode/${encodeURIComponent(pincode)}`,
