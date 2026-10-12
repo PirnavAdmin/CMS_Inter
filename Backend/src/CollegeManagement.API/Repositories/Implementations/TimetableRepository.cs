@@ -355,13 +355,19 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task PublishSectionTimetableAsync(int sectionId, int academicYearId, bool isPublished)
         {
             var conn = await GetOpenConnectionAsync();
-            await conn.ExecuteAsync(@"
-                UPDATE `Timetables` 
-                SET `IsPublished` = @IsPublished, 
-                    `ApprovalStatus` = @ApprovalStatus, 
-                    `UpdatedAt` = UTC_TIMESTAMP() 
-                WHERE `SectionId` = @sectionId AND `AcademicYearId` = @academicYearId;
-            ", new
+            string sql = academicYearId > 0
+                ? @"UPDATE `Timetables` 
+                    SET `IsPublished` = @IsPublished, 
+                        `ApprovalStatus` = @ApprovalStatus, 
+                        `UpdatedAt` = UTC_TIMESTAMP() 
+                    WHERE `SectionId` = @sectionId AND `AcademicYearId` = @academicYearId;"
+                : @"UPDATE `Timetables` 
+                    SET `IsPublished` = @IsPublished, 
+                        `ApprovalStatus` = @ApprovalStatus, 
+                        `UpdatedAt` = UTC_TIMESTAMP() 
+                    WHERE `SectionId` = @sectionId;";
+
+            await conn.ExecuteAsync(sql, new
             {
                 sectionId,
                 academicYearId,
