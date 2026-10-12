@@ -57,6 +57,19 @@ namespace CollegeManagement.API.Models
         [StringLength(50)]
         public string? ExamPattern { get; set; }
 
+        [NotMapped]
+        public string? PatternName
+        {
+            get => ExamPattern;
+            set { if (!string.IsNullOrWhiteSpace(value)) ExamPattern = value; }
+        }
+
+        [NotMapped]
+        public string ExamCategory =>
+            (!string.IsNullOrEmpty(ExamPattern) && (ExamPattern.ToUpper().Contains("OBJECTIVE") || ExamPattern.ToUpper().Contains("JEE") || ExamPattern.ToUpper().Contains("NEET") || ExamPattern.ToUpper().Contains("PATTERN")))
+                ? "Objective"
+                : "Regular";
+
         public int? TotalMarks { get; set; }
 
         public decimal? PassPercentage { get; set; }
