@@ -32,11 +32,12 @@
   box-shadow: none;
 }
 
-.cms-tabs button {
-  border: 0;
+.cms-tabs button,
+.cms-tab-btn {
+  border: 1.5px solid rgba(111, 132, 0, 0.35);
   border-radius: 10px;
-  padding: 8px 18px;
-  background: transparent;
+  padding: 7px 18px;
+  background: var(--cms-surface, #ffffff);
   color: var(--cms-muted, #555e54);
   font: inherit;
   font-size: 14px;
@@ -46,15 +47,47 @@
   white-space: nowrap;
 }
 
-.cms-tabs button:hover:not(.active) {
+.cms-tabs button:hover:not(.active),
+.cms-tab-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--cms-primary-soft, rgba(111, 132, 0, 0.08));
+  border-color: var(--cms-primary, #6f8400);
 }
 
-.cms-tabs button.active {
+.cms-tabs button.active,
+.cms-tab-btn.active {
   background: var(--cms-primary, #6f8400);
+  border-color: var(--cms-primary, #6f8400);
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.28);
+}
+
+[data-theme="dark"] .cms-tabs button,
+:root[data-theme="dark"] .cms-tabs button,
+[data-theme="dark"] .cms-tab-btn,
+:root[data-theme="dark"] .cms-tab-btn {
+  border: 1.5px solid rgba(135, 157, 25, 0.45);
+  background: var(--cms-surface, #1b2119);
+  color: var(--cms-muted, #949c8f);
+}
+
+[data-theme="dark"] .cms-tabs button:hover:not(.active),
+:root[data-theme="dark"] .cms-tabs button:hover:not(.active),
+[data-theme="dark"] .cms-tab-btn:hover:not(.active),
+:root[data-theme="dark"] .cms-tab-btn:hover:not(.active) {
+  color: var(--cms-text, #e8ece1);
+  background: var(--cms-primary-soft, rgba(135, 157, 25, 0.14));
+  border-color: var(--cms-primary, #879d19);
+}
+
+[data-theme="dark"] .cms-tabs button.active,
+:root[data-theme="dark"] .cms-tabs button.active,
+[data-theme="dark"] .cms-tab-btn.active,
+:root[data-theme="dark"] .cms-tab-btn.active {
+  background: var(--cms-primary, #879d19);
+  border-color: var(--cms-primary, #879d19);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(135, 157, 25, 0.38);
 }
 
 .cms-subtabs-row {
@@ -312,7 +345,7 @@
   letter-spacing: 0.3px;
 }
 
-/* ---------- Custom Searchable Select ---------- */
+/* ---------- Custom Searchable Select (Matching First Reference Dropdown) ---------- */
 .cms-custom-select {
   position: relative;
   width: 100%;
@@ -326,6 +359,7 @@
   z-index: 100000 !important;
 }
 
+/* Disabled trigger for Board and Academic Year (matching Second Reference) */
 .cms-custom-select-trigger {
   display: flex;
   align-items: center;
@@ -334,8 +368,8 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 35px;
-  padding: 5px 9px;
+  height: 36px;
+  padding: 5px 10px;
   overflow: hidden;
   border: 1px solid var(--cms-border, #e6e7de);
   border-radius: 8px;
@@ -349,6 +383,7 @@
   box-sizing: border-box;
 }
 
+.cms-custom-select.is-disabled .cms-custom-select-trigger,
 .cms-custom-select-trigger:disabled {
   cursor: not-allowed;
   opacity: 0.65 !important;
@@ -363,74 +398,182 @@
   white-space: nowrap;
 }
 
+/* Combobox Container for all interactive dropdowns (matching First Reference without search icon) */
+.cms-custom-select-combobox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  overflow: visible;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 8px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cms-custom-select-combobox:hover:not(.is-disabled) {
+  border-color: #cbd5e1;
+}
+
+.cms-custom-select-combobox.is-focused,
+.cms-custom-select-combobox:focus-within {
+  border-color: var(--cms-primary, #6f8400) !important;
+  box-shadow: 0 0 0 3px var(--cms-primary-soft, rgba(111, 132, 0, 0.16)) !important;
+}
+
+.cms-custom-select-combobox.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.65 !important;
+  background-color: var(--cms-subtle, #f7f8ef) !important;
+}
+
+/* Input directly inside the combobox (no search icon) */
+.cms-custom-combobox-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--cms-text, #171a17);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cms-custom-select-combobox.is-focused .cms-custom-combobox-input {
+  cursor: text;
+}
+
+.cms-custom-combobox-input::placeholder {
+  color: var(--cms-text, #171a17);
+  opacity: 0.85;
+}
+
+.cms-custom-combobox-input:disabled {
+  cursor: not-allowed;
+  color: var(--cms-muted, #7b8275);
+}
+
+.cms-custom-combobox-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--cms-text, #171a17);
+  user-select: none;
+  -webkit-user-select: none;
+  text-align: left;
+}
+
+.cms-custom-combobox-value.is-placeholder {
+  color: var(--cms-muted, #7b8275);
+}
+
+.cms-select-arrow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--cms-muted, #7b8275);
+}
+
+.cms-select-arrow-btn:disabled {
+  cursor: not-allowed;
+}
+
 .cms-select-arrow {
   flex: 0 0 auto;
   font-size: 10px;
+  color: var(--cms-muted, #7b8275);
+  transition: transform 0.2s ease;
 }
 
-/* High Z-Index Popup Menu floating cleanly without screen overflow */
-.cms-custom-select-menu {
+.cms-select-arrow.is-open {
+  transform: rotate(180deg);
+}
+
+/* Dropdown Menu (matching First Reference bay-level-options without search input inside) */
+.cms-custom-select-menu.bay-style-menu {
   position: absolute !important;
   z-index: 100000 !important;
   top: calc(100% + 4px);
   left: 0;
+  right: 0;
   width: 100%;
   min-width: 100%;
   max-width: 100%;
-  overflow: hidden;
-  padding: 5px;
-  border: 1px solid var(--cms-border, #e6e7de);
-  border-radius: 9px;
-  background: var(--cms-surface) !important;
-  opacity: 1 !important;
-  box-shadow: var(--cms-shadow-lg) !important;
-  box-sizing: border-box;
-}
-
-.cms-custom-select-search {
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  padding: 4px 8px;
-  border: 1px solid var(--cms-border, #e6e7de);
-  border-radius: 6px;
-  background: var(--cms-surface, #ffffff);
-  color: var(--cms-text, #171a17);
-  font: inherit;
-  font-size: 12px;
-}
-
-.cms-custom-select-options {
-  max-height: 200px;
-  overflow-x: hidden;
+  max-height: 220px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-top: 4px;
+  padding: 5px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 8px;
+  background: var(--cms-surface, #ffffff) !important;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.16) !important;
+  box-sizing: border-box;
 }
 
-.cms-custom-select-option {
-  display: block;
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option {
+  display: flex;
+  align-items: center;
   width: 100%;
-  min-width: 0;
-  padding: 6px 8px;
-  overflow: hidden;
+  min-height: 32px;
+  padding: 6px 10px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--cms-text, #171a17);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
   text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
 }
 
-.cms-custom-select-option:hover,
-.cms-custom-select-option.highlighted,
-.cms-custom-select-option.selected {
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option .cms-option-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option:hover,
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option.highlighted {
   background: var(--cms-primary-soft, #f1f4e2);
-  color: var(--cms-primary);
+  color: var(--cms-primary, #6f8400);
+}
+
+.cms-custom-select-menu.bay-style-menu .cms-custom-select-option.selected {
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary, #6f8400);
+  font-weight: 700;
 }
 
 .cms-custom-select-empty {
@@ -438,6 +581,10 @@
   color: var(--cms-muted, #7b8275);
   font-size: 12px;
   text-align: center;
+}
+
+.cms-entry-select-compact .cms-custom-select-combobox {
+  height: 34px;
 }
 
 /* ---------- Context Summary Box (Ref Screenshots 1-5) ---------- */
@@ -612,7 +759,7 @@
   align-items: center;
   gap: 4px;
   background: var(--cms-surface-subtle, #f5f6f0);
-  border: 1px solid var(--cms-border, #e2e4d8);
+  border: 1.5px solid rgba(111, 132, 0, 0.28);
   border-radius: 8px;
   padding: 3px;
 }
@@ -625,7 +772,7 @@
   font-size: 0.8rem;
   font-weight: 600;
   border-radius: 6px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--cms-muted, #5c645b);
   cursor: pointer;
@@ -635,14 +782,39 @@
 
 .cms-subtab-pill-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(111, 132, 0, 0.08);
 }
 
 .cms-subtab-pill-btn.active {
   background: var(--cms-primary, #6f8400);
+  border: 1px solid var(--cms-primary, #6f8400);
   color: #ffffff;
   font-weight: 700;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] .cms-subtab-pill-group,
+:root[data-theme="dark"] .cms-subtab-pill-group {
+  background: #171c15;
+  border: 1.5px solid rgba(135, 157, 25, 0.42);
+}
+
+[data-theme="dark"] .cms-subtab-pill-btn,
+:root[data-theme="dark"] .cms-subtab-pill-btn {
+  color: var(--cms-muted, #949c8f);
+}
+
+[data-theme="dark"] .cms-subtab-pill-btn:hover:not(.active),
+:root[data-theme="dark"] .cms-subtab-pill-btn:hover:not(.active) {
+  color: #f2f4ec;
+  background: rgba(135, 157, 25, 0.14);
+}
+
+[data-theme="dark"] .cms-subtab-pill-btn.active,
+:root[data-theme="dark"] .cms-subtab-pill-btn.active {
+  background: var(--cms-primary, #879d19);
+  border: 1px solid var(--cms-primary, #879d19);
+  color: #ffffff;
 }
 
 .cms-eval-search {
@@ -758,24 +930,38 @@
   height: 28px;
 }
 
+/* ---------- Marks Entry Table Inputs (Theme-Based Borders) ---------- */
 .cms-number-input {
   width: 76px;
   height: 32px;
   padding: 0 6px;
-  border: 1px solid var(--cms-border, #e6e7de);
+  border: 1.5px solid rgba(111, 132, 0, 0.45) !important;
   border-radius: 6px;
   text-align: center;
   font-weight: 600;
   font-size: 13px;
-  background: var(--cms-surface, #ffffff);
+  background: #ffffff !important;
   color: var(--cms-text, #171a17);
   box-sizing: border-box;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.cms-number-input:hover:not(:disabled) {
+  border-color: var(--cms-primary, #6f8400) !important;
+  box-shadow: 0 0 0 1px var(--cms-primary, #6f8400) !important;
 }
 
 .cms-number-input:focus {
-  border-color: var(--cms-primary);
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary) 18%, transparent);
+  border-color: var(--cms-primary, #6f8400) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary, #6f8400) 24%, transparent) !important;
+}
+
+.cms-number-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  border-color: rgba(111, 132, 0, 0.22) !important;
+  background: var(--cms-subtle, #f7f8ef) !important;
 }
 
 .cms-remarks-input {
@@ -783,12 +969,67 @@
   min-width: 130px;
   height: 32px;
   padding: 0 8px;
-  border: 1px solid var(--cms-border, #e6e7de);
+  border: 1.5px solid rgba(111, 132, 0, 0.45) !important;
   border-radius: 6px;
   font-size: 12px;
-  background: var(--cms-surface, #ffffff);
+  background: #ffffff !important;
   color: var(--cms-text, #171a17);
   box-sizing: border-box;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.cms-remarks-input:hover:not(:disabled) {
+  border-color: var(--cms-primary, #6f8400) !important;
+  box-shadow: 0 0 0 1px var(--cms-primary, #6f8400) !important;
+}
+
+.cms-remarks-input:focus {
+  border-color: var(--cms-primary, #6f8400) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary, #6f8400) 24%, transparent) !important;
+}
+
+.cms-remarks-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  border-color: rgba(111, 132, 0, 0.22) !important;
+  background: var(--cms-subtle, #f7f8ef) !important;
+}
+
+/* ---------- Dark Theme Overrides for Marks Entry Inputs ---------- */
+[data-theme="dark"] .cms-number-input,
+:root[data-theme="dark"] .cms-number-input,
+[data-theme="dark"] .cms-remarks-input,
+:root[data-theme="dark"] .cms-remarks-input {
+  border: 1.5px solid rgba(135, 157, 25, 0.68) !important;
+  background: #1c2219 !important;
+  color: var(--cms-text, #f2f4ec) !important;
+}
+
+[data-theme="dark"] .cms-number-input:hover:not(:disabled),
+:root[data-theme="dark"] .cms-number-input:hover:not(:disabled),
+[data-theme="dark"] .cms-remarks-input:hover:not(:disabled),
+:root[data-theme="dark"] .cms-remarks-input:hover:not(:disabled) {
+  border-color: var(--cms-primary, #879d19) !important;
+  box-shadow: 0 0 0 1px var(--cms-primary, #879d19) !important;
+}
+
+[data-theme="dark"] .cms-number-input:focus,
+:root[data-theme="dark"] .cms-number-input:focus,
+[data-theme="dark"] .cms-remarks-input:focus,
+:root[data-theme="dark"] .cms-remarks-input:focus {
+  border-color: var(--cms-primary, #879d19) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(135, 157, 25, 0.38) !important;
+}
+
+[data-theme="dark"] .cms-number-input:disabled,
+:root[data-theme="dark"] .cms-number-input:disabled,
+[data-theme="dark"] .cms-remarks-input:disabled,
+:root[data-theme="dark"] .cms-remarks-input:disabled {
+  opacity: 0.5;
+  border-color: rgba(135, 157, 25, 0.25) !important;
+  background: rgba(0, 0, 0, 0.35) !important;
 }
 
 .cms-checkbox {
@@ -826,7 +1067,8 @@
   background: currentColor;
 }
 
-.cms-status-draft {
+.cms-status-draft,
+.cms-status-not-started {
   background: var(--cms-subtle, #f7f8ef);
   color: var(--cms-muted, #7b8275);
   border-color: var(--cms-border, #e6e7de);

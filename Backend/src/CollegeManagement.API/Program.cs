@@ -16,6 +16,8 @@ using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using CollegeManagement.API.Repositories.Implementations.Payroll;
+using CollegeManagement.API.Repositories.Interfaces.Reimbursement;
+using CollegeManagement.API.Repositories.Implementations.Reimbursement;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Implementations;
 using CollegeManagement.API.Services.Implementations.Hostel;
@@ -23,6 +25,8 @@ using CollegeManagement.API.Services.Implementations.Payroll;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Payroll;
+using CollegeManagement.API.Services.Interfaces.Reimbursement;
+using CollegeManagement.API.Services.Implementations.Reimbursement;
 using CollegeManagement.API.Services.Interfaces.Transport;
 using CollegeManagement.API.Services.Implementations.Transport;
 using CollegeManagement.API.Services.Location;
@@ -200,6 +204,7 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
 builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
+builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 #endregion
 
 #region Services
@@ -294,6 +299,9 @@ builder.Services.AddScoped<IDriverAttendanceService, DriverAttendanceService>();
 
 // Payroll Service
 builder.Services.AddScoped<IPayrollService, PayrollService>();
+
+// Reimbursement Service
+builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
