@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
-  ReceiptIndianRupee,
+  ReceiptIndianRupee, Boxes,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -77,6 +77,7 @@ const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
   "audit logs": settingsAuditLogsIcon,
   "faculty reimbursement": reimbursementIcon,
   reimbursement: reimbursementIcon,
+  "inventory management": Boxes,
 });
 
 const PAGE_ICON_ROUTE_ALIASES = [
@@ -91,6 +92,8 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/reimbursement", icon: reimbursementIcon },
   { path: "/dashboard/finance/reimbursement", icon: reimbursementIcon },
+  { path: "/dashboard/inventory-management", icon: Boxes },
+  { path: "/dashboard/inventory", icon: Boxes },
   { path: "/warden-dashboard/students", icon: studentsIcon },
   { path: "/warden-dashboard/rooms", icon: sectionsIcon },
   { path: "/warden-dashboard/beds", icon: sectionsIcon },
@@ -162,6 +165,7 @@ export const menu = [
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
       { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
+      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes },
     ],
   },
   {

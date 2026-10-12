@@ -28,6 +28,7 @@ import FeeManagementPage from "@/components/pages/FeeManagementPage.jsx";
 import TransportPage from "@/components/pages/TransportPage.jsx";
 import CertificatesPage, { pageConfig as certificatesConfig } from "@/components/pages/CertificatesPage.jsx";
 import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
+import InventoryManagementPage from "@/components/pages/InventoryManagement/InventoryManagementPage.jsx";
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
@@ -203,6 +204,10 @@ export default function AppRoutes() {
         <Route path="/dashboard/students/:id/enroll" element={<StudentEnrollmentRoute />} />
         <Route path="/dashboard/timetable" element={<TimetablePage />} />
         <Route path="/dashboard/holidays" element={<HolidayManagementPage />} />
+        <Route path="/dashboard/inventory-management/*" element={<InventoryManagementPage />} />
+        <Route path="/dashboard/inventory-management" element={<InventoryManagementPage />} />
+        <Route path="/dashboard/inventory/*" element={<Navigate to="/dashboard/inventory-management" replace />} />
+        <Route path="/dashboard/inventory" element={<Navigate to="/dashboard/inventory-management" replace />} />
         <Route path="/dashboard/timetable/setup" element={<TimetablePage screen="setup" />} />
         <Route path="/dashboard/timetable/draft" element={<TimetablePage screen="draft" />} />
         <Route path="/dashboard/timetable/generate" element={<TimetablePage screen="generate" />} />
