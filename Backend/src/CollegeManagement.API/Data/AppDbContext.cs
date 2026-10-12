@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Models;
+using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Models.Settings;
@@ -24,6 +24,7 @@ namespace CollegeManagement.API.Data
         public DbSet<Role> Roles { get; set; }
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<RoleModule> RoleModules { get; set; } = null!;
         public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<OTP> OTPs { get; set; }
         public DbSet<AcademicYear> AcademicYears { get; set; }
@@ -75,6 +76,7 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportTrip> TransportTrips => Set<TransportTrip>();
         public DbSet<TransportStudentAttendance> TransportStudentAttendances { get; set; } = null!;
         public DbSet<TransportGpsTelemetry> TransportGpsTelemetries { get; set; } = null!;
+        public DbSet<DriverPreference> DriverPreferences { get; set; } = null!;
         public DbSet<Staff> Staffs { get; set; }
         public DbSet<StaffSubjectAllocation> StaffSubjectAllocations { get; set; }
         public DbSet<Faculty> Faculties { get; set; }
@@ -1714,6 +1716,16 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                 entity.HasOne(e => e.Permission)
                     .WithMany(p => p.UserPermissions)
                     .HasForeignKey(e => e.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // RoleModules Configuration
+            modelBuilder.Entity<RoleModule>(entity =>
+            {
+                entity.HasIndex(e => new { e.RoleId, e.SubModule }).IsUnique();
+                entity.HasOne(e => e.Role)
+                    .WithMany(r => r.RoleModules)
+                    .HasForeignKey(e => e.RoleId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
         }
