@@ -66,6 +66,18 @@ namespace CollegeManagement.API.Services.Implementations
             ValidateCreateRequest(request);
 
             // ---------------------------------------------
+            // Allocate Admission Number Atomically on Submission
+            // ---------------------------------------------
+            if (!request.IsReferral)
+            {
+                var allocatedNumber = await AllocateAdmissionNumberAsync(request.CampusId, request.BoardId, request.AcademicYearId);
+                if (!string.IsNullOrWhiteSpace(allocatedNumber))
+                {
+                    request.AdmissionNo = allocatedNumber;
+                }
+            }
+
+            // ---------------------------------------------
             // Save only Student Photo
             // ---------------------------------------------
 
@@ -177,20 +189,92 @@ namespace CollegeManagement.API.Services.Implementations
         //generate//
 
         // =====================================================
-        // GENERATE ADMISSION NUMBER
+        // GENERATE ADMISSION NUMBER (PREVIEW ONLY - DOES NOT INCREMENT SEQUENCE)
         // =====================================================
 
         public async Task<string?> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null, bool isReferral = false)
         {
             if (isReferral) return null;
 
+            string? boardStr = boardId?.ToString();
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                var b = await _context.Boards.AsNoTracking().FirstOrDefaultAsync(x => x.BoardId == boardId.Value);
+                if (b != null) boardStr = b.BoardCode ?? b.BoardName;
+            }
+
+            string? ayStr = academicYearId?.ToString();
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+            {
+                var ay = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(x => x.AcademicYearId == academicYearId.Value);
+                if (ay != null) ayStr = ay.AcademicYearName;
+            }
+
+            string? campusCode = null;
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var c = await _context.Campuses.AsNoTracking().FirstOrDefaultAsync(x => x.CampusId == campusId.Value);
+                if (c != null) campusCode = c.CampusCode ?? c.CampusName;
+            }
+
+            // Live preview WITHOUT mutating the database sequence counter
+            var previewNumber = await _numberSeriesService.GetLivePreviewAsync(
+                "ADMISSION_NO",
+                campusId: campusId,
+                board: boardStr,
+                academicYear: ayStr,
+                campusCode: campusCode);
+
+            if (!string.IsNullOrWhiteSpace(previewNumber))
+            {
+                return previewNumber;
+            }
+
+            // Fallback to repository if number series configuration doesn't exist
+            return await _repository.GenerateAdmissionNumberAsync(campusId, boardId, academicYearId);
+        }
+
+        // =====================================================
+        // ALLOCATE ADMISSION NUMBER (MUTATING - INCREMENTS SEQUENCE ON RECORD CREATION)
+        // =====================================================
+
+        public async Task<string?> AllocateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
+        {
+            string? boardStr = boardId?.ToString();
+            string? boardCode = null;
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                var b = await _context.Boards.AsNoTracking().FirstOrDefaultAsync(x => x.BoardId == boardId.Value);
+                if (b != null)
+                {
+                    boardStr = b.BoardName;
+                    boardCode = b.BoardCode ?? b.BoardName;
+                }
+            }
+
+            string? ayStr = academicYearId?.ToString();
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+            {
+                var ay = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(x => x.AcademicYearId == academicYearId.Value);
+                if (ay != null) ayStr = ay.AcademicYearName;
+            }
+
+            string? campusCode = null;
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var c = await _context.Campuses.AsNoTracking().FirstOrDefaultAsync(x => x.CampusId == campusId.Value);
+                if (c != null) campusCode = c.CampusCode ?? c.CampusName;
+            }
+
             var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
             { 
-                Board = boardId?.ToString(),
-                AcademicYear = academicYearId?.ToString()
+                Board = boardStr,
+                BoardCode = boardCode,
+                AcademicYear = ayStr,
+                CampusCode = campusCode
             };
             
-            // Generate next number purely from the NumberSeriesSequences table for global continuity
+            // Atomically generate and increment sequence in NumberSeriesConfigurations
             var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
             
             if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
@@ -253,7 +337,7 @@ namespace CollegeManagement.API.Services.Implementations
             // Generate admission number if it was deferred (e.g. for referrals)
             if (string.IsNullOrWhiteSpace(admission.AdmissionNo))
             {
-                admission.AdmissionNo = await GenerateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId);
+                admission.AdmissionNo = await AllocateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId);
                 if (!string.IsNullOrWhiteSpace(admission.AdmissionNo))
                 {
                     // Directly update the DB so the approval SP can use it

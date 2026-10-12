@@ -1,4 +1,4 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -405,36 +405,83 @@ namespace CollegeManagement.API.Controllers.V1
 
             return Ok(bloodGroups);
         }
-        //generatenumber//
+        // =========================================================
+        // PREVIEW / GENERATE ADMISSION NUMBER (LIVE PREVIEW - NON-INCREMENTING)
+        // =========================================================
+
+        /// <summary>
+        /// Live preview of next admission number (non-incrementing, read-only).
+        /// POST: api/v1/student-admissions/preview-number
+        /// POST: api/v1/student-admissions/generate-number
+        /// </summary>
+        [HttpPost("preview-number")]
         [HttpPost("generate-number")]
-        public async Task<IActionResult> GenerateAdmissionNumber([FromBody] GenerateAdmissionNumberRequestDto? request = null, [FromQuery] int? campusId = null)
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> PreviewAdmissionNumber(
+            [FromBody] GenerateAdmissionNumberRequestDto? request, 
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null)
         {
-            if (!campusId.HasValue || campusId <= 0)
+            return await ExecuteAdmissionNumberPreviewAsync(request, campusId, boardId, academicYearId);
+        }
+
+        /// <summary>
+        /// Live preview of next admission number via query parameters (non-incrementing, read-only).
+        /// GET: api/v1/student-admissions/preview-number
+        /// GET: api/v1/student-admissions/generate-number
+        /// </summary>
+        [HttpGet("preview-number")]
+        [HttpGet("generate-number")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> PreviewAdmissionNumberGet(
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null)
+        {
+            return await ExecuteAdmissionNumberPreviewAsync(null, campusId, boardId, academicYearId);
+        }
+
+        private async Task<IActionResult> ExecuteAdmissionNumberPreviewAsync(
+            GenerateAdmissionNumberRequestDto? request,
+            int? queryCampusId,
+            int? queryBoardId,
+            int? queryAcademicYearId)
+        {
+            var resolvedCampusId = request?.CampusId ?? queryCampusId;
+            if (!resolvedCampusId.HasValue || resolvedCampusId <= 0)
             {
-                if (request?.CampusId.HasValue == true && request.CampusId > 0)
-                {
-                    campusId = request.CampusId.Value;
-                }
-                else if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
                     int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
                 {
-                    campusId = cId;
+                    resolvedCampusId = cId;
                 }
                 else
                 {
                     var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
                     if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
                     {
-                        campusId = claimCampusId;
+                        resolvedCampusId = claimCampusId;
                     }
                 }
             }
 
-            var admissionNumber = await _service.GenerateAdmissionNumberAsync(campusId, request?.BoardId, request?.AcademicYearId);
+            var resolvedBoardId = request?.BoardId ?? queryBoardId;
+            var resolvedAcademicYearId = request?.AcademicYearId ?? queryAcademicYearId;
+
+            var admissionNumber = await _service.GenerateAdmissionNumberAsync(resolvedCampusId, resolvedBoardId, resolvedAcademicYearId);
 
             return Ok(new
             {
-                admissionNumber
+                success = true,
+                data = new
+                {
+                    admissionNo = admissionNumber,
+                    admissionNumber = admissionNumber,
+                    generatedNumber = admissionNumber
+                },
+                admissionNumber = admissionNumber,
+                admissionNo = admissionNumber
             });
         }
 

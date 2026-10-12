@@ -329,10 +329,11 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 12. POST /api/v1/staff/{id}/save-profile-draft
+        /// 12. POST/PUT /api/v1/staff/{id}/save-profile-draft
         /// Saves profile section draft by staff ID.
         /// </summary>
         [HttpPost("{id:int}/save-profile-draft")]
+        [HttpPut("{id:int}/save-profile-draft")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraft(int id, [FromBody] UpdateStaffProfileSectionDto dto)
@@ -342,10 +343,11 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 13. POST /api/v1/staff/token/{token}/save-profile-draft
+        /// 13. POST/PUT /api/v1/staff/token/{token}/save-profile-draft
         /// Saves profile section draft by secure token.
         /// </summary>
         [HttpPost("token/{token}/save-profile-draft")]
+        [HttpPut("token/{token}/save-profile-draft")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraftByToken(string token, [FromBody] UpdateStaffProfileSectionDto dto)

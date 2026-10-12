@@ -171,6 +171,7 @@ public class ReportService : IReportService
         var request = new CustomReportRequestDto
         {
             ReportType = reportType,
+            CampusId = filter.CampusId,
             BoardId = filter.BoardId,
             AcademicYearId = filter.AcademicYearId,
             AcademicLevelId = filter.AcademicLevelId,
@@ -391,26 +392,25 @@ public class ReportService : IReportService
             case DashboardReportDto d:
                 title = "Dashboard Overview & KPI Summary";
                 headers = new[] { "S.No", "Metric Name", "Metric Value", "Category" };
-                kpis.Add(("Total Admissions", $"{d.Admissions}"));
-                kpis.Add(("Attendance Rate", $"{d.Attendance:F2}%"));
-                kpis.Add(("Fee Collections", $"₹{d.FeeCollection:N2}"));
-                kpis.Add(("Outstanding Dues", $"₹{d.DueFees:N2}"));
-                kpis.Add(("Student Strength", $"{d.StudentStrength}"));
-                kpis.Add(("Pass Percentage", $"{d.PassPercentage:F1}%"));
+                // Dedicated 10-metric scorecard table rows (no separate duplicate KPI card block above it)
                 rows.Add(new[] { "1", "Total Admissions", $"{d.Admissions}", "Academics" });
                 rows.Add(new[] { "2", "Average Student Attendance", $"{d.Attendance:F2}%", "Attendance" });
                 rows.Add(new[] { "3", "Total Fee Collection", $"₹{d.FeeCollection:N2}", "Finance" });
                 rows.Add(new[] { "4", "Total Outstanding Due Fees", $"₹{d.DueFees:N2}", "Finance" });
                 rows.Add(new[] { "5", "Total Examinations Conducted", $"{d.Examinations}", "Examinations" });
                 rows.Add(new[] { "6", "Published Exam Results", $"{d.ResultsPublished}", "Examinations" });
-                rows.Add(new[] { "7", "Total Faculty Workload", $"{d.FacultyWorkload:F1} hrs/wk", "Staff" });
+                rows.Add(new[] { "7", "Average Faculty Workload", $"{d.FacultyWorkload:F1} hrs/wk", "Staff" });
                 rows.Add(new[] { "8", "Total Student Strength", $"{d.StudentStrength}", "Students" });
                 rows.Add(new[] { "9", "Overall Pass Percentage", $"{d.PassPercentage:F1}%", "Academics" });
                 rows.Add(new[] { "10", "Toppers Identified", $"{d.ToppersIdentified}", "Academics" });
                 break;
 
-            case IReadOnlyList<AdmissionReportDto> adm:
+            case IReadOnlyList<AdmissionReportDto> admList:
                 title = "Student Admissions Detailed Report";
+                var adm = admList
+                    .GroupBy(x => !string.IsNullOrEmpty(x.AdmissionNo) ? x.AdmissionNo : x.AdmissionId.ToString())
+                    .Select(g => g.First())
+                    .ToList();
                 headers = new[] { "S.No", "Admission No", "Student Name", "Board", "Group", "Section", "Admission Date", "Status" };
                 kpis.Add(("Total Admissions", $"{adm.Count}"));
                 kpis.Add(("Approved", $"{adm.Count(x => x.IsApproved || x.Status == "Approved")}"));
@@ -435,10 +435,18 @@ public class ReportService : IReportService
 
             case IReadOnlyList<StudentStrengthReportDto> ssList:
                 title = "Student Strength Detailed Report";
-                var allStudents = ssList.SelectMany(x => x.Students ?? Enumerable.Empty<StudentStrengthStudentDto>()).ToList();
-                var totS = ssList.Sum(x => x.TotalStudents);
-                var totM = ssList.Sum(x => x.MaleStudents);
-                var totF = ssList.Sum(x => x.FemaleStudents);
+                var distinctSsList = ssList
+                    .GroupBy(x => new { x.GroupId, x.SectionId })
+                    .Select(g => g.First())
+                    .ToList();
+                var allStudents = distinctSsList
+                    .SelectMany(x => x.Students ?? Enumerable.Empty<StudentStrengthStudentDto>())
+                    .GroupBy(s => s.StudentId > 0 ? s.StudentId.ToString() : (!string.IsNullOrEmpty(s.AdmissionNo) ? s.AdmissionNo : (s.RollNo ?? s.StudentName)))
+                    .Select(g => g.First())
+                    .ToList();
+                var totS = allStudents.Count > 0 ? allStudents.Count : distinctSsList.Sum(x => x.TotalStudents);
+                var totM = allStudents.Count > 0 ? allStudents.Count(x => string.Equals(x.Gender, "Male", StringComparison.OrdinalIgnoreCase)) : distinctSsList.Sum(x => x.MaleStudents);
+                var totF = allStudents.Count > 0 ? allStudents.Count(x => string.Equals(x.Gender, "Female", StringComparison.OrdinalIgnoreCase)) : distinctSsList.Sum(x => x.FemaleStudents);
                 kpis.Add(("Total Students", $"{totS}"));
                 kpis.Add(("Male Students", $"{totM}"));
                 kpis.Add(("Female Students", $"{totF}"));
@@ -467,7 +475,7 @@ public class ReportService : IReportService
                 {
                     headers = new[] { "S.No", "Group", "Section", "Capacity", "Utilization %", "Male Students", "Female Students", "Total Strength" };
                     int ssIdx = 1;
-                    foreach (var s in ssList)
+                    foreach (var s in distinctSsList)
                     {
                         rows.Add(new[]
                         {
@@ -484,11 +492,16 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<AttendanceReportDto> att:
+            case IReadOnlyList<AttendanceReportDto> attList:
                 title = "Student Attendance Detailed Report";
-                headers = new[] { "S.No", "Date", "Present", "Absent", "Late", "Leave", "Total Students", "Attendance %" };
+                var att = attList
+                    .GroupBy(a => new { Date = a.AttendanceDate?.Date, a.GroupName, a.SectionName })
+                    .Select(g => g.First())
+                    .OrderByDescending(a => a.AttendanceDate)
+                    .ToList();
+                headers = new[] { "S.No", "Date", "Group", "Section", "Present", "Absent", "Late", "Leave", "Total Students", "Attendance %" };
                 var avgAtt = att.Any() ? Math.Round(att.Average(x => x.AttendancePercentage), 2) : 0;
-                kpis.Add(("Total Log Days", $"{att.Count}"));
+                kpis.Add(("Total Log Days", $"{att.Select(x => x.AttendanceDate?.Date).Distinct().Count()}"));
                 kpis.Add(("Average Attendance", $"{avgAtt}%"));
                 int attIdx = 1;
                 foreach (var a in att)
@@ -497,6 +510,8 @@ public class ReportService : IReportService
                     {
                         $"{attIdx++}",
                         a.AttendanceDate?.ToString("dd-MM-yyyy") ?? a.Period ?? "—",
+                        a.GroupName ?? "—",
+                        a.SectionName ?? "—",
                         $"{a.Present}",
                         $"{a.Absent}",
                         $"{a.Late}",
@@ -507,9 +522,13 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<FacultyAttendanceReportDto> fa:
+            case IReadOnlyList<FacultyAttendanceReportDto> faList:
                 title = "Faculty & Staff Attendance Report";
-                headers = new[] { "S.No", "Faculty Name", "Department", "Present Days", "Absent", "Leave", "Attendance %" };
+                var fa = faList
+                    .GroupBy(f => f.FacultyId)
+                    .Select(g => g.First())
+                    .ToList();
+                headers = new[] { "S.No", "Faculty Name", "Department", "Designation", "Present Days", "Absent", "Leave", "Attendance %" };
                 kpis.Add(("Total Faculty", $"{fa.Count}"));
                 int faIdx = 1;
                 foreach (var f in fa)
@@ -519,6 +538,7 @@ public class ReportService : IReportService
                         $"{faIdx++}",
                         f.FacultyName ?? "—",
                         f.DepartmentName ?? "Academics",
+                        f.Designation ?? "Lecturer",
                         $"{f.Present}",
                         $"{f.Absent}",
                         $"{f.Leave}",
@@ -527,8 +547,13 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<FeeCollectionReportDto> fees:
+            case IReadOnlyList<FeeCollectionReportDto> feeList:
                 title = "Fee Collection & Transactions Detailed Report";
+                var fees = feeList
+                    .GroupBy(f => f.PaymentId)
+                    .Select(g => g.First())
+                    .OrderByDescending(f => f.PaymentDate)
+                    .ToList();
                 headers = new[] { "S.No", "Receipt / ID", "Admission No", "Student Name", "Group", "Section", "Paid Amount", "Date", "Payment Mode", "Status" };
                 var sumCollected = fees.Sum(x => x.PaidAmount > 0 ? x.PaidAmount : x.Collected);
                 kpis.Add(("Total Collected", $"₹{sumCollected:N2}"));
@@ -552,9 +577,27 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<OutstandingFeeReportDto> dues:
+            case IReadOnlyList<OutstandingFeeReportDto> dueList:
                 title = "Outstanding Due Fees & Defaulters Report";
-                headers = new[] { "S.No", "Admission No", "Roll No", "Student Name", "Group", "Section", "Total Fee", "Paid Fee", "Due Amount", "Status" };
+                var dues = dueList
+                    .GroupBy(d => d.StudentId > 0 ? d.StudentId.ToString() : (!string.IsNullOrEmpty(d.AdmissionNo) ? d.AdmissionNo : d.StudentName))
+                    .Select(g => new OutstandingFeeReportDto
+                    {
+                        StudentId = g.First().StudentId,
+                        AdmissionNo = g.First().AdmissionNo,
+                        RollNo = g.First().RollNo,
+                        StudentName = g.First().StudentName,
+                        GroupName = g.First().GroupName,
+                        SectionName = g.First().SectionName,
+                        FeeStructureName = string.Join(", ", g.Select(x => x.FeeStructureName).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct()),
+                        TotalAmount = g.Sum(x => x.TotalAmount),
+                        PaidAmount = g.Sum(x => x.PaidAmount),
+                        DueAmount = g.Sum(x => x.DueAmount),
+                        FeeStatus = g.All(x => x.FeeStatus == "Paid") ? "Paid" : (g.Any(x => x.FeeStatus == "Overdue") ? "Overdue" : "Due")
+                    })
+                    .OrderByDescending(x => x.DueAmount)
+                    .ToList();
+                headers = new[] { "S.No", "Admission No", "Roll No", "Student Name", "Group", "Section", "Fee Heads", "Total Fee", "Paid Fee", "Due Amount", "Status" };
                 var sumDue = dues.Sum(x => x.DueAmount);
                 var sumPaid = dues.Sum(x => x.PaidAmount);
                 var sumTotal = dues.Sum(x => x.TotalAmount);
@@ -573,6 +616,7 @@ public class ReportService : IReportService
                         d.StudentName ?? "—",
                         d.GroupName ?? "—",
                         d.SectionName ?? "—",
+                        !string.IsNullOrWhiteSpace(d.FeeStructureName) ? d.FeeStructureName : "Academic Fee",
                         $"₹{d.TotalAmount:N2}",
                         $"₹{d.PaidAmount:N2}",
                         $"₹{d.DueAmount:N2}",
@@ -581,8 +625,12 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<ExaminationReportDto> exams:
+            case IReadOnlyList<ExaminationReportDto> examList:
                 title = "Examinations Master & Schedules Report";
+                var exams = examList
+                    .GroupBy(e => e.ExaminationId)
+                    .Select(g => g.First())
+                    .ToList();
                 headers = new[] { "S.No", "Exam Code", "Exam Name", "Academic Year", "Group", "Type", "Start Date", "End Date", "Status", "Eligible", "Pass %" };
                 kpis.Add(("Total Examinations", $"{exams.Count}"));
                 int exIdx = 1;
@@ -605,11 +653,15 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<ResultAnalysisReportDto> results:
+            case IReadOnlyList<ResultAnalysisReportDto> resultList:
                 title = "Examination Results Detailed Analysis Report";
+                var results = resultList
+                    .GroupBy(r => r.ResultId)
+                    .Select(g => g.First())
+                    .ToList();
                 headers = new[] { "S.No", "Roll No", "Student Name", "Exam Name", "Subject", "Total Marks", "Grade", "Result", "Date" };
-                var passCount = results.Count(x => x.ResultStatus == "Pass" || x.ResultStatus == "Passed");
-                var failCount = results.Count(x => x.ResultStatus == "Fail" || x.ResultStatus == "Failed");
+                var passCount = results.Count(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase));
+                var failCount = results.Count(x => string.Equals(x.ResultStatus, "Fail", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Failed", StringComparison.OrdinalIgnoreCase));
                 kpis.Add(("Total Results", $"{results.Count}"));
                 kpis.Add(("Passed", $"{passCount}"));
                 kpis.Add(("Failed", $"{failCount}"));
@@ -632,8 +684,12 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<PassPercentageReportDto> pp:
+            case IReadOnlyList<PassPercentageReportDto> ppList:
                 title = "Academic Pass Percentage Report";
+                var pp = ppList
+                    .GroupBy(p => new { p.ExamId, p.GroupName })
+                    .Select(g => g.First())
+                    .ToList();
                 headers = new[] { "S.No", "Exam Name", "Group", "Appeared", "Passed", "Failed", "Pass Percentage %" };
                 var totApp = pp.Sum(x => x.TotalAppeared);
                 var totPass = pp.Sum(x => x.Passed);
@@ -656,8 +712,14 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<TopperReportDto> tops:
+            case IReadOnlyList<TopperReportDto> topList:
                 title = "Student Toppers & Rankers Leaderboard";
+                var tops = topList
+                    .GroupBy(t => t.StudentId > 0 ? t.StudentId.ToString() : (t.RollNo ?? t.StudentName))
+                    .Select(g => g.First())
+                    .OrderByDescending(t => t.TotalMarks)
+                    .Take(10)
+                    .ToList();
                 headers = new[] { "Rank", "Student Name", "Roll No", "Group", "Section", "Total Marks", "Percentage %", "Passed Subjects" };
                 kpis.Add(("Toppers Identified", $"{tops.Count}"));
                 int tIdx = 1;
@@ -665,7 +727,7 @@ public class ReportService : IReportService
                 {
                     rows.Add(new[]
                     {
-                        t.Rank > 0 ? $"#{t.Rank}" : $"{tIdx++}",
+                        $"#{tIdx++}",
                         t.StudentName ?? "—",
                         t.RollNo ?? "—",
                         t.GroupName ?? "—",
@@ -677,8 +739,12 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<FacultyWorkloadReportDto> fw:
+            case IReadOnlyList<FacultyWorkloadReportDto> fwList:
                 title = "Faculty Workload & Allocation Report";
+                var fw = fwList
+                    .GroupBy(f => f.FacultyId)
+                    .Select(g => g.First())
+                    .ToList();
                 headers = new[] { "S.No", "Employee ID", "Faculty Name", "Department", "Assigned Periods", "Weekly Hours" };
                 var sumHours = fw.Sum(x => x.HoursPerWeek);
                 kpis.Add(("Total Faculty", $"{fw.Count}"));
@@ -698,8 +764,12 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<StudentPerformanceReportDto> sp:
+            case IReadOnlyList<StudentPerformanceReportDto> spList:
                 title = "Student Academic Performance Report";
+                var sp = spList
+                    .GroupBy(s => s.StudentId > 0 ? s.StudentId.ToString() : (s.AdmissionNo ?? s.RollNo ?? s.StudentName))
+                    .Select(g => g.First())
+                    .ToList();
                 headers = new[] { "S.No", "Admission No", "Roll No", "Student Name", "Average %", "Passed", "Failed", "Attendance %", "Grade" };
                 int spIdx = 1;
                 foreach (var s in sp)
@@ -719,8 +789,12 @@ public class ReportService : IReportService
                 }
                 break;
 
-            case IReadOnlyList<AuditLogDto> logs:
+            case IReadOnlyList<AuditLogDto> logList:
                 title = "System Security & User Activity Audit Logs";
+                var logs = logList
+                    .GroupBy(l => l.AuditLogId)
+                    .Select(g => g.First())
+                    .ToList();
                 headers = new[] { "S.No", "User", "Action", "Entity", "Description", "Timestamp" };
                 kpis.Add(("Total Audit Logs", $"{logs.Count}"));
                 int logIdx = 1;

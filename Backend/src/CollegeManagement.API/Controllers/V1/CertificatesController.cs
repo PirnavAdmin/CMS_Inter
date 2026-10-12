@@ -204,7 +204,13 @@ public class CertificatesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = $"Error generating certificate: {ex.Message}" });
+            return ex switch
+            {
+                ArgumentException ae => BadRequest(new { status = false, message = ae.Message }),
+                InvalidOperationException ioe => BadRequest(new { status = false, message = ioe.Message }),
+                MySqlConnector.MySqlException me => BadRequest(new { status = false, message = $"Database constraint failure: {me.Message}" }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new { status = false, message = ex.Message })
+            };
         }
     }
 
@@ -240,7 +246,13 @@ public class CertificatesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = $"Error requesting certificate: {ex.Message}" });
+            return ex switch
+            {
+                ArgumentException ae => BadRequest(new { status = false, message = ae.Message }),
+                InvalidOperationException ioe => BadRequest(new { status = false, message = ioe.Message }),
+                MySqlConnector.MySqlException me => BadRequest(new { status = false, message = $"Database constraint failure: {me.Message}" }),
+                _ => StatusCode(StatusCodes.Status500InternalServerError, new { status = false, message = ex.Message })
+            };
         }
     }
 
