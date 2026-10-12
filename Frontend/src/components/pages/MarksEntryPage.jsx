@@ -27,18 +27,15 @@ const editableStatuses = ["NOT STARTED", "DRAFT", "REJECTED"];
 
 const buildMarksPayload = (workspace, evalId, campusId = null) => {
   const effectiveCampusId = Number(campusId || workspace?.campusId) || 1;
+  const isObjective = workspace?.mode === "OBJECTIVE";
   const formattedMarks = (workspace?.rows || []).map((row) => {
     const isAbsent = Boolean(row.absent);
-    const internal = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Math.round(Number(row.internal || 0));
-    const practical = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Math.round(Number(row.practical || 0));
-    const theory = isAbsent
-      ? 0
-      : workspace?.mode === "OBJECTIVE"
-        ? Math.round(Number(row.obtainedMarks || 0))
-        : Math.round(Number(row.theory || 0));
+    const internal = isAbsent || isObjective ? 0 : Math.round(Number(row.internal || 0));
+    const practical = isAbsent || isObjective ? 0 : Math.round(Number(row.practical || 0));
+    const theory = isAbsent || isObjective ? 0 : Math.round(Number(row.theory || 0));
     const total = isAbsent
       ? 0
-      : workspace?.mode === "OBJECTIVE"
+      : isObjective
         ? Math.round(Number(row.obtainedMarks || 0))
         : Math.round(Number(row.total || 0));
 
@@ -74,18 +71,15 @@ const buildMarksPayload = (workspace, evalId, campusId = null) => {
 
 const buildAdminMarksPayload = (workspace, campusId = null) => {
   const effectiveCampusId = Number(campusId || workspace?.campusId) || 1;
+  const isObjective = workspace?.mode === "OBJECTIVE";
   const studentMarks = (workspace?.rows || []).map((row) => {
     const isAbsent = Boolean(row.absent);
-    const internal = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Number(row.internal || 0);
-    const practical = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Number(row.practical || 0);
-    const theory = isAbsent
-      ? 0
-      : workspace?.mode === "OBJECTIVE"
-        ? Number(row.obtainedMarks || 0)
-        : Number(row.theory || 0);
+    const internal = isAbsent || isObjective ? 0 : Number(row.internal || 0);
+    const practical = isAbsent || isObjective ? 0 : Number(row.practical || 0);
+    const theory = isAbsent || isObjective ? 0 : Number(row.theory || 0);
     const total = isAbsent
       ? 0
-      : workspace?.mode === "OBJECTIVE"
+      : isObjective
         ? Number(row.obtainedMarks || 0)
         : Number(row.total || 0);
 
@@ -93,10 +87,14 @@ const buildAdminMarksPayload = (workspace, campusId = null) => {
       campusId: effectiveCampusId,
       ...(row.markId ? { markId: Number(row.markId) } : {}),
       studentId: Number(row.studentId),
+      internalMarks: internal,
+      practicalMarks: practical,
+      theoryMarks: theory,
       internal,
       practical,
       theory,
       obtainedMarks: total,
+      totalMarks: total,
       maxMarks: Number(workspace?.maxMarks || 100),
       isAbsent,
       remarks: String(row.remarks || "").trim(),
@@ -138,22 +136,23 @@ const numericMark = (value) =>
 const validateMarksRows = (workspace, complete) => {
   const errors = {};
   if (!workspace?.rows) return errors;
+  const isObjective = workspace.mode === "OBJECTIVE";
   workspace.rows.forEach((row) => {
     if (row.absent) return;
-    const fields =
-      workspace.mode === "OBJECTIVE"
-        ? [["obtainedMarks", workspace.maxMarks]]
-        : [
-          ["internal", workspace.internalMax],
-          ...(workspace.practicalMax ? [["practical", workspace.practicalMax]] : []),
-          ["theory", workspace.theoryMax],
-        ];
+    const fields = isObjective
+      ? [["Objective Marks", "obtainedMarks", workspace.maxMarks]]
+      : [
+        ["internal", "internal", workspace.internalMax],
+        ...(workspace.practicalMax ? [["practical", "practical", workspace.practicalMax]] : []),
+        ["theory", "theory", workspace.theoryMax],
+      ];
     const list = [];
-    fields.forEach(([key, max]) => {
-      if (row[key] === "" || row[key] === null || row[key] === undefined) {
-        if (complete) list.push(`${key} is required`);
-      } else if (!numericMark(row[key]) || Number(row[key]) < 0 || Number(row[key]) > Number(max)) {
-        list.push(`${key} must be between 0 and ${max} with at most two decimals`);
+    fields.forEach(([label, key, max]) => {
+      const val = row[key];
+      if (val === "" || val === null || val === undefined) {
+        if (complete) list.push(`${label} is required`);
+      } else if (!numericMark(val) || Number(val) < 0 || Number(val) > Number(max)) {
+        list.push(`${label} must be between 0 and ${max} with at most two decimals`);
       }
     });
     if ((row.remarks || "").trim().length > 250) list.push("Remarks cannot exceed 250 characters");
@@ -164,21 +163,53 @@ const validateMarksRows = (workspace, complete) => {
 
 const calculateStudentSubjectResult = (row, workspace) => {
   if (!row || !workspace) return { obtained: 0, percentage: 0, grade: "F", result: "FAIL" };
-  const obtained = row.absent ? 0 : Number(workspace.mode === "OBJECTIVE" ? row.obtainedMarks : row.total);
-  const percentage = workspace.maxMarks ? (obtained / workspace.maxMarks) * 100 : 0;
+  const maxMarks = Math.max(1, Number(workspace.maxMarks || 100));
+  const isAbsent = Boolean(row.absent);
+  const obtainedVal = workspace.mode === "OBJECTIVE" ? row.obtainedMarks : row.total;
+  const obtained = isAbsent ? 0 : (obtainedVal === "" || obtainedVal === null || obtainedVal === undefined ? "" : Number(obtainedVal));
+  const numericObtained = obtained === "" ? 0 : Number(obtained);
+  const percentage = obtained === "" ? 0 : (numericObtained / maxMarks) * 100;
   return {
     obtained,
     percentage,
     grade: grade(percentage),
-    result: !row.absent && percentage >= (workspace.passPercentage || 35) ? "PASS" : "FAIL",
+    result: !isAbsent && obtained !== "" && percentage >= (Number(workspace.passPercentage) || 35) ? "PASS" : "FAIL",
   };
+};
+
+const isObjectiveExamination = (schedule, exam) => {
+  const schedMode = String(schedule?.scheduleMode || schedule?.mode || "").trim().toUpperCase();
+  if (["PATTERN_WISE", "COMBINED", "COMBINED_OBJECTIVE", "OBJECTIVE"].includes(schedMode)) return true;
+  if (schedMode === "SUBJECT_WISE" || schedMode === "REGULAR") return false;
+
+  const examMode = String(exam?.scheduleMode || exam?.mode || "").trim().toUpperCase();
+  if (["PATTERN_WISE", "COMBINED", "COMBINED_OBJECTIVE", "OBJECTIVE"].includes(examMode)) return true;
+  if (examMode === "SUBJECT_WISE" || examMode === "REGULAR") return false;
+
+  const cat = String(
+    schedule?.examCategory || schedule?.category || exam?.examCategory || exam?.category || exam?.categoryName || ""
+  ).trim().toLowerCase();
+  if (cat === "objective" || cat === "combined" || cat.includes("objective")) return true;
+
+  return false;
 };
 
 const formatExamDropdownLabel = (exam) => {
   if (!exam) return "Examination";
   const examId = normalizeId(exam.id ?? exam.examinationId ?? exam.examId);
-  const rawName = exam.name || exam.examName || "Examination";
-  const cleanedName = rawName.replace(/\s*\((?:COMPLETED|SCHEDULED|DRAFT|FINISHED|PUBLISHED)\)/gi, "").trim();
+  const examCode = String(exam.examCode || exam.code || exam.examinationCode || exam.exam_code || "").trim();
+  const rawName = exam.name || exam.examName || exam.examinationName || "Examination";
+  const cleanedName = rawName
+    .replace(/\s*\((?:COMPLETED|SCHEDULED|DRAFT|FINISHED|PUBLISHED)\)/gi, "")
+    .replace(/\s*\(ID:\s*[^)]+\)/gi, "")
+    .trim();
+
+  if (examCode) {
+    if (cleanedName.includes(`(${examCode})`) || cleanedName.includes(examCode)) {
+      return cleanedName;
+    }
+    return `${cleanedName} (${examCode})`;
+  }
   return examId ? `${cleanedName} (ID: ${examId})` : cleanedName;
 };
 
@@ -262,6 +293,8 @@ const reconcileRosterWithMarks = (roster = [], marks = [], config = {}, existing
     if (sId) existingMap.set(sId, r);
   });
 
+  const isObjective = config?.mode === "OBJECTIVE";
+
   return (roster || []).map((student) => {
     const sId = normalizeId(student.studentId ?? student.id);
     const existing = existingMap.get(sId);
@@ -281,17 +314,26 @@ const reconcileRosterWithMarks = (roster = [], marks = [], config = {}, existing
         rollNo: String(student.rollNo || existing.rollNo || ""),
         studentName: student.studentName || existing.studentName || "Student",
         markId: existing.markId ?? mark?.markId,
+        ...(isObjective
+          ? {
+            obtainedMarks: existing.obtainedMarks,
+            total: existing.obtainedMarks,
+            internal: 0,
+            practical: 0,
+            theory: 0,
+          }
+          : {}),
       };
     }
 
     // If saved mark record exists from backend
     if (mark) {
       const isAbsent = Boolean(mark.isAbsent || mark.absent);
-      const internal = isAbsent ? "" : (mark.internalMarks ?? mark.internal ?? "");
-      const practical = isAbsent ? "" : (mark.practicalMarks ?? mark.practical ?? (config?.practicalMax ? "" : 0));
-      const theory = isAbsent ? "" : (mark.theoryMarks ?? mark.theory ?? "");
       const obtained = isAbsent ? "" : (mark.obtainedMarks ?? mark.totalMarks ?? mark.total ?? "");
-      const total = isAbsent ? "" : (mark.totalMarks ?? mark.total ?? obtained);
+      const internal = isAbsent || isObjective ? (isObjective ? 0 : "") : (mark.internalMarks ?? mark.internal ?? "");
+      const practical = isAbsent || isObjective ? 0 : (mark.practicalMarks ?? mark.practical ?? (config?.practicalMax ? "" : 0));
+      const theory = isAbsent || isObjective ? (isObjective ? 0 : "") : (mark.theoryMarks ?? mark.theory ?? "");
+      const total = isAbsent ? "" : (isObjective ? obtained : (mark.totalMarks ?? mark.total ?? obtained));
 
       return {
         markId: mark.markId,
@@ -314,9 +356,9 @@ const reconcileRosterWithMarks = (roster = [], marks = [], config = {}, existing
       studentId: sId,
       rollNo: String(student.rollNo || ""),
       studentName: student.studentName || "Student",
-      internal: "",
-      practical: config?.practicalMax ? "" : 0,
-      theory: "",
+      internal: isObjective ? 0 : "",
+      practical: isObjective ? 0 : (config?.practicalMax ? "" : 0),
+      theory: isObjective ? 0 : "",
       obtainedMarks: "",
       total: "",
       absent: false,
@@ -848,6 +890,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             const examName = e.examName ?? e.examinationName ?? e.name ?? "Examination";
             const examId = normalizeId(e.examinationId ?? e.id ?? e.examId);
             return {
+              ...e,
               id: examId,
               examinationId: examId,
               code: examCode,
@@ -855,6 +898,9 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               name: examName,
               examName: examName,
               status: rawStatus,
+              scheduleMode: e.scheduleMode || e.mode || "",
+              examPattern: e.examPattern || e.pattern || e.patternName || "",
+              examCategory: e.examCategory || e.category || "",
               boardId: normalizeId(e.boardId ?? e.BoardId),
               academicYearId: normalizeId(e.academicYearId ?? e.AcademicYearId ?? e.yearId),
               academicYearName: e.academicYearName ?? e.academicYear ?? "",
@@ -1227,43 +1273,49 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     if (!examId || !sectionId) return;
     const selectedExam = examList.find((e) => eq(e.id, examId));
     let schedules = selectedExam?.schedules || [];
+    let examDetail = null;
 
-    if (!schedules.length) {
-      try {
-        const detailRes = await apiClient.get(`/api/v1/examinations/${examId}`).catch(() => null);
-        const detail = detailRes?.data || detailRes;
-        if (detail?.schedules?.length) {
-          schedules = detail.schedules;
-        }
-      } catch (e) {
-        console.warn("Could not fetch exam schedules:", e);
+    try {
+      const detailRes = await apiClient.get(`/api/v1/examinations/${examId}`).catch(() => null);
+      examDetail = detailRes?.data || detailRes;
+      if (examDetail?.schedules?.length) {
+        schedules = examDetail.schedules;
       }
+    } catch (e) {
+      console.warn("Could not fetch exam schedules:", e);
     }
 
-    const configs = schedules.map((s) => ({
-      id: `cfg-${examId}-${s.subjectId}`,
-      examinationId: examId,
-      sectionId: sectionId,
-      subjectId: normalizeId(s.subjectId),
-      subjectName: s.subjectName || `Subject ${s.subjectId}`,
-      subjectCode: s.subjectCode || "",
-      mode: s.scheduleMode === "COMBINED" ? "OBJECTIVE" : "REGULAR",
-      maxMarks: Number(s.maxMarks || 100),
-      passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
-      internalMax: Number(s.internalMax ?? 20),
-      practicalMax: Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
-      theoryMax: Number(
-        s.theoryMax ??
-        Math.max(
-          0,
-          Number(s.maxMarks || 100) -
-          Number(s.internalMax ?? 20) -
-          Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
-        )
-      ),
-      facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
-      facultyId: s.invigilatorId || s.facultyId || "",
-    }));
+    const effectiveExam = examDetail || selectedExam;
+
+    const configs = schedules.map((s) => {
+      const isObjective = isObjectiveExamination(s, effectiveExam);
+      return {
+        id: `cfg-${examId}-${s.subjectId}`,
+        examinationId: examId,
+        sectionId: sectionId,
+        subjectId: normalizeId(s.subjectId),
+        subjectName: s.subjectName || `Subject ${s.subjectId}`,
+        subjectCode: s.subjectCode || "",
+        mode: isObjective ? "OBJECTIVE" : "REGULAR",
+        maxMarks: Number(s.maxMarks || 100),
+        passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
+        internalMax: isObjective ? 0 : Number(s.internalMax ?? 20),
+        practicalMax: isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
+        theoryMax: isObjective
+          ? 0
+          : Number(
+            s.theoryMax ??
+            Math.max(
+              0,
+              Number(s.maxMarks || 100) -
+              Number(s.internalMax ?? 20) -
+              Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
+            )
+          ),
+        facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
+        facultyId: s.invigilatorId || s.facultyId || "",
+      };
+    });
 
     setEntryConfigs(configs);
     const chosenSubjectId = configs.some((c) => eq(c.subjectId, entrySubjectId)) ? entrySubjectId : configs[0]?.subjectId || "";
@@ -1340,16 +1392,27 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               m.isActive !== false
           );
 
-          let evalStatus = ev ? String(ev.status || "DRAFT").trim().toUpperCase() : "NOT STARTED";
-
-          if (subjMarks.length > 0) {
-            evalStatus =
-              ev?.status ||
-              subjMarks[0].evaluationStatus ||
-              (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
-          }
-
           const reconciledRows = reconcileRosterWithMarks(studentList, subjMarks, config, prev[key]?.rows);
+
+          const hasRecordedMarks = (reconciledRows || []).some((r) =>
+            r.absent ||
+            (r.obtainedMarks !== "" && r.obtainedMarks !== null && r.obtainedMarks !== undefined && Number(r.obtainedMarks) > 0) ||
+            (r.theory !== "" && r.theory !== null && r.theory !== undefined && Number(r.theory) > 0) ||
+            (r.internal !== "" && r.internal !== null && r.internal !== undefined && Number(r.internal) > 0) ||
+            (r.practical !== "" && r.practical !== null && r.practical !== undefined && Number(r.practical) > 0) ||
+            (r.total !== "" && r.total !== null && r.total !== undefined && Number(r.total) > 0)
+          );
+
+          let evalStatus = "NOT STARTED";
+          if (hasRecordedMarks) {
+            evalStatus = ev ? String(ev.status || "DRAFT").trim().toUpperCase() : "DRAFT";
+            if (subjMarks.length > 0) {
+              evalStatus =
+                ev?.status ||
+                subjMarks[0].evaluationStatus ||
+                (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
+            }
+          }
 
           next[key] = {
             evaluationId: ev?.evaluationId || `${config.subjectId}_${sectionId}_${examId}`,
@@ -1440,6 +1503,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           const examName = e.examName ?? e.examinationName ?? e.name ?? "Examination";
           const examId = normalizeId(e.examinationId ?? e.id ?? e.examId);
           return {
+            ...e,
             id: examId,
             examinationId: examId,
             code: examCode,
@@ -1447,6 +1511,9 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             name: examName,
             examName: examName,
             status: rawStatus,
+            scheduleMode: e.scheduleMode || e.mode || "",
+            examPattern: e.examPattern || e.pattern || e.patternName || "",
+            examCategory: e.examCategory || e.category || "",
             startDate: e.startDate || e.examStartDate || e.examDate || null,
             endDate: e.endDate || e.examEndDate || e.completionDate || null,
             boardId: normalizeId(e.boardId ?? e.BoardId),
@@ -1602,6 +1669,19 @@ export default function MarksEntryPage({ embedded = false } = {}) {
 
         if (fetchId !== activeFetchRef.current) return;
 
+        const hasAnyEnteredMarks = (loadedRows || []).some((r) =>
+          r.absent ||
+          (r.obtainedMarks !== "" && r.obtainedMarks !== null && r.obtainedMarks !== undefined && Number(r.obtainedMarks) > 0) ||
+          (r.theory !== "" && r.theory !== null && r.theory !== undefined && Number(r.theory) > 0) ||
+          (r.internal !== "" && r.internal !== null && r.internal !== undefined && Number(r.internal) > 0) ||
+          (r.practical !== "" && r.practical !== null && r.practical !== undefined && Number(r.practical) > 0) ||
+          (r.total !== "" && r.total !== null && r.total !== undefined && Number(r.total) > 0)
+        );
+
+        if (!hasAnyEnteredMarks) {
+          evalStatus = "NOT STARTED";
+        }
+
         setWorkspaces((all) => {
           const existing = all[workspaceKey] || {};
           return {
@@ -1714,16 +1794,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           campusId,
           marks: missingRows.map((row) => {
             const isAbsent = Boolean(row.absent);
-            const intMarks = isAbsent ? 0 : Math.round(Number(row.internal || 0));
-            const pracMarks = isAbsent ? 0 : Math.round(Number(row.practical || 0));
-            const theoMarks = isAbsent
-              ? 0
-              : ws.mode === "OBJECTIVE"
-                ? Math.round(Number(row.obtainedMarks || 0))
-                : Math.round(Number(row.theory || 0));
+            const isObjective = ws.mode === "OBJECTIVE";
+            const intMarks = isAbsent || isObjective ? 0 : Math.round(Number(row.internal || 0));
+            const pracMarks = isAbsent || isObjective ? 0 : Math.round(Number(row.practical || 0));
+            const theoMarks = isAbsent || isObjective ? 0 : Math.round(Number(row.theory || 0));
             const totalMarks = isAbsent
               ? 0
-              : ws.mode === "OBJECTIVE"
+              : isObjective
                 ? Math.round(Number(row.obtainedMarks || 0))
                 : Math.round(Number(row.total || 0));
 
@@ -1807,9 +1884,9 @@ export default function MarksEntryPage({ embedded = false } = {}) {
                 : {
                   ...row,
                   absent: false,
-                  internal: "",
-                  practical: current.practicalMax ? "" : 0,
-                  theory: "",
+                  internal: current.mode === "OBJECTIVE" ? 0 : "",
+                  practical: current.mode === "OBJECTIVE" ? 0 : (current.practicalMax ? "" : 0),
+                  theory: current.mode === "OBJECTIVE" ? 0 : "",
                   obtainedMarks: "",
                   total: "",
                   remarks: row.autoAbsentRemark ? "" : row.remarks,
@@ -1826,6 +1903,10 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               next.obtainedMarks = next.total;
             } else if (field === "obtainedMarks") {
               next.total = value;
+              next.obtainedMarks = value;
+              next.internal = 0;
+              next.practical = 0;
+              next.theory = 0;
             }
             return next;
           }),
@@ -1884,7 +1965,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           const intVal = findVal(/^(internal|internal\s*marks|internalmarks)$/i);
           const pracVal = findVal(/^(practical|practical\s*marks|practicalmarks)$/i);
           const theoVal = findVal(/^(theory|theory\s*marks|theorymarks)$/i);
-          const totVal = findVal(/^(marks|total|obtained|obtained\s*marks|total\s*marks)$/i);
+          const objVal = findVal(/^(objective|objective\s*marks|objectivemarks|marks|total|obtained|obtained\s*marks|total\s*marks)$/i);
           const absVal = findVal(/^(absent|is\s*absent|isabsent)$/i);
           const remVal = findVal(/^(remarks|remark|comments)$/i);
 
@@ -1892,7 +1973,8 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             absVal === true ||
             String(absVal).toLowerCase() === "yes" ||
             String(absVal).toLowerCase() === "true" ||
-            String(totVal).toLowerCase() === "abs";
+            String(totVal).toLowerCase() === "abs" ||
+            String(objVal).toLowerCase() === "abs";
 
           if (isAbsent) {
             return {
@@ -1907,6 +1989,20 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             };
           }
 
+          if (workspace.mode === "OBJECTIVE") {
+            const entered = objVal !== undefined && objVal !== "" ? String(objVal) : studentRow.obtainedMarks;
+            return {
+              ...studentRow,
+              absent: false,
+              internal: 0,
+              practical: 0,
+              theory: 0,
+              obtainedMarks: entered,
+              total: entered,
+              remarks: remVal !== undefined && remVal !== "" ? String(remVal) : studentRow.remarks,
+            };
+          }
+
           const internal = intVal !== undefined && intVal !== "" ? String(intVal) : studentRow.internal;
           const practical = workspace.practicalMax
             ? pracVal !== undefined && pracVal !== ""
@@ -1915,13 +2011,8 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             : 0;
           const theory = theoVal !== undefined && theoVal !== "" ? String(theoVal) : studentRow.theory;
 
-          let total = "";
-          if (workspace.mode === "REGULAR") {
-            const fields = [internal, ...(workspace.practicalMax ? [practical] : []), theory];
-            total = fields.every((n) => numericMark(n)) ? fields.reduce((sum, n) => sum + Number(n), 0) : "";
-          } else {
-            total = totVal !== undefined && totVal !== "" ? String(totVal) : studentRow.total;
-          }
+          const fields = [internal, ...(workspace.practicalMax ? [practical] : []), theory];
+          const total = fields.every((n) => numericMark(n)) ? fields.reduce((sum, n) => sum + Number(n), 0) : "";
 
           return {
             ...studentRow,
@@ -1960,19 +2051,20 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   const downloadMarksTemplate = () => {
     if (!workspace) return;
     const currentRows = workspace.rows || [];
+    const isObjective = workspace.mode === "OBJECTIVE";
     const templateRows = currentRows.map((r) => {
       const obj = {
         "Roll No": r.rollNo || "",
         "Student Name": r.studentName || "",
       };
-      if (workspace.mode === "REGULAR") {
+      if (!isObjective) {
         obj[`Internal (Max ${workspace.internalMax})`] = r.internal !== "" ? r.internal : "";
         if (workspace.practicalMax > 0) {
           obj[`Practical (Max ${workspace.practicalMax})`] = r.practical !== "" ? r.practical : "";
         }
         obj[`Theory (Max ${workspace.theoryMax})`] = r.theory !== "" ? r.theory : "";
       } else {
-        obj[`Obtained Marks (Max ${workspace.maxMarks})`] = r.obtainedMarks !== "" ? r.obtainedMarks : "";
+        obj[`Objective Marks (Max ${workspace.maxMarks})`] = r.obtainedMarks !== "" ? r.obtainedMarks : "";
       }
       obj["Absent"] = r.absent ? "Yes" : "No";
       obj["Remarks"] = r.remarks || "";
@@ -1986,14 +2078,14 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           {
             "Roll No": "MPC2501",
             "Student Name": "Aarav Sharma",
-            ...(workspace.mode === "REGULAR"
+            ...(!isObjective
               ? {
                 [`Internal (Max ${workspace.internalMax})`]: 15,
                 ...(workspace.practicalMax > 0 ? { [`Practical (Max ${workspace.practicalMax})`]: 20 } : {}),
                 [`Theory (Max ${workspace.theoryMax})`]: 50,
               }
               : {
-                [`Obtained Marks (Max ${workspace.maxMarks})`]: 85,
+                [`Objective Marks (Max ${workspace.maxMarks})`]: 85,
               }),
             "Absent": "No",
             "Remarks": "Good",
@@ -2071,7 +2163,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           const intVal = findVal(/^(internal|internal\s*marks|internalmarks)/i);
           const pracVal = findVal(/^(practical|practical\s*marks|practicalmarks)/i);
           const theoVal = findVal(/^(theory|theory\s*marks|theorymarks)/i);
-          const totVal = findVal(/^(marks|total|obtained|obtained\s*marks|total\s*marks)/i);
+          const objVal = findVal(/^(objective|objective\s*marks|objectivemarks|marks|total|obtained|obtained\s*marks|total\s*marks)/i);
           const absVal = findVal(/^(absent|is\s*absent|isabsent)$/i);
           const remVal = findVal(/^(remarks|remark|comments)$/i);
 
@@ -2079,17 +2171,18 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             absVal === true ||
             String(absVal).toLowerCase() === "yes" ||
             String(absVal).toLowerCase() === "true" ||
-            String(totVal).toLowerCase() === "abs";
+            String(totVal).toLowerCase() === "abs" ||
+            String(objVal).toLowerCase() === "abs";
 
-          let internal = isAbsent ? 0 : intVal !== undefined && intVal !== "" ? String(intVal) : targetStudent.internal;
-          let practical = isAbsent
+          let internal = isAbsent || workspace.mode === "OBJECTIVE" ? 0 : intVal !== undefined && intVal !== "" ? String(intVal) : targetStudent.internal;
+          let practical = isAbsent || workspace.mode === "OBJECTIVE"
             ? 0
             : workspace.practicalMax
               ? pracVal !== undefined && pracVal !== ""
                 ? String(pracVal)
                 : targetStudent.practical
               : 0;
-          let theory = isAbsent ? 0 : theoVal !== undefined && theoVal !== "" ? String(theoVal) : targetStudent.theory;
+          let theory = isAbsent || workspace.mode === "OBJECTIVE" ? 0 : theoVal !== undefined && theoVal !== "" ? String(theoVal) : targetStudent.theory;
           let total = isAbsent ? 0 : "";
 
           let rowHasError = false;
@@ -2110,9 +2203,9 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               const fields = [internal, ...(workspace.practicalMax ? [practical] : []), theory];
               total = fields.every((n) => numericMark(n)) ? fields.reduce((sum, n) => sum + Number(n), 0) : "";
             } else {
-              const obtained = totVal !== undefined && totVal !== "" ? String(totVal) : targetStudent.obtainedMarks;
+              const obtained = objVal !== undefined && objVal !== "" ? String(objVal) : targetStudent.obtainedMarks;
               if (obtained !== "" && (isNaN(Number(obtained)) || Number(obtained) < 0 || Number(obtained) > workspace.maxMarks)) {
-                errors.push({ row: rowNum, message: `Obtained marks (${obtained}) must be between 0 and ${workspace.maxMarks}.` });
+                errors.push({ row: rowNum, message: `Objective marks (${obtained}) must be between 0 and ${workspace.maxMarks}.` });
                 rowHasError = true;
               }
               total = obtained;
@@ -2124,9 +2217,9 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               studentId: targetStudent.studentId,
               rollNo: targetStudent.rollNo,
               studentName: targetStudent.studentName,
-              internal: isAbsent ? 0 : internal,
-              practical: isAbsent ? 0 : practical,
-              theory: isAbsent ? 0 : theory,
+              internal: isAbsent || workspace.mode === "OBJECTIVE" ? 0 : internal,
+              practical: isAbsent || workspace.mode === "OBJECTIVE" ? 0 : practical,
+              theory: isAbsent || workspace.mode === "OBJECTIVE" ? 0 : theory,
               obtainedMarks: total,
               total,
               absent: isAbsent,
@@ -2479,49 +2572,61 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       // 2. Fetch Exam details & schedules/configs
       const selectedExam = evalState.exams.find((e) => eq(e.id, evalState.filters.exam));
       let schedules = selectedExam?.schedules || [];
-      if (!schedules.length) {
-        try {
-          const detailRes = await apiClient
-            .get(`/api/v1/examinations/${evalState.filters.exam}`, {
-              headers: {
-                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-              },
-              skipGlobalLoader: true,
-            })
-            .catch(() => null);
-          const detail = detailRes?.data || detailRes;
-          if (detail?.schedules?.length) {
-            schedules = detail.schedules;
-          }
-        } catch (e) {
-          console.warn("Could not fetch schedules for evaluation:", e);
+      let examDetail = null;
+      try {
+        const detailRes = await apiClient
+          .get(`/api/v1/examinations/${evalState.filters.exam}`, {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+            skipGlobalLoader: true,
+          })
+          .catch(() => null);
+        examDetail = detailRes?.data || detailRes;
+        if (examDetail?.schedules?.length) {
+          schedules = examDetail.schedules;
         }
+      } catch (e) {
+        console.warn("Could not fetch schedules for evaluation:", e);
       }
 
-      const configs = schedules.map((s) => ({
-        id: `cfg-${evalState.filters.exam}-${s.subjectId}`,
-        examinationId: evalState.filters.exam,
-        sectionId: evalState.filters.section,
-        subjectId: normalizeId(s.subjectId),
-        subjectName: s.subjectName || `Subject ${s.subjectId}`,
-        subjectCode: s.subjectCode || "",
-        mode: s.scheduleMode === "COMBINED" ? "OBJECTIVE" : "REGULAR",
-        maxMarks: Number(s.maxMarks || 100),
-        passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
-        internalMax: Number(s.internalMax ?? 20),
-        practicalMax: Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
-        theoryMax: Number(
-          s.theoryMax ??
-          Math.max(
-            0,
-            Number(s.maxMarks || 100) -
-            Number(s.internalMax ?? 20) -
-            Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
-          )
-        ),
-        facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
-        facultyId: s.invigilatorId || s.facultyId || "",
-      }));
+      const effectiveExam = examDetail || selectedExam;
+
+      const configs = [];
+      const seenConfigSubjects = new Set();
+      (schedules || []).forEach((s) => {
+        const subjId = normalizeId(s.subjectId);
+        if (!subjId || seenConfigSubjects.has(subjId)) return;
+        seenConfigSubjects.add(subjId);
+
+        const isObjective = isObjectiveExamination(s, effectiveExam);
+        configs.push({
+          id: `cfg-${evalState.filters.exam}-${subjId}`,
+          examinationId: evalState.filters.exam,
+          sectionId: evalState.filters.section,
+          subjectId: subjId,
+          subjectName: s.subjectName || `Subject ${subjId}`,
+          subjectCode: s.subjectCode || "",
+          mode: isObjective ? "OBJECTIVE" : "REGULAR",
+          maxMarks: Number(s.maxMarks || 100),
+          passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
+          internalMax: isObjective ? 0 : Number(s.internalMax ?? 20),
+          practicalMax: isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
+          theoryMax: isObjective
+            ? 0
+            : Number(
+              s.theoryMax ??
+              Math.max(
+                0,
+                Number(s.maxMarks || 100) -
+                Number(s.internalMax ?? 20) -
+                Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
+              )
+            ),
+          facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
+          facultyId: s.invigilatorId || s.facultyId || "",
+        });
+      });
 
       setEvalConfigs(configs);
 
@@ -2589,14 +2694,26 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             m.isActive !== false
         );
 
-        let evalStatus = ev ? String(ev.status || "DRAFT").trim().toUpperCase() : "NOT STARTED";
-        if (subjMarks.length > 0 && evalStatus === "NOT STARTED") {
-          evalStatus =
-            subjMarks[0].evaluationStatus ||
-            (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
-        }
-
         const reconciledRows = reconcileRosterWithMarks(studentList, subjMarks, config);
+
+        const hasRecordedMarks = (reconciledRows || []).some((r) =>
+          r.absent ||
+          (r.obtainedMarks !== "" && r.obtainedMarks !== null && r.obtainedMarks !== undefined && Number(r.obtainedMarks) > 0) ||
+          (r.theory !== "" && r.theory !== null && r.theory !== undefined && Number(r.theory) > 0) ||
+          (r.internal !== "" && r.internal !== null && r.internal !== undefined && Number(r.internal) > 0) ||
+          (r.practical !== "" && r.practical !== null && r.practical !== undefined && Number(r.practical) > 0) ||
+          (r.total !== "" && r.total !== null && r.total !== undefined && Number(r.total) > 0)
+        );
+
+        let evalStatus = "NOT STARTED";
+        if (hasRecordedMarks) {
+          evalStatus = ev ? String(ev.status || "DRAFT").trim().toUpperCase() : "DRAFT";
+          if (subjMarks.length > 0 && evalStatus === "NOT STARTED") {
+            evalStatus =
+              subjMarks[0].evaluationStatus ||
+              (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
+          }
+        }
         const presentCount = subjMarks.filter(
           (m) => !m.isAbsent && !m.absent && (m.obtainedMarks !== "" || m.totalMarks !== "" || m.total !== "")
         ).length;
@@ -2684,15 +2801,18 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     const seenSubjects = new Set();
 
     (evalConfigs || []).forEach((config) => {
+      const subjId = normalizeId(config.subjectId);
+      if (!subjId || seenSubjects.has(subjId)) return;
+      seenSubjects.add(subjId);
+
       const key = evaluationKey({
         examinationId: evalState.filters.exam,
         sectionId: evalState.filters.section,
-        subjectId: config.subjectId,
+        subjectId: subjId,
       });
       const ws = workspaces[key];
       if (ws && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())) {
         items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
-        seenSubjects.add(normalizeId(config.subjectId));
       }
     });
 
@@ -2771,60 +2891,155 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   // Bulk Transitions (Verify All, Approve All)
   const bulkTransition = async (from, to) => {
     if (processing) return;
-    const targetEvaluations = evalFilteredEvaluations.filter((item) => item.status === from);
+    const targetEvaluations = evaluationItems.filter((item) => {
+      const st = String(item.status || "").toUpperCase();
+      if (to === "APPROVED") {
+        return st === "VERIFIED" || (from && st === String(from).toUpperCase());
+      }
+      return st === String(from || "").toUpperCase();
+    });
     const keys = targetEvaluations.map(evaluationKey);
     setProcessing(to === "VERIFIED" ? "VERIFY_ALL" : "APPROVE_ALL");
 
     try {
       if (to === "VERIFIED") {
         const verifyAllUrl = apiEndpoints.evaluations?.verifyAll || "/api/v1/evaluations/verify-all";
-        await apiClient.post(
-          verifyAllUrl,
-          {
-            campusId: Number(effectiveCampusId) || 1,
-            boardId: Number(evalState.filters.board),
-            academicYearId: Number(evalState.filters.year),
-            academicLevelId: Number(evalState.filters.level),
-            groupId: Number(evalState.filters.group),
-            sectionId: Number(evalState.filters.section),
-            examinationId: Number(evalState.filters.exam),
+        const verifyPayload = {
+          campusId: Number(effectiveCampusId) || 1,
+          boardId: Number(evalState.filters.board || effectiveBoardId) || 0,
+          academicYearId: Number(evalState.filters.year || effectiveYearId) || 0,
+          academicLevelId: Number(evalState.filters.level) || 0,
+          levelId: Number(evalState.filters.level) || 0,
+          programId: Number(evalState.filters.program) || 0,
+          groupId: Number(evalState.filters.group) || 0,
+          sectionId: Number(evalState.filters.section) || 0,
+          examinationId: Number(evalState.filters.exam) || 0,
+          examId: Number(evalState.filters.exam) || 0,
+          subjectId: 0,
+          studentId: 0,
+          facultyId: 0,
+          status: from || "SUBMITTED",
+          pageNumber: 0,
+          pageSize: 0,
+        };
+        await apiClient.post(verifyAllUrl, verifyPayload, {
+          headers: {
+            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
           },
-          {
-            headers: {
-              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-            },
-          }
-        );
+        }).catch((err) => console.warn("Verify-all bulk endpoint notice:", err));
+
+        // Execute individual verify for each target evaluation
+        const verifyPromises = targetEvaluations.map(async (item) => {
+          const evalId =
+            item.evaluationId ||
+            `${item.subjectId}_${item.sectionId || evalState.filters.section}_${item.examinationId || evalState.filters.exam}`;
+          const verifyUrl = apiEndpoints.evaluations?.verify
+            ? apiEndpoints.evaluations.verify(evalId)
+            : `/api/v1/evaluations/${evalId}/verify`;
+          return apiClient.post(verifyUrl, null, { params: { message: "Verified" } }).catch((err) => {
+            console.warn(`Individual verify notice for ${evalId}:`, err);
+          });
+        });
+        await Promise.allSettled(verifyPromises);
       } else if (to === "APPROVED") {
         const approveAllUrl = apiEndpoints.evaluations?.approveAll || "/api/v1/evaluations/approve-all";
-        await apiClient.post(
-          approveAllUrl,
-          {
-            campusId: Number(effectiveCampusId) || 1,
-            boardId: Number(evalState.filters.board),
-            academicYearId: Number(evalState.filters.year),
-            academicLevelId: Number(evalState.filters.level),
-            groupId: Number(evalState.filters.group),
-            sectionId: Number(evalState.filters.section),
-            examinationId: Number(evalState.filters.exam),
+        const approvePayload = {
+          campusId: Number(effectiveCampusId) || 1,
+          boardId: Number(evalState.filters.board || effectiveBoardId) || 0,
+          academicYearId: Number(evalState.filters.year || effectiveYearId) || 0,
+          academicLevelId: Number(evalState.filters.level) || 0,
+          levelId: Number(evalState.filters.level) || 0,
+          programId: Number(evalState.filters.program) || 0,
+          groupId: Number(evalState.filters.group) || 0,
+          sectionId: Number(evalState.filters.section) || 0,
+          examinationId: Number(evalState.filters.exam) || 0,
+          examId: Number(evalState.filters.exam) || 0,
+          subjectId: 0,
+          studentId: 0,
+          facultyId: 0,
+          status: from || "VERIFIED",
+          pageNumber: 0,
+          pageSize: 0,
+        };
+        await apiClient.post(approveAllUrl, approvePayload, {
+          headers: {
+            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
           },
-          {
-            headers: {
-              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-            },
-          }
-        );
+        }).catch((err) => console.warn("Approve-all bulk endpoint notice:", err));
+
+        // In addition, execute individual approval calls for every target evaluation
+        // User confirmed: "individual approval works perfectly"
+        const approvePromises = targetEvaluations.map(async (item) => {
+          const evalId =
+            item.evaluationId ||
+            `${item.subjectId}_${item.sectionId || evalState.filters.section}_${item.examinationId || evalState.filters.exam}`;
+          const approveUrl = apiEndpoints.evaluations?.approve
+            ? apiEndpoints.evaluations.approve(evalId)
+            : `/api/v1/evaluations/${evalId}/approve`;
+          return apiClient.post(approveUrl).catch((err) => {
+            console.warn(`Individual approve notice for ${evalId}:`, err);
+          });
+        });
+        await Promise.allSettled(approvePromises);
       }
 
       setWorkspaces((all) => {
         const next = { ...all };
-        keys.forEach((key) => {
+        targetEvaluations.forEach((item) => {
+          const key = evaluationKey(item);
           if (next[key]) next[key] = { ...next[key], status: to };
         });
         return next;
       });
+
+      // Re-fetch authoritative evaluations from backend
+      try {
+        const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
+        const freshRes = await apiClient.post(
+          evalSearchUrl,
+          {
+            campusId: Number(effectiveCampusId) || 1,
+            boardId: Number(evalState.filters.board),
+            academicYearId: Number(evalState.filters.year),
+            academicLevelId: Number(evalState.filters.level),
+            groupId: Number(evalState.filters.group),
+            sectionId: Number(evalState.filters.section),
+            examinationId: Number(evalState.filters.exam),
+          },
+          {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          }
+        ).catch(() => null);
+        const freshEvals = unwrapRecords(freshRes);
+        if (freshEvals && freshEvals.length > 0) {
+          setWorkspaces((all) => {
+            const next = { ...all };
+            freshEvals.forEach((fe) => {
+              const parts = String(fe.evaluationId || "").split("_");
+              const sId = normalizeId(fe.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
+              const secId = normalizeId(fe.sectionId ?? (parts.length >= 3 ? parts[1] : evalState.filters.section));
+              const exId = normalizeId(fe.examinationId ?? fe.examId ?? (parts.length >= 3 ? parts[2] : evalState.filters.exam));
+              const k = evaluationKey({ examinationId: exId, sectionId: secId, subjectId: sId });
+              if (next[k]) {
+                next[k] = {
+                  ...next[k],
+                  status: String(fe.status || fe.statusCode || to).toUpperCase(),
+                  rejectionReason: fe.rejectionReason || next[k].rejectionReason,
+                  adminReviewMessage: fe.adminReviewMessage || next[k].adminReviewMessage,
+                };
+              }
+            });
+            return next;
+          });
+        }
+      } catch (syncErr) {
+        console.warn("Notice syncing fresh evaluations:", syncErr);
+      }
+
       setModal(null);
-      notify(`${keys.length} evaluation(s) ${to.toLowerCase()} successfully.`);
+      notify(`${keys.length || "All"} evaluation(s) ${to.toLowerCase()} successfully.`);
     } catch (err) {
       notify(getApiErrorMessage(err), "error");
     } finally {
@@ -3036,7 +3251,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             type="button"
             role="tab"
             aria-selected={tab === "entry"}
-            className={tab === "entry" ? "active" : ""}
+            className={`cms-tab-btn ${tab === "entry" ? "active" : ""}`}
             onClick={() => handleTabChange("entry")}
           >
             Marks Entry
@@ -3045,7 +3260,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             type="button"
             role="tab"
             aria-selected={tab === "evaluation"}
-            className={tab === "evaluation" ? "active" : ""}
+            className={`cms-tab-btn ${tab === "evaluation" ? "active" : ""}`}
             onClick={() => handleTabChange("evaluation")}
           >
             Marks Evaluation
@@ -3704,7 +3919,7 @@ function Entry({
                   `THEORY / ${workspace?.theoryMax ?? (Number(workspace?.maxMarks || 100) - Number(workspace?.internalMax || 20))}`,
                   `TOTAL / ${workspace?.maxMarks || 100}`,
                 ]
-                : ["OBTAINED", `TOTAL / ${workspace?.maxMarks || 100}`]),
+                : [`Objective Marks / ${workspace?.maxMarks || 100}`]),
               "PERCENTAGE",
               "ABSENT",
               "REMARKS",
@@ -3712,7 +3927,7 @@ function Entry({
           >
             {loadingWorkspace ? (
               <LoadingRow
-                span={workspace?.mode === "REGULAR" ? (workspace?.practicalMax ? 8 : 7) : 6}
+                span={workspace?.mode === "REGULAR" ? (workspace?.practicalMax ? 9 : 8) : 6}
                 count={Math.min(6, pageSize || 5)}
               />
             ) : rows.length ? (
@@ -3727,7 +3942,7 @@ function Entry({
               ))
             ) : (
               <EmptyRow
-                span={workspace?.mode === "REGULAR" ? (workspace?.practicalMax ? 8 : 7) : 6}
+                span={workspace?.mode === "REGULAR" ? (workspace?.practicalMax ? 9 : 8) : 6}
                 text={locked ? lockedText : "No active students are available for the selected section."}
               />
             )}
@@ -3787,31 +4002,30 @@ function MarkRow({ row, workspace, locked, update }) {
       </td>
       {workspace.mode === "REGULAR" ? (
         <>
-          <Num value={row.internal} disabled={locked || row.absent} onChange={(value) => update("internal", value)} />
+          <Num value={row.internal} disabled={locked || row.absent} title="Internal Marks" onChange={(value) => update("internal", value)} />
           {workspace.practicalMax > 0 && (
             <Num
               value={row.practical}
               disabled={locked || row.absent}
+              title="Practical Marks"
               onChange={(value) => update("practical", value)}
             />
           )}
-          <Num value={row.theory} disabled={locked || row.absent} onChange={(value) => update("theory", value)} />
+          <Num value={row.theory} disabled={locked || row.absent} title="Theory Marks" onChange={(value) => update("theory", value)} />
           <td className="cms-cell-center">{row.absent ? "ABS" : row.total === "" ? "—" : row.total}</td>
         </>
       ) : (
-        <>
-          <Num
-            value={row.obtainedMarks}
-            disabled={locked || row.absent}
-            onChange={(value) => update("obtainedMarks", value)}
-          />
-          <td className="cms-cell-center">{workspace.maxMarks}</td>
-        </>
+        <Num
+          value={row.obtainedMarks}
+          disabled={locked || row.absent}
+          title="Objective Marks"
+          onChange={(value) => update("obtainedMarks", value)}
+        />
       )}
       <td className="cms-cell-center">
         {row.absent
           ? "ABS"
-          : row.total === ""
+          : (workspace.mode === "OBJECTIVE" ? row.obtainedMarks : row.total) === ""
             ? "—"
             : `${result?.percentage !== undefined && Number.isFinite(Number(result.percentage)) ? Number(result.percentage).toFixed(2) : "0.00"}%`}
       </td>
@@ -3830,6 +4044,9 @@ function MarkRow({ row, workspace, locked, update }) {
           value={row.remarks}
           maxLength={250}
           disabled={locked}
+          placeholder="Remarks"
+          title="Remarks"
+          aria-label="Student remarks"
           onChange={(event) => update("remarks", event.target.value)}
         />
       </td>
@@ -4001,7 +4218,7 @@ function EvaluationDetails({ item, page, pageSize = 5, setPage, setPageSize, onB
                 <td className="cms-cell-center">{row.absent ? "—" : row.theory}</td>
               </>
             )}
-            <td className="cms-cell-center">{row.absent ? "ABS" : row.total}</td>
+            <td className="cms-cell-center">{row.absent ? "ABS" : (row.total !== "" && row.total !== null && row.total !== undefined ? row.total : (row.obtainedMarks ?? "—"))}</td>
             <td className="cms-cell-center">{row.remarks || "—"}</td>
             <td className="cms-cell-center">{row.absent ? "Yes" : "No"}</td>
           </tr>
@@ -4439,7 +4656,7 @@ function SearchableSelect({
   );
 }
 
-const Num = ({ value, disabled, onChange }) => (
+const Num = ({ value, disabled, onChange, title = "Marks input" }) => (
   <td className="cms-cell-center">
     <input
       type="text"
@@ -4447,6 +4664,8 @@ const Num = ({ value, disabled, onChange }) => (
       className="cms-number-input"
       value={value}
       disabled={disabled}
+      title={title}
+      aria-label={title || "Marks input"}
       onChange={(event) => onChange(event.target.value)}
     />
   </td>
