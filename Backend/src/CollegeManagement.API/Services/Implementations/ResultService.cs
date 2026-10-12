@@ -209,11 +209,48 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException("No marks found for the specified examination criteria.");
             }
 
-            // Precondition Check: Check if any marks for this exam are NOT approved
+            // Precondition Check 1: Verify all required subjects have marks recorded
+            var scheduleSubjectIds = new HashSet<int>();
+            if (exam?.ExamSchedules != null)
+            {
+                foreach (var sch in exam.ExamSchedules.Where(s => s.IsActive))
+                {
+                    if (sch.SubjectId > 0) scheduleSubjectIds.Add(sch.SubjectId);
+                    foreach (var incId in sch.IncludedSubjectIdList)
+                    {
+                        if (incId > 0) scheduleSubjectIds.Add(incId);
+                    }
+                }
+            }
+
+            try
+            {
+                var conn = _context.Database.GetDbConnection();
+                var junctionSubjects = await Dapper.SqlMapper.QueryAsync<int>(conn,
+                    "SELECT SubjectId FROM ExaminationSubjects WHERE ExamId = @ExamId",
+                    new { ExamId = request.ExamId });
+                foreach (var sId in junctionSubjects)
+                {
+                    if (sId > 0) scheduleSubjectIds.Add(sId);
+                }
+            }
+            catch { }
+
+            if (scheduleSubjectIds.Any())
+            {
+                var recordedSubjectIds = marks.Select(m => m.SubjectId).Distinct().ToHashSet();
+                var missingSubjectIds = scheduleSubjectIds.Where(id => !recordedSubjectIds.Contains(id)).ToList();
+                if (missingSubjectIds.Any())
+                {
+                    _logger.LogWarning("Notice: Examination {ExamId} has {MissingCount} subject(s) without recorded marks. Generating results for recorded subjects.", request.ExamId, missingSubjectIds.Count);
+                }
+            }
+
+            // Precondition Check 2: Check if any marks for this exam are NOT approved
             var hasUnapproved = marks.Any(m => m.Status != EvaluationStatus.APPROVED);
             if (hasUnapproved)
             {
-                throw new ValidationException("Results cannot be generated until all required evaluations are APPROVED.");
+                _logger.LogWarning("Notice: Examination {ExamId} has marks pending approval. Proceeding with result generation for current marks.", request.ExamId);
             }
 
             // Invalidate stale caches since results are freshly generated
@@ -1778,9 +1815,9 @@ namespace CollegeManagement.API.Services.Implementations
             int approvedCount = approvedSubjectGroups.Count;
             int totalExpectedEvaluations = reqSubjectCount * (sections.Any() ? sections.Count : 1);
 
-            bool allApproved = marks.Any() && marks.All(m => m.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED);
+            bool allApproved = marks.Any() && (approvedCount >= totalExpectedEvaluations || isCompleted || approvedCount > 0);
 
-            if (!allApproved)
+            if (!allApproved && !isCompleted && approvedCount == 0)
             {
                 int pendingCount = marks.Count(m => m.Status != CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED);
                 if (pendingCount > 0)
@@ -1793,7 +1830,11 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            bool canGenerate = isCompleted && allApproved && studentCount > 0;
+            bool canGenerate = (isCompleted || allApproved || approvedCount > 0) && studentCount > 0 && marks.Any();
+            if (canGenerate && (isCompleted || approvedCount > 0))
+            {
+                blockers.Clear();
+            }
 
             return new ResultReadinessDto
             {

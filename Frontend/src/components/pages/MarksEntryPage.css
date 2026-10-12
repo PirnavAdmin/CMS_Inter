@@ -32,11 +32,12 @@
   box-shadow: none;
 }
 
-.cms-tabs button {
-  border: 0;
+.cms-tabs button,
+.cms-tab-btn {
+  border: 1.5px solid rgba(111, 132, 0, 0.35);
   border-radius: 10px;
-  padding: 8px 18px;
-  background: transparent;
+  padding: 7px 18px;
+  background: var(--cms-surface, #ffffff);
   color: var(--cms-muted, #555e54);
   font: inherit;
   font-size: 14px;
@@ -46,15 +47,47 @@
   white-space: nowrap;
 }
 
-.cms-tabs button:hover:not(.active) {
+.cms-tabs button:hover:not(.active),
+.cms-tab-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--cms-primary-soft, rgba(111, 132, 0, 0.08));
+  border-color: var(--cms-primary, #6f8400);
 }
 
-.cms-tabs button.active {
+.cms-tabs button.active,
+.cms-tab-btn.active {
   background: var(--cms-primary, #6f8400);
+  border-color: var(--cms-primary, #6f8400);
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.28);
+}
+
+[data-theme="dark"] .cms-tabs button,
+:root[data-theme="dark"] .cms-tabs button,
+[data-theme="dark"] .cms-tab-btn,
+:root[data-theme="dark"] .cms-tab-btn {
+  border: 1.5px solid rgba(135, 157, 25, 0.45);
+  background: var(--cms-surface, #1b2119);
+  color: var(--cms-muted, #949c8f);
+}
+
+[data-theme="dark"] .cms-tabs button:hover:not(.active),
+:root[data-theme="dark"] .cms-tabs button:hover:not(.active),
+[data-theme="dark"] .cms-tab-btn:hover:not(.active),
+:root[data-theme="dark"] .cms-tab-btn:hover:not(.active) {
+  color: var(--cms-text, #e8ece1);
+  background: var(--cms-primary-soft, rgba(135, 157, 25, 0.14));
+  border-color: var(--cms-primary, #879d19);
+}
+
+[data-theme="dark"] .cms-tabs button.active,
+:root[data-theme="dark"] .cms-tabs button.active,
+[data-theme="dark"] .cms-tab-btn.active,
+:root[data-theme="dark"] .cms-tab-btn.active {
+  background: var(--cms-primary, #879d19);
+  border-color: var(--cms-primary, #879d19);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(135, 157, 25, 0.38);
 }
 
 .cms-subtabs-row {
@@ -612,7 +645,7 @@
   align-items: center;
   gap: 4px;
   background: var(--cms-surface-subtle, #f5f6f0);
-  border: 1px solid var(--cms-border, #e2e4d8);
+  border: 1.5px solid rgba(111, 132, 0, 0.28);
   border-radius: 8px;
   padding: 3px;
 }
@@ -625,7 +658,7 @@
   font-size: 0.8rem;
   font-weight: 600;
   border-radius: 6px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--cms-muted, #5c645b);
   cursor: pointer;
@@ -635,14 +668,39 @@
 
 .cms-subtab-pill-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(111, 132, 0, 0.08);
 }
 
 .cms-subtab-pill-btn.active {
   background: var(--cms-primary, #6f8400);
+  border: 1px solid var(--cms-primary, #6f8400);
   color: #ffffff;
   font-weight: 700;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] .cms-subtab-pill-group,
+:root[data-theme="dark"] .cms-subtab-pill-group {
+  background: #171c15;
+  border: 1.5px solid rgba(135, 157, 25, 0.42);
+}
+
+[data-theme="dark"] .cms-subtab-pill-btn,
+:root[data-theme="dark"] .cms-subtab-pill-btn {
+  color: var(--cms-muted, #949c8f);
+}
+
+[data-theme="dark"] .cms-subtab-pill-btn:hover:not(.active),
+:root[data-theme="dark"] .cms-subtab-pill-btn:hover:not(.active) {
+  color: #f2f4ec;
+  background: rgba(135, 157, 25, 0.14);
+}
+
+[data-theme="dark"] .cms-subtab-pill-btn.active,
+:root[data-theme="dark"] .cms-subtab-pill-btn.active {
+  background: var(--cms-primary, #879d19);
+  border: 1px solid var(--cms-primary, #879d19);
+  color: #ffffff;
 }
 
 .cms-eval-search {
@@ -758,24 +816,38 @@
   height: 28px;
 }
 
+/* ---------- Marks Entry Table Inputs (Theme-Based Borders) ---------- */
 .cms-number-input {
   width: 76px;
   height: 32px;
   padding: 0 6px;
-  border: 1px solid var(--cms-border, #e6e7de);
+  border: 1.5px solid rgba(111, 132, 0, 0.45) !important;
   border-radius: 6px;
   text-align: center;
   font-weight: 600;
   font-size: 13px;
-  background: var(--cms-surface, #ffffff);
+  background: #ffffff !important;
   color: var(--cms-text, #171a17);
   box-sizing: border-box;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.cms-number-input:hover:not(:disabled) {
+  border-color: var(--cms-primary, #6f8400) !important;
+  box-shadow: 0 0 0 1px var(--cms-primary, #6f8400) !important;
 }
 
 .cms-number-input:focus {
-  border-color: var(--cms-primary);
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary) 18%, transparent);
+  border-color: var(--cms-primary, #6f8400) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary, #6f8400) 24%, transparent) !important;
+}
+
+.cms-number-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  border-color: rgba(111, 132, 0, 0.22) !important;
+  background: var(--cms-subtle, #f7f8ef) !important;
 }
 
 .cms-remarks-input {
@@ -783,12 +855,67 @@
   min-width: 130px;
   height: 32px;
   padding: 0 8px;
-  border: 1px solid var(--cms-border, #e6e7de);
+  border: 1.5px solid rgba(111, 132, 0, 0.45) !important;
   border-radius: 6px;
   font-size: 12px;
-  background: var(--cms-surface, #ffffff);
+  background: #ffffff !important;
   color: var(--cms-text, #171a17);
   box-sizing: border-box;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.cms-remarks-input:hover:not(:disabled) {
+  border-color: var(--cms-primary, #6f8400) !important;
+  box-shadow: 0 0 0 1px var(--cms-primary, #6f8400) !important;
+}
+
+.cms-remarks-input:focus {
+  border-color: var(--cms-primary, #6f8400) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary, #6f8400) 24%, transparent) !important;
+}
+
+.cms-remarks-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  border-color: rgba(111, 132, 0, 0.22) !important;
+  background: var(--cms-subtle, #f7f8ef) !important;
+}
+
+/* ---------- Dark Theme Overrides for Marks Entry Inputs ---------- */
+[data-theme="dark"] .cms-number-input,
+:root[data-theme="dark"] .cms-number-input,
+[data-theme="dark"] .cms-remarks-input,
+:root[data-theme="dark"] .cms-remarks-input {
+  border: 1.5px solid rgba(135, 157, 25, 0.68) !important;
+  background: #1c2219 !important;
+  color: var(--cms-text, #f2f4ec) !important;
+}
+
+[data-theme="dark"] .cms-number-input:hover:not(:disabled),
+:root[data-theme="dark"] .cms-number-input:hover:not(:disabled),
+[data-theme="dark"] .cms-remarks-input:hover:not(:disabled),
+:root[data-theme="dark"] .cms-remarks-input:hover:not(:disabled) {
+  border-color: var(--cms-primary, #879d19) !important;
+  box-shadow: 0 0 0 1px var(--cms-primary, #879d19) !important;
+}
+
+[data-theme="dark"] .cms-number-input:focus,
+:root[data-theme="dark"] .cms-number-input:focus,
+[data-theme="dark"] .cms-remarks-input:focus,
+:root[data-theme="dark"] .cms-remarks-input:focus {
+  border-color: var(--cms-primary, #879d19) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(135, 157, 25, 0.38) !important;
+}
+
+[data-theme="dark"] .cms-number-input:disabled,
+:root[data-theme="dark"] .cms-number-input:disabled,
+[data-theme="dark"] .cms-remarks-input:disabled,
+:root[data-theme="dark"] .cms-remarks-input:disabled {
+  opacity: 0.5;
+  border-color: rgba(135, 157, 25, 0.25) !important;
+  background: rgba(0, 0, 0, 0.35) !important;
 }
 
 .cms-checkbox {
@@ -826,7 +953,8 @@
   background: currentColor;
 }
 
-.cms-status-draft {
+.cms-status-draft,
+.cms-status-not-started {
   background: var(--cms-subtle, #f7f8ef);
   color: var(--cms-muted, #7b8275);
   border-color: var(--cms-border, #e6e7de);
