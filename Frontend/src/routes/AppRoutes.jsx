@@ -1,4 +1,3 @@
-import { lazy, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/components/pages/LandingPage.jsx";
 import DashboardPage from "@/components/pages/DashboardPage.jsx";
@@ -16,12 +15,20 @@ import DepartmentManagementPage, { DepartmentDetailsPage, DesignationDetailsPage
 import StudentAdmissionPage from "@/components/pages/StudentAdmissionPage.jsx";
 import StudentManagementPage, { pageConfig as studentManagementConfig } from "@/components/pages/StudentManagementPage.jsx";
 import SectionAllocationPage from "@/components/pages/SectionAllocationPage.jsx";
+import TimetablePage from "@/components/pages/TimetablePage.jsx";
 import HolidayManagementPage from "@/components/pages/HolidayManagementPage.jsx";
 import AttendancePage from "@/components/pages/AttendancePage.jsx";
 import AttendanceOverviewPage from "@/components/pages/AttendanceOverviewPage.jsx";
 import LeaveManagementPage from "@/components/pages/LeaveManagementPage.jsx";
 import ExaminationPage, { pageConfig as examinationConfig } from "@/components/pages/ExaminationPage.jsx";
+import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
+import ResultProcessingPage from "@/components/pages/ResultProcessingPage.jsx";
+import PromotionPage from "@/components/pages/PromotionPage.jsx";
+import FeeManagementPage from "@/components/pages/FeeManagementPage.jsx";
+import TransportPage from "@/components/pages/TransportPage.jsx";
 import CertificatesPage, { pageConfig as certificatesConfig } from "@/components/pages/CertificatesPage.jsx";
+import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
+import InventoryManagementPage from "@/components/pages/InventoryManagement/InventoryManagementPage.jsx";
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
@@ -32,54 +39,44 @@ import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfi
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
+import PayrollPage from "@/components/pages/PayrollPage.jsx";
+import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
 import AdminReimbursementsPage from "@/components/pages/AdminReimbursementsPage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
+import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
+import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
+import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx";
+import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
+import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
+import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
+import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
+import ParentAttendancePage from "@/Dashboard/Parent Dashboard/pages/ParentAttendancePage.jsx";
+import ParentAcademicsPage from "@/Dashboard/Parent Dashboard/pages/ParentAcademicsPage.jsx";
+import ParentExaminationsPage from "@/Dashboard/Parent Dashboard/pages/ParentExaminationsPage.jsx";
+import ParentFeesPage from "@/Dashboard/Parent Dashboard/pages/ParentFeesPage.jsx";
+import ParentTimetablePage from "@/Dashboard/Parent Dashboard/pages/ParentTimetablePage.jsx";
+import ParentCommunicationPage from "@/Dashboard/Parent Dashboard/pages/ParentCommunicationPage.jsx";
+import ParentAnnouncementsPage from "@/Dashboard/Parent Dashboard/pages/ParentAnnouncementsPage.jsx";
+import ParentDocumentsPage from "@/Dashboard/Parent Dashboard/pages/ParentDocumentsPage.jsx";
+import ParentNotificationsPage from "@/Dashboard/Parent Dashboard/pages/ParentNotificationsPage.jsx";
+import ParentProfilePage from "@/Dashboard/Parent Dashboard/pages/ParentProfilePage.jsx";
+import ParentSettingsPage from "@/Dashboard/Parent Dashboard/pages/ParentSettingsPage.jsx";
 import { ParentPortalProvider } from "@/Dashboard/Parent Dashboard/context/ParentPortalContext.jsx";
 import ErrorBoundary from "@/components/common/ErrorBoundary.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
-
-// Lazy-loaded heavy modules and portal routes
-const TimetablePage = lazy(() => import("@/components/pages/TimetablePage.jsx"));
-const MarksEntryPage = lazy(() => import("@/components/pages/MarksEntryPage.jsx"));
-const ResultProcessingPage = lazy(() => import("@/components/pages/ResultProcessingPage.jsx"));
-const PromotionPage = lazy(() => import("@/components/pages/PromotionPage.jsx"));
-const FeeManagementPage = lazy(() => import("@/components/pages/FeeManagementPage.jsx"));
-const TransportPage = lazy(() => import("@/components/pages/TransportPage.jsx"));
-const ReportsAnalyticsPage = lazy(() => import("@/components/pages/ReportsAnalyticsPage.jsx"));
-const PayrollPage = lazy(() => import("@/components/pages/PayrollPage.jsx"));
-const AuditLogsPage = lazy(() => import("@/components/pages/AuditLogsPage.jsx"));
-
-const StudentPortalRoutes = lazy(() => import("@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx"));
-const AccountantPortalRoutes = lazy(() => import("@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx"));
-const FacultyPortalRoutes = lazy(() => import("@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx"));
-const DriverDashboard = lazy(() => import("@/Dashboard/DriverDashboard/DriverDashboard.jsx"));
-
-const ParentDashboard = lazy(() => import("@/Dashboard/Parent Dashboard/ParentDashboard.jsx"));
-const ParentChildrenPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx"));
-const ParentChildDetailsRoute = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx").then(m => ({ default: m.ParentChildDetailsRoute })));
-const ParentAttendancePage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentAttendancePage.jsx"));
-const ParentAcademicsPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentAcademicsPage.jsx"));
-const ParentExaminationsPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentExaminationsPage.jsx"));
-const ParentFeesPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentFeesPage.jsx"));
-const ParentTimetablePage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentTimetablePage.jsx"));
-const ParentCommunicationPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentCommunicationPage.jsx"));
-const ParentAnnouncementsPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentAnnouncementsPage.jsx"));
-const ParentDocumentsPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentDocumentsPage.jsx"));
-const ParentNotificationsPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentNotificationsPage.jsx"));
-const ParentProfilePage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentProfilePage.jsx"));
-const ParentSettingsPage = lazy(() => import("@/Dashboard/Parent Dashboard/pages/ParentSettingsPage.jsx"));
-
-const HostelDashboard = lazy(() => import("@/modules/hostel/index.js").then(m => ({ default: m.HostelDashboard })));
-const HostelMasterSetup = lazy(() => import("@/modules/hostel/index.js").then(m => ({ default: m.HostelMasterSetup })));
-const HostelStudentManagement = lazy(() => import("@/modules/hostel/index.js").then(m => ({ default: m.HostelStudentManagement })));
-const HostelAttendanceRegister = lazy(() => import("@/modules/hostel/index.js").then(m => ({ default: m.HostelAttendanceRegister })));
-const HostelReports = lazy(() => import("@/modules/hostel/index.js").then(m => ({ default: m.HostelReports })));
+import {
+  HostelDashboard,
+  HostelMasterSetup,
+  HostelStudentManagement,
+  HostelAttendanceRegister,
+  HostelReports,
+} from "@/modules/hostel/index.js";
 
 const moduleConfigs = {
   courses: courseGroupConfig,
@@ -120,9 +117,8 @@ function StudentEnrollmentRoute() {
 
 export default function AppRoutes() {
   return (
-    <Suspense fallback={<div className="cms-page-loading" style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontWeight: 500 }}>Loading...</div>}>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Navigate to="/login" replace />} />
@@ -130,6 +126,35 @@ export default function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/verify-otp" element={<VerifyOTP />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+
+      <Route path="/warden-login" element={<Navigate to="/login" replace />} />
+
+      <Route element={<ProtectedRoute requireWarden />}>
+        <Route path="/warden-dashboard" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/overview" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/students" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/rooms" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/beds" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/allocations" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/leave-requests" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/complaints" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/attendance" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/profile" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/reports" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/*" element={<HostelDashboard />} />
+
+        {/* Legacy /warden Aliases redirect to /warden-dashboard */}
+        <Route path="/warden" element={<Navigate to="/warden-dashboard" replace />} />
+        <Route path="/warden/dashboard" element={<Navigate to="/warden-dashboard" replace />} />
+        <Route path="/warden/overview" element={<Navigate to="/warden-dashboard/overview" replace />} />
+        <Route path="/warden/rooms" element={<Navigate to="/warden-dashboard/rooms" replace />} />
+        <Route path="/warden/beds" element={<Navigate to="/warden-dashboard/beds" replace />} />
+        <Route path="/warden/students" element={<Navigate to="/warden-dashboard/students" replace />} />
+        <Route path="/warden/attendance" element={<Navigate to="/warden-dashboard/attendance" replace />} />
+        <Route path="/warden/leave-requests" element={<Navigate to="/warden-dashboard/leave-requests" replace />} />
+        <Route path="/warden/reports" element={<Navigate to="/warden-dashboard/reports" replace />} />
+        <Route path="/warden/*" element={<Navigate to="/warden-dashboard" replace />} />
+      </Route>
 
       <Route element={<ProtectedRoute requirePrincipal />}>
         <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
@@ -182,6 +207,10 @@ export default function AppRoutes() {
         <Route path="/dashboard/students/:id/enroll" element={<StudentEnrollmentRoute />} />
         <Route path="/dashboard/timetable" element={<TimetablePage />} />
         <Route path="/dashboard/holidays" element={<HolidayManagementPage />} />
+        <Route path="/dashboard/inventory-management/*" element={<InventoryManagementPage />} />
+        <Route path="/dashboard/inventory-management" element={<InventoryManagementPage />} />
+        <Route path="/dashboard/inventory/*" element={<Navigate to="/dashboard/inventory-management" replace />} />
+        <Route path="/dashboard/inventory" element={<Navigate to="/dashboard/inventory-management" replace />} />
         <Route path="/dashboard/timetable/setup" element={<TimetablePage screen="setup" />} />
         <Route path="/dashboard/timetable/draft" element={<TimetablePage screen="draft" />} />
         <Route path="/dashboard/timetable/generate" element={<TimetablePage screen="generate" />} />
@@ -274,6 +303,10 @@ export default function AppRoutes() {
         <Route path="/dashboard/payroll/reports" element={<PayrollPage mode="reports" />} />
         <Route path="/dashboard/payroll/settings" element={<PayrollPage mode="settings" />} />
         <Route path="/dashboard/payroll/import" element={<PayrollPage mode="import" />} />
+
+        {/* Faculty Reimbursement Canonical & Finance Routes */}
+        <Route path="/dashboard/reimbursement" element={<ReimbursementPage />} />
+        <Route path="/dashboard/finance/reimbursement" element={<ReimbursementPage />} />
 
         {/* Backward-Compatible Staff Salary Aliases */}
         <Route path="/dashboard/staff-salary" element={<PayrollPage mode="payroll" />} />
@@ -388,6 +421,5 @@ export default function AppRoutes() {
       <Route path="/settings" element={<Navigate to="/dashboard/settings" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-  </Suspense>
   );
 }

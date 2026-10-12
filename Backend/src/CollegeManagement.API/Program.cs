@@ -16,6 +16,8 @@ using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using CollegeManagement.API.Repositories.Implementations.Payroll;
+using CollegeManagement.API.Repositories.Interfaces.Reimbursement;
+using CollegeManagement.API.Repositories.Implementations.Reimbursement;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Implementations;
 using CollegeManagement.API.Services.Implementations.Hostel;
@@ -23,6 +25,8 @@ using CollegeManagement.API.Services.Implementations.Payroll;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Payroll;
+using CollegeManagement.API.Services.Interfaces.Reimbursement;
+using CollegeManagement.API.Services.Implementations.Reimbursement;
 using CollegeManagement.API.Services.Interfaces.Transport;
 using CollegeManagement.API.Services.Implementations.Transport;
 using CollegeManagement.API.Services.Location;
@@ -65,23 +69,6 @@ builder.Services.AddControllers(options =>
     });
 #endregion
 
-#region Response Compression
-builder.Services.AddResponseCompression(options =>
-{
-    options.EnableForHttps = true;
-    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
-    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
-});
-builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProviderOptions>(options =>
-{
-    options.Level = System.IO.Compression.CompressionLevel.Fastest;
-});
-builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProviderOptions>(options =>
-{
-    options.Level = System.IO.Compression.CompressionLevel.Fastest;
-});
-#endregion
-
 #region CORS
 builder.Services.AddCors(options =>
 {
@@ -112,7 +99,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         connectionString,
         serverVersion,
         mySqlOptions => mySqlOptions
-            .CommandTimeout(120)));;
+            .CommandTimeout(120)
+            .EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(3),
+                errorNumbersToAdd: null)));
 
 builder.Services.AddSingleton<DatabaseContext>();
 
@@ -213,6 +204,7 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
 builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
+builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 #endregion
 
 #region Services
@@ -307,6 +299,9 @@ builder.Services.AddScoped<IDriverAttendanceService, DriverAttendanceService>();
 
 // Payroll Service
 builder.Services.AddScoped<IPayrollService, PayrollService>();
+
+// Reimbursement Service
+builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
@@ -447,7 +442,6 @@ forwardedHeadersOptions.KnownNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
-app.UseResponseCompression();
 app.UseCors("AllowFrontend");
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
@@ -559,34 +553,7 @@ app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifi
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var allRollNoConfigs = dbContext.NumberSeriesConfigurations
-        .Where(n => n.SeriesCode.StartsWith("ROLL_NO"))
-        .ToList();
-
-    bool dbModified = false;
-    foreach(var config in allRollNoConfigs)
-    {
-        if (config.FormatPattern != "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}")
-        {
-            config.FormatPattern = "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}";
-            config.Prefix = "";
-            dbModified = true;
-        }
-    }
-
-    if (dbModified)
-    {
-        dbContext.SaveChanges();
-    }
-}
-
 app.Run();
-
-
-
 
 
 
