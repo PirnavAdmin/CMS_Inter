@@ -21,18 +21,18 @@ namespace CollegeManagement.API.Enums
         Late = 3,
 
         /// <summary>
-        /// The student attended half day (Morning or Afternoon session). Historically mapped to 4.
+        /// The student is on approved leave.
+        /// </summary>
+        Leave = 4,
+
+        /// <summary>
+        /// The student attended half day (Morning or Afternoon session).
         /// </summary>
         HalfDay = 4,
 
         /// <summary>
         /// The day is an official institution holiday.
         /// </summary>
-        Holiday = 5,
-
-        /// <summary>
-        /// The student is on approved leave. Separated from HalfDay (4) to prevent ambiguity.
-        /// </summary>
-        Leave = 6
+        Holiday = 5
     }
 }

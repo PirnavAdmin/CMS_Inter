@@ -7,6 +7,7 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 {
     public class RejectStudentAdmissionRequest
     {
+        [Required]
         public int AdmissionId { get; set; }
 
         [Required]

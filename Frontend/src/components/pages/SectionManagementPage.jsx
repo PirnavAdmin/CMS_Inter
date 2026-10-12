@@ -503,18 +503,14 @@ function SearchableSelect({
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const containerRef = useRef(null);
-  const inputRef = useRef(null);
   const listboxId = useRef(`section-select-${++searchableSelectCounter}`).current;
 
   const normalizedOptions = useMemo(() => {
-    return options.map((opt) => {
-      if (typeof opt === "object" && opt !== null) {
-        const val = opt.value != null ? String(opt.value) : opt.id != null ? String(opt.id) : "";
-        const lbl = opt.label != null ? String(opt.label) : opt.name != null ? String(opt.name) : val;
-        return { value: val, label: lbl };
-      }
-      return { value: String(opt), label: String(opt) };
-    });
+    return options.map((opt) =>
+      typeof opt === "object" && opt !== null
+        ? { value: String(opt.value), label: String(opt.label) }
+        : { value: String(opt), label: String(opt) }
+    );
   }, [options]);
 
   const selectedOption = useMemo(() => {
@@ -551,29 +547,23 @@ function SearchableSelect({
 
   useEffect(() => {
     setHighlightedIndex(filteredOptions.length ? 0 : -1);
-  }, [filteredOptions, searchQuery]);
+  }, [filteredOptions]);
 
   const handleKeyboard = (event) => {
-    if (disabled) return;
-    if (event.key === "Escape") {
-      setOpen(false);
-      setSearchQuery("");
-    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      if (!open) {
-        setOpen(true);
-        return;
-      }
+      if (!open) return setOpen(true);
       if (!filteredOptions.length) return;
       const step = event.key === "ArrowDown" ? 1 : -1;
       setHighlightedIndex((current) => (current + step + filteredOptions.length) % filteredOptions.length);
-    } else if (event.key === "Enter") {
-      if (open && highlightedIndex >= 0 && filteredOptions[highlightedIndex]) {
-        event.preventDefault();
-        onChange(filteredOptions[highlightedIndex].value);
-        setOpen(false);
-        setSearchQuery("");
-      }
+    } else if (event.key === "Enter" && open && highlightedIndex >= 0) {
+      event.preventDefault();
+      onChange(filteredOptions[highlightedIndex].value);
+      setOpen(false);
+      setSearchQuery("");
+    } else if (event.key === "Escape") {
+      setOpen(false);
+      setSearchQuery("");
     }
   };
 
@@ -582,104 +572,88 @@ function SearchableSelect({
       ref={containerRef}
       className={`cms-searchable-select ${disabled ? "is-disabled" : ""} ${open ? "is-open" : ""} ${hasError ? "has-error" : ""}`}
     >
-      <div
-        className={`cms-searchable-select-combobox ${open ? "is-focused" : ""} ${disabled ? "is-disabled" : ""}`}
+      <button
+        type="button"
+        className="cms-searchable-select-trigger"
+        role="combobox"
+        aria-label={placeholder}
+        aria-expanded={open}
+        aria-controls={listboxId}
+        disabled={disabled}
+        onKeyDown={handleKeyboard}
         onClick={() => {
-          if (disabled) return;
-          if (!open) {
-            setOpen(true);
+          if (!disabled) {
+            setOpen((prev) => !prev);
             setSearchQuery("");
           }
-          inputRef.current?.focus();
         }}
       >
-        <input
-          ref={inputRef}
-          id={`${listboxId}-input`}
-          type="text"
-          role="combobox"
-          aria-label={placeholder}
-          aria-expanded={open}
-          aria-controls={listboxId}
-          disabled={disabled}
-          className="cms-searchable-combobox-input"
-          value={open ? searchQuery : (selectedOption?.label || "")}
-          placeholder={open ? (selectedOption?.label || `Search ${placeholder.toLowerCase()}...`) : placeholder}
-          onFocus={() => {
-            if (disabled) return;
-            setSearchQuery("");
-            setOpen(true);
-          }}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setHighlightedIndex(0);
-            if (!open) setOpen(true);
-          }}
-          onKeyDown={handleKeyboard}
-        />
-        <button
-          type="button"
-          tabIndex={-1}
-          className="cms-select-arrow-btn"
-          disabled={disabled}
-          aria-label={open ? "Close menu" : "Open menu"}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (disabled) return;
-            setOpen((prev) => {
-              const next = !prev;
-              if (next) {
-                setSearchQuery("");
-                inputRef.current?.focus();
-              }
-              return next;
-            });
-          }}
-        >
-          <ChevronDown size={14} className={`cms-select-arrow ${open ? "is-open" : ""}`} />
-        </button>
-      </div>
-
-      {open && !disabled && (
-        <div className="cms-searchable-select-menu bay-style-menu" id={listboxId} role="listbox">
-          <button
-            type="button"
-            className={`cms-select-option ${!value ? "is-selected" : ""}`}
-            role="option"
-            aria-selected={!value}
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange("");
-              setOpen(false);
-              setSearchQuery("");
-            }}
-          >
-            {placeholder}
-          </button>
-          {filteredOptions.length > 0 ? (
-            filteredOptions.map((opt, index) => (
-              <button
-                key={opt.value}
-                type="button"
-                className={`cms-select-option ${String(value) === opt.value ? "is-selected" : ""} ${
-                  highlightedIndex === index ? "is-highlighted" : ""
-                }`}
-                role="option"
-                aria-selected={String(value) === opt.value}
-                onMouseEnter={() => setHighlightedIndex(index)}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(opt.value);
-                  setOpen(false);
-                  setSearchQuery("");
-                }}
-              >
-                {opt.label}
-              </button>
-            ))
-          ) : (
-            <div className="cms-select-empty">{emptyText}</div>
+        <span className="cms-searchable-select-label" title={selectedOption?.label || ""}>
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        <ChevronDown size={14} className="cms-select-arrow" />
+      </button>
+      {open && (
+        <div className="cms-searchable-select-menu">
+          {showSearch && (
+            <div className="cms-searchable-select-search">
+              <Search size={14} />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyboard}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="cms-search-clear-btn"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
           )}
+          <div className="cms-searchable-select-options" id={listboxId} role="listbox">
+            <button
+              type="button"
+              className={`cms-select-option ${!value ? "is-selected" : ""}`}
+              role="option"
+              aria-selected={!value}
+              title={placeholder}
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              {placeholder}
+            </button>
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt, index) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`cms-select-option ${String(value) === opt.value ? "is-selected" : ""} ${highlightedIndex === index ? "is-highlighted" : ""}`}
+                  role="option"
+                  aria-selected={String(value) === opt.value}
+                  title={opt.label}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                    setSearchQuery("");
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))
+            ) : (
+              <div className="cms-select-empty">{emptyText}</div>
+            )}
+          </div>
         </div>
       )}
     </div>

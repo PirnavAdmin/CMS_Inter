@@ -211,14 +211,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        
-        public async Task<IEnumerable<Holiday>> CreateRangeAsync(IEnumerable<Holiday> holidays)
-        {
-            _context.Set<Holiday>().AddRange(holidays);
-            await _context.SaveChangesAsync();
-            return holidays;
-        }
-
         public async Task<Holiday> CreateAsync(Holiday holiday)
         {
             try
@@ -400,4 +392,3 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
     }
 }
-

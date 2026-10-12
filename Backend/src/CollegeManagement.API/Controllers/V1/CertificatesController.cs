@@ -104,11 +104,9 @@ public class CertificatesController : ControllerBase
         [FromQuery] string? status = null,
         [FromQuery] string? certificateType = null,
         [FromQuery] int? campusId = null,
-        [FromQuery] int? boardId = null,
-        [FromQuery] int? academicYearId = null,
         CancellationToken ct = default)
     {
-        var result = await _service.GetAllAsync(search, status, certificateType, campusId, boardId, academicYearId, ct);
+        var result = await _service.GetAllAsync(search, status, certificateType, campusId, ct);
         return Ok(result);
     }
 
@@ -204,55 +202,7 @@ public class CertificatesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return ex switch
-            {
-                ArgumentException ae => BadRequest(new { status = false, message = ae.Message }),
-                InvalidOperationException ioe => BadRequest(new { status = false, message = ioe.Message }),
-                MySqlConnector.MySqlException me => BadRequest(new { status = false, message = $"Database constraint failure: {me.Message}" }),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new { status = false, message = ex.Message })
-            };
-        }
-    }
-
-    // =========================================================
-    // 6. STUDENT REQUEST CERTIFICATE
-    // POST /api/v1/certificates/student-request
-    // =========================================================
-    [HttpPost("student-request")]
-    [AllowAnonymous] // Simulated student portal endpoint
-    [ProducesResponseType(typeof(CertificateResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> StudentRequest(
-        [FromBody] GenerateCertificateRequestDto request,
-        CancellationToken ct = default)
-    {
-        if (request == null) return BadRequest(new { message = "Request body is required" });
-        if (string.IsNullOrWhiteSpace(request.AdmissionNo)) return BadRequest(new { message = "Admission number is required" });
-        if (string.IsNullOrWhiteSpace(request.CertificateType)) return BadRequest(new { message = "Certificate type is required" });
-        if (string.IsNullOrWhiteSpace(request.Purpose)) return BadRequest(new { message = "Purpose is required" });
-
-        try
-        {
-            // 1. Generate it
-            var result = await _service.GenerateAsync(request, ct);
-            if (result == null)
-                return BadRequest(new { message = $"Unable to request {request.CertificateType} certificate for AdmissionNo '{request.AdmissionNo}'." });
-
-            // 2. Override status to Requested
-            await _service.MoveStatusAsync(result.CertificateId, "Requested", "Student Portal", ct);
-            result.Status = "Requested";
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            return ex switch
-            {
-                ArgumentException ae => BadRequest(new { status = false, message = ae.Message }),
-                InvalidOperationException ioe => BadRequest(new { status = false, message = ioe.Message }),
-                MySqlConnector.MySqlException me => BadRequest(new { status = false, message = $"Database constraint failure: {me.Message}" }),
-                _ => StatusCode(StatusCodes.Status500InternalServerError, new { status = false, message = ex.Message })
-            };
+            return BadRequest(new { message = $"Error generating certificate: {ex.Message}" });
         }
     }
 
@@ -270,22 +220,6 @@ public class CertificatesController : ControllerBase
         if (!success) return NotFound(new { message = "Certificate not found" });
 
         return Ok(new { success = true, message = "Certificate reviewed successfully" });
-    }
-
-    // =========================================================
-    // 7.1 GENERATE CERTIFICATE FROM REQUEST
-    // PATCH /api/v1/certificates/{id}/generate
-    // =========================================================
-    [HttpPatch("{id:int}/generate")]
-    public async Task<IActionResult> GenerateFromRequest(int id, CancellationToken ct = default)
-    {
-        if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
-
-        var userName = User.Identity?.Name ?? "Admin";
-        var success = await _service.MoveStatusAsync(id, "Generated", userName, ct);
-        if (!success) return NotFound(new { message = "Certificate not found or could not be generated." });
-
-        return Ok(new { success = true, message = "Certificate generated successfully" });
     }
 
     // =========================================================
@@ -506,7 +440,7 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var certificates = await _service.GetAllAsync(search, status, certificateType, campusId, null, null, ct);
+        var certificates = await _service.GetAllAsync(search, status, certificateType, campusId, ct);
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("S.No,Certificate Number,Admission Number,Student Name,Academic Level,Group,Certificate Type,Request Date,Issue Date,Status,Issued By,Purpose,Remarks,Verification Link");
@@ -537,7 +471,7 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var certificates = await _service.GetAllAsync(search, status, certificateType, campusId, null, null, ct);
+        var certificates = await _service.GetAllAsync(search, status, certificateType, campusId, ct);
 
         var crestPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "pirnav-college-crest.png");
         if (!System.IO.File.Exists(crestPath))

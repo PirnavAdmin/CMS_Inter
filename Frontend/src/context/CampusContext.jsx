@@ -161,13 +161,12 @@ export function CampusProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await campusApi.getCampuses();
+      const data = await campusApi.getCampuses({}, { skipErrorLog: true });
       if (Array.isArray(data) && data.length > 0) {
         setCampuses(data);
       }
     } catch (err) {
-      console.warn("Could not fetch campuses from API, keeping cached:", err);
-      setError(err.message);
+      setError(err.message || "Could not fetch campuses from API.");
     } finally {
       setLoading(false);
     }

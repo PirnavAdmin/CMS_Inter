@@ -9,7 +9,6 @@ namespace CollegeManagement.API.DTOs
     public class SectionRollAllocationFilterRequest
     {
         public int AcademicYearId { get; set; }
-        public int BoardId { get; set; }
         public int AcademicLevelId { get; set; }
         public int GroupId { get; set; }
         public int ProgramId { get; set; }
@@ -60,7 +59,6 @@ namespace CollegeManagement.API.DTOs
     public class ConfirmSectionAllocationRequest
     {
         public int AcademicYearId { get; set; }
-        public int BoardId { get; set; }
 
         public int AcademicLevelId { get; set; }
 
@@ -116,7 +114,6 @@ namespace CollegeManagement.API.DTOs
     public class ConfirmRollNumberAllocationRequest
     {
         public int AcademicYearId { get; set; }
-        public int BoardId { get; set; }
 
         public int AcademicLevelId { get; set; }
 

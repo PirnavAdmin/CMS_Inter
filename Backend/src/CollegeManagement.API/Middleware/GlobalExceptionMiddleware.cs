@@ -27,13 +27,13 @@ namespace CollegeManagement.API.Middleware
             }
             catch (Exception ex)
             {
-                if (ex is NotFoundException || ex is ConflictException || ex is ValidationException || ex is UnauthorizedException || ex is ForbiddenException || ex is ArgumentException)
+                if (ex is NotFoundException || ex is ConflictException || ex is ValidationException || ex is UnauthorizedException || ex is ForbiddenException)
                 {
-                    _logger.LogWarning("A client error occurred during HTTP request processing at {Path} (TraceId: {TraceId}): {Message}", context.Request.Path, context.TraceIdentifier, ex.Message);
+                    _logger.LogWarning("A client error occurred during HTTP request processing at {Path}: {Message}", context.Request.Path, ex.Message);
                 }
                 else
                 {
-                    _logger.LogError(ex, "An unhandled server exception occurred during HTTP request processing at {Path} (TraceId: {TraceId}).", context.Request.Path, context.TraceIdentifier);
+                    _logger.LogError(ex, "An unhandled exception occurred during HTTP request processing at {Path}.", context.Request.Path);
                 }
                 await HandleExceptionAsync(context, ex);
             }
@@ -43,22 +43,24 @@ namespace CollegeManagement.API.Middleware
         {
             context.Response.ContentType = "application/json";
 
-            var (statusCode, message) = exception switch
-            {
-                ValidationException => (HttpStatusCode.BadRequest, exception.Message),
+         var (statusCode, message) = exception switch
+        {
+            ValidationException => (HttpStatusCode.BadRequest, exception.Message),
 
-                ArgumentException => (HttpStatusCode.BadRequest, exception.Message),
+            InvalidOperationException => (HttpStatusCode.BadRequest, exception.Message),
 
-                NotFoundException => (HttpStatusCode.NotFound, exception.Message),
+            ArgumentException => (HttpStatusCode.BadRequest, exception.Message),
 
-                ConflictException => (HttpStatusCode.Conflict, exception.Message),
+            NotFoundException => (HttpStatusCode.NotFound, exception.Message),
 
-                UnauthorizedException => (HttpStatusCode.Unauthorized, exception.Message),
+            ConflictException => (HttpStatusCode.Conflict, exception.Message),
 
-                ForbiddenException => (HttpStatusCode.Forbidden, exception.Message),
+            UnauthorizedException => (HttpStatusCode.Unauthorized, exception.Message),
 
-                _ => (HttpStatusCode.InternalServerError, "An unexpected server error occurred.")
-            };
+            ForbiddenException => (HttpStatusCode.Forbidden, exception.Message),
+
+            _ => (HttpStatusCode.InternalServerError, "An unexpected server error occurred.")   
+        };
 
             if (!context.Response.HasStarted)
             {
@@ -70,7 +72,7 @@ namespace CollegeManagement.API.Middleware
                 statusCode = context.Response.StatusCode,
                 message = message,
                 details = exception.InnerException != null ? $"{exception.Message} --> {exception.InnerException.Message}" : exception.Message,
-                traceId = context.TraceIdentifier,
+                stackTrace = exception.StackTrace,
                 path = context.Request.Path.Value,
                 timestamp = DateTime.UtcNow
             };

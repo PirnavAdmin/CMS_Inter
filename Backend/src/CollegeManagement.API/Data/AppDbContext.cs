@@ -1,4 +1,4 @@
-using CollegeManagement.API.Models;
+﻿using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Models.Settings;
@@ -9,256 +9,14 @@ using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Models.Holiday;
 using CollegeManagement.API.Models.Transport;
-using Microsoft.AspNetCore.Http;
-using System.Security.Claims;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.Json;
-using CollegeManagement.API.Helpers;
 
 namespace CollegeManagement.API.Data
 {
-    public class AuditEntry
-    {
-        public EntityEntry Entry { get; }
-        public EntityState OriginalState { get; set; }
-        public string? UserName { get; set; }
-        public int? UserId { get; set; }
-        public string? ActorRole { get; set; }
-        public string? IpAddress { get; set; }
-        public string? UserAgent { get; set; }
-        public string Action { get; set; } = string.Empty;
-        public string EntityName { get; set; } = string.Empty;
-        public int? EntityId { get; set; }
-        public string Module { get; set; } = "System";
-
-        public Dictionary<string, object?> OldValues { get; } = new();
-        public Dictionary<string, object?> NewValues { get; } = new();
-        public List<string> ChangedColumns { get; } = new();
-        public Dictionary<string, object?> UserInput { get; } = new();
-
-        public AuditEntry(EntityEntry entry)
-        {
-            Entry = entry;
-            OriginalState = entry.State;
-        }
-
-        public AuditLog ToAuditLog()
-        {
-            var changesList = new List<object>();
-            foreach (var col in ChangedColumns)
-            {
-                OldValues.TryGetValue(col, out var oldVal);
-                NewValues.TryGetValue(col, out var newVal);
-                changesList.Add(new
-                {
-                    field = col,
-                    old = FormatValue(oldVal),
-                    @new = FormatValue(newVal)
-                });
-            }
-
-            var humanSummary = GenerateHumanReadableSummary();
-
-            var payloadObj = new
-            {
-                summary = humanSummary,
-                changes = changesList,
-                userInput = UserInput.Count > 0 ? UserInput : (OriginalState == EntityState.Added ? NewValues : null)
-            };
-
-            var jsonOptions = new JsonSerializerOptions
-            {
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-                WriteIndented = false
-            };
-
-            string descriptionJson = JsonSerializer.Serialize(payloadObj, jsonOptions);
-
-            return new AuditLog
-            {
-                UserName = UserName ?? "System",
-                UserId = UserId,
-                ActorRole = ActorRole ?? "System",
-                IpAddress = IpAddress ?? "0.0.0.0",
-                UserAgent = UserAgent,
-                Action = Action,
-                EntityName = EntityName,
-                EntityId = EntityId,
-                Module = Module,
-                Severity = Action == "Delete" ? "Warning" : "Info",
-                Status = "Success",
-                Description = descriptionJson,
-                CreatedAt = DateTime.UtcNow
-            };
-        }
-
-        private static string? FormatValue(object? val)
-        {
-            if (val == null) return null;
-            if (val is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
-            if (val is DateOnly d) return d.ToString("yyyy-MM-dd");
-            return val.ToString();
-        }
-
-        private string GenerateHumanReadableSummary()
-        {
-            try
-            {
-                var idStr = (EntityId.HasValue && EntityId > 0) ? $" #{EntityId}" : "";
-
-                switch (EntityName)
-                {
-                    case "Attendance":
-                    {
-                        NewValues.TryGetValue("Status", out var statusVal);
-                        NewValues.TryGetValue("StudentId", out var sIdVal);
-                        NewValues.TryGetValue("AttendanceDate", out var dtVal);
-                        NewValues.TryGetValue("Session", out var sessVal);
-
-                        var status = statusVal?.ToString() ?? "Recorded";
-                        var studentId = sIdVal?.ToString() ?? (EntityEntryHasProp("StudentId") ? Entry.Property("StudentId").CurrentValue?.ToString() : "");
-                        var dateStr = dtVal is DateTime adt ? adt.ToString("yyyy-MM-dd") : dtVal?.ToString();
-                        var sessStr = sessVal != null ? $" ({sessVal} Session)" : "";
-
-                        if (OriginalState == EntityState.Added)
-                        {
-                            return $"Marked attendance as '{status}' for Student #{studentId}{sessStr}{(dateStr != null ? $" on {dateStr}" : "")}";
-                        }
-                        if (OriginalState == EntityState.Modified)
-                        {
-                            OldValues.TryGetValue("Status", out var oldStatus);
-                            if (oldStatus != null && statusVal != null && oldStatus.ToString() != statusVal.ToString())
-                            {
-                                return $"Changed attendance for Student #{studentId} from '{oldStatus}' to '{statusVal}'{(dateStr != null ? $" on {dateStr}" : "")}";
-                            }
-                            return $"Updated attendance record for Student #{studentId}{(dateStr != null ? $" on {dateStr}" : "")}";
-                        }
-                        return $"Deleted attendance record for Student #{studentId}";
-                    }
-
-                    case "StaffAttendance":
-                    {
-                        NewValues.TryGetValue("Status", out var statusVal);
-                        NewValues.TryGetValue("StaffId", out var sIdVal);
-                        NewValues.TryGetValue("AttendanceDate", out var dtVal);
-                        var status = statusVal?.ToString() ?? "Recorded";
-                        var staffId = sIdVal?.ToString() ?? "";
-                        var dateStr = dtVal is DateTime adt ? adt.ToString("yyyy-MM-dd") : dtVal?.ToString();
-
-                        if (OriginalState == EntityState.Added)
-                            return $"Marked staff attendance as '{status}' for Staff #{staffId}{(dateStr != null ? $" on {dateStr}" : "")}";
-                        if (OriginalState == EntityState.Modified)
-                            return $"Updated staff attendance for Staff #{staffId}{(dateStr != null ? $" on {dateStr}" : "")}";
-                        return $"Deleted staff attendance record for Staff #{staffId}";
-                    }
-
-                    case "Student":
-                    case "StudentAdmission":
-                    {
-                        NewValues.TryGetValue("FirstName", out var fn);
-                        NewValues.TryGetValue("LastName", out var ln);
-                        var name = $"{fn} {ln}".Trim();
-                        if (string.IsNullOrWhiteSpace(name))
-                        {
-                            NewValues.TryGetValue("StudentName", out var sn);
-                            name = sn?.ToString() ?? $"Student{idStr}";
-                        }
-
-                        if (OriginalState == EntityState.Added)
-                            return $"Enrolled new student: {name}";
-                        if (OriginalState == EntityState.Modified)
-                            return $"Updated profile details for student: {name}";
-                        return $"Removed student record: {name}";
-                    }
-
-                    case "Staff":
-                    {
-                        NewValues.TryGetValue("FirstName", out var fn);
-                        NewValues.TryGetValue("LastName", out var ln);
-                        var name = $"{fn} {ln}".Trim();
-                        if (string.IsNullOrWhiteSpace(name)) name = $"Staff{idStr}";
-                        NewValues.TryGetValue("Designation", out var desig);
-                        var desigStr = desig != null ? $" ({desig})" : "";
-
-                        if (OriginalState == EntityState.Added)
-                            return $"Registered new staff member: {name}{desigStr}";
-                        if (OriginalState == EntityState.Modified)
-                            return $"Updated staff record for: {name}{desigStr}";
-                        return $"Removed staff member: {name}";
-                    }
-
-                    case "FeePayment":
-                    case "StudentFee":
-                    {
-                        NewValues.TryGetValue("Amount", out var amt);
-                        if (amt == null) NewValues.TryGetValue("PaidAmount", out amt);
-                        NewValues.TryGetValue("StudentId", out var sId);
-                        NewValues.TryGetValue("PaymentMode", out var mode);
-                        var amtStr = amt != null ? $" of ₹{amt}" : "";
-                        var modeStr = mode != null ? $" via {mode}" : "";
-
-                        if (OriginalState == EntityState.Added)
-                            return $"Recorded fee payment{amtStr} for Student #{sId}{modeStr}";
-                        if (OriginalState == EntityState.Modified)
-                            return $"Updated fee record{amtStr} for Student #{sId}";
-                        return $"Deleted fee record for Student #{sId}";
-                    }
-
-                    case "User":
-                    {
-                        NewValues.TryGetValue("UserName", out var un);
-                        if (un == null) NewValues.TryGetValue("Email", out un);
-                        var uStr = un?.ToString() ?? $"User{idStr}";
-
-                        if (OriginalState == EntityState.Added)
-                            return $"Created user account: {uStr}";
-                        if (OriginalState == EntityState.Modified)
-                            return $"Updated user account: {uStr}";
-                        return $"Deleted user account: {uStr}";
-                    }
-
-                    case "TransportTrip":
-                    {
-                        NewValues.TryGetValue("RouteName", out var rn);
-                        NewValues.TryGetValue("Status", out var st);
-                        return $"{Action} transport trip{idStr}{(rn != null ? $" (Route: {rn})" : "")}{(st != null ? $" - Status: {st}" : "")}";
-                    }
-
-                    default:
-                    {
-                        if (OriginalState == EntityState.Added)
-                            return $"Created new {EntityName}{idStr}";
-                        if (OriginalState == EntityState.Modified)
-                        {
-                            var cols = ChangedColumns.Count > 0 ? $" (modified: {string.Join(", ", ChangedColumns.Take(3))}{(ChangedColumns.Count > 3 ? "..." : "")})" : "";
-                            return $"Updated {EntityName}{idStr}{cols}";
-                        }
-                        return $"Deleted {EntityName}{idStr}";
-                    }
-                }
-            }
-            catch
-            {
-                return $"{Action} operation performed on {EntityName}{(EntityId != null && EntityId > 0 ? $" (ID: {EntityId})" : "")}";
-            }
-        }
-
-        private bool EntityEntryHasProp(string propName)
-        {
-            try { return Entry.Metadata.FindProperty(propName) != null; } catch { return false; }
-        }
-    }
-
     public class AppDbContext : DbContext
     {
-        private readonly IHttpContextAccessor? _httpContextAccessor;
-
-        public AppDbContext(DbContextOptions<AppDbContext> options, IHttpContextAccessor? httpContextAccessor = null)
+        public AppDbContext(DbContextOptions<AppDbContext> options)
             : base(options)
         {
-            _httpContextAccessor = httpContextAccessor;
         }
 
         public DbSet<User> Users { get; set; }
@@ -311,8 +69,6 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportVehicle> TransportVehicles => Set<TransportVehicle>();
         public DbSet<TransportDriver> TransportDrivers { get; set; } = null!;
         public DbSet<TransportVehicleAssignment> TransportVehicleAssignments { get; set; } = null!;
-        public DbSet<DriverPreference> DriverPreferences { get; set; } = null!;
-
         public DbSet<DriverNotification> DriverNotifications { get; set; } = null!;
         public DbSet<StudentTransportAssignment> StudentTransportAssignments { get; set; } = null!;
         public DbSet<VehicleMaintenance> VehicleMaintenances { get; set; } = null!;
@@ -320,7 +76,6 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportStudentAttendance> TransportStudentAttendances { get; set; } = null!;
         public DbSet<TransportGpsTelemetry> TransportGpsTelemetries { get; set; } = null!;
         public DbSet<Staff> Staffs { get; set; }
-        public DbSet<StaffReimbursement> StaffReimbursements { get; set; }
         public DbSet<StaffSubjectAllocation> StaffSubjectAllocations { get; set; }
         public DbSet<Faculty> Faculties { get; set; }
         public DbSet<FacultySubjectAllocation> FacultySubjectAllocations { get; set; }
@@ -755,7 +510,7 @@ namespace CollegeManagement.API.Data
             modelBuilder.Entity<FeeStructureComponent>(entity =>
             {
                 entity.HasKey(x => x.FeeStructureComponentId);
-                entity.Ignore(x => x.Rule);
+                entity.Property(x => x.Rule).IsRequired().HasMaxLength(20);
                 entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
                 entity.Property(x => x.IsActive).HasDefaultValue(true);
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
@@ -1467,7 +1222,6 @@ namespace CollegeManagement.API.Data
             modelBuilder.Entity<Faculty>(entity =>
             {
                 entity.Ignore(f => f.Aadhaar);
-                entity.Ignore(f => f.BloodGroup);
                 entity.HasOne(f => f.DesignationRef)
                     .WithMany(d => d.Faculties)
                     .HasForeignKey(f => f.DesignationId)
@@ -1964,149 +1718,11 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             });
         }
 
-        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        {
-            var auditEntries = OnBeforeSaveChanges();
-            var result = await base.SaveChangesAsync(cancellationToken);
-            await OnAfterSaveChanges(auditEntries, cancellationToken);
-            return result;
-        }
-
-        private List<AuditEntry> OnBeforeSaveChanges()
-        {
-            var auditEntries = new List<AuditEntry>();
-            var httpContext = _httpContextAccessor?.HttpContext;
-            var userId = httpContext?.User?.FindFirstValue("UserId");
-            var role = httpContext?.User?.FindFirstValue(ClaimTypes.Role) ?? httpContext?.User?.FindFirstValue("role");
-            var ip = ClientIpHelper.GetClientIpAddress(httpContext);
-            var agent = httpContext?.Request?.Headers["User-Agent"].ToString();
-            var userName = httpContext?.User?.Identity?.Name ?? httpContext?.User?.FindFirstValue(ClaimTypes.Email);
-
-            foreach (var entry in ChangeTracker.Entries())
-            {
-                if (entry.Entity is AuditLog || entry.Entity is AttendanceAuditHistory || entry.State == EntityState.Detached || entry.State == EntityState.Unchanged)
-                    continue;
-
-                var entityName = entry.Entity.GetType().Name;
-                var action = entry.State == EntityState.Added ? "Create" :
-                             entry.State == EntityState.Modified ? "Update" : "Delete";
-
-                var auditEntry = new AuditEntry(entry)
-                {
-                    UserName = userName ?? "Unknown",
-                    UserId = int.TryParse(userId, out var uid) ? uid : null,
-                    ActorRole = role ?? "Unknown",
-                    IpAddress = ip,
-                    UserAgent = agent,
-                    Action = action,
-                    EntityName = entityName,
-                    Module = GetModuleFromEntity(entityName)
-                };
-
-                // Capture Primary Key if available (for Modified/Deleted)
-                var primaryKey = entry.Metadata.FindPrimaryKey();
-                if (primaryKey != null)
-                {
-                    foreach (var property in primaryKey.Properties)
-                    {
-                        var value = entry.Property(property.Name).CurrentValue;
-                        if (value != null && int.TryParse(value.ToString(), out var pKey) && pKey > 0)
-                        {
-                            auditEntry.EntityId = pKey;
-                        }
-                    }
-                }
-
-                // Capture Property values & diffs
-                foreach (var prop in entry.Properties)
-                {
-                    var propName = prop.Metadata.Name;
-                    if (prop.Metadata.IsPrimaryKey())
-                        continue;
-
-                    // Exclude internal security and sensitive hash fields
-                    if (propName.Contains("PasswordHash") || propName.Contains("PasswordSalt") || propName.Contains("SecurityStamp"))
-                        continue;
-
-                    switch (entry.State)
-                    {
-                        case EntityState.Added:
-                            auditEntry.NewValues[propName] = prop.CurrentValue;
-                            auditEntry.UserInput[propName] = prop.CurrentValue;
-                            break;
-
-                        case EntityState.Deleted:
-                            auditEntry.OldValues[propName] = prop.OriginalValue;
-                            break;
-
-                        case EntityState.Modified:
-                            if (prop.IsModified)
-                            {
-                                auditEntry.OldValues[propName] = prop.OriginalValue;
-                                auditEntry.NewValues[propName] = prop.CurrentValue;
-                                auditEntry.ChangedColumns.Add(propName);
-                                auditEntry.UserInput[propName] = prop.CurrentValue;
-                            }
-                            else
-                            {
-                                // Preserve key contextual fields in NewValues even if unmodified
-                                if (propName == "StudentId" || propName == "StaffId" || propName == "AttendanceDate" || propName == "Session" || propName == "Status")
-                                {
-                                    auditEntry.NewValues[propName] = prop.CurrentValue;
-                                }
-                            }
-                            break;
-                    }
-                }
-
-                auditEntries.Add(auditEntry);
-            }
-
-            return auditEntries;
-        }
-        
-        private async Task OnAfterSaveChanges(List<AuditEntry> auditEntries, CancellationToken cancellationToken)
-        {
-            if (auditEntries == null || auditEntries.Count == 0)
-                return;
-
-            foreach (var auditEntry in auditEntries)
-            {
-                // Retrieve the positive auto-increment ID generated by the database for new entities
-                if (auditEntry.OriginalState == EntityState.Added || auditEntry.EntityId == null || auditEntry.EntityId <= 0)
-                {
-                    var primaryKey = auditEntry.Entry.Metadata.FindPrimaryKey();
-                    if (primaryKey != null)
-                    {
-                        foreach (var property in primaryKey.Properties)
-                        {
-                            var value = auditEntry.Entry.Property(property.Name).CurrentValue;
-                            if (value != null && int.TryParse(value.ToString(), out var pKey) && pKey > 0)
-                            {
-                                auditEntry.EntityId = pKey;
-                            }
-                        }
-                    }
-                }
-                AuditLogs.Add(auditEntry.ToAuditLog());
-            }
-
-            await base.SaveChangesAsync(cancellationToken);
-        }
-
-        private string GetModuleFromEntity(string entityName)
-        {
-            return entityName switch
-            {
-                "User" or "Role" or "Permission" => "Authentication",
-                "Attendance" or "StaffAttendance" => "Attendance",
-                "Examination" or "Result" => "Examinations",
-                "FeePayment" or "StudentFee" => "Finance",
-                "Staff" or "Student" => "Administration",
-                "Holiday" => "Holiday Management",
-                "TransportRoute" or "TransportVehicle" => "Transport",
-                _ => "System"
-            };
-        }
-    }
 }
+}
+
+
+
+
+
+

@@ -407,7 +407,7 @@ export default function PayrollPage({ mode = "payroll" }) {
       isMounted = false;
       if (payrollRequestRef.current === requestId) payrollRequestRef.current += 1;
     };
-  }, [selectedCampusId, mode]);
+  }, [selectedCampusId]);
 
   // Derived KPI metrics
   const kpiData = useMemo(() => {
@@ -1372,60 +1372,54 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
       .reduce((sum, a) => sum + Number(a.netSalary || 0), 0);
   }, [assignmentsList, selectedStaffIds]);
 
-  const generationLock = useRef(false);
-  const [generationReport, setGenerationReport] = useState(null);
-
+  // Handler for Generating Payslips
   const handleGeneratePayslips = async () => {
-    if (generationLock.current || selectedStaffIds.length === 0) return;
-    const selectedAssignments = assignmentsList.filter((assignment) => selectedStaffIds.includes(assignment.id));
-    const employees = Array.from(new Map(selectedAssignments.map((assignment) => [getNumericApiId(assignment.rawStaffId), assignment])).values());
-    if (!employees.length || employees.some((employee) => !getNumericApiId(employee.rawStaffId))) {
-      setGenerationReport({ message: "A valid StaffId is missing for a selected employee. Refresh Payroll and try again.", failures: [], error: true });
-      return;
-    }
-    const payrollMonth = Number(selectedMonth), payrollYear = Number(selectedYear);
-    if (!Number.isInteger(payrollMonth) || payrollMonth < 1 || payrollMonth > 12 || !Number.isInteger(payrollYear) || payrollYear <= 0) {
-      setGenerationReport({ message: "Select a valid payroll month and year.", failures: [], error: true });
-      return;
-    }
-    generationLock.current = true;
+    if (selectedStaffIds.length === 0 || isGenerating) return;
     setIsGenerating(true);
-    setGenerationReport(null);
-    const generated = [], failures = [];
-    const periodKey = `${selectedYear}-${selectedMonth}`;
+
+    const targetMonthKey = `${selectedYear}-${selectedMonth}`;
+    const periodLabel = currentPeriodLabel;
+    const selectedAssignments = assignmentsList.filter((assignment) => selectedStaffIds.includes(assignment.id));
+    const numericStaffIds = selectedAssignments.map((assignment) => getNumericApiId(assignment.rawStaffId));
+    if (numericStaffIds.some((staffId) => !staffId)) {
+      setToast("The API did not provide a numeric staff ID for every selected employee.");
+      setIsGenerating(false);
+      return;
+    }
+
     try {
-      // The bulk API stops at the first failure. Individual calls preserve each result.
-      for (const employee of employees) {
-        try {
-          const response = await payrollApi.generatePayslip({ staffId: getNumericApiId(employee.rawStaffId), payrollMonth, payrollYear });
-          const record = getPayrollRecord(response);
-          const payslipId = getNumericApiId(getPayrollField(record, "payslipId", "id"));
-          if (!payslipId) throw new Error("The server did not confirm a generated payslip ID. Check history before retrying.");
-          generated.push({ employee, payslipId });
-        } catch (failure) {
-          failures.push({ employee: `${employee.staffName || "Employee"} (${employee.staffId})`, message: getApiErrorMessage(failure) });
-        }
+      const payload = {
+        payrollMonth: Number(selectedMonth),
+        payrollYear: Number(selectedYear),
+      };
+      if (numericStaffIds.length === 1) {
+        await payrollApi.generatePayslip({ staffId: numericStaffIds[0], ...payload });
+      } else {
+        await payrollApi.generatePayslipsBulk({ staffIds: numericStaffIds, ...payload });
       }
-      const campusParams = selectedCampusId != null && selectedCampusId !== "" ? { campusId: Number(selectedCampusId) || selectedCampusId } : {};
-      const [history, summary] = await Promise.allSettled([
-        payrollApi.getPayslips({ payrollMonth, payrollYear, ...campusParams }),
-        payrollApi.getPayrollSummary({ month: payrollMonth, year: payrollYear, ...campusParams }),
+
+      const query = {
+        payrollMonth: Number(selectedMonth),
+        payrollYear: Number(selectedYear),
+        ...(selectedCampusId != null && selectedCampusId !== "" ? { campusId: Number(selectedCampusId) || selectedCampusId } : {}),
+      };
+      const [payslipsResult, summaryResult] = await Promise.allSettled([
+        payrollApi.getPayslips(query),
+        payrollApi.getPayrollSummary({ month: Number(selectedMonth), year: Number(selectedYear), ...(selectedCampusId != null && selectedCampusId !== "" ? { campusId: Number(selectedCampusId) || selectedCampusId } : {}) }),
       ]);
-      if (history.status === "fulfilled") {
-        const refreshed = getPayrollList(history.value).map((payslip) => mapApiPayslip(payslip));
-        setStore((previous) => ({ ...previous,
-          payslips: [...refreshed, ...previous.payslips.filter((slip) => slip.month !== periodKey)],
-          ...(summary.status === "fulfilled" ? { apiSummary: getPayrollRecord(summary.value) } : {}),
-        }));
-      }
-      // Keep only failures selected so a retry does not regenerate confirmed successes.
-      setSelectedStaffIds((previous) => previous.filter((id) => !generated.some(({ employee }) => employee.id === id)));
-      const refreshWarning = history.status === "rejected" ? ` History could not be refreshed: ${getApiErrorMessage(history.reason)}. Check Payslip History before retrying successful employees.` : "";
-      const message = `${generated.length} of ${employees.length} payslip(s) generated for ${currentPeriodLabel}.${refreshWarning}`;
-      setGenerationReport({ message, failures, error: failures.length > 0 || history.status === "rejected" });
-      setToast(message);
+      if (payslipsResult.status === "rejected") throw payslipsResult.reason;
+      const refreshedPayslips = getPayrollList(payslipsResult.value).map((payslip) => mapApiPayslip(payslip));
+      setStore((previous) => ({
+        ...previous,
+        payslips: refreshedPayslips,
+        ...(summaryResult.status === "fulfilled" ? { apiSummary: getPayrollRecord(summaryResult.value) } : {}),
+      }));
+      setToast(summaryResult.status === "rejected"
+        ? `Generated payslips for ${periodLabel}, but summary refresh failed: ${getApiErrorMessage(summaryResult.reason)}`
+        : `Generated payslips for ${periodLabel}.`);
+    } catch (err) {
+      setToast(`Unable to generate or refresh payslips: ${getApiErrorMessage(err)}`);
     } finally {
-      generationLock.current = false;
       setIsGenerating(false);
     }
   };
@@ -1671,11 +1665,6 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
             </button>
           </div>
         </div>
-
-      {generationReport && <div className="salary-card-panel" role={generationReport.error ? "alert" : "status"} aria-live="polite">
-        <strong>{generationReport.message}</strong>
-        {generationReport.failures.length > 0 && <ul>{generationReport.failures.map((failure) => <li key={failure.employee}><strong>{failure.employee}:</strong> {failure.message}</li>)}</ul>}
-      </div>}
 
       {/* Recently Generated Section */}
       <div className="salary-card-panel">
@@ -2210,10 +2199,6 @@ function SearchableInputPicker({ label, placeholder, value, onChange, options = 
 // SCREEN — ADD / EDIT SALARY STRUCTURE
 // ----------------------------------------------------------------------
 function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
-  const [saveError, setSaveError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const saveLock = useRef(false);
-  const reportError = (message) => { setSaveError(message); setToast(message); };
   const existing = useMemo(() => {
     if (!id) return null;
     return (store.structures || []).find((s) => s.id === id || String(s.numericId) === String(id));
@@ -2394,18 +2379,18 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
     const departmentMatch = departmentRows.find((department) => getPayrollField(department, "departmentName", "name") === formData.department);
     const designationMatch = designationRows.find((designation) => getPayrollField(designation, "designationName", "name") === formData.designation);
     const departmentId = formData.departmentId ?? getPayrollField(departmentMatch, "departmentId", "id") ?? null;
-    const designationId = formData.designationId ?? getPayrollField(designationMatch, "designationId", "roleId", "id") ?? null;
+    const designationId = formData.designationId ?? getPayrollField(designationMatch, "designationId", "id") ?? null;
     if (formData.department && !departmentId) {
-      reportError("Select a department from the search results so its ID can be saved.");
+      setToast("Select a department returned by the Departments API so its ID can be saved.");
       return;
     }
     if (formData.designation && !designationId) {
-      reportError("Select a designation from the search results (for example, Bus Driver), rather than entering partial text.");
+      setToast("Select a designation returned by the Designations API so its ID can be saved.");
       return;
     }
 
     const payload = {
-      structureName: formData.name.trim(),
+      structureName: formData.name,
       staffType: formData.staffType,
       departmentId,
       designationId,
@@ -2423,21 +2408,16 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
       status: formData.status,
     };
 
-    if (saveLock.current) return;
-    saveLock.current = true;
-    setSaving(true);
-    setSaveError("");
-    try {
     if (existing || id) {
       const targetNumericId = getNumericApiId(existing?.numericId);
       if (!targetNumericId) {
-        reportError("The API did not provide a salary structure ID, so it cannot be updated.");
+        setToast("The API did not provide a salary structure ID, so it cannot be updated.");
         return;
       }
       try {
         await payrollApi.updateSalaryStructure(targetNumericId, payload);
       } catch (err) {
-        reportError(`Unable to update salary structure: ${getApiErrorMessage(err)}`);
+        setToast(`Unable to update salary structure: ${getApiErrorMessage(err)}`);
         return;
       }
       setToast("Salary structure updated successfully.");
@@ -2445,13 +2425,12 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
       try {
         await payrollApi.createSalaryStructure(payload);
       } catch (err) {
-        reportError(`Unable to create salary structure: ${getApiErrorMessage(err)}`);
+        setToast(`Unable to create salary structure: ${getApiErrorMessage(err)}`);
         return;
       }
       setToast("Salary structure created successfully.");
     }
     navigate("/dashboard/payroll?tab=structures");
-    } finally { saveLock.current = false; setSaving(false); }
   };
 
   return (
@@ -2500,7 +2479,7 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
                   options={designationOptions}
                   onChange={(val) => {
                     const match = designationRows.find((designation) => getPayrollField(designation, "designationName", "name") === val);
-                    setFormData({ ...formData, designation: val, designationId: getPayrollField(match, "designationId", "roleId", "id") ?? null });
+                    setFormData({ ...formData, designation: val, designationId: getPayrollField(match, "designationId", "id") ?? null });
                   }}
                 />
                 <div className="salary-form-group">
@@ -2602,9 +2581,8 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
                 <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/dashboard/payroll?tab=structures")}>Cancel</button>
-                <button type="submit" disabled={saving} className="cms-btn cms-btn-primary"><Plus size={14} /> {saving ? "Saving..." : "Save Structure"}</button>
+                <button type="submit" className="cms-btn cms-btn-primary"><Plus size={14} /> Save Structure</button>
               </div>
-              {saveError && <p className="salary-field-error" role="alert">{saveError}</p>}
             </div>
 
             {/* Live Breakup Preview */}
@@ -2811,9 +2789,6 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
 // SCREEN — ASSIGN / EDIT SALARY TO STAFF
 // ----------------------------------------------------------------------
 function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navigate, setToast }) {
-  const [saveError, setSaveError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const saveLock = useRef(false);
   const existingAssignment = useMemo(() => {
     if (!id) return null;
     return (store.assignments || []).find((a) => a.id === id || String(a.numericId) === String(id));
@@ -2824,7 +2799,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
     const sourceList = Array.isArray(store.apiEmployees) ? store.apiEmployees : [];
 
     return sourceList
-      .filter((a) => !assignmentStaffType || String(a.staffType).toLowerCase().replace(/[^a-z]/g, "") === String(assignmentStaffType).toLowerCase().replace(/[^a-z]/g, ""))
+      .filter((a) => !assignmentStaffType || a.staffType === assignmentStaffType)
       .map((a) => ({
         id: String(a.staffId ?? a.id ?? ""),
         staffCode: a.employeeId || "",
@@ -2879,8 +2854,6 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
 
   const handleSaveAssignment = async (e) => {
     e.preventDefault();
-    if (saveLock.current) return;
-    setSaveError("");
     const errors = {};
     const cleanBankName = bankName.trim();
     const cleanAccountNumber = accountNumber.trim();
@@ -2890,7 +2863,6 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
 
     if (!chosenStaff) errors.staff = `Select a ${assignmentStaffType.toLowerCase()} staff member.`;
     if (!chosenStruct) errors.structure = "Select a salary structure.";
-    if (!effectiveFrom) errors.effectiveFrom = "Select an effective date.";
     if (!paymentMode) errors.paymentMode = "Select a payment mode.";
     if (cleanBankName && !/^[A-Za-z][A-Za-z .&'-]{1,99}$/.test(cleanBankName)) errors.bankName = "Enter a valid bank name.";
     if (cleanAccountNumber && !/^\d{6,18}$/.test(cleanAccountNumber)) errors.accountNumber = "Account number must contain 6 to 18 digits.";
@@ -2913,7 +2885,6 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
     const numericStructId = getNumericApiId(chosenStruct.numericId);
     const existingNumericId = getNumericApiId(existingAssignment?.numericId);
     if (!numericStaffId || !numericStructId || (existingAssignment && !existingNumericId)) {
-      setSaveError("A required numeric staff, salary structure, or assignment ID is missing from the API response.");
       setToast("A required numeric staff, salary structure, or assignment ID is missing from the API response.");
       return;
     }
@@ -2921,8 +2892,6 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
     let createdAsgnId = existingAssignment?.id || "";
     let createdNumericId = existingNumericId;
 
-    saveLock.current = true;
-    setSaving(true);
     try {
       if (existingAssignment && existingNumericId) {
         await payrollApi.updateSalaryAssignment(existingNumericId, {
@@ -2942,7 +2911,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
           uanNumber: uanNumber || "",
         };
         const res = await payrollApi.createSalaryAssignment(payload);
-        createdNumericId = getNumericApiId(getPayrollField(getPayrollRecord(res), "assignmentId", "id"));
+        createdNumericId = getNumericApiId(getPayrollField(res, "assignmentId", "id"));
         if (!createdNumericId) {
           setToast("The API accepted the assignment but did not return its ID. Refresh the page to load it from the server.");
           navigate("/dashboard/payroll?tab=employees");
@@ -2951,10 +2920,9 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
         createdAsgnId = `asgn-${createdNumericId}`;
       }
     } catch (err) {
-      setSaveError(`Unable to save salary assignment: ${getApiErrorMessage(err)}`);
       setToast(`Unable to save salary assignment: ${getApiErrorMessage(err)}`);
       return;
-    } finally { saveLock.current = false; setSaving(false); }
+    }
 
     const newAssignment = {
       id: createdAsgnId,
@@ -3026,11 +2994,6 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
                   </select>
                   {fieldErrors.structure ? <span className="salary-field-error" role="alert">{fieldErrors.structure}</span> : null}
                 </div>
-                <div className="salary-form-group">
-                  <label>Effective From *</label>
-                  <input type="date" required value={String(effectiveFrom).slice(0, 10)} aria-invalid={Boolean(fieldErrors.effectiveFrom)} onChange={(event) => { setEffectiveFrom(event.target.value); setFieldErrors((previous) => ({ ...previous, effectiveFrom: "" })); }} />
-                  {fieldErrors.effectiveFrom && <span className="salary-field-error" role="alert">{fieldErrors.effectiveFrom}</span>}
-                </div>
               </div>
 
               <div className="salary-form-section-title">Step 2 — Bank & Payment Details</div>
@@ -3074,9 +3037,8 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
                 <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/dashboard/payroll?tab=employees")}>Cancel</button>
-                <button type="submit" disabled={saving} className="cms-btn cms-btn-primary"><UserCheck size={14} /> {saving ? "Saving..." : "Assign Salary"}</button>
+                <button type="submit" className="cms-btn cms-btn-primary"><UserCheck size={14} /> Assign Salary</button>
               </div>
-              {saveError && <p className="salary-field-error" role="alert">{saveError}</p>}
             </div>
 
             {/* Structure Summary Preview */}

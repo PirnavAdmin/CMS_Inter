@@ -227,7 +227,7 @@ public static class DbSchemaAndSpTester
         {
             try
             {
-                using var multi = await connection.QueryMultipleAsync("CALL sp_Report_Dashboard(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)");
+                using var multi = await connection.QueryMultipleAsync("CALL sp_Report_Dashboard(NULL, NULL, NULL, NULL, NULL, NULL, NULL)");
                 var first = await multi.ReadFirstOrDefaultAsync();
                 Console.WriteLine($"  [PASS] Successfully executed `CALL sp_Report_Dashboard(...)` multi-result sets.");
                 passed++;

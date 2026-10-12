@@ -64,6 +64,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates configuration: prefix, formatPattern, numberLength, startNumber, description.
         /// </summary>
         [HttpPut("{seriesCode}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
