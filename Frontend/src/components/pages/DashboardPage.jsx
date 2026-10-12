@@ -575,7 +575,12 @@ export default function DashboardPage() {
         let onLeaveCount = 0;
 
         rows.forEach(r => {
-           const st = staffStatus(r.status ?? r.Status);
+           const rawStatus = r.status ?? r.Status;
+           const marked = r.isAttendanceMarked ?? r.IsAttendanceMarked;
+           const unmarked = marked === false || marked === 0 || marked === "false" || rawStatus == null ||
+             ["", "0", "unmarked", "notmarked", "notset"].includes(String(rawStatus).toLowerCase().replace(/[\s_-]/g, ""));
+           const savedStatus = staffStatus(rawStatus);
+           const st = unmarked && savedStatus !== "Holiday" ? "Absent" : savedStatus;
            if (st === "Present") presentCount++;
            else if (st === "Absent") absentCount++;
            else if (st === "Late") lateCount++;
@@ -665,8 +670,17 @@ export default function DashboardPage() {
 
   // Load attendance cards when their scope changes
   useEffect(() => {
-    fetchStudentAttendance();
-    fetchStaffAttendance();
+    const refreshAttendance = () => {
+      fetchStudentAttendance();
+      fetchStaffAttendance();
+    };
+    refreshAttendance();
+    window.addEventListener("attendance-saved", refreshAttendance);
+    window.addEventListener("focus", refreshAttendance);
+    return () => {
+      window.removeEventListener("attendance-saved", refreshAttendance);
+      window.removeEventListener("focus", refreshAttendance);
+    };
   }, [fetchStudentAttendance, fetchStaffAttendance]);
 
   // Full Refresh Dashboard handler
@@ -1335,10 +1349,6 @@ export default function DashboardPage() {
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
-                {studentAttData.total === 0 ? (
-                    <EmptyState message="No marked student attendance available for today." />
-                  ) : (
-                    <>
                       {/* Donut Chart & Side Status Legend (Centered Together) */}
                       <div className="dashboard-attendance-donut-row">
                         <div className="dashboard-donut-chart-wrap">
@@ -1348,7 +1358,7 @@ export default function DashboardPage() {
                                 data={
                                   studentAttData.chartData.some((d) => d.value > 0)
                                     ? studentAttData.chartData.filter((d) => d.value > 0)
-                                    : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                    : [{ name: "Not marked", value: 1, color: "var(--cms-border)" }]
                                 }
                                 dataKey="value"
                                 nameKey="name"
@@ -1360,21 +1370,21 @@ export default function DashboardPage() {
                               >
                                 {(studentAttData.chartData.some((d) => d.value > 0)
                                   ? studentAttData.chartData.filter((d) => d.value > 0)
-                                  : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                  : [{ name: "Not marked", value: 1, color: "var(--cms-border)" }]
                                 ).map((entry) => (
                                   <Cell key={entry.name} fill={entry.color} />
                                 ))}
                               </Pie>
-                              <Tooltip
+                              {studentAttData.total > 0 && <Tooltip
                                 content={<CustomDonutTooltip />}
                                 wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
                                 allowEscapeViewBox={{ x: true, y: true }}
-                              />
+                              />}
                             </PieChart>
                           </ResponsiveContainer>
                           <div className="dashboard-donut-center">
                             <strong>{studentAttData.percentage ?? 0}%</strong>
-                            <span>Attendance</span>
+                            <span>{studentAttData.total > 0 ? "Attendance" : "Not marked"}</span>
                           </div>
                         </div>
 
@@ -1400,7 +1410,7 @@ export default function DashboardPage() {
                       {/* 5 Summary KPI Chips */}
                       <div className="dashboard-attendance-kpi-row">
                         <div className="att-kpi-chip">
-                          <small>Marked Students</small>
+                          <small>Total Students</small>
                           <strong>{formatNumber(studentAttData.total)}</strong>
                         </div>
                         <div className="att-kpi-chip text-present">
@@ -1420,9 +1430,6 @@ export default function DashboardPage() {
                           <strong>{formatNumber(studentAttData.percentage)}%</strong>
                         </div>
                       </div>
-                    </>
-                  )
-                }
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">
@@ -1459,7 +1466,7 @@ export default function DashboardPage() {
                           data={
                             staffAttData.chartData.some((d) => d.value > 0)
                               ? staffAttData.chartData.filter((d) => d.value > 0)
-                              : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                              : [{ name: "Not marked", value: 1, color: "var(--cms-border)" }]
                           }
                           dataKey="value"
                           nameKey="name"
@@ -1471,21 +1478,21 @@ export default function DashboardPage() {
                         >
                           {(staffAttData.chartData.some((d) => d.value > 0)
                             ? staffAttData.chartData.filter((d) => d.value > 0)
-                            : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                            : [{ name: "Not marked", value: 1, color: "var(--cms-border)" }]
                           ).map((entry) => (
                             <Cell key={entry.name} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip
+                        {staffAttData.chartData.some((d) => d.value > 0) && <Tooltip
                           content={<CustomDonutTooltip />}
                           wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
                           allowEscapeViewBox={{ x: true, y: true }}
-                        />
+                        />}
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="dashboard-donut-center">
                       <strong>{staffAttData.percentage ?? 0}%</strong>
-                      <span>Attendance</span>
+                      <span>{staffAttData.chartData.some((d) => d.value > 0) ? "Attendance" : "Not marked"}</span>
                     </div>
                   </div>
 

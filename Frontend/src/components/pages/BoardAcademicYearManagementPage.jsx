@@ -377,17 +377,20 @@ function normalizeAcademicYearList(responseData, requestedPage, requestedSize) {
   const items = Array.isArray(envelope)
     ? envelope
     : envelope.items ?? envelope.Items ?? envelope.records ?? envelope.Records ?? envelope.data ?? envelope.Data ?? [];
+  const pagination = envelope.pagination ?? envelope.Pagination ?? responseData?.pagination ?? responseData?.Pagination ?? {};
   const totalCount = Number(
-    envelope.totalCount ??
+    pagination.totalCount ??
+      pagination.TotalCount ??
+      envelope.totalCount ??
       envelope.TotalCount ??
       responseData?.totalCount ??
       responseData?.TotalCount ??
       items.length,
   );
-  const pageSize = Number(envelope.pageSize ?? envelope.PageSize ?? requestedSize) || requestedSize;
-  const pageNumber = Number(envelope.pageNumber ?? envelope.PageNumber ?? requestedPage) || requestedPage;
+  const pageSize = Number(pagination.pageSize ?? pagination.PageSize ?? envelope.pageSize ?? envelope.PageSize ?? requestedSize) || requestedSize;
+  const pageNumber = Number(pagination.pageNumber ?? pagination.PageNumber ?? envelope.pageNumber ?? envelope.PageNumber ?? requestedPage) || requestedPage;
   const totalPages = Number(
-    envelope.totalPages ?? envelope.TotalPages ?? Math.max(1, Math.ceil(totalCount / pageSize)),
+    pagination.totalPages ?? pagination.TotalPages ?? envelope.totalPages ?? envelope.TotalPages ?? Math.max(1, Math.ceil(totalCount / pageSize)),
   );
   return {
     items: (Array.isArray(items) ? items : []).map(mapAcademicYearFromApi),

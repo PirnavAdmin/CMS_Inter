@@ -465,6 +465,7 @@ function Screen({ staff = false, say }) {
        say("Student attendance saved successfully!");
      }
      setDirty(false);
+     window.dispatchEvent(new Event("attendance-saved"));
      await load();
    } catch (e) {
      say(getApiErrorMessage(e) || "Failed to save attendance.", "error");
@@ -519,6 +520,7 @@ function Screen({ staff = false, say }) {
          remarks: editing.remarks
        });
      }
+     window.dispatchEvent(new Event("attendance-saved"));
      await load();
      setEditing(null);
      say(`${staff ? "Staff" : "Student"} attendance saved successfully.`);

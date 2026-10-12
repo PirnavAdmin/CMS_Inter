@@ -136,23 +136,23 @@ const LEAVE_BASE_URL = "/api/v1/staff-attendance/leave";
 
 export const leaveApi = {
   createLeave: async (data) => {
-    return apiClient.post(LEAVE_BASE_URL, data);
+    return api.post(LEAVE_BASE_URL, data);
   },
   
   getStaffLeaves: async (params) => {
-    return apiClient.get(LEAVE_BASE_URL, { params });
+    return api.get(LEAVE_BASE_URL, { params });
   },
   
   getLeaveDetails: async (leaveId) => {
-    return apiClient.get(`${LEAVE_BASE_URL}/${leaveId}`);
+    return api.get(`${LEAVE_BASE_URL}/${leaveId}`);
   },
   
   actionLeave: async (leaveId, data) => {
-    return apiClient.post(`${LEAVE_BASE_URL}/${leaveId}/action`, data);
+    return api.post(`${LEAVE_BASE_URL}/${leaveId}/action`, data);
   },
   
   getLeaveHistory: async (staffId) => {
-    return apiClient.get(`${LEAVE_BASE_URL}/history/staff/${staffId}`);
+    return api.get(`${LEAVE_BASE_URL}/history/staff/${staffId}`);
   }
 };
 
@@ -162,41 +162,41 @@ const REIMBURSEMENT_BASE_URL = "/api/v1/staff-reimbursements";
 
 export const reimbursementApi = {
   createReimbursement: async (data) => {
-    return apiClient.post(REIMBURSEMENT_BASE_URL, data);
+    return api.post(REIMBURSEMENT_BASE_URL, data);
   },
 
   getReimbursementById: async (id) => {
-    return apiClient.get(`${REIMBURSEMENT_BASE_URL}/${id}`);
+    return api.get(`${REIMBURSEMENT_BASE_URL}/${id}`);
   },
 
   getAllReimbursements: async (params) => {
-    return apiClient.get(REIMBURSEMENT_BASE_URL, { params });
+    return api.get(REIMBURSEMENT_BASE_URL, { params });
   },
 
   getReimbursementSummary: async (campusId) => {
-    return apiClient.get(`${REIMBURSEMENT_BASE_URL}/summary`, { params: { campusId } });
+    return api.get(`${REIMBURSEMENT_BASE_URL}/summary`, { params: { campusId } });
   },
 
   verifyReimbursement: async (id, data) => {
-    return apiClient.patch(`${REIMBURSEMENT_BASE_URL}/${id}/admin-verify`, data);
+    return api.patch(`${REIMBURSEMENT_BASE_URL}/${id}/admin-verify`, data);
   },
 
   rejectReimbursement: async (id, data) => {
-    return apiClient.patch(`${REIMBURSEMENT_BASE_URL}/${id}/admin-reject`, data);
+    return api.patch(`${REIMBURSEMENT_BASE_URL}/${id}/admin-reject`, data);
   },
 
   approveReimbursement: async (id, data) => {
-    return apiClient.patch(`${REIMBURSEMENT_BASE_URL}/${id}/accountant-approve`, data);
+    return api.patch(`${REIMBURSEMENT_BASE_URL}/${id}/accountant-approve`, data);
   },
 
   markReimbursementPaid: async (id, data) => {
-    return apiClient.patch(`${REIMBURSEMENT_BASE_URL}/${id}/mark-paid`, data);
+    return api.patch(`${REIMBURSEMENT_BASE_URL}/${id}/mark-paid`, data);
   },
 
   uploadProofDocument: async (id, file) => {
     const formData = new FormData();
     formData.append("file", file);
-    return apiClient.post(`${REIMBURSEMENT_BASE_URL}/${id}/upload-proof`, formData, {
+    return api.post(`${REIMBURSEMENT_BASE_URL}/${id}/upload-proof`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
