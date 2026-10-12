@@ -175,6 +175,7 @@ export default function ResultProcessingPage() {
   const [selectedAnalyticsExamKey, setSelectedAnalyticsExamKey] = useState("");
   const [analyticsGroupFilter, setAnalyticsGroupFilter] = useState("all");
   const [selectedExamAnalyticsApiData, setSelectedExamAnalyticsApiData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const toastRef = useRef(null);
 
@@ -675,83 +676,274 @@ export default function ResultProcessingPage() {
     fetchPrograms();
   }, [filters.group, filters.board, effectiveCampusId]);
 
-  // 4. Completed Examinations (Independent - loads all completed exams for board/campus)
+  // 4. Completed Examinations with Approved Evaluations Only (Ready to generate and publish)
   useEffect(() => {
     if (!filters.board) {
       setExaminations([]);
       return;
     }
-    const fetchCompletedExams = async () => {
+    let isCancelled = false;
+    const fetchApprovedExams = async () => {
       try {
-        const res = await apiClient.get("/api/v1/examinations", {
-          params: {
-            campusId: effectiveCampusId,
-            CampusId: effectiveCampusId,
-            BoardId: filters.board,
-            AcademicYearId: filters.year || undefined,
-            AcademicLevelId: filters.level || undefined,
-            GroupId: filters.group || undefined,
-            ProgramId: filters.program || undefined,
-            status: "COMPLETED",
-          },
-          headers: {
-            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-          },
-        });
-        const raw = unwrap(res);
-        const items = Array.isArray(raw) ? raw : (res.data?.items || res.data || []);
-        const matchingItems = items.filter((e) => {
-          const examBoardId = e.boardId ?? e.BoardId;
-          if (examBoardId && String(examBoardId) !== String(filters.board)) return false;
-          return true;
-        });
-        const completedOnly = matchingItems.filter((e) => {
-          const s = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
-          return s === "COMPLETED" || s === "FINISHED" || s === "PUBLISHED" || e.isCompleted === true;
-        });
-        const finalExams = (completedOnly.length > 0 ? completedOnly : matchingItems).map((e) => ({
-          ...e,
-          id: e.examinationId ?? e.id ?? e.examId,
-          examinationId: e.examinationId ?? e.id ?? e.examId,
-          examName: e.examName || e.examinationName || e.name || e.title || e.examCode || "Examination",
-          examinationName: e.examName || e.examinationName || e.name || e.title || e.examCode || "Examination",
-          name: e.examName || e.examinationName || e.name || e.title || e.examCode || "Examination",
-          code: e.examCode || e.code || "",
-          examCode: e.examCode || e.code || "",
-        }));
+        const boardNum = Number(filters.board) || undefined;
+        const yearNum = Number(filters.year) || undefined;
+        const levelNum = Number(filters.level) || undefined;
+        const groupNum = Number(filters.group) || undefined;
+        const progStr = filters.program ? String(filters.program) : undefined;
 
-        // Also incorporate any examinations already published so all previous/approved exams are selectable
-        const publishedExams = (publishedGroupsRef.current || publishedGroups || []).map((pg) => ({
-          id: pg.examId,
-          examinationId: pg.examId,
-          examId: pg.examId,
-          examName: pg.examName,
-          examinationName: pg.examName,
-          name: pg.examName,
-          code: pg.examCode || "",
-          examCode: pg.examCode || "",
-          status: "PUBLISHED",
-          isPublished: true,
-          boardId: pg.boardId,
-          academicYearId: pg.academicYearId,
-          academicLevelId: pg.academicLevelId,
-          groupId: pg.groupId,
-          programId: pg.programId,
-        }));
-        const combinedExams = [...finalExams];
-        publishedExams.forEach((pe) => {
-          if (!combinedExams.some((c) => String(c.id ?? c.examinationId ?? c.examId) === String(pe.id))) {
-            combinedExams.push(pe);
+        // Fetch candidate exams, faculty evaluations, search evaluations, and published exams in parallel
+        const [examsResult, facultyEvalsResult, evalSearchResult, pubResult] = await Promise.allSettled([
+          apiClient.get("/api/v1/examinations", {
+            params: {
+              campusId: effectiveCampusId,
+              CampusId: effectiveCampusId,
+              BoardId: boardNum,
+              AcademicYearId: yearNum,
+              AcademicLevelId: levelNum,
+              GroupId: groupNum,
+              ProgramId: progStr,
+              status: "COMPLETED",
+            },
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          }),
+          apiClient.get("/api/v1/faculty/evaluations", {
+            params: {
+              status: "APPROVED",
+              campusId: effectiveCampusId,
+            },
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          }).catch(() =>
+            apiClient.get("/api/v1/faculty/evaluations", {
+              headers: {
+                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+              },
+            })
+          ),
+          apiClient.post(
+            "/api/v1/evaluations/search",
+            {
+              campusId: Number(effectiveCampusId) || 1,
+              boardId: boardNum,
+              academicYearId: yearNum,
+              academicLevelId: levelNum,
+              groupId: groupNum,
+            },
+            {
+              headers: {
+                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+              },
+            }
+          ),
+          apiClient.get("/api/v1/results/published", {
+            params: {
+              campusId: effectiveCampusId,
+              boardId: boardNum,
+              academicYearId: yearNum,
+              groupId: groupNum,
+            },
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          }),
+        ]);
+
+        if (isCancelled) return;
+
+        const isEvaluationApproved = (ev) => {
+          if (!ev) return false;
+          const s = String(ev.status ?? ev.evaluationStatus ?? "").trim().toUpperCase();
+          return s === "APPROVED" || ev.status === 3 || ev.isApproved === true;
+        };
+
+        const approvedExamIdSet = new Set();
+        const approvedExamMap = new Map();
+
+        // 1. Process evaluations from faculty evaluations endpoint
+        if (facultyEvalsResult.status === "fulfilled" && facultyEvalsResult.value) {
+          const facultyEvals = unwrap(facultyEvalsResult.value);
+          const evList = Array.isArray(facultyEvals) ? facultyEvals : (facultyEvalsResult.value.data?.items || []);
+          evList.forEach((ev) => {
+            if (isEvaluationApproved(ev)) {
+              const eId = String(ev.examinationId ?? ev.examId ?? "");
+              if (eId) {
+                approvedExamIdSet.add(eId);
+                if (!approvedExamMap.has(eId)) {
+                  const eName = String(ev.examinationName || ev.examName || `Exam ${eId}`).trim();
+                  approvedExamMap.set(eId, {
+                    id: Number(eId) || eId,
+                    examinationId: Number(eId) || eId,
+                    examId: Number(eId) || eId,
+                    examName: eName,
+                    examinationName: eName,
+                    name: eName,
+                    code: ev.examCode || ev.subjectCode || "",
+                    examCode: ev.examCode || ev.subjectCode || "",
+                    status: "APPROVED",
+                    isApproved: true,
+                    boardId: filters.board,
+                    academicYearId: filters.year,
+                    academicLevelId: filters.level,
+                    groupId: filters.group,
+                    programId: filters.program,
+                  });
+                }
+              }
+            }
+          });
+        }
+
+        // 2. Process evaluations from evaluations/search endpoint
+        if (evalSearchResult.status === "fulfilled" && evalSearchResult.value) {
+          const searchedEvals = unwrap(evalSearchResult.value);
+          const evList = Array.isArray(searchedEvals) ? searchedEvals : (evalSearchResult.value.data?.items || []);
+          evList.forEach((ev) => {
+            if (isEvaluationApproved(ev)) {
+              const eId = String(ev.examinationId ?? ev.examId ?? "");
+              if (eId) {
+                approvedExamIdSet.add(eId);
+                if (!approvedExamMap.has(eId)) {
+                  const eName = String(ev.examinationName || ev.examName || `Exam ${eId}`).trim();
+                  approvedExamMap.set(eId, {
+                    id: Number(eId) || eId,
+                    examinationId: Number(eId) || eId,
+                    examId: Number(eId) || eId,
+                    examName: eName,
+                    examinationName: eName,
+                    name: eName,
+                    code: ev.examCode || ev.subjectCode || "",
+                    examCode: ev.examCode || ev.subjectCode || "",
+                    status: "APPROVED",
+                    isApproved: true,
+                    boardId: filters.board,
+                    academicYearId: filters.year,
+                    academicLevelId: filters.level,
+                    groupId: filters.group,
+                    programId: filters.program,
+                  });
+                }
+              }
+            }
+          });
+        }
+
+        // 3. Candidate examinations from GET /api/v1/examinations
+        let candidateExams = [];
+        if (examsResult.status === "fulfilled" && examsResult.value) {
+          const raw = unwrap(examsResult.value);
+          const items = Array.isArray(raw) ? raw : (examsResult.value.data?.items || []);
+          candidateExams = items.filter((e) => {
+            const examBoardId = e.boardId ?? e.BoardId;
+            if (examBoardId && boardNum && String(examBoardId) !== String(boardNum)) return false;
+            return true;
+          });
+        }
+
+        // Check if candidate exams have approved status directly
+        candidateExams.forEach((e) => {
+          const eId = String(e.examinationId ?? e.id ?? e.examId ?? "");
+          const isDirectlyApproved =
+            String(e.status || e.evaluationStatus || "").toUpperCase() === "APPROVED" ||
+            e.status === 3 ||
+            e.isApproved === true ||
+            e.evaluationsApproved === true;
+          if (eId && isDirectlyApproved) {
+            approvedExamIdSet.add(eId);
           }
         });
 
-        setExaminations(combinedExams);
+        // Check readiness for candidate exams not already verified
+        const unverifiedCandidates = candidateExams.filter((e) => {
+          const eId = String(e.examinationId ?? e.id ?? e.examId ?? "");
+          return eId && !approvedExamIdSet.has(eId);
+        });
+
+        if (unverifiedCandidates.length > 0) {
+          const readinessChecks = unverifiedCandidates.map(async (e) => {
+            const eId = String(e.examinationId ?? e.id ?? e.examId);
+            try {
+              const rRes = await apiClient.get("/api/v1/results/readiness", {
+                params: {
+                  campusId: effectiveCampusId,
+                  boardId: boardNum,
+                  academicYearId: yearNum,
+                  academicLevelId: levelNum,
+                  groupId: groupNum,
+                  programId: progStr,
+                  examId: eId,
+                  examinationId: eId,
+                },
+                headers: {
+                  ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+                },
+              });
+              const rData = rRes.data?.data || rRes.data || {};
+              const isApproved = Boolean(
+                rData.allEvaluationsApproved ||
+                rData.evaluationsApproved ||
+                (rData.approvedEvaluationCount > 0 && rData.approvedEvaluationCount >= rData.requiredEvaluationCount)
+              );
+              return { exam: e, id: eId, approved: isApproved };
+            } catch {
+              return { exam: e, id: eId, approved: false };
+            }
+          });
+
+          const readinessResults = await Promise.allSettled(readinessChecks);
+          if (isCancelled) return;
+          readinessResults.forEach((r) => {
+            if (r.status === "fulfilled" && r.value.approved) {
+              approvedExamIdSet.add(r.value.id);
+            }
+          });
+        }
+
+        // Merge candidate examinations details that have approved evaluations
+        candidateExams.forEach((e) => {
+          const eId = String(e.examinationId ?? e.id ?? e.examId ?? "");
+          if (eId && approvedExamIdSet.has(eId)) {
+            const existing = approvedExamMap.get(eId) || {};
+            const cleanName = String(e.examName || e.examinationName || e.name || existing.examName || `Exam ${eId}`).trim();
+            approvedExamMap.set(eId, {
+              ...existing,
+              ...e,
+              id: Number(eId) || eId,
+              examinationId: Number(eId) || eId,
+              examId: Number(eId) || eId,
+              examName: cleanName,
+              examinationName: cleanName,
+              name: cleanName,
+              code: e.examCode || e.code || existing.examCode || "",
+              examCode: e.examCode || e.code || existing.examCode || "",
+              status: "APPROVED",
+              isApproved: true,
+            });
+          }
+        });
+
+        const finalApprovedExams = Array.from(approvedExamMap.values()).filter(
+          (e) => e.isApproved === true || String(e.status || "").toUpperCase() === "APPROVED"
+        );
+
+        if (!isCancelled) {
+          setExaminations(finalApprovedExams);
+          if (filters.exam && !finalApprovedExams.some((e) => String(e.examinationId ?? e.id ?? e.examId) === String(filters.exam))) {
+            setFilters((prev) => ({ ...prev, exam: "" }));
+          }
+        }
       } catch (err) {
-        showToast("Failed to load completed examinations.", "error");
+        console.warn("Notice loading approved examinations:", err);
       }
     };
-    fetchCompletedExams();
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveCampusId, showToast, publishedGroups]);
+
+    fetchApprovedExams();
+    return () => {
+      isCancelled = true;
+    };
+  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveCampusId, publishedGroups]);
 
   // 5. Readiness & Evaluation Verification
   useEffect(() => {
@@ -2007,87 +2199,49 @@ export default function ResultProcessingPage() {
     return { id: targetExamId || "", name: "Examination" };
   }, [filters.exam, applied.exam, examinations]);
 
-  // Analytics options (current session, previous year and current published examinations, approved examinations)
+  // Analytics options: published results examinations details only
   const analyticsExamOptions = useMemo(() => {
     const opts = [];
-    const seenKeys = new Set();
+    const seenExamIds = new Set();
 
-    // 1. Current session results (if generated)
-    if (resultsGenerated && currentExamObj?.id) {
-      const key = `current_${currentExamObj.id}`;
-      opts.push({
-        id: key,
-        name: `${currentExamObj.name} (Current Session)`,
-        examName: currentExamObj.name,
-        examId: currentExamObj.id,
-        type: "current",
-      });
-      seenKeys.add(key);
-    }
-
-    // 2. All published examinations from publishedGroups (includes previous years' results)
     (publishedGroups || []).forEach((pg) => {
-      const pId = pg.publishedId || pg.examId;
-      const optKey = `published_${pId}`;
-      if (!seenKeys.has(optKey)) {
-        const codeStr = pg.examCode ? ` (${pg.examCode})` : "";
-        const yrStr = pg.academicYear && pg.academicYear !== "—" ? ` (${pg.academicYear})` : "";
-        opts.push({
-          id: optKey,
-          name: `${pg.examName}${codeStr}${yrStr}`,
-          examName: pg.examName,
-          examCode: pg.examCode || "",
-          examId: pg.examId,
-          publishedId: pg.publishedId,
-          type: "published",
-          academicYear: pg.academicYear,
-          groupData: pg,
-        });
-        seenKeys.add(optKey);
-      }
-    });
+      const pId = String(pg.examId ?? pg.publishedId ?? "");
+      if (!pId || seenExamIds.has(pId)) return;
+      seenExamIds.add(pId);
 
-    // 3. Approved examination evaluations from examinations list
-    (examinations || []).forEach((e) => {
-      const eId = String(e.examinationId ?? e.id ?? e.examId);
-      const key = `exam_${eId}`;
-      const eName = e.examName || e.examinationName || e.name || `Exam ${eId}`;
-      const codeStr = (e.examCode || e.code) ? ` (${e.examCode || e.code})` : "";
-      const alreadyInPublished = (publishedGroups || []).some((pg) => String(pg.examId) === eId || String(pg.publishedId) === eId);
-      const alreadyCurrent = resultsGenerated && String(currentExamObj?.id) === eId;
-      if (!alreadyInPublished && !alreadyCurrent && !seenKeys.has(key)) {
-        opts.push({
-          id: key,
-          name: `${eName}${codeStr} (Approved Evaluation)`,
-          examName: eName,
-          examCode: e.examCode || e.code || "",
-          examId: eId,
-          type: "examination",
-          examData: e,
-        });
-        seenKeys.add(key);
-      }
+      const codeStr = pg.examCode ? ` (${pg.examCode})` : "";
+      const yrStr = pg.academicYear && pg.academicYear !== "—" ? ` · ${pg.academicYear}` : "";
+      opts.push({
+        id: `published_${pId}`,
+        name: `${pg.examName || `Exam ${pId}`}${codeStr}${yrStr}`,
+        examName: pg.examName || `Exam ${pId}`,
+        examCode: pg.examCode || "",
+        examId: pg.examId ?? pId,
+        publishedId: pg.publishedId ?? pId,
+        type: "published",
+        academicYear: pg.academicYear,
+        groupData: pg,
+      });
     });
 
     return opts;
-  }, [resultsGenerated, currentExamObj, publishedGroups, examinations]);
+  }, [publishedGroups]);
 
-  // Default to generated results when results are generated; otherwise first available option
+  // Default to first published examination if current key is invalid or unset
   useEffect(() => {
-    if (resultsGenerated && currentExamObj?.id) {
-      setSelectedAnalyticsExamKey(`current_${currentExamObj.id}`);
-    } else if (analyticsExamOptions.length > 0) {
+    if (analyticsExamOptions.length > 0) {
       const exists = analyticsExamOptions.some((o) => o.id === selectedAnalyticsExamKey);
       if (!exists) {
         setSelectedAnalyticsExamKey(analyticsExamOptions[0].id);
       }
     }
-  }, [resultsGenerated, currentExamObj?.id, analyticsExamOptions, selectedAnalyticsExamKey]);
+  }, [analyticsExamOptions, selectedAnalyticsExamKey]);
 
   const handleSelectAnalyticsExam = (key) => {
     setSelectedAnalyticsExamKey(key);
     setSelectedExamAnalyticsApiData(null);
     setAnalyticsGroupFilter("all");
+    setAnalyticsLoading(true);
   };
 
   const activeAnalyticsOption = useMemo(() => {
@@ -2098,131 +2252,130 @@ export default function ResultProcessingPage() {
     );
   }, [analyticsExamOptions, selectedAnalyticsExamKey]);
 
-  // Available groups for the selected examination
+  // Available groups for the selected published examination
   const analyticsGroupOptions = useMemo(() => {
     if (!activeAnalyticsOption) return [{ id: "all", name: "All Groups" }];
     const set = new Set();
 
-    if (activeAnalyticsOption.type === "current") {
-      sectionSummaries.forEach((s) => {
-        if (s.groupName) set.add(s.groupName);
-      });
-      if (currentGroupObj?.name) set.add(currentGroupObj.name);
-      groups.forEach((g) => {
-        if (g.groupName || g.name) set.add(g.groupName || g.name);
-      });
-    } else if (activeAnalyticsOption.type === "published") {
-      const targetExamId = Number(activeAnalyticsOption.examId);
-      const targetPublishedId = Number(activeAnalyticsOption.publishedId || activeAnalyticsOption.groupData?.publishedId);
-      (publishedGroups || []).forEach((pg) => {
-        const matchesThisExam =
-          (targetPublishedId && Number(pg.publishedId) === targetPublishedId) ||
-          (targetExamId && Number(pg.examId) === targetExamId);
-        if (matchesThisExam && pg.groupName) {
-          set.add(pg.groupName);
-        }
-      });
-    }
+    const targetExamId = Number(activeAnalyticsOption.examId);
+    const targetPublishedId = Number(activeAnalyticsOption.publishedId || activeAnalyticsOption.groupData?.publishedId);
+    (publishedGroups || []).forEach((pg) => {
+      const matchesThisExam =
+        (targetPublishedId && Number(pg.publishedId) === targetPublishedId) ||
+        (targetExamId && Number(pg.examId) === targetExamId);
+      if (matchesThisExam && pg.groupName) {
+        set.add(pg.groupName);
+      }
+    });
 
     const items = Array.from(set).map((name) => ({ id: name, name }));
     return [{ id: "all", name: "All Groups" }, ...items];
-  }, [activeAnalyticsOption, sectionSummaries, currentGroupObj, groups, publishedGroups]);
+  }, [activeAnalyticsOption, publishedGroups]);
 
   // Fetch API analytics and section student records when activeAnalyticsOption changes
   useEffect(() => {
-    if (!activeAnalyticsOption) return;
+    if (!activeAnalyticsOption) {
+      setAnalyticsLoading(false);
+      return;
+    }
+    let isCancelled = false;
+    setAnalyticsLoading(true);
 
-    if (activeAnalyticsOption.type === "current") {
-      fetchAnalyticsData();
+    const targetExamId = Number(activeAnalyticsOption.examId);
+    const targetPublishedId = Number(activeAnalyticsOption.publishedId || activeAnalyticsOption.groupData?.publishedId);
+    const matching = (publishedGroups || []).filter(
+      (pg) => (targetPublishedId && Number(pg.publishedId) === targetPublishedId) || (targetExamId && Number(pg.examId) === targetExamId)
+    );
+
+    if (!matching.length) {
+      setAnalyticsLoading(false);
       return;
     }
 
-    if (activeAnalyticsOption.type === "published") {
-      setSelectedExamAnalyticsApiData(null);
-      const targetExamId = Number(activeAnalyticsOption.examId);
-      const targetPublishedId = Number(activeAnalyticsOption.publishedId || activeAnalyticsOption.groupData?.publishedId);
-      const matching = (publishedGroups || []).filter(
-        (pg) => (targetPublishedId && Number(pg.publishedId) === targetPublishedId) || (targetExamId && Number(pg.examId) === targetExamId)
-      );
-      if (!matching.length) return;
-
-      const firstPg = matching[0];
-      apiClient
-        .get("/api/v1/results/analytics", {
-          params: {
-            campusId: effectiveCampusId,
-            boardId: firstPg.boardId,
-            academicYearId: firstPg.academicYearId,
-            examId: firstPg.examId,
-            examinationId: firstPg.examId,
-            ...(firstPg.groupId ? { groupId: firstPg.groupId } : {}),
-          },
-          headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-        })
-        .then((res) => {
+    const firstPg = matching[0];
+    const analyticsPromise = apiClient
+      .get("/api/v1/results/analytics", {
+        params: {
+          campusId: effectiveCampusId,
+          boardId: firstPg.boardId,
+          academicYearId: firstPg.academicYearId,
+          examId: firstPg.examId,
+          examinationId: firstPg.examId,
+          ...(firstPg.groupId ? { groupId: firstPg.groupId } : {}),
+        },
+        headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+      })
+      .then((res) => {
+        if (!isCancelled) {
           const payload = unwrapPayload(res);
           if (payload) setSelectedExamAnalyticsApiData(payload);
-        })
-        .catch(() => setSelectedExamAnalyticsApiData(null));
-
-      // Fetch student rows for all sections of matching groups if not yet loaded
-      matching.forEach((pg) => {
-        const needsStudentRows = (pg.sections || []).some((s) => !s.studentRows || s.studentRows.length === 0);
-        if (needsStudentRows && pg.sections?.length > 0) {
-          Promise.all(
-            pg.sections.map((sec) =>
-              apiClient
-                .get(`/api/v1/results/sections/${sec.sectionId}`, {
-                  params: {
-                    campusId: effectiveCampusId,
-                    examId: pg.examId,
-                  },
-                  headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-                })
-                .then((res) => {
-                  const payload = unwrapPayload(res) || {};
-                  const sList = Array.isArray(payload) ? payload : (payload.students || []);
-                  return { sectionId: sec.sectionId, studentRows: sList };
-                })
-                .catch(() => ({ sectionId: sec.sectionId, studentRows: [] }))
-            )
-          ).then((sectionResults) => {
-            setPublishedGroups((prev) =>
-              prev.map((g) => {
-                if (String(g.examId) === String(pg.examId) && String(g.groupId) === String(pg.groupId)) {
-                  const updatedSections = (g.sections || []).map((s) => {
-                    const match = sectionResults.find((sr) => sr.sectionId === s.sectionId);
-                    if (match && match.studentRows.length > 0) {
-                      return { ...s, studentRows: match.studentRows };
-                    }
-                    return s;
-                  });
-                  return { ...g, sections: updatedSections };
-                }
-                return g;
-              })
-            );
-          });
+        }
+      })
+      .catch((err) => {
+        if (!isCancelled) {
+          console.warn("Analytics API fetch notice:", err);
+          setSelectedExamAnalyticsApiData(null);
         }
       });
-    } else if (activeAnalyticsOption.type === "examination") {
-      const e = activeAnalyticsOption.examData;
-      const targetExamId = e.examinationId ?? e.id ?? e.examId;
-      apiClient
-        .get("/api/v1/results/analytics", {
-          params: {
-            campusId: effectiveCampusId,
-            examId: targetExamId,
-          },
-          headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-        })
-        .then((res) => {
-          const payload = unwrapPayload(res);
-          if (payload) setSelectedExamAnalyticsApiData(payload);
-        })
-        .catch(() => setSelectedExamAnalyticsApiData(null));
-    }
-  }, [activeAnalyticsOption, effectiveCampusId, publishedGroups, fetchAnalyticsData]);
+
+    // Fetch student rows for all sections of matching groups if not yet loaded
+    const sectionsToFetch = [];
+    matching.forEach((pg) => {
+      (pg.sections || []).forEach((sec) => {
+        if (!sec.studentRows || sec.studentRows.length === 0) {
+          sectionsToFetch.push({ pg, sec });
+        }
+      });
+    });
+
+    const sectionsPromise = sectionsToFetch.length > 0
+      ? Promise.all(
+        sectionsToFetch.map(({ pg, sec }) =>
+          apiClient
+            .get(`/api/v1/results/sections/${sec.sectionId}`, {
+              params: {
+                campusId: effectiveCampusId,
+                examId: pg.examId,
+              },
+              headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+            })
+            .then((res) => {
+              const payload = unwrapPayload(res) || {};
+              const sList = Array.isArray(payload) ? payload : (payload.students || []);
+              return { examId: pg.examId, groupId: pg.groupId, sectionId: sec.sectionId, studentRows: sList };
+            })
+            .catch(() => ({ examId: pg.examId, groupId: pg.groupId, sectionId: sec.sectionId, studentRows: [] }))
+        )
+      ).then((sectionResults) => {
+        if (!isCancelled && sectionResults.length > 0) {
+          setPublishedGroups((prev) =>
+            prev.map((g) => {
+              const matchesPg = sectionResults.some((sr) => String(sr.examId) === String(g.examId) && String(sr.groupId) === String(g.groupId));
+              if (!matchesPg) return g;
+              const updatedSections = (g.sections || []).map((s) => {
+                const match = sectionResults.find((sr) => sr.sectionId === s.sectionId);
+                if (match && match.studentRows && match.studentRows.length > 0) {
+                  return { ...s, studentRows: match.studentRows };
+                }
+                return s;
+              });
+              return { ...g, sections: updatedSections };
+            })
+          );
+        }
+      })
+      : Promise.resolve();
+
+    Promise.allSettled([analyticsPromise, sectionsPromise]).finally(() => {
+      if (!isCancelled) {
+        setAnalyticsLoading(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeAnalyticsOption, effectiveCampusId]);
 
   // Dynamically computed analytics data for the selected examination and group filter
   const currentAnalyticsData = useMemo(() => {
@@ -2943,6 +3096,7 @@ export default function ResultProcessingPage() {
             <PreGenerateNotice mode="analytics" onGoToGenerate={() => setViewMode("table")} />
           ) : (
             <AnalyticsView
+              loading={analyticsLoading}
               data={currentAnalyticsData}
               examName={activeAnalyticsOption?.examName || currentExamObj.name}
               examOptions={analyticsExamOptions}
@@ -4041,6 +4195,7 @@ function RankListView({
 
 /* Analytics View with Passed/Failed Modals and Subject Performance */
 function AnalyticsView({
+  loading = false,
   data,
   examName,
   examOptions = [],
@@ -4142,44 +4297,71 @@ function AnalyticsView({
 
       {/* Overview Stat Cards */}
       <div className="results-analytics-grid" style={{ position: "relative", zIndex: 1 }}>
-        <div className="results-analytics-card">
-          <span>TOTAL STUDENTS</span>
-          <strong>{data.totalStudents}</strong>
-        </div>
+        {loading ? (
+          <>
+            <div className="results-analytics-card results-analytics-card-skeleton">
+              <span className="cms-skeleton" style={{ width: "65%", height: 11, display: "inline-block", marginBottom: 6 }} />
+              <strong className="cms-skeleton" style={{ width: "45%", height: 22, display: "inline-block" }} />
+            </div>
+            <div className="results-analytics-card results-analytics-card-skeleton">
+              <span className="cms-skeleton" style={{ width: "70%", height: 11, display: "inline-block", marginBottom: 6 }} />
+              <strong className="cms-skeleton" style={{ width: "40%", height: 22, display: "inline-block" }} />
+            </div>
+            <div className="results-analytics-card results-analytics-card-skeleton">
+              <span className="cms-skeleton" style={{ width: "65%", height: 11, display: "inline-block", marginBottom: 6 }} />
+              <strong className="cms-skeleton" style={{ width: "40%", height: 22, display: "inline-block" }} />
+            </div>
+            <div className="results-analytics-card results-analytics-card-skeleton">
+              <span className="cms-skeleton" style={{ width: "70%", height: 11, display: "inline-block", marginBottom: 6 }} />
+              <strong className="cms-skeleton" style={{ width: "50%", height: 22, display: "inline-block" }} />
+            </div>
+            <div className="results-analytics-card results-analytics-card-skeleton">
+              <span className="cms-skeleton" style={{ width: "60%", height: 11, display: "inline-block", marginBottom: 6 }} />
+              <strong className="cms-skeleton" style={{ width: "50%", height: 22, display: "inline-block" }} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="results-analytics-card">
+              <span>TOTAL STUDENTS</span>
+              <strong>{data.totalStudents}</strong>
+            </div>
 
-        <button
-          type="button"
-          className="results-analytics-card results-analytics-card-button"
-          onClick={() => onOpenModal("passed")}
-        >
-          <span style={{ color: "var(--cms-green)", display: "flex", alignItems: "center", gap: 4 }}>
-            <UserCheck size={14} /> PASSED STUDENTS
-          </span>
-          <strong style={{ color: "var(--cms-green)" }}>{data.passedCount}</strong>
-          <small style={{ fontSize: 10, color: "var(--cms-muted)" }}>Click to view passed list →</small>
-        </button>
+            <button
+              type="button"
+              className="results-analytics-card results-analytics-card-button"
+              onClick={() => onOpenModal("passed")}
+            >
+              <span style={{ color: "var(--cms-green)", display: "flex", alignItems: "center", gap: 4 }}>
+                <UserCheck size={14} /> PASSED STUDENTS
+              </span>
+              <strong style={{ color: "var(--cms-green)" }}>{data.passedCount}</strong>
+              <small style={{ fontSize: 10, color: "var(--cms-muted)" }}>Click to view passed list →</small>
+            </button>
 
-        <button
-          type="button"
-          className="results-analytics-card results-analytics-card-button"
-          onClick={() => onOpenModal("failed")}
-        >
-          <span style={{ color: "var(--cms-red)", display: "flex", alignItems: "center", gap: 4 }}>
-            <UserX size={14} /> FAILED STUDENTS
-          </span>
-          <strong style={{ color: "var(--cms-red)" }}>{data.failedCount}</strong>
-          <small style={{ fontSize: 10, color: "var(--cms-muted)" }}>Click to view failed list →</small>
-        </button>
+            <button
+              type="button"
+              className="results-analytics-card results-analytics-card-button"
+              onClick={() => onOpenModal("failed")}
+            >
+              <span style={{ color: "var(--cms-red)", display: "flex", alignItems: "center", gap: 4 }}>
+                <UserX size={14} /> FAILED STUDENTS
+              </span>
+              <strong style={{ color: "var(--cms-red)" }}>{data.failedCount}</strong>
+              <small style={{ fontSize: 10, color: "var(--cms-muted)" }}>Click to view failed list →</small>
+            </button>
 
-        <div className="results-analytics-card">
-          <span>PASS PERCENTAGE</span>
-          <strong>{data.passPercentage}%</strong>
-        </div>
+            <div className="results-analytics-card">
+              <span>PASS PERCENTAGE</span>
+              <strong>{data.passPercentage}%</strong>
+            </div>
 
-        <div className="results-analytics-card">
-          <span>CLASS AVERAGE</span>
-          <strong>{data.averageScore}%</strong>
-        </div>
+            <div className="results-analytics-card">
+              <span>CLASS AVERAGE</span>
+              <strong>{data.averageScore}%</strong>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Subject Performance Section */}
@@ -4206,7 +4388,18 @@ function AnalyticsView({
                 </tr>
               </thead>
               <tbody>
-                {data.subjectPerformance?.length ? (
+                {loading ? (
+                  Array.from({ length: 4 }, (_, idx) => (
+                    <tr key={idx} className="cms-skeleton-table-row">
+                      <td><span className="cms-skeleton" style={{ width: `${60 + (idx * 8)}%`, display: "inline-block" }} /></td>
+                      <td className="cms-text-center"><span className="cms-skeleton" style={{ width: "36px", margin: "0 auto", display: "inline-block" }} /></td>
+                      <td className="cms-text-center"><span className="cms-skeleton" style={{ width: "46px", margin: "0 auto", display: "inline-block" }} /></td>
+                      <td className="cms-text-center"><span className="cms-skeleton" style={{ width: "32px", margin: "0 auto", display: "inline-block" }} /></td>
+                      <td className="cms-text-center"><span className="cms-skeleton" style={{ width: "32px", margin: "0 auto", display: "inline-block" }} /></td>
+                      <td className="cms-text-center"><span className="cms-skeleton" style={{ width: "46px", margin: "0 auto", display: "inline-block" }} /></td>
+                    </tr>
+                  ))
+                ) : data.subjectPerformance?.length ? (
                   data.subjectPerformance.map((sub) => (
                     <tr key={sub.subjectId}>
                       <td className="cms-font-semibold">{sub.subjectName}</td>

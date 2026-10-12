@@ -128,6 +128,8 @@ apiClient.interceptors.request.use(
     try {
       const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
+      const clientIp = window.localStorage.getItem("cms_client_ip") || window.sessionStorage.getItem("cms_client_ip");
+      if (clientIp) config.headers["X-Client-IP"] = clientIp;
     } catch {
       // Storage may be unavailable in restricted browser contexts.
     }
