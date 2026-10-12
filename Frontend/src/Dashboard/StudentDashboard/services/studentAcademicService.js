@@ -153,7 +153,16 @@ export const getCurrentStudentPhotoFile = async (path, signal) => {
   const url = new URL(path, `${base.origin}/`);
   if (!["http:", "https:"].includes(url.protocol) || url.origin !== base.origin
     || !url.pathname.startsWith("/uploads/")) throw new Error("The profile photo URL is unavailable.");
-  const response = await apiClient.get(url.href, { responseType: "blob", signal, skipGlobalLoader: true });
+  const response = await apiClient.get(url.href, {
+    responseType: "blob",
+    signal,
+    skipGlobalLoader: true,
+    // A missing optional photo is handled locally; other failures still reject.
+    validateStatus: (status) => (status >= 200 && status < 300) || status === 404,
+  });
+  if (response.status === 404) {
+    throw new Error("Your saved profile photo is missing from the server. Please upload a replacement photo.");
+  }
   if (!response.data.type.startsWith("image/")) throw new Error("The photo server did not return an image.");
   return response.data;
 };

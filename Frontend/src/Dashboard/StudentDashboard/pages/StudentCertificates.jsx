@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Download, Plus, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
@@ -17,6 +18,9 @@ const date = (value) => value ? new Date(value).toLocaleDateString("en-IN", { da
 const saveFile = (blob, filename) => { const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob])); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url); };
 
 export default function StudentCertificates() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const consumedRequest = useRef(null);
   const { profile: student, loading: profileLoading, error: profileError } = useStudentProfile();
   const [rows, setRows] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -31,18 +35,31 @@ export default function StudentCertificates() {
   const load = useCallback(async () => {
     if (!student?.studentId) { setLoading(false); return; }
     setLoading(true); setError("");
-    const [certResult, templateResult] = await Promise.allSettled([
+    const [certResult, typeResult] = await Promise.allSettled([
       apiClient.get(studentApiEndpoints.certificates.list, { params: { search: student.admissionNo || student.studentId } }),
-      apiClient.get(studentApiEndpoints.certificates.activeTemplates),
+      apiClient.get(studentApiEndpoints.certificates.list, { params: {
+        campusId: student.campusId,
+        boardId: student.boardId,
+        academicYearId: student.academicYearId,
+      } }),
     ]);
     if (certResult.status === "fulfilled") {
       const records = list(certResult.value.data, ["items", "Items", "records", "Records", "certificates", "Certificates"]);
       setRows(records.filter((item) => String(read(item, "studentId", "StudentId") ?? "") === String(student.studentId) || (student.admissionNo && String(read(item, "admissionNo", "AdmissionNo") ?? "").toLowerCase() === String(student.admissionNo).toLowerCase())));
     }
-    if (templateResult.status === "fulfilled") setTemplates(list(templateResult.value.data, ["items", "Items", "templates", "Templates"]));
-    const failed = [certResult, templateResult].find((item) => item.status === "rejected");
+    if (typeResult.status === "fulfilled") {
+      const records = list(typeResult.value.data, ["items", "Items", "records", "Records", "certificates", "Certificates"]);
+      setTemplates(records.filter((item) => {
+        const active = read(item, "isActive", "IsActive");
+        const status = String(read(item, "status", "Status") || "").toLowerCase();
+        const campus = read(item, "campusId", "CampusId");
+        return ![false, 0, "false", "0"].includes(active) && status !== "cancelled"
+          && (student.campusId == null || campus == null || String(campus) === String(student.campusId));
+      }));
+    } else setTemplates([]);
+    const failed = [certResult, typeResult].find((item) => item.status === "rejected");
     if (certResult.status === "rejected") setError(getApiErrorMessage(certResult.reason));
-    else if (failed) setError(`Certificate templates could not be loaded. ${getApiErrorMessage(failed.reason)}`);
+    else if (failed) setError(`Certificate types could not be loaded. ${getApiErrorMessage(failed.reason)}`);
     setLoading(false);
   }, [student]);
   useEffect(() => { if (!profileLoading) load(); }, [load, profileLoading]);
@@ -55,7 +72,7 @@ export default function StudentCertificates() {
     if (!form.type || !form.purpose.trim()) return setRequestError("Select a certificate type and enter its purpose.");
     setSaving(true); setRequestError("");
     try {
-      await apiClient.post(studentApiEndpoints.certificates.generate, { admissionNo, certificateType: form.type, purpose: form.purpose.trim(), remarks: form.notes.trim() || null, requestDate: new Date().toISOString() });
+      await apiClient.post(studentApiEndpoints.certificates.studentRequest, { admissionNo, certificateType: form.type, purpose: form.purpose.trim(), remarks: form.notes.trim() || null, requestDate: new Date().toISOString() });
       setOpen(false); setForm({ type: "", purpose: "", notes: "" }); setSuccess("Certificate request submitted successfully."); await load();
     } catch (failure) { setRequestError(getApiErrorMessage(failure)); }
     finally { setSaving(false); }
@@ -70,12 +87,32 @@ export default function StudentCertificates() {
     } catch (requestError) { setError(getApiErrorMessage(requestError)); }
     finally { setDownloading(""); }
   };
-  const templatesReady = [...new Set(templates.map((item) => String(read(item, "certificateType", "CertificateType", "title", "Title", "templateTitle", "TemplateTitle", "name", "Name", "templateCode", "TemplateCode") || "").trim()).filter(Boolean))];
+  const templatesReady = [...new Set(templates
+    .filter((item) => typeof item === "string" || ![false, 0, "false", "0", "Inactive"].includes(read(item, "isActive", "IsActive", "status", "Status")))
+    .map((item) => String(typeof item === "string" ? item : read(item, "certificateType", "CertificateType", "title", "Title", "templateTitle", "TemplateTitle", "name", "Name", "templateCode", "TemplateCode") || "").trim())
+    .filter(Boolean))];
+  const defaultCertificateType = templatesReady[0] || "";
+  const openRequestCertificate = useCallback(() => {
+    setRequestError("");
+    setForm((current) => ({ ...current, type: defaultCertificateType }));
+    setOpen(true);
+  }, [defaultCertificateType]);
+  useEffect(() => {
+    if (!location.state?.openRequestCertificate || profileLoading || loading
+      || consumedRequest.current === location.key) return;
+    consumedRequest.current = location.key;
+    openRequestCertificate();
+    const { openRequestCertificate: consumed, ...remainingState } = location.state;
+    navigate({ pathname: location.pathname, search: location.search, hash: location.hash }, {
+      replace: true,
+      state: Object.keys(remainingState).length ? remainingState : null,
+    });
+  }, [location, navigate, profileLoading, loading, defaultCertificateType, openRequestCertificate]);
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
   return <div className="sp-page">
-    <StudentPageHeader title="Certificates" subtitle="View and request your student certificates." action={<button className="sp-btn primary" type="button" onClick={() => { setRequestError(""); setForm((current) => ({ ...current, type: templatesReady[0] || "" })); setOpen(true); }} disabled={!templatesReady.length}><Plus size={16}/> Request Certificate</button>}/>
+    <StudentPageHeader title="Certificates" subtitle="View and request your student certificates." action={<button className="sp-btn primary" type="button" onClick={openRequestCertificate}><Plus size={16}/> Request Certificate</button>}/>
     {success ? <Toast message={success} type="success" onClose={() => setSuccess("")}/> : null}
-    {!templatesReady.length && !error ? <div className="sp-api-state">No active certificate templates are available. Please contact the college administrator.</div> : null}
+    {!templatesReady.length && !error ? <div className="sp-api-state">No admin-created certificate types are available for your academic context. Please contact the college administrator.</div> : null}
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
     <StudentCard title="Certificate Requests" subtitle={`${rows.length} certificate request${rows.length === 1 ? "" : "s"}`}>
       {!rows.length && !error ? <StudentEmptyState title="No certificate requests" text="Your certificate requests and issued certificates will appear here."/> : <StudentDataTable columns={["Certificate No.", "Certificate Type", "Requested Date", "Purpose", "Status", "Action"]} rows={rows} empty="No certificate requests found for this student." renderCell={(value, row, column, index) => {
@@ -90,6 +127,6 @@ export default function StudentCertificates() {
       }}/>
       }
     </StudentCard>
-    {open ? <div className="sp-modal-backdrop"><form className="sp-modal" onSubmit={submit}><header><div><h2>Request Certificate</h2><p>Submit a certificate request for review.</p></div><button type="button" className="sp-icon-btn" disabled={saving} onClick={() => setOpen(false)}><X size={18}/></button></header>{requestError ? <div className="sp-api-state is-error" role="alert">{requestError}</div> : null}<label><span>Certificate Type</span><select required value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}><option value="">Select certificate type</option>{templatesReady.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label><span>Purpose</span><input required value={form.purpose} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}/></label><label><span>Additional Notes</span><textarea rows="3" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}/></label><footer><button type="button" className="sp-btn" disabled={saving} onClick={() => setOpen(false)}>Cancel</button><button className="sp-btn primary" disabled={saving}>{saving ? "Submitting..." : "Submit Request"}</button></footer></form></div> : null}
+    {open ? <div className="sp-modal-backdrop"><form className="sp-modal" onSubmit={submit}><header><div><h2>Request Certificate</h2><p>Submit a certificate request for review.</p></div><button type="button" className="sp-icon-btn" disabled={saving} onClick={() => setOpen(false)}><X size={18}/></button></header>{requestError ? <div className="sp-api-state is-error" role="alert">{requestError}</div> : null}{!templatesReady.length ? <div className="sp-api-state" role="status">{error || "No admin-created certificate types are available for your academic context. Please contact the college administrator."}</div> : null}<label><span>Certificate Type</span><select required value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}><option value="">Select certificate type</option>{templatesReady.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label><span>Purpose</span><input required value={form.purpose} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}/></label><label><span>Additional Notes</span><textarea rows="3" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}/></label><footer><button type="button" className="sp-btn" disabled={saving} onClick={() => setOpen(false)}>Cancel</button><button className="sp-btn primary" disabled={saving || !templatesReady.length}>{saving ? "Submitting..." : "Submit Request"}</button></footer></form></div> : null}
   </div>;
 }
