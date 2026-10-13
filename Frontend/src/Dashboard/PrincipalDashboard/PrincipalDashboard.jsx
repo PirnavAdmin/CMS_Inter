@@ -10,6 +10,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
+import { getAuthUser } from "@/features/authStorage.js";
 import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
 import { principalQuickActions, principalReports } from "./data/principalDashboardMockData.js";
 import { fetchPrincipalDashboardData, principalDashboardFallbackData } from "./services/principalDashboardApi.js";
@@ -36,8 +37,15 @@ function formatRangeLabel(range) {
 }
 
 function attendancePercent(attendance) {
+  if (attendance?.attendanceRate !== undefined && attendance?.attendanceRate !== null) {
+    const rate = Math.min(100, Math.max(0, Number(attendance.attendanceRate)));
+    return `${rate.toFixed(1)}%`;
+  }
   const total = Number(attendance?.total || 0);
-  return total ? `${((Number(attendance.present || 0) / total) * 100).toFixed(1)}%` : "0.0%";
+  const present = Number(attendance?.present || 0);
+  if (!total || !present) return "0.0%";
+  const pct = Math.min(100, Math.max(0, (present / total) * 100));
+  return `${pct.toFixed(1)}%`;
 }
 
 function Icon({ name, size = 18 }) {
@@ -60,7 +68,7 @@ function SectionHeader({ title, subtitle, action, icon: HeaderIcon = Activity })
 function Donut({ present, absent, leave, label }) {
   const data = [{ name: "Present", value: present, color: "#168a52" }, { name: "Absent", value: absent, color: "#ef6b62" }, { name: "Leave", value: leave, color: "#e8b938" }];
   const total = present + absent + leave;
-  const percentage = total ? Math.round((present / total) * 100) : 0;
+  const percentage = total ? Math.min(100, Math.max(0, Math.round((present / total) * 100))) : 0;
   return (
     <div className="principal-donut-wrap">
       <ResponsiveContainer width="100%" height="100%">
@@ -94,12 +102,23 @@ function PrincipalDashboard() {
   const [reloadKey, setReloadKey] = useState(0);
   const periodControlRef = useRef(null);
   const data = dashboardState.data || principalDashboardFallbackData;
+  const authUser = useMemo(() => getAuthUser(), []);
+  const principalName = authUser?.fullName || authUser?.name || data.principal?.name || "Principal";
+  const collegeName = selectedCampus?.campusName || selectedCampus?.name || data.principal?.college || "College Campus";
+  const academicYearName = selectedAcademicYear?.academicYearName || selectedAcademicYear?.name || data.principal?.academicYear || "2026-2027";
 
-  const contextFilters = useMemo(() => ({
-    campusId: parseNumericId(selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId),
-    boardId: parseNumericId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId),
-    academicYearId: parseNumericId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId),
-  }), [selectedAcademicYear, selectedAcademicYearId, selectedBoard, selectedBoardId, selectedCampus, selectedCampusId]);
+  const campusId = useMemo(
+    () => parseNumericId(selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId),
+    [selectedCampusId, selectedCampus?.id, selectedCampus?.campusId],
+  );
+  const boardId = useMemo(
+    () => parseNumericId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId),
+    [selectedBoardId, selectedBoard?.id, selectedBoard?.boardId],
+  );
+  const academicYearId = useMemo(
+    () => parseNumericId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId),
+    [selectedAcademicYearId, selectedAcademicYear?.id, selectedAcademicYear?.academicYearId],
+  );
 
   const selectedPeriodLabel = period === "Custom Date Range" ? formatRangeLabel(customRange) : period;
   const periodSnapshot = data.periodSnapshots?.[period] || data.periodSnapshots?.["This Week"] || principalDashboardFallbackData.periodSnapshots.Today;
@@ -147,7 +166,7 @@ function PrincipalDashboard() {
     let active = true;
     setDashboardState((current) => ({ ...current, loading: true, error: "" }));
     setIsRefreshing(true);
-    fetchPrincipalDashboardData({ period, customRange, context: contextFilters })
+    fetchPrincipalDashboardData({ period, customRange, context: { campusId, boardId, academicYearId } })
       .then((response) => {
         if (!active) return;
         setDashboardState({
@@ -175,7 +194,7 @@ function PrincipalDashboard() {
     return () => {
       active = false;
     };
-  }, [contextFilters, customRange, period, reloadKey]);
+  }, [campusId, boardId, academicYearId, customRange.start, customRange.end, period, reloadKey]);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -245,7 +264,7 @@ function PrincipalDashboard() {
     <DashboardLayout title={null} subtitle={null} breadcrumb={["Overview"]}>
       <main className="principal-page">
         <header className="principal-page-head">
-          <div><p className="principal-eyebrow">{data.principal.college} <span>•</span> Academic Year {data.principal.academicYear}</p><h1>Principal Dashboard</h1><p className="principal-page-subtitle">A clear view of your college, from attendance to academic progress.</p></div>
+          <div><p className="principal-eyebrow">{collegeName} <span>•</span> Academic Year {academicYearName}</p><h1>Principal Dashboard</h1><p className="principal-page-subtitle">A clear view of your college, from attendance to academic progress.</p></div>
           <div className="principal-head-actions">
             <div className="principal-period-control" ref={periodControlRef}>
               <button type="button" className="principal-date-picker" aria-haspopup="menu" aria-expanded={periodOpen || customRangeOpen} onClick={() => { setPeriodOpen((open) => !open); setCustomRangeOpen(false); }}>
@@ -287,9 +306,9 @@ function PrincipalDashboard() {
         ) : null}
 
         <section className="principal-welcome">
-          <div className="principal-welcome-copy"><span className="principal-welcome-badge"><Sparkles size={14} /> Campus snapshot</span><h2>Good morning, {data.principal.name}</h2><p>Every number tells a story about your students. Here is what is happening across Pirnav today.</p><div className="principal-welcome-meta"><span><CheckCircle2 size={15} /> {dashboardState.partial ? "Live data partially loaded" : "Campus operations are on track"}</span><span>{loadedAtLabel}</span></div></div>
+          <div className="principal-welcome-copy"><span className="principal-welcome-badge"><Sparkles size={14} /> Campus snapshot</span><h2>Good morning, {principalName}</h2><p>Every number tells a story about your students. Here is what is happening across {collegeName} today.</p><div className="principal-welcome-meta"><span><CheckCircle2 size={15} /> {dashboardState.partial ? "Live data partially loaded" : "Campus operations are on track"}</span><span>{loadedAtLabel}</span></div></div>
           <img src={pirnavCollegeCrest} alt="Pirnav College crest" className="principal-crest" />
-          <div className="principal-welcome-side"><span>{period === "Today" ? "Today's attendance" : `${selectedPeriodLabel} attendance`}</span><strong>{attendancePercent(periodSnapshot.attendance)}</strong><small>+2.8% from previous period</small>{canViewModule("attendance") ? <Link to="/dashboard/attendance/student">View details <ArrowUpRight size={14} /></Link> : null}</div>
+          <div className="principal-welcome-side"><span>{period === "Today" ? "Today's attendance" : `${selectedPeriodLabel} attendance`}</span><strong>{attendancePercent(periodSnapshot.attendance)}</strong><small>{Number(periodSnapshot.attendance?.total || 0) > 0 ? `${periodSnapshot.attendance?.present || 0} students recorded present` : "No attendance recorded for this period"}</small>{canViewModule("attendance") ? <Link to="/dashboard/attendance/student">View details <ArrowUpRight size={14} /></Link> : null}</div>
         </section>
 
         <section className="principal-kpi-grid" aria-label="College summary">
@@ -303,7 +322,7 @@ function PrincipalDashboard() {
         </section>
 
         <section className="principal-middle-grid">
-          <article className="principal-card principal-table-card"><SectionHeader title="Class-wise Student Overview" subtitle="Attendance by class and section" action={<label className="principal-filter"><select value={classFilter} onChange={(event) => setClassFilter(event.target.value)} aria-label="Filter classes"><option>All classes</option><option>1st Year</option><option>2nd Year</option></select><ChevronDown size={13} /></label>} /><div className="principal-table-wrap"><table><thead><tr><th>Class</th><th>Students</th><th>Present</th><th>Absent</th><th>Rate</th></tr></thead><tbody>{filteredClasses.map((item) => <tr key={item.className}><td><span className={`principal-table-dot tone-${item.tone}`} />{item.className}</td><td>{item.students}</td><td className="is-green">{item.present}</td><td className="is-red">{item.absent}</td><td><span className="principal-rate-pill">{Math.round((item.present / item.students) * 100)}%</span></td></tr>)}</tbody></table></div>{canViewModule("section-room") ? <Link className="principal-table-footer" to="/dashboard/sections">View all classes <ChevronRight size={14} /></Link> : null}</article>
+          <article className="principal-card principal-table-card"><SectionHeader title="Class-wise Student Overview" subtitle="Attendance by class and section" action={<label className="principal-filter"><select value={classFilter} onChange={(event) => setClassFilter(event.target.value)} aria-label="Filter classes"><option>All classes</option><option>1st Year</option><option>2nd Year</option></select><ChevronDown size={13} /></label>} /><div className="principal-table-wrap"><table><thead><tr><th>Class</th><th>Students</th><th>Present</th><th>Absent</th><th>Rate</th></tr></thead><tbody>{filteredClasses.map((item) => <tr key={item.className}><td><span className={`principal-table-dot tone-${item.tone}`} />{item.className}</td><td>{item.students}</td><td className="is-green">{item.present}</td><td className="is-red">{item.absent}</td><td><span className="principal-rate-pill">{item.students > 0 ? `${Math.min(100, Math.max(0, Math.round((item.present / item.students) * 100)))}%` : "0%"}</span></td></tr>)}</tbody></table></div>{canViewModule("section-room") ? <Link className="principal-table-footer" to="/dashboard/sections">View all classes <ChevronRight size={14} /></Link> : null}</article>
           <article className="principal-card principal-exams-card"><SectionHeader title="Upcoming Examinations" subtitle="Next scheduled assessments" action={canViewModule("examination") ? <Link to="/dashboard/examinations" className="principal-card-link">View all <ChevronRight size={14} /></Link> : null} /><div className="principal-exam-list">{data.exams.map((exam, index) => canViewModule("examination") ? <Link to="/dashboard/examinations" className="principal-exam-row" key={exam.subject}><span className={`principal-exam-date tone-${["green", "violet", "amber"][index]}`}><strong>{exam.date.split(" ")[0]}</strong><small>{exam.date.split(" ").slice(1).join(" ")}</small></span><span className="principal-exam-copy"><strong>{exam.subject}</strong><small>{exam.time} <span>•</span> {exam.classes}</small><small>{exam.room} <span>•</span> {exam.students} students</small></span><ChevronRight size={15} /></Link> : <div className="principal-exam-row" key={exam.subject}><span className={`principal-exam-date tone-${["green", "violet", "amber"][index]}`}><strong>{exam.date.split(" ")[0]}</strong><small>{exam.date.split(" ").slice(1).join(" ")}</small></span><span className="principal-exam-copy"><strong>{exam.subject}</strong><small>{exam.time} <span>•</span> {exam.classes}</small><small>{exam.room} <span>•</span> {exam.students} students</small></span></div>)}</div></article>
         </section>
 

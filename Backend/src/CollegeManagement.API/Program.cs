@@ -433,6 +433,14 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+if (args.Contains("--test-principal-dashboard"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var tester = new CollegeManagement.API.Tests.PrincipalDashboardTester(connStr);
+    await tester.RunAsync();
+    return;
+}
+
 if (args.Contains("--test-timetable"))
 {
     var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
