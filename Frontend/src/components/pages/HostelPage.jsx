@@ -1276,8 +1276,8 @@ export default function HostelPage() {
       const totalRoomsCount = dbBlock?.totalRooms ?? blockRooms.length;
       const blockBeds = beds.filter((bd) => Number(bd.hostelId) === Number(b.id) || blockRooms.some((r) => Number(r.id) === Number(bd.roomId)));
       const totalBedsCount = dbBlock?.totalBeds ?? (blockBeds.length > 0 ? blockBeds.length : blockRooms.reduce((acc, r) => acc + (Number(r.capacity) || 1), 0));
-      const occupiedCount = dbBlock?.occupiedBeds ?? allocations.filter((a) => (Number(a.hostelId) === Number(b.id) || a.blockName === b.name || a.blockCode === b.code) && a.status === "Active").length;
-      const vacantCount = dbBlock?.availableBeds ?? Math.max(0, totalBedsCount - occupiedCount);
+      const occupiedCount = allocations.filter((a) => (Number(a.hostelId) === Number(b.id) || a.blockName === b.name || a.blockCode === b.code || a.hostelName === b.name || a.hostelCode === b.code) && ((a.status || "").toLowerCase() === "active" || (a.status || "").toLowerCase() === "allocated")).length;
+      const vacantCount = Math.max(0, totalBedsCount - occupiedCount);
       const assignedWarden = wardens.find((w) => (w.status || "").toLowerCase() === "active" && (Number(w.hostelId) === Number(b.id) || String(w.hostelId) === String(b.id) || w.assignedHostels === b.name || (w.assignedHostels || "").includes(b.name)));
       const staffForWarden = assignedWarden && (!assignedWarden.name || assignedWarden.name === "Resident Warden")
         ? candidateStaff.find((s) => Number(s.staffId || s.id) === Number(assignedWarden.staffId))
@@ -1365,16 +1365,16 @@ export default function HostelPage() {
     [allocations]
   );
 
-  const occupiedBeds = dashboardData?.occupiedBeds ?? activeAllocations.length;
-  const vacantBeds = dashboardData?.availableBeds ?? Math.max(0, totalBeds - occupiedBeds);
-  const occupancyRate = dashboardData?.occupancyPercentage ?? (totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0);
+  const occupiedBeds = activeAllocations.length;
+  const vacantBeds = Math.max(0, totalBeds - occupiedBeds);
+  const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
   const monthlyRevenue = useMemo(() => {
-    return allocations.reduce((sum, a) => {
+    return activeAllocations.reduce((sum, a) => {
       const num = parseFloat(String(a.monthlyFee || "").replace(/[^0-9.]/g, "")) || 0;
       return sum + num;
     }, 0);
-  }, [allocations]);
-  const activeWardensCount = dashboardData?.activeWardens ?? wardens.filter((w) => w.status === "Active").length;
+  }, [activeAllocations]);
+  const activeWardensCount = wardens.filter((w) => (w.status || "").toLowerCase() === "active").length || (dashboardData?.activeWardens ?? 0);
   const pendingOutpasses = useMemo(
     () => outpasses.filter((o) => o.status === "Pending" || o.status === "Pending Approval" || o.status === "Under Review").length,
     [outpasses]

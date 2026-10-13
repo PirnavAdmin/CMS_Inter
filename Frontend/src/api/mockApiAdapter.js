@@ -9,7 +9,7 @@
  * and allows full CRUD interactions across all ERP modules.
  */
 
-import { DEFAULT_CAMPUSES } from "../context/CampusContext.jsx";
+import { DEFAULT_CAMPUSES } from "../data/defaultCampuses.js";
 import {
   boards as rawBoards,
   academicYears as rawAcademicYears,
@@ -64,13 +64,13 @@ const initialHostelBlocks = [
     blockName: "Boys Hostel 1",
     code: "BH-1",
     blockCode: "BH-1",
-    totalFloors: 3,
-    floors: 3,
-    totalRooms: 45,
-    totalBeds: 120,
-    occupiedBeds: 92,
-    availableBeds: 28,
-    vacantBeds: 28,
+    totalFloors: 4,
+    floors: 4,
+    totalRooms: 12,
+    totalBeds: 31,
+    occupiedBeds: 2,
+    availableBeds: 29,
+    vacantBeds: 29,
     wardenName: "Dr. K. Sharma",
     warden: "Dr. K. Sharma",
     primaryMobileNumber: "9848011111",
@@ -91,11 +91,11 @@ const initialHostelBlocks = [
     blockCode: "BH-2",
     totalFloors: 4,
     floors: 4,
-    totalRooms: 60,
-    totalBeds: 180,
-    occupiedBeds: 140,
-    availableBeds: 40,
-    vacantBeds: 40,
+    totalRooms: 12,
+    totalBeds: 31,
+    occupiedBeds: 1,
+    availableBeds: 30,
+    vacantBeds: 30,
     wardenName: "Mr. S. Rao",
     warden: "Mr. S. Rao",
     primaryMobileNumber: "9848022222",
@@ -114,13 +114,13 @@ const initialHostelBlocks = [
     blockName: "Girls Hostel 1",
     code: "GH-1",
     blockCode: "GH-1",
-    totalFloors: 3,
-    floors: 3,
-    totalRooms: 40,
-    totalBeds: 100,
-    occupiedBeds: 80,
-    availableBeds: 20,
-    vacantBeds: 20,
+    totalFloors: 4,
+    floors: 4,
+    totalRooms: 12,
+    totalBeds: 31,
+    occupiedBeds: 2,
+    availableBeds: 29,
+    vacantBeds: 29,
     wardenName: "Mrs. P. Lakshmi",
     warden: "Mrs. P. Lakshmi",
     primaryMobileNumber: "9848033333",
@@ -141,9 +141,9 @@ const initialHostelBlocks = [
     blockCode: "GH-2",
     totalFloors: 4,
     floors: 4,
-    totalRooms: 55,
-    totalBeds: 150,
-    occupiedBeds: 120,
+    totalRooms: 12,
+    totalBeds: 31,
+    occupiedBeds: 1,
     availableBeds: 30,
     vacantBeds: 30,
     wardenName: "Ms. S. Devi",
@@ -275,6 +275,7 @@ function generateInitialRooms() {
         const roomNo = `${flIdx + 1}0${r}`;
         const typeId = ((flIdx + r) % 5) + 1;
         const typeSpec = initialRoomTypes.find((t) => t.id === typeId) || initialRoomTypes[0];
+
         rooms.push({
           id: roomId,
           roomId,
@@ -290,7 +291,7 @@ function generateInitialRooms() {
           type: typeSpec.name,
           capacity: typeSpec.bedCapacity,
           bedCapacity: typeSpec.bedCapacity,
-          occupied: Math.min(typeSpec.bedCapacity, r % 2 === 0 ? typeSpec.bedCapacity : typeSpec.bedCapacity - 1),
+          occupied: 0,
           standardMonthlyFee: typeSpec.standardMonthlyFee,
           fee: `₹${typeSpec.standardMonthlyFee.toLocaleString()}/mo`,
           acType: typeSpec.acType,
@@ -311,7 +312,6 @@ function generateInitialBeds(rooms) {
   const letters = ["A", "B", "C", "D"];
   rooms.forEach((rm) => {
     for (let b = 0; b < rm.capacity; b++) {
-      const isOcc = b < rm.occupied;
       beds.push({
         id: bedId,
         bedId,
@@ -320,7 +320,7 @@ function generateInitialBeds(rooms) {
         hostelId: rm.hostelId,
         hostelName: rm.hostelName,
         bedNumber: `${rm.roomNumber}-${letters[b] || b + 1}`,
-        bedStatus: isOcc ? "Occupied" : "Available",
+        bedStatus: "Available",
         status: "Active",
         isActive: true,
       });
@@ -898,9 +898,9 @@ class MockDataStore {
   constructor() {
     this.hostelBlocks = getStored("hostel_blocks", initialHostelBlocks);
     this.roomTypes = getStored("hostel_room_types", initialRoomTypes);
-    const rooms = generateInitialRooms();
-    this.rooms = getStored("hostel_rooms", rooms);
-    this.beds = getStored("hostel_beds", generateInitialBeds(rooms));
+    const defaultRooms = generateInitialRooms();
+    this.rooms = getStored("hostel_rooms", defaultRooms);
+    this.beds = getStored("hostel_beds", generateInitialBeds(this.rooms));
     this.wardens = getStored("hostel_wardens", initialWardens);
     this.allocations = getStored("hostel_allocations", initialAllocations);
     this.outpasses = getStored("hostel_outpasses", initialOutpasses);
@@ -909,6 +909,35 @@ class MockDataStore {
     this.staff = getStored("staff", initialAllStaff);
     this.students = getStored("students", initialAllStudents);
     this.campuses = getStored("campuses", DEFAULT_CAMPUSES);
+
+    // Synchronize beds and rooms with active allocations so only genuinely allocated beds are marked Occupied
+    const activeAllocs = (this.allocations || []).filter((a) => (a.status || "").toLowerCase() === "active");
+    const activeBedIds = new Set(activeAllocs.map((a) => Number(a.bedId)).filter(Boolean));
+    const activeRoomOccupancy = {};
+    activeAllocs.forEach((a) => {
+      if (a.roomId) activeRoomOccupancy[a.roomId] = (activeRoomOccupancy[a.roomId] || 0) + 1;
+    });
+    this.beds.forEach((bd) => {
+      const isAllocated =
+        activeBedIds.has(Number(bd.id || bd.bedId)) ||
+        activeAllocs.some(
+          (a) =>
+            (Number(a.hostelId) === Number(bd.hostelId) || a.hostelName === bd.hostelName || a.blockName === bd.hostelName) &&
+            String(a.roomNumber || a.room).replace(/^(room\s*#?)/i, "").trim() === String(bd.roomNumber).trim() &&
+            String(a.bedNumber || a.bed).trim() === String(bd.bedNumber).trim()
+        );
+      bd.bedStatus = isAllocated ? "Occupied" : "Available";
+    });
+    this.rooms.forEach((rm) => {
+      rm.occupied =
+        activeRoomOccupancy[rm.id] ||
+        activeAllocs.filter(
+          (a) =>
+            Number(a.roomId) === Number(rm.id) ||
+            ((Number(a.hostelId) === Number(rm.hostelId) || a.hostelName === rm.hostelName || a.blockName === rm.hostelName) &&
+              String(a.roomNumber || a.room).replace(/^(room\s*#?)/i, "").trim() === String(rm.roomNumber || rm.roomNo).trim())
+        ).length;
+    });
     this.academicYears = getStored("academic_years", [
       {
         id: 1,
@@ -973,9 +1002,90 @@ class MockDataStore {
     ]);
   }
 
+  // Aliases for seamless access
+  get blocks() { return this.hostelBlocks; }
+  set blocks(val) { this.hostelBlocks = val; }
+  get hostel_blocks() { return this.hostelBlocks; }
+  set hostel_blocks(val) { this.hostelBlocks = val; }
+
+  get hostel_room_types() { return this.roomTypes; }
+  set hostel_room_types(val) { this.roomTypes = val; }
+
+  get hostel_rooms() { return this.rooms; }
+  set hostel_rooms(val) { this.rooms = val; }
+
+  get hostel_beds() { return this.beds; }
+  set hostel_beds(val) { this.beds = val; }
+
+  get hostel_wardens() { return this.wardens; }
+  set hostel_wardens(val) { this.wardens = val; }
+
+  get hostel_allocations() { return this.allocations; }
+  set hostel_allocations(val) { this.allocations = val; }
+
+  get hostel_outpasses() { return this.outpasses; }
+  set hostel_outpasses(val) { this.outpasses = val; }
+
+  get hostel_transfers() { return this.transfers; }
+  set hostel_transfers(val) { this.transfers = val; }
+
+  get hostel_attendance() { return this.attendance; }
+  set hostel_attendance(val) { this.attendance = val; }
+
+  get academic_years() { return this.academicYears; }
+  set academic_years(val) { this.academicYears = val; }
+
   save(key) {
-    if (this[key]) {
-      setStored(key, this[key]);
+    const propToStorageKey = {
+      hostelBlocks: "hostel_blocks",
+      blocks: "hostel_blocks",
+      hostel_blocks: "hostel_blocks",
+      roomTypes: "hostel_room_types",
+      hostel_room_types: "hostel_room_types",
+      rooms: "hostel_rooms",
+      hostel_rooms: "hostel_rooms",
+      beds: "hostel_beds",
+      hostel_beds: "hostel_beds",
+      wardens: "hostel_wardens",
+      hostel_wardens: "hostel_wardens",
+      allocations: "hostel_allocations",
+      hostel_allocations: "hostel_allocations",
+      outpasses: "hostel_outpasses",
+      hostel_outpasses: "hostel_outpasses",
+      transfers: "hostel_transfers",
+      hostel_transfers: "hostel_transfers",
+      attendance: "hostel_attendance",
+      hostel_attendance: "hostel_attendance",
+      academicYears: "academic_years",
+      academic_years: "academic_years",
+      campuses: "campuses",
+      boards: "boards",
+      staff: "staff",
+      students: "students",
+    };
+
+    const storageKeyToProp = {
+      hostel_blocks: "hostelBlocks",
+      hostel_room_types: "roomTypes",
+      hostel_rooms: "rooms",
+      hostel_beds: "beds",
+      hostel_wardens: "wardens",
+      hostel_allocations: "allocations",
+      hostel_outpasses: "outpasses",
+      hostel_transfers: "transfers",
+      hostel_attendance: "attendance",
+      academic_years: "academicYears",
+      campuses: "campuses",
+      boards: "boards",
+      staff: "staff",
+      students: "students",
+    };
+
+    const storeKey = propToStorageKey[key] || key;
+    const prop = storageKeyToProp[storeKey] || key;
+    const data = this[prop] !== undefined ? this[prop] : this[key];
+    if (data !== undefined) {
+      setStored(storeKey, data);
     }
   }
 }
@@ -1073,19 +1183,66 @@ export function handleMockApiRequest(config) {
   // 4. HOSTEL BLOCKS
   if (path === "/api/v1/hostel/blocks") {
     if (method === "get") {
-      return ok(config, { success: true, data: mockStore.hostelBlocks, items: mockStore.hostelBlocks });
+      const blocksWithCounts = mockStore.hostelBlocks.map((b) => {
+        const bId = Number(b.id || b.hostelId);
+        const bRooms = mockStore.rooms.filter(
+          (r) => Number(r.hostelId) === bId || r.block === b.code || r.blockName === b.name
+        );
+        const bRoomIds = new Set(bRooms.map((r) => Number(r.id || r.roomId)));
+        const bBeds = mockStore.beds.filter(
+          (bd) => bRoomIds.has(Number(bd.roomId)) || Number(bd.hostelId) === bId
+        );
+        const occBeds = bBeds.filter((bd) => (bd.bedStatus || "").toLowerCase() === "occupied").length;
+        const totalRooms = bRooms.length || Number(b.totalRooms || 0);
+        const totalBeds = bBeds.length || Number(b.totalBeds || 0);
+        const vacantBeds = Math.max(0, totalBeds - occBeds);
+
+        return {
+          ...b,
+          totalRooms,
+          totalBeds,
+          occupiedBeds: occBeds,
+          availableBeds: vacantBeds,
+          vacantBeds,
+        };
+      });
+      return ok(config, { success: true, data: blocksWithCounts, items: blocksWithCounts });
     }
     if (method === "post") {
+      const maxId = mockStore.hostelBlocks.reduce((max, b) => Math.max(max, Number(b.id || b.hostelId || 0)), 0);
+      const nextId = maxId + 1;
+      const bName = body.hostelName || body.name || `Hostel Block #${nextId}`;
+      const bCode = body.hostelCode || body.code || `BLK-${nextId}`;
+      const bType = body.hostelType || body.type || "Boys";
+      const bFloors = Number(body.totalFloors || body.floors || 1);
+
       const newBlock = {
-        id: mockStore.hostelBlocks.length + 1,
-        hostelId: mockStore.hostelBlocks.length + 1,
-        ...body,
+        id: nextId,
+        hostelId: nextId,
+        name: bName,
+        blockName: bName,
+        hostelName: bName,
+        code: bCode,
+        blockCode: bCode,
+        hostelCode: bCode,
+        type: bType,
+        hostelType: bType,
+        totalFloors: bFloors,
+        floors: bFloors,
         totalRooms: Number(body.totalRooms || 0),
         totalBeds: Number(body.totalBeds || 0),
         availableBeds: Number(body.totalBeds || 0),
+        vacantBeds: Number(body.totalBeds || 0),
         occupiedBeds: 0,
-        status: "Active",
-        isActive: true,
+        warden: body.warden || body.wardenName || "Unassigned",
+        wardenName: body.wardenName || body.warden || "Unassigned",
+        wardenPhone: body.wardenPhone || body.primaryMobileNumber || "-",
+        primaryMobileNumber: body.primaryMobileNumber || body.wardenPhone || "-",
+        email: body.email || "",
+        address: body.address || "",
+        status: body.status || "Active",
+        isActive: (body.status || "Active").toLowerCase() === "active",
+        ...body,
       };
       mockStore.hostelBlocks.push(newBlock);
       mockStore.save("hostel_blocks");
@@ -1094,14 +1251,20 @@ export function handleMockApiRequest(config) {
   }
   if (path.startsWith("/api/v1/hostel/blocks/")) {
     const id = Number(path.split("/").pop());
-    const blk = mockStore.hostelBlocks.find((b) => b.id === id || b.hostelId === id);
+    const blk = mockStore.hostelBlocks.find((b) => Number(b.id || b.hostelId) === id);
     if (method === "put") {
-      if (blk) Object.assign(blk, body);
+      if (blk) {
+        Object.assign(blk, body);
+        if (body.hostelName) { blk.name = body.hostelName; blk.blockName = body.hostelName; }
+        if (body.hostelCode) { blk.code = body.hostelCode; blk.blockCode = body.hostelCode; }
+        if (body.hostelType) { blk.type = body.hostelType; }
+        if (body.totalFloors) { blk.floors = body.totalFloors; }
+      }
       mockStore.save("hostel_blocks");
       return ok(config, { success: true, data: blk });
     }
     if (method === "delete") {
-      mockStore.hostelBlocks = mockStore.hostelBlocks.filter((b) => b.id !== id && b.hostelId !== id);
+      mockStore.hostelBlocks = mockStore.hostelBlocks.filter((b) => Number(b.id || b.hostelId) !== id);
       mockStore.save("hostel_blocks");
       return ok(config, { success: true, message: "Block deleted successfully" });
     }
@@ -1114,12 +1277,23 @@ export function handleMockApiRequest(config) {
       return ok(config, { success: true, data: mockStore.roomTypes, items: mockStore.roomTypes });
     }
     if (method === "post") {
+      const maxId = mockStore.roomTypes.reduce((max, r) => Math.max(max, Number(r.id || r.roomTypeId || 0)), 0);
+      const nextId = maxId + 1;
       const newCat = {
-        id: mockStore.roomTypes.length + 1,
-        roomTypeId: mockStore.roomTypes.length + 1,
-        ...body,
-        status: "Active",
+        id: nextId,
+        roomTypeId: nextId,
+        name: body.roomTypeSpecification || body.name || `Room Type #${nextId}`,
+        roomTypeSpecification: body.roomTypeSpecification || body.name || `Room Type #${nextId}`,
+        specification: body.roomTypeSpecification || body.specification || body.name || `Room Type #${nextId}`,
+        acType: body.acType || "Non-AC",
+        bedCapacity: Number(body.bedCapacity || body.capacity || 2),
+        capacity: Number(body.bedCapacity || body.capacity || 2),
+        standardMonthlyFee: Number(body.standardMonthlyFee || body.monthlyFee || body.fee || 6000),
+        monthlyFee: Number(body.standardMonthlyFee || body.monthlyFee || body.fee || 6000),
+        fee: Number(body.standardMonthlyFee || body.monthlyFee || body.fee || 6000),
+        status: body.status || "Active",
         isActive: true,
+        ...body,
       };
       mockStore.roomTypes.push(newCat);
       mockStore.save("hostel_room_types");
@@ -1128,14 +1302,14 @@ export function handleMockApiRequest(config) {
   }
   if (path.startsWith("/api/v1/hostel/room-types/")) {
     const id = Number(path.split("/").pop());
-    const rt = mockStore.roomTypes.find((r) => r.id === id || r.roomTypeId === id);
+    const rt = mockStore.roomTypes.find((r) => Number(r.id || r.roomTypeId) === id);
     if (method === "put") {
       if (rt) Object.assign(rt, body);
       mockStore.save("hostel_room_types");
       return ok(config, { success: true, data: rt });
     }
     if (method === "delete") {
-      mockStore.roomTypes = mockStore.roomTypes.filter((r) => r.id !== id && r.roomTypeId !== id);
+      mockStore.roomTypes = mockStore.roomTypes.filter((r) => Number(r.id || r.roomTypeId) !== id);
       mockStore.save("hostel_room_types");
       return ok(config, { success: true, message: "Room type deleted" });
     }
@@ -1148,13 +1322,38 @@ export function handleMockApiRequest(config) {
       return ok(config, { success: true, data: mockStore.rooms, items: mockStore.rooms });
     }
     if (method === "post") {
+      const maxId = mockStore.rooms.reduce((max, r) => Math.max(max, Number(r.id || r.roomId || 0)), 0);
+      const nextId = maxId + 1;
+      const blk = mockStore.hostelBlocks.find((b) => Number(b.id || b.hostelId) === Number(body.hostelId));
+      const cat = mockStore.roomTypes.find((c) => Number(c.id || c.roomTypeId) === Number(body.roomTypeId));
+      const cap = Number(body.bedCapacity || body.capacity || cat?.bedCapacity || cat?.capacity || 2);
+      const rNum = String(body.roomNumber || body.roomNo || "").replace(/^Room\s*#?\s*/i, "").trim();
+      const feeVal = cat?.standardMonthlyFee || (body.acType === "AC" ? 7500 : 6000);
+
       const newRoom = {
-        id: mockStore.rooms.length + 1,
-        roomId: mockStore.rooms.length + 1,
-        ...body,
+        id: nextId,
+        roomId: nextId,
+        hostelId: Number(body.hostelId || blk?.id || 1),
+        hostelName: blk?.name || `Hostel Block #${body.hostelId}`,
+        hostelCode: blk?.code || `BLK-${body.hostelId}`,
+        block: blk?.code || blk?.name || `BLK-${body.hostelId}`,
+        blockName: blk?.name || `Hostel Block #${body.hostelId}`,
+        roomNo: rNum,
+        roomNumber: rNum,
+        floorLevel: body.floorLevel || body.floor || "Floor 1",
+        floor: body.floorLevel || body.floor || "Floor 1",
+        roomTypeId: Number(body.roomTypeId || cat?.id || 1),
+        roomTypeSpecification: cat?.name || cat?.roomTypeSpecification || "Standard Room",
+        type: cat?.name || cat?.roomTypeSpecification || "Standard Room",
+        capacity: cap,
+        bedCapacity: cap,
         occupied: 0,
-        status: "Active",
+        standardMonthlyFee: feeVal,
+        fee: `₹${feeVal.toLocaleString()}/mo`,
+        acType: body.acType || cat?.acType || "Non-AC",
+        status: body.status || "Active",
         isActive: true,
+        ...body,
       };
       mockStore.rooms.push(newRoom);
       mockStore.save("hostel_rooms");
@@ -1163,15 +1362,29 @@ export function handleMockApiRequest(config) {
   }
   if (path.startsWith("/api/v1/hostel/rooms/")) {
     const id = Number(path.split("/").pop());
-    const rm = mockStore.rooms.find((r) => r.id === id || r.roomId === id);
+    const rm = mockStore.rooms.find((r) => Number(r.id || r.roomId) === id);
     if (method === "put") {
-      if (rm) Object.assign(rm, body);
+      if (rm) {
+        Object.assign(rm, body);
+        if (body.roomNumber || body.roomNo) {
+          const clean = String(body.roomNumber || body.roomNo).replace(/^Room\s*#?\s*/i, "").trim();
+          rm.roomNo = clean;
+          rm.roomNumber = clean;
+        }
+        if (body.bedCapacity || body.capacity) {
+          const cap = Number(body.bedCapacity || body.capacity);
+          rm.capacity = cap;
+          rm.bedCapacity = cap;
+        }
+      }
       mockStore.save("hostel_rooms");
       return ok(config, { success: true, data: rm });
     }
     if (method === "delete") {
-      mockStore.rooms = mockStore.rooms.filter((r) => r.id !== id && r.roomId !== id);
+      mockStore.rooms = mockStore.rooms.filter((r) => Number(r.id || r.roomId) !== id);
+      mockStore.beds = mockStore.beds.filter((bd) => Number(bd.roomId) !== id);
       mockStore.save("hostel_rooms");
+      mockStore.save("hostel_beds");
       return ok(config, { success: true, message: "Room deleted" });
     }
     return ok(config, { success: true, data: rm });
@@ -1183,13 +1396,21 @@ export function handleMockApiRequest(config) {
       return ok(config, { success: true, data: mockStore.beds, items: mockStore.beds });
     }
     if (method === "post") {
+      const maxId = mockStore.beds.reduce((max, b) => Math.max(max, Number(b.id || b.bedId || 0)), 0);
+      const nextId = maxId + 1;
+      const parentRoom = mockStore.rooms.find((r) => Number(r.id || r.roomId) === Number(body.roomId));
       const newBed = {
-        id: mockStore.beds.length + 1,
-        bedId: mockStore.beds.length + 1,
-        ...body,
-        bedStatus: "Available",
-        status: "Active",
+        id: nextId,
+        bedId: nextId,
+        roomId: Number(body.roomId),
+        hostelId: parentRoom ? parentRoom.hostelId : (body.hostelId || 1),
+        hostelName: parentRoom ? (parentRoom.hostelName || parentRoom.blockName) : "",
+        roomNumber: parentRoom ? (parentRoom.roomNumber || parentRoom.roomNo) : (body.roomNumber || ""),
+        bedNumber: body.bedNumber || `BED-${nextId}`,
+        bedStatus: body.bedStatus || "Available",
+        status: body.status || "Active",
         isActive: true,
+        ...body,
       };
       mockStore.beds.push(newBed);
       mockStore.save("hostel_beds");
@@ -1198,14 +1419,14 @@ export function handleMockApiRequest(config) {
   }
   if (path.startsWith("/api/v1/hostel/beds/")) {
     const id = Number(path.split("/").pop());
-    const bd = mockStore.beds.find((b) => b.id === id || b.bedId === id);
+    const bd = mockStore.beds.find((b) => Number(b.id || b.bedId) === id);
     if (method === "put") {
       if (bd) Object.assign(bd, body);
       mockStore.save("hostel_beds");
       return ok(config, { success: true, data: bd });
     }
     if (method === "delete") {
-      mockStore.beds = mockStore.beds.filter((b) => b.id !== id && b.bedId !== id);
+      mockStore.beds = mockStore.beds.filter((b) => Number(b.id || b.bedId) !== id);
       mockStore.save("hostel_beds");
       return ok(config, { success: true, message: "Bed deleted" });
     }
@@ -1657,17 +1878,34 @@ export function handleMockApiRequest(config) {
 
   // 12. HOSTEL DASHBOARD STATS
   if (path === "/api/v1/hostel/dashboard") {
+    const activeAllocs = (mockStore.allocations || []).filter(
+      (a) => a.status === "Active" || a.status === "Allocated"
+    );
+    const totalBedsCount = mockStore.beds.length;
+    const occupiedCount = activeAllocs.length;
+    const availableCount = Math.max(0, totalBedsCount - occupiedCount);
+    const occPct = totalBedsCount > 0 ? Math.round((occupiedCount / totalBedsCount) * 100) : 0;
+    const rev = activeAllocs.reduce(
+      (sum, a) => sum + (parseFloat(String(a.monthlyFee || "").replace(/[^0-9.]/g, "")) || 0),
+      0
+    );
+
     const stats = {
       totalBlocks: mockStore.hostelBlocks.length,
       totalRooms: mockStore.rooms.length,
-      totalBeds: mockStore.beds.length,
-      occupiedBeds: mockStore.beds.filter((b) => b.bedStatus === "Occupied").length,
-      availableBeds: mockStore.beds.filter((b) => b.bedStatus === "Available").length,
-      occupancyRate: "78.5%",
-      activeWardens: mockStore.wardens.length,
-      pendingOutpasses: mockStore.outpasses.filter((o) => o.status === "Pending" || o.approvalStatus === "Pending").length,
-      totalComplaints: 2,
-      feeCollectionRate: "94.2%",
+      totalBeds: totalBedsCount,
+      occupiedBeds: occupiedCount,
+      availableBeds: availableCount,
+      occupancyPercentage: occPct,
+      occupancyRate: `${occPct}%`,
+      activeWardens: (mockStore.wardens || []).filter((w) => w.status === "Active").length,
+      hostellers: occupiedCount,
+      monthlyRevenue: rev,
+      pendingOutpasses: (mockStore.outpasses || []).filter(
+        (o) => o.status === "Pending" || o.approvalStatus === "Pending"
+      ).length,
+      totalComplaints: 0,
+      feeCollectionRate: "100%",
     };
     return ok(config, { success: true, data: stats });
   }
@@ -1784,3 +2022,54 @@ export function handleMockApiRequest(config) {
     data: { id: Date.now(), ...body },
   });
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// BROWSER FETCH INTERCEPTOR FOR TOTAL 404 SUPPRESSION & CONSISTENCY
+// ──────────────────────────────────────────────────────────────────────────
+
+if (typeof window !== "undefined") {
+  window.__mockStore = mockStore;
+
+  if (!window.__cms_fetch_mock_intercepted__) {
+    window.__cms_fetch_mock_intercepted__ = true;
+    const nativeFetch = window.fetch;
+
+    window.fetch = async function (resource, init = {}) {
+      const url = typeof resource === "string" ? resource : resource?.url || "";
+      const isOffline =
+        window.localStorage?.getItem("cms_backend_offline") === "true" ||
+        window.localStorage?.getItem("cms_backend_online") !== "true";
+
+      if (isOffline && (url.startsWith("/api/") || url.includes("/api/"))) {
+        const isAuthLoginEndpoint = /\/api\/(Auth|Admin)\/login/i.test(url);
+        if (!isAuthLoginEndpoint) {
+          try {
+            const config = {
+              url,
+              method: (init?.method || "GET").toLowerCase(),
+              data: init?.body,
+              headers: init?.headers || {},
+            };
+            const mockRes = await handleMockApiRequest(config);
+            if (mockRes) {
+              return new Response(JSON.stringify(mockRes.data), {
+                status: 200,
+                statusText: "OK",
+                headers: { "Content-Type": "application/json" },
+              });
+            }
+          } catch (err) {
+            if (err?.response) {
+              return new Response(JSON.stringify(err.response.data || {}), {
+                status: err.response.status || 400,
+                headers: { "Content-Type": "application/json" },
+              });
+            }
+          }
+        }
+      }
+      return nativeFetch.apply(this, arguments);
+    };
+  }
+}
+

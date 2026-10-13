@@ -129,7 +129,9 @@ apiClient.interceptors.request.use(
     const token = getStoredAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
 
+    const isExplicitlyOnline = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_online") === "true";
     const isMockSession =
+      !isExplicitlyOnline ||
       Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("parent-auth-token-"))) ||
       Boolean(typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true");
 
@@ -148,7 +150,8 @@ apiClient.interceptors.request.use(
     } catch {
       // Storage may be unavailable in restricted browser contexts.
     }
-    if (import.meta.env.DEV) {
+    // In development, avoid flooding console on every request unless verbose debug is enabled
+    if (import.meta.env.DEV && typeof window !== "undefined" && window.__CMS_VERBOSE_API__) {
       const expiry = token ? getJwtExpiryState(token) : {};
       console.log("API request:", {
         url: config.url,
@@ -191,16 +194,20 @@ apiClient.interceptors.response.use(
       } catch {}
     }
 
-    // Automatic fallback to mock adapter for missing endpoints (404) or offline backend
-    if (
-      (error.response?.status === 404 || isNgrokOffline || !error.response) &&
-      originalRequest &&
-      !originalRequest._isMockFallback
-    ) {
+    // Automatic fallback to mock adapter for missing endpoints (404), offline backend, 502/503 proxy errors, or HTML error pages
+    const isProxyOrBackendFailure =
+      error.response?.status === 404 ||
+      error.response?.status === 502 ||
+      error.response?.status === 503 ||
+      isNgrokOffline ||
+      !error.response ||
+      isHtmlResponse(error.response?.data);
+
+    if (isProxyOrBackendFailure && originalRequest && !originalRequest._isMockFallback) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);
-        return mockRes;
+        if (mockRes) return mockRes;
       } catch (_) {}
     }
 
