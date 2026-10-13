@@ -13,7 +13,7 @@ import StudentCard from "@/Dashboard/StudentDashboard/components/StudentCard.jsx
 import StudentDataTable from "@/Dashboard/StudentDashboard/components/StudentDataTable.jsx";
 import StudentPageHeader from "@/Dashboard/StudentDashboard/components/StudentPageHeader.jsx";
 import StudentSummaryCard from "@/Dashboard/StudentDashboard/components/StudentSummaryCard.jsx";
-import { getStoredAccountEntries, disburseClaimPayment } from "@/services/reimbursementService.js";
+import { fetchClaims, fetchAccountEntries, disburseClaimPayment } from "@/services/reimbursementService.js";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import "@/components/pages/AdminProfilePage.css";
 
@@ -136,11 +136,38 @@ export function AccountantPayments() {
   const [disburseLoading, setDisburseLoading] = useState(false);
   const [disburseSuccess, setDisburseSuccess] = useState("");
 
-  const [accountEntries, setAccountEntries] = useState(() => getStoredAccountEntries());
+  const [accountEntries, setAccountEntries] = useState([]);
 
-  const refreshAccountEntries = useCallback(() => {
-    setAccountEntries(getStoredAccountEntries());
+  const refreshAccountEntries = useCallback(async () => {
+    try {
+      let payables = await fetchAccountEntries();
+      if (!payables || payables.length === 0) {
+        const claims = await fetchClaims();
+        payables = (claims || [])
+          .filter((c) => c.status === "Approved" || c.status === "Paid" || c.accountReferenceId)
+          .map((c) => ({
+            voucherId: c.accountReferenceId || `ACC-PAY-${c.claimId}`,
+            claimId: c.claimId,
+            facultyName: c.facultyName,
+            facultyId: c.facultyId,
+            department: c.department,
+            category: c.category,
+            approvedAmount: c.approvedAmount || c.amount,
+            paymentStatus: c.status === "Paid" ? "Paid / Disbursed" : "Payable (Awaiting Disbursement)",
+            disbursedDate: c.disbursedDate,
+            paymentRef: c.paymentReference,
+            paymentMode: c.paymentMode,
+          }));
+      }
+      setAccountEntries(payables);
+    } catch (err) {
+      console.warn("Could not fetch account payables from API:", err);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshAccountEntries();
+  }, [refreshAccountEntries]);
 
   useEffect(() => {
     window.addEventListener("cms-account-updated", refreshAccountEntries);

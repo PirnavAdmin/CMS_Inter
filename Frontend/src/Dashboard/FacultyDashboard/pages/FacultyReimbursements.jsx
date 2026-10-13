@@ -18,35 +18,31 @@ const STATUS_BADGE = {
 export default function FacultyReimbursements() {
   const context = useFacultySafe();
   const authUser = getAuthUser() || {};
-  const [reimbList, setReimbList] = useState(() => {
-    const claims = getStoredClaims();
-    return claims.map((c) => ({
-      id: c.id,
-      claimId: c.claimId,
-      type: c.category,
-      claimed: c.amount,
-      approved: c.approvedAmount || (c.status === "Approved" || c.status === "Paid" ? c.amount : 0),
-      date: c.expenseDate,
-      status: c.status,
-      proofName: c.proof?.name || "None",
-    }));
-  });
+  const [reimbList, setReimbList] = useState([]);
 
-  const refreshClaims = useCallback(() => {
-    const claims = getStoredClaims();
-    setReimbList(
-      claims.map((c) => ({
-        id: c.id,
-        claimId: c.claimId,
-        type: c.category,
-        claimed: c.amount,
-        approved: c.approvedAmount || (c.status === "Approved" || c.status === "Paid" ? c.amount : 0),
-        date: c.expenseDate,
-        status: c.status,
-        proofName: c.proof?.name || "None",
-      }))
-    );
+  const refreshClaims = useCallback(async () => {
+    try {
+      const claims = await reimbursementService.fetchMyClaims();
+      setReimbList(
+        claims.map((c) => ({
+          id: c.id,
+          claimId: c.claimId,
+          type: c.category,
+          claimed: c.amount,
+          approved: c.approvedAmount || (c.status === "Approved" || c.status === "Paid" ? c.amount : 0),
+          date: c.expenseDate,
+          status: c.status,
+          proofName: c.proof?.name || "None",
+        }))
+      );
+    } catch (err) {
+      console.warn("Failed to fetch faculty claims:", err);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshClaims();
+  }, [refreshClaims]);
 
   useEffect(() => {
     window.addEventListener("cms-reimbursements-updated", refreshClaims);
@@ -88,6 +84,8 @@ export default function FacultyReimbursements() {
         declaration: true,
         proof: reimbForm.file
           ? {
+              rawFile: reimbForm.file,
+              file: reimbForm.file,
               name: reimbForm.file.name,
               size: reimbForm.file.size,
               type: reimbForm.file.type,
