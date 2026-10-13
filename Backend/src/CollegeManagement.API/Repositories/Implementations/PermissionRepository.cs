@@ -339,7 +339,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                 { "library", "Library" },
                 { "placement", "Placement" },
                 { "settings", "Settings" },
-                { "roles-permissions", "Roles & Permissions" }
+                { "roles-permissions", "Roles & Permissions" },
+                { "inventory-management", "Inventory Management" },
+                { "inventory", "Inventory Management" }
             };
 
             var payload = new List<object>();
