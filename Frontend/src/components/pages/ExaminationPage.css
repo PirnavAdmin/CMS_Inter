@@ -2171,11 +2171,15 @@
   color: #ffffff !important;
   border: 1px solid var(--cms-primary, #6f8400) !important;
   font-weight: 600 !important;
-  border-radius: 6px !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  height: 22px !important;
+  line-height: 1 !important;
+  border-radius: 5px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   cursor: pointer;
   transition: all 0.2s ease;
 }

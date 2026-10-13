@@ -104,6 +104,9 @@ const isCombinedExamination = (examOrForm) => {
   const mode = normalizeStatus(examOrForm.scheduleMode);
   if (mode === "PATTERN_WISE" || mode === "COMBINED_OBJECTIVE") return true;
 
+  const examMode = normalizeStatus(examOrForm.examMode || examOrForm.mode);
+  if (examMode === "OBJECTIVE") return true;
+
   const cat = String(
     examOrForm.examCategory ||
     examOrForm.category ||
@@ -120,7 +123,7 @@ const isCombinedExamination = (examOrForm) => {
   }
 
   // Check pattern indicator (Mains pattern, JEE Main, NEET, etc.)
-  const pat = String(examOrForm.examPattern || examOrForm.pattern || "").trim().toLowerCase();
+  const pat = String(examOrForm.examPattern || examOrForm.pattern || examOrForm.patternName || "").trim().toLowerCase();
   if (pat && pat !== "regular" && pat !== "regular pattern" && pat !== "regular academic pattern" && pat !== "none") {
     return true;
   }
@@ -139,9 +142,15 @@ const isCombinedExamination = (examOrForm) => {
   const name = String(examOrForm.name || examOrForm.examName || examOrForm.code || examOrForm.examCode || "").trim().toLowerCase();
   if (name.includes("objective") || name.includes("combined")) return true;
 
-  // Check schedules if any schedule has PATTERN_WISE or patternName
+  // Check schedules if any schedule has PATTERN_WISE, patternName, examMode === Objective, or includedSubjectIds
   if (Array.isArray(examOrForm.schedules) && examOrForm.schedules.length > 0) {
-    if (examOrForm.schedules.some((s) => s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName))) {
+    if (examOrForm.schedules.some((s) =>
+      s.scheduleMode === "PATTERN_WISE" ||
+      Boolean(s.patternName) ||
+      normalizeStatus(s.examMode) === "OBJECTIVE" ||
+      normalizeStatus(s.mode) === "OBJECTIVE" ||
+      (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0)
+    )) {
       return true;
     }
   }
@@ -2099,7 +2108,7 @@ const normalizeScheduleRecord = (
   const totalCandidatesAlloc = hallAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0);
   const finalCandidateCount = totalCandidatesAlloc > 0 ? totalCandidatesAlloc : (fallbackStrength > 0 ? fallbackStrength : 0);
 
-  const combined = ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) || isCombinedExamination(examContext);
+  const combined = ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) || normalizeStatus(s?.examMode) === "OBJECTIVE" || normalizeStatus(s?.mode) === "OBJECTIVE" || (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 0) || isCombinedExamination(examContext);
   const configuredPattern = ensureArray(examContext?.selectedGroupPatterns?.[resolvedGroupId])[0] || examContext?.examPattern || "";
   const patternName = s?.patternName || (combined ? configuredPattern : "");
 
@@ -2263,7 +2272,7 @@ const validateSchedulePayload = (dto, isObj = false) => {
 
 // Format schedule entry to strict backend API DTO matching CreateExamScheduleRequest contract
 const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = [], targetCampusId = null, examContext = null, masterPatterns = []) => {
-  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName);
+  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName) || normalizeStatus(s.examMode) === "OBJECTIVE" || normalizeStatus(s.mode) === "OBJECTIVE" || (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0) || isCombinedExamination(examContext);
 
   // 1. Examination ID (Number > 0)
   const examNumericId = Number(targetExamId || s.examId || s.examinationId || examContext?.id);
@@ -2982,22 +2991,35 @@ const normalizeExamRecord = (e) => {
     e?.categoryName ??
     e?.rawCategory;
 
+  const pat = e?.examPattern ?? e?.pattern ?? e?.patternName ?? "";
+  const isPatObjective = Boolean(pat && String(pat).trim() !== "" && !["regular", "regular pattern", "regular academic pattern", "none"].includes(String(pat).trim().toLowerCase()));
+  const hasObjectiveSched = Array.isArray(rawSchedules) && rawSchedules.some((s) =>
+    normalizeStatus(s?.scheduleMode) === "PATTERN_WISE" ||
+    normalizeStatus(s?.examMode) === "OBJECTIVE" ||
+    normalizeStatus(s?.mode) === "OBJECTIVE" ||
+    (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 0) ||
+    Boolean(s?.patternName)
+  );
+
   let resolvedExamCategory = "Regular";
   const catCandidate = rawCat ? String(rawCat).trim() : "";
-  if (isCombinedExamination(e) || catCandidate.toLowerCase() === "objective" || catCandidate.toLowerCase().includes("objective")) {
+  if (
+    isCombinedExamination(e) ||
+    catCandidate.toLowerCase() === "objective" ||
+    catCandidate.toLowerCase().includes("objective") ||
+    isPatObjective ||
+    hasObjectiveSched ||
+    normalizeStatus(e?.scheduleMode) === "PATTERN_WISE" ||
+    normalizeStatus(e?.scheduleMode) === "COMBINED_OBJECTIVE" ||
+    normalizeStatus(e?.examMode) === "OBJECTIVE" ||
+    (e?.examName && String(e.examName).toLowerCase().includes("objective")) ||
+    (e?.name && String(e.name).toLowerCase().includes("objective"))
+  ) {
     resolvedExamCategory = "Objective";
   } else if (catCandidate.toLowerCase() === "others") {
     resolvedExamCategory = "Others";
-  } else if (catCandidate.toLowerCase() === "regular") {
-    resolvedExamCategory = "Regular";
   } else {
-    resolvedExamCategory = catCandidate || "Regular";
-  }
-
-  const pat = e?.examPattern ?? e?.pattern ?? "";
-  const isPatObjective = pat && pat !== "Regular" && pat !== "Regular Academic Pattern" && pat !== "None";
-  if (isPatObjective || (e?.examName && String(e.examName).toLowerCase().includes("objective")) || (e?.name && String(e.name).toLowerCase().includes("objective"))) {
-    resolvedExamCategory = "Objective";
+    resolvedExamCategory = "Regular";
   }
 
   const rawGroupPatterns = e?.selectedGroupPatterns || {};
@@ -3405,8 +3427,16 @@ export default function ExaminationPage() {
         return filteredExams.map((exam) => {
           const existing = prevMap.get(normalizeId(exam.id));
           if (existing) {
+            const isObj =
+              exam.examCategory === "Objective" ||
+              existing.examCategory === "Objective" ||
+              isCombinedExamination(exam) ||
+              isCombinedExamination(existing);
             return {
               ...exam,
+              examCategory: isObj ? "Objective" : exam.examCategory,
+              category: isObj ? "Objective" : exam.category,
+              scheduleMode: isObj ? "PATTERN_WISE" : exam.scheduleMode,
               selectedSubjectIds: (exam.selectedSubjectIds && exam.selectedSubjectIds.length > 0)
                 ? exam.selectedSubjectIds
                 : (!exam.needsSubjectSelection ? [] : (existing.selectedSubjectIds || [])),
@@ -4256,6 +4286,10 @@ export default function ExaminationPage() {
 
           const sanitizedSubIds = newSubs.map(Number).filter((id) => !isNaN(id) && id > 0);
 
+          const isObjective = (newRecord.examCategory === "Objective") || isCombinedExamination(newRecord) || isCombinedExamination(original) || newRecord.scheduleMode === "PATTERN_WISE" || original.scheduleMode === "PATTERN_WISE";
+          const resolvedCategory = isObjective ? "Objective" : (newRecord.examCategory || original.examCategory || "Regular");
+          const resolvedScheduleMode = isObjective ? "PATTERN_WISE" : (newRecord.scheduleMode || original.scheduleMode || "SUBJECT_WISE");
+
           const updatePayload = sanitizeUpdateExamDto({
             examCode: newRecord.examCode || newRecord.code || undefined,
             campusId: Number(effectiveCampusId) || 1,
@@ -4271,8 +4305,8 @@ export default function ExaminationPage() {
             programId: targetProgramId,
             assessmentTypeId: Number(newRecord.assessmentTypeId) || Number(original.assessmentTypeId) || undefined,
             examType: newRecord.examType || original.examType || "Regular Exam",
-            examCategory: newRecord.examCategory || original.examCategory || "Regular",
-            category: newRecord.examCategory || original.examCategory || "Regular",
+            examCategory: resolvedCategory,
+            category: resolvedCategory,
             customCategoryName: newRecord.customCategoryName || original.customCategoryName || undefined,
             startDate: newStart,
             endDate: newEnd,
@@ -4282,7 +4316,7 @@ export default function ExaminationPage() {
             passPercentage: Number(newRecord.passPercentage) || Number(original.passPercentage) || undefined,
             description: newRecord.description !== undefined ? newRecord.description : (original.description || ""),
             status: original.status || newRecord.status || "DRAFT",
-            scheduleMode: newRecord.scheduleMode || original.scheduleMode || (newRecord.examCategory === "Objective" ? "PATTERN_WISE" : "SUBJECT_WISE"),
+            scheduleMode: resolvedScheduleMode,
             selectedSubjectIds: sanitizedSubIds,
             allocatedSubjectIds: sanitizedSubIds,
           });
@@ -4295,6 +4329,9 @@ export default function ExaminationPage() {
           const updatedNormalized = normalizeExamRecord({
             ...original,
             ...(putData && typeof putData === "object" ? putData : {}),
+            examCategory: resolvedCategory,
+            category: resolvedCategory,
+            scheduleMode: resolvedScheduleMode,
             name: updatePayload.examName,
             startDate: updatePayload.startDate,
             endDate: updatePayload.endDate,
@@ -4363,6 +4400,10 @@ export default function ExaminationPage() {
           // The atomic generation response is the source of truth for the saved exam code.
           let resolvedExamCode = await generateNextExamCode();
 
+          const isObjExam = newRecord.examCategory === "Objective" || isCombinedExamination(newRecord);
+          const resolvedCat = isObjExam ? "Objective" : (newRecord.examCategory || "Regular");
+          const resolvedSchedMode = isObjExam ? "PATTERN_WISE" : (newRecord.scheduleMode || "SUBJECT_WISE");
+
           let res;
           let attempt = 0;
           const maxAttempts = 4;
@@ -4375,12 +4416,12 @@ export default function ExaminationPage() {
                 code: resolvedExamCode,
                 examName: newRecord.name,
                 name: newRecord.name,
-                examCategory: newRecord.examCategory,
-                category: newRecord.examCategory,
-                examinationCategory: newRecord.examCategory,
-                exam_category: newRecord.examCategory,
-                categoryName: newRecord.examCategory,
-                rawCategory: newRecord.rawCategory || newRecord.examCategory,
+                examCategory: resolvedCat,
+                category: resolvedCat,
+                examinationCategory: resolvedCat,
+                exam_category: resolvedCat,
+                categoryName: resolvedCat,
+                rawCategory: newRecord.rawCategory || resolvedCat,
                 customCategoryName: newRecord.customCategoryName,
                 boardId: Number(newRecord.boardId) || newRecord.boardId,
                 academicYearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
@@ -4405,7 +4446,7 @@ export default function ExaminationPage() {
                 endDate: newRecord.endDate,
                 description: newRecord.description,
                 status: "DRAFT",
-                scheduleMode: newRecord.scheduleMode,
+                scheduleMode: resolvedSchedMode,
               });
               break;
             } catch (postErr) {
@@ -4433,10 +4474,11 @@ export default function ExaminationPage() {
             const backendExam = unwrap(detailRes);
             if (backendExam && (backendExam.id || backendExam.examinationId)) {
               createdRecord = normalizeExamRecord({
-                ...newRecord,
                 ...backendExam,
-                examCategory: newRecord.examCategory || backendExam.examCategory,
-                category: newRecord.examCategory || backendExam.category,
+                ...newRecord,
+                examCategory: resolvedCat,
+                category: resolvedCat,
+                scheduleMode: resolvedSchedMode,
                 examPattern: newRecord.examPattern || backendExam.examPattern,
                 selectedGroupPatterns: newRecord.selectedGroupPatterns || backendExam.selectedGroupPatterns,
               });
@@ -4446,10 +4488,11 @@ export default function ExaminationPage() {
           }
 
           const draftRecord = createdRecord || normalizeExamRecord({
-            ...newRecord,
             ...createdPayload,
-            examCategory: newRecord.examCategory,
-            category: newRecord.examCategory,
+            ...newRecord,
+            examCategory: resolvedCat,
+            category: resolvedCat,
+            scheduleMode: resolvedSchedMode,
             examCode: resolvedExamCode || newRecord.examCode || createdPayload.examCode,
             code: resolvedExamCode || newRecord.code || createdPayload.code,
             id: createdId,
@@ -5349,18 +5392,20 @@ export default function ExaminationPage() {
               setExamId(v);
               setEditing(null);
               setErrors({});
+              const targetExam = exams.find((x) => normalizeId(x.id) === normalizeId(v));
+              const isObj = targetExam && (targetExam.examCategory === "Objective" || isCombinedExamination(targetExam));
               setSch({
                 groupId: "",
                 subjectId: "",
                 patternName: "",
-                date: "",
+                date: isObj && targetExam?.startDate ? targetExam.startDate : "",
                 startTime: "09:00",
                 endTime: "12:00",
-                totalMarks: "100",
+                totalMarks: isObj ? (targetExam?.totalMarks ? String(targetExam.totalMarks) : "300") : "100",
                 passingMarks: "35",
-                passPercentage: "35",
+                passPercentage: isObj ? "40" : "35",
                 hallAssignments: [],
-                mode: "Written",
+                mode: isObj ? "Objective" : "Written",
               });
             }}
             sch={sch}
@@ -6368,19 +6413,28 @@ function ExamForm({
 
   const initialCategory = useMemo(() => {
     if (!existing) return "";
-    const cat = existing.examCategory || "";
-    if (["regular", "objective"].includes(cat.toLowerCase())) {
-      return cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
-    }
     if (isCombinedExamination(existing)) {
       return "Objective";
     }
-    return "Others";
+    const cat = existing.examCategory || existing.category || "";
+    if (cat.toLowerCase() === "objective") {
+      return "Objective";
+    }
+    if (cat.toLowerCase() === "regular") {
+      return "Regular";
+    }
+    if (cat.toLowerCase() === "others") {
+      return "Others";
+    }
+    return cat ? (cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase()) : "Regular";
   }, [existing]);
 
   const initialCustomCategory = useMemo(() => {
     if (!existing) return "";
-    const cat = existing.examCategory || "";
+    if (isCombinedExamination(existing)) {
+      return "";
+    }
+    const cat = existing.examCategory || existing.category || "";
     if (["regular", "objective"].includes(cat.toLowerCase())) {
       return existing.customCategoryName || "";
     }
@@ -6550,6 +6604,24 @@ function ExamForm({
         let rawScheds = [];
         if (schedRes.status === "fulfilled") {
           rawScheds = unwrap(schedRes.value);
+        }
+
+        if (rawEntity && typeof rawEntity === "object" && !Array.isArray(rawEntity)) {
+          if (Array.isArray(rawScheds) && rawScheds.length > 0) {
+            rawEntity.schedules = rawScheds;
+            const hasObjSched = rawScheds.some((s) =>
+              normalizeStatus(s?.scheduleMode) === "PATTERN_WISE" ||
+              normalizeStatus(s?.examMode) === "OBJECTIVE" ||
+              normalizeStatus(s?.mode) === "OBJECTIVE" ||
+              (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 0) ||
+              Boolean(s?.patternName)
+            );
+            if (hasObjSched) {
+              rawEntity.scheduleMode = "PATTERN_WISE";
+              rawEntity.examCategory = "Objective";
+              rawEntity.category = "Objective";
+            }
+          }
         }
 
         const freshRecord = rawEntity && typeof rawEntity === "object" && !Array.isArray(rawEntity)
@@ -8187,9 +8259,25 @@ function ScheduleSection({
     if (editing && sch.groupId && normalizeId(sch.groupId) !== normalizeId(selectedGroupId)) {
       setSelectedGroupId(sch.groupId);
     } else if (!editing && selectedGroupId && normalizeId(sch.groupId) !== normalizeId(selectedGroupId)) {
-      setSch((prev) => ({ ...prev, groupId: selectedGroupId, subjectId: "", patternName: "", hallAssignments: [] }));
+      setSch((prev) => ({
+        ...prev,
+        groupId: selectedGroupId,
+        subjectId: "",
+        patternName: "",
+        hallAssignments: [],
+        ...(isCombined ? {
+          mode: "Objective",
+          totalMarks: prev.totalMarks && prev.totalMarks !== "100" ? prev.totalMarks : (exam?.totalMarks ? String(exam.totalMarks) : "300"),
+          passPercentage: prev.passPercentage && prev.passPercentage !== "35" ? prev.passPercentage : "40",
+          date: exam?.startDate || prev.date,
+        } : {
+          mode: prev.mode || "Written",
+          totalMarks: prev.totalMarks || "100",
+          passingMarks: prev.passingMarks || "35",
+        }),
+      }));
     }
-  }, [selectedGroupId, sch.groupId, editing, setSch]);
+  }, [selectedGroupId, sch.groupId, editing, isCombined, exam?.startDate, exam?.totalMarks, setSch]);
 
   // Auto-fetch active classrooms and examination halls if not yet loaded
   useEffect(() => {
@@ -8328,9 +8416,12 @@ function ScheduleSection({
         startTime: anyCombinedSessionForExam ? anyCombinedSessionForExam.startTime : (prev.startTime || defaultSessionStartTime),
         endTime: anyCombinedSessionForExam ? anyCombinedSessionForExam.endTime : (prev.endTime || defaultSessionEndTime),
         includedSubjectIds: subjectIds.length > 0 ? subjectIds : (prev.includedSubjectIds || []),
+        mode: "Objective",
+        totalMarks: prev.totalMarks && prev.totalMarks !== "100" ? prev.totalMarks : (exam.totalMarks ? String(exam.totalMarks) : "300"),
+        passPercentage: prev.passPercentage && prev.passPercentage !== "35" ? prev.passPercentage : "40",
       }));
     }
-  }, [isCombined, exam?.startDate, anyCombinedSessionForExam, defaultSessionStartTime, defaultSessionEndTime, editing, activeGroupSubjects, setSch]);
+  }, [isCombined, exam?.startDate, exam?.totalMarks, anyCombinedSessionForExam, defaultSessionStartTime, defaultSessionEndTime, editing, activeGroupSubjects, setSch]);
 
   useEffect(() => {
     if (isCombined && activeGroupSubjects.length > 0) {
@@ -8787,8 +8878,8 @@ function ScheduleSection({
             date: entry.date,
             startTime: entry.startTime,
             endTime: entry.endTime,
-            totalMarks: sch.totalMarks,
-            passPercentage: sch.passPercentage,
+            totalMarks: sch.totalMarks && sch.totalMarks !== "100" ? sch.totalMarks : (exam.totalMarks ? String(exam.totalMarks) : "300"),
+            passPercentage: sch.passPercentage || "40",
             candidateCount: enrichedAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
             hallAssignments: enrichedAssignments,
             roomId: validFirstRoom,
@@ -8800,7 +8891,8 @@ function ScheduleSection({
             invigilatorId: validFirstInv,
             invigilator: firstInvName || invigilatorNames,
             invigilatorName: invigilatorNames,
-            mode: sch.mode || (isObjective ? "Objective" : (exam.examCategory || "Combined")),
+            mode: "Objective",
+            examMode: "Objective",
             scheduleMode: "PATTERN_WISE",
             sessionId: sch.sessionId || (sch.patternName ? `SESSION-${sch.patternName}-${selectedGroupId}` : undefined),
             subjectId: sch.subjectId ? Number(sch.subjectId) : validSubId,
@@ -8910,30 +9002,43 @@ function ScheduleSection({
                 className="exam-context"
                 style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
               >
-                <div>
-                  <strong>
-                    {exam.name} ({exam.code})
-                  </strong>
-                  <span>
-                    {nameOf(boards, exam.boardId)} · Category: {exam.examCategory} · Levels:{" "}
-                    {getLevelNames(exam, academicLevels)} · Groups: {getGroupNames(exam, groups)}
-                  </span>
-                  <span style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "4px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", color: "var(--cms-text, #1e293b)", fontSize: "13px" }}>
+                    <strong style={{ fontWeight: "700", color: "var(--cms-text, #0f172a)" }}>
+                      {exam.name} ({exam.code})
+                    </strong>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>{nameOf(boards, exam.boardId)}</span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
                     <span>
-                      Pattern: {exam.examPattern} · Period: {d(exam.startDate)} – {d(exam.endDate)}
+                      Category: <strong style={{ fontWeight: "700" }}>{exam.examCategory}</strong>
+                    </span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>
+                      Levels: {getLevelNames(exam, academicLevels)}
+                    </span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>
+                      Groups: <strong style={{ fontWeight: "700" }}>{getGroupNames(exam, groups)}</strong>
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", color: "var(--cms-text, #1e293b)", fontSize: "13px" }}>
+                    <span>
+                      Pattern: <strong style={{ fontWeight: "700" }}>{exam.examPattern}</strong>
+                      <span style={{ margin: "0 8px", color: "#94a3b8" }}>·</span>
+                      Period: <strong style={{ fontWeight: "700" }}>{d(exam.startDate)} – {d(exam.endDate)}</strong>
                     </span>
                     {onEditPeriod && (
                       <button
                         type="button"
                         className="cms-btn cms-btn-primary exam-edit-period-btn"
-                        style={{ padding: "4px 10px", fontSize: "11px", height: "auto", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "600" }}
                         onClick={() => onEditPeriod(exam)}
                         title="Change examination time period dates"
                       >
-                        <Pencil size={12} style={{ marginRight: "3px" }} /> Edit Period
+                        <Pencil size={11} style={{ marginRight: "2px" }} /> Edit Period
                       </button>
                     )}
-                  </span>
+                  </div>
                 </div>
                 <span className={`cms-badge exam-status-badge exam-status-${normalizeStatus(exam.status).toLowerCase()}`}>
                   {normalizeStatus(exam.status) || "DRAFT"}
@@ -9198,8 +9303,8 @@ function ScheduleSection({
                   <Field
                     label="Total Marks *"
                     type="number"
-                    placeholder="e.g. 100 or 300"
-                    value={sch.totalMarks}
+                    placeholder={isCombined ? "e.g. 300" : "e.g. 100"}
+                    value={sch.totalMarks || (isCombined ? "300" : "100")}
                     onChange={(v) => {
                       setSch((x) => ({ ...x, totalMarks: v }));
                       setErrors((x) => ({ ...x, totalMarks: undefined }));
@@ -9211,7 +9316,7 @@ function ScheduleSection({
                     label={isCombined ? "Pass Percentage (%) *" : "Passing Marks *"}
                     type="number"
                     placeholder={isCombined ? "e.g. 40" : "e.g. 35"}
-                    value={isCombined ? sch.passPercentage : sch.passingMarks}
+                    value={isCombined ? (sch.passPercentage || "40") : (sch.passingMarks || "35")}
                     onChange={(v) => {
                       setSch((x) => ({ ...x, [isCombined ? "passPercentage" : "passingMarks"]: v }));
                       setErrors((x) => ({ ...x, [isCombined ? "passPercentage" : "passingMarks"]: undefined }));
@@ -9220,7 +9325,7 @@ function ScheduleSection({
                   />
 
                   {isCombined ? (
-                    <Field label="Exam Mode" value={sch.mode || (isObjective ? "Objective" : (exam?.examCategory || "Combined"))} readOnly />
+                    <Field label="Exam Mode" value={isCombined || isObjective ? "Objective" : (sch.mode || exam?.examCategory || "Combined")} readOnly />
 
                   ) : (
                     <SearchableSingleSelect
