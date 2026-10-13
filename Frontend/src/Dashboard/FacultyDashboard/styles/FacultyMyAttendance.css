@@ -1,54 +1,4 @@
 /* Faculty My Attendance Styles */
-.faculty-regularization-modal {
-  width: min(540px, calc(100vw - 32px)) !important;
-  max-width: 540px !important;
-  max-height: calc(100vh - 100px) !important;
-}
-.faculty-regularization-modal .cms-modal-head {
-  padding: 12px 18px;
-}
-.faculty-regularization-modal .cms-modal-head h3 {
-  font-size: 15px !important;
-}
-.faculty-regularization-modal .cms-modal-head span {
-  font-size: 11.5px !important;
-}
-.faculty-regularization-modal .cms-modal-body {
-  padding: 14px 18px;
-}
-.faculty-regularization-modal .cms-form-grid {
-  gap: 9px 12px;
-}
-.faculty-regularization-modal .cms-field {
-  gap: 4px;
-}
-.faculty-regularization-modal .cms-field label {
-  min-height: 17px;
-  font-size: 11px;
-  letter-spacing: 0.045em;
-}
-.faculty-regularization-modal .cms-field input,
-.faculty-regularization-modal .cms-field select {
-  min-height: 40px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 12.5px;
-}
-.faculty-regularization-modal .cms-field textarea {
-  min-height: 68px;
-  padding: 9px 10px;
-  border-radius: 8px;
-  font-size: 12.5px;
-}
-.faculty-regularization-modal .cms-modal-foot {
-  padding: 10px 18px;
-  gap: 8px;
-}
-.faculty-regularization-modal .cms-modal-foot .cms-btn {
-  min-height: 40px;
-  padding: 9px 15px;
-  font-size: 12.5px;
-}
 
 .sp-attendance-punch-grid {
   display: grid;
@@ -61,12 +11,12 @@
     grid-template-columns: 1fr;
   }
 }
-/* Base Live Clock Card (Theme-based: Light in light mode, Dark in dark mode) */
+/* Attendance & Shift Card (Theme-based) */
 .sp-live-clock-card {
   background: var(--cms-card-bg, #ffffff) !important;
   color: var(--cms-text, #10203c) !important;
   border-radius: 14px !important;
-  padding: 24px 26px !important;
+  padding: 22px 24px !important;
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
@@ -75,70 +25,18 @@
   transition: all 0.2s ease;
 }
 
-/* Dark mode live clock card */
+/* Dark mode attendance & shift card */
 [data-theme="dark"] .sp-live-clock-card,
 :root[data-theme="dark"] .sp-live-clock-card,
 .dark-theme .sp-live-clock-card {
-  background: linear-gradient(135deg, #182212 0%, #25331a 100%) !important;
+  background: var(--cms-card-bg, #1a2318) !important;
   color: #ffffff !important;
-  border-color: rgba(111, 132, 0, 0.45) !important;
-  box-shadow: 0 8px 24px rgba(24, 34, 18, 0.25) !important;
-}
-
-.sp-live-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--cms-primary-soft, #f1f4e2) !important;
-  color: var(--cms-primary, #6f8400) !important;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  padding: 4px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(111, 132, 0, 0.25) !important;
-}
-
-[data-theme="dark"] .sp-live-badge,
-:root[data-theme="dark"] .sp-live-badge,
-.dark-theme .sp-live-badge {
-  background: rgba(111, 132, 0, 0.28) !important;
-  color: #d7e89a !important;
-  border-color: rgba(111, 132, 0, 0.45) !important;
-}
-
-.sp-live-clock-time {
-  font-size: 40px;
-  font-weight: 800;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  letter-spacing: 1.5px;
-  color: var(--cms-text, #10203c) !important;
-  margin: 12px 0 6px;
-  text-shadow: none;
-}
-
-[data-theme="dark"] .sp-live-clock-time,
-:root[data-theme="dark"] .sp-live-clock-time,
-.dark-theme .sp-live-clock-time {
-  color: #ffffff !important;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6) !important;
-}
-
-.sp-live-clock-date {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--cms-muted, #7b8275) !important;
-}
-
-[data-theme="dark"] .sp-live-clock-date,
-:root[data-theme="dark"] .sp-live-clock-date,
-.dark-theme .sp-live-clock-date {
-  color: #cbd5b8 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
 }
 
 .sp-clock-status-box {
-  margin-top: 20px;
+  margin-top: 0;
   padding: 14px 16px;
   background: var(--cms-surface, #f8faf5) !important;
   border-radius: 12px;
@@ -648,107 +546,6 @@
   background: rgba(148, 163, 184, 0.14) !important;
   color: #cbd5e1 !important;
   border: 1px solid rgba(148, 163, 184, 0.35) !important;
-}
-
-/* Regularize button in attendance logs */
-.sp-regularize-btn {
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  border: 1px solid var(--cms-border, #e6e7de);
-  background: var(--cms-surface, #ffffff);
-  color: var(--cms-text, #171a17);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.sp-regularize-btn:hover {
-  background: var(--cms-bg, #f7f8ef);
-  border-color: var(--cms-primary, #6f8400);
-  color: var(--cms-primary, #6f8400);
-}
-
-[data-theme="dark"] .sp-regularize-btn,
-.dark-theme .sp-regularize-btn {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border-color: rgba(255, 255, 255, 0.15) !important;
-  color: #f2f3ee !important;
-}
-
-[data-theme="dark"] .sp-regularize-btn:hover,
-:root[data-theme="dark"] .sp-regularize-btn:hover,
-.dark-theme .sp-regularize-btn:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-  border-color: #38bdf8 !important;
-  color: #38bdf8 !important;
-}
-
-/* Compact Regularization Status Badge (Matching Reference Pill with Dot) */
-.sp-regularize-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 600;
-  line-height: 1.35;
-  white-space: nowrap;
-}
-
-.sp-regularize-badge .sp-badge-dot {
-  font-size: 8px;
-  line-height: 1;
-}
-
-.sp-regularize-badge.pending {
-  background: #fef3c7;
-  color: #b45309;
-  border: 1px solid #fde68a;
-}
-
-.sp-regularize-badge.pending .sp-badge-dot {
-  color: #d97706;
-}
-
-[data-theme="dark"] .sp-regularize-badge.pending,
-:root[data-theme="dark"] .sp-regularize-badge.pending,
-.dark-theme .sp-regularize-badge.pending {
-  background: rgba(245, 158, 11, 0.16) !important;
-  color: #fbbf24 !important;
-  border: 1px solid rgba(245, 158, 11, 0.35) !important;
-}
-
-[data-theme="dark"] .sp-regularize-badge.pending .sp-badge-dot,
-:root[data-theme="dark"] .sp-regularize-badge.pending .sp-badge-dot,
-.dark-theme .sp-regularize-badge.pending .sp-badge-dot {
-  color: #f59e0b !important;
-}
-
-.sp-regularize-badge.approved {
-  background: #eaf7ec;
-  color: #1e7e34;
-  border: 1px solid #bce6c4;
-}
-
-.sp-regularize-badge.approved .sp-badge-dot {
-  color: #16a34a;
-}
-
-[data-theme="dark"] .sp-regularize-badge.approved,
-:root[data-theme="dark"] .sp-regularize-badge.approved,
-.dark-theme .sp-regularize-badge.approved {
-  background: rgba(34, 197, 94, 0.14) !important;
-  color: #4ade80 !important;
-  border: 1px solid rgba(34, 197, 94, 0.35) !important;
-}
-
-[data-theme="dark"] .sp-regularize-badge.approved .sp-badge-dot,
-:root[data-theme="dark"] .sp-regularize-badge.approved .sp-badge-dot,
-.dark-theme .sp-regularize-badge.approved .sp-badge-dot {
-  color: #22c55e !important;
 }
 
 /* Stat icon tone-red for Absent Days */
