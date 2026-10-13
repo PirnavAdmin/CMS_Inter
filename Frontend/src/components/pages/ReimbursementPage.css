@@ -23,7 +23,6 @@
 
 .reimb-role-toggle {
   display: inline-flex;
-  flex-wrap: wrap;
   background: #eef2e6;
   border: 1px solid #dce4d2;
   border-radius: 10px;

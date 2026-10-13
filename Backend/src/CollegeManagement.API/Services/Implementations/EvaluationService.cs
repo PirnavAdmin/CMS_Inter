@@ -2,16 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Evaluations;
 using CollegeManagement.API.Exceptions;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Enums;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
-using Microsoft.Extensions.Logging;
-
-using CollegeManagement.API.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -44,6 +44,18 @@ namespace CollegeManagement.API.Services.Implementations
             var rawMarks = await _marksRepository.GetFilteredEvaluationsAsync(filter);
             var totalCount = await _marksRepository.GetFilteredEvaluationsCountAsync(filter);
 
+            var examIds = rawMarks.Select(m => m.ExaminationId).Distinct().ToList();
+            var examSchedules = (await _context.ExamSchedules.AsNoTracking()
+                .Where(s => s.IsActive && examIds.Contains(s.ExaminationId))
+                .ToListAsync())
+                .GroupBy(s => new { s.ExaminationId, s.SubjectId })
+                .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
+                .ToList();
+            var examinations = await _context.Examinations.AsNoTracking()
+                .Include(e => e.AssessmentType)
+                .Where(e => examIds.Contains(e.ExaminationId))
+                .ToDictionaryAsync(e => e.ExaminationId);
+
             var groupedEvaluations = rawMarks
                 .GroupBy(m => new { m.SubjectId, m.SectionId, m.ExaminationId })
                 .Select((g, index) =>
@@ -58,9 +70,20 @@ namespace CollegeManagement.API.Services.Implementations
 
                     var facName = first.Faculty != null ? $"{first.Faculty.FirstName} {first.Faculty.LastName}".Trim() : "Unassigned";
                     var facCode = first.Faculty != null ? (!string.IsNullOrWhiteSpace(first.Faculty.EmployeeId) ? first.Faculty.EmployeeId : $"FAC{first.Faculty.Id:0000}") : "FAC1001";
+                    
+                    var examObj = examinations.GetValueOrDefault(first.ExaminationId) ?? first.Examination;
+                    var scheduleObj = examSchedules.FirstOrDefault(s => s.ExaminationId == first.ExaminationId &&
+                        (s.SubjectId == first.SubjectId || s.IncludedSubjectIdList.Contains(first.SubjectId)));
+                    if (scheduleObj == null && examSchedules.Any(s => s.ExaminationId == first.ExaminationId))
+                    {
+                        scheduleObj = examSchedules.FirstOrDefault(s => s.ExaminationId == first.ExaminationId);
+                    }
+
                     var isPractical = first.Subject?.Practical == true || first.Subject?.SubjectType?.ToLower() == "practical";
-                    var isObjective = first.Examination?.ExamPattern?.Contains("OBJECTIVE") == true || first.Examination?.ExamPattern?.Contains("JEE") == true || first.Examination?.ExamPattern?.Contains("NEET") == true;
-                    var subjectMaxMarks = first.Subject?.TotalMarks > 0 ? (decimal)first.Subject.TotalMarks : (isObjective ? 75m : 100m);
+                    var isObjective = ExaminationFormatHelper.IsObjectiveExam(examObj, scheduleObj);
+                    var subjectMaxMarks = scheduleObj?.MaxMarks > 0
+                        ? scheduleObj.MaxMarks
+                        : (first.Subject?.TotalMarks > 0 ? (decimal)first.Subject.TotalMarks : 100m);
 
                     return new EvaluationListDto
                     {
@@ -76,14 +99,14 @@ namespace CollegeManagement.API.Services.Implementations
                         AcademicYear = first.AcademicYearId > 0 ? first.AcademicYearId.ToString() : "2026-27",
                         GroupName = first.GroupNavigation?.GroupName ?? "MPC",
                         SectionName = first.SectionNavigation?.SectionName ?? "Section A",
-                        ExaminationName = first.Examination?.ExamName ?? "Quarterly Examination",
-                        ExamPattern = first.Examination?.ExamPattern ?? (isObjective ? "JEE Main Pattern" : "Regular Academic Pattern"),
-                        ExamType = first.Examination?.AssessmentType?.AssessmentTypeName ?? (isObjective ? "Objective" : "Written"),
-                        ExamTotalMarks = first.Examination?.TotalMarks ?? (isObjective ? 300 : 600),
-                        ExamPassPercentage = first.Examination?.PassPercentage ?? (isObjective ? 40m : 35m),
+                        ExaminationName = examObj?.ExamName ?? first.Examination?.ExamName ?? "Quarterly Examination",
+                        ExamPattern = examObj?.ExamPattern ?? first.Examination?.ExamPattern ?? (isObjective ? "JEE Main Pattern" : "Regular Academic Pattern"),
+                        ExamType = isObjective ? "Objective" : (examObj?.AssessmentType?.AssessmentTypeName ?? first.Examination?.AssessmentType?.AssessmentTypeName ?? "Written"),
+                        ExamTotalMarks = examObj?.TotalMarks ?? first.Examination?.TotalMarks ?? (isObjective ? 300 : 600),
+                        ExamPassPercentage = examObj?.PassPercentage ?? first.Examination?.PassPercentage ?? (isObjective ? 40m : 35m),
                         SubjectMaxMarks = subjectMaxMarks,
-                        IsPractical = isPractical,
-                        SubjectType = first.Subject?.SubjectType ?? (isPractical ? "Practical" : (isObjective ? "Objective" : "Theory")),
+                        IsPractical = isObjective ? false : isPractical,
+                        SubjectType = isObjective ? "Objective" : (first.Subject?.SubjectType ?? (isPractical ? "Practical" : "Theory")),
                         TotalStudents = total,
                         PresentStudents = present,
                         AbsentStudents = absent,
@@ -121,8 +144,8 @@ namespace CollegeManagement.API.Services.Implementations
             var facName = first.Faculty != null ? $"{first.Faculty.FirstName} {first.Faculty.LastName}".Trim() : "Unassigned";
             var facCode = first.Faculty != null ? (!string.IsNullOrWhiteSpace(first.Faculty.EmployeeId) ? first.Faculty.EmployeeId : $"FAC{first.Faculty.Id:0000}") : "FAC1001";
             var isPractical = first.Subject?.Practical == true || first.Subject?.SubjectType?.ToLower() == "practical";
-            var isObjective = first.Examination?.ExamPattern?.Contains("OBJECTIVE") == true || first.Examination?.ExamPattern?.Contains("JEE") == true || first.Examination?.ExamPattern?.Contains("NEET") == true;
-            var subjectMaxMarks = first.Subject?.TotalMarks > 0 ? (decimal)first.Subject.TotalMarks : (isObjective ? 75m : 100m);
+            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId);
+            var (subjectMaxMarks, _) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, first.Subject);
 
             return new EvaluationDetailDto
             {
@@ -138,12 +161,12 @@ namespace CollegeManagement.API.Services.Implementations
                 SectionName = first.SectionNavigation?.SectionName ?? "Section A",
                 ExaminationName = first.Examination?.ExamName ?? "Quarterly Examination",
                 ExamPattern = first.Examination?.ExamPattern ?? (isObjective ? "JEE Main Pattern" : "Regular Academic Pattern"),
-                ExamType = first.Examination?.AssessmentType?.AssessmentTypeName ?? (isObjective ? "Objective" : "Written"),
+                ExamType = isObjective ? "Objective" : (first.Examination?.AssessmentType?.AssessmentTypeName ?? "Written"),
                 ExamTotalMarks = first.Examination?.TotalMarks ?? (isObjective ? 300 : 600),
                 ExamPassPercentage = first.Examination?.PassPercentage ?? (isObjective ? 40m : 35m),
                 SubjectMaxMarks = subjectMaxMarks,
-                IsPractical = isPractical,
-                SubjectType = first.Subject?.SubjectType ?? (isPractical ? "Practical" : (isObjective ? "Objective" : "Theory")),
+                IsPractical = isObjective ? false : isPractical,
+                SubjectType = isObjective ? "Objective" : (first.Subject?.SubjectType ?? (isPractical ? "Practical" : "Theory")),
                 TotalStudents = total,
                 AverageMarks = Math.Round(avg, 2),
                 HighestMarks = max,
@@ -163,7 +186,7 @@ namespace CollegeManagement.API.Services.Implementations
                         RollNo = !string.IsNullOrEmpty(m.RollNo) ? m.RollNo : (m.Student?.RollNo ?? $"ROLL{m.StudentId:000}"),
                         StudentName = !string.IsNullOrEmpty(m.StudentName) ? m.StudentName : (m.Student?.StudentName ?? "Student"),
                         Internal = isObjective ? null : m.InternalMarks,
-                        Practical = isPractical ? (decimal?)m.PracticalMarks : null,
+                        Practical = (isPractical && !isObjective) ? (decimal?)m.PracticalMarks : null,
                         Theory = isObjective ? null : m.TheoryMarks,
                         TotalMarks = m.TotalMarks,
                         ObtainedMarks = m.TotalMarks,
@@ -364,8 +387,9 @@ namespace CollegeManagement.API.Services.Implementations
             var programName = first.Examination?.Program?.ProgramName ?? "Regular Academic";
             var sectionName = first.SectionNavigation?.SectionName ?? "Section A";
             var examName = first.Examination?.ExamName ?? "Quarterly Examination";
-            var examPattern = first.Examination?.ExamPattern ?? "Regular Academic Pattern";
-            var examType = first.Examination?.AssessmentType?.AssessmentTypeName ?? (examPattern.Contains("OBJECTIVE") ? "Objective" : "Written");
+            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, first.ExaminationId);
+            var examPattern = first.Examination?.ExamPattern ?? (isObjective ? "JEE Main Pattern" : "Regular Academic Pattern");
+            var examType = isObjective ? "Objective" : (first.Examination?.AssessmentType?.AssessmentTypeName ?? "Written");
             var passPercentage = first.Examination?.PassPercentage ?? 35m;
 
             var subjectsList = new List<StudentSubjectAnalysisDetailItemDto>();
@@ -384,9 +408,9 @@ namespace CollegeManagement.API.Services.Implementations
                     SubjectId = mark.SubjectId,
                     SubjectName = subjectName,
                     SubjectCode = subjectCode,
-                    Internal = examType == "Objective" ? null : mark.InternalMarks,
-                    Practical = mark.PracticalMarks > 0 ? mark.PracticalMarks : null,
-                    Theory = examType == "Objective" ? null : mark.TheoryMarks,
+                    Internal = isObjective ? null : mark.InternalMarks,
+                    Practical = (!isObjective && mark.PracticalMarks > 0) ? mark.PracticalMarks : null,
+                    Theory = isObjective ? null : mark.TheoryMarks,
                     Total = total,
                     ObtainedMarks = total,
                     MaxMarks = subMax,
@@ -550,12 +574,50 @@ namespace CollegeManagement.API.Services.Implementations
             var targetStatus = dto.SubmitForEvaluation ? EvaluationStatus.SUBMITTED : EvaluationStatus.SUBMITTED;
             var now = DateTime.UtcNow;
 
+            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, dto.ExaminationId, dto.SubjectId);
+            var (maxMarks, defaultPass) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, dto.ExaminationId, dto.SubjectId);
+
             foreach (var item in dto.StudentMarks)
             {
                 var markEntity = existingMarks.FirstOrDefault(m => m.StudentId == item.StudentId);
                 if (markEntity == null)
                 {
                     markEntity = await _marksRepository.GetByExamSubjectStudentAsync(dto.ExaminationId, dto.SubjectId, item.StudentId);
+                }
+
+                int internalMarks;
+                int practicalMarks;
+                int theoryMarks;
+                int totalMarks;
+
+                if (isObjective)
+                {
+                    decimal singleScore = item.ObtainedMarks.HasValue
+                        ? item.ObtainedMarks.Value
+                        : (item.TotalMarks.HasValue
+                            ? item.TotalMarks.Value
+                            : (item.TheoryMarks > 0 ? item.TheoryMarks : (item.InternalMarks > 0 ? item.InternalMarks : item.PracticalMarks)));
+
+                    int score = (int)Math.Round(singleScore, MidpointRounding.AwayFromZero);
+                    if (!item.IsAbsent && maxMarks > 0 && score > (int)maxMarks)
+                    {
+                        throw new ValidationException($"Obtained marks ({score}) cannot exceed configured maximum marks ({maxMarks}) for this objective examination subject.");
+                    }
+                    totalMarks = item.IsAbsent ? 0 : score;
+                    internalMarks = 0;
+                    practicalMarks = 0;
+                    theoryMarks = totalMarks;
+                }
+                else
+                {
+                    internalMarks = (int)item.InternalMarks;
+                    practicalMarks = (int)item.PracticalMarks;
+                    theoryMarks = (int)item.TheoryMarks;
+                    totalMarks = item.IsAbsent ? 0 : (internalMarks + practicalMarks + theoryMarks);
+                    if (!item.IsAbsent && maxMarks > 0 && totalMarks > (int)maxMarks)
+                    {
+                        throw new ValidationException($"Total marks ({totalMarks}) cannot exceed configured maximum marks ({maxMarks}).");
+                    }
                 }
 
                 if (markEntity != null)
@@ -565,10 +627,10 @@ namespace CollegeManagement.API.Services.Implementations
                     markEntity.AcademicLevelId = dto.AcademicLevelId > 0 ? dto.AcademicLevelId : markEntity.AcademicLevelId;
                     markEntity.GroupId = dto.GroupId;
                     markEntity.SectionId = dto.SectionId;
-                    markEntity.InternalMarks = (int)item.InternalMarks;
-                    markEntity.PracticalMarks = (int)item.PracticalMarks;
-                    markEntity.TheoryMarks = (int)item.TheoryMarks;
-                    markEntity.TotalMarks = (int)(item.InternalMarks + item.PracticalMarks + item.TheoryMarks);
+                    markEntity.InternalMarks = internalMarks;
+                    markEntity.PracticalMarks = practicalMarks;
+                    markEntity.TheoryMarks = theoryMarks;
+                    markEntity.TotalMarks = totalMarks;
                     markEntity.IsAbsent = item.IsAbsent;
                     markEntity.Remarks = item.Remarks;
                     if (dto.FacultyId > 0) markEntity.FacultyId = dto.FacultyId;
@@ -608,11 +670,11 @@ namespace CollegeManagement.API.Services.Implementations
                         StudentId = item.StudentId,
                         RollNo = !string.IsNullOrEmpty(item.RollNo) ? item.RollNo : "UG2026001",
                         StudentName = !string.IsNullOrEmpty(item.StudentName) ? item.StudentName : "Student",
-                        InternalMarks = (int)item.InternalMarks,
-                        PracticalMarks = (int)item.PracticalMarks,
-                        TheoryMarks = (int)item.TheoryMarks,
-                        TotalMarks = (int)(item.InternalMarks + item.PracticalMarks + item.TheoryMarks),
-                        PassingMarks = 35,
+                        InternalMarks = internalMarks,
+                        PracticalMarks = practicalMarks,
+                        TheoryMarks = theoryMarks,
+                        TotalMarks = totalMarks,
+                        PassingMarks = (int)defaultPass,
                         IsAbsent = item.IsAbsent,
                         Remarks = item.Remarks,
                         Status = targetStatus,
@@ -838,22 +900,50 @@ namespace CollegeManagement.API.Services.Implementations
 
             var marks = await query.ToListAsync();
 
+            var examIds = marks.Select(m => m.ExaminationId).Distinct().ToList();
+            var examSchedules = await _context.ExamSchedules.AsNoTracking()
+                .Where(s => s.IsActive && examIds.Contains(s.ExaminationId))
+                .ToListAsync();
+            var examinations = await _context.Examinations.AsNoTracking()
+                .Include(e => e.AssessmentType)
+                .Where(e => examIds.Contains(e.ExaminationId))
+                .ToDictionaryAsync(e => e.ExaminationId);
+
             return marks
                 .GroupBy(m => new { m.SubjectId, m.SectionId, m.ExaminationId })
                 .Select(g =>
                 {
                     var first = g.First();
+                    var examObj = examinations.GetValueOrDefault(first.ExaminationId) ?? first.Examination;
+                    var scheduleObj = examSchedules.FirstOrDefault(s => s.ExaminationId == first.ExaminationId &&
+                        (s.SubjectId == first.SubjectId || s.IncludedSubjectIdList.Contains(first.SubjectId)));
+                    if (scheduleObj == null && examSchedules.Any(s => s.ExaminationId == first.ExaminationId))
+                    {
+                        scheduleObj = examSchedules.FirstOrDefault(s => s.ExaminationId == first.ExaminationId);
+                    }
+
+                    var isObjective = ExaminationFormatHelper.IsObjectiveExam(examObj, scheduleObj);
+                    var maxMarks = scheduleObj?.MaxMarks > 0
+                        ? scheduleObj.MaxMarks
+                        : (first.Subject?.TotalMarks > 0 ? (decimal)first.Subject.TotalMarks : 100m);
+
                     return new CollegeManagement.API.DTOs.Marks.FacultyAssignedEvaluationDto
                     {
                         EvaluationId = first.MarkId,
                         ExaminationId = first.ExaminationId,
-                        ExaminationName = first.Examination?.ExamName ?? $"Exam #{first.ExaminationId}",
+                        ExaminationName = examObj?.ExamName ?? first.Examination?.ExamName ?? $"Exam #{first.ExaminationId}",
                         SectionId = first.SectionId,
                         SectionName = first.SectionNavigation?.SectionName ?? $"Section #{first.SectionId}",
                         SubjectId = first.SubjectId,
                         SubjectName = first.Subject?.SubjectName ?? $"Subject #{first.SubjectId}",
                         FacultyId = first.FacultyId,
                         Status = first.Status.ToString(),
+                        Mode = isObjective ? "OBJECTIVE" : "REGULAR",
+                        MaxMarks = maxMarks,
+                        TheoryMax = isObjective ? maxMarks : 70,
+                        PracticalMax = isObjective ? 0 : 0,
+                        InternalMax = isObjective ? 0 : 30,
+                        PassPercentage = examObj?.PassPercentage ?? 35,
                         RejectionReason = first.RejectionReason,
                         ResubmissionCount = first.ResubmissionCount,
                         RowVersion = 1
@@ -865,6 +955,8 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<CollegeManagement.API.DTOs.Marks.FacultyEvaluationStudentsResponseDto?> GetFacultyEvaluationStudentsAsync(string evaluationId, int? facultyId)
         {
             var (subjectId, sectionId, examinationId) = ParseEvaluationId(evaluationId);
+
+            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId);
 
             var marks = await _context.Marks
                 .Include(m => m.Student)
@@ -880,6 +972,7 @@ namespace CollegeManagement.API.Services.Implementations
                 var exam = await _context.Examinations.AsNoTracking().FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
                 var subject = await _context.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.SubjectId == subjectId);
                 var section = await _context.Sections.AsNoTracking().FirstOrDefaultAsync(sec => sec.SectionId == sectionId);
+                var (maxMarks, _) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, subject);
 
                 var students = await _context.Students.AsNoTracking()
                     .Where(s => s.IsActive && s.SectionId == sectionId)
@@ -905,11 +998,12 @@ namespace CollegeManagement.API.Services.Implementations
                     SectionName = section?.SectionName ?? string.Empty,
                     SubjectId = subjectId,
                     SubjectName = subject?.SubjectName ?? string.Empty,
-                    MaxMarks = subject?.TotalMarks > 0 ? subject.TotalMarks : 100,
-                    TheoryMax = subject?.ExternalMarks > 0 ? subject.ExternalMarks : 70,
-                    PracticalMax = subject?.PracticalMarks > 0 ? subject.PracticalMarks : 20,
-                    InternalMax = subject?.InternalMarks > 0 ? subject.InternalMarks : 10,
-                    IsPracticalApplicable = subject?.Practical == true,
+                    Mode = isObjective ? "OBJECTIVE" : "REGULAR",
+                    MaxMarks = maxMarks,
+                    TheoryMax = isObjective ? maxMarks : (subject?.ExternalMarks > 0 ? subject.ExternalMarks : 70),
+                    PracticalMax = isObjective ? 0 : (subject?.PracticalMarks > 0 ? subject.PracticalMarks : 20),
+                    InternalMax = isObjective ? 0 : (subject?.InternalMarks > 0 ? subject.InternalMarks : 10),
+                    IsPracticalApplicable = isObjective ? false : (subject?.Practical == true),
                     Status = EvaluationStatus.SUBMITTED.ToString(),
                     RejectionReason = null,
                     RowVersion = 1,
@@ -929,6 +1023,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var first = marks.First();
+            var (resolvedMax, _) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, first.Subject);
 
             return new CollegeManagement.API.DTOs.Marks.FacultyEvaluationStudentsResponseDto
             {
@@ -939,11 +1034,12 @@ namespace CollegeManagement.API.Services.Implementations
                 SectionName = first.SectionNavigation?.SectionName ?? string.Empty,
                 SubjectId = first.SubjectId,
                 SubjectName = first.Subject?.SubjectName ?? string.Empty,
-                MaxMarks = first.Subject?.TotalMarks > 0 ? first.Subject.TotalMarks : 100,
-                TheoryMax = 70,
-                PracticalMax = 20,
-                InternalMax = 10,
-                IsPracticalApplicable = first.Subject?.Practical == true,
+                Mode = isObjective ? "OBJECTIVE" : "REGULAR",
+                MaxMarks = resolvedMax,
+                TheoryMax = isObjective ? resolvedMax : 70,
+                PracticalMax = isObjective ? 0 : 20,
+                InternalMax = isObjective ? 0 : 10,
+                IsPracticalApplicable = isObjective ? false : (first.Subject?.Practical == true),
                 Status = first.Status.ToString(),
                 RejectionReason = first.RejectionReason,
                 RowVersion = 1,
@@ -952,9 +1048,9 @@ namespace CollegeManagement.API.Services.Implementations
                     StudentId = m.StudentId,
                     RollNo = !string.IsNullOrWhiteSpace(m.RollNo) ? m.RollNo : (m.Student?.RollNo ?? m.Student?.AdmissionNo ?? $"STU-{m.StudentId:D4}"),
                     StudentName = !string.IsNullOrWhiteSpace(m.StudentName) ? m.StudentName : (m.Student?.StudentName ?? $"Student #{m.StudentId}"),
-                    InternalMarks = (int)m.InternalMarks,
-                    PracticalMarks = (int)m.PracticalMarks,
-                    TheoryMarks = (int)m.TheoryMarks,
+                    InternalMarks = isObjective ? 0 : (int)m.InternalMarks,
+                    PracticalMarks = isObjective ? 0 : (int)m.PracticalMarks,
+                    TheoryMarks = isObjective ? (int)m.TotalMarks : (int)m.TheoryMarks,
                     TotalMarks = (int)m.TotalMarks,
                     IsAbsent = m.IsAbsent,
                     Remarks = m.Remarks
@@ -988,11 +1084,14 @@ namespace CollegeManagement.API.Services.Implementations
             var subject = await _context.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.SubjectId == subjectId);
             var section = await _context.Sections.AsNoTracking().FirstOrDefaultAsync(sec => sec.SectionId == sectionId);
 
+            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId);
+            var (maxMarks, defaultPass) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, subject);
+
             int boardId = exam?.BoardId ?? subject?.BoardId ?? 1;
             int academicYearId = exam?.AcademicYearId ?? 1;
             int academicLevelId = exam?.AcademicLevelId ?? subject?.AcademicLevelId ?? 1;
             int groupId = exam?.GroupId ?? subject?.GroupId ?? section?.GroupId ?? 1;
-            int passingMarks = subject?.PassingMarks > 0 ? subject.PassingMarks : 35;
+            int passingMarks = subject?.PassingMarks > 0 ? subject.PassingMarks : (int)defaultPass;
 
             var studentIds = inputList.Select(s => s.StudentId).Distinct().ToList();
             var studentEntities = await _context.Students.AsNoTracking()
@@ -1006,20 +1105,49 @@ namespace CollegeManagement.API.Services.Implementations
                 var mark = marks.FirstOrDefault(m => m.StudentId == studentInput.StudentId);
                 var studentEntity = studentEntities.GetValueOrDefault(studentInput.StudentId);
 
-                int total = (studentInput.TotalMarks.HasValue && studentInput.TotalMarks.Value > 0)
-                    ? studentInput.TotalMarks.Value
-                    : (studentInput.ObtainedMarks.HasValue && studentInput.ObtainedMarks.Value > 0)
-                        ? studentInput.ObtainedMarks.Value
-                        : (studentInput.InternalMarks + studentInput.PracticalMarks + studentInput.TheoryMarks);
+                int internalMarks;
+                int practicalMarks;
+                int theoryMarks;
+                int total;
 
                 bool isAbsent = studentInput.IsAbsent || string.Equals(studentInput.Status, "ABSENT", StringComparison.OrdinalIgnoreCase);
 
+                if (isObjective)
+                {
+                    int score = studentInput.ObtainedMarks.HasValue
+                        ? studentInput.ObtainedMarks.Value
+                        : (studentInput.TotalMarks.HasValue
+                            ? studentInput.TotalMarks.Value
+                            : studentInput.TheoryMarks);
+
+                    if (!isAbsent && maxMarks > 0 && score > (int)maxMarks)
+                    {
+                        throw new ValidationException($"Obtained marks ({score}) cannot exceed configured maximum marks ({maxMarks}) for this objective examination subject.");
+                    }
+
+                    total = isAbsent ? 0 : score;
+                    internalMarks = 0;
+                    practicalMarks = 0;
+                    theoryMarks = total;
+                }
+                else
+                {
+                    internalMarks = studentInput.InternalMarks;
+                    practicalMarks = studentInput.PracticalMarks;
+                    theoryMarks = studentInput.TheoryMarks;
+                    total = isAbsent ? 0 : (internalMarks + practicalMarks + theoryMarks);
+                    if (!isAbsent && maxMarks > 0 && total > (int)maxMarks)
+                    {
+                        throw new ValidationException($"Total marks ({total}) cannot exceed configured maximum marks ({maxMarks}).");
+                    }
+                }
+
                 if (mark != null)
                 {
-                    mark.InternalMarks = studentInput.InternalMarks;
-                    mark.PracticalMarks = studentInput.PracticalMarks;
-                    mark.TheoryMarks = studentInput.TheoryMarks;
-                    mark.TotalMarks = isAbsent ? 0 : total;
+                    mark.InternalMarks = internalMarks;
+                    mark.PracticalMarks = practicalMarks;
+                    mark.TheoryMarks = theoryMarks;
+                    mark.TotalMarks = total;
                     mark.IsAbsent = isAbsent;
                     mark.Remarks = studentInput.Remarks;
                     mark.UpdatedAt = now;
@@ -1043,10 +1171,10 @@ namespace CollegeManagement.API.Services.Implementations
                         RollNo = studentEntity?.RollNo ?? studentEntity?.AdmissionNo ?? string.Empty,
                         StudentName = studentEntity?.StudentName ?? string.Empty,
                         FacultyId = facultyId,
-                        InternalMarks = studentInput.InternalMarks,
-                        PracticalMarks = studentInput.PracticalMarks,
-                        TheoryMarks = studentInput.TheoryMarks,
-                        TotalMarks = isAbsent ? 0 : total,
+                        InternalMarks = internalMarks,
+                        PracticalMarks = practicalMarks,
+                        TheoryMarks = theoryMarks,
+                        TotalMarks = total,
                         PassingMarks = passingMarks,
                         IsAbsent = isAbsent,
                         Remarks = studentInput.Remarks,

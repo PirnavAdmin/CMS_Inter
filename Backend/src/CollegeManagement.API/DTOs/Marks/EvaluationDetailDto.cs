@@ -19,6 +19,10 @@ namespace CollegeManagement.API.DTOs.Evaluations
         public string ExaminationName { get; set; } = string.Empty;
         public string? ExamPattern { get; set; }
         public string? ExamType { get; set; }
+        public string Mode => (string.Equals(ExamType, "Objective", StringComparison.OrdinalIgnoreCase) 
+            || string.Equals(SubjectType, "Objective", StringComparison.OrdinalIgnoreCase) 
+            || (ExamPattern != null && (ExamPattern.ToUpper().Contains("OBJECTIVE") || ExamPattern.ToUpper().Contains("JEE") || ExamPattern.ToUpper().Contains("NEET") || ExamPattern.ToUpper().Contains("PATTERN")))) 
+            ? "OBJECTIVE" : "REGULAR";
         public int ExamTotalMarks { get; set; } = 600;
         public decimal ExamPassPercentage { get; set; } = 35;
         public decimal SubjectMaxMarks { get; set; } = 100;
@@ -73,6 +77,8 @@ namespace CollegeManagement.API.DTOs.Evaluations
         public decimal? Internal { get; set; }
         public decimal? Practical { get; set; }
         public decimal? Theory { get; set; }
+        public decimal? TotalMarks { get; set; }
+        public decimal? Total { get => TotalMarks; set => TotalMarks = value; }
         public decimal? ObtainedMarks { get; set; }
         public decimal? MaxMarks { get; set; }
         public bool? IsAbsent { get; set; }

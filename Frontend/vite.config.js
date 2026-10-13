@@ -8,18 +8,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || "https://prune-abroad-blemish.ngrok-free.dev";
+  const apiBaseUrl = env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
     plugins: [react()],
     resolve: {
-      alias: [
-        {
-          find: /^@\//,
-          replacement: `${path.resolve(__dirname, "src").replace(/\\/g, "/")}/`,
-        },
-      ],
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
     },
     optimizeDeps: {
       include: ["@microsoft/signalr"],

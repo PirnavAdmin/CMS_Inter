@@ -402,6 +402,8 @@ CREATE PROCEDURE `sp_CheckUserModuleAction`(
 )
 BEGIN
     DECLARE v_NormAction VARCHAR(50);
+    DECLARE v_Result INT DEFAULT 0;
+
     SET v_NormAction = CASE LOWER(TRIM(p_Action))
         WHEN 'create' THEN 'Add'
         WHEN 'add' THEN 'Add'
@@ -411,13 +413,14 @@ BEGIN
         ELSE 'View'
     END;
 
+    -- 1. Check if the action itself is granted
     SELECT 
         CASE 
             WHEN u.RoleId = 1 THEN 1
             WHEN up.IsGranted IS NOT NULL THEN up.IsGranted
             WHEN rp.PermissionId IS NOT NULL THEN 1
             ELSE 0
-        END AS HasPermission
+        END INTO v_Result
     FROM `Users` u
     INNER JOIN `Permissions` p ON (
         LOWER(p.SubModule) = LOWER(TRIM(p_ModuleIdentifier))
@@ -430,6 +433,33 @@ BEGIN
     WHERE u.UserId = p_UserId
       AND (u.RoleId = 1 OR rm.RoleModuleId IS NOT NULL OR NOT EXISTS (SELECT 1 FROM `RoleModules` WHERE RoleId = u.RoleId))
     LIMIT 1;
+
+    -- 2. If action is Add/Edit/Delete, enforce that View must ALSO be granted
+    IF v_Result = 1 AND v_NormAction != 'View' THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM `Users` u
+            INNER JOIN `Permissions` p ON (
+                LOWER(p.SubModule) = LOWER(TRIM(p_ModuleIdentifier))
+                OR LOWER(p.Module) = LOWER(TRIM(p_ModuleIdentifier))
+                OR LOWER(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(p.SubModule), '&', ''), '/', '-'), '  ', ' '), ' ', '-')) = LOWER(TRIM(p_ModuleIdentifier))
+            ) AND p.Action = 'View'
+            LEFT JOIN `RoleModules` rm ON rm.RoleId = u.RoleId AND LOWER(rm.SubModule) = LOWER(p.SubModule)
+            LEFT JOIN `RolePermissions` rp ON rp.PermissionId = p.PermissionId AND rp.RoleId = u.RoleId
+            LEFT JOIN `UserPermissions` up ON up.PermissionId = p.PermissionId AND up.UserId = u.UserId
+            WHERE u.UserId = p_UserId
+              AND (u.RoleId = 1 OR rm.RoleModuleId IS NOT NULL OR NOT EXISTS (SELECT 1 FROM `RoleModules` WHERE RoleId = u.RoleId))
+              AND (
+                  u.RoleId = 1
+                  OR (up.IsGranted = 1)
+                  OR (up.IsGranted IS NULL AND rp.PermissionId IS NOT NULL)
+              )
+        ) THEN
+            SET v_Result = 0;
+        END IF;
+    END IF;
+
+    SELECT COALESCE(v_Result, 0) AS HasPermission;
 END;";
             using (var cmd = new MySqlCommand(spCheckUserModuleAction, conn)) await cmd.ExecuteNonQueryAsync();
 

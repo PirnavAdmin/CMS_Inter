@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Evaluations;
 using CollegeManagement.API.DTOs.Marks;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Enums;
 using CollegeManagement.API.Repositories.Interfaces;
@@ -397,6 +398,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             var existingMarks = (await GetEvaluationMarksListAsync(subjectId, sectionId, examinationId)).ToList();
             if (!existingMarks.Any()) return false;
 
+            bool isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId);
+
             bool anyUpdated = false;
             foreach (var update in updates)
             {
@@ -412,18 +415,44 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 if (target != null)
                 {
-                    int internalMarks = update.Internal.HasValue ? (int)update.Internal.Value : target.InternalMarks;
-                    int practicalMarks = update.Practical.HasValue ? (int)update.Practical.Value : target.PracticalMarks;
-                    int theoryMarks = update.Theory.HasValue ? (int)update.Theory.Value : target.TheoryMarks;
                     bool isAbsent = update.IsAbsent ?? target.IsAbsent;
                     string? remarks = update.Remarks ?? target.Remarks;
+
+                    int internalMarks;
+                    int practicalMarks;
+                    int theoryMarks;
+                    int totalMarks;
+
+                    if (isObjective)
+                    {
+                        // Objective exam: single score authoritative, internal and practical remain 0
+                        decimal singleScore = update.ObtainedMarks.HasValue
+                            ? update.ObtainedMarks.Value
+                            : (update.TotalMarks.HasValue
+                                ? update.TotalMarks.Value
+                                : (update.Theory.HasValue ? update.Theory.Value : target.TotalMarks));
+
+                        int score = (int)Math.Round(singleScore, MidpointRounding.AwayFromZero);
+                        totalMarks = isAbsent ? 0 : score;
+                        internalMarks = 0;
+                        practicalMarks = 0;
+                        theoryMarks = totalMarks;
+                    }
+                    else
+                    {
+                        // Regular exam: preserve internal, practical, theory components
+                        internalMarks = update.Internal.HasValue ? (int)update.Internal.Value : target.InternalMarks;
+                        practicalMarks = update.Practical.HasValue ? (int)update.Practical.Value : target.PracticalMarks;
+                        theoryMarks = update.Theory.HasValue ? (int)update.Theory.Value : target.TheoryMarks;
+                        totalMarks = isAbsent ? 0 : (internalMarks + practicalMarks + theoryMarks);
+                    }
 
                     var parameters = new DynamicParameters();
                     parameters.Add("p_MarkId", target.MarkId);
                     parameters.Add("p_InternalMarks", internalMarks);
                     parameters.Add("p_PracticalMarks", practicalMarks);
                     parameters.Add("p_TheoryMarks", theoryMarks);
-                    parameters.Add("p_TotalMarks", isAbsent ? 0 : (internalMarks + practicalMarks + theoryMarks));
+                    parameters.Add("p_TotalMarks", totalMarks);
                     parameters.Add("p_PassingMarks", target.PassingMarks);
                     parameters.Add("p_IsAbsent", isAbsent ? 1 : 0);
                     parameters.Add("p_Remarks", remarks);

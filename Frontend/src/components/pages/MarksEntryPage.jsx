@@ -18,7 +18,6 @@ import "./MarksEntryPage.css";
 
 const PAGE_SIZE = 5;
 const normalizeId = (value) => String(value ?? "");
-const ensureArray = (value) => Array.isArray(value) ? value : (value !== null && value !== undefined && value !== "" ? [value] : []);
 const isActiveRecord = (item) => item?.isActive !== false && item?.status !== false;
 const evaluationKey = (item) => `${item.examinationId}:${item.sectionId}:${item.subjectId}`;
 const eq = (a, b) => normalizeId(a) === normalizeId(b);
@@ -179,35 +178,18 @@ const calculateStudentSubjectResult = (row, workspace) => {
 };
 
 const isObjectiveExamination = (schedule, exam) => {
-  if (schedule) {
-    const sExamMode = String(schedule.examMode || schedule.mode || "").trim().toLowerCase();
-    if (sExamMode === "objective") return true;
-    const sSchedMode = String(schedule.scheduleMode || "").trim().toUpperCase();
-    if (["PATTERN_WISE", "COMBINED", "COMBINED_OBJECTIVE", "OBJECTIVE"].includes(sSchedMode)) return true;
-    if (Array.isArray(schedule.includedSubjectIds) && schedule.includedSubjectIds.length > 0) return true;
-    const sPat = String(schedule.patternName || "").trim().toLowerCase();
-    if (sPat && !["regular", "regular pattern", "regular academic pattern", "none"].includes(sPat)) return true;
-  }
+  const schedMode = String(schedule?.scheduleMode || schedule?.mode || "").trim().toUpperCase();
+  if (["PATTERN_WISE", "COMBINED", "COMBINED_OBJECTIVE", "OBJECTIVE"].includes(schedMode)) return true;
+  if (schedMode === "SUBJECT_WISE" || schedMode === "REGULAR") return false;
 
-  if (exam) {
-    const eExamMode = String(exam.examMode || exam.mode || "").trim().toLowerCase();
-    if (eExamMode === "objective") return true;
-    const eSchedMode = String(exam.scheduleMode || "").trim().toUpperCase();
-    if (["PATTERN_WISE", "COMBINED", "COMBINED_OBJECTIVE", "OBJECTIVE"].includes(eSchedMode)) return true;
-    const ePat = String(exam.examPattern || exam.pattern || exam.patternName || "").trim().toLowerCase();
-    if (ePat && !["regular", "regular pattern", "regular academic pattern", "none"].includes(ePat)) return true;
-    const cat = String(
-      exam.examCategory || exam.category || exam.categoryName || schedule?.examCategory || schedule?.category || ""
-    ).trim().toLowerCase();
-    if (cat === "objective" || cat === "combined" || cat.includes("objective")) return true;
-    if (Array.isArray(exam.schedules) && exam.schedules.some((s) =>
-      String(s?.examMode || s?.mode || "").trim().toLowerCase() === "objective" ||
-      ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(String(s?.scheduleMode || "").trim().toUpperCase()) ||
-      (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 0)
-    )) {
-      return true;
-    }
-  }
+  const examMode = String(exam?.scheduleMode || exam?.mode || "").trim().toUpperCase();
+  if (["PATTERN_WISE", "COMBINED", "COMBINED_OBJECTIVE", "OBJECTIVE"].includes(examMode)) return true;
+  if (examMode === "SUBJECT_WISE" || examMode === "REGULAR") return false;
+
+  const cat = String(
+    schedule?.examCategory || schedule?.category || exam?.examCategory || exam?.category || exam?.categoryName || ""
+  ).trim().toLowerCase();
+  if (cat === "objective" || cat === "combined" || cat.includes("objective")) return true;
 
   return false;
 };
@@ -1286,153 +1268,54 @@ export default function MarksEntryPage({ embedded = false } = {}) {
 
   const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false));
 
-  // Shared Helper: Load Authoritative Schedules & Generate Complete Subject Configurations
-  const buildAuthoritativeExamConfigs = async (examId, sectionId, selectedExam = null, campusId = null) => {
-    if (!examId || !sectionId) return { configs: [], effectiveExam: selectedExam };
-
-    const headers = campusId ? { "X-Campus-Id": String(campusId) } : {};
-    let examDetail = null;
-    let schedules = selectedExam?.schedules || [];
-
-    try {
-      const [detailRes, schedRes, subsRes] = await Promise.all([
-        apiClient.get(`/api/v1/examinations/${examId}`, { headers, skipGlobalLoader: true }).catch(() => null),
-        apiClient.get(`/api/v1/examinations/${examId}/schedules`, { headers, skipGlobalLoader: true }).catch(() => null),
-        apiClient.get("/api/v1/subjects", { headers, skipGlobalLoader: true }).catch(() => null),
-      ]);
-
-      examDetail = detailRes?.data?.data ?? detailRes?.data ?? detailRes;
-      const unwrappedScheds = unwrapRecords(schedRes);
-      if (Array.isArray(unwrappedScheds) && unwrappedScheds.length > 0) {
-        schedules = unwrappedScheds;
-      } else if (examDetail?.schedules?.length) {
-        schedules = examDetail.schedules;
-      }
-
-      const masterSubjects = unwrapRecords(subsRes) || [];
-      const effectiveExam = examDetail || selectedExam;
-
-      const findSubjectMeta = (subjId, fallbackSchedule) => {
-        const sIdStr = normalizeId(subjId);
-        const fromDetails = ensureArray(effectiveExam?.selectedSubjectDetails).find(
-          (sub) => normalizeId(sub.id ?? sub.subjectId) === sIdStr
-        );
-        if (fromDetails) {
-          return {
-            name: fromDetails.name || fromDetails.subjectName || "",
-            code: fromDetails.code || fromDetails.subjectCode || "",
-          };
-        }
-        const fromMaster = masterSubjects.find(
-          (sub) => normalizeId(sub.id ?? sub.subjectId) === sIdStr
-        );
-        if (fromMaster) {
-          return {
-            name: fromMaster.name || fromMaster.subjectName || "",
-            code: fromMaster.code || fromMaster.subjectCode || "",
-          };
-        }
-        if (fallbackSchedule && normalizeId(fallbackSchedule.subjectId) === sIdStr) {
-          return {
-            name: fallbackSchedule.subjectName || "",
-            code: fallbackSchedule.subjectCode || "",
-          };
-        }
-        return {
-          name: `Subject ${subjId}`,
-          code: `SUB${subjId}`,
-        };
-      };
-
-      const configs = [];
-      const seenSubjects = new Set();
-
-      (schedules || []).forEach((s) => {
-        const isObjective = isObjectiveExamination(s, effectiveExam);
-        const scheduleId = s.examScheduleId || s.scheduleId || s.id;
-        const includedIds = Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0
-          ? s.includedSubjectIds
-          : (isObjective && Array.isArray(s.subjectIds) && s.subjectIds.length > 0 ? s.subjectIds : []);
-
-        if (isObjective && includedIds.length > 0) {
-          // Objective PATTERN_WISE schedule: expand every included subject independently
-          includedIds.forEach((incId) => {
-            const normSubId = normalizeId(incId);
-            if (!normSubId || seenSubjects.has(normSubId)) return;
-            seenSubjects.add(normSubId);
-            const meta = findSubjectMeta(normSubId, s);
-
-            configs.push({
-              id: `cfg-${examId}-${normSubId}`,
-              examinationId: examId,
-              sectionId: sectionId,
-              examScheduleId: scheduleId,
-              sessionId: s.sessionId || `SESSION-${s.patternName || "PATTERN"}-${s.groupId || ""}`,
-              patternName: s.patternName || effectiveExam?.examPattern || "",
-              subjectId: normSubId,
-              subjectName: meta.name || `Subject ${normSubId}`,
-              subjectCode: meta.code || `SUB${normSubId}`,
-              mode: "OBJECTIVE",
-              maxMarks: Number(s.maxMarks || 300),
-              passPercentage: Number(s.passingMarks ? (Number(s.passingMarks) / (Number(s.maxMarks) || 300)) * 100 : 35),
-              internalMax: 0,
-              practicalMax: 0,
-              theoryMax: 0,
-              facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
-              facultyId: s.invigilatorId || s.facultyId || "",
-            });
-          });
-        } else {
-          // Regular SUBJECT_WISE schedule (or single-subject schedule)
-          const normSubId = normalizeId(s.subjectId);
-          if (!normSubId || seenSubjects.has(normSubId)) return;
-          seenSubjects.add(normSubId);
-          const meta = findSubjectMeta(normSubId, s);
-
-          configs.push({
-            id: `cfg-${examId}-${normSubId}`,
-            examinationId: examId,
-            sectionId: sectionId,
-            examScheduleId: scheduleId,
-            sessionId: s.sessionId || null,
-            patternName: s.patternName || null,
-            subjectId: normSubId,
-            subjectName: meta.name || s.subjectName || `Subject ${normSubId}`,
-            subjectCode: meta.code || s.subjectCode || "",
-            mode: isObjective ? "OBJECTIVE" : "REGULAR",
-            maxMarks: Number(s.maxMarks || (isObjective ? 300 : 100)),
-            passPercentage: Number(s.passingMarks ? (Number(s.passingMarks) / (Number(s.maxMarks) || (isObjective ? 300 : 100))) * 100 : 35),
-            internalMax: isObjective ? 0 : Number(s.internalMax ?? 20),
-            practicalMax: isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
-            theoryMax: isObjective
-              ? 0
-              : Number(
-                s.theoryMax ??
-                Math.max(
-                  0,
-                  Number(s.maxMarks || 100) -
-                  Number(s.internalMax ?? 20) -
-                  Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
-                )
-              ),
-            facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
-            facultyId: s.invigilatorId || s.facultyId || "",
-          });
-        }
-      });
-
-      return { configs, effectiveExam };
-    } catch (err) {
-      console.error("buildAuthoritativeExamConfigs error:", err);
-      return { configs: [], effectiveExam: selectedExam };
-    }
-  };
-
   // Helper to load schedules & search evaluations for an examination in Marks Entry
   const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
     if (!examId || !sectionId) return;
     const selectedExam = examList.find((e) => eq(e.id, examId));
-    const { configs } = await buildAuthoritativeExamConfigs(examId, sectionId, selectedExam, effectiveCampusId);
+    let schedules = selectedExam?.schedules || [];
+    let examDetail = null;
+
+    try {
+      const detailRes = await apiClient.get(`/api/v1/examinations/${examId}`).catch(() => null);
+      examDetail = detailRes?.data || detailRes;
+      if (examDetail?.schedules?.length) {
+        schedules = examDetail.schedules;
+      }
+    } catch (e) {
+      console.warn("Could not fetch exam schedules:", e);
+    }
+
+    const effectiveExam = examDetail || selectedExam;
+
+    const configs = schedules.map((s) => {
+      const isObjective = isObjectiveExamination(s, effectiveExam);
+      return {
+        id: `cfg-${examId}-${s.subjectId}`,
+        examinationId: examId,
+        sectionId: sectionId,
+        subjectId: normalizeId(s.subjectId),
+        subjectName: s.subjectName || `Subject ${s.subjectId}`,
+        subjectCode: s.subjectCode || "",
+        mode: isObjective ? "OBJECTIVE" : "REGULAR",
+        maxMarks: Number(s.maxMarks || 100),
+        passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
+        internalMax: isObjective ? 0 : Number(s.internalMax ?? 20),
+        practicalMax: isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
+        theoryMax: isObjective
+          ? 0
+          : Number(
+            s.theoryMax ??
+            Math.max(
+              0,
+              Number(s.maxMarks || 100) -
+              Number(s.internalMax ?? 20) -
+              Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
+            )
+          ),
+        facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
+        facultyId: s.invigilatorId || s.facultyId || "",
+      };
+    });
 
     setEntryConfigs(configs);
     const chosenSubjectId = configs.some((c) => eq(c.subjectId, entrySubjectId)) ? entrySubjectId : configs[0]?.subjectId || "";
@@ -1536,8 +1419,6 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             examinationId: examId,
             sectionId: sectionId,
             subjectId: config.subjectId,
-            examScheduleId: config.examScheduleId || null,
-            sessionId: config.sessionId || null,
             facultyId: config.facultyId || ev?.facultyId || "1",
             faculty: { name: config.facultyName || ev?.facultyName || "Assigned Faculty", employeeCode: ev?.facultyCode || "" },
             subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
@@ -1811,8 +1692,6 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               examinationId: entryExamId,
               sectionId: entry.filters.section,
               subjectId: config.subjectId,
-              examScheduleId: config.examScheduleId || existing.examScheduleId || null,
-              sessionId: config.sessionId || existing.sessionId || null,
               facultyId: config.facultyId || existing.facultyId || "1",
               faculty: { name: config.facultyName || existing.faculty?.name || "Assigned Faculty", employeeCode: "" },
               subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
@@ -2690,14 +2569,64 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       const studentList = await fetchAuthoritativeSectionStudents(effectiveEvalFilters, effectiveCampusId);
       setEvalStudents(studentList);
 
-      // 2. Fetch Exam details & authoritative schedules/configs
+      // 2. Fetch Exam details & schedules/configs
       const selectedExam = evalState.exams.find((e) => eq(e.id, evalState.filters.exam));
-      const { configs } = await buildAuthoritativeExamConfigs(
-        evalState.filters.exam,
-        evalState.filters.section,
-        selectedExam,
-        effectiveCampusId
-      );
+      let schedules = selectedExam?.schedules || [];
+      let examDetail = null;
+      try {
+        const detailRes = await apiClient
+          .get(`/api/v1/examinations/${evalState.filters.exam}`, {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+            skipGlobalLoader: true,
+          })
+          .catch(() => null);
+        examDetail = detailRes?.data || detailRes;
+        if (examDetail?.schedules?.length) {
+          schedules = examDetail.schedules;
+        }
+      } catch (e) {
+        console.warn("Could not fetch schedules for evaluation:", e);
+      }
+
+      const effectiveExam = examDetail || selectedExam;
+
+      const configs = [];
+      const seenConfigSubjects = new Set();
+      (schedules || []).forEach((s) => {
+        const subjId = normalizeId(s.subjectId);
+        if (!subjId || seenConfigSubjects.has(subjId)) return;
+        seenConfigSubjects.add(subjId);
+
+        const isObjective = isObjectiveExamination(s, effectiveExam);
+        configs.push({
+          id: `cfg-${evalState.filters.exam}-${subjId}`,
+          examinationId: evalState.filters.exam,
+          sectionId: evalState.filters.section,
+          subjectId: subjId,
+          subjectName: s.subjectName || `Subject ${subjId}`,
+          subjectCode: s.subjectCode || "",
+          mode: isObjective ? "OBJECTIVE" : "REGULAR",
+          maxMarks: Number(s.maxMarks || 100),
+          passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
+          internalMax: isObjective ? 0 : Number(s.internalMax ?? 20),
+          practicalMax: isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
+          theoryMax: isObjective
+            ? 0
+            : Number(
+              s.theoryMax ??
+              Math.max(
+                0,
+                Number(s.maxMarks || 100) -
+                Number(s.internalMax ?? 20) -
+                Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
+              )
+            ),
+          facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
+          facultyId: s.invigilatorId || s.facultyId || "",
+        });
+      });
 
       setEvalConfigs(configs);
 

@@ -4,8 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using AutoMapper;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Marks;
 using CollegeManagement.API.Exceptions;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
@@ -18,12 +20,14 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IMarksRepository _marksRepository;
         private readonly IMapper _mapper;
         private readonly ILogger<MarksService> _logger;
+        private readonly AppDbContext _context;
 
-        public MarksService(IMarksRepository marksRepository, IMapper mapper, ILogger<MarksService> logger)
+        public MarksService(IMarksRepository marksRepository, IMapper mapper, ILogger<MarksService> logger, AppDbContext context)
         {
             _marksRepository = marksRepository;
             _mapper = mapper;
             _logger = logger;
+            _context = context;
         }
 
         public async Task<List<MarkResponseDto>> GetAllMarksAsync()
@@ -41,19 +45,64 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<MarkResponseDto> SaveMarkAsync(SaveMarkDto dto)
         {
+            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, dto.ExaminationId, dto.SubjectId);
+            var (maxMarks, defaultPass) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, dto.ExaminationId, dto.SubjectId);
+
+            if (dto.PassingMarks <= 0)
+            {
+                dto.PassingMarks = (int)defaultPass;
+            }
+
+            int finalScore;
+            if (isObjective)
+            {
+                // Objective examination: accept single objective score, ignore internal and practical marks
+                finalScore = dto.ObtainedMarks.HasValue
+                    ? dto.ObtainedMarks.Value
+                    : (dto.TotalMarks.HasValue ? dto.TotalMarks.Value : dto.TheoryMarks);
+
+                if (!dto.IsAbsent && maxMarks > 0 && finalScore > (int)maxMarks)
+                {
+                    throw new ValidationException($"Obtained marks ({finalScore}) cannot exceed configured maximum marks ({maxMarks}) for this objective examination subject.");
+                }
+
+                if (dto.IsAbsent)
+                {
+                    finalScore = 0;
+                }
+
+                dto.InternalMarks = 0;
+                dto.PracticalMarks = 0;
+                dto.TheoryMarks = finalScore;
+                dto.TotalMarks = finalScore;
+                dto.ObtainedMarks = finalScore;
+            }
+            else
+            {
+                // Regular examination: preserve internal, practical and theory marks
+                if (dto.IsAbsent)
+                {
+                    finalScore = 0;
+                }
+                else
+                {
+                    finalScore = dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks;
+                    if (maxMarks > 0 && finalScore > (int)maxMarks)
+                    {
+                        throw new ValidationException($"Total marks ({finalScore}) cannot exceed configured maximum marks ({maxMarks}).");
+                    }
+                }
+                dto.TotalMarks = finalScore;
+                dto.ObtainedMarks = finalScore;
+            }
+
             var existing = await _marksRepository.GetByExamSubjectStudentAsync(dto.ExaminationId, dto.SubjectId, dto.StudentId);
             if (existing != null)
             {
-                var total = (dto.TotalMarks.HasValue && dto.TotalMarks.Value > 0)
-                    ? dto.TotalMarks.Value
-                    : (dto.ObtainedMarks.HasValue && dto.ObtainedMarks.Value > 0)
-                        ? dto.ObtainedMarks.Value
-                        : (dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks);
-
                 existing.InternalMarks = dto.InternalMarks;
                 existing.PracticalMarks = dto.PracticalMarks;
                 existing.TheoryMarks = dto.TheoryMarks;
-                existing.TotalMarks = total;
+                existing.TotalMarks = finalScore;
                 if (dto.PassingMarks > 0)
                 {
                     existing.PassingMarks = dto.PassingMarks;
@@ -136,7 +185,59 @@ namespace CollegeManagement.API.Services.Implementations
             var existing = await _marksRepository.GetByIdAsync(id);
             if (existing == null) throw new NotFoundException($"Mark record with ID {id} not found.");
             if (existing.IsLocked || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED) throw new ConflictException("Cannot edit approved or locked marks.");
+
+            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, existing.ExaminationId, existing.SubjectId);
+            var (maxMarks, _) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, existing.ExaminationId, existing.SubjectId);
+
+            int finalScore;
+            if (isObjective)
+            {
+                finalScore = dto.ObtainedMarks.HasValue
+                    ? dto.ObtainedMarks.Value
+                    : (dto.TotalMarks.HasValue ? dto.TotalMarks.Value : dto.TheoryMarks);
+
+                if (!dto.IsAbsent && maxMarks > 0 && finalScore > (int)maxMarks)
+                {
+                    throw new ValidationException($"Obtained marks ({finalScore}) cannot exceed configured maximum marks ({maxMarks}) for this objective examination subject.");
+                }
+
+                if (dto.IsAbsent)
+                {
+                    finalScore = 0;
+                }
+
+                dto.InternalMarks = 0;
+                dto.PracticalMarks = 0;
+                dto.TheoryMarks = finalScore;
+                dto.TotalMarks = finalScore;
+                dto.ObtainedMarks = finalScore;
+            }
+            else
+            {
+                if (dto.IsAbsent)
+                {
+                    finalScore = 0;
+                }
+                else
+                {
+                    finalScore = dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks;
+                    if (maxMarks > 0 && finalScore > (int)maxMarks)
+                    {
+                        throw new ValidationException($"Total marks ({finalScore}) cannot exceed configured maximum marks ({maxMarks}).");
+                    }
+                }
+                dto.TotalMarks = finalScore;
+                dto.ObtainedMarks = finalScore;
+            }
+
             _mapper.Map(dto, existing);
+            existing.TotalMarks = finalScore;
+            existing.InternalMarks = dto.InternalMarks;
+            existing.PracticalMarks = dto.PracticalMarks;
+            existing.TheoryMarks = dto.TheoryMarks;
+            existing.IsAbsent = dto.IsAbsent;
+            existing.UpdatedAt = DateTime.UtcNow;
+
             var updated = await _marksRepository.UpdateAsync(id, existing);
             return _mapper.Map<MarkResponseDto>(updated ?? existing);
         }
