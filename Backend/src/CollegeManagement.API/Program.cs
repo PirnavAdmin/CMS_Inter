@@ -18,6 +18,8 @@ using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using CollegeManagement.API.Repositories.Implementations.Payroll;
 using CollegeManagement.API.Repositories.Interfaces.Reimbursement;
 using CollegeManagement.API.Repositories.Implementations.Reimbursement;
+using CollegeManagement.API.Repositories.Interfaces.Inventory;
+using CollegeManagement.API.Repositories.Implementations.Inventory;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Implementations;
 using CollegeManagement.API.Services.Implementations.Hostel;
@@ -27,6 +29,8 @@ using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Payroll;
 using CollegeManagement.API.Services.Interfaces.Reimbursement;
 using CollegeManagement.API.Services.Implementations.Reimbursement;
+using CollegeManagement.API.Services.Interfaces.Inventory;
+using CollegeManagement.API.Services.Implementations.Inventory;
 using CollegeManagement.API.Services.Interfaces.Transport;
 using CollegeManagement.API.Services.Implementations.Transport;
 using CollegeManagement.API.Services.Location;
@@ -205,6 +209,9 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
 builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
 builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
+
+// Inventory Repository
+builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 #endregion
 
 #region Services
@@ -302,6 +309,9 @@ builder.Services.AddScoped<IPayrollService, PayrollService>();
 
 // Reimbursement Service
 builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
+
+// Inventory Service
+builder.Services.AddScoped<IInventoryService, InventoryService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
@@ -429,6 +439,19 @@ if (args.Contains("--test-timetable"))
     var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
     var tester = new CollegeManagement.API.Tests.TimetableOptimizationTester(connStr);
     await tester.RunAsync();
+    return;
+}
+
+if (args.Contains("--deploy-inventory"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    await CollegeManagement.API.Tests.InventoryDbDeployer.DeployAsync(connStr);
+    return;
+}
+
+if (args.Contains("--verify-inventory"))
+{
+    await CollegeManagement.API.Tests.InventoryVerificationRunner.RunAsync(app.Services);
     return;
 }
 
