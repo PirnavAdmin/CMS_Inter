@@ -348,7 +348,8 @@ namespace CollegeManagement.API.Services.Implementations
                 new { id = "library", name = "Library", route = "/dashboard/library", section = "Operations", availableActions = actions },
                 new { id = "placement", name = "Placement", route = "/dashboard/placement", section = "Operations", availableActions = actions },
                 new { id = "settings", name = "Settings", route = "/dashboard/settings", section = "Administration", availableActions = actions },
-                new { id = "roles-permissions", name = "Roles & Permissions", route = "/dashboard/roles", section = "Administration", availableActions = actions }
+                new { id = "roles-permissions", name = "Roles & Permissions", route = "/dashboard/roles", section = "Administration", availableActions = actions },
+                new { id = "inventory-management", name = "Inventory Management", route = "/dashboard/inventory-management", section = "Academic", availableActions = actions }
             };
         }
 

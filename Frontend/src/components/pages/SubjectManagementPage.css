@@ -1000,7 +1000,20 @@
 .subject-allocation-footer span { flex: 1 1 110px; color: var(--cms-muted); font-size: 12px; font-weight: 650; }
 .subject-allocation-footer .cms-btn:last-child { margin-left: auto; }
 .subject-language-picker { display: grid; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--cms-border); }
-.subject-language-picker .subject-master-field { max-width: 280px; }
+.subject-language-controls { display: flex; align-items: flex-end; gap: 10px; }
+.subject-language-controls .subject-master-field { flex: 1; min-width: 0; }
+.subject-language-controls .cms-btn { flex: 0 0 auto; width: auto; height: 40px; min-height: 40px; padding: 0 12px; white-space: nowrap; }
+
+/* Only the Add Language modal hides these controls; their state is retained. */
+.subject-language-modal .subject-form-grid:not(.subject-language-marks-grid) { grid-template-columns: 1fr; }
+.subject-language-modal .subject-modal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.subject-language-modal .subject-modal > .subject-master-field,
+.subject-language-modal .subject-modal > .subject-form-grid:not(.subject-language-marks-grid) { grid-column: 1 / -1; }
+.subject-language-modal .subject-language-marks-grid { display: contents; }
+.subject-language-modal .subject-modal > .subject-master-field:last-child { grid-column: auto; }
+.subject-language-modal .subject-language-marks-grid > :nth-child(2),
+.subject-language-modal .subject-language-marks-grid > :nth-child(3),
+.subject-language-modal .subject-language-marks-grid > :nth-child(4) { display: none; }
 .subject-selected-languages { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--cms-muted); font-size: 12px; font-weight: 650; }
 .subject-selected-languages > div { display: flex; flex-wrap: wrap; gap: 6px; }
 .subject-selected-languages .language-chip { border: 0; cursor: pointer; }
@@ -1013,6 +1026,9 @@
 }
 
 @media (max-width: 560px) {
+  .subject-language-controls { flex-direction: column; align-items: stretch; }
+  .subject-language-controls .cms-btn { align-self: flex-start; }
+  .subject-language-modal .subject-modal { grid-template-columns: 1fr; }
   .subject-master-context { gap: 16px; padding: 16px; }
   .subject-language-list > .subject-table-head { align-items: stretch; flex-direction: column; }
   .subject-language-list > .subject-table-head .cms-btn { width: 100%; justify-content: center; }

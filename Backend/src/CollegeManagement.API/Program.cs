@@ -16,6 +16,10 @@ using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using CollegeManagement.API.Repositories.Implementations.Payroll;
+using CollegeManagement.API.Repositories.Interfaces.Reimbursement;
+using CollegeManagement.API.Repositories.Implementations.Reimbursement;
+using CollegeManagement.API.Repositories.Interfaces.Inventory;
+using CollegeManagement.API.Repositories.Implementations.Inventory;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Implementations;
 using CollegeManagement.API.Services.Implementations.Hostel;
@@ -23,6 +27,10 @@ using CollegeManagement.API.Services.Implementations.Payroll;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Payroll;
+using CollegeManagement.API.Services.Interfaces.Reimbursement;
+using CollegeManagement.API.Services.Implementations.Reimbursement;
+using CollegeManagement.API.Services.Interfaces.Inventory;
+using CollegeManagement.API.Services.Implementations.Inventory;
 using CollegeManagement.API.Services.Interfaces.Transport;
 using CollegeManagement.API.Services.Implementations.Transport;
 using CollegeManagement.API.Services.Location;
@@ -61,6 +69,7 @@ builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new NullableTimeOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 #endregion
 
@@ -198,6 +207,11 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
+builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
+builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
+
+// Inventory Repository
+builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 #endregion
 
 #region Services
@@ -232,6 +246,7 @@ builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
 builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
+builder.Services.AddScoped<IStaffReimbursementService, StaffReimbursementService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IStudentAdmissionService, StudentAdmissionService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
@@ -292,11 +307,19 @@ builder.Services.AddScoped<IDriverAttendanceService, DriverAttendanceService>();
 // Payroll Service
 builder.Services.AddScoped<IPayrollService, PayrollService>();
 
+// Reimbursement Service
+builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
+
+// Inventory Service
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");
 });
+// Background Services
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 #endregion
 
 #region Email Configuration
@@ -416,6 +439,19 @@ if (args.Contains("--test-timetable"))
     var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
     var tester = new CollegeManagement.API.Tests.TimetableOptimizationTester(connStr);
     await tester.RunAsync();
+    return;
+}
+
+if (args.Contains("--deploy-inventory"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    await CollegeManagement.API.Tests.InventoryDbDeployer.DeployAsync(connStr);
+    return;
+}
+
+if (args.Contains("--verify-inventory"))
+{
+    await CollegeManagement.API.Tests.InventoryVerificationRunner.RunAsync(app.Services);
     return;
 }
 

@@ -13,6 +13,8 @@ using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1;
 
 [ApiController]
@@ -20,6 +22,7 @@ namespace CollegeManagement.API.Controllers.V1;
 [Route("api/v{version:apiVersion}/reports")]
 [EnableCors("AllowFrontend")]
 [Authorize]
+[RequirePermission("reports-analytics")]
 [Produces("application/json")]
 public class ReportsController : ControllerBase
 {
@@ -264,6 +267,8 @@ public class ReportsController : ControllerBase
         var totalAbsent = data.Sum(x => x.Absent);
         var totalLate = data.Sum(x => x.Late);
         var totalLeave = data.Sum(x => x.Leave);
+        var totalRecorded = totalPresent + totalAbsent + totalLate + totalLeave;
+        var overallPercentage = totalRecorded > 0 ? Math.Round((double)totalPresent * 100.0 / totalRecorded, 2) : 0;
         return Ok(new
         {
             totalDays = data.Count,
@@ -272,7 +277,7 @@ public class ReportsController : ControllerBase
             totalAbsent,
             totalLate,
             totalLeave,
-            overallPercentage = data.Any() ? Math.Round(data.Average(x => (double)x.AttendancePercentage), 2) : 0,
+            overallPercentage,
             details = data
         });
     }

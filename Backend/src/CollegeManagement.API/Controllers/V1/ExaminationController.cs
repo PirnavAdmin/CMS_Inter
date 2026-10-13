@@ -12,6 +12,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     /// <summary>
@@ -22,6 +24,7 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v{version:apiVersion}/examinations")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("examination")]
     public class ExaminationController : ControllerBase
     {
         private readonly IExaminationService _examinationService;

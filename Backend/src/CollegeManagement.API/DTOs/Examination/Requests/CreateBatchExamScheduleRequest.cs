@@ -63,5 +63,10 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
             }
         }
         public decimal PassingMarks { get; set; } = 35.00m;
+        public decimal? PassPercentage { get; set; }
+        public int? GroupId { get; set; }
+        public int? AcademicLevelId { get; set; }
+        public string? PatternName { get; set; }
+        public List<int>? IncludedSubjectIds { get; set; }
     }
 }

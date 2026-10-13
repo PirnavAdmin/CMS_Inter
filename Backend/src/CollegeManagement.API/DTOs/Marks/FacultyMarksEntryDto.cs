@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Evaluations
@@ -57,6 +57,10 @@ namespace CollegeManagement.API.DTOs.Evaluations
 
         [Range(0, 100)]
         public decimal TheoryMarks { get; set; }
+
+        public decimal? TotalMarks { get; set; }
+
+        public decimal? ObtainedMarks { get; set; }
 
         public bool IsAbsent { get; set; }
 

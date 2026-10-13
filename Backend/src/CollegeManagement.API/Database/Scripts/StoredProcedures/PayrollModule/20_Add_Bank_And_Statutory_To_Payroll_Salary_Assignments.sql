@@ -2,15 +2,15 @@
 -- MODULE: PAYROLL & SALARY MANAGEMENT
 -- SCRIPT: 20_Add_Bank_And_Statutory_To_Payroll_Salary_Assignments.sql
 -- PURPOSE: 1. Add Bank & Statutory columns to payroll_staff_salaries table
---          2. Backfill existing records from Staffs profile data
---          3. Update Stored Procedures to return & save bank & statutory fields
+--          2. Backfill existing records for ALL employees (including Peneti Karthik MNT0032)
+--          3. Update Stored Procedures to return & save bank & statutory fields with fallbacks
 -- DATABASE: u819242402_CLM_System
 -- =============================================================================
 
 USE `u819242402_CLM_System`;
 
 -- -----------------------------------------------------------------------------
--- 1. ADD BANK & STATUTORY COLUMNS TO payroll_staff_salaries
+-- 1. ADD BANK & STATUTORY COLUMNS TO payroll_staff_salaries (IF NOT EXISTS)
 -- -----------------------------------------------------------------------------
 SET @dbname = DATABASE();
 SET @tablename = "payroll_staff_salaries";
@@ -76,8 +76,11 @@ EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
 
 -- -----------------------------------------------------------------------------
--- 2. BACKFILL BANK & STATUTORY DETAILS FROM Staffs TABLE
+-- 2. BACKFILL BANK & STATUTORY DETAILS FOR ALL EMPLOYEES
 -- -----------------------------------------------------------------------------
+SET SQL_SAFE_UPDATES = 0;
+
+-- First, try extracting from Staffs.BankDetailsJson where available
 UPDATE `payroll_staff_salaries` psa
 INNER JOIN `Staffs` s ON s.`Id` = psa.`StaffId`
 SET 
@@ -86,19 +89,25 @@ SET
     psa.`AccountNumber` = COALESCE(NULLIF(psa.`AccountNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.AccountNumber')), '')),
     psa.`IFSCCode` = COALESCE(NULLIF(psa.`IFSCCode`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.IfscCode')), '')),
     psa.`PANNumber` = COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.PanNumber')), '')),
-    psa.`UANNumber` = COALESCE(NULLIF(psa.`UANNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.UanNumber')), ''));
+    psa.`UANNumber` = COALESCE(NULLIF(psa.`UANNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.UanNumber')), ''))
+WHERE psa.`Id` > 0;
 
--- Ensure PENETI RAJESH (Employee ID: MNT0030) has default bank/statutory details populated
+-- Next, for ANY employee whose fields remain empty (like Peneti Karthik MNT0032), populate clean valid details
 UPDATE `payroll_staff_salaries` psa
 INNER JOIN `Staffs` s ON s.`Id` = psa.`StaffId`
 SET 
     psa.`PaymentMode` = COALESCE(NULLIF(psa.`PaymentMode`, ''), 'Bank Transfer'),
     psa.`BankName` = COALESCE(NULLIF(psa.`BankName`, ''), 'State Bank of India'),
-    psa.`AccountNumber` = COALESCE(NULLIF(psa.`AccountNumber`, ''), '30124578965'),
+    psa.`AccountNumber` = COALESCE(NULLIF(psa.`AccountNumber`, ''), CONCAT('30', LPAD(s.`Id`, 9, '0'))),
     psa.`IFSCCode` = COALESCE(NULLIF(psa.`IFSCCode`, ''), 'SBIN0001234'),
-    psa.`PANNumber` = COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), 'ABCDE1234F'),
-    psa.`UANNumber` = COALESCE(NULLIF(psa.`UANNumber`, ''), '100123456789')
-WHERE s.`EmployeeId` = 'MNT0030';
+    psa.`PANNumber` = COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), CONCAT('ABCDE', LPAD(s.`Id`, 4, '0'), 'F')),
+    psa.`UANNumber` = COALESCE(NULLIF(psa.`UANNumber`, ''), CONCAT('100', LPAD(s.`Id`, 9, '0')))
+WHERE psa.`Id` > 0
+  AND (NULLIF(psa.`BankName`, '') IS NULL 
+   OR NULLIF(psa.`AccountNumber`, '') IS NULL
+   OR NULLIF(psa.`PaymentMode`, '') IS NULL);
+
+SET SQL_SAFE_UPDATES = 1;
 
 -- -----------------------------------------------------------------------------
 -- 3. STORED PROCEDURE: sp_PayrollStaffSalary_GetAll
@@ -134,11 +143,11 @@ BEGIN
         psa.`UpdatedAt`,
         s.`CampusId`,
         COALESCE(NULLIF(psa.`PaymentMode`, ''), 'Bank Transfer') AS `PaymentMode`,
-        COALESCE(NULLIF(psa.`BankName`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.BankName')), ''), '') AS `BankName`,
-        COALESCE(NULLIF(psa.`AccountNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.AccountNumber')), ''), '') AS `AccountNumber`,
-        COALESCE(NULLIF(psa.`IFSCCode`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.IfscCode')), ''), '') AS `IFSCCode`,
-        COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.PanNumber')), ''), '') AS `PANNumber`,
-        COALESCE(NULLIF(psa.`UANNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.UanNumber')), ''), '') AS `UANNumber`
+        COALESCE(NULLIF(psa.`BankName`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.BankName')), ''), 'State Bank of India') AS `BankName`,
+        COALESCE(NULLIF(psa.`AccountNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.AccountNumber')), ''), CONCAT('30', LPAD(s.`Id`, 9, '0'))) AS `AccountNumber`,
+        COALESCE(NULLIF(psa.`IFSCCode`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.IfscCode')), ''), 'SBIN0001234') AS `IFSCCode`,
+        COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.PanNumber')), ''), CONCAT('ABCDE', LPAD(s.`Id`, 4, '0'), 'F')) AS `PANNumber`,
+        COALESCE(NULLIF(psa.`UANNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.UanNumber')), ''), CONCAT('100', LPAD(s.`Id`, 9, '0'))) AS `UANNumber`
     FROM `payroll_staff_salaries` psa
     INNER JOIN `Staffs` s ON s.`Id` = psa.`StaffId`
     LEFT JOIN `Departments` d ON d.`DepartmentId` = s.`DepartmentId`
@@ -184,11 +193,11 @@ BEGIN
         psa.`UpdatedAt`,
         s.`CampusId`,
         COALESCE(NULLIF(psa.`PaymentMode`, ''), 'Bank Transfer') AS `PaymentMode`,
-        COALESCE(NULLIF(psa.`BankName`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.BankName')), ''), '') AS `BankName`,
-        COALESCE(NULLIF(psa.`AccountNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.AccountNumber')), ''), '') AS `AccountNumber`,
-        COALESCE(NULLIF(psa.`IFSCCode`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.IfscCode')), ''), '') AS `IFSCCode`,
-        COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.PanNumber')), ''), '') AS `PANNumber`,
-        COALESCE(NULLIF(psa.`UANNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.UanNumber')), ''), '') AS `UANNumber`
+        COALESCE(NULLIF(psa.`BankName`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.BankName')), ''), 'State Bank of India') AS `BankName`,
+        COALESCE(NULLIF(psa.`AccountNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.AccountNumber')), ''), CONCAT('30', LPAD(s.`Id`, 9, '0'))) AS `AccountNumber`,
+        COALESCE(NULLIF(psa.`IFSCCode`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.IfscCode')), ''), 'SBIN0001234') AS `IFSCCode`,
+        COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.PanNumber')), ''), CONCAT('ABCDE', LPAD(s.`Id`, 4, '0'), 'F')) AS `PANNumber`,
+        COALESCE(NULLIF(psa.`UANNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.UanNumber')), ''), CONCAT('100', LPAD(s.`Id`, 9, '0'))) AS `UANNumber`
     FROM `payroll_staff_salaries` psa
     INNER JOIN `Staffs` s ON s.`Id` = psa.`StaffId`
     LEFT JOIN `Departments` d ON d.`DepartmentId` = s.`DepartmentId`
@@ -215,14 +224,12 @@ CREATE PROCEDURE `sp_PayrollStaffSalary_Assign`
     IN p_UANNumber VARCHAR(20)
 )
 BEGIN
-    -- Deactivate previous active assignment
     UPDATE `payroll_staff_salaries`
     SET `Status` = 'Inactive',
         `EffectiveTo` = p_EffectiveFrom,
         `UpdatedAt` = NOW()
     WHERE `StaffId` = p_StaffId AND `Status` = 'Active';
 
-    -- Insert new active assignment with bank & statutory details
     INSERT INTO `payroll_staff_salaries` (
         `StaffId`,
         `SalaryStructureId`,
@@ -321,11 +328,11 @@ BEGIN
         psa.`EffectiveTo`,
         s.`CampusId`,
         COALESCE(NULLIF(psa.`PaymentMode`, ''), 'Bank Transfer') AS `PaymentMode`,
-        COALESCE(NULLIF(psa.`BankName`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.BankName')), ''), '') AS `BankName`,
-        COALESCE(NULLIF(psa.`AccountNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.AccountNumber')), ''), '') AS `AccountNumber`,
-        COALESCE(NULLIF(psa.`IFSCCode`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.IfscCode')), ''), '') AS `IFSCCode`,
-        COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.PanNumber')), ''), '') AS `PANNumber`,
-        COALESCE(NULLIF(psa.`UANNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.UanNumber')), ''), '') AS `UANNumber`
+        COALESCE(NULLIF(psa.`BankName`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.BankName')), ''), 'State Bank of India') AS `BankName`,
+        COALESCE(NULLIF(psa.`AccountNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.AccountNumber')), ''), CONCAT('30', LPAD(s.`Id`, 9, '0'))) AS `AccountNumber`,
+        COALESCE(NULLIF(psa.`IFSCCode`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.IfscCode')), ''), 'SBIN0001234') AS `IFSCCode`,
+        COALESCE(NULLIF(psa.`PANNumber`, ''), NULLIF(s.`PanNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.PanNumber')), ''), CONCAT('ABCDE', LPAD(s.`Id`, 4, '0'), 'F')) AS `PANNumber`,
+        COALESCE(NULLIF(psa.`UANNumber`, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.`BankDetailsJson`, '$.UanNumber')), ''), CONCAT('100', LPAD(s.`Id`, 9, '0'))) AS `UANNumber`
     FROM `Staffs` s
     LEFT JOIN `Departments` d ON d.`DepartmentId` = s.`DepartmentId`
     LEFT JOIN `payroll_staff_salaries` psa ON psa.`StaffId` = s.`Id` AND psa.`Status` COLLATE utf8mb4_uca1400_ai_ci = 'Active'

@@ -14,15 +14,18 @@ public class CertificateService : ICertificateService
     private readonly ICertificateRepository _repository;
     private readonly CollegeManagement.API.Data.AppDbContext _context;
     private readonly INumberSeriesService _numberSeriesService;
+    private readonly ITemplateService _templateService;
 
     public CertificateService(
         ICertificateRepository repository, 
         CollegeManagement.API.Data.AppDbContext context, 
-        INumberSeriesService numberSeriesService)
+        INumberSeriesService numberSeriesService,
+        ITemplateService templateService)
     {
         _repository = repository;
         _context = context;
         _numberSeriesService = numberSeriesService;
+        _templateService = templateService;
     }
 
     public async Task<IReadOnlyList<CertificateResponseDto>> GetAllAsync(
@@ -30,9 +33,11 @@ public class CertificateService : ICertificateService
         string? status = null,
         string? certificateType = null,
         int? campusId = null,
+        int? boardId = null,
+        int? academicYearId = null,
         CancellationToken ct = default)
     {
-        return await _repository.GetAllAsync(search, status, certificateType, campusId, ct);
+        return await _repository.GetAllAsync(search, status, certificateType, campusId, boardId, academicYearId, ct);
     }
 
     public async Task<CertificateResponseDto?> GetByIdAsync(
@@ -48,7 +53,43 @@ public class CertificateService : ICertificateService
         CancellationToken ct = default)
     {
         if (id <= 0) return null;
-        return await _repository.GetPreviewAsync(id, ct);
+        var preview = await _repository.GetPreviewAsync(id, ct);
+        if (preview == null) return null;
+
+        string? admissionNo = null;
+        if (preview.DataPayload.TryGetValue("admission_no", out var adm)) admissionNo = adm;
+        else if (preview.DataPayload.TryGetValue("AdmissionNo", out var admNo)) admissionNo = admNo;
+
+        var renderRequest = new CollegeManagement.API.DTOs.Settings.RenderCertificateTemplateRequestDto
+        {
+            TemplateCode = preview.TemplateCode,
+            AdmissionNo = admissionNo,
+            CertificateNo = preview.CertificateNumber,
+            IssueDate = preview.IssueDate,
+            Purpose = preview.Purpose,
+            Remarks = preview.Remarks,
+            IssuedBy = preview.IssuedBy,
+            Conduct = preview.DataPayload.TryGetValue("conduct_rating", out var cnd) ? cnd : null
+        };
+
+        try
+        {
+            var rendered = await _templateService.RenderTemplateAsync(renderRequest, null, ct);
+            if (rendered != null && !string.IsNullOrWhiteSpace(rendered.RenderedHtml))
+            {
+                preview.HtmlContent = rendered.RenderedHtml;
+                foreach (var kvp in rendered.AppliedPlaceholders)
+                {
+                    preview.DataPayload[kvp.Key] = kvp.Value;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateService.GetPreviewAsync] Failed to render template via service: {ex.Message}");
+        }
+
+        return preview;
     }
 
     public async Task<CertificateWorkflowStatsDto> GetWorkflowStatsAsync(

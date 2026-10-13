@@ -20,6 +20,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/attendance")]
     [Authorize]
+    [RequirePermission("attendance")]
     [Produces("application/json")]
     public class AttendanceController : ControllerBase
     {
@@ -227,6 +228,22 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetAdminStudentsForAttendance([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
         {
             var request = requestBody ?? requestQuery;
+            
+            if (request.CampusId.HasValue && request.CampusId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Campus ID." });
+                
+            if (request.BoardId.HasValue && request.BoardId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Board ID." });
+                
+            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Academic Year ID." });
+                
+            if (!string.IsNullOrEmpty(request.AttendanceDate) && !DateTime.TryParse(request.AttendanceDate, out _))
+                return BadRequest(new { success = false, message = "Invalid Attendance Date format." });
+                
+            if (!string.IsNullOrEmpty(request.Date) && !DateTime.TryParse(request.Date, out _))
+                return BadRequest(new { success = false, message = "Invalid Date format." });
+
             var results = await _attendanceService.GetAdminStudentsForAttendanceAsync(request);
             return Ok(results);
         }
@@ -235,7 +252,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Saves or updates student attendance records in bulk for Admin (session-based).
         /// </summary>
         [HttpPost("admin/bulk-save")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -249,7 +266,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("defaulters")]
-        [Authorize(Roles = "Super Admin,Admin,HOD")]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal")]
         [ProducesResponseType(typeof(IEnumerable<AttendanceDefaulterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -356,7 +373,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="sessionId">The session identifier.</param>
         /// <returns>A success indicator.</returns>
         [HttpPost("session/{sessionId}/unlock")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -464,7 +481,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         private bool IsCurrentUserAdmin()
         {
-            return User.IsInRole("Super Admin") || User.IsInRole("Admin");
+            return User.IsInRole("Super Admin") || User.IsInRole("Admin") || User.IsInRole("Principal");
         }
 
         private int GetCurrentUserId()
@@ -491,7 +508,7 @@ namespace CollegeManagement.API.Controllers.V1
             return userName;
         }
         [HttpPost("audit")]
-        [Authorize(Roles = "Super Admin,Admin,HOD")]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal")]
         public async Task<IActionResult> GetAuditHistory([FromBody] CollegeManagement.API.DTOs.Attendance.Requests.AuditHistorySearchRequest request)
         {
             var result = await _attendanceService.GetAuditHistoryAsync(request);

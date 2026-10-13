@@ -9,12 +9,15 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/timetable")]
     [Authorize]
+    [RequirePermission("timetable")]
     public class TimetableController : ControllerBase
     {
         private readonly ITimetableService _timetableService;

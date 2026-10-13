@@ -50,7 +50,6 @@ import { generateQrCodeSvg } from "@/utils/qrCodeGenerator.js";
 import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
 import "./TemplatesPage.css";
 
-// Helper: Returns today's present date formatted as DD Mon YYYY (e.g., 15 Sep 2026)
 export function getPresentDateFormatted() {
   return new Date().toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -482,6 +481,100 @@ export function saveCertificateTemplates(templatesList) {
     const cleanList = Array.from(canonicalMap.values());
     localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(cleanList));
   } catch {}
+}
+
+export function extractCleanCertificateBody(rawContent) {
+  if (!rawContent) return "";
+  let str = String(rawContent).trim();
+
+  // If contains HTML markup
+  if (/<[a-z][\s\S]*>/i.test(str)) {
+    if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(str, "text/html");
+        
+        // Remove style, script, head, headers, footers
+        const elementsToRemove = doc.querySelectorAll(
+          "h1, h2, h3, h4, h5, h6, header, footer, style, script, head"
+        );
+        elementsToRemove.forEach((el) => el.remove());
+
+        // Replace br with newline
+        doc.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+
+        // Replace p, div, tr, li with newlines
+        doc.querySelectorAll("p, div, tr, li").forEach((el) => {
+          el.prepend(document.createTextNode("\n"));
+          el.append(document.createTextNode("\n"));
+        });
+
+        str = doc.body.textContent || "";
+      } catch {
+        // Fallback regex parsing if DOMParser fails
+        str = str.replace(/<style[\s\S]*?<\/style>/gi, "");
+        str = str.replace(/<script[\s\S]*?<\/script>/gi, "");
+        str = str.replace(/<h[1-6][\s\S]*?<\/h[1-6]>/gi, "");
+        str = str.replace(/<header[\s\S]*?<\/header>/gi, "");
+        str = str.replace(/<footer[\s\S]*?<\/footer>/gi, "");
+        str = str.replace(/<br\s*\/?>/gi, "\n");
+        str = str.replace(/<\/p>|<\/div>|<\/tr>|<\/li>/gi, "\n");
+        str = str.replace(/<[^>]+>/g, " ");
+      }
+    } else {
+      str = str.replace(/<style[\s\S]*?<\/style>/gi, "");
+      str = str.replace(/<script[\s\S]*?<\/script>/gi, "");
+      str = str.replace(/<h[1-6][\s\S]*?<\/h[1-6]>/gi, "");
+      str = str.replace(/<header[\s\S]*?<\/header>/gi, "");
+      str = str.replace(/<footer[\s\S]*?<\/footer>/gi, "");
+      str = str.replace(/<br\s*\/?>/gi, "\n");
+      str = str.replace(/<\/p>|<\/div>|<\/tr>|<\/li>/gi, "\n");
+      str = str.replace(/<[^>]+>/g, " ");
+    }
+  }
+
+  // Remove any remaining tags
+  str = str.replace(/<[^>]+>/g, " ");
+
+  // Strip known leaked legacy header phrases
+  str = str.replace(/BOARD OF INTERMEDIATE EDUCATION[,\s]+ANDHRA PRADESH\s+(?:STUDY\s*&\s*BONAFIDE|BONAFIDE|STUDY)\s+CERTIFICATE/gi, "");
+  str = str.replace(/COLLEGE TRANSFER CERTIFICATE\s*\([^)]*\)/gi, "");
+  str = str.replace(/BIEAP STUDY & BONAFIDE CERTIFICATE/gi, "");
+
+  // Strip known leaked legacy footer phrases
+  str = str.replace(/Date:\s*\d{2}\/\d{2}\/\d{4}\s*Place:\s*[A-Za-z\s]+PRINCIPAL\s*\([^)]*\)/gi, "");
+  str = str.replace(/PRINCIPAL\s*\([^)]*\)/gi, "");
+  str = str.replace(/SIGNATURE OF PRINCIPAL/gi, "");
+  str = str.replace(/\(College Seal\)/gi, "");
+
+  // Clean lines, eliminate header/footer artifacts
+  const cleanLines = str
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => {
+      if (!line) return false;
+      const lower = line.toLowerCase();
+      if (
+        lower.startsWith("college name") ||
+        lower.startsWith("college address") ||
+        lower.includes("recognized by board") ||
+        lower.includes("office seal") ||
+        lower.includes("college seal") ||
+        lower.includes("principal / head") ||
+        lower.includes("principal signature") ||
+        lower.includes("authorized signature") ||
+        lower.includes("scan to verify") ||
+        lower.includes("certificate no:") ||
+        lower.includes("issued by") ||
+        lower.startsWith("signature of principal") ||
+        lower.startsWith("principal (college seal)")
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+  return cleanLines.join("\n\n").trim();
 }
 
 const INITIAL_TEMPLATES = [

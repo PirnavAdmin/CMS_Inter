@@ -465,7 +465,7 @@ public class ReportService : IReportService
                 }
                 else
                 {
-                    headers = new[] { "S.No", "Group", "Section", "Male Students", "Female Students", "Total Strength" };
+                    headers = new[] { "S.No", "Group", "Section", "Capacity", "Utilization %", "Male Students", "Female Students", "Total Strength" };
                     int ssIdx = 1;
                     foreach (var s in ssList)
                     {
@@ -474,6 +474,8 @@ public class ReportService : IReportService
                             $"{ssIdx++}",
                             s.GroupName ?? "—",
                             s.SectionName ?? "—",
+                            $"{s.MaximumStrength}",
+                            $"{s.UtilizationPercentage:F1}%",
                             $"{s.MaleStudents}",
                             $"{s.FemaleStudents}",
                             $"{s.TotalStudents}"

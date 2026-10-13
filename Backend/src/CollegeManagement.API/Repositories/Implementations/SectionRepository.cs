@@ -24,30 +24,60 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<SectionResponse>> GetAllSectionsAsync(SectionFilterDto? filter = null)
         {
-            // Resolve foreign keys if string names provided
-            int? boardId = (filter?.BoardId.HasValue == true && filter.BoardId.Value > 0) 
-                ? filter.BoardId.Value 
-                : await ResolveBoardIdAsync(null, filter?.Board);
+            var conn = Connection;
+            if (conn.State != ConnectionState.Open)
+            {
+                if (conn is System.Data.Common.DbConnection dbConn)
+                    await dbConn.OpenAsync();
+                else
+                    conn.Open();
+            }
 
-            int? academicYearId = (filter?.AcademicYearId.HasValue == true && filter.AcademicYearId.Value > 0) 
-                ? filter.AcademicYearId.Value 
-                : null;
+            int? boardId = (filter?.BoardId.HasValue == true && filter.BoardId.Value > 0) ? filter.BoardId.Value : null;
+            int? academicYearId = (filter?.AcademicYearId.HasValue == true && filter.AcademicYearId.Value > 0) ? filter.AcademicYearId.Value : null;
+            int? academicLevelId = (filter?.AcademicLevelId.HasValue == true && filter.AcademicLevelId.Value > 0) ? filter.AcademicLevelId.Value : null;
+            int? groupId = (filter?.GroupId.HasValue == true && filter.GroupId.Value > 0) ? filter.GroupId.Value : null;
+            int? programId = (filter?.ProgramId.HasValue == true && filter.ProgramId.Value > 0) ? filter.ProgramId.Value : null;
+            int? groupProgramId = (filter?.GroupProgramId.HasValue == true && filter.GroupProgramId.Value > 0) ? filter.GroupProgramId.Value : null;
 
-            int? academicLevelId = (filter?.AcademicLevelId.HasValue == true && filter.AcademicLevelId.Value > 0)
-                ? filter.AcademicLevelId.Value
-                : await ResolveAcademicLevelIdAsync(null, filter?.AcademicLevel ?? filter?.YearOfStudy);
+            string? boardName = string.IsNullOrWhiteSpace(filter?.Board) ? null : filter.Board.Trim();
+            string? levelName = string.IsNullOrWhiteSpace(filter?.AcademicLevel ?? filter?.YearOfStudy) ? null : (filter?.AcademicLevel ?? filter?.YearOfStudy)!.Trim();
+            string? groupName = string.IsNullOrWhiteSpace(filter?.Group) ? null : filter.Group.Trim();
+            string? programName = string.IsNullOrWhiteSpace(filter?.Programme ?? filter?.Program) ? null : (filter?.Programme ?? filter?.Program)!.Trim();
 
-            int? groupId = (filter?.GroupId.HasValue == true && filter.GroupId.Value > 0)
-                ? filter.GroupId.Value
-                : await ResolveGroupIdAsync(null, filter?.Group);
+            // Only call sp_ResolveSectionForeignKeys if any string name is provided and corresponding ID is missing
+            bool needsResolution = (!boardId.HasValue && boardName != null) ||
+                                   (!academicLevelId.HasValue && levelName != null) ||
+                                   (!groupId.HasValue && groupName != null) ||
+                                   (!programId.HasValue && programName != null);
 
-            int? programId = (filter?.ProgramId.HasValue == true && filter.ProgramId.Value > 0)
-                ? filter.ProgramId.Value
-                : await ResolveProgramIdAsync(null, filter?.Programme ?? filter?.Program, groupId);
+            if (needsResolution)
+            {
+                var resolved = await conn.QueryFirstOrDefaultAsync<dynamic>(
+                    "sp_ResolveSectionForeignKeys",
+                    new
+                    {
+                        p_BoardId = boardId,
+                        p_BoardName = boardName,
+                        p_AcademicLevelId = academicLevelId,
+                        p_LevelName = levelName,
+                        p_GroupId = groupId,
+                        p_GroupName = groupName,
+                        p_ProgramId = programId,
+                        p_ProgramName = programName,
+                        p_GroupProgramId = groupProgramId
+                    },
+                    commandType: CommandType.StoredProcedure);
 
-            int? groupProgramId = (filter?.GroupProgramId.HasValue == true && filter.GroupProgramId.Value > 0)
-                ? filter.GroupProgramId.Value
-                : null;
+                if (resolved != null)
+                {
+                    boardId ??= (int?)resolved.ResolvedBoardId;
+                    academicLevelId ??= (int?)resolved.ResolvedAcademicLevelId;
+                    groupId ??= (int?)resolved.ResolvedGroupId;
+                    programId ??= (int?)resolved.ResolvedProgramId;
+                    groupProgramId ??= (int?)resolved.ResolvedGroupProgramId;
+                }
+            }
 
             string? searchTerm = string.IsNullOrWhiteSpace(filter?.SearchTerm ?? filter?.Search) 
                 ? null 
@@ -64,7 +94,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_IsActive", filter?.IsActive, DbType.Boolean);
             parameters.Add("p_CampusId", filter?.CampusId, DbType.Int32);
 
-            return await Connection.QueryAsync<SectionResponse>(
+            return await conn.QueryAsync<SectionResponse>(
                 "sp_GetAllSections",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -359,7 +389,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<int?> ResolveProgramIdAsync(int? programId, string? programName, int? groupId)
         {
             if (programId.HasValue && programId.Value > 0) return programId.Value;
-            if (string.IsNullOrWhiteSpace(programName) && (!groupId.HasValue || groupId.Value <= 0)) return null;
+            if (string.IsNullOrWhiteSpace(programName)) return null;
 
             var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_ResolveSectionForeignKeys",
@@ -383,6 +413,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<int?> ResolveGroupProgramIdAsync(int? groupProgramId, int? groupId, int? programId)
         {
             if (groupProgramId.HasValue && groupProgramId.Value > 0) return groupProgramId.Value;
+            if ((!groupId.HasValue || groupId.Value <= 0) && (!programId.HasValue || programId.Value <= 0)) return null;
 
             var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_ResolveSectionForeignKeys",

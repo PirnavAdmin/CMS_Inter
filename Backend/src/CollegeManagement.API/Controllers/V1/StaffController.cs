@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -23,6 +24,7 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v{version:apiVersion}/staff")]
     [EnableCors("AllowFrontend")]
     [Authorize]
+    [RequirePermission("staff-management")]
     [Produces("application/json")]
     public class StaffController : ControllerBase
     {
@@ -40,7 +42,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Returns real database aggregated counts for summary cards and completion overview.
         /// </summary>
         [HttpGet("dashboard-stats")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffDashboardStatsDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetDashboardStats([FromQuery] int? boardId = null, [FromQuery] int? campusId = null)
         {
@@ -70,7 +71,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get paged, searched, filtered list of staff members.
         /// </summary>
         [HttpGet]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(PagedResult<StaffResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStaff([FromQuery] StaffQueryParams queryParams)
         {
@@ -100,7 +100,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Generates the next sequential Employee ID (PCTCH0001 / PCNT0001).
         /// </summary>
         [HttpGet("next-employee-id")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetNextEmployeeId([FromQuery] string? staffType = "Teaching", [FromQuery] string? facultyType = null, [FromQuery] int? campusId = null)
         {
@@ -133,7 +132,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get list of staff for dropdown selection with optional staffType filter.
         /// </summary>
         [HttpGet("dropdown")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<StaffDropdownDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStaffDropdown([FromQuery] string? staffType = null, [FromQuery] string? facultyType = null, [FromQuery] int? campusId = null)
         {
@@ -164,7 +162,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get complete staff profile details by ID.
         /// </summary>
         [HttpGet("{id:int}")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffById(int id)
@@ -178,7 +175,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get complete staff profile details by Employee ID string (e.g. PCTCH0001, PCNT0001).
         /// </summary>
         [HttpGet("by-employee-id/{employeeId}")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffByEmployeeId(string employeeId)
@@ -192,7 +188,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Universal lookup accepting either integer database ID or string Employee ID.
         /// </summary>
         [HttpGet("profile/{identifier}")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffProfileByIdentifier(string identifier)
@@ -228,7 +223,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Create a new staff member (Teaching or Non-Teaching).
         /// </summary>
         [HttpPost]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -243,7 +237,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Update an existing staff member.
         /// </summary>
         [HttpPut("{id:int}")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -259,7 +252,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Soft delete a staff member record.
         /// </summary>
         [HttpDelete("{id:int}")]
-        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> DeleteStaff(int id)
@@ -273,7 +265,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Generates token, dispatches profile completion link via email/SMS.
         /// </summary>
         [HttpPost("{id}/send-link")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(SendProfileLinkResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> SendProfileLink([FromRoute] string id, [FromBody] SendProfileLinkRequestDto? dto = null)
@@ -320,7 +311,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Bulk sends profile completion links to multiple staff members.
         /// </summary>
         [HttpPost("bulk-send-links")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffBulkSendResultDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> BulkSendProfileLinks([FromBody] StaffBulkSendLinksDto dto)
         {
@@ -333,7 +323,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Saves profile section draft by staff ID.
         /// </summary>
         [HttpPost("{id:int}/save-profile-draft")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraft(int id, [FromBody] UpdateStaffProfileSectionDto dto)
         {
@@ -359,7 +348,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Final submission of staff profile.
         /// </summary>
         [HttpPost("{id:int}/submit-profile")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SubmitProfile(int id)
         {
@@ -385,7 +373,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Admin review action: Approve or Request Correction.
         /// </summary>
         [HttpPost("{id:int}/admin-review")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> AdminReviewProfile(int id, [FromBody] AdminReviewStaffDto dto)
         {
@@ -398,7 +385,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Import Staff from Excel workbook (.xlsx) with auto-segregation and row-level validation.
         /// </summary>
         [HttpPost("import-excel")]
-        [AllowAnonymous]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StaffImportResultDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> ImportExcel([FromForm] StaffImportExcelRequestDto dto)
@@ -412,7 +398,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Exports filtered or all staff members to Excel (.xlsx).
         /// </summary>
         [HttpGet("export-excel")]
-        [AllowAnonymous]
         public async Task<IActionResult> ExportExcel([FromQuery] StaffQueryParams queryParams)
         {
             var (bytes, contentType, fileName) = await _staffService.ExportStaffExcelAsync(queryParams);
@@ -424,7 +409,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Download sample Excel template for staff import.
         /// </summary>
         [HttpGet("export-template")]
-        [AllowAnonymous]
         public async Task<IActionResult> DownloadTemplate([FromQuery] string? staffType = null)
         {
             var (bytes, contentType, fileName) = await _staffService.GenerateTemplateExcelAsync(staffType);
@@ -439,7 +423,6 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("{id:int}/pdf")]
         [HttpGet("{id:int}/profile-pdf")]
         [HttpGet("{id:int}/print")]
-        [AllowAnonymous]
         public async Task<IActionResult> PrintProfilePdf(int id)
         {
             var (bytes, contentType, fileName) = await _staffService.GenerateProfilePdfAsync(id);
@@ -451,7 +434,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Uploads an individual document for a staff member.
         /// </summary>
         [HttpPost("{id:int}/documents/upload")]
-        [AllowAnonymous]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadDocument(int id, [FromForm] UploadStaffDocumentDto dto)
@@ -479,7 +461,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Removes an individual uploaded document.
         /// </summary>
         [HttpDelete("{id:int}/documents/{documentType}")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> DeleteDocument(int id, string documentType)
         {
@@ -505,7 +486,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Upload or replace staff member photo.
         /// </summary>
         [HttpPost("upload-photo")]
-        [AllowAnonymous]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadPhoto([FromForm] UploadStaffPhotoDto dto)
@@ -519,7 +499,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Stream staff member profile photo.
         /// </summary>
         [HttpGet("photo/{id:int}")]
-        [AllowAnonymous]
         public async Task<IActionResult> GetStaffPhoto(int id)
         {
             var (physicalPath, contentType) = await _staffService.GetPhotoAsync(id);
@@ -670,7 +649,7 @@ namespace CollegeManagement.API.Controllers.V1
             var isNonTeachingFallback = string.Equals(effectiveStaffType?.Replace("-", "").Replace("_", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var fallback = isNonTeachingFallback
                 ? new[] { "Administrative Officer", "Office Assistant", "Clerk", "Receptionist", "Senior Accountant", "Accountant", "Cashier", "Fee Collection Executive", "Librarian", "Assistant Librarian", "Library Assistant", "Bus Driver", "Van Driver", "Driver", "Bus Attendant", "Transport In-charge", "Chief Warden", "Hostel Warden", "Assistant Warden", "Cook", "Mess Manager", "Security Officer", "Security Supervisor", "Security Guard", "CCTV Operator", "Electrician", "Plumber", "AC Technician", "Maintenance Supervisor", "System Administrator", "IT Support Specialist", "Network Engineer", "HR Manager", "HR Executive", "Housekeeping Supervisor", "Store Keeper", "Inventory Executive", "Lab Assistant", "Attender / Peon" }
-                : new[] { "Junior Lecturer", "Lecturer", "Senior Lecturer", "Subject Teacher", "Head of Department (HOD)", "Academic Coordinator", "Vice Principal", "Professor", "Associate Professor", "Assistant Professor" };
+                : new[] { "Junior Lecturer", "Senior Lecturer", "Head of Department (HOD)", "Lecturer", "Lab Demonstrator", "Physical Director (PD)", "Academic Coordinator", "Vice Principal", "Subject Teacher", "Professor", "Associate Professor", "Assistant Professor" };
 
             var desigStaffType = isNonTeachingFallback ? "Non-Teaching" : "Teaching";
             return Ok(fallback.Select((name, i) => new { id = i + 1, name, designationName = name, code = name.ToUpperInvariant(), designationCode = name.ToUpperInvariant(), staffType = desigStaffType }));

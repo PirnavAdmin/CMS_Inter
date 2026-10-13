@@ -443,3 +443,107 @@
   overflow-y: auto;
   flex: 1;
 }
+
+/* Meta Bar & Header Badges */
+.faculty-tt-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.faculty-tt-badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--cms-primary-soft, #F1F4E2);
+  border: 1px solid rgba(111, 132, 0, 0.22);
+  color: var(--cms-primary-dark, #566900);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.faculty-tt-time-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--cms-primary-dark, #566900);
+  line-height: 1.2;
+}
+
+.faculty-tt-time-sub {
+  display: block;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: var(--cms-muted, #7B8275);
+  margin-top: 1px;
+}
+
+/* Loading & Empty States */
+.faculty-tt-loading-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  gap: 10px;
+  color: var(--cms-muted, #7B8275);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.faculty-tt-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  min-height: 260px;
+}
+
+.faculty-tt-empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--cms-primary-soft, #F1F4E2);
+  color: var(--cms-primary-dark, #566900);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.faculty-tt-empty-state h3 {
+  font-size: 16px;
+  font-weight: 750;
+  color: var(--cms-text, #10203c);
+  margin: 0 0 6px;
+}
+
+.faculty-tt-empty-state p {
+  font-size: 12px;
+  color: var(--cms-muted, #7B8275);
+  max-width: 440px;
+  line-height: 1.45;
+  margin: 0 0 16px;
+}
+
+[data-theme="dark"] .faculty-tt-badge-chip,
+.dark-theme .faculty-tt-badge-chip {
+  background: rgba(135, 157, 25, 0.16) !important;
+  color: #d9eda3 !important;
+  border-color: rgba(135, 157, 25, 0.35) !important;
+}
+
+[data-theme="dark"] .faculty-tt-empty-icon,
+.dark-theme .faculty-tt-empty-icon {
+  background: rgba(135, 157, 25, 0.16) !important;
+  color: #d9eda3 !important;
+}
+
+[data-theme="dark"] .faculty-tt-time-label,
+.dark-theme .faculty-tt-time-label {
+  color: #d9eda3 !important;
+}

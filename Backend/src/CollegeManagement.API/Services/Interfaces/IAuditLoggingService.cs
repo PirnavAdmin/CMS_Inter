@@ -4,6 +4,7 @@ namespace CollegeManagement.API.Services.Interfaces
 {
     public interface IAuditLoggingService
     {
-        Task LogAsync(string action, string module, string target, string severity = "Info", string status = "Success", string? details = null);
+        Task LogAsync(string action, string module, string target, string severity = "Info", string status = "Success", string? details = null, string? overrideUser = null, string? overrideRole = null);
     }
 }
+

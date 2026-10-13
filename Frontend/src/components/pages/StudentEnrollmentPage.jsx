@@ -349,6 +349,27 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     loadAllocationLookups();
     return () => { active = false; };
   }, [selectedCampusId]);
+  useEffect(() => {
+    let active = true;
+    const selections = [
+      ["routes", form.busRoute, apiEndpoints.transport.routeById, transportRouteFrom, "route"],
+      ["pickupPoints", form.pickupPoint, apiEndpoints.transport.pickupPointById, pickupPointFrom, "pickupPoint"],
+    ];
+    Promise.allSettled(selections.map(async ([key, id, endpoint, normalize, wrapper]) => {
+      if (!/^\d+$/.test(String(id))) return;
+      const response = await apiClient.get(endpoint(id), { skipGlobalLoader: true });
+      const data = response.data?.data ?? response.data?.Data ?? response.data;
+      const option = normalize(data?.[wrapper] ?? data?.[wrapper[0].toUpperCase() + wrapper.slice(1)] ?? data);
+      if (!active || !option) return;
+      setAllocationLookups((current) => ({ ...current, [key]: [
+        ...current[key].filter((item) => item.value !== option.value), option,
+      ] }));
+    })).then((results) => {
+      if (active && results.some((result) => result.status === "rejected"))
+        setAllocationLookupError("The saved route or pickup point could not be loaded. Please check the transport configuration.");
+    });
+    return () => { active = false; };
+  }, [form.busRoute, form.pickupPoint, selectedCampusId]);
   const routeBusTypes = useMemo(() => {
     const vehicleTypes = new Map(allocationLookups.vehicles.filter((vehicle) => vehicle.active && vehicle.busType).map((vehicle) => [vehicle.value, vehicle.busType]));
     return allocationLookups.vehicleAssignments.filter((assignment) => assignment.active).reduce((map, assignment) => {
@@ -359,11 +380,14 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       return map;
     }, new Map());
   }, [allocationLookups.vehicleAssignments, allocationLookups.vehicles]);
-  const routeOptions = useMemo(() => allocationLookups.routes.filter((route) => route.active && (!form.busType || routeBusTypes.get(route.value)?.has(form.busType))), [allocationLookups.routes, form.busType, routeBusTypes]);
+  const routeOptions = useMemo(() => allocationLookups.routes.filter((route) => {
+    const types = routeBusTypes.get(route.value);
+    return route.value === String(form.busRoute) || (route.active && (!form.busType || !types?.size || types.has(form.busType)));
+  }), [allocationLookups.routes, form.busType, form.busRoute, routeBusTypes]);
   const pickupOptions = useMemo(() => {
     const linked = allocationLookups.pickupPoints.some((point) => point.routeId);
-    return allocationLookups.pickupPoints.filter((point) => point.active && (!linked || point.routeId === String(form.busRoute || "")));
-  }, [allocationLookups.pickupPoints, form.busRoute]);
+    return allocationLookups.pickupPoints.filter((point) => point.value === String(form.pickupPoint) || (point.active && (!linked || point.routeId === String(form.busRoute || ""))));
+  }, [allocationLookups.pickupPoints, form.busRoute, form.pickupPoint]);
   const hostelBlockOptions = useMemo(() => allocationLookups.hostelBlocks.filter((block) => block.active), [allocationLookups.hostelBlocks]);
   const hostelRoomOptions = useMemo(() => {
     const block = allocationLookups.hostelBlocks.find((item) => item.value === String(form.hostelBlock));
@@ -415,7 +439,8 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       if (key === "studentType") return { ...current, studentType: value, transportRequired: "", busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", hostelBlock: "", hostelBlockName: "", hostelRoom: "", hostelRoomName: "" };
       if (key === "transportRequired") return { ...current, transportRequired: value, ...(value === "Yes" ? {} : { busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "" }) };
       if (key === "busType") {
-        const keepRoute = current.busRoute && routeBusTypes.get(String(current.busRoute))?.has(value);
+        const types = routeBusTypes.get(String(current.busRoute));
+        const keepRoute = current.busRoute && (!types?.size || types.has(value));
         return { ...current, busType: value, ...(keepRoute ? { pickupPoint: "", pickupPointName: "" } : { busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "" }) };
       }
       if (key === "busRoute") {

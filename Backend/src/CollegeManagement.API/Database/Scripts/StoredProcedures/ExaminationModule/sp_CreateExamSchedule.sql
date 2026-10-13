@@ -18,6 +18,11 @@ CREATE PROCEDURE `sp_CreateExamSchedule`(
     IN p_CampusId INT
 )
 BEGIN
+    -- Deactivate any prior active schedule for the same (ExamId, SubjectId) to prevent duplicates
+    UPDATE ExamSchedules
+    SET IsActive = 0, UpdatedAt = UTC_TIMESTAMP()
+    WHERE ExamId = p_ExamId AND SubjectId = p_SubjectId AND IsActive = 1;
+
     INSERT INTO ExamSchedules (
         ExamId,
         SubjectId,

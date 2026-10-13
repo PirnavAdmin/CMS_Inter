@@ -39,22 +39,14 @@ function isAdminRole(role) {
   return normalized === "admin" || normalized.includes("admin");
 }
 
-function isWardenRole(role) {
-  const cmsRole = getAuthItem("cms_role");
-  const cmsAuth = getAuthItem("cms_auth");
-  if (cmsRole === "warden" && (cmsAuth === "true" || cmsAuth === true)) return true;
-  return String(role || "").trim().toLowerCase().includes("warden");
-}
-
 export default function ProtectedRoute({
   children,
   requireAdmin = false,
-  requireFaculty = false,
   requireStudent = false,
   requireParent = false,
   requireAccountant = false,
   requirePrincipal = false,
-  requireWarden = false,
+  requireFaculty = false,
 }) {
   const token = getAuthToken();
   const tokenState = token ? getJwtExpiryState(token) : null;
@@ -67,20 +59,11 @@ export default function ProtectedRoute({
 
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
-  const isWarden = isWardenRole(role);
   const isAdmin = user?.isAdmin || isAdminRole(role);
   const isFaculty = isFacultyOrStaffRole(role);
   const isPrincipal = isPrincipalRole(role);
   const isParent = isParentRole(role);
   const isAccountant = isAccountantRole(role);
-
-  if (requireWarden && !isWarden && !isAdmin && !isPrincipal) {
-    if (isParent) return <Navigate to="/parent-dashboard" replace />;
-    if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
-    if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
-    return <Navigate to="/student-dashboard" replace />;
-  }
-  if (isWarden && !requireWarden && !isAdmin && !isPrincipal) return <Navigate to="/warden-dashboard" replace />;
 
   if (requireFaculty && !isFaculty) {
     if (isAdmin) return <Navigate to="/dashboard" replace />;
@@ -89,7 +72,6 @@ export default function ProtectedRoute({
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
   }
-
   if (requireAdmin && !isAdmin && !isPrincipal) {
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
@@ -128,7 +110,6 @@ export function PublicOnlyRoute({ children }) {
 
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
-  const isWarden = isWardenRole(role);
   const isAdmin = user?.isAdmin || isAdminRole(role);
   const isFaculty = isFacultyOrStaffRole(role);
   const isPrincipal = isPrincipalRole(role);
@@ -136,7 +117,6 @@ export function PublicOnlyRoute({ children }) {
   const isAccountant = isAccountantRole(role);
 
   if (isTokenValid) {
-    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
@@ -146,3 +126,6 @@ export function PublicOnlyRoute({ children }) {
   }
   return children || <Outlet />;
 }
+
+
+
