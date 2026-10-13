@@ -26,18 +26,7 @@ namespace CollegeManagement.API.Services.Implementations
             int validStaffId = request.StaffId;
             if (validStaffId <= 0 || !await _context.Staffs.AnyAsync(s => s.Id == validStaffId))
             {
-                if (userId > 0)
-                {
-                    var staffByUser = await _context.Staffs.FirstOrDefaultAsync(s => s.UserId == userId);
-                    if (staffByUser != null)
-                    {
-                        validStaffId = staffByUser.Id;
-                    }
-                }
-                if (validStaffId <= 0 || !await _context.Staffs.AnyAsync(s => s.Id == validStaffId))
-                {
-                    validStaffId = await _context.Staffs.Select(s => s.Id).FirstOrDefaultAsync();
-                }
+                validStaffId = await _context.Staffs.Select(s => s.Id).FirstOrDefaultAsync();
             }
 
             // 2. Resolve CreatedByUserId defensively
