@@ -20,7 +20,7 @@ export const resolveStudentPhotoUrl = (photoPath) => {
   if (/^https?:\/\//i.test(clean) || clean.startsWith("data:") || clean.startsWith("blob:")) {
     return clean;
   }
-  const configuredBase = String(env.apiBaseUrl || "https://whiff-lyrics-debug.ngrok-free.dev").trim();
+  const configuredBase = String(env.apiBaseUrl || "https://prune-abroad-blemish.ngrok-free.dev").trim();
   const origin = configuredBase.replace(/\/+$/, "");
   const normalized = clean.startsWith("/") ? clean : `/${clean}`;
   return `${origin}${normalized}`;

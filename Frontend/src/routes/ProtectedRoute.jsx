@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/features/authStorage.js";
 import { getJwtExpiryState } from "@/api/apiClient.js";
+import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 
 function isFacultyOrStaffRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
@@ -47,8 +48,12 @@ export default function ProtectedRoute({
   requireAccountant = false,
   requirePrincipal = false,
   requireFaculty = false,
+  requireExamCell = false,
 }) {
-  const token = getAuthToken();
+  // Discard sessions created by the removed local preview login.
+  const storedToken = getAuthToken();
+  if (storedToken === "exam-cell-local-preview") clearAuthSession();
+  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenExpired = Boolean(tokenState?.isJwt && tokenState?.isExpired);
 
@@ -64,6 +69,15 @@ export default function ProtectedRoute({
   const isPrincipal = isPrincipalRole(role);
   const isParent = isParentRole(role);
   const isAccountant = isAccountantRole(role);
+
+  const isExamCell = isExamCellRole(role);
+  if (requireExamCell && !isExamCell) {
+    const destination = isAdmin ? "/dashboard" : isPrincipal ? "/principal-dashboard" : isAccountant ? "/accountant-dashboard" : isParent ? "/parent-dashboard" : isFaculty ? "/faculty-dashboard" : "/student-dashboard";
+    return <Navigate to={destination} replace />;
+  }
+  if (isExamCell && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal)) {
+    return <Navigate to="/exam-cell-dashboard" replace />;
+  }
 
   if (requireFaculty && !isFaculty) {
     if (isAdmin) return <Navigate to="/dashboard" replace />;
@@ -104,7 +118,10 @@ export default function ProtectedRoute({
 }
 
 export function PublicOnlyRoute({ children }) {
-  const token = getAuthToken();
+  // Discard sessions created by the removed local preview login.
+  const storedToken = getAuthToken();
+  if (storedToken === "exam-cell-local-preview") clearAuthSession();
+  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenValid = Boolean(token && (!tokenState?.isJwt || !tokenState?.isExpired));
 
@@ -117,6 +134,7 @@ export function PublicOnlyRoute({ children }) {
   const isAccountant = isAccountantRole(role);
 
   if (isTokenValid) {
+    if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;

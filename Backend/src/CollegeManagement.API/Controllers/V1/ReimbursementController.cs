@@ -127,7 +127,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 2. Get All Claims (Finance & Admin Review table)
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Faculty,Staff,Teacher")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllClaims(
             [FromQuery] int? campusId,
@@ -144,7 +144,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 3. Get My Claims (Self-service claims for faculty/staff)
         /// </summary>
         [HttpGet("my-claims")]
-        [Authorize(Roles = "Faculty,Staff,Admin,Super Admin")]
+        [Authorize(Roles = "Faculty,Staff,Admin,Super Admin,Teacher")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetMyClaims([FromQuery] int? campusId)
         {
@@ -163,7 +163,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 4. Get Reimbursement Summary KPIs
         /// </summary>
         [HttpGet("summary")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Faculty,Staff,Teacher")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetSummary([FromQuery] int? campusId)
         {
@@ -176,7 +176,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 5. Get Account Ledger Entries (For Account Ledger Modal)
         /// </summary>
         [HttpGet("account-entries")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Faculty,Staff,Teacher")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAccountEntries([FromQuery] int? campusId)
         {

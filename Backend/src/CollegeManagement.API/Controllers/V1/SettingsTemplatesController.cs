@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Settings;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -20,6 +21,7 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v{version:apiVersion}/settings/templates")]
     [EnableCors("AllowFrontend")]
     [Authorize]
+    [RequirePermission("settings")]
     [Produces("application/json")]
     public class SettingsTemplatesController : ControllerBase
     {
@@ -35,7 +37,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Fetch all templates with pagination, keyword search, category filter, and active status filter.
         /// </summary>
         [HttpGet]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(TemplatePagedResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
             [FromQuery] int pageNumber = 1,
@@ -182,7 +183,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Toggle the active status of a template.
         /// </summary>
         [HttpPatch("{id:int}/toggle-active")]
-        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ToggleActive(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
@@ -200,7 +200,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Dynamically render a template with real or sample placeholders.
         /// </summary>
         [HttpPost("preview")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(RenderedTemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Preview([FromBody] RenderCertificateTemplateRequestDto request, [FromQuery] int? campusId = null, CancellationToken ct = default)

@@ -45,7 +45,7 @@ const documentFileName = (url) => {
   try { return decodeURIComponent(new URL(url).pathname.split("/").pop()); } catch { return ""; }
 };
 const academicRows = [
-  [["Board", "boardName", Landmark], ["Academic Year", "academicYearName", CalendarDays], ["Academic Level", "academicLevelName", Layers], ["Group", "groupName", Users]],
+  [["Campus", "campusName", Building2], ["Board", "boardName", Landmark], ["Academic Year", "academicYearName", CalendarDays], ["Academic Level", "academicLevelName", Layers], ["Group", "groupName", Users]],
   [["Programme", "programName", BookOpen], ["Section", "sectionName", Users], ["Roll Number", "rollNo", Hash], ["Admission Number", "admissionNo", FileText], ["Admission Date", "admissionDate", CalendarDays]],
 ];
 const fieldIcons = { gender: UserRound, dateOfBirth: CalendarDays, mobileNumber: Phone, email: Mail, bloodGroup: Heart, aadhaarNumber: Fingerprint, nationality: Globe, religion: Landmark, address: MapPin, city: Building2, district: MapPin, state: Globe, pincode: Hash, previousSchool: Landmark, previousHallTicketNumber: Hash, previousBoard: GraduationCap, previousYearOfPassing: CalendarDays, previousPercentage: Percent, fatherMobile: Phone, motherMobile: Phone, guardianMobile: Phone, parentGuardianEmail: Mail };

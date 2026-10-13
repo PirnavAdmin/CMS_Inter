@@ -12,16 +12,16 @@ namespace CollegeManagement.API.Profiles
         {
             // 1. Mark Model -> MarkResponseDto Mapping
             CreateMap<Mark, MarkResponseDto>()
-                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.TotalMarks > 0 ? src.TotalMarks : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks)))
-                .ForMember(dest => dest.IsPass, opt => opt.MapFrom(src => !src.IsAbsent && ((src.InternalMarks + src.PracticalMarks + src.TheoryMarks) >= src.PassingMarks)));
+                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.IsAbsent ? 0 : (src.TotalMarks > 0 ? src.TotalMarks : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks))))
+                .ForMember(dest => dest.IsPass, opt => opt.MapFrom(src => !src.IsAbsent && ((src.TotalMarks > 0 ? src.TotalMarks : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks)) >= src.PassingMarks)));
 
             // 2. SaveMarkDto -> Mark Model Mapping
             CreateMap<SaveMarkDto, Mark>()
-                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => (src.TotalMarks.HasValue && src.TotalMarks.Value > 0)
+                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.IsAbsent ? 0 : ((src.TotalMarks.HasValue && src.TotalMarks.Value >= 0)
                     ? src.TotalMarks.Value
-                    : (src.ObtainedMarks.HasValue && src.ObtainedMarks.Value > 0)
+                    : (src.ObtainedMarks.HasValue && src.ObtainedMarks.Value >= 0)
                         ? src.ObtainedMarks.Value
-                        : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks)))
+                        : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks))))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(_ => EvaluationStatus.SUBMITTED))
                 .ForMember(dest => dest.IsVerified, opt => opt.MapFrom(_ => false))
                 .ForMember(dest => dest.IsPublished, opt => opt.MapFrom(_ => false))
@@ -47,7 +47,11 @@ namespace CollegeManagement.API.Profiles
 
             // 3. UpdateMarkDto -> Mark Model Mapping
             CreateMap<UpdateMarkDto, Mark>()
-                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.InternalMarks + src.PracticalMarks + src.TheoryMarks))
+                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.IsAbsent ? 0 : ((src.TotalMarks.HasValue && src.TotalMarks.Value >= 0)
+                    ? src.TotalMarks.Value
+                    : (src.ObtainedMarks.HasValue && src.ObtainedMarks.Value >= 0)
+                        ? src.ObtainedMarks.Value
+                        : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks))))
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.MarkId, opt => opt.Ignore())
                 .ForMember(dest => dest.Board, opt => opt.Ignore())

@@ -15,6 +15,7 @@ import {
   FileText,
   Filter,
   HelpCircle,
+  History,
   MessageSquareQuote,
   Paperclip,
   Plus,
@@ -72,17 +73,61 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   // Allow switching view between "Finance & Admin Review", "Claims", and "My Claims"
   const [activePortalTab, setActivePortalTab] = useState("all-claims");
 
-  // ── Live Claims & Account Entries State ─────────────────────────────
-  const [claims, setClaims] = useState(() => reimbursementService.getStoredClaims());
-  const [accountEntries, setAccountEntries] = useState(() =>
-    reimbursementService.getStoredAccountEntries()
-  );
+  // ── Live Claims & Account Entries State (API v1 Integration) ───────────
+  const [claims, setClaims] = useState([]);
+  const [dedicatedAccountEntries, setDedicatedAccountEntries] = useState([]);
+  const [isLoadingClaims, setIsLoadingClaims] = useState(false);
+  const [summaryData, setSummaryData] = useState(null);
   const [toast, setToast] = useState(null);
 
-  const refreshData = useCallback(() => {
-    setClaims(reimbursementService.getStoredClaims());
-    setAccountEntries(reimbursementService.getStoredAccountEntries());
-  }, []);
+  const campusId = authUser.campusId || authUser.CampusId || undefined;
+
+  const refreshData = useCallback(async () => {
+    setIsLoadingClaims(true);
+    try {
+      // 1. Fetch claims based on active tab:
+      // Endpoint 2: GET /api/v1/reimbursements (all claims)
+      // Endpoint 3: GET /api/v1/reimbursements/my-claims (logged-in faculty's claims)
+      const fetchPromise =
+        activePortalTab === "my-claims"
+          ? reimbursementService.fetchMyClaims({ campusId })
+          : reimbursementService.fetchClaims({ campusId });
+
+      // Endpoint 1: GET /api/v1/reimbursements/summary
+      const summaryPromise = reimbursementService.fetchReimbursementSummary({ campusId });
+
+      // Endpoint 5: GET /api/v1/reimbursements/account-entries (Dedicated Account Ledger modal list)
+      const accountEntriesPromise = reimbursementService.fetchAccountEntries({ campusId });
+
+      const [claimsResult, summaryResult, accountEntriesResult] = await Promise.allSettled([
+        fetchPromise,
+        summaryPromise,
+        accountEntriesPromise,
+      ]);
+
+      if (claimsResult.status === "fulfilled") {
+        setClaims(claimsResult.value || []);
+      }
+      if (summaryResult.status === "fulfilled") {
+        setSummaryData(summaryResult.value);
+      }
+      if (
+        accountEntriesResult.status === "fulfilled" &&
+        Array.isArray(accountEntriesResult.value) &&
+        accountEntriesResult.value.length > 0
+      ) {
+        setDedicatedAccountEntries(accountEntriesResult.value);
+      }
+    } catch (err) {
+      console.warn("Error refreshing reimbursement data from API:", err);
+    } finally {
+      setIsLoadingClaims(false);
+    }
+  }, [activePortalTab, campusId]);
+
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
   useEffect(() => {
     const onUpdated = () => refreshData();
@@ -94,23 +139,53 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     };
   }, [refreshData]);
 
-  // Derived KPI Summary
-  const summary = useMemo(
-    () => calculateReimbursementSummary(claims),
-    [claims]
-  );
+  // Account Entries: Uses dedicated Endpoint 5 list or falls back to approved/paid claims
+  const accountEntries = useMemo(() => {
+    if (dedicatedAccountEntries.length > 0) {
+      return dedicatedAccountEntries;
+    }
+    return claims
+      .filter(
+        (c) =>
+          c.status === CLAIM_STATUSES.APPROVED ||
+          c.status === CLAIM_STATUSES.PAID ||
+          c.accountReferenceId
+      )
+      .map((c) => ({
+        id: c.accountReferenceId || `ACC-PAY-${c.claimId}`,
+        accountEntryId: c.accountReferenceId || `ACC-PAY-${c.claimId}`,
+        claimId: c.claimId,
+        facultyName: c.facultyName,
+        department: c.department,
+        category: c.category,
+        amount: c.approvedAmount || c.amount,
+        approvalDate: c.approvalDate || c.submissionDate,
+        paymentStatus:
+          c.status === CLAIM_STATUSES.PAID
+            ? "Paid / Disbursed"
+            : "Payable (Awaiting Disbursement)",
+      }));
+  }, [dedicatedAccountEntries, claims]);
+
+  // Derived KPI Summary from Endpoint 1 or calculated from live claims
+  const summary = useMemo(() => {
+    if (summaryData) {
+      return summaryData;
+    }
+    return calculateReimbursementSummary(claims);
+  }, [summaryData, claims]);
 
   // ── Section 1: Faculty Details Initial State ────────────────────────
   const defaultFacultyId =
-    authUser.employeeId || authUser.staffId || (isFacultyUser ? authUser.id || "" : "EMP-1042");
+    authUser.employeeId || authUser.staffId || authUser.id || "";
   const defaultFacultyName =
-    authUser.fullName || authUser.name || (isFacultyUser ? "" : "Dr. Ananya Rao");
+    authUser.fullName || authUser.name || "";
   const defaultDepartment =
-    authUser.department || authUser.departmentName || (isFacultyUser ? "" : "Mathematics");
+    authUser.department || authUser.departmentName || "";
   const defaultDesignation =
-    authUser.designation || authUser.designationName || (isFacultyUser ? "Faculty Member" : "Assistant Professor");
+    authUser.designation || authUser.designationName || "";
   const defaultEmail =
-    authUser.email || (isFacultyUser ? "" : "ananya.rao@example.edu");
+    authUser.email || "";
 
   // ── Claim Submission Form State (Three Sections) ────────────────────
   const [formData, setFormData] = useState({
@@ -124,7 +199,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     // Section 2: Expense Details
     category: "Teaching Materials",
     otherCategory: "",
-    expenseDate: new Date().toISOString().split("T")[0],
+    expenseDate: "",
     amount: "",
     purpose: "",
     paymentMethod: "Bank Transfer",
@@ -203,6 +278,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     const reader = new FileReader();
     reader.onload = () => {
       setUploadedFile({
+        rawFile: file,
         name: file.name,
         size: file.size,
         type: file.type,
@@ -243,7 +319,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
       email: defaultEmail,
       category: "Teaching Materials",
       otherCategory: "",
-      expenseDate: new Date().toISOString().split("T")[0],
+      expenseDate: "",
       amount: "",
       purpose: "",
       paymentMethod: "Bank Transfer",
@@ -321,6 +397,22 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     setPreviewClaimModalOpen(true);
   };
 
+  // ── View Detailed Claim (Endpoint 4: GET /api/v1/reimbursements/{id}) ──
+  const handleOpenClaimDetails = async (claim) => {
+    setSelectedClaim(claim);
+    setClaimDetailModalOpen(true);
+    if (claim.id || claim.claimId) {
+      try {
+        const detail = await reimbursementService.fetchClaimById(claim.id || claim.claimId);
+        if (detail) {
+          setSelectedClaim((prev) => ({ ...prev, ...detail }));
+        }
+      } catch (err) {
+        console.warn("Could not fetch detailed claim view, showing row data:", err);
+      }
+    }
+  };
+
   // ── Submit Claim Workflow ───────────────────────────────────────────
   const handleSubmitClaim = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -365,6 +457,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
       setPreviewClaimModalOpen(false);
       resetForm();
       refreshData();
+      setActivePortalTab("history");
     } catch (err) {
       setToast({
         type: "error",
@@ -387,7 +480,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     if (!selectedClaim) return;
     setIsProcessingAction(true);
     try {
-      await reimbursementService.approveClaim(selectedClaim.claimId, {
+      await reimbursementService.approveClaim(selectedClaim.id || selectedClaim.claimId, {
         approvedBy: authUser.fullName || authUser.name || "Finance Admin",
         approvedAmount: Number(approvalAmount) || selectedClaim.amount,
         remarks: approvalRemarks,
@@ -430,7 +523,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
     setIsProcessingAction(true);
     try {
-      await reimbursementService.rejectClaim(selectedClaim.claimId, {
+      await reimbursementService.rejectClaim(selectedClaim.id || selectedClaim.claimId, {
         rejectedBy: authUser.fullName || authUser.name || "Finance Admin",
         rejectionReason: rejectionReason.trim(),
       });
@@ -472,7 +565,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
     setIsProcessingAction(true);
     try {
-      await reimbursementService.requestClarification(selectedClaim.claimId, {
+      await reimbursementService.requestClarification(selectedClaim.id || selectedClaim.claimId, {
         reviewer: authUser.fullName || authUser.name || "Finance Reviewer",
         clarificationNote: clarificationNote.trim(),
       });
@@ -513,7 +606,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
           ? otherDisbursementMode.trim() || "Other"
           : disbursementMode;
 
-      await reimbursementService.disburseClaimPayment(selectedClaim.claimId, {
+      await reimbursementService.disburseClaimPayment(selectedClaim.id || selectedClaim.claimId, {
         disbursedBy: authUser.fullName || authUser.name || "Accounts Officer",
         paymentMode: resolvedMode,
         paymentRef: disbursementRef,
@@ -574,13 +667,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   // ── Filtered Claims Calculation ─────────────────────────────────────
   const filteredClaims = useMemo(() => {
     return claims.filter((claim) => {
-      // If in faculty personal view and not finance reviewer, show their claims
-      if (activePortalTab === "my-claims") {
-        const currentEmpId = authUser.employeeId || authUser.staffId || "EMP-1042";
-        if (claim.facultyId !== currentEmpId && claim.facultyName !== defaultFacultyName) {
-          return false;
-        }
-      }
+      // When in my-claims tab, records are already retrieved specifically from GET /api/v1/reimbursements/my-claims
 
       // Status filter
       if (statusFilter !== "ALL" && claim.status !== statusFilter) {
@@ -652,11 +739,26 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     searchQuery,
   ]);
 
-  // ── Financial Metrics Calculation ──────────────────────────────────
-  const financialMetrics = useMemo(
-    () => reimbursementService.calculateFinancialMetrics(activePortalTab === "all-claims" ? filteredClaims : claims),
-    [filteredClaims, claims, activePortalTab]
-  );
+  // ── Financial Metrics Calculation (Endpoint 1 summaryData with live calculation fallback) ──
+  const financialMetrics = useMemo(() => {
+    if (summaryData && summaryData.totalClaimed !== undefined) {
+      return {
+        totalClaimed: summaryData.totalClaimed,
+        awaitingReview: summaryData.awaitingReview,
+        approvedUnpaid: summaryData.approvedUnpaid,
+        totalPaid: summaryData.totalPaid,
+        totalRejected: summaryData.totalRejected,
+        counts:
+          summaryData.counts ||
+          reimbursementService.calculateFinancialMetrics(
+            activePortalTab === "all-claims" ? filteredClaims : claims
+          ).counts,
+      };
+    }
+    return reimbursementService.calculateFinancialMetrics(
+      activePortalTab === "all-claims" ? filteredClaims : claims
+    );
+  }, [summaryData, filteredClaims, claims, activePortalTab]);
 
   // ── CSV Export Action ──────────────────────────────────────────────
   const handleExportCsv = () => {
@@ -692,13 +794,8 @@ export default function ReimbursementPage({ isAccountantView = false }) {
       : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  return (
-    <DashboardLayout
-      title="Faculty Reimbursement"
-      subtitle="Submit, track, and manage faculty expense reimbursement claims."
-      breadcrumb={["Home", "Finance", "Reimbursement"]}
-    >
-      <div className="reimb-page-container">
+  const pageContent = (
+    <div className="reimb-page-container">
         {/* Toast Notification */}
         {toast && (
           <Toast
@@ -730,7 +827,14 @@ export default function ReimbursementPage({ isAccountantView = false }) {
               className={`reimb-toggle-btn ${activePortalTab === "my-claims" ? "is-active" : ""}`}
               onClick={() => setActivePortalTab("my-claims")}
             >
-              <FileCheck2 size={15} /> My Claims ({claims.filter((c) => c.facultyId === defaultFacultyId || c.facultyName === defaultFacultyName).length})
+              <FileCheck2 size={15} /> My Claims ({activePortalTab === "my-claims" ? claims.length : (summary.myClaimsCount ?? claims.length)})
+            </button>
+            <button
+              type="button"
+              className={`reimb-toggle-btn ${activePortalTab === "history" ? "is-active" : ""}`}
+              onClick={() => setActivePortalTab("history")}
+            >
+              <History size={15} /> Claims History ({claims.length})
             </button>
           </div>
 
@@ -742,7 +846,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
               title="Click to view integrated payables in Account section"
               style={{ cursor: "pointer" }}
             >
-              <CheckCircle2 size={14} /> Account Ledger: {accountEntries.length} Integrated Payables
+              <CheckCircle2 size={14} /> Account Ledger: {summary.integratedPayablesCount ?? accountEntries.length} Integrated Payables
             </button>
             <button
               type="button"
@@ -1257,8 +1361,9 @@ export default function ReimbursementPage({ isAccountantView = false }) {
           </div>
         )}
 
-        {/* ── Claims History Table ── */}
-        <div className="reimb-table-card">
+        {/* ── Claims History Table (Hidden on Submit Claims tab) ── */}
+        {activePortalTab !== "submit" && (
+          <div className="reimb-table-card">
           <div className="reimb-table-header">
             <div>
               <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
@@ -1501,10 +1606,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                             type="button"
                             className="reimb-btn-icon"
                             title="View Claim Details & Timeline"
-                            onClick={() => {
-                              setSelectedClaim(claim);
-                              setClaimDetailModalOpen(true);
-                            }}
+                            onClick={() => handleOpenClaimDetails(claim)}
                           >
                             <Eye size={14} />
                           </button>
@@ -1621,8 +1723,9 @@ export default function ReimbursementPage({ isAccountantView = false }) {
             </div>
           )}
         </div>
+      )}
 
-        {/* ── MODALS ── */}
+      {/* ── MODALS ── */}
 
         {/* 1. Claim Details Modal */}
         {claimDetailModalOpen && selectedClaim && (
@@ -2663,6 +2766,23 @@ export default function ReimbursementPage({ isAccountantView = false }) {
           </Modal>
         )}
       </div>
+  );
+
+  if (isAccountantView) {
+    return pageContent;
+  }
+
+  return (
+    <DashboardLayout
+      title={isFinanceUser ? "Staff Reimbursements" : "Faculty Reimbursement"}
+      subtitle={
+        isFinanceUser
+          ? "Review, approve, and disburse faculty & staff expense reimbursement claims."
+          : "Submit, track, and manage faculty expense reimbursement claims."
+      }
+      breadcrumb={["Home", isFinanceUser ? "Staff" : "Finance", "Reimbursements"]}
+    >
+      {pageContent}
     </DashboardLayout>
   );
 }

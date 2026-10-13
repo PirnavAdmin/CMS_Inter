@@ -32,9 +32,10 @@ export default function StudentCertificates() {
   const [success, setSuccess] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ type: "", purpose: "", notes: "" });
-  const load = useCallback(async () => {
+  const load = useCallback(async (showLoading = true) => {
     if (!student?.studentId) { setLoading(false); return; }
-    setLoading(true); setError("");
+    if (showLoading) setLoading(true);
+    setError("");
     const [certResult, typeResult] = await Promise.allSettled([
       apiClient.get(studentApiEndpoints.certificates.list, { params: { search: student.admissionNo || student.studentId } }),
       apiClient.get(studentApiEndpoints.certificates.list, { params: {
@@ -63,6 +64,16 @@ export default function StudentCertificates() {
     setLoading(false);
   }, [student]);
   useEffect(() => { if (!profileLoading) load(); }, [load, profileLoading]);
+  useEffect(() => {
+    const refresh = () => { if (!profileLoading) load(false); };
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load, profileLoading]);
 
   const submit = async (event) => {
     event.preventDefault();

@@ -51,6 +51,10 @@ public class CreateFeeStructureRequest
     [Range(1, int.MaxValue)] public int AcademicYearId { get; set; }
     [Range(1, int.MaxValue)] public int GroupId { get; set; }
     public int? ProgramId { get; set; }
+    public int? AcademicLevelId { get; set; }
+    public string? YearFeeMode { get; set; }
+    public string? IncrementType { get; set; }
+    public decimal? IncrementValue { get; set; }
     public List<CreateFeeStructureItemRequest> Items { get; set; } = new();
 }
 
@@ -93,6 +97,13 @@ public class FeeStructureResponse
     public int? ProgramId { get; set; }
     public string? ProgramName { get; set; }
     public string StructureName { get; set; } = string.Empty;
+    public int AcademicLevelId { get; set; }
+    public string AcademicLevelName { get; set; } = string.Empty;
+    public string? YearFeeMode { get; set; }
+    public string? IncrementType { get; set; }
+    public decimal? IncrementValue { get; set; }
+    public int? PairedStructureId { get; set; }
+    public decimal? SecondYearTotalAmount { get; set; }
     public decimal TotalAmount { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }

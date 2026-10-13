@@ -241,12 +241,28 @@ export const getStudentExaminations = async (student) => {
 
 export const getStudentAttendance = async (studentId, fromDate, toDate) => {
   const response = await apiClient.get(studentApiEndpoints.attendance.search, {
-    params: { studentId, fromDate, toDate },
+    params: { studentId, fromDate, toDate, pageNumber: 1, pageSize: 1000 },
   });
-  return getPayload(response.data);
+  const list = (value) => {
+    const payload = getPayload(value);
+    return Array.isArray(payload) ? payload
+      : payload?.records ?? payload?.items ?? payload?.attendanceRecords ?? payload?.data ?? [];
+  };
+  const records = list(response.data);
+  const dates = [...new Set(records.map((record) => String(record.attendanceDate ?? record.date ?? "").slice(0, 10)).filter(Boolean))];
+  // The search DTO has no reliable session identity. The existing daily endpoint
+  // returns the same explicit Morning/Afternoon fields used by admin attendance.
+  return (await Promise.all(dates.map(async (date) => {
+    const daily = await apiClient.get(studentApiEndpoints.attendance.dailySessions, {
+      params: { studentId, attendanceDate: date, date },
+      skipGlobalLoader: true,
+    });
+    const record = list(daily.data).find((item) => String(item.studentId) === String(studentId));
+    return record ? { ...record, attendanceDate: date } : null;
+  }))).filter(Boolean);
 };
 
-export const getStudentResult = async (student) => {
+export const getStudentResult = async (student, examId) => {
   const params = {
     studentId: student?.studentId,
     boardId: student?.boardId,
@@ -254,8 +270,13 @@ export const getStudentResult = async (student) => {
     academicLevelId: student?.academicLevelId,
     groupId: student?.groupId,
   };
+  params.examId = examId;
   Object.keys(params).forEach((key) => { if (params[key] == null || params[key] === "") delete params[key]; });
-  const response = await apiClient.get(studentApiEndpoints.results.studentResult, { params });
+  const response = await apiClient.get(studentApiEndpoints.results.studentResult, {
+    params,
+    validateStatus: (status) => (status >= 200 && status < 300) || status === 404,
+  });
+  if (response.status === 404) return null;
   return getPayload(response.data);
 };
 

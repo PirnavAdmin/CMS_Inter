@@ -14,12 +14,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     resolve: {
-      alias: [
-        {
-          find: /^@\//,
-          replacement: `${path.resolve(__dirname, "src").replace(/\\/g, "/")}/`,
-        },
-      ],
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
     },
     optimizeDeps: {
       include: ["@microsoft/signalr"],

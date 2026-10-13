@@ -3,6 +3,8 @@ import { env } from "@/config/env.js";
 import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
 
 let activeApiRequests = 0;
+import { handleMockApiRequest } from "./mockApiAdapter.js";
+
 const apiLoadingListeners = new Set();
 
 const notifyApiLoading = () => {
@@ -123,8 +125,21 @@ apiClient.interceptors.request.use(
       config.headers.delete("Content-Type");
     }
     beginApiLoading(config);
+
     const token = getStoredAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
+
+    const isMockSession =
+      Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("parent-auth-token-"))) ||
+      Boolean(typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true");
+
+    const isAuthLoginEndpoint = /\/api\/(Auth|Admin)\/login/i.test(config.url || "");
+
+    // When backend is offline or session is mock-authenticated, use mock adapter for all ERP calls
+    if (isMockSession && !isAuthLoginEndpoint) {
+      config.adapter = handleMockApiRequest;
+    }
+
     try {
       const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
@@ -167,8 +182,31 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    const errText = `${error?.message || ""} ${typeof error?.response?.data === "string" ? error.response.data : JSON.stringify(error?.response?.data || "")}`;
+    const isNgrokOffline = /ERR_NGROK|is offline/i.test(errText);
+
+    if (isNgrokOffline && typeof window !== "undefined") {
+      try {
+        window.localStorage?.setItem("cms_backend_offline", "true");
+      } catch {}
+    }
+
+    // Automatic fallback to mock adapter for missing endpoints (404) or offline backend
+    if (
+      (error.response?.status === 404 || isNgrokOffline || !error.response) &&
+      originalRequest &&
+      !originalRequest._isMockFallback
+    ) {
+      originalRequest._isMockFallback = true;
+      try {
+        const mockRes = await handleMockApiRequest(originalRequest);
+        return mockRes;
+      } catch (_) {}
+    }
+
     const shouldLogDevError =
       import.meta.env.DEV &&
+      !isNgrokOffline &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&
@@ -204,13 +242,19 @@ apiClient.interceptors.response.use(
 
     // Handle 401 Unauthorized with automatic token refresh
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
+      const currentToken = getStoredAccessToken();
+      const isMockToken = currentToken.startsWith("mock-") || currentToken.startsWith("demo-") || currentToken.startsWith("parent-auth-token-");
+      if (isMockToken) {
+        // Mock token sessions must NEVER be logged out or redirected by backend 401 errors
+        return Promise.reject(error);
+      }
+
       if (originalRequest._retry) {
         clearAuthSession();
         if (window.location.pathname !== "/login") window.location.assign("/login");
         return Promise.reject(error);
       }
 
-      const currentToken = getStoredAccessToken();
       if (!currentToken) {
         clearAuthSession();
         if (window.location.pathname !== "/login") window.location.assign("/login");
