@@ -206,7 +206,7 @@ export const menu = [
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
       { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
-      { to: "/dashboard/reimbursements", label: "Reimbursements", icon: reimbursementIcon },
+      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon },
     ],
   },
   {
