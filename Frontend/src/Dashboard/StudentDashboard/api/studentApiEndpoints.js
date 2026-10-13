@@ -14,6 +14,7 @@ const studentApiEndpoints = {
   },
   attendance: {
     search: "/api/v1/attendance/search",
+    dailySessions: "/api/v1/attendance/admin/students",
   },
   results: {
     studentResult: "/api/v1/results/student-result",
@@ -24,6 +25,7 @@ const studentApiEndpoints = {
     list: "/api/v1/certificates",
     activeTemplates: "/api/v1/certificates/active-templates",
     generate: "/api/v1/certificates/generate",
+    studentRequest: "/api/v1/certificates/student-request",
     download: (id) => `/api/v1/certificates/download/${encodeURIComponent(id)}`,
   },
   holidays: {

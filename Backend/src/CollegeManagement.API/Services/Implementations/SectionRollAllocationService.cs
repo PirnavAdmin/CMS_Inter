@@ -74,7 +74,7 @@ namespace CollegeManagement.API.Services.Implementations
             ValidateRequest(request);
 
             var preview = await _repository.PreviewRollNumberAllocationAsync(request);
-            if (preview == null || preview.Students.Count == 0) return preview;
+            if (preview == null || preview.Students.Count == 0) return preview ?? new RollNumberAllocationPreviewResponse();
 
             var subCode = $"ROLL_NO|{request.CampusId}|{request.BoardId}|{request.AcademicYearId}|{request.AcademicLevelId}|{request.GroupId}|{request.ProgramId}";
             var seriesDto = await _numberSeriesService.GetSeriesByCodeAsync(subCode, request.CampusId) 

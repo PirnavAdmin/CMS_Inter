@@ -16,19 +16,34 @@ namespace CollegeManagement.API.Services.Implementations
     public class HolidayService : IHolidayService
     {
         private readonly IHolidayRepository _holidayRepository;
+        private readonly ILookupCacheService _cache;
 
-        public HolidayService(IHolidayRepository holidayRepository)
+        public HolidayService(IHolidayRepository holidayRepository, ILookupCacheService cache)
         {
             _holidayRepository = holidayRepository;
+            _cache = cache;
         }
 
         public async Task<HolidaySummaryResponse> GetSummaryAsync(int? campusId, int? academicYearId, int? boardId)
         {
-            return await _holidayRepository.GetSummaryAsync(campusId, academicYearId, boardId);
+            return await _cache.GetOrCreateAsync($"lookup:holidays:summary:{campusId}:{academicYearId}:{boardId}", () => _holidayRepository.GetSummaryAsync(campusId, academicYearId, boardId));
         }
 
         public async Task<(IEnumerable<HolidayResponse> Items, int TotalCount, int TotalPages)> GetPagedHolidaysAsync(HolidayFilterRequest filter)
         {
+            if (string.IsNullOrWhiteSpace(filter.Search) && filter.Page <= 1)
+            {
+                string cacheKey = $"lookup:holidays:list:{filter.CampusId}:{filter.AcademicYearId}:{filter.BoardId}:{filter.Month}:{filter.FromDate}:{filter.ToDate}:{filter.Type}:{filter.Status}:{filter.PageSize}";
+                return await _cache.GetOrCreateAsync(cacheKey, async () =>
+                {
+                    var (cItems, cCount) = await _holidayRepository.GetPagedHolidaysAsync(filter);
+                    var cSize = filter.PageSize < 1 ? 10 : filter.PageSize;
+                    var cPages = Math.Max(1, (int)Math.Ceiling((double)cCount / cSize));
+                    var cDtos = cItems.Select(MapToResponse).ToList();
+                    return ((IEnumerable<HolidayResponse>)cDtos, cCount, cPages);
+                });
+            }
+
             var (items, totalCount) = await _holidayRepository.GetPagedHolidaysAsync(filter);
             var pageSize = filter.PageSize < 1 ? 10 : filter.PageSize;
             var totalPages = Math.Max(1, (int)Math.Ceiling((double)totalCount / pageSize));
@@ -78,6 +93,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
 
             var created = await _holidayRepository.CreateAsync(entity);
+            _cache.RemoveByPrefix("lookup:holidays");
             return MapToResponse(created);
         }
 
@@ -116,12 +132,15 @@ namespace CollegeManagement.API.Services.Implementations
             existing.BoardId = request.BoardId;
 
             var updated = await _holidayRepository.UpdateAsync(id, existing);
+            _cache.RemoveByPrefix("lookup:holidays");
             return updated == null ? null : MapToResponse(updated);
         }
 
         public async Task<bool> DeleteAsync(int id)
         {
-            return await _holidayRepository.DeleteAsync(id);
+            var res = await _holidayRepository.DeleteAsync(id);
+            if (res) _cache.RemoveByPrefix("lookup:holidays");
+            return res;
         }
 
         private static void ValidateHolidayRequest(CreateHolidayRequest request)

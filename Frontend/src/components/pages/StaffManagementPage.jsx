@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { incrementSeriesSequence } from "@/data/numberSeriesData.js";
-import { generateNextNumber } from "@/api/numberSeriesApi.js";
+import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
 import {
   ArrowLeft,
   Building2,
@@ -36,7 +35,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, SkeletonPage, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonPage, SkeletonRow, SkeletonText, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -912,7 +911,9 @@ const portalFields = [
 
 function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasError = false }) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState(value || "");
+  const [search, setSearch] = useState("");
+  const [isUserTyping, setIsUserTyping] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(0);
   const ref = useRef(null);
 
   const safeOpts = useMemo(() => (Array.isArray(opts) ? opts : []), [opts]);
@@ -922,19 +923,23 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
   const getOptLabel = (o) =>
     o && typeof o === "object" ? String(o.label ?? o.name ?? o.value ?? "") : String(o ?? "");
 
-  useEffect(() => {
-    setSearch(value || "");
-  }, [value]);
+  const selectedOpt = useMemo(() => {
+    if (!value) return null;
+    const valStr = String(value).trim().toLowerCase();
+    return (
+      safeOpts.find(
+        (o) =>
+          getOptValue(o).trim().toLowerCase() === valStr ||
+          getOptLabel(o).trim().toLowerCase() === valStr
+      ) || null
+    );
+  }, [value, safeOpts]);
 
   useEffect(() => {
-    const clickOutside = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", clickOutside);
-    return () => document.removeEventListener("mousedown", clickOutside);
-  }, []);
+    if (!isUserTyping) {
+      setSearch(selectedOpt ? getOptLabel(selectedOpt) : String(value || ""));
+    }
+  }, [value, selectedOpt, isUserTyping]);
 
   const filteredOpts = useMemo(() => {
     const withoutOther = safeOpts.filter((o) => {
@@ -942,29 +947,98 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
       return s !== "other" && s !== "others";
     });
     const q = (search || "").toLowerCase().trim();
-    if (!q) return withoutOther;
-
-    const currentSelectedLabel = (getOptLabel(value) || "").toLowerCase().trim();
-    const currentSelectedValue = (getOptValue(value) || "").toLowerCase().trim();
-    // If the search string matches current selected item's label/value (i.e. user just focused/clicked to open dropdown),
-    // show ALL available options so the user can easily switch to any other department or designation!
-    if (q === currentSelectedLabel || q === currentSelectedValue) {
+    if (!isUserTyping || !q) {
       return withoutOther;
     }
-
     return withoutOther.filter((o) => {
       const lbl = getOptLabel(o).toLowerCase();
       const val = getOptValue(o).toLowerCase();
       return lbl.includes(q) || val.includes(q);
     });
-  }, [safeOpts, search, value]);
+  }, [safeOpts, search, isUserTyping]);
 
   const handleSelect = (opt) => {
-    const optVal = getOptValue(opt);
-    const optLbl = getOptLabel(opt);
-    setSearch(optLbl);
-    if (typeof onChange === "function") onChange(optVal);
+    if (!opt) {
+      setSearch("");
+      if (typeof onChange === "function") onChange("");
+    } else {
+      const optVal = getOptValue(opt);
+      const optLbl = getOptLabel(opt);
+      setSearch(optLbl);
+      if (typeof onChange === "function") onChange(optVal);
+    }
+    setIsUserTyping(false);
     setOpen(false);
+    setHighlightIndex(0);
+  };
+
+  useEffect(() => {
+    const clickOutside = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+        if (isUserTyping) {
+          const q = (search || "").trim().toLowerCase();
+          if (!q) {
+            handleSelect(null);
+          } else {
+            const exact = safeOpts.find(
+              (o) =>
+                getOptLabel(o).trim().toLowerCase() === q ||
+                getOptValue(o).trim().toLowerCase() === q
+            );
+            if (exact) {
+              handleSelect(exact);
+            } else {
+              setSearch(selectedOpt ? getOptLabel(selectedOpt) : String(value || ""));
+            }
+          }
+          setIsUserTyping(false);
+        }
+      }
+    };
+    document.addEventListener("mousedown", clickOutside);
+    return () => document.removeEventListener("mousedown", clickOutside);
+  }, [isUserTyping, search, safeOpts, selectedOpt, value]);
+
+  const handleKeyDown = (e) => {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        e.preventDefault();
+        setOpen(true);
+        return;
+      }
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIndex((prev) => (filteredOpts.length > 0 ? (prev + 1) % filteredOpts.length : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((prev) => (filteredOpts.length > 0 ? (prev - 1 + filteredOpts.length) % filteredOpts.length : 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (filteredOpts.length > 0) {
+        const target =
+          highlightIndex >= 0 && highlightIndex < filteredOpts.length
+            ? filteredOpts[highlightIndex]
+            : filteredOpts[0];
+        handleSelect(target);
+      }
+    } else if (e.key === "Tab") {
+      if (open && filteredOpts.length > 0 && isUserTyping) {
+        const target =
+          highlightIndex >= 0 && highlightIndex < filteredOpts.length
+            ? filteredOpts[highlightIndex]
+            : filteredOpts[0];
+        handleSelect(target);
+      }
+      setOpen(false);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      setIsUserTyping(false);
+      setSearch(selectedOpt ? getOptLabel(selectedOpt) : String(value || ""));
+    }
   };
 
   return (
@@ -988,21 +1062,56 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
           }}
           onFocus={(e) => {
             setOpen(true);
+            setIsUserTyping(false);
             try {
               e.target.select();
             } catch { }
           }}
           onChange={(e) => {
             setSearch(e.target.value);
-            if (typeof onChange === "function") onChange(e.target.value);
+            setIsUserTyping(true);
+            setHighlightIndex(0);
             setOpen(true);
           }}
+          onKeyDown={handleKeyDown}
           placeholder={`Search or select ${String(label || "").toLowerCase()}...`}
           autoComplete="off"
         />
+        {value ? (
+          <button
+            type="button"
+            className="staff-dropdown-clear-btn"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "16px",
+              height: "16px",
+              padding: 0,
+              border: 0,
+              borderRadius: "50%",
+              background: "var(--cms-border, #e5e7eb)",
+              color: "var(--cms-muted, #6b7280)",
+              cursor: "pointer",
+              marginRight: "4px",
+              flexShrink: 0,
+            }}
+            title="Clear selection"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelect(null);
+            }}
+          >
+            <X size={10} />
+          </button>
+        ) : null}
         <ChevronDown
           className="staff-dropdown-caret"
           size={13}
+          style={{
+            transition: "transform 0.15s ease",
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          }}
           onClick={(e) => {
             e.stopPropagation();
             setOpen((prev) => !prev);
@@ -1021,7 +1130,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             zIndex: 99999,
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
             border: "1px solid var(--cms-border, #d1d5db)",
-            maxHeight: "165px",
+            maxHeight: "180px",
             overflowY: "auto",
             overflowX: "hidden",
             scrollbarWidth: "thin",
@@ -1032,16 +1141,22 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
               const optVal = getOptValue(o);
               const optLbl = getOptLabel(o);
               const isSelected = value === optVal || value === optLbl;
+              const isHighlighted = idx === highlightIndex;
               return (
                 <div
                   key={`${optVal}-${idx}`}
-                  className={`staff-search-dropdown-item ${isSelected ? "is-selected" : ""}`}
+                  className={`staff-search-dropdown-item ${isSelected ? "is-selected" : ""} ${isHighlighted ? "is-highlighted" : ""}`}
                   style={{
-                    backgroundColor: isSelected ? "var(--cms-primary-soft, #f0fdf4)" : "#ffffff",
-                    color: isSelected ? "var(--cms-primary, #355e3b)" : "var(--cms-text, #1f2937)",
-                    fontWeight: isSelected ? "600" : "normal",
+                    backgroundColor: isHighlighted || isSelected
+                      ? "var(--cms-primary-soft, #f0fdf4)"
+                      : "#ffffff",
+                    color: isHighlighted || isSelected
+                      ? "var(--cms-primary, #355e3b)"
+                      : "var(--cms-text, #1f2937)",
+                    fontWeight: isSelected || isHighlighted ? "600" : "normal",
                     cursor: "pointer",
                   }}
+                  onMouseEnter={() => setHighlightIndex(idx)}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     handleSelect(o);
@@ -1052,7 +1167,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
               );
             })
           ) : (
-            <div className="staff-search-dropdown-empty" style={{ backgroundColor: "#ffffff" }}>No options found</div>
+            <div className="staff-search-dropdown-empty" style={{ backgroundColor: "#ffffff" }}>No matching options found</div>
           )}
         </div>
       ) : null}
@@ -1060,9 +1175,38 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
   );
 }
 
+const DEFAULT_SUBJECTS = [
+  "Mathematics 1A",
+  "Mathematics 1B",
+  "Mathematics 2A",
+  "Mathematics 2B",
+  "Physics 1",
+  "Physics 2",
+  "Chemistry 1",
+  "Chemistry 2",
+  "Botany 1",
+  "Botany 2",
+  "Zoology 1",
+  "Zoology 2",
+  "English 1",
+  "English 2",
+  "Sanskrit 1",
+  "Sanskrit 2",
+  "Computer Science",
+  "Economics 1",
+  "Economics 2",
+  "Commerce 1",
+  "Commerce 2",
+  "Civics 1",
+  "Civics 2",
+  "History 1",
+  "History 2",
+];
+
 function SubjectAllocationInput({ staffId = null, department = "", value = [], onChange }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [highlightIndex, setHighlightIndex] = useState(0);
   const [apiSubjects, setApiSubjects] = useState([]);
   const ref = useRef(null);
 
@@ -1094,7 +1238,9 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
         }
         if (isMounted && Array.isArray(data)) {
           const names = data.map((item) => (typeof item === "object" ? item.subjectName || item.name || item.title || item.subjectCode : String(item))).filter(Boolean);
-          setApiSubjects(names);
+          if (names.length > 0) {
+            setApiSubjects(names);
+          }
         }
       } catch (err) {
         console.warn("Failed to fetch available subjects:", err);
@@ -1106,12 +1252,17 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
     };
   }, [staffId, department]);
 
+  const allAvailableSubjects = useMemo(() => {
+    const list = Array.isArray(apiSubjects) && apiSubjects.length > 0 ? apiSubjects : DEFAULT_SUBJECTS;
+    return [...new Set([...list, ...DEFAULT_SUBJECTS])];
+  }, [apiSubjects]);
+
   const filteredOptions = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
-    const unselected = apiSubjects.filter((opt) => !selectedSubjects.includes(opt));
+    const unselected = allAvailableSubjects.filter((opt) => !selectedSubjects.includes(opt));
     if (!q) return unselected;
     return unselected.filter((opt) => opt.toLowerCase().includes(q));
-  }, [apiSubjects, selectedSubjects, search]);
+  }, [allAvailableSubjects, selectedSubjects, search]);
 
   useEffect(() => {
     const clickOutside = (e) => {
@@ -1142,6 +1293,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
     }
     setSearch("");
     setOpen(false);
+    setHighlightIndex(0);
   };
 
   const removeSubject = (subjectName) => {
@@ -1150,11 +1302,43 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        e.preventDefault();
+        setOpen(true);
+        return;
+      }
+    }
+    if (e.key === "ArrowDown") {
       e.preventDefault();
-      if (search.trim()) {
+      setHighlightIndex((prev) => (filteredOptions.length > 0 ? (prev + 1) % filteredOptions.length : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((prev) => (filteredOptions.length > 0 ? (prev - 1 + filteredOptions.length) % filteredOptions.length : 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (filteredOptions.length > 0) {
+        const target =
+          highlightIndex >= 0 && highlightIndex < filteredOptions.length
+            ? filteredOptions[highlightIndex]
+            : filteredOptions[0];
+        addSubject(target);
+      } else if (search.trim()) {
         addSubject(search.trim());
       }
+    } else if (e.key === "Tab") {
+      if (open && filteredOptions.length > 0) {
+        const target =
+          highlightIndex >= 0 && highlightIndex < filteredOptions.length
+            ? filteredOptions[highlightIndex]
+            : filteredOptions[0];
+        addSubject(target);
+      }
+      setOpen(false);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
     }
   };
 
@@ -1169,6 +1353,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
       <div
         className="subject-compact-box"
         onClick={() => {
+          setOpen(true);
           const input = ref.current?.querySelector("input");
           if (input) input.focus();
         }}
@@ -1186,7 +1371,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
               }}
               title={`Remove ${sub}`}
             >
-              Ã—
+              ×
             </button>
           </span>
         ))}
@@ -1196,6 +1381,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
           onFocus={() => setOpen(true)}
           onChange={(e) => {
             setSearch(e.target.value);
+            setHighlightIndex(0);
             setOpen(true);
           }}
           onKeyDown={handleKeyDown}
@@ -1206,7 +1392,21 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
       </div>
 
       {open ? (
-        <div className="subject-dropdown-menu">
+        <div
+          className="subject-dropdown-menu"
+          style={{
+            backgroundColor: "#ffffff",
+            background: "#ffffff",
+            opacity: 1,
+            zIndex: 99999,
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
+            border: "1px solid var(--cms-border, #d1d5db)",
+            maxHeight: "180px",
+            overflowY: "auto",
+            overflowX: "hidden",
+            scrollbarWidth: "thin",
+          }}
+        >
           {showCustomAdd ? (
             <div
               className="subject-dropdown-item is-custom-add"
@@ -1220,20 +1420,30 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
           ) : null}
 
           {filteredOptions.length > 0 ? (
-            filteredOptions.map((opt, idx) => (
-              <div
-                key={`${opt}-${idx}`}
-                className="subject-dropdown-item"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  addSubject(opt);
-                }}
-              >
-                {opt}
-              </div>
-            ))
+            filteredOptions.map((opt, idx) => {
+              const isHighlighted = idx === highlightIndex;
+              return (
+                <div
+                  key={`${opt}-${idx}`}
+                  className={`subject-dropdown-item ${isHighlighted ? "is-highlighted" : ""}`}
+                  style={{
+                    backgroundColor: isHighlighted ? "var(--cms-primary-soft, #edf7e2)" : "#ffffff",
+                    color: isHighlighted ? "var(--cms-primary, #355e3b)" : "var(--cms-text, #1f2937)",
+                    fontWeight: isHighlighted ? "600" : "normal",
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={() => setHighlightIndex(idx)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    addSubject(opt);
+                  }}
+                >
+                  {opt}
+                </div>
+              );
+            })
           ) : !showCustomAdd ? (
-            <div className="staff-search-dropdown-empty">
+            <div className="staff-search-dropdown-empty" style={{ backgroundColor: "#ffffff" }}>
               {search.trim() ? "Press Enter to add custom subject" : "No subjects available"}
             </div>
           ) : null}
@@ -1326,6 +1536,7 @@ function PrincipalMultiSelectInput({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [highlightIndex, setHighlightIndex] = useState(0);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -1363,18 +1574,48 @@ function PrincipalMultiSelectInput({
   const showCustomAdd = allowCustomAdd && query.trim().length > 0 && !isExactMatchInFiltered && !isAlreadySelected;
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        e.preventDefault();
+        setOpen(true);
+        return;
+      }
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIndex((prev) => (filtered.length > 0 ? (prev + 1) % filtered.length : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((prev) => (filtered.length > 0 ? (prev - 1 + filtered.length) % filtered.length : 0));
+    } else if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      if (query.trim()) {
-        const exact = filtered.find((opt) => (opt.name || opt.label || "").trim().toLowerCase() === query.trim().toLowerCase());
-        if (exact) {
-          onToggle(exact.raw || exact);
-        } else if (allowCustomAdd && typeof onCustomAdd === "function") {
-          onCustomAdd(query.trim());
-        }
+      if (filtered.length > 0) {
+        const target =
+          highlightIndex >= 0 && highlightIndex < filtered.length
+            ? filtered[highlightIndex]
+            : filtered[0];
+        onToggle(target.raw || target);
+        setQuery("");
+        setHighlightIndex(0);
+      } else if (allowCustomAdd && query.trim() && typeof onCustomAdd === "function") {
+        onCustomAdd(query.trim());
+        setQuery("");
+        setHighlightIndex(0);
+      }
+    } else if (e.key === "Tab") {
+      if (open && filtered.length > 0) {
+        const target =
+          highlightIndex >= 0 && highlightIndex < filtered.length
+            ? filtered[highlightIndex]
+            : filtered[0];
+        onToggle(target.raw || target);
         setQuery("");
       }
+      setOpen(false);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
     }
   };
 
@@ -1445,7 +1686,7 @@ function PrincipalMultiSelectInput({
                 }}
                 title={"Remove " + itemLabel}
               >
-                Ã—
+                ×
               </button>
             </span>
           );
@@ -1462,6 +1703,7 @@ function PrincipalMultiSelectInput({
           onFocus={() => setOpen(true)}
           onChange={(e) => {
             setQuery(e.target.value);
+            setHighlightIndex(0);
             setOpen(true);
           }}
           onKeyDown={handleKeyDown}
@@ -1520,6 +1762,7 @@ function PrincipalMultiSelectInput({
                   onCustomAdd(query.trim());
                 }
                 setQuery("");
+                setHighlightIndex(0);
               }}
             >
               <Plus size={13} /> Add "{query.trim()}"
@@ -1539,14 +1782,16 @@ function PrincipalMultiSelectInput({
                 return (optKey && svKey === optKey) || (optName && svName === optName);
               });
 
+              const isHighlighted = i === highlightIndex;
+
               return (
                 <div
                   key={optKey + "-" + i}
-                  className={"staff-search-dropdown-item " + (isSelected ? "is-selected" : "")}
+                  className={"staff-search-dropdown-item " + (isSelected ? "is-selected " : "") + (isHighlighted ? "is-highlighted" : "")}
                   style={{
-                    backgroundColor: isSelected ? "var(--cms-primary-soft, #f0fdf4)" : "#ffffff",
-                    color: isSelected ? "var(--cms-primary, #355e3b)" : "var(--cms-text, #1f2937)",
-                    fontWeight: isSelected ? "600" : "normal",
+                    backgroundColor: isHighlighted || isSelected ? "var(--cms-primary-soft, #f0fdf4)" : "#ffffff",
+                    color: isHighlighted || isSelected ? "var(--cms-primary, #355e3b)" : "var(--cms-text, #1f2937)",
+                    fontWeight: isSelected || isHighlighted ? "600" : "normal",
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
@@ -1554,11 +1799,13 @@ function PrincipalMultiSelectInput({
                     padding: "8px 12px",
                     fontSize: "12px",
                   }}
+                  onMouseEnter={() => setHighlightIndex(i)}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     onToggle(opt.raw || opt);
                     setQuery("");
+                    setHighlightIndex(0);
                   }}
                 >
                   <span>{opt.label}</span>
@@ -2972,6 +3219,117 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
   );
 }
 
+/** Mirrors the mounted staff management dashboard layout while requests are pending, referencing DashboardSkeleton. */
+function StaffDashboardSkeleton() {
+  return (
+    <main className="staff-mock-page staff-dashboard-skeleton" aria-label="Loading staff management" aria-busy="true">
+      {/* 5 KPI Cards Skeleton */}
+      <section className="staff-kpis" aria-label="Loading staff statistics">
+        {Array.from({ length: 5 }, (_, i) => (
+          <article key={i} style={{ cursor: "default", pointerEvents: "none" }}>
+            <SkeletonAvatar size={32} style={{ flexShrink: 0 }} />
+            <div style={{ display: "grid", gap: "6px", width: "100%" }}>
+              <Skeleton style={{ width: i === 3 ? "110px" : i === 4 ? "90px" : "75px", height: "10px" }} />
+              <Skeleton style={{ width: "42px", height: "18px" }} />
+            </div>
+          </article>
+        ))}
+      </section>
+
+      {/* Main Grid Skeleton (Donut Overview + Quick Actions) */}
+      <section className="staff-dashboard-grid" aria-label="Loading overview and actions">
+        {/* Profile Completion Overview Skeleton */}
+        <article className="staff-panel" style={{ cursor: "default" }}>
+          <header>
+            <div style={{ display: "grid", gap: "4px" }}>
+              <Skeleton style={{ width: "165px", height: "15px" }} />
+              <Skeleton style={{ width: "135px", height: "10px" }} />
+            </div>
+          </header>
+          <div className="staff-donut-wrap" style={{ minHeight: "192px" }}>
+            <Skeleton
+              style={{
+                width: "125px",
+                height: "125px",
+                borderRadius: "50%",
+                flexShrink: 0,
+              }}
+            />
+            <div style={{ minWidth: "175px", display: "grid", gap: "10px", width: "100%", maxWidth: "210px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "8px",
+                  padding: "9px 0",
+                  borderBottom: "1px solid var(--cms-border)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Skeleton style={{ width: "8px", height: "8px", borderRadius: "50%" }} />
+                  <Skeleton style={{ width: "68px", height: "11px" }} />
+                </div>
+                <Skeleton style={{ width: "26px", height: "14px" }} />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "8px",
+                  padding: "9px 0",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Skeleton style={{ width: "8px", height: "8px", borderRadius: "50%" }} />
+                  <Skeleton style={{ width: "56px", height: "11px" }} />
+                </div>
+                <Skeleton style={{ width: "26px", height: "14px" }} />
+              </div>
+            </div>
+          </div>
+        </article>
+
+        {/* Quick Actions Skeleton */}
+        <article className="staff-panel quick" style={{ cursor: "default" }}>
+          <header>
+            <div style={{ display: "grid", gap: "4px" }}>
+              <Skeleton style={{ width: "115px", height: "15px" }} />
+              <Skeleton style={{ width: "130px", height: "10px" }} />
+            </div>
+          </header>
+          <div style={{ padding: "0 0 10px" }}>
+            {Array.from({ length: 5 }, (_, i) => {
+              const widths = ["125px", "145px", "110px", "150px", "95px"];
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    width: "calc(100% - 20px)",
+                    minHeight: "33px",
+                    margin: "6px 10px 0",
+                    padding: "6px 9px",
+                    border: "1px solid var(--cms-border)",
+                    borderRadius: "7px",
+                    background: "var(--cms-surface)",
+                  }}
+                >
+                  <Skeleton style={{ width: widths[i], height: "11px" }} />
+                  <Skeleton style={{ width: "12px", height: "12px", borderRadius: "3px" }} />
+                </div>
+              );
+            })}
+          </div>
+        </article>
+      </section>
+    </main>
+  );
+}
+
 // ----------------------------------------------------------------------
 // SCREEN 1 — DASHBOARD (Connected to GET /api/v1/staff/dashboard-stats)
 // ----------------------------------------------------------------------
@@ -3037,11 +3395,18 @@ function Dashboard({ records = [], loadingRecords = false }) {
       subtitle="Manage teaching and non-teaching staff, their details and profile completion."
       breadcrumb={["People"]}
       actions={
-        <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/add")}>
-          <Plus /> Add Staff
-        </button>
+        isDataLoading ? (
+          <SkeletonButton width={105} />
+        ) : (
+          <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/add")}>
+            <Plus /> Add Staff
+          </button>
+        )
       }
     >
+      {isDataLoading ? (
+        <StaffDashboardSkeleton />
+      ) : (
       <main className="staff-mock-page">
         <section className="staff-kpis">
           {[
@@ -3127,6 +3492,7 @@ function Dashboard({ records = [], loadingRecords = false }) {
           </article>
         </section>
       </main>
+      )}
       <StaffCredentialsGeneratorModal
         isOpen={credModalOpen}
         onClose={() => setCredModalOpen(false)}
@@ -3609,8 +3975,10 @@ function StaffList({ records = [], setRecords, forced }) {
         const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || row.boardName || activeBoardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
 
-        const empId = row.employeeId || (await generateNextNumber(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF_ID" : "TEACHING_STAFF_ID", {}, activeCampusId))?.generatedNumber;
-        // incrementSeriesSequence is obsolete; backend atomic generation handles it
+        const empId = row.employeeId || generateNextNumber(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF" : "TEACHING_STAFF");
+        if (!row.employeeId) {
+          incrementSeriesSequence(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF" : "TEACHING_STAFF");
+        }
 
         const payload = {
           employeeId: empId,
@@ -3818,24 +4186,29 @@ function StaffList({ records = [], setRecords, forced }) {
       }
     });
 
-    return mergedList.filter(
-      (r) =>
-        r &&
-        isStaffMatchingBoard(r, selectedBoard, boards) &&
-        isStaffMatchingCampus(r, selectedCampus) &&
-        (currentTab === "All" ||
-          (currentTab === "Pending"
-            ? r.staffType === "Teaching" && r.profileStatus !== "Completed"
-            : currentTab === "Completed"
-              ? r.profileStatus === "Completed"
-              : r.staffType === currentTab)) &&
-        (!departmentFilter || r.department === departmentFilter) &&
-        (!designationFilter || r.designation === designationFilter) &&
-        (!staffTypeFilter || r.staffType === staffTypeFilter) &&
-        [r.fullName, r.employeeId, r.email, r.mobile, r.department, r.designation, r.board, r.boardCode].some((v) =>
-          String(v || "").toLowerCase().includes((q || "").toLowerCase()),
-        ),
-    );
+    return mergedList.filter((r) => {
+      if (!r) return false;
+      if (!isStaffMatchingBoard(r, selectedBoard, boards)) return false;
+      if (!isStaffMatchingCampus(r, selectedCampus)) return false;
+      if (
+        currentTab !== "All" &&
+        (currentTab === "Pending"
+          ? r.staffType !== "Teaching" || r.profileStatus === "Completed"
+          : currentTab === "Completed"
+            ? r.profileStatus !== "Completed"
+            : r.staffType !== currentTab)
+      ) {
+        return false;
+      }
+      if (departmentFilter && r.department !== departmentFilter) return false;
+      if (designationFilter && r.designation !== designationFilter) return false;
+      if (staffTypeFilter && r.staffType !== staffTypeFilter) return false;
+
+      const staffFullName = r.fullName || [r.firstName, r.lastName].filter(Boolean).join(" ") || r.name || "";
+      return [staffFullName, r.firstName, r.lastName, r.name, r.employeeId, r.email, r.mobile, r.department, r.designation, r.board, r.boardCode].some((v) =>
+        String(v || "").toLowerCase().includes((q || "").toLowerCase()),
+      );
+    });
   }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards, selectedCampus]);
 
   const [apiFilterDepts, setApiFilterDepts] = useState([]);
@@ -4029,7 +4402,10 @@ function StaffList({ records = [], setRecords, forced }) {
                 <input
                   placeholder="Search staff..."
                   value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setPage(1);
+                  }}
                 />
               </label>
               <select value={departmentFilter} onChange={(e) => handleDepartmentFilterChange(e.target.value)} aria-label="Filter by department">
@@ -4056,7 +4432,7 @@ function StaffList({ records = [], setRecords, forced }) {
                 title="Download Excel template for adding staff"
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                <Download size={16} /> Download Template (Excel)
+                <Download size={15} /> Download Template
               </button>
               <button
                 type="button"
@@ -5138,23 +5514,6 @@ function SendLink({ record, update, activity }) {
 // ----------------------------------------------------------------------
 // PENDING SUBMISSIONS & BULK RESEND (POST /api/v1/staff/bulk-send-links)
 // ----------------------------------------------------------------------
-function getStaffSubmissionTab(record) {
-  const normalize = (value) => String(value || "").replace(/[\s_-]/g, "").toLowerCase();
-  const status = normalize(record.profileStatus);
-  const review = normalize(record.reviewStatus);
-  if (status === "completed" || review === "approved") return null;
-  const correctionStatuses = ["needscorrection", "requestcorrection", "correctionrequested"];
-  if (correctionStatuses.includes(status) || correctionStatuses.includes(review) ||
-      (Boolean(record.correctionNote || record.correctionNotes) && status !== "submitted" && review !== "pending")) {
-    return "Needs Correction";
-  }
-  if (status === "submitted" || review === "pending" || Number(record.profileCompletion) === 100 || record.submittedAt || record.profileSubmittedAt) {
-    return "Submitted";
-  }
-  if (status === "inprogress" || (Number(record.profileCompletion) > 30 && Number(record.profileCompletion) < 100)) return "In Progress";
-  return "Link Sent";
-}
-
 function Pending({ records = [], setRecords, activity }) {
   const n = useNavigate();
   const tabs = ["Link Sent", "In Progress", "Needs Correction", "Submitted"];
@@ -5217,15 +5576,8 @@ function Pending({ records = [], setRecords, activity }) {
           if (!r) return;
           const norm = normalizeStaffRecord(r);
           const key = String(norm.id || norm.employeeId);
-          const employeeKey = String(norm.employeeId || "").trim().toLowerCase();
-          const previous = map.get(key) || (employeeKey && map.get(employeeKey));
-          // A cached submission must not undo an administrator's review.
-          const reviewed = [previous, norm].find((item) => item && (getStaffSubmissionTab(item) === "Needs Correction" || getStaffSubmissionTab(item) === null));
-          const merged = reviewed
-            ? { ...norm, ...reviewed }
-            : { ...(previous || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 };
-          map.set(key, merged);
-          if (employeeKey) map.set(employeeKey, merged);
+          map.set(key, { ...(map.get(key) || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 });
+          if (norm.employeeId) map.set(String(norm.employeeId).trim().toLowerCase(), { ...(map.get(key) || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 });
         });
       }
     } catch (e) { }
@@ -5239,12 +5591,6 @@ function Pending({ records = [], setRecords, activity }) {
         const empKey = norm.employeeId ? String(norm.employeeId).trim().toLowerCase() : "";
         const local = (idKey && map.get(idKey)) || (empKey && map.get(empKey));
         const merged = local ? { ...norm, ...local } : norm;
-        // Honor an explicit correction/approval returned by the server too.
-        if (getStaffSubmissionTab(norm) === "Needs Correction" || getStaffSubmissionTab(norm) === null) {
-          merged.profileStatus = norm.profileStatus;
-          merged.reviewStatus = norm.reviewStatus;
-          merged.correctionNote = norm.correctionNote || norm.correctionNotes || "";
-        }
         if (idKey) map.set(idKey, merged);
         if (empKey) map.set(empKey, merged);
       });
@@ -5273,14 +5619,40 @@ function Pending({ records = [], setRecords, activity }) {
   const tabCounts = useMemo(() => {
     const counts = { "Link Sent": 0, "In Progress": 0, "Needs Correction": 0, "Submitted": 0 };
     mergedTeachingList.forEach((r) => {
-      const submissionTab = getStaffSubmissionTab(r);
-      if (submissionTab) counts[submissionTab]++;
+      const status = String(r.profileStatus || "").trim();
+      if (status === "Completed") return;
+      if (status === "Submitted" || r.reviewStatus === "Pending" || r.profileCompletion === 100 || r.submittedAt || r.profileSubmittedAt) {
+        counts["Submitted"]++;
+      } else if (status === "Needs Correction" || r.correctionNote) {
+        counts["Needs Correction"]++;
+      } else if (status === "In Progress" || (Number(r.profileCompletion) > 30 && Number(r.profileCompletion) < 100)) {
+        counts["In Progress"]++;
+      } else {
+        counts["Link Sent"]++;
+      }
     });
     return counts;
   }, [mergedTeachingList]);
 
   const rows = useMemo(() => {
-    return mergedTeachingList.filter((r) => getStaffSubmissionTab(r) === tab);
+    return mergedTeachingList.filter((r) => {
+      const status = String(r.profileStatus || "").trim();
+      if (status === "Completed") return false;
+
+      if (tab === "Submitted") {
+        return status === "Submitted" || r.reviewStatus === "Pending" || r.profileCompletion === 100 || Boolean(r.submittedAt || r.profileSubmittedAt);
+      }
+      if (tab === "Needs Correction") {
+        return status === "Needs Correction" || Boolean(r.correctionNote);
+      }
+      if (tab === "In Progress") {
+        return status === "In Progress" || (Number(r.profileCompletion) > 30 && Number(r.profileCompletion) < 100 && status !== "Submitted" && status !== "Needs Correction");
+      }
+      if (tab === "Link Sent") {
+        return status === "Link Sent" || status === "Pending" || !status || status === "Active" || Boolean(r.linkSent);
+      }
+      return false;
+    });
   }, [mergedTeachingList, tab]);
 
   const pageSize = 10;
@@ -5466,10 +5838,10 @@ function Pending({ records = [], setRecords, activity }) {
                           <span style={{ fontSize: "11px", fontWeight: "600" }}>{tab === "Submitted" ? "100%" : `${r.profileCompletion || 30}%`}</span>
                         </div>
                       </td>
-                      <td><Badge value={getStaffSubmissionTab(r)} /></td>
+                      <td><Badge value={tab === "Submitted" ? "Submitted" : r.profileStatus || "Link Sent"} /></td>
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          {tab === "Submitted" ? (
+                          {tab === "Submitted" || r.profileStatus === "Submitted" ? (
                             <button
                               className="cms-btn cms-btn-primary"
                               style={{ padding: "5px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
@@ -5681,8 +6053,6 @@ function Review({ record, update, activity }) {
         profileStatus: "Completed",
         profileCompletion: 100,
         reviewStatus: "Approved",
-        correctionNote: "",
-        correctionNotes: "",
       });
       if (activity) activity(`${record.fullName} profile approved by administration`);
       n(`/dashboard/staff/${record.id}`);
@@ -5710,12 +6080,10 @@ function Review({ record, update, activity }) {
       update({
         ...record,
         profileStatus: "Needs Correction",
-        reviewStatus: "Needs Correction",
         correctionNote: note.trim(),
-        correctionNotes: note.trim(),
       });
       if (activity) activity(`${record.fullName} requested profile corrections: ${note.trim()}`);
-      n("/dashboard/staff/pending?tab=Needs%20Correction");
+      n(`/dashboard/staff/${record.id}`);
     } catch (err) {
       console.error("POST /api/v1/staff/{id}/admin-review failed", err);
       alert(getApiErrorMessage(err, "Failed to request correction. Please try again."));

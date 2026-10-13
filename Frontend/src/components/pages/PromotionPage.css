@@ -1255,6 +1255,42 @@
 }
 
 /* Board & Academic Year table-system alignment. */
+.promotion-fee-panel {
+  padding: 18px 22px;
+  border-block: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  min-width: 0;
+}
+.promotion-fee-panel h3 { margin: 0 0 14px; font-size: 15px; }
+.promotion-fee-panel h4 { margin: 0 0 10px; font-size: 13px; }
+.promotion-fee-panel p { font-size: 13px; overflow-wrap: anywhere; }
+.promotion-fee-panel .promotion-error { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.promotion-fee-panel .promotion-error span { flex: 1 1 160px; overflow-wrap: anywhere; }
+.promotion-fee-panel .cms-field select,
+.promotion-fee-panel .cms-field input { width: 100%; min-width: 0; }
+.promotion-fee-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 14px; }
+.promotion-fee-checkbox { display: flex; align-items: flex-start; gap: 9px; margin-block: 14px; font-size: 13px; line-height: 1.5; }
+.promotion-fee-checkbox input { flex: 0 0 auto; margin-top: 3px; }
+.promotion-fee-breakdown { margin-top: 12px; font-size: 13px; }
+.promotion-fee-breakdown summary { cursor: pointer; padding-block: 8px; }
+.promotion-fee-values,
+.promotion-fee-breakdown dl { margin: 10px 0; display: grid; gap: 8px; }
+.promotion-fee-values > div,
+.promotion-fee-breakdown dl > div { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; }
+.promotion-fee-values dd,
+.promotion-fee-breakdown dd { margin: 0; font-weight: 600; text-align: right; }
+.promotion-fee-arrears { border-left: 3px solid #b7791f; padding: 10px 12px; color: var(--cms-text); background: var(--cms-subtle); }
+.promotion-fee-balance { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding-block: 12px; border-top: 1px solid var(--cms-border); }
+.promotion-fee-program-row { padding-block: 12px; border-bottom: 1px solid var(--cms-border); }
+.promotion-fee-program-row:last-child { border-bottom: 0; }
+.promotion-fee-increase { color: #b45309; }
+@media (max-width: 600px) {
+  .promotion-fee-panel { padding: 14px; }
+  .promotion-fee-grid { grid-template-columns: minmax(0, 1fr); }
+  .promotion-fee-values > div,
+  .promotion-fee-breakdown dl > div { flex-wrap: wrap; }
+}
+
 .promotion-table th,
 .promotion-table td { padding: clamp(7px, .5vw, 9px) clamp(6px, .6vw, 9px); line-height: 1.4; }
 .promotion-table th { font-size: clamp(11px, .8vw, 12.5px); line-height: 1.3; letter-spacing: .6px; }

@@ -346,9 +346,9 @@ function TableSection({
           value={filterValues[filter.name] || "All"}
           onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
         >
-          {filter.options.map((option) => {
+          {filter.options.map((option, optionIndex) => {
             const normalized = option && typeof option === "object" ? option : { value: option, label: option };
-            return <option key={normalized.value} value={normalized.value}>{normalized.label}</option>;
+            return <option key={`${normalized.value}-${optionIndex}`} value={normalized.value}>{normalized.label}</option>;
           })}
         </select>
       )}
@@ -476,7 +476,7 @@ function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
           <span>Select Driver from Non-Teaching Staff <span className="required-star">*</span></span>
           <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaffDriver(event.target.value)}>
             <option value="">Select Driver</option>
-            {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.driverName} ({driver.employeeId})</option>)}
+            {drivers.map((driver, driverIndex) => <option key={`${driver.id}-${driverIndex}`} value={driver.id}>{driver.driverName} ({driver.employeeId})</option>)}
           </select>
         </label>
         <label className="cms-field">
@@ -556,7 +556,7 @@ function AddAttendantModal({ staff, isSaving, onCancel, onSave }) {
           <span>Select Non-Teaching Staff <span className="required-star">*</span></span>
           <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaff(event.target.value)}>
             <option value="">Select Non-Teaching Staff</option>
-            {staff.map((member) => <option key={member.id} value={member.id}>{member.name} ({member.employeeId})</option>)}
+            {staff.map((member, memberIndex) => <option key={`${member.id}-${memberIndex}`} value={member.id}>{member.name} ({member.employeeId})</option>)}
           </select>
         </label>
         <label className="cms-field"><span>Employee ID <span className="required-star">*</span></span><input value={values.employeeId} readOnly /></label>
@@ -1007,7 +1007,7 @@ export default function TransportPage() {
             routeName: r.routeName || "",
             routeStart: r.startLocation || r.routeStart || "",
             routeEnd: r.endLocation || r.routeEnd || "",
-            totalDistanceKm: Number(r.distanceKm || r.totalDistanceKm || r.distance || 0),
+            totalDistanceKm: Number(r.distanceKm ?? r.DistanceKm ?? r.totalDistanceKm ?? r.distance ?? 0),
             estimatedTimeMinutes: Number(r.estimatedDurationMinutes || r.estimatedTimeMinutes || 30),
             minDistanceKm: Number(r.minRangeKm || r.minDistanceKm || 5),
             minBaseFare: Number(r.nonAcBaseFare || r.defaultMonthlyFee || r.minBaseFare || 1000),
@@ -1026,18 +1026,32 @@ export default function TransportPage() {
         const lookupItems = pickupLookupsRes.status === "fulfilled"
           ? extractList(pickupLookupsRes.value.data).filter((point) => !detailedIds.has(String(point.pickupPointId || point.id)))
           : [];
-        const items = [...detailedItems, ...lookupItems];
+        // Lookup-only entries contain labels but can omit route and timing details.
+        const items = await Promise.all([...detailedItems, ...lookupItems].map(async (point) => {
+          const id = point.pickupPointId ?? point.PickupPointId ?? point.id;
+          if (id == null || ((point.routeId ?? point.RouteId) != null
+            && (point.pickupTime ?? point.PickupTime ?? point.morningPickupTime ?? point.MorningPickupTime) != null
+            && (point.dropTime ?? point.DropTime ?? point.eveningDropTime ?? point.EveningDropTime) != null)) return point;
+          try {
+            const response = await apiClient.get(apiEndpoints.transport.pickupPointById(id));
+            const payload = response.data?.data ?? response.data ?? {};
+            return { ...point, ...(payload.pickupPoint ?? payload.PickupPoint ?? payload) };
+          } catch {
+            return point;
+          }
+        }));
+        const routeItems = routesRes.status === "fulfilled" ? scoped(extractList(routesRes.value.data)) : routes;
         setPickupPoints(
           items.map((p) => ({
-            id: p.pickupPointId || p.id,
+            id: p.pickupPointId ?? p.PickupPointId ?? p.id,
             routeId: p.routeId ?? p.RouteId ?? "",
-            routeName: p.routeName || p.RouteName || "-",
+            routeName: p.routeName || p.RouteName || routeItems.find((route) => String(route.routeId ?? route.RouteId ?? route.id) === String(p.routeId ?? p.RouteId))?.routeName || "-",
             pickupName: p.pickupPointName || p.stopName || p.pickupName || "",
             landmark: p.landmark || p.stopAddress || "",
             sequenceNumber: p.sequenceNo || p.sequenceNumber || p.stopOrder || 1,
-            pickupTime: p.pickupTime ? String(p.pickupTime).substring(0, 5) : "",
-            dropTime: p.dropTime ? String(p.dropTime).substring(0, 5) : "",
-            distanceKm: Number(p.distanceFromStart || p.distanceFromSchool || p.distanceKm || 0),
+            pickupTime: toTimeInputValue(p.pickupTime ?? p.PickupTime ?? p.morningPickupTime ?? p.MorningPickupTime),
+            dropTime: toTimeInputValue(p.dropTime ?? p.DropTime ?? p.eveningDropTime ?? p.EveningDropTime),
+            distanceKm: Number(p.distanceFromStart ?? p.DistanceFromStart ?? p.distanceFromSchool ?? p.DistanceFromSchool ?? p.distanceKm ?? 0),
             monthlyFee: Number(p.monthlyFee || 0),
             status: p.status == null || p.status === true || p.status === 1 || p.status === "Active" ? "Active" : "Inactive",
           }))
@@ -1156,14 +1170,14 @@ export default function TransportPage() {
         setVehicleAssignments(
           items.map((va) => ({
             id: va.assignmentId || va.id,
-            routeId: va.routeId,
-            routeName: va.routeName || va.route || "",
-            vehicleId: va.vehicleId,
-            vehicleNumber: va.vehicleNumber || va.busNumber || "",
-            driverId: va.driverId,
-            driverName: va.driverName || va.driver || "",
-            attendantId: va.attendantId,
-            attendantName: va.attendantName || va.attendant || "Unassigned",
+            routeId: va.routeId ?? va.RouteId ?? va.route?.routeId,
+            routeName: va.routeName || va.RouteName || va.route?.routeName || (typeof va.route === "string" ? va.route : ""),
+            vehicleId: va.vehicleId ?? va.VehicleId ?? va.vehicle?.vehicleId,
+            vehicleNumber: va.vehicleNumber || va.VehicleNumber || va.busNumber || va.vehicle?.vehicleNumber || "",
+            driverId: va.driverId ?? va.DriverId ?? va.driver?.driverId,
+            driverName: va.driverName || va.DriverName || va.driver?.driverName || (typeof va.driver === "string" ? va.driver : ""),
+            attendantId: va.attendantId ?? va.AttendantId ?? va.busAttendantId,
+            attendantName: va.attendantName || va.AttendantName || va.busAttendantName || (typeof va.attendant === "string" ? va.attendant : "") || "Unassigned",
             morningTripTime: va.morningTripTime || "07:00 AM",
             eveningTripTime: va.eveningTripTime || "03:45 PM",
             effectiveFrom: va.effectiveFrom ? String(va.effectiveFrom).split("T")[0] : "",
@@ -1239,11 +1253,28 @@ export default function TransportPage() {
 
       if (studentRes.status === "fulfilled" && studentRes.value?.data) {
         const items = scoped(extractList(studentRes.value.data));
+        const getAdmissionNumber = (student) => [
+          student.admissionNo, student.AdmissionNo, student.admissionNumber, student.AdmissionNumber,
+          student.student?.admissionNo, student.student?.admissionNumber,
+        ].find((value) => value != null && String(value).trim() !== "") ?? "";
+        const studentItems = await Promise.all(items.map(async (student) => {
+          if (getAdmissionNumber(student)) return student;
+          const assignmentId = getStudentTransportAssignmentId(student);
+          if (assignmentId == null || assignmentId === "") return student;
+          try {
+            const response = await apiClient.get(apiEndpoints.transport.studentAssignmentById(assignmentId));
+            const payload = response.data?.data ?? response.data ?? {};
+            const detail = payload.studentAssignment ?? payload.assignment ?? payload;
+            return { ...student, admissionNo: getAdmissionNumber(detail) };
+          } catch {
+            return student;
+          }
+        }));
         setStudentAssignments(
-          items.map((s) => ({
+          studentItems.map((s) => ({
             id: getStudentTransportAssignmentId(s),
             studentName: s.studentName || "Student",
-            admissionNo: s.admissionNo || "",
+            admissionNo: getAdmissionNumber(s),
             routeId: s.routeId,
             routeName: s.routeName || "",
             pickupPointName: s.pickupPointName || s.pickupPoint || "",
@@ -1441,7 +1472,7 @@ export default function TransportPage() {
         const routeName = detail.routeName ?? detail.RouteName ?? record.routeName;
         const routeId = detail.routeId
           ?? detail.RouteId
-          ?? record.routeId
+          ?? (record.routeId || undefined)
           ?? routes.find((route) => String(route.routeName).trim().toLowerCase() === String(routeName || "").trim().toLowerCase())?.id
           ?? "";
         const rawStatus = detail.status ?? detail.Status ?? detail.isActive ?? detail.IsActive;
@@ -2009,8 +2040,8 @@ export default function TransportPage() {
   ];
 
   const studentTransportReportColumns = [
-    { key: "studentName", label: "Student & Class", strong: true, value: (row) => `${row.studentName} (${row.admissionNo || ""})` },
-    { key: "admissionNo", label: "Adm No" },
+    { key: "studentName", label: "Student", strong: true },
+    { key: "admissionNo", label: "Admission Number" },
     { key: "routeName", label: "Transit Route" },
     { key: "pickupPointName", label: "Pickup Point" },
     { key: "vehicleNumber", label: "Assigned Vehicle" },
@@ -2408,10 +2439,10 @@ export default function TransportPage() {
                   No vehicle trip activity recorded today.
                 </div>
               ) : (
-                trips.map((trip) => {
+                trips.map((trip, tripIndex) => {
                   const assignment = findAssignment(trip.assignmentId);
                   return (
-                    <div key={trip.id} className="cms-transport-trip">
+                    <div key={`${trip.id}-${trip.tripDate}-${trip.tripType}-${tripIndex}`} className="cms-transport-trip">
                       <span className="cms-transport-trip-info">
                         <strong>{trip.vehicleNumber}</strong>
                         <small>{trip.routeName} - {trip.tripType}</small>
@@ -2439,10 +2470,10 @@ export default function TransportPage() {
               {vehicles.length === 0 ? (
                 <p className="cms-transport-empty" style={{ margin: "1rem 0" }}>No vehicles registered yet.</p>
               ) : (
-                vehicles.map((vehicle) => {
+                vehicles.map((vehicle, vehicleIndex) => {
                   const { assigned, capacity, percent } = getVehicleOccupancy(vehicle);
                   return (
-                    <div key={vehicle.id}>
+                    <div key={`${vehicle.id}-${vehicleIndex}`}>
                       <span><strong>{vehicle.vehicleNumber} ({vehicle.vehicleType})</strong><small>{assigned} / {capacity} Seats ({percent}%)</small></span>
                       <div className="cms-transport-progress"><i style={{ width: `${Math.min(percent, 100)}%` }} /></div>
                     </div>
@@ -2460,10 +2491,10 @@ export default function TransportPage() {
               {routes.length === 0 ? (
                 <p className="cms-transport-empty" style={{ margin: "1rem 0" }}>No transport routes registered yet.</p>
               ) : (
-                routes.map((route) => {
+                routes.map((route, routeIndex) => {
                   const students = studentAssignments.filter((student) => student.routeId === route.id && student.status === "Active").length;
                   return (
-                    <div key={route.id}>
+                    <div key={`${route.id}-${routeIndex}`}>
                       <span>
                         <strong>{route.routeName}</strong>
                         <small>{route.routeCode} &bull; {route.totalDistanceKm} KM</small>
@@ -2487,8 +2518,8 @@ export default function TransportPage() {
           No active GPS vehicle tracking telemetry available.
         </div>
       ) : (
-        gpsSnapshots.map((snapshot) => (
-          <div key={snapshot.id} className="cms-transport-gps-card">
+        gpsSnapshots.map((snapshot, snapshotIndex) => (
+          <div key={`${snapshot.id}-${snapshotIndex}`} className="cms-transport-gps-card">
             <div>
               <strong>{snapshot.vehicleNumber}</strong>
               <StatusBadge value={snapshot.status} />
@@ -2604,24 +2635,35 @@ export default function TransportPage() {
           })
         : activeReportTab === "route-reports"
           ? rawReportRows.map((row) => {
+              const normalizeRoute = (value) => String(value ?? "").trim().toLowerCase();
+              const rowRouteId = row.routeId ?? row.RouteId ?? row.id;
               const route = routes.find((item) =>
-                (row.routeId != null && String(item.id) === String(row.routeId))
-                || (row.routeCode && item.routeCode === row.routeCode)
-                || (row.routeName && item.routeName === row.routeName));
+                (rowRouteId != null && String(item.id) === String(rowRouteId))
+                || (row.routeCode && normalizeRoute(item.routeCode) === normalizeRoute(row.routeCode))
+                || (row.routeName && normalizeRoute(item.routeName) === normalizeRoute(row.routeName)));
               const assignments = vehicleAssignments.filter((item) =>
                 (route?.id != null && String(item.routeId) === String(route.id))
-                || (row.routeId != null && String(item.routeId) === String(row.routeId))
-                || (row.routeName && item.routeName === row.routeName));
+                || (rowRouteId != null && String(item.routeId) === String(rowRouteId))
+                || (row.routeName && normalizeRoute(item.routeName) === normalizeRoute(row.routeName)));
               const activeAssignments = assignments.filter((item) => item.status === "Active" || item.status === true);
               const applicableAssignments = activeAssignments.length ? activeAssignments : assignments;
               const assignedBuses = [...new Set(applicableAssignments.map((item) =>
                 item.vehicleNumber || findVehicle(item.vehicleId)?.vehicleNumber).filter(Boolean))];
               const assignedDrivers = [...new Set(applicableAssignments.map((item) =>
                 item.driverName || findDriver(item.driverId)?.driverName).filter(Boolean))];
+              const assignedAttendants = [...new Set(applicableAssignments.map((item) =>
+                (item.attendantName !== "Unassigned" ? item.attendantName : "") || findAttendant(item.attendantId)?.attendantName).filter(Boolean))];
+              const routePickupCount = pickupPoints.filter((point) =>
+                (route?.id != null && String(point.routeId) === String(route.id))
+                || (rowRouteId != null && String(point.routeId) === String(rowRouteId))
+                || (row.routeName && normalizeRoute(point.routeName) === normalizeRoute(row.routeName))).length;
               return {
                 ...row,
-                assignedBus: assignedBuses.join(", ") || "-",
-                assignedDriver: assignedDrivers.join(", ") || "-",
+                distanceKm: Number(route?.totalDistanceKm) || Number(row.distanceKm ?? row.DistanceKm ?? row.totalDistanceKm) || 0,
+                totalPickupPoints: routePickupCount || Number(row.totalPickupPoints) || 0,
+                assignedBus: assignedBuses.join(", ") || row.assignedBus || "-",
+                assignedDriver: assignedDrivers.join(", ") || row.assignedDriver || "-",
+                busAttendant: assignedAttendants.join(", ") || row.busAttendant || "-",
               };
             })
       : activeReportTab === "pickup-wise-reports"

@@ -38,9 +38,9 @@ export const FIXED_NUMBER_SERIES = [
       isActive: true,
       allowedTokens: ["{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{BOARD}", "{PROGRAM}", "{AY}"],
     sampleFormats: [
-      { format: "PCTCH{SEQ}", example: "PCTCH0001" },
-      { format: "TCH-{YYYY}-{SEQ}", example: "TCH-2026-0001" },
-      { format: "FAC-{DEPT}-{SEQ}", example: "FAC-MATH-0001" },
+      { format: "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}", example: "26MUB1M0001" },
+      { format: "ROLL-{AY}-{GROUP}-{SEQ}", example: "ROLL-2026-MPC-0001" },
+      { format: "{CAMPUS}-{GROUP}-{SEQ}", example: "MC-MPC-0001" },
     ],
   },
   {

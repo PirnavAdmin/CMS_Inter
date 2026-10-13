@@ -253,8 +253,8 @@ namespace CollegeManagement.API.DTOs.Staff
         // Structured Sub-sections (for nested callers)
         public List<StaffEducationItem> EducationList { get; set; } = new();
         public List<StaffExperienceItem> ExperienceList { get; set; } = new();
-        public List<StaffDocumentItem> DocumentsList { get; set; } = new();
-        public List<StaffDocumentItem> Documents
+        public List<StaffDocumentPayloadItem> DocumentsList { get; set; } = new();
+        public List<StaffDocumentPayloadItem> Documents
         {
             get => DocumentsList;
             set => DocumentsList = value;
@@ -291,7 +291,17 @@ namespace CollegeManagement.API.DTOs.Staff
             get => DepartmentSpecific;
             set => DepartmentSpecific = value;
         }
-        public Dictionary<string, string>? Documents { get; set; }
+        public List<StaffDocumentPayloadItem>? Documents { get; set; }
+    }
+
+    public class StaffDocumentPayloadItem
+    {
+        public string? id { get; set; }
+        public string? type { get; set; }
+        public string? name { get; set; }
+        public string? size { get; set; }
+        public string? url { get; set; }
+        public string? format { get; set; }
     }
 
     public class UpdateStaffPersonalDetailsDto

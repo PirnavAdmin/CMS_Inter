@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => {
           target: apiBaseUrl,
           changeOrigin: true,
           secure: !isHttpsApi ? true : false,
-          agent: isHttpsApi ? new https.Agent({ keepAlive: false, rejectUnauthorized: false }) : undefined,
+          agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
           proxyTimeout: 120000,
           timeout: 120000,
           headers: {

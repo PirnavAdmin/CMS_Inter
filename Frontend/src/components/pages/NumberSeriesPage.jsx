@@ -572,14 +572,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
               Numbering categories are fixed system configurations. You can edit formats, preview next sequence values, and view generation logs.
             </p>
           </div>
-          <button
-            type="button"
-            className="cms-btn cms-btn-primary"
-            onClick={() => setShowAddModal(true)}
-            style={{ alignSelf: "center", marginLeft: "auto", marginRight: "10px" }}
-          >
-            + Add Custom Series
-          </button>
+          
           <button
             type="button"
             className="cms-btn cms-btn-ghost"
@@ -593,7 +586,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
           </button>
         </div>
 
-        {showAddModal && <AddCustomSeriesModal onClose={() => setShowAddModal(false)} onSave={handleCreateCustom} campus={selectedCampus} toast={toast} />}
+        
 
         {/* 4 FIXED CARDS GRID */}
         <div className="ns-card-grid">
@@ -617,32 +610,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                       <div className={`ns-card-badge ${series.isActive ? "" : "ns-card-badge-inactive"}`}>
                         {series.isActive ? "Active" : "Inactive"}
                       </div>
-                      {!series.isActive && (
-                        <button 
-                          className="cms-btn cms-btn-ghost" 
-                          style={{ padding: '4px', color: 'var(--error)' }} 
-                          title="Delete Series"
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to completely delete "${series.name || series.seriesName}"? This action removes the configuration permanently.`)) {
-                              try {
-                                const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
-                                const existingRaw = localStorage.getItem('NumberSeries_Deleted');
-                                let arr = [];
-                                if (existingRaw) arr = JSON.parse(existingRaw);
-                                arr.push(key);
-                                localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
-                                setToast({ message: "Series deleted successfully.", type: "success" });
-                                if (forceSyncLocal) forceSyncLocal();
-                                else onRefresh();
-                              } catch {
-                                setToast({ message: "Unable to update the saved series configuration.", type: "error" });
-                              }
-                            }
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
+                      
                     </div>
                   </div>
 
@@ -1360,31 +1328,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                     Cancel
                   </button>
 
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    style={{ color: "var(--error)" }}
-                    title="Delete Series Permanently"
-                    onClick={() => {
-                      if (window.confirm(`Are you sure you want to completely delete "${series.name || series.seriesName}"?`)) {
-                        try {
-                          const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
-                          const existingRaw = localStorage.getItem('NumberSeries_Deleted');
-                          let arr = [];
-                          if (existingRaw) arr = JSON.parse(existingRaw);
-                          arr.push(key);
-                          localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
-                                                    setToast({ message: "Series deleted successfully.", type: "success" });
-                          if (forceSyncLocal) forceSyncLocal();
-                          setTimeout(() => navigate("/dashboard/settings/number-series"), 50);
-                        } catch {
-                          setToast({ message: "Unable to update the saved series configuration.", type: "error" });
-                        }
-                      }
-                    }}
-                  >
-                    <Trash2 size={16} /> Delete
-                  </button>
+                  
                   <button
                     type="submit"
                     className="cms-btn cms-btn-primary"

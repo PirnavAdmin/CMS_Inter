@@ -1,25 +1,51 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Plus, Paperclip, Upload, Trash2, X, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import "../styles/FacultyReimbursements.css";
-import { MOCK_REIMB } from "../data/facultyMockData.js";
 
 import { useFacultySafe } from "../FacultyContext.jsx";
+import { reimbursementApi } from "@/api/staffApi";
 
 const STATUS_BADGE = {
   Approved: "cms-badge-active",
-  Active: "cms-badge-active",
+  AccountantApproved: "cms-badge-active",
+  AdminVerified: "cms-badge-info",
+  Paid: "cms-badge-success",
   Pending: "cms-badge-warn",
   Rejected: "cms-badge-danger",
 };
 
 export default function FacultyReimbursements() {
   const context = useFacultySafe();
-  const [reimbList, setReimbList] = useState(MOCK_REIMB);
+  const [reimbList, setReimbList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showReimbModal, setShowReimbModal] = useState(false);
   const [reimbForm, setReimbForm] = useState({ type: "Books & Journals", amount: "", desc: "", file: null });
   const [reimbSubmitting, setReimbSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
   const reimbFileInputRef = useRef(null);
+
+  const staffId = context?.profileData?.facultyId || 0; // The FacultyContext maps it to facultyId
+
+  useEffect(() => {
+    fetchReimbursements();
+  }, [staffId]);
+
+  const fetchReimbursements = async () => {
+    if (!staffId) return;
+    try {
+      setLoading(true);
+      // Fetch reimbursements specific to this staff member
+      const res = await reimbursementApi.getAllReimbursements({ staffId });
+      if (res.data?.status) {
+        setReimbList(res.data.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch reimbursements", error);
+      notify("Failed to load reimbursements", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const notify = (text, type = "success") => {
     if (context?.notify) {
@@ -30,28 +56,55 @@ export default function FacultyReimbursements() {
     }
   };
 
-  const submitReimbursement = () => {
+  const submitReimbursement = async () => {
     if (!reimbForm.amount || !reimbForm.desc.trim()) {
       return notify("Please fill amount and description.", "error");
     }
     setReimbSubmitting(true);
-    setTimeout(() => {
-      const item = {
-        id: Date.now(),
-        claimId: `CLM${Date.now().toString().slice(-6)}`,
-        type: reimbForm.type,
-        claimed: Number(reimbForm.amount),
-        approved: 0,
-        date: new Date().toLocaleDateString("en-GB"),
-        status: "Pending",
-        proofName: reimbForm.file?.name || "None",
+    try {
+      const payload = {
+        staffId: staffId,
+        claimCategory: reimbForm.type,
+        claimedAmount: Number(reimbForm.amount),
+        description: reimbForm.desc,
+        campusId: context?.profileData?.campusId || 1
       };
-      setReimbList((p) => [item, ...p]);
-      setShowReimbModal(false);
-      setReimbForm({ type: "Books & Journals", amount: "", desc: "", file: null });
-      notify("Expense claim submitted with proof attachment!");
+
+      const res = await reimbursementApi.createReimbursement(payload);
+      if (res.data?.status) {
+        const newClaim = res.data.data;
+        
+        // Upload proof if file is selected
+        if (reimbForm.file) {
+          try {
+            await reimbursementApi.uploadProofDocument(newClaim.id, reimbForm.file);
+          } catch (uploadErr) {
+            console.error("Failed to upload proof", uploadErr);
+            notify("Claim created, but proof upload failed.", "error");
+          }
+        }
+        
+        notify("Expense claim submitted successfully!");
+        setShowReimbModal(false);
+        setReimbForm({ type: "Books & Journals", amount: "", desc: "", file: null });
+        fetchReimbursements(); // Refresh list
+
+        // Notify Admin tabs
+        const channel = new BroadcastChannel("cms_notifications");
+        channel.postMessage({ type: "NEW_REIMBURSEMENT" });
+        setTimeout(() => channel.close(), 100);
+      }
+    } catch (error) {
+      console.error("Failed to submit claim", error);
+      notify(error.response?.data?.message || "Failed to submit claim", "error");
+    } finally {
       setReimbSubmitting(false);
-    }, 600);
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleDateString("en-GB");
   };
 
   return (
@@ -81,25 +134,41 @@ export default function FacultyReimbursements() {
               </tr>
             </thead>
             <tbody>
-              {reimbList.map((r) => (
-                <tr key={r.id}>
-                  <td className="cms-strong">{r.claimId}</td>
-                  <td>{r.type}</td>
-                  <td>₹{Number(r.claimed || 0).toLocaleString()}</td>
-                  <td style={{ fontWeight: 700 }}>₹{Number(r.approved || 0).toLocaleString()}</td>
-                  <td>{r.date}</td>
-                  <td>
-                    {r.proofName && r.proofName !== "None" ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--cms-primary)" }}>
-                        <Paperclip size={13} /> {r.proofName}
-                      </span>
-                    ) : (
-                      <span style={{ color: "var(--cms-muted)", fontSize: 12 }}>None</span>
-                    )}
+              {loading ? (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: "center", padding: "20px" }}>
+                    <Loader2 size={24} className="spin" style={{ margin: "0 auto", color: "var(--cms-primary)" }} />
                   </td>
-                  <td><span className={`cms-badge ${STATUS_BADGE[r.status] || "cms-badge-warn"}`}>{r.status}</span></td>
                 </tr>
-              ))}
+              ) : reimbList.length === 0 ? (
+                <tr>
+                  <td colSpan="7" style={{ textAlign: "center", padding: "20px", color: "var(--cms-muted)" }}>
+                    No reimbursements found.
+                  </td>
+                </tr>
+              ) : (
+                reimbList.map((r) => (
+                  <tr key={r.id}>
+                    <td className="cms-strong">{r.claimNumber}</td>
+                    <td>{r.claimCategory}</td>
+                    <td>₹{Number(r.claimedAmount || 0).toLocaleString()}</td>
+                    <td style={{ fontWeight: 700 }}>
+                      {r.approvedAmount !== null ? `₹${Number(r.approvedAmount).toLocaleString()}` : "-"}
+                    </td>
+                    <td>{formatDate(r.submittedAt)}</td>
+                    <td>
+                      {r.proofDocumentPath ? (
+                        <a href={`${import.meta.env.VITE_API_URL || "http://localhost:5167"}${r.proofDocumentPath}`} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "var(--cms-primary)", textDecoration: "none" }}>
+                          <Paperclip size={13} /> View Proof
+                        </a>
+                      ) : (
+                        <span style={{ color: "var(--cms-muted)", fontSize: 12 }}>None</span>
+                      )}
+                    </td>
+                    <td><span className={`cms-badge ${STATUS_BADGE[r.status] || "cms-badge-warn"}`}>{r.status}</span></td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

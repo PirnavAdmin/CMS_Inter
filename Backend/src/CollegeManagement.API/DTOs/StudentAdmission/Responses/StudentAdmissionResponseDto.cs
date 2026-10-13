@@ -23,6 +23,7 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public int? CampusId { get; set; } 
         public int? SourceCampusId { get; set; }
         public string? SourceCampusName { get; set; }
+        public bool IsReferral { get; set; }
         public int? AdmittedById { get; set; } 
         public string? AdmittedByName { get; set; }
         public string? CampusName { get; set; }

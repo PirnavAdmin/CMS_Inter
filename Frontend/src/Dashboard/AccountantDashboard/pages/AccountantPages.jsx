@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CalendarCheck, CheckCircle2, Eye, EyeOff, KeyRound, Lock, RefreshCw, Search, User } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, CalendarCheck, Camera, CheckCircle2, Edit3, Eye, EyeOff, KeyRound, Lock, RefreshCw, Save, Search, User, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -240,9 +240,29 @@ export function AccountantReports() {
 }
 
 export function AccountantProfile() {
-  const user = getAuthUser() || {};
-  const name = user.fullName || user.name || "Accountant";
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "AC";
+  const user = useMemo(() => getAuthUser() || {}, []);
+  const requestSeq = useRef(0);
+  const photoObjectUrl = useRef("");
+  const fileInputRef = useRef(null);
+  const [profileState, setProfileState] = useState({
+    loading: true,
+    staffError: "",
+    accountError: "",
+    lookupError: "",
+    photoError: "",
+    staff: null,
+    account: null,
+    lookups: { campuses: [], departments: [], designations: [] },
+  });
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoSuccess, setPhotoSuccess] = useState("");
+  const [photoUploadError, setPhotoUploadError] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState("");
+  const [profileError, setProfileError] = useState("");
+  const [form, setForm] = useState(createEmptyProfileForm());
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -252,15 +272,200 @@ export function AccountantProfile() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const firstName = user.firstName || name.split(/\s+/)[0] || "";
-  const lastName = user.lastName || name.split(/\s+/).slice(1).join(" ");
-  const phone = user.phoneNumber || user.mobile || user.mobileNumber || user.phone || "";
-  const employeeId = user.employeeId || user.staffId || user.userId || user.id || "";
-  const department = user.department || user.departmentName || "Finance";
-  const designation = user.designation || user.designationName || user.role || "Accountant";
-  const campus = user.campus || user.campusName || user.branch || user.branchName || "";
-  const username = user.username || user.userName || user.email || "";
-  const status = user.status || user.accountStatus || (user.isActive === false ? "Inactive" : "Active Account");
+  const staff = profileState.staff;
+  const account = profileState.account;
+  const staffId = getNumericId(readAny(staff, ["id", "Id", "staffId", "StaffId"]));
+  const display = useMemo(() => normalizeAccountantProfile(staff, account, user, profileState.lookups), [staff, account, user, profileState.lookups]);
+  const initials = getInitials(display.fullName || "Accountant");
+
+  const cleanupPhotoUrl = useCallback(() => {
+    if (photoObjectUrl.current) {
+      URL.revokeObjectURL(photoObjectUrl.current);
+      photoObjectUrl.current = "";
+    }
+  }, []);
+
+  const loadPhoto = useCallback(async (targetStaffId, seq = requestSeq.current) => {
+    if (!targetStaffId) return;
+    cleanupPhotoUrl();
+    setPhotoUrl("");
+    setProfileState((state) => ({ ...state, photoError: "" }));
+    try {
+      const response = await apiClient.get(apiEndpoints.faculty.getPhoto(targetStaffId), {
+        responseType: "blob",
+        skipGlobalLoader: true,
+        skipErrorLog: true,
+      });
+      if (seq !== requestSeq.current) return;
+      const type = response?.data?.type || "";
+      if (!response?.data || (type && !type.startsWith("image/"))) throw new Error("Profile photo response was not an image.");
+      const nextUrl = URL.createObjectURL(response.data);
+      photoObjectUrl.current = nextUrl;
+      setPhotoUrl(nextUrl);
+    } catch (error) {
+      if (seq !== requestSeq.current) return;
+      setProfileState((state) => ({ ...state, photoError: getApiErrorMessage(error) || "Unable to load profile photo." }));
+    }
+  }, [cleanupPhotoUrl]);
+
+  const loadProfile = useCallback(async () => {
+    const seq = requestSeq.current + 1;
+    requestSeq.current = seq;
+    cleanupPhotoUrl();
+    setPhotoUrl("");
+    setPhotoSuccess("");
+    setPhotoUploadError("");
+    setProfileSuccess("");
+    setProfileError("");
+    setProfileState((state) => ({ ...state, loading: true, staffError: "", accountError: "", lookupError: "", photoError: "" }));
+
+    const sessionIdentity = getSessionIdentity(user);
+    const accountPromise = sessionIdentity.userId
+      ? apiClient.get(apiEndpoints.auth.userById(sessionIdentity.userId), { skipErrorLog: true }).then((response) => unwrapApiData(response.data))
+      : Promise.resolve(null);
+    const lookupsPromise = Promise.allSettled([
+      apiClient.get(apiEndpoints.campuses.list, { params: { isActive: true }, skipErrorLog: true }).then((response) => getRows(response.data)),
+      apiClient.get(apiEndpoints.faculty.lookupDepartments, { params: { staffType: "Non-Teaching" }, skipErrorLog: true }).then((response) => getRows(response.data)),
+      apiClient.get(apiEndpoints.faculty.lookupDesignations, { params: { staffType: "Non-Teaching" }, skipErrorLog: true }).then((response) => getRows(response.data)),
+    ]);
+    const initialStaffPromise = sessionIdentity.staffIdentifier
+      ? loadStaffByIdentifier(sessionIdentity.staffIdentifier)
+      : Promise.resolve(null);
+
+    const [accountResult, initialStaffResult, lookupResults] = await Promise.allSettled([accountPromise, initialStaffPromise, lookupsPromise]);
+    if (seq !== requestSeq.current) return;
+
+    const accountData = accountResult.status === "fulfilled" ? accountResult.value : null;
+    const accountIdentity = getSessionIdentity(accountData || {});
+    const staffIdentifier = sessionIdentity.staffIdentifier || accountIdentity.staffIdentifier;
+    let staffData = initialStaffResult.status === "fulfilled" ? initialStaffResult.value : null;
+    let staffError = initialStaffResult.status === "rejected" ? getApiErrorMessage(initialStaffResult.reason) : "";
+
+    if (!staffData && !sessionIdentity.staffIdentifier && staffIdentifier) {
+      try {
+        staffData = await loadStaffByIdentifier(staffIdentifier);
+      } catch (error) {
+        staffError = getApiErrorMessage(error);
+      }
+    }
+
+    const lookups = lookupResults.status === "fulfilled" ? {
+      campuses: lookupResults.value[0].status === "fulfilled" ? lookupResults.value[0].value : [],
+      departments: lookupResults.value[1].status === "fulfilled" ? lookupResults.value[1].value : [],
+      designations: lookupResults.value[2].status === "fulfilled" ? lookupResults.value[2].value : [],
+    } : { campuses: [], departments: [], designations: [] };
+    const lookupError = lookupResults.status === "rejected" || lookupResults.value?.some((result) => result.status === "rejected")
+      ? "Some profile labels could not be resolved from lookup APIs."
+      : "";
+    const accountError = accountResult.status === "rejected" ? getApiErrorMessage(accountResult.reason) : "";
+    if (!staffIdentifier && !staffData) staffError = "This session does not include a staff ID or employee identifier for the signed-in accountant.";
+
+    setProfileState({
+      loading: false,
+      staffError,
+      accountError,
+      lookupError,
+      photoError: "",
+      staff: staffData,
+      account: accountData,
+      lookups,
+    });
+    setForm(createProfileForm(staffData));
+    setEditing(false);
+    const loadedStaffId = getNumericId(readAny(staffData, ["id", "Id", "staffId", "StaffId"]));
+    if (loadedStaffId) loadPhoto(loadedStaffId, seq);
+  }, [cleanupPhotoUrl, loadPhoto, user]);
+
+  useEffect(() => {
+    loadProfile();
+    return () => {
+      requestSeq.current += 1;
+      cleanupPhotoUrl();
+    };
+  }, [cleanupPhotoUrl, loadProfile]);
+
+  const handleProfileChange = (field) => (event) => {
+    setProfileSuccess("");
+    setProfileError("");
+    setForm((current) => ({ ...current, [field]: event.target.value }));
+  };
+
+  const handleCancelProfile = () => {
+    setForm(createProfileForm(staff));
+    setEditing(false);
+    setProfileError("");
+    setProfileSuccess("");
+  };
+
+  const handleSaveProfile = async (event) => {
+    event.preventDefault();
+    setProfileError("");
+    setProfileSuccess("");
+    if (!staffId) {
+      setProfileError("Staff profile ID is required before saving.");
+      return;
+    }
+    const validation = validateProfileForm(form);
+    if (validation) {
+      setProfileError(validation);
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const payload = buildStaffUpdatePayload(staff, form);
+      const payloadError = validateStaffUpdatePayload(payload);
+      if (payloadError) {
+        setProfileError(payloadError);
+        return;
+      }
+      const response = await apiClient.put(apiEndpoints.faculty.update(staffId), payload);
+      const updated = await loadStaffByIdentifier(staffId).catch(() => unwrapApiData(response.data));
+      setProfileState((state) => ({ ...state, staff: updated, staffError: "" }));
+      setForm(createProfileForm(updated));
+      setEditing(false);
+      setProfileSuccess("Profile details updated successfully.");
+    } catch (error) {
+      setProfileError(getApiErrorMessage(error) || "Failed to update profile details.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handlePhotoSelect = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setPhotoSuccess("");
+    setPhotoUploadError("");
+    if (!file) return;
+    if (!staffId) {
+      setPhotoUploadError("Staff profile ID is required before uploading a photo.");
+      return;
+    }
+    const extension = `.${String(file.name || "").split(".").pop() || ""}`.toLowerCase();
+    if (![".jpg", ".jpeg", ".png"].includes(extension) || !["image/jpeg", "image/png"].includes(file.type)) {
+      setPhotoUploadError("Only JPEG and PNG photos are accepted.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoUploadError("Photo size must be 5 MB or smaller.");
+      return;
+    }
+    const formData = new FormData();
+    formData.append("StaffId", String(staffId));
+    formData.append("Photo", file);
+    setPhotoUploading(true);
+    try {
+      await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData);
+      setPhotoSuccess("Profile photo updated successfully.");
+      await loadPhoto(staffId);
+      const updatedStaff = await loadStaffByIdentifier(staffId).catch(() => null);
+      if (updatedStaff) setProfileState((state) => ({ ...state, staff: updatedStaff }));
+    } catch (error) {
+      setPhotoUploadError(getApiErrorMessage(error) || "Failed to upload profile photo.");
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const handleUpdatePassword = async (event) => {
     event.preventDefault();
@@ -280,13 +485,13 @@ export function AccountantProfile() {
     }
     setPasswordLoading(true);
     try {
-      await apiClient.post(apiEndpoints.auth.changePassword, { currentPassword, newPassword, confirmPassword });
+      await apiClient.post(apiEndpoints.auth.changePassword, { oldPassword: currentPassword, newPassword, confirmNewPassword: confirmPassword });
       setPasswordSuccess("Password updated successfully.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (error) {
-      setPasswordError(error?.response?.data?.message || error?.response?.data?.title || error.message || "Failed to update password.");
+      setPasswordError(getApiErrorMessage(error) || "Failed to update password.");
     } finally {
       setPasswordLoading(false);
     }
@@ -302,43 +507,68 @@ export function AccountantProfile() {
               <span className="admin-profile-title-icon"><User size={20} /></span>
               <h2>Basic Details &amp; Profile Setup</h2>
             </div>
-            <span className="admin-role-badge">{user.role || "Accountant"}</span>
+            <div className="accountant-profile-actions">
+              <span className="admin-role-badge">{display.role || "Accountant"}</span>
+              {staff ? (
+                editing ? <>
+                  <button type="button" className="sp-btn" onClick={handleCancelProfile} disabled={savingProfile}><X size={14} /> Cancel</button>
+                  <button type="submit" form="accountantProfileForm" className="sp-btn primary" disabled={savingProfile}><Save size={14} /> {savingProfile ? "Saving..." : "Save"}</button>
+                </> : (
+                  <button type="button" className="sp-btn" onClick={() => setEditing(true)}><Edit3 size={14} /> Edit</button>
+                )
+              ) : null}
+            </div>
           </div>
+
+          {profileState.loading ? <div className="sp-api-state">Loading accountant profile...</div> : null}
+          {profileState.staffError ? <ProfileNotice type="error" message={profileState.staffError} onRetry={loadProfile} /> : null}
+          {profileState.accountError ? <ProfileNotice type="warning" message={`Account details could not be loaded. ${profileState.accountError}`} /> : null}
+          {profileState.lookupError ? <ProfileNotice type="warning" message={profileState.lookupError} /> : null}
+          {profileState.photoError && !photoUrl ? <ProfileNotice type="warning" message={profileState.photoError} /> : null}
+          {profileSuccess ? <div className="admin-feedback-msg success"><CheckCircle2 size={16} /> {profileSuccess}</div> : null}
+          {profileError ? <div className="admin-feedback-msg error"><AlertCircle size={16} /> {profileError}</div> : null}
 
           <div className="admin-photo-section">
             <label className="admin-photo-label">Profile Photo</label>
             <div className="admin-photo-content">
               <div className="admin-avatar-wrapper">
-                {user.photo || user.profilePhoto || user.avatar ? (
-                  <img src={user.photo || user.profilePhoto || user.avatar} alt="Accountant Profile" className="admin-avatar-img" />
+                {photoUrl ? (
+                  <img src={photoUrl} alt="Accountant Profile" className="admin-avatar-img" />
                 ) : (
                   <div className="admin-avatar-placeholder accountant-avatar-initials">{initials}</div>
                 )}
               </div>
               <div className="admin-photo-actions">
-                <strong>{name}</strong>
-                <p className="admin-photo-hint">{user.email || "Email not available"}</p>
+                <strong>{display.fullName || "Accountant"}</strong>
+                <p className="admin-photo-hint">{display.email || "Email not available"}</p>
+                <div className="accountant-photo-controls">
+                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" className="accountant-hidden-file" onChange={handlePhotoSelect} />
+                  <button type="button" className="sp-btn" disabled={!staffId || photoUploading} onClick={() => fileInputRef.current?.click()}><Camera size={14} /> {photoUploading ? "Uploading..." : "Replace Photo"}</button>
+                  <small>JPEG or PNG, up to 5 MB.</small>
+                </div>
+                {photoSuccess ? <div className="admin-feedback-msg success"><CheckCircle2 size={16} /> {photoSuccess}</div> : null}
+                {photoUploadError ? <div className="admin-feedback-msg error"><AlertCircle size={16} /> {photoUploadError}</div> : null}
               </div>
             </div>
           </div>
 
-          <div className="admin-profile-form-grid">
-            <ReadOnlyField label="Full Name" value={name} />
-            <ReadOnlyField label="First Name" value={firstName} />
-            <ReadOnlyField label="Last Name" value={lastName} />
-            <ReadOnlyField label="Email Address" value={user.email} />
-            <ReadOnlyField label="Contact Phone Number" value={phone} />
-            <ReadOnlyField label="Employee / Staff ID" value={employeeId} />
-            <ReadOnlyField label="Department" value={department} />
-            <ReadOnlyField label="Designation" value={designation} />
-            <ReadOnlyField label="Campus / Branch Assignment" value={campus} />
-            <ReadOnlyField label="Username" value={username} />
-            <ReadOnlyField label="Assigned Role" value={user.role || "Accountant"} />
+          <form id="accountantProfileForm" onSubmit={handleSaveProfile} className="admin-profile-form-grid">
+            <ReadOnlyField label="Full Name" value={display.fullName} />
+            <ProfileField label="First Name" value={form.firstName} editing={editing} onChange={handleProfileChange("firstName")} required />
+            <ProfileField label="Last Name" value={form.lastName} editing={editing} onChange={handleProfileChange("lastName")} required />
+            <ProfileField label="Email Address" type="email" value={form.email} editing={editing} onChange={handleProfileChange("email")} />
+            <ProfileField label="Contact Phone Number" value={form.mobile} editing={editing} onChange={handleProfileChange("mobile")} required />
+            <ReadOnlyField label="Employee / Staff ID" value={display.employeeId} />
+            <ReadOnlyField label="Department" value={display.department} />
+            <ReadOnlyField label="Designation" value={display.designation} />
+            <ReadOnlyField label="Campus / Branch Assignment" value={display.campus} />
+            <ReadOnlyField label="Username" value={display.username} />
+            <ReadOnlyField label="Assigned Role" value={display.role} />
             <div className="admin-form-group">
               <label>Account Status</label>
-              <div className="admin-status-box"><span className="admin-status-dot" /> {status}</div>
+              <div className="admin-status-box"><span className="admin-status-dot" /> {display.status || "Not available"}</div>
             </div>
-          </div>
+          </form>
         </div>
 
         <div className="admin-security-card">
@@ -366,6 +596,223 @@ export function AccountantProfile() {
       </div>
     </div>
   </>;
+}
+
+const unwrapApiData = (payload) => payload?.data ?? payload?.Data ?? payload;
+
+const readAny = (source, keys, fallback = "") => {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+  }
+  return fallback;
+};
+
+const getNumericId = (value) => {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+};
+
+const getInitials = (name) => String(name || "")
+  .split(/\s+/)
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((part) => part[0])
+  .join("")
+  .toUpperCase() || "AC";
+
+const getSessionIdentity = (source = {}) => {
+  const staffId = getNumericId(readAny(source, ["staffId", "StaffId", "staffID", "StaffID"]));
+  const employeeId = String(readAny(source, ["employeeId", "EmployeeId", "employeeCode", "EmployeeCode"])).trim();
+  const userId = getNumericId(readAny(source, ["id", "Id", "userId", "UserId"]));
+  return {
+    userId,
+    staffId,
+    employeeId: employeeId || "",
+    staffIdentifier: staffId || employeeId || "",
+  };
+};
+
+const loadStaffByIdentifier = async (identifier) => {
+  const response = Number.isInteger(Number(identifier)) && Number(identifier) > 0
+    ? await apiClient.get(apiEndpoints.faculty.getById(Number(identifier)), { skipErrorLog: true })
+    : await apiClient.get(apiEndpoints.faculty.getProfileByIdentifier(identifier), { skipErrorLog: true });
+  return unwrapApiData(response.data);
+};
+
+const labelFromLookup = (items, id, name, idKeys, nameKeys) => {
+  const normalizedId = id !== undefined && id !== null && id !== "" ? String(id) : "";
+  const normalizedName = String(name || "").trim().toLowerCase();
+  const match = (items || []).find((item) => {
+    const itemId = String(readAny(item, idKeys, ""));
+    const itemName = String(readAny(item, nameKeys, "")).trim().toLowerCase();
+    return (normalizedId && itemId === normalizedId) || (normalizedName && itemName === normalizedName);
+  });
+  return readAny(match, nameKeys, name) || name || "";
+};
+
+const normalizeAccountantProfile = (staff, account, sessionUser, lookups) => {
+  const firstName = readAny(staff, ["firstName", "FirstName"]);
+  const middleName = readAny(staff, ["middleName", "MiddleName"]);
+  const lastName = readAny(staff, ["lastName", "LastName"]);
+  const staffName = [firstName, middleName, lastName].filter(Boolean).join(" ").trim();
+  const fullName = staffName || readAny(account, ["fullName", "FullName", "name", "Name"]) || readAny(sessionUser, ["fullName", "name"], "Accountant");
+  const campusId = readAny(staff, ["campusId", "CampusId"]);
+  const departmentId = readAny(staff, ["departmentId", "DepartmentId"]);
+  const designationId = readAny(staff, ["designationId", "DesignationId"]);
+  const staffStatus = readAny(staff, ["status", "Status"]);
+  const accountStatus = readAny(account, ["status", "Status", "accountStatus", "AccountStatus"]);
+  const isActive = readAny(account, ["isActive", "IsActive"], undefined);
+  return {
+    fullName,
+    email: readAny(staff, ["email", "Email"]) || readAny(account, ["email", "Email"]) || readAny(sessionUser, ["email"]),
+    mobile: readAny(staff, ["mobile", "Mobile", "phoneNumber", "PhoneNumber"]) || readAny(sessionUser, ["mobile", "phone"]),
+    employeeId: readAny(staff, ["employeeId", "EmployeeId"]) || readAny(sessionUser, ["employeeId"]),
+    department: labelFromLookup(lookups.departments, departmentId, readAny(staff, ["department", "Department"]), ["id", "Id", "departmentId", "DepartmentId"], ["name", "Name", "departmentName", "DepartmentName"]),
+    designation: labelFromLookup(lookups.designations, designationId, readAny(staff, ["designation", "Designation"]), ["id", "Id", "designationId", "DesignationId"], ["name", "Name", "designationName", "DesignationName"]),
+    campus: labelFromLookup(lookups.campuses, campusId, readAny(staff, ["campusName", "CampusName", "campus", "Campus"]), ["id", "Id", "campusId", "CampusId"], ["name", "Name", "campusName", "CampusName"]),
+    username: readAny(account, ["username", "Username", "userName", "UserName", "email", "Email"]) || readAny(sessionUser, ["username", "userName", "email"]),
+    role: readAny(account, ["role", "Role", "roleName", "RoleName"]) || readAny(sessionUser, ["role"], "Accountant"),
+    status: accountStatus || (isActive === false ? "Inactive" : staffStatus || (isActive === true ? "Active" : "")),
+  };
+};
+
+const createEmptyProfileForm = () => ({ firstName: "", lastName: "", email: "", mobile: "" });
+
+const createProfileForm = (staff) => ({
+  firstName: String(readAny(staff, ["firstName", "FirstName"])),
+  lastName: String(readAny(staff, ["lastName", "LastName"])),
+  email: String(readAny(staff, ["email", "Email"])),
+  mobile: String(readAny(staff, ["mobile", "Mobile"])),
+});
+
+const validateProfileForm = (form) => {
+  if (!form.firstName.trim()) return "First name is required.";
+  if (!form.lastName.trim()) return "Last name is required.";
+  if (!form.mobile.trim()) return "Mobile number is required.";
+  if (!/^[0-9+\-\s]{7,15}$/.test(form.mobile.trim())) return "Mobile number must be a valid contact format.";
+  if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Please provide a valid email address.";
+  return "";
+};
+
+const staffValue = (staff, keys, fallback = undefined) => {
+  const value = readAny(staff, keys, "");
+  return value === "" ? fallback : value;
+};
+
+const nestedStaffValue = (staff, path, fallback = null) => {
+  let value = staff;
+  for (const key of path) value = value?.[key];
+  return value === undefined || value === null || value === "" ? fallback : value;
+};
+
+const normalizeDateForPayload = (value) => {
+  if (!value) return value;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+};
+
+const buildStaffUpdatePayload = (staff, form) => ({
+  firstName: form.firstName.trim(),
+  middleName: staffValue(staff, ["middleName", "MiddleName"], null),
+  lastName: form.lastName.trim(),
+  fatherOrHusbandName: staffValue(staff, ["fatherOrHusbandName", "FatherOrHusbandName", "guardianName", "GuardianName"], null),
+  gender: staffValue(staff, ["gender", "Gender"], ""),
+  dateOfBirth: normalizeDateForPayload(staffValue(staff, ["dateOfBirth", "DateOfBirth"], null)),
+  maritalStatus: staffValue(staff, ["maritalStatus", "MaritalStatus"], null),
+  nationality: staffValue(staff, ["nationality", "Nationality"], "Indian"),
+  aadhaar: staffValue(staff, ["aadhaar", "Aadhaar"], null),
+  panNumber: staffValue(staff, ["panNumber", "PanNumber", "pan", "Pan"], null),
+  mobile: form.mobile.trim(),
+  alternateMobile: staffValue(staff, ["alternateMobile", "AlternateMobile"], null),
+  email: form.email.trim() || null,
+  bloodGroup: staffValue(staff, ["bloodGroup", "BloodGroup"], null),
+  currentAddress: staffValue(staff, ["currentAddress", "CurrentAddress"], null),
+  permanentAddress: staffValue(staff, ["permanentAddress", "PermanentAddress"], null),
+  city: staffValue(staff, ["city", "City"], null),
+  district: staffValue(staff, ["district", "District"], null),
+  state: staffValue(staff, ["state", "State"], null),
+  pincode: staffValue(staff, ["pincode", "Pincode", "pin", "Pin"], null),
+  country: staffValue(staff, ["country", "Country"], "India"),
+  qualification: staffValue(staff, ["qualification", "Qualification"], null),
+  designation: staffValue(staff, ["designation", "Designation"], null),
+  designationId: staffValue(staff, ["designationId", "DesignationId"], null),
+  staffType: staffValue(staff, ["staffType", "StaffType", "facultyType", "FacultyType"], "Non-Teaching"),
+  departmentId: staffValue(staff, ["departmentId", "DepartmentId"], null),
+  department: staffValue(staff, ["department", "Department"], null),
+  campusId: staffValue(staff, ["campusId", "CampusId"], null),
+  campusName: staffValue(staff, ["campusName", "CampusName"], null),
+  assignedCampusIds: staffValue(staff, ["assignedCampusIds", "AssignedCampusIds"], []),
+  boardId: staffValue(staff, ["boardId", "BoardId"], null),
+  boardCode: staffValue(staff, ["boardCode", "BoardCode"], null),
+  boardName: staffValue(staff, ["boardName", "BoardName"], null),
+  assignedBoardIds: staffValue(staff, ["assignedBoardIds", "AssignedBoardIds"], []),
+  joiningDate: normalizeDateForPayload(staffValue(staff, ["joiningDate", "JoiningDate", "dateOfJoining", "DateOfJoining"], null)),
+  experience: Number(staffValue(staff, ["experience", "Experience"], 0)) || 0,
+  employmentType: staffValue(staff, ["employmentType", "EmploymentType"], "Full Time"),
+  status: staffValue(staff, ["status", "Status"], "Active"),
+  photoPath: staffValue(staff, ["photoPath", "PhotoPath"], null),
+  profileStatus: staffValue(staff, ["profileStatus", "ProfileStatus"], null),
+  profileCompletionPercentage: staffValue(staff, ["profileCompletionPercentage", "ProfileCompletionPercentage"], null),
+  correctionNotes: staffValue(staff, ["correctionNotes", "CorrectionNotes"], null),
+  allocatedSubjects: staffValue(staff, ["allocatedSubjects", "AllocatedSubjects", "subjects", "Subjects"], []),
+  bankName: staffValue(staff, ["bankName", "BankName"], nestedStaffValue(staff, ["bankDetails", "bankName"], nestedStaffValue(staff, ["BankDetails", "BankName"]))),
+  accountHolder: staffValue(staff, ["accountHolder", "AccountHolder", "accountHolderName", "AccountHolderName"], nestedStaffValue(staff, ["bankDetails", "accountHolderName"], nestedStaffValue(staff, ["BankDetails", "AccountHolderName"]))),
+  accountNumber: staffValue(staff, ["accountNumber", "AccountNumber"], nestedStaffValue(staff, ["bankDetails", "accountNumber"], nestedStaffValue(staff, ["BankDetails", "AccountNumber"]))),
+  ifsc: staffValue(staff, ["ifsc", "Ifsc", "ifscCode", "IfscCode"], nestedStaffValue(staff, ["bankDetails", "ifscCode"], nestedStaffValue(staff, ["BankDetails", "IfscCode"]))),
+  branch: staffValue(staff, ["branch", "Branch"], nestedStaffValue(staff, ["bankDetails", "branch"], nestedStaffValue(staff, ["BankDetails", "Branch"]))),
+  accountType: staffValue(staff, ["accountType", "AccountType"], nestedStaffValue(staff, ["bankDetails", "accountType"], nestedStaffValue(staff, ["BankDetails", "AccountType"]))),
+  emergencyName: staffValue(staff, ["emergencyName", "EmergencyName", "contactName", "ContactName"], nestedStaffValue(staff, ["emergencyContact", "contactName"], nestedStaffValue(staff, ["EmergencyContact", "ContactName"]))),
+  emergencyRelationship: staffValue(staff, ["emergencyRelationship", "EmergencyRelationship", "relationship", "Relationship"], nestedStaffValue(staff, ["emergencyContact", "relationship"], nestedStaffValue(staff, ["EmergencyContact", "Relationship"]))),
+  emergencyMobile: staffValue(staff, ["emergencyMobile", "EmergencyMobile"], nestedStaffValue(staff, ["emergencyContact", "mobile"], nestedStaffValue(staff, ["EmergencyContact", "Mobile"]))),
+  emergencyAlternate: staffValue(staff, ["emergencyAlternate", "EmergencyAlternate"], nestedStaffValue(staff, ["emergencyContact", "alternateMobile"], nestedStaffValue(staff, ["EmergencyContact", "AlternateMobile"]))),
+  emergencyAddress: staffValue(staff, ["emergencyAddress", "EmergencyAddress"], nestedStaffValue(staff, ["emergencyContact", "address"], nestedStaffValue(staff, ["EmergencyContact", "Address"]))),
+  highestQualification: staffValue(staff, ["highestQualification", "HighestQualification"], null),
+  university: staffValue(staff, ["university", "University"], null),
+  specialization: staffValue(staff, ["specialization", "Specialization"], null),
+  passingYear: staffValue(staff, ["passingYear", "PassingYear"], null),
+  percentage: staffValue(staff, ["percentage", "Percentage"], null),
+  totalExperience: staffValue(staff, ["totalExperience", "TotalExperience"], null),
+  previousInstitution: staffValue(staff, ["previousInstitution", "PreviousInstitution"], null),
+  previousDesignation: staffValue(staff, ["previousDesignation", "PreviousDesignation"], null),
+  experienceFrom: staffValue(staff, ["experienceFrom", "ExperienceFrom"], null),
+  experienceTo: staffValue(staff, ["experienceTo", "ExperienceTo"], null),
+  educationJson: staffValue(staff, ["educationJson", "EducationJson"], null),
+  experienceJson: staffValue(staff, ["experienceJson", "ExperienceJson"], null),
+  documentsJson: staffValue(staff, ["documentsJson", "DocumentsJson"], null),
+  bankDetailsJson: staffValue(staff, ["bankDetailsJson", "BankDetailsJson"], null),
+  emergencyContactJson: staffValue(staff, ["emergencyContactJson", "EmergencyContactJson"], null),
+  departmentSpecificJson: staffValue(staff, ["departmentSpecificJson", "DepartmentSpecificJson"], null),
+  departmentSpecific: staffValue(staff, ["departmentSpecific", "DepartmentSpecific"], null),
+  documents: staffValue(staff, ["documentsMap", "DocumentsMap"], null),
+});
+
+const validateStaffUpdatePayload = (payload) => {
+  if (!payload.firstName) return "First name is required.";
+  if (!payload.lastName) return "Last name is required.";
+  if (!payload.mobile) return "Mobile number is required.";
+  if (!payload.gender) return "Cannot save because the backend staff record is missing gender.";
+  if (!payload.dateOfBirth) return "Cannot save because the backend staff record is missing date of birth.";
+  return "";
+};
+
+function ProfileNotice({ type = "warning", message, onRetry }) {
+  return (
+    <div className={`admin-feedback-msg ${type === "error" ? "error" : "accountant-warning"}`}>
+      <AlertCircle size={16} />
+      <span>{message}</span>
+      {onRetry ? <button type="button" className="sp-btn" onClick={onRetry}><RefreshCw size={14} /> Retry</button> : null}
+    </div>
+  );
+}
+
+function ProfileField({ label, value, editing, onChange, type = "text", required = false }) {
+  return (
+    <div className="admin-form-group">
+      <label>{label}</label>
+      <input className="admin-input" type={type} value={editing ? value : value || "Not available"} onChange={onChange} readOnly={!editing} disabled={!editing} required={required} />
+    </div>
+  );
 }
 
 function ReadOnlyField({ label, value }) {

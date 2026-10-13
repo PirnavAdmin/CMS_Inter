@@ -46,7 +46,7 @@ export const NAV_ITEMS = [
   { id: "marks", label: "Marks Entry", icon: marksEvaluationIcon, group: "ACADEMICS" },
   { id: "examduties", label: "Exam Duties", icon: examinationIcon, group: "ACADEMICS" },
   { id: "myattendance", label: "My Attendance", icon: generatedSidebarIcons.staffAttendance, group: "HR & FINANCE" },
-  { id: "leave", label: "Faculty Leave", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
+  { id: "leave", label: "Staff Leave", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
   { id: "salary", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll, group: "HR & FINANCE" },
   { id: "reimbursements", label: "Reimbursements", icon: feeManagementIcon, group: "HR & FINANCE" },
   { id: "holidays", label: "Holidays", icon: holidayManagementIcon, group: "HR & FINANCE" },

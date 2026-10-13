@@ -108,34 +108,24 @@ public class FeeService : IFeeService
     public Task<FeeReportResponse> GetMonthlyReportAsync(int? campusId, int? year, int? month) { if (year.HasValue && (year < 2000 || year > 2100)) throw new ArgumentException("Invalid year."); if (month.HasValue && (month < 1 || month > 12)) throw new ArgumentException("Invalid month."); return _repo.GetMonthlyReportAsync(campusId, year, month); }
 
     // ---------------- Fee Transition & Lifecycle Helpers ----------------
-    public async Task<FeeStructureResponse?> GetMatchingFeeStructureAsync(int? campusId, int boardId, int academicYearId, int? academicLevelId, int groupId, int? programId = null)
+    private static FeeStructureResponse MapFeeStructureResponse(FeeStructure match)
     {
-        var query = _context.FeeStructures
-            .AsNoTracking()
-            .Include(f => f.Board)
-            .Include(f => f.AcademicYear)
-            .Include(f => f.Group)
-            .Include(f => f.Program)
-            .Include(f => f.Campus)
-            .Include(f => f.Components.Where(c => c.IsActive))
-                .ThenInclude(c => c.FeeType)
-            .Where(f => f.IsActive && f.BoardId == boardId && f.AcademicYearId == academicYearId && f.GroupId == groupId);
-
-        if (academicLevelId.HasValue && academicLevelId.Value > 0)
+        var rawName = match.StructureName;
+        var programName = match.Program?.ProgramName;
+        var groupName = match.Group?.GroupName ?? "Group";
+        string formattedName;
+        if (string.IsNullOrWhiteSpace(rawName))
         {
-            query = query.Where(f => f.AcademicLevelId == academicLevelId.Value);
+            formattedName = !string.IsNullOrWhiteSpace(programName)
+                ? $"Fee Structure - {groupName} ({programName})"
+                : $"Fee Structure - {groupName}";
         }
-
-        var list = await query.ToListAsync();
-        if (!list.Any()) return null;
-
-        var match = list.FirstOrDefault(f => (programId.HasValue && f.ProgramId == programId.Value) && (campusId.HasValue && f.CampusId == campusId.Value))
-                 ?? list.FirstOrDefault(f => (programId.HasValue && f.ProgramId == programId.Value) && f.CampusId == null)
-                 ?? list.FirstOrDefault(f => f.ProgramId == null && (campusId.HasValue && f.CampusId == campusId.Value))
-                 ?? list.FirstOrDefault(f => f.ProgramId == null && f.CampusId == null)
-                 ?? list.FirstOrDefault();
-
-        if (match == null) return null;
+        else
+        {
+            formattedName = (!string.IsNullOrWhiteSpace(programName) && !rawName.Contains(programName, StringComparison.OrdinalIgnoreCase))
+                ? $"{rawName} ({programName})"
+                : rawName;
+        }
 
         return new FeeStructureResponse
         {
@@ -147,10 +137,10 @@ public class FeeService : IFeeService
             AcademicYearId = match.AcademicYearId,
             AcademicYearName = match.AcademicYear?.AcademicYearName ?? string.Empty,
             GroupId = match.GroupId,
-            GroupName = match.Group?.GroupName ?? string.Empty,
+            GroupName = groupName,
             ProgramId = match.ProgramId,
-            ProgramName = match.Program?.ProgramName,
-            StructureName = match.StructureName,
+            ProgramName = programName,
+            StructureName = formattedName,
             TotalAmount = match.Components.Where(c => c.IsActive).Sum(c => c.Amount),
             IsActive = match.IsActive,
             CreatedAt = match.CreatedAt,
@@ -167,6 +157,32 @@ public class FeeService : IFeeService
                 IsActive = c.IsActive
             }).ToList()
         };
+    }
+
+    public async Task<FeeStructureResponse?> GetMatchingFeeStructureAsync(int? campusId, int boardId, int academicYearId, int? academicLevelId, int groupId, int? programId = null)
+    {
+        var candidates = await _context.FeeStructures
+            .AsNoTracking()
+            .Include(f => f.Board)
+            .Include(f => f.AcademicYear)
+            .Include(f => f.Group)
+            .Include(f => f.Program)
+            .Include(f => f.Campus)
+            .Include(f => f.Components.Where(c => c.IsActive))
+                .ThenInclude(c => c.FeeType)
+            .Where(f => f.IsActive && (boardId <= 0 || f.BoardId == boardId) && f.GroupId == groupId)
+            .ToListAsync();
+
+        if (!candidates.Any()) return null;
+
+        var bestMatch = candidates
+            .OrderByDescending(f => programId.HasValue && f.ProgramId == programId.Value ? 100 : (f.ProgramId == null ? 10 : 0))
+            .ThenByDescending(f => f.AcademicYearId == academicYearId ? 50 : 0)
+            .ThenByDescending(f => academicLevelId.HasValue && f.AcademicLevelId == academicLevelId.Value ? 30 : (f.AcademicLevelId == 0 ? 10 : 0))
+            .ThenByDescending(f => campusId.HasValue && f.CampusId == campusId.Value ? 20 : (f.CampusId == null ? 10 : 0))
+            .FirstOrDefault();
+
+        return bestMatch == null ? null : MapFeeStructureResponse(bestMatch);
     }
 
     public async Task<PromotionFeePreviewResponse> PreviewPromotionFeeAsync(PromotionFeePreviewRequest request)
@@ -189,12 +205,31 @@ public class FeeService : IFeeService
             request.TargetGroupId,
             request.TargetProgramId);
 
+        var candidateStructures = await _context.FeeStructures
+            .AsNoTracking()
+            .Include(f => f.Board)
+            .Include(f => f.AcademicYear)
+            .Include(f => f.Group)
+            .Include(f => f.Program)
+            .Include(f => f.Campus)
+            .Include(f => f.Components.Where(c => c.IsActive))
+                .ThenInclude(c => c.FeeType)
+            .Where(f => f.IsActive && (effectiveBoardId <= 0 || f.BoardId == effectiveBoardId) && f.GroupId == request.TargetGroupId)
+            .ToListAsync();
+
+        var availableFeeStructures = candidateStructures
+            .OrderByDescending(f => request.TargetProgramId.HasValue && f.ProgramId == request.TargetProgramId.Value ? 100 : (f.ProgramId == null ? 10 : 0))
+            .ThenByDescending(f => f.AcademicYearId == request.TargetAcademicYearId ? 50 : 0)
+            .Select(MapFeeStructureResponse)
+            .ToList();
+
         var response = new PromotionFeePreviewResponse
         {
             FeeStructureId = match?.FeeStructureId,
             StructureName = match?.StructureName,
             TotalAmount = match?.TotalAmount ?? 0,
             Components = match?.Items ?? new List<FeeStructureItemResponse>(),
+            AvailableFeeStructures = availableFeeStructures,
             StudentsCount = request.StudentIds?.Count ?? 0
         };
 

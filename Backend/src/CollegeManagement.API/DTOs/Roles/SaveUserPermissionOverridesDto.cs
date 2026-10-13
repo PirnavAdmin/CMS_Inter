@@ -69,7 +69,9 @@ namespace CollegeManagement.API.DTOs.Roles
                 { "library", "Library" },
                 { "placement", "Placement" },
                 { "settings", "Settings" },
-                { "roles-permissions", "Roles & Permissions" }
+                { "roles-permissions", "Roles & Permissions" },
+                { "inventory-management", "Inventory Management" },
+                { "inventory", "Inventory Management" }
             };
 
             return map.TryGetValue(clean, out var subModule) ? subModule : moduleId;

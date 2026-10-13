@@ -274,12 +274,17 @@ namespace CollegeManagement.API.Repositories.Implementations
             return result == 1;
         }
 
-        public async Task<bool> HasPermissionAsync(int userId, string permissionCode)
+        public async Task<bool> HasModulePermissionAsync(int userId, string moduleIdentifier, string action)
         {
             var conn = await GetOpenConnectionAsync();
             var result = await conn.ExecuteScalarAsync<int?>(
-                "sp_CheckUserPermission",
-                new { p_UserId = userId, p_PermissionCode = permissionCode },
+                "sp_CheckUserModuleAction",
+                new
+                {
+                    p_UserId = userId,
+                    p_ModuleIdentifier = moduleIdentifier,
+                    p_Action = action ?? "View"
+                },
                 commandType: CommandType.StoredProcedure);
 
             return result == 1;

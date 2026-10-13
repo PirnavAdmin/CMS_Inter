@@ -83,7 +83,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            return result;
+            return result ?? new PromotionExecutionResponse();
         }
 
         public Task<IEnumerable<PromotionHistoryDto>> GetHistoryAsync(PromotionHistoryQuery query) => _repository.GetHistoryAsync(query);
@@ -171,7 +171,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            return response;
+            return response ?? new AllocationResponse();
         }
 
         public Task<AllocationResponse> AllocateSectionAsync(SectionAllocationRequest request)
