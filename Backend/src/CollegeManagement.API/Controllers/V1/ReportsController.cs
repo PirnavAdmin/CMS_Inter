@@ -13,6 +13,8 @@ using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1;
 
 [ApiController]
@@ -20,6 +22,7 @@ namespace CollegeManagement.API.Controllers.V1;
 [Route("api/v{version:apiVersion}/reports")]
 [EnableCors("AllowFrontend")]
 [Authorize]
+[RequirePermission("reports-analytics")]
 [Produces("application/json")]
 public class ReportsController : ControllerBase
 {

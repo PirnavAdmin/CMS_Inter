@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Marks;
+using CollegeManagement.API.DTOs.Marks;
 using FluentValidation;
 
 namespace CollegeManagement.API.Validators.MarksValidators
@@ -49,6 +49,12 @@ namespace CollegeManagement.API.Validators.MarksValidators
 
             RuleFor(x => x.TheoryMarks)
                 .GreaterThanOrEqualTo(0).WithMessage("Theory marks cannot be negative.");
+
+            RuleFor(x => x.TotalMarks)
+                .GreaterThanOrEqualTo(0).When(x => x.TotalMarks.HasValue).WithMessage("Total marks cannot be negative.");
+
+            RuleFor(x => x.ObtainedMarks)
+                .GreaterThanOrEqualTo(0).When(x => x.ObtainedMarks.HasValue).WithMessage("Obtained marks cannot be negative.");
 
             RuleFor(x => x.PassingMarks)
                 .GreaterThanOrEqualTo(0).WithMessage("Passing marks cannot be negative.");

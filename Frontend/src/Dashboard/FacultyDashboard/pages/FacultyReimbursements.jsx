@@ -73,7 +73,7 @@ export default function FacultyReimbursements() {
       const res = await reimbursementApi.createReimbursement(payload);
       if (res.data?.status) {
         const newClaim = res.data.data;
-
+        
         // Upload proof if file is selected
         if (reimbForm.file) {
           try {
@@ -83,7 +83,7 @@ export default function FacultyReimbursements() {
             notify("Claim created, but proof upload failed.", "error");
           }
         }
-
+        
         notify("Expense claim submitted successfully!");
         setShowReimbModal(false);
         setReimbForm({ type: "Books & Journals", amount: "", desc: "", file: null });

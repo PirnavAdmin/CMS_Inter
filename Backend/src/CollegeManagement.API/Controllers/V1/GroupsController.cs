@@ -1,4 +1,5 @@
 using CollegeManagement.API.DTOs.Groups;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,8 +11,8 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/groups")]
-    [AllowAnonymous]
     [Authorize]
+    [RequirePermission("group-management")]
     public class GroupsController : ControllerBase
     {
         private readonly IGroupRepository _groupRepository;
@@ -47,6 +48,7 @@ namespace CollegeManagement.API.Controllers
         // =========================================================
 
         [HttpGet("dropdown")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetDropdown()
         {
             return Ok(

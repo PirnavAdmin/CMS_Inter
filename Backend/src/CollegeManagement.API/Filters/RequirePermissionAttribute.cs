@@ -17,11 +17,19 @@ namespace CollegeManagement.API.Filters
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
     public class RequirePermissionAttribute : TypeFilterAttribute
     {
-        public RequirePermissionAttribute(string module, string action = "View") 
+        public RequirePermissionAttribute(string module, string action = "auto") 
             : base(typeof(RequirePermissionFilter))
         {
             Arguments = new object[] { module, action };
         }
+    }
+
+    /// <summary>
+    /// Attribute to bypass RequirePermission authorization checks for specific actions within a protected controller.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
+    public class BypassPermissionAttribute : Attribute
+    {
     }
 
     public class RequirePermissionFilter : IAsyncAuthorizationFilter
@@ -38,13 +46,20 @@ namespace CollegeManagement.API.Filters
             ILogger<RequirePermissionFilter> logger)
         {
             _module = module ?? throw new ArgumentNullException(nameof(module));
-            _action = action ?? "View";
+            _action = string.IsNullOrWhiteSpace(action) ? "auto" : action;
             _permissionRepository = permissionRepository ?? throw new ArgumentNullException(nameof(permissionRepository));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
+            // AllowAnonymous or BypassPermission check
+            if (context.ActionDescriptor.EndpointMetadata.OfType<Microsoft.AspNetCore.Authorization.IAllowAnonymous>().Any()
+                || context.ActionDescriptor.EndpointMetadata.OfType<BypassPermissionAttribute>().Any())
+            {
+                return;
+            }
+
             // 1. Check if user is authenticated
             if (context.HttpContext.User?.Identity?.IsAuthenticated != true)
             {
@@ -60,8 +75,8 @@ namespace CollegeManagement.API.Filters
                 return;
             }
 
-            // 2. Unrestricted bypass for platform Super Admin
-            if (context.HttpContext.User.IsInRole("Super Admin"))
+            // 2. Unrestricted bypass for platform Super Admin and Admin
+            if (context.HttpContext.User.IsInRole("Super Admin") || context.HttpContext.User.IsInRole("Admin"))
             {
                 return;
             }
@@ -69,7 +84,8 @@ namespace CollegeManagement.API.Filters
             // 3. Extract User ID
             var userIdClaim = context.HttpContext.User.FindFirst("UserId")
                            ?? context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)
-                           ?? context.HttpContext.User.FindFirst(JwtRegisteredClaimNames.Sub);
+                           ?? context.HttpContext.User.FindFirst(JwtRegisteredClaimNames.Sub)
+                           ?? context.HttpContext.User.FindFirst("sub");
 
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId) || userId <= 0)
             {
@@ -85,20 +101,45 @@ namespace CollegeManagement.API.Filters
                 return;
             }
 
+            // Resolve action: if "auto", map based on HTTP method and path
+            string resolvedAction = _action;
+            if (string.IsNullOrWhiteSpace(resolvedAction) || resolvedAction.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            {
+                var httpMethod = context.HttpContext.Request.Method.ToUpperInvariant();
+                var path = context.HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "";
+
+                // Endpoints that use POST for searching/filtering/exporting/readiness are viewing operations
+                if (httpMethod == "POST" && (path.EndsWith("/search") || path.EndsWith("/filter") || path.EndsWith("/export") || path.EndsWith("/dropdown") || path.EndsWith("/readiness") || path.EndsWith("/preview")))
+                {
+                    resolvedAction = "view";
+                }
+                else
+                {
+                    resolvedAction = httpMethod switch
+                    {
+                        "GET" or "HEAD" => "view",
+                        "POST" => "create",
+                        "PUT" or "PATCH" => "edit",
+                        "DELETE" => "delete",
+                        _ => "view"
+                    };
+                }
+            }
+
             try
             {
                 // 4. Verify permission in DB: User -> Role -> RoleModules -> Permissions (with User Overrides)
-                bool hasPermission = await _permissionRepository.HasModulePermissionAsync(userId, _module, _action);
+                bool hasPermission = await _permissionRepository.HasModulePermissionAsync(userId, _module, resolvedAction);
                 if (!hasPermission)
                 {
-                    _logger.LogWarning("Forbidden: User {UserId} denied '{Action}' on module '{Module}'.", userId, _action, _module);
+                    _logger.LogWarning("Forbidden: User {UserId} denied '{Action}' on module '{Module}'.", userId, resolvedAction, _module);
                     context.Result = new ObjectResult(new
                     {
                         statusCode = StatusCodes.Status403Forbidden,
                         success = false,
-                        message = $"Access denied. You do not have '{_action}' permission for module '{_module}'.",
+                        message = $"Access denied. You do not have '{resolvedAction}' permission for module '{_module}'.",
                         module = _module,
-                        action = _action
+                        action = resolvedAction
                     })
                     {
                         StatusCode = StatusCodes.Status403Forbidden

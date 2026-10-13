@@ -18,12 +18,15 @@ using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/students")]
     [Authorize]
+    [RequirePermission("student-management")]
     public class StudentsController : ControllerBase
     {
         private readonly IStudentService _service;
@@ -529,6 +532,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpGet("my-children")]
         [Authorize(Roles = "Parent")]
+        [BypassPermission]
         public async Task<IActionResult> GetMyChildren()
         {
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -558,6 +562,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("{studentId:int}/dashboard")]
         [Authorize(Roles = "Admin,Teacher,Student,Parent")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
+        [BypassPermission]
         public async Task<IActionResult> GetDashboard(int studentId)
         {
             var dashboard = await _service.GetDashboardAsync(studentId);
