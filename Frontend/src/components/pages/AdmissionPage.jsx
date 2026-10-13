@@ -3086,7 +3086,6 @@ export default function AdmissionPage() {
   const fileInputRefs = useRef({});
   const committedAdmissionRef = useRef(null);
   const submitInFlightRef = useRef(false);
-  const allocatedAdmissionNumbersRef = useRef(new Map());
   const stepNavRef = useRef(null);
   const stepButtonRefs = useRef({});
   const persistTimerRef = useRef(null);
@@ -3190,17 +3189,18 @@ export default function AdmissionPage() {
     selectedCampusValue ? { campusId: selectedCampusValue } : {}
   ), [selectedCampusValue]);
   const admissionNumberPayload = useMemo(() => ({
-    campusId: toNullableNumberId(selectedCampusValue),
+    campusId: toNullableNumberId(values.campus || selectedCampusValue),
     boardId: toNullableNumberId(values.board || selectedContextBoardValue),
     academicYearId: toNullableNumberId(values.year || selectedContextYearValue),
   }), [
+    values.campus,
     values.board,
     values.year,
     selectedCampusValue,
     selectedContextBoardValue,
     selectedContextYearValue,
   ]);
-  const canRequestAdmissionNumber = !isReferral && Number.isInteger(admissionNumberPayload.campusId) && admissionNumberPayload.campusId > 0;
+  const canRequestAdmissionNumber = !isReferral && Boolean(admissionNumberPayload.campusId && admissionNumberPayload.boardId && admissionNumberPayload.academicYearId);
   const admittedBySelectedLabel = admissionStaffLabel({
     employeeId: values.admittedByEmployeeId,
     fullName: values.admittedByEmployeeName,
@@ -3214,27 +3214,18 @@ export default function AdmissionPage() {
       .filter((option) => shouldShowAll || option.searchText.includes(query));
   }, [admittedByDisplayValue, admittedBySelectedLabel, admittedByStaffOptions]);
 
-  const requestAdmissionNumber = useCallback(async () => {
+  const previewAdmissionNumber = useCallback(async () => {
     if (!canRequestAdmissionNumber) return "";
-    const key = JSON.stringify(admissionNumberPayload);
-    if (allocatedAdmissionNumbersRef.current.has(key)) return allocatedAdmissionNumbersRef.current.get(key);
-    // Reuse an allocation for this draft, including concurrent effect/submission calls.
-    const allocation = apiClient.post(apiEndpoints.admissions.generateNumber, null, {
-      params: { ...admissionNumberPayload, isReferral: false },
-      headers: { "X-Campus-Id": String(admissionNumberPayload.campusId) },
-    }).then((response) => {
-      const data = response.data?.data ?? response.data?.Data ?? response.data;
-      const admissionNumber = typeof data === "string"
-        ? data
-        : read(data, "generatedNumber", "GeneratedNumber", "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo", "number", "Number", "livePreview", "LivePreview");
-      if (!admissionNumber) throw new Error("Admission number allocation is unavailable. Please try again.");
-      return String(admissionNumber);
-    }).catch((error) => {
-      if (allocatedAdmissionNumbersRef.current.get(key) === allocation) allocatedAdmissionNumbersRef.current.delete(key);
-      throw error;
-    });
-    allocatedAdmissionNumbersRef.current.set(key, allocation);
-    return allocation;
+    const response = await apiClient.post(
+      apiEndpoints.admissions.previewNumber,
+      admissionNumberPayload,
+    );
+    const data = response.data?.data ?? response.data?.Data ?? response.data;
+    const admissionNumber = typeof data === "string"
+      ? data
+      : read(data, "generatedNumber", "GeneratedNumber", "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo", "number", "Number", "livePreview", "LivePreview");
+    if (!admissionNumber) throw new Error("Admission number preview is unavailable. The final number will be assigned on submission.");
+    return String(admissionNumber);
   }, [admissionNumberPayload, canRequestAdmissionNumber]);
   const loadAdmittedByStaffOptions = useCallback(() => {
     setAdmittedByDropdownOpen(true);
@@ -3487,8 +3478,8 @@ export default function AdmissionPage() {
         placeholder: isReferral ? "Assigned by target campus on approval" : admissionNumberLoading ? "Fetching preview..." : "Will be generated automatically",
         helperText: isReferral ? "Assigned by target campus on approval."
           : admissionNumberLoading ? "Fetching next available number..."
-          : admissionNumberError ? admissionNumberError
-          : "Pre-allocated admission number.",
+          : admissionNumberError ? "Preview unavailable. Confirmed upon saving."
+          : "Projected sequence number. Confirmed upon saving.",
       };
     }
     if (field.name === "dob") return { ...field, max: yesterdayISO() };
@@ -4257,7 +4248,7 @@ export default function AdmissionPage() {
     setAdmissionNumberLoading(true);
     setValues((current) => current.admissionNo ? { ...current, admissionNo: "" } : current);
 
-    requestAdmissionNumber()
+    previewAdmissionNumber()
       .then((response) => {
         if (ignore || submitInFlightRef.current || committedAdmissionRef.current) return;
         if (response) setValues((currentValues) => ({ ...currentValues, admissionNo: response }));
@@ -4274,7 +4265,7 @@ export default function AdmissionPage() {
     return () => {
       ignore = true;
     };
-  }, [admissionNumberPreviewVersion, canRequestAdmissionNumber, editingAdmissionId, requestAdmissionNumber, viewMode]);
+  }, [admissionNumberPreviewVersion, canRequestAdmissionNumber, editingAdmissionId, previewAdmissionNumber, viewMode]);
 
   useEffect(() => {
     if (!isReferral) return;
@@ -5079,7 +5070,6 @@ export default function AdmissionPage() {
   };
 
   const resetAdmissionDraftState = () => {
-    allocatedAdmissionNumbersRef.current.clear();
     suppressPersistRef.current = true;
     clearAdmissionDraft();
     committedAdmissionRef.current = null;
@@ -5106,7 +5096,6 @@ export default function AdmissionPage() {
   };
 
   const clearAdmissionForm = () => {
-    allocatedAdmissionNumbersRef.current.clear();
     setAdmissionNumberPreviewVersion((current) => current + 1);
     suppressPersistRef.current = true;
     clearAdmissionDraft();
@@ -5534,19 +5523,14 @@ export default function AdmissionPage() {
     let admissionWriteCompleted = false;
     let submittedAdmissionNo = isReferral || !isUpdate ? "" : submitValues.admissionNo || values.admissionNo;
     try {
-      if (!isUpdate && !isReferral) {
-        const admissionNo = submitValues.admissionNo || await requestAdmissionNumber();
-        if (!admissionNo) throw new Error("Select the current campus before submitting the admission.");
-        submitValues = { ...submitValues, admissionNo };
-        submittedAdmissionNo = admissionNo;
-        setValues((current) => ({ ...current, admissionNo }));
-      }
       if (!isUpdate) submitValues = mapAdmissionReferral(submitValues, selectedCampusValue, isReferral, targetCampusId, campusOptions);
       const endpoint = isUpdate
         ? apiEndpoints.admissions.update(submitAdmissionId)
         : apiEndpoints.admissions.create;
       const method = isUpdate ? "put" : "post";
       const formData = buildAdmissionFormData(submitValues, { includeFee: !isCrossCampusAdmission });
+      // A preview is never an allocated number; creation uses the server's sequence.
+      if (!isUpdate) formData.delete("AdmissionNo");
       if (isUpdate) {
         formData.delete("CampusId");
         formData.delete("IsReferral");
@@ -5628,7 +5612,7 @@ export default function AdmissionPage() {
       return;
     }
 
-    setToast(isReferral ? `Referral request submitted successfully to ${campusOptions.find((campus) => String(campus.value) === String(targetCampusId))?.label || "Target Campus"}.`
+    setToast(isReferral ? "Referral submitted to the target campus."
       : isCrossCampusAdmission
       ? `Admission request ${submittedAdmissionNo} submitted successfully.`
       : `Admission ${submittedAdmissionNo} ${isUpdate ? "updated" : "submitted"} successfully.`);

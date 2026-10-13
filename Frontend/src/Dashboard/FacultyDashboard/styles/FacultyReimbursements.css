@@ -1,0 +1,811 @@
+/* ============================================================
+   Faculty Reimbursement Styles
+   Imports core Reimbursement Page styles & integrates with Faculty Dashboard
+   Theme-aware styling for Light & Dark modes with compact KPI cards
+   ============================================================ */
+@import "../../../components/pages/ReimbursementPage.css";
+
+.faculty-reimb-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Faculty Reimbursement Page Header */
+.faculty-reimb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.faculty-reimb-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.faculty-reimb-header-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--cms-surface, #f4f7ed);
+  border: 1px solid var(--cms-border, #dce4d2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.faculty-reimb-header-icon img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.faculty-reimb-header-title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.faculty-reimb-header-sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--cms-muted, #64748b);
+}
+
+/* ---------- Toolbar & Tabs (Matching Third Reference - Marks Entry Style) ---------- */
+.reimb-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.reimb-role-toggle,
+.reimb-role-toggle.cms-tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  width: max-content;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.reimb-role-toggle .reimb-toggle-btn,
+.reimb-role-toggle button {
+  border: 1.5px solid rgba(111, 132, 0, 0.35);
+  border-radius: 10px;
+  padding: 7px 18px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-muted, #555e54);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: none;
+}
+
+.reimb-role-toggle .reimb-toggle-btn:hover:not(.is-active):not(.active),
+.reimb-role-toggle button:hover:not(.is-active):not(.active) {
+  color: var(--cms-text, #171a17);
+  background: var(--cms-primary-soft, rgba(111, 132, 0, 0.08));
+  border-color: var(--cms-primary, #6f8400);
+}
+
+.reimb-role-toggle .reimb-toggle-btn.is-active,
+.reimb-role-toggle .reimb-toggle-btn.active,
+.reimb-role-toggle button.active {
+  background: var(--cms-primary, #6f8400) !important;
+  border-color: var(--cms-primary, #6f8400) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.28);
+}
+
+/* Refresh Icon Button */
+.reimb-btn-icon {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #dce4d2);
+  color: var(--cms-muted, #556052);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.reimb-btn-icon:hover {
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary, #6f8400);
+  border-color: var(--cms-primary, #6f8400);
+}
+
+/* ---------- Compact Summary KPI Cards Grid ---------- */
+.reimb-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1024px) {
+  .reimb-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .reimb-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.reimb-kpi-card {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px rgba(16, 32, 60, 0.04);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.reimb-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 32, 60, 0.08);
+}
+
+.reimb-kpi-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reimb-kpi-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cms-muted, #7b8275);
+}
+
+.reimb-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+  line-height: 1.2;
+}
+
+.reimb-kpi-sub {
+  font-size: 11px;
+  color: var(--cms-muted, #7b8275);
+  margin-top: 1px;
+}
+
+.reimb-kpi-icon-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.reimb-kpi-icon-wrap svg {
+  width: 18px;
+  height: 18px;
+}
+
+.reimb-kpi-icon-wrap img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+/* Backward compatibility classes for existing modals & chips */
+.faculty-reimbursement-modal {
+  width: min(580px, calc(100vw - 32px)) !important;
+  max-width: 580px !important;
+  max-height: calc(100vh - 100px) !important;
+}
+
+.faculty-reimbursement-modal .cms-modal-head {
+  padding: 12px 18px;
+}
+
+.faculty-reimbursement-modal .cms-modal-head h3 {
+  font-size: 15px;
+}
+
+.faculty-reimbursement-modal .cms-modal-body {
+  padding: 14px 18px;
+}
+
+.faculty-reimbursement-modal .faculty-reimbursement-form {
+  gap: 10px 14px;
+}
+
+.faculty-reimbursement-modal .cms-field {
+  gap: 4px;
+}
+
+.faculty-reimbursement-modal .cms-field label {
+  min-height: 17px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.faculty-reimbursement-modal .cms-field input,
+.faculty-reimbursement-modal .cms-field select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.faculty-reimbursement-modal .cms-field textarea {
+  min-height: 68px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.faculty-reimbursement-modal .sp-proof-upload-box {
+  min-height: 68px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.faculty-reimbursement-modal .sp-proof-upload-box>div {
+  min-width: 0;
+}
+
+.faculty-reimbursement-modal .sp-proof-upload-box>div span {
+  font-size: 11.5px !important;
+  line-height: 1.35;
+}
+
+.faculty-reimbursement-modal .cms-modal-foot {
+  padding: 10px 18px;
+  gap: 8px;
+}
+
+.faculty-reimbursement-modal .cms-modal-foot .cms-btn {
+  min-height: 40px;
+  padding: 9px 15px;
+  font-size: 12.5px;
+}
+
+@media (max-width: 600px) {
+  .faculty-reimbursement-modal .faculty-reimbursement-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sp-proof-upload-box {
+  border: 1.5px dashed var(--cms-border, #E6E9EE);
+  background: var(--cms-subtle, #f9fafb);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.sp-proof-upload-box:hover {
+  border-color: var(--cms-primary, #6F8400);
+  background: var(--cms-primary-soft, #f7faed);
+}
+
+.sp-proof-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #E6E9EE);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cms-text, #10203c);
+}
+
+.sp-proof-upload {
+  border: 1.5px dashed var(--cms-border, #E6E9EE);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  background: var(--cms-bg, #ffffff);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.sp-proof-upload:hover {
+  border-color: var(--cms-primary, #6F8400);
+}
+
+.sp-proof-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--cms-surface, #fff);
+  border: 1px solid var(--cms-border, #E6E9EE);
+  border-radius: 8px;
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+
+/* ============================================================
+   Dark Mode Theme Overrides
+   ============================================================ */
+
+/* Header */
+[data-theme="dark"] .faculty-reimb-header-title,
+:root[data-theme="dark"] .faculty-reimb-header-title,
+.dark-theme .faculty-reimb-header-title {
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .faculty-reimb-header-sub,
+:root[data-theme="dark"] .faculty-reimb-header-sub,
+.dark-theme .faculty-reimb-header-sub {
+  color: var(--cms-muted, #aab5a2) !important;
+}
+
+[data-theme="dark"] .faculty-reimb-header-icon,
+:root[data-theme="dark"] .faculty-reimb-header-icon,
+.dark-theme .faculty-reimb-header-icon {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Toolbar & Tab Buttons */
+[data-theme="dark"] .reimb-role-toggle .reimb-toggle-btn,
+:root[data-theme="dark"] .reimb-role-toggle .reimb-toggle-btn,
+.dark-theme .reimb-role-toggle .reimb-toggle-btn,
+[data-theme="dark"] .reimb-role-toggle button,
+:root[data-theme="dark"] .reimb-role-toggle button,
+.dark-theme .reimb-role-toggle button {
+  border: 1.5px solid rgba(135, 157, 25, 0.45) !important;
+  background: var(--cms-surface, #1b2119) !important;
+  color: var(--cms-muted, #949c8f) !important;
+}
+
+[data-theme="dark"] .reimb-role-toggle .reimb-toggle-btn:hover:not(.is-active):not(.active),
+:root[data-theme="dark"] .reimb-role-toggle .reimb-toggle-btn:hover:not(.is-active):not(.active),
+.dark-theme .reimb-role-toggle .reimb-toggle-btn:hover:not(.is-active):not(.active),
+[data-theme="dark"] .reimb-role-toggle button:hover:not(.is-active):not(.active),
+:root[data-theme="dark"] .reimb-role-toggle button:hover:not(.is-active):not(.active),
+.dark-theme .reimb-role-toggle button:hover:not(.is-active):not(.active) {
+  color: var(--cms-text, #e8ece1) !important;
+  background: var(--cms-primary-soft, rgba(135, 157, 25, 0.14)) !important;
+  border-color: var(--cms-primary, #879d19) !important;
+}
+
+[data-theme="dark"] .reimb-role-toggle .reimb-toggle-btn.is-active,
+:root[data-theme="dark"] .reimb-role-toggle .reimb-toggle-btn.is-active,
+.dark-theme .reimb-role-toggle .reimb-toggle-btn.is-active,
+[data-theme="dark"] .reimb-role-toggle .reimb-toggle-btn.active,
+:root[data-theme="dark"] .reimb-role-toggle .reimb-toggle-btn.active,
+.dark-theme .reimb-role-toggle .reimb-toggle-btn.active,
+[data-theme="dark"] .reimb-role-toggle button.active,
+:root[data-theme="dark"] .reimb-role-toggle button.active,
+.dark-theme .reimb-role-toggle button.active {
+  background: var(--cms-primary, #879d19) !important;
+  border-color: var(--cms-primary, #879d19) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(135, 157, 25, 0.38) !important;
+}
+
+[data-theme="dark"] .reimb-btn-icon,
+:root[data-theme="dark"] .reimb-btn-icon,
+.dark-theme .reimb-btn-icon {
+  background: var(--cms-surface, #1b2119) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: var(--cms-muted, #aab5a2) !important;
+}
+
+[data-theme="dark"] .reimb-btn-icon:hover,
+:root[data-theme="dark"] .reimb-btn-icon:hover,
+.dark-theme .reimb-btn-icon:hover {
+  background: rgba(135, 157, 25, 0.15) !important;
+  color: #edf2e7 !important;
+  border-color: var(--cms-primary, #879d19) !important;
+}
+
+/* KPI Cards */
+[data-theme="dark"] .reimb-kpi-card,
+:root[data-theme="dark"] .reimb-kpi-card,
+.dark-theme .reimb-kpi-card {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+}
+
+[data-theme="dark"] .reimb-kpi-card:hover,
+:root[data-theme="dark"] .reimb-kpi-card:hover,
+.dark-theme .reimb-kpi-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
+}
+
+[data-theme="dark"] .reimb-kpi-label,
+:root[data-theme="dark"] .reimb-kpi-label,
+.dark-theme .reimb-kpi-label {
+  color: var(--cms-muted, #aab5a2) !important;
+}
+
+[data-theme="dark"] .reimb-kpi-value,
+:root[data-theme="dark"] .reimb-kpi-value,
+.dark-theme .reimb-kpi-value {
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-kpi-sub,
+:root[data-theme="dark"] .reimb-kpi-sub,
+.dark-theme .reimb-kpi-sub {
+  color: var(--cms-muted, #8f9d86) !important;
+}
+
+[data-theme="dark"] .reimb-kpi-card.total .reimb-kpi-icon-wrap,
+:root[data-theme="dark"] .reimb-kpi-card.total .reimb-kpi-icon-wrap,
+.dark-theme .reimb-kpi-card.total .reimb-kpi-icon-wrap {
+  background: rgba(111, 132, 0, 0.2) !important;
+  color: #a3b832 !important;
+}
+
+[data-theme="dark"] .reimb-kpi-card.pending .reimb-kpi-icon-wrap,
+:root[data-theme="dark"] .reimb-kpi-card.pending .reimb-kpi-icon-wrap,
+.dark-theme .reimb-kpi-card.pending .reimb-kpi-icon-wrap {
+  background: rgba(245, 158, 11, 0.18) !important;
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .reimb-kpi-card.approved .reimb-kpi-icon-wrap,
+:root[data-theme="dark"] .reimb-kpi-card.approved .reimb-kpi-icon-wrap,
+.dark-theme .reimb-kpi-card.approved .reimb-kpi-icon-wrap {
+  background: rgba(16, 185, 129, 0.18) !important;
+  color: #34d399 !important;
+}
+
+[data-theme="dark"] .reimb-kpi-card.rejected .reimb-kpi-icon-wrap,
+:root[data-theme="dark"] .reimb-kpi-card.rejected .reimb-kpi-icon-wrap,
+.dark-theme .reimb-kpi-card.rejected .reimb-kpi-icon-wrap {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #f87171 !important;
+}
+
+/* Claim Submission Form */
+[data-theme="dark"] .reimb-form-card,
+:root[data-theme="dark"] .reimb-form-card,
+.dark-theme .reimb-form-card {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-theme="dark"] .reimb-form-header,
+:root[data-theme="dark"] .reimb-form-header,
+.dark-theme .reimb-form-header {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .reimb-form-title-group h2,
+:root[data-theme="dark"] .reimb-form-title-group h2,
+.dark-theme .reimb-form-title-group h2 {
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-form-title-group p,
+:root[data-theme="dark"] .reimb-form-title-group p,
+.dark-theme .reimb-form-title-group p {
+  color: var(--cms-muted, #aab5a2) !important;
+}
+
+[data-theme="dark"] .reimb-section-card,
+:root[data-theme="dark"] .reimb-section-card,
+.dark-theme .reimb-section-card {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .reimb-section-heading,
+:root[data-theme="dark"] .reimb-section-heading,
+.dark-theme .reimb-section-heading {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .reimb-section-heading h3,
+:root[data-theme="dark"] .reimb-section-heading h3,
+.dark-theme .reimb-section-heading h3 {
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-auth-tag,
+:root[data-theme="dark"] .reimb-auth-tag,
+.dark-theme .reimb-auth-tag {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  color: #34d399 !important;
+}
+
+[data-theme="dark"] .reimb-admin-notice,
+:root[data-theme="dark"] .reimb-admin-notice,
+.dark-theme .reimb-admin-notice {
+  background: rgba(111, 132, 0, 0.1) !important;
+  border-color: rgba(111, 132, 0, 0.25) !important;
+  color: #edf2e7 !important;
+}
+
+[data-theme="dark"] .reimb-field label,
+:root[data-theme="dark"] .reimb-field label,
+.dark-theme .reimb-field label {
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-input,
+:root[data-theme="dark"] .reimb-input,
+.dark-theme .reimb-input,
+[data-theme="dark"] .reimb-select,
+:root[data-theme="dark"] .reimb-select,
+.dark-theme .reimb-select,
+[data-theme="dark"] .reimb-textarea,
+:root[data-theme="dark"] .reimb-textarea,
+.dark-theme .reimb-textarea {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-input:focus,
+:root[data-theme="dark"] .reimb-input:focus,
+.dark-theme .reimb-input:focus,
+[data-theme="dark"] .reimb-select:focus,
+:root[data-theme="dark"] .reimb-select:focus,
+.dark-theme .reimb-select:focus,
+[data-theme="dark"] .reimb-textarea:focus,
+:root[data-theme="dark"] .reimb-textarea:focus,
+.dark-theme .reimb-textarea:focus {
+  border-color: var(--cms-primary, #879d19) !important;
+  box-shadow: 0 0 0 3px rgba(135, 157, 25, 0.2) !important;
+}
+
+[data-theme="dark"] .reimb-select option,
+:root[data-theme="dark"] .reimb-select option,
+.dark-theme .reimb-select option {
+  background: #1a2318 !important;
+  color: #edf2e7 !important;
+}
+
+[data-theme="dark"] .reimb-input.is-readonly,
+:root[data-theme="dark"] .reimb-input.is-readonly,
+.dark-theme .reimb-input.is-readonly {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--cms-muted, #aab5a2) !important;
+}
+
+[data-theme="dark"] .reimb-upload-box,
+:root[data-theme="dark"] .reimb-upload-box,
+.dark-theme .reimb-upload-box,
+[data-theme="dark"] .sp-proof-upload,
+:root[data-theme="dark"] .sp-proof-upload,
+.dark-theme .sp-proof-upload,
+[data-theme="dark"] .sp-proof-upload-box,
+:root[data-theme="dark"] .sp-proof-upload-box,
+.dark-theme .sp-proof-upload-box {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-upload-box:hover,
+:root[data-theme="dark"] .reimb-upload-box:hover,
+.dark-theme .reimb-upload-box:hover,
+[data-theme="dark"] .sp-proof-upload:hover,
+:root[data-theme="dark"] .sp-proof-upload:hover,
+.dark-theme .sp-proof-upload:hover {
+  border-color: var(--cms-primary, #879d19) !important;
+  background: rgba(135, 157, 25, 0.1) !important;
+}
+
+[data-theme="dark"] .reimb-uploaded-file-card,
+:root[data-theme="dark"] .reimb-uploaded-file-card,
+.dark-theme .reimb-uploaded-file-card,
+[data-theme="dark"] .sp-proof-chip,
+:root[data-theme="dark"] .sp-proof-chip,
+.dark-theme .sp-proof-chip,
+[data-theme="dark"] .sp-proof-preview,
+:root[data-theme="dark"] .sp-proof-preview,
+.dark-theme .sp-proof-preview {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-declaration-card,
+:root[data-theme="dark"] .reimb-declaration-card,
+.dark-theme .reimb-declaration-card {
+  background: rgba(111, 132, 0, 0.08) !important;
+  border-color: rgba(111, 132, 0, 0.25) !important;
+}
+
+[data-theme="dark"] .reimb-declaration-label,
+:root[data-theme="dark"] .reimb-declaration-label,
+.dark-theme .reimb-declaration-label {
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-form-actions,
+:root[data-theme="dark"] .reimb-form-actions,
+.dark-theme .reimb-form-actions {
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .reimb-btn-secondary,
+:root[data-theme="dark"] .reimb-btn-secondary,
+.dark-theme .reimb-btn-secondary {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-btn-secondary:hover:not(:disabled),
+:root[data-theme="dark"] .reimb-btn-secondary:hover:not(:disabled),
+.dark-theme .reimb-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+/* Table Section */
+[data-theme="dark"] .reimb-table-card,
+:root[data-theme="dark"] .reimb-table-card,
+.dark-theme .reimb-table-card {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-theme="dark"] .reimb-table-header,
+:root[data-theme="dark"] .reimb-table-header,
+.dark-theme .reimb-table-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .reimb-table-header h2,
+:root[data-theme="dark"] .reimb-table-header h2,
+.dark-theme .reimb-table-header h2 {
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-search-input,
+:root[data-theme="dark"] .reimb-search-input,
+.dark-theme .reimb-search-input,
+[data-theme="dark"] .reimb-filter-select,
+:root[data-theme="dark"] .reimb-filter-select,
+.dark-theme .reimb-filter-select {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-filter-select option,
+:root[data-theme="dark"] .reimb-filter-select option,
+.dark-theme .reimb-filter-select option {
+  background: #1a2318 !important;
+  color: #edf2e7 !important;
+}
+
+[data-theme="dark"] .reimb-table th,
+:root[data-theme="dark"] .reimb-table th,
+.dark-theme .reimb-table th {
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: var(--cms-muted, #aab5a2) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .reimb-table td,
+:root[data-theme="dark"] .reimb-table td,
+.dark-theme .reimb-table td {
+  color: var(--cms-text, #edf2e7) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme="dark"] .reimb-table tr:hover td,
+:root[data-theme="dark"] .reimb-table tr:hover td,
+.dark-theme .reimb-table tr:hover td {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+[data-theme="dark"] .reimb-faculty-name,
+:root[data-theme="dark"] .reimb-faculty-name,
+.dark-theme .reimb-faculty-name {
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-faculty-meta,
+:root[data-theme="dark"] .reimb-faculty-meta,
+.dark-theme .reimb-faculty-meta {
+  color: var(--cms-muted, #aab5a2) !important;
+}
+
+[data-theme="dark"] .reimb-amount,
+:root[data-theme="dark"] .reimb-amount,
+.dark-theme .reimb-amount {
+  color: #a3b832 !important;
+}
+
+[data-theme="dark"] .reimb-account-ref,
+:root[data-theme="dark"] .reimb-account-ref,
+.dark-theme .reimb-account-ref {
+  background: rgba(111, 132, 0, 0.15) !important;
+  border-color: rgba(111, 132, 0, 0.3) !important;
+  color: #c0d638 !important;
+}
+
+[data-theme="dark"] .reimb-pagination,
+:root[data-theme="dark"] .reimb-pagination,
+.dark-theme .reimb-pagination {
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Modals & Dialogs */
+[data-theme="dark"] .reimb-modal-card,
+:root[data-theme="dark"] .reimb-modal-card,
+.dark-theme .reimb-modal-card,
+[data-theme="dark"] .faculty-reimbursement-modal,
+:root[data-theme="dark"] .faculty-reimbursement-modal,
+.dark-theme .faculty-reimbursement-modal,
+[data-theme="dark"] .reimb-drawer,
+:root[data-theme="dark"] .reimb-drawer,
+.dark-theme .reimb-drawer {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-modal-box,
+:root[data-theme="dark"] .reimb-modal-box,
+.dark-theme .reimb-modal-box {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--cms-text, #edf2e7) !important;
+}
+
+[data-theme="dark"] .reimb-modal-label,
+:root[data-theme="dark"] .reimb-modal-label,
+.dark-theme .reimb-modal-label {
+  color: var(--cms-muted, #aab5a2) !important;
+}
+
+[data-theme="dark"] .reimb-modal-value,
+:root[data-theme="dark"] .reimb-modal-value,
+.dark-theme .reimb-modal-value {
+  color: var(--cms-text, #edf2e7) !important;
+}

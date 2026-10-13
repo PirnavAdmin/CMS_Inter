@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Check, Eye, Inbox, Info, Loader2, Search, Send, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -133,46 +133,32 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
   const [loading, setLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState("");
   const [requestsByTab, setRequestsByTab] = useState({ outgoing: [], incoming: [] });
-  const [loadedCampusId, setLoadedCampusId] = useState("");
-  const requestsVersionRef = useRef(0);
   const isIncoming = tab === "incoming";
 
   const loadRequests = useCallback(async () => {
-    const version = ++requestsVersionRef.current;
-    if (!currentCampusId) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
-      const config = { headers: { "X-Campus-Id": String(currentCampusId) } };
       const [outgoingResponse, incomingResponse] = await Promise.all([
-        apiClient.get(apiEndpoints.admissions.outgoingRequests, config),
-        apiClient.get(apiEndpoints.admissions.incomingRequests, config),
+        apiClient.get(apiEndpoints.admissions.outgoingRequests),
+        apiClient.get(apiEndpoints.admissions.incomingRequests),
       ]);
-      if (requestsVersionRef.current !== version) return;
-      setLoadedCampusId(String(currentCampusId));
       setRequestsByTab({
         outgoing: getCollection(outgoingResponse.data).map((item) => normalizeAdmissionRequest(item, campusOptions, currentCampusId, "outgoing")),
         incoming: getCollection(incomingResponse.data).map((item) => normalizeAdmissionRequest(item, campusOptions, currentCampusId, "incoming")),
       });
     } catch (err) {
-      if (requestsVersionRef.current === version) setToast(getApiErrorMessage(err));
+      setToast(getApiErrorMessage(err));
     } finally {
-      if (requestsVersionRef.current === version) setLoading(false);
+      setLoading(false);
     }
   }, [campusOptions, currentCampusId]);
 
   useEffect(() => {
-    setDetailId(null);
-    setPage(1);
-    setToast("");
     loadRequests();
-    return () => { requestsVersionRef.current += 1; };
   }, [loadRequests]);
 
-  const outgoing = loadedCampusId === String(currentCampusId) ? requestsByTab.outgoing : [];
-  const incoming = loadedCampusId === String(currentCampusId) ? requestsByTab.incoming : [];
+  const outgoing = requestsByTab.outgoing;
+  const incoming = requestsByTab.incoming;
   const scopedRequests = isIncoming ? incoming : outgoing;
   const otherCampus = (request) => isIncoming ? request.fromCampus : request.toCampus;
   const filterOptions = Array.from(new Map(scopedRequests.map((request) => [otherCampus(request).value, otherCampus(request)])).values());
@@ -188,7 +174,7 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
   const detail = scopedRequests.find((request) => request.id === detailId);
 
   const changeStatus = async (status) => {
-    if (!isIncoming || !detail || detail.status !== "Pending" || actionBusy || String(detail.toCampus.value) !== String(currentCampusId)) return;
+    if (!isIncoming || !detail || detail.status !== "Pending") return;
     const admissionId = detail.admissionId || detail.id;
     const remarks = window.prompt("Remarks (optional)", "") || "";
     const rejectionReason = status === "Request Rejected" ? window.prompt("Rejection reason", "") : "";
@@ -196,21 +182,18 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
       setToast("Rejection reason is required.");
       return;
     }
-    const requestVersion = requestsVersionRef.current;
     setActionBusy(status);
     try {
-      const config = { headers: { "X-Campus-Id": String(currentCampusId) } };
       if (status === "Request Approved") {
-        await apiClient.post(apiEndpoints.admissions.approveRequest(admissionId), { remarks }, config);
+        await apiClient.post(apiEndpoints.admissions.approveRequest(admissionId), { remarks });
       } else {
-        await apiClient.post(apiEndpoints.admissions.rejectRequest(admissionId), { rejectionReason: String(rejectionReason).trim(), remarks }, config);
+        await apiClient.post(apiEndpoints.admissions.rejectRequest(admissionId), { rejectionReason, remarks });
       }
-      if (requestsVersionRef.current !== requestVersion) return;
-      setToast(status === "Request Approved" ? "Admission request approved. Admission number assigned." : "Admission request rejected.");
+      setToast(status === "Request Approved" ? "Admission request approved." : "Admission request rejected.");
       await loadRequests();
       setDetailId(null);
     } catch (err) {
-      if (requestsVersionRef.current === requestVersion) setToast(getApiErrorMessage(err));
+      setToast(getApiErrorMessage(err));
     } finally {
       setActionBusy("");
     }

@@ -7,7 +7,7 @@ const CampusContext = createContext(null);
 const STORAGE_KEY_CAMPUSES = "cms_campuses_data";
 const STORAGE_KEY_SELECTED_CAMPUS = "cms_selected_campus_id";
 
-export const DEFAULT_CAMPUSES = [
+const DEFAULT_CAMPUSES = [
   {
     id: 1,
     campusId: 1,

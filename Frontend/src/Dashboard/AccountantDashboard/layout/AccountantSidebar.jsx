@@ -2,7 +2,6 @@ import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import { NavLink } from "react-router-dom";
 import { BarChart3, CalendarCheck, CircleUserRound, History, LayoutDashboard, ReceiptText, WalletCards } from "lucide-react";
 import logo from "@/assets/pirnav-colleges-logo.png";
-import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 
 const groups = [
   ["ACCOUNTANT PORTAL", [["Dashboard", "", LayoutDashboard]]],
@@ -10,7 +9,6 @@ const groups = [
     ["Fee Management", "fees", ReceiptText],
     ["Payment History", "payments", History],
     ["Payroll", "payroll", WalletCards],
-    ["Reimbursements", "reimbursement", reimbursementIcon],
     ["Attendance Impact", "payroll/attendance-impact", CalendarCheck],
     ["Financial Reports", "reports", BarChart3],
   ]],
@@ -33,17 +31,7 @@ export default function AccountantSidebar({ open, onClose }) {
                 onClick={onClose}
                 className={({ isActive }) => isActive ? "is-active" : ""}
               >
-                {typeof Icon === "string" ? (
-                  <img
-                    className="accountant-nav-icon cms-nav-3d-icon"
-                    src={Icon}
-                    alt=""
-                    aria-hidden="true"
-                    style={{ width: 19, height: 19, objectFit: "contain", verticalAlign: "middle" }}
-                  />
-                ) : (
-                  <Icon className="accountant-nav-icon" size={19} aria-hidden="true" />
-                )}
+                <Icon className="accountant-nav-icon" size={19} aria-hidden="true" />
                 <span>{label}</span>
               </NavLink>
             ))}

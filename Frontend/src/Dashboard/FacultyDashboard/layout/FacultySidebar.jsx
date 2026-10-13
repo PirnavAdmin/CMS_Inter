@@ -48,6 +48,7 @@ export const NAV_ITEMS = [
   { id: "myattendance", label: "My Attendance", icon: generatedSidebarIcons.staffAttendance, group: "HR & FINANCE" },
   { id: "leave", label: "Staff Leave", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
   { id: "salary", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll, group: "HR & FINANCE" },
+  { id: "reimbursements", label: "Reimbursements", icon: feeManagementIcon, group: "HR & FINANCE" },
   { id: "holidays", label: "Holidays", icon: holidayManagementIcon, group: "HR & FINANCE" },
   { id: "settings", label: "Settings", icon: generalSettingsIcon, group: "ADMINISTRATION" },
 ];
@@ -62,6 +63,7 @@ export const permissionByModule = {
   myattendance: "VIEW_SELF_ATTENDANCE",
   leave: "APPLY_LEAVE",
   salary: "VIEW_PAYSLIPS",
+  reimbursements: "VIEW_PAYSLIPS",
   holidays: "VIEW_HOLIDAYS",
   classes: "VIEW_CLASSES",
 };

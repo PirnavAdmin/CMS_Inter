@@ -5,7 +5,6 @@ import { Field, useForm } from "@/components/common/Ui.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { clearPasswordResetContext, loginUser } from "@/features/auth/services/authService.js";
 import { clearAuthSession, saveAuthSession } from "@/features/authStorage.js";
-import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 import { useCampusImages } from "../../campusImages.js";
 import { getCampusContent } from "../../campusContent.js";
 
@@ -85,7 +84,6 @@ export default function Login() {
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
       const userRole = String(result.user.role || "").toLowerCase();
-      const isExamCell = isExamCellRole(userRole);
       const isPrincipal = userRole === "principal" || userRole.includes("principal");
       const isFacultyOrStaff =
         userRole === "faculty" ||
@@ -102,9 +100,7 @@ export default function Login() {
         result.roleType === "parent";
       const isAccountant = userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier";
 
-      if (isExamCell) {
-        navigate("/exam-cell-dashboard", { replace: true });
-      } else if (result.user.isAdmin || userRole.includes("admin")) {
+      if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
       } else if (isPrincipal) {
         navigate("/principal-dashboard", { replace: true });
@@ -170,3 +166,8 @@ export default function Login() {
     </AuthLayout>
   );
 }
+
+
+
+
+

@@ -9,18 +9,75 @@ import {
   RotateCcw,
   Eye,
   UserCheck,
-  Loader2,
-  FileSpreadsheet,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useFacultySafe } from "../FacultyContext.jsx";
-import { useAcademicContext } from "@/context/AcademicContext.jsx";
-import apiClient from "@/api/axios.js";
+import { MASTER_STUDENTS } from "./FacultyStudentAttendance.jsx";
 import "../styles/FacultyMarks.css";
+
+// Examination List Options
+const EXAMINATIONS_LIST = [
+  { id: "MPC-FINAL-2025", name: "MPC Final Examination 2025", code: "MPC-FINAL-2025", maxMarks: 100, passMarks: 40 },
+  { id: "UT1-2025", name: "Unit Test I 2025", code: "UT1-2025", maxMarks: 100, passMarks: 40 },
+  { id: "UT2-2025", name: "Unit Test II 2025", code: "UT2-2025", maxMarks: 100, passMarks: 40 },
+  { id: "MID-2025", name: "Mid Term Examination 2025", code: "MID-2025", maxMarks: 100, passMarks: 40 },
+  { id: "PRE-FINAL-2025", name: "Pre-Final Examination 2025", code: "PRE-FINAL-2025", maxMarks: 100, passMarks: 40 },
+];
+
+// Faculty's Assigned Subjects (Dr. Ananya Rao - Mathematics Department)
+const FACULTY_ASSIGNED_SUBJECTS = [
+  { id: "MATH1A", name: "Mathematics - IA", code: "MATH1A", group: "MPC", faculty: "Dr. Ananya Rao", empId: "EMP-104" },
+  { id: "MATH1B", name: "Mathematics - IB", code: "MATH1B", group: "MPC", faculty: "Dr. Ananya Rao", empId: "EMP-104" },
+  { id: "MATH2A", name: "Mathematics - IIA", code: "MATH2A", group: "MPC", faculty: "Dr. Ananya Rao", empId: "EMP-104" },
+  { id: "MATH2B", name: "Mathematics - IIB", code: "MATH2B", group: "MPC", faculty: "Dr. Ananya Rao", empId: "EMP-104" },
+  { id: "COMM101", name: "Commercial Mathematics", code: "COMM101", group: "MEC", faculty: "Dr. Ananya Rao", empId: "EMP-104" },
+];
+
+// Seed sample students for marks entry matching Screenshot 2 & 3
+const getInitialSectionStudents = (section) => {
+  const normalizedSec = section === "REG-1" ? "Section A" : section === "REG-2" ? "Section B" : "Section C";
+  const roster = MASTER_STUDENTS.filter((s) => s.section === normalizedSec);
+
+  const seedProfiles = [
+    { name: "Sneha H", rollNo: "7", internal: 20, theory: 56.5, totalScore: 306, percentage: "76.50%", absent: false, remarks: "good" },
+    { name: "Nandhitha G", rollNo: "ROLL518", internal: 20, theory: 45, totalScore: 183, percentage: "45.75%", absent: false, remarks: "need to improve" },
+    { name: "Navi D", rollNo: "ROLL520", internal: 18, theory: 57, totalScore: 300, percentage: "75.00%", absent: false, remarks: "good" },
+    { name: "Rohit R", rollNo: "ROLL514", internal: 20, theory: 67, totalScore: 348, percentage: "87.00%", absent: false, remarks: "very good" },
+    { name: "Nakshi K", rollNo: "1", internal: 16, theory: 56, totalScore: 288, percentage: "72.00%", absent: false, remarks: "good" },
+    { name: "Nandhini string", rollNo: "2", internal: 18, theory: 60, totalScore: 290, percentage: "72.50%", absent: false, remarks: "TEST" },
+    { name: "Student", rollNo: "3", internal: 0, theory: 0, totalScore: 0, percentage: "0.00%", absent: true, remarks: "Absent" },
+  ];
+
+  return roster.map((s, idx) => {
+    if (idx < seedProfiles.length) {
+      return {
+        studentId: s.studentId,
+        rollNo: seedProfiles[idx].rollNo,
+        name: seedProfiles[idx].name,
+        internal: seedProfiles[idx].internal,
+        theory: seedProfiles[idx].theory,
+        totalScore: seedProfiles[idx].totalScore,
+        percentage: seedProfiles[idx].percentage,
+        absent: seedProfiles[idx].absent,
+        remarks: seedProfiles[idx].remarks,
+      };
+    }
+    const defaultTheory = Math.round(45 + (idx % 6) * 5);
+    const defaultInternal = Math.round(15 + (idx % 4));
+    return {
+      studentId: s.studentId,
+      rollNo: s.rollNo,
+      name: s.name,
+      internal: defaultInternal,
+      theory: defaultTheory,
+      absent: false,
+      remarks: "regular",
+    };
+  });
+};
 
 export default function FacultyMarks() {
   const context = useFacultySafe();
-  const academicCtx = useAcademicContext() || {};
   const [toast, setToast] = useState(null);
 
   const notify = (text, type = "success") => {
@@ -35,31 +92,18 @@ export default function FacultyMarks() {
   // Main Tabs State: "entry" | "report"
   const [activeTab, setActiveTab] = useState("entry");
 
-  // 1. Academic Context Filters
-  const [selectedBoard, setSelectedBoard] = useState("");
+  // 1. Academic Context Filters (All manual entry)
+  const [selectedBoard, setSelectedBoard] = useState("BIEAP");
   const [selectedYear, setSelectedYear] = useState("");
   const [selectedLevel, setSelectedLevel] = useState("");
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedProgram, setSelectedProgram] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
 
-  // Cascading Filter Dropdown Lists
-  const [boardsList, setBoardsList] = useState([]);
-  const [yearsList, setYearsList] = useState([]);
-  const [levelsList, setLevelsList] = useState([]);
-  const [groupsList, setGroupsList] = useState([]);
-  const [programsList, setProgramsList] = useState([]);
-  const [sectionsList, setSectionsList] = useState([]);
-
-  // Filter loading flags
-  const [loadingFilters, setLoadingFilters] = useState(false);
-
   // Context applied state (controlled by "Enter Marks" button)
   const [contextApplied, setContextApplied] = useState(false);
 
-  // 2. Marks Entry Workspace Filters (Examinations & Subjects from Real APIs)
-  const [examinationsList, setExaminationsList] = useState([]);
-  const [subjectsList, setSubjectsList] = useState([]);
+  // 2. Marks Entry Workspace Filters
   const [selectedExam, setSelectedExam] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
 
@@ -76,18 +120,62 @@ export default function FacultyMarks() {
         console.warn("Could not parse saved evaluations ledger:", e);
       }
     }
-    return {};
+    return {
+      "REG-1_MPC-FINAL-2025_MATH1A": {
+        evaluationId: "REG-1_MPC-FINAL-2025_MATH1A",
+        section: "REG-1",
+        examId: "MPC-FINAL-2025",
+        examName: "MPC Final Examination 2025 (MPC-FINAL-2025)",
+        subjectId: "MATH1A",
+        subjectName: "Mathematics - IA (MATH1A)",
+        faculty: "Dr. Ananya Rao",
+        empId: "EMP-104",
+        status: "APPROVED",
+        adminRemarks: "Approved. Results published for students.",
+        rows: getInitialSectionStudents("REG-1"),
+        submittedAt: "Recent",
+        updatedAt: "2026-05-15",
+      },
+      "REG-1_MPC-FINAL-2025_MATH2B": {
+        evaluationId: "REG-1_MPC-FINAL-2025_MATH2B",
+        section: "REG-1",
+        examId: "MPC-FINAL-2025",
+        examName: "MPC Final Examination 2025 (MPC-FINAL-2025)",
+        subjectId: "MATH2B",
+        subjectName: "Mathematics - IIB",
+        faculty: "Dr. Ananya Rao",
+        empId: "EMP-104",
+        status: "APPROVED",
+        adminRemarks: "Approved. Results published for students.",
+        rows: getInitialSectionStudents("REG-1"),
+        submittedAt: "Recent",
+        updatedAt: "2026-05-15",
+      },
+      "REG-1_MPC-FINAL-2025_MATH2A": {
+        evaluationId: "REG-1_MPC-FINAL-2025_MATH2A",
+        section: "REG-1",
+        examId: "MPC-FINAL-2025",
+        examName: "MPC Final Examination 2025 (MPC-FINAL-2025)",
+        subjectId: "MATH2A",
+        subjectName: "Mathematics - IIA",
+        faculty: "Dr. Ananya Rao",
+        empId: "EMP-104",
+        status: "SUBMITTED",
+        adminRemarks: "Submitted to Admin. Awaiting verification review.",
+        rows: getInitialSectionStudents("REG-1"),
+        submittedAt: "2026-10-06",
+        updatedAt: "2026-10-06",
+      },
+    };
   });
 
   // Current working student rows
   const [currentStudents, setCurrentStudents] = useState([]);
   const [evaluationStatus, setEvaluationStatus] = useState("DRAFT");
-  const [loadingStudents, setLoadingStudents] = useState(false);
-  const [savingMarks, setSavingMarks] = useState(false);
 
   // Marks Entry Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(5);
 
   // Bulk Import Modal State
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -95,7 +183,7 @@ export default function FacultyMarks() {
   const [bulkFileName, setBulkFileName] = useState("");
   const fileInputRef = useRef(null);
 
-  // View Results Modal State
+  // View Results Modal State (Matching Screenshot 2)
   const [viewResultsEval, setViewResultsEval] = useState(null);
   const [resultsModalPage, setResultsModalPage] = useState(1);
   const resultsPageSize = 5;
@@ -121,184 +209,27 @@ export default function FacultyMarks() {
     }
   }, [evaluationsLedger]);
 
-  // 1. Initialize Boards & Academic Years
-  useEffect(() => {
-    let isMounted = true;
-    async function initContext() {
-      try {
-        if (academicCtx.boards?.length) {
-          if (isMounted) setBoardsList(academicCtx.boards);
-          if (isMounted && !selectedBoard) setSelectedBoard(academicCtx.selectedBoardId || academicCtx.boards[0].id || academicCtx.boards[0].boardId);
-        } else {
-          const res = await apiClient.get("/api/v1/boards");
-          const list = res.data?.data || res.data || [];
-          if (isMounted) {
-            setBoardsList(list);
-            if (list.length && !selectedBoard) setSelectedBoard(list[0].boardId || list[0].id);
-          }
-        }
-
-        if (academicCtx.academicYears?.length) {
-          if (isMounted) setYearsList(academicCtx.academicYears);
-          if (isMounted && !selectedYear) setSelectedYear(academicCtx.selectedAcademicYearId || academicCtx.academicYears[0].id || academicCtx.academicYears[0].academicYearId);
-        } else {
-          const res = await apiClient.get("/api/v1/academic-years");
-          const list = res.data?.data || res.data || [];
-          if (isMounted) {
-            setYearsList(list);
-            if (list.length && !selectedYear) setSelectedYear(list[0].academicYearId || list[0].id);
-          }
-        }
-      } catch (err) {
-        console.warn("Error initializing boards/years for marks:", err);
-      }
-    }
-    initContext();
-    return () => { isMounted = false; };
-  }, [academicCtx.boards, academicCtx.academicYears]);
-
-  // 2. Fetch Academic Levels
-  useEffect(() => {
-    if (!selectedBoard) return;
-    let isMounted = true;
-    apiClient
-      .get(`/api/v1/academic-levels?boardId=${selectedBoard}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setLevelsList(list);
-          if (list.length) setSelectedLevel(list[0].academicLevelId || list[0].id);
-        }
-      })
-      .catch((err) => console.warn("Error fetching levels for marks:", err));
-    return () => { isMounted = false; };
-  }, [selectedBoard]);
-
-  // 3. Fetch Groups
-  useEffect(() => {
-    if (!selectedBoard) return;
-    let isMounted = true;
-    const params = new URLSearchParams();
-    if (selectedBoard) params.append("boardId", selectedBoard);
-    if (selectedYear) params.append("academicYearId", selectedYear);
-    if (selectedLevel) params.append("academicLevelId", selectedLevel);
-
-    apiClient
-      .get(`/api/v1/groups?${params.toString()}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setGroupsList(list);
-          if (list.length) setSelectedGroup(list[0].groupId || list[0].id);
-        }
-      })
-      .catch((err) => console.warn("Error fetching groups for marks:", err));
-    return () => { isMounted = false; };
-  }, [selectedBoard, selectedYear, selectedLevel]);
-
-  // 4. Fetch Programs
-  useEffect(() => {
-    let isMounted = true;
-    apiClient
-      .get("/api/v1/programs")
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setProgramsList(list);
-          if (list.length) setSelectedProgram(list[0].programId || list[0].id);
-        }
-      })
-      .catch((err) => console.warn("Error fetching programs for marks:", err));
-    return () => { isMounted = false; };
+  // Subject options restricted to faculty's department (Dr. Ananya Rao)
+  const facultySubjectOptions = useMemo(() => {
+    if (!selectedGroup) return FACULTY_ASSIGNED_SUBJECTS;
+    return FACULTY_ASSIGNED_SUBJECTS.filter(
+      (s) => s.group.toLowerCase() === selectedGroup.toLowerCase()
+    );
   }, [selectedGroup]);
 
-  // 5. Fetch Sections
-  useEffect(() => {
-    if (!selectedBoard) return;
-    let isMounted = true;
-    const params = new URLSearchParams();
-    if (selectedBoard) params.append("boardId", selectedBoard);
-    if (selectedYear) params.append("academicYearId", selectedYear);
-    if (selectedLevel) params.append("academicLevelId", selectedLevel);
-    if (selectedGroup) params.append("groupId", selectedGroup);
-    if (selectedProgram) params.append("programId", selectedProgram);
-
-    apiClient
-      .get(`/api/v1/sections?${params.toString()}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setSectionsList(list);
-          if (list.length) setSelectedSection(list[0].sectionId || list[0].id);
-        }
-      })
-      .catch((err) => console.warn("Error fetching sections for marks:", err));
-    return () => { isMounted = false; };
-  }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, selectedProgram]);
-
-  // 6. Fetch Examinations & Subjects when context is applied
-  useEffect(() => {
-    let isMounted = true;
-
-    // Fetch Examinations
-    apiClient
-      .get("/api/v1/examinations")
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted && Array.isArray(list)) {
-          setExaminationsList(list);
-          if (list.length && !selectedExam) {
-            setSelectedExam(list[0].examinationId || list[0].id);
-          }
-        }
-      })
-      .catch((err) => console.warn("Error fetching examinations:", err));
-
-    // Fetch Subjects
-    const subParams = new URLSearchParams();
-    if (selectedBoard) subParams.append("boardId", selectedBoard);
-    if (selectedGroup) subParams.append("groupId", selectedGroup);
-    if (selectedLevel) subParams.append("academicLevelId", selectedLevel);
-
-    apiClient
-      .get(`/api/v1/subjects?${subParams.toString()}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted && Array.isArray(list)) {
-          setSubjectsList(list);
-          if (list.length && !selectedSubject) {
-            setSelectedSubject(list[0].subjectId || list[0].id);
-          }
-        }
-      })
-      .catch((err) => console.warn("Error fetching subjects:", err));
-
-    return () => { isMounted = false; };
-  }, [selectedBoard, selectedGroup, selectedLevel]);
-
   // Selected Exam Metadata
-  const selectedExamInfo = useMemo(() => {
-    return examinationsList.find((e) => String(e.examinationId || e.id) === String(selectedExam)) || null;
-  }, [examinationsList, selectedExam]);
-
-  const selectedExamName = selectedExamInfo
-    ? `${selectedExamInfo.examName || selectedExamInfo.name} (${selectedExamInfo.examCode || selectedExamInfo.code || "EXAM"})`
-    : "";
+  const selectedExamInfo = useMemo(
+    () => EXAMINATIONS_LIST.find((e) => e.id === selectedExam) || null,
+    [selectedExam]
+  );
+  const selectedExamName = selectedExamInfo ? `${selectedExamInfo.name} (${selectedExamInfo.code})` : "";
 
   // Selected Subject Metadata
-  const selectedSubjectObj = useMemo(() => {
-    return subjectsList.find((s) => String(s.subjectId || s.id) === String(selectedSubject)) || null;
-  }, [subjectsList, selectedSubject]);
-
-  const selectedSubjectName = selectedSubjectObj
-    ? (selectedSubjectObj.subjectName || selectedSubjectObj.name)
-    : "Selected Subject";
-
-  // Selected Section Metadata
-  const selectedSectionName = useMemo(() => {
-    const found = sectionsList.find((s) => String(s.sectionId || s.id) === String(selectedSection));
-    return found ? (found.sectionName || found.name) : `Section #${selectedSection}`;
-  }, [sectionsList, selectedSection]);
+  const selectedSubjectObj = useMemo(
+    () => facultySubjectOptions.find((s) => s.id === selectedSubject) || null,
+    [facultySubjectOptions, selectedSubject]
+  );
+  const selectedSubjectName = selectedSubjectObj ? selectedSubjectObj.name : "Mathematics - IA";
 
   // Handle clicking "Enter Marks" button
   const handleEnterMarks = () => {
@@ -307,14 +238,11 @@ export default function FacultyMarks() {
       return;
     }
     setContextApplied(true);
-    notify(`Marks Entry workspace loaded for ${selectedSectionName}.`);
-    if (selectedExam && selectedSubject) {
-      handleExamOrSubjectChange(selectedExam, selectedSubject);
-    }
+    notify("Marks Entry workspace loaded.");
   };
 
   // Handle changing Exam or Subject inside workspace
-  const handleExamOrSubjectChange = async (newExam, newSubject) => {
+  const handleExamOrSubjectChange = (newExam, newSubject) => {
     if (!newExam || !newSubject) {
       setCurrentStudents([]);
       setCurrentRejectionRemarks("");
@@ -324,54 +252,17 @@ export default function FacultyMarks() {
     const key = `${selectedSection}_${newExam}_${newSubject}`;
     const existing = evaluationsLedger[key];
 
-    if (existing && existing.rows && existing.rows.length) {
-      setCurrentStudents(existing.rows);
+    if (existing) {
+      setCurrentStudents(existing.rows || []);
       setEvaluationStatus(existing.status || "DRAFT");
       setCurrentRejectionRemarks(existing.status === "REJECTED" ? existing.adminRemarks || "" : "");
-      setCurrentPage(1);
-      return;
-    }
-
-    // Fetch real students from attendance student list
-    setLoadingStudents(true);
-    try {
-      const studentParams = {
-        boardId: selectedBoard ? Number(selectedBoard) : undefined,
-        academicYearId: selectedYear ? Number(selectedYear) : undefined,
-        academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-        groupId: selectedGroup ? Number(selectedGroup) : undefined,
-        programId: selectedProgram ? Number(selectedProgram) : undefined,
-        sectionId: Number(selectedSection),
-      };
-
-      const res = await apiClient.get("/api/v1/attendance/admin/students", { params: studentParams });
-      const raw = res.data?.data || res.data || [];
-
-      let mapped = [];
-      if (Array.isArray(raw) && raw.length) {
-        mapped = raw.map((s) => ({
-          studentId: s.studentId || s.id,
-          rollNo: s.rollNumber || s.rollNo || `RL-${s.studentId}`,
-          name: s.studentName || s.name || `Student #${s.studentId}`,
-          internal: 18,
-          theory: 55,
-          totalScore: 73,
-          percentage: "73.00%",
-          absent: false,
-          remarks: "Regular",
-        }));
-      }
-
-      setCurrentStudents(mapped);
+    } else {
+      const initial = getInitialSectionStudents(selectedSection);
+      setCurrentStudents(initial);
       setEvaluationStatus("DRAFT");
       setCurrentRejectionRemarks("");
-    } catch (err) {
-      console.warn("Could not load section students for marks, setting empty roster:", err);
-      setCurrentStudents([]);
-    } finally {
-      setLoadingStudents(false);
-      setCurrentPage(1);
     }
+    setCurrentPage(1);
   };
 
   // Row update handlers
@@ -411,21 +302,19 @@ export default function FacultyMarks() {
     );
   };
 
-  // Save Draft (via /api/v1/marks/bulk and local ledger)
-  const handleSaveDraft = async () => {
+  // Save Draft
+  const handleSaveDraft = () => {
     if (!selectedExam || !selectedSubject) return;
-    setSavingMarks(true);
-
     const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const updatedEval = {
       evaluationId: key,
-      section: selectedSectionName,
+      section: selectedSection,
       examId: selectedExam,
       examName: selectedExamName,
       subjectId: selectedSubject,
-      subjectName: selectedSubjectName,
-      faculty: "Faculty In-Charge",
-      empId: "EMP-FACULTY",
+      subjectName: selectedSubjectObj?.name || selectedSubject,
+      faculty: "Dr. Ananya Rao",
+      empId: "EMP-104",
       status: "DRAFT",
       adminRemarks: "",
       rows: currentStudents,
@@ -433,55 +322,26 @@ export default function FacultyMarks() {
       updatedAt: new Date().toISOString().split("T")[0],
     };
 
-    try {
-      const payload = {
-        marks: currentStudents.map((s) => ({
-          board: "BIEAP",
-          boardId: selectedBoard ? Number(selectedBoard) : undefined,
-          academicYearId: selectedYear ? Number(selectedYear) : 1,
-          academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-          groupId: selectedGroup ? Number(selectedGroup) : 1,
-          sectionId: Number(selectedSection),
-          examinationId: Number(selectedExam),
-          subjectId: Number(selectedSubject),
-          studentId: Number(s.studentId),
-          rollNo: s.rollNo,
-          studentName: s.name,
-          internalMarks: Number(s.internal || 0),
-          theoryMarks: Number(s.theory || 0),
-          isAbsent: Boolean(s.absent),
-          remarks: s.remarks || "",
-        })),
-      };
-
-      await apiClient.post("/api/v1/marks/bulk", payload);
-    } catch (err) {
-      console.warn("API bulk save endpoint warning, saving to local evaluations ledger:", err);
-    }
-
     setEvaluationsLedger((prev) => ({ ...prev, [key]: updatedEval }));
     setEvaluationStatus("DRAFT");
-    setSavingMarks(false);
     notify("Marks draft saved successfully.");
   };
 
-  // Submit Subject / Resubmit (via /api/v1/marks/bulk with SUBMITTED status)
-  const handleSubmitSubject = async () => {
+  // Submit Subject / Resubmit
+  const handleSubmitSubject = () => {
     if (!selectedExam || !selectedSubject) return;
-    setSavingMarks(true);
-
     const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const wasRejected = evaluationStatus === "REJECTED";
 
     const updatedEval = {
       evaluationId: key,
-      section: selectedSectionName,
+      section: selectedSection,
       examId: selectedExam,
       examName: selectedExamName,
       subjectId: selectedSubject,
-      subjectName: selectedSubjectName,
-      faculty: "Faculty In-Charge",
-      empId: "EMP-FACULTY",
+      subjectName: selectedSubjectObj?.name || selectedSubject,
+      faculty: "Dr. Ananya Rao",
+      empId: "EMP-104",
       status: "SUBMITTED",
       adminRemarks: "Submitted to Admin. Awaiting verification review.",
       rows: currentStudents,
@@ -489,46 +349,20 @@ export default function FacultyMarks() {
       updatedAt: new Date().toISOString().split("T")[0],
     };
 
-    try {
-      const payload = {
-        marks: currentStudents.map((s) => ({
-          board: "BIEAP",
-          boardId: selectedBoard ? Number(selectedBoard) : undefined,
-          academicYearId: selectedYear ? Number(selectedYear) : 1,
-          academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-          groupId: selectedGroup ? Number(selectedGroup) : 1,
-          sectionId: Number(selectedSection),
-          examinationId: Number(selectedExam),
-          subjectId: Number(selectedSubject),
-          studentId: Number(s.studentId),
-          rollNo: s.rollNo,
-          studentName: s.name,
-          internalMarks: Number(s.internal || 0),
-          theoryMarks: Number(s.theory || 0),
-          isAbsent: Boolean(s.absent),
-          remarks: s.remarks || "",
-        })),
-      };
-
-      await apiClient.post("/api/v1/marks/bulk", payload);
-    } catch (err) {
-      console.warn("API bulk submit warning:", err);
-    }
-
     setEvaluationsLedger((prev) => ({ ...prev, [key]: updatedEval }));
     setEvaluationStatus("SUBMITTED");
     setCurrentRejectionRemarks("");
-    setSavingMarks(false);
 
     if (wasRejected) {
-      notify("Corrected marks resubmitted to Admin for review!", "success");
+      notify("Corrected marks successfully resubmitted to Admin for verification and approval!", "success");
     } else {
       notify("Marks submitted successfully! Pending Admin verification and approval.", "success");
     }
   };
 
-  // Switch to Marks Entry to edit and resubmit
+  // Switch to Marks Entry to edit and resubmit if rejected
   const handleEditAndResubmit = (ev) => {
+    setSelectedSection(ev.section);
     setSelectedExam(ev.examId);
     setSelectedSubject(ev.subjectId);
     setContextApplied(true);
@@ -537,15 +371,17 @@ export default function FacultyMarks() {
     setCurrentRejectionRemarks(ev.adminRemarks || "");
     setActiveTab("entry");
     setCurrentPage(1);
-    notify(`Loaded ${ev.subjectName} for revision. Check admin feedback above.`, "info");
+    notify(`Loaded ${ev.subjectName} (${ev.section}) for revision. Check admin feedback above.`, "info");
   };
 
-  // Download Sample Template for Bulk Import
+  // Download Sample Template for Bulk Import (Matching Image 1)
   const handleDownloadTemplate = () => {
     const templateData = [
-      { "Roll No": "25MPC001", "Student Name": "Sample Student 1", "Internal / 20": 20, "Theory / 80": 65, Absent: "NO", Remarks: "Good" },
-      { "Roll No": "25MPC002", "Student Name": "Sample Student 2", "Internal / 20": 18, "Theory / 80": 55, Absent: "NO", Remarks: "Fair" },
-      { "Roll No": "25MPC003", "Student Name": "Sample Student 3", "Internal / 20": 0, "Theory / 80": 0, Absent: "YES", Remarks: "Absent" },
+      { "Roll No": "1", "Student Name": "Nandhitha G", "Internal / 20": 20, "Theory / 80": 45, Absent: "NO", Remarks: "need to improve" },
+      { "Roll No": "2", "Student Name": "Nandhini string", "Internal / 20": 18, "Theory / 80": 65, Absent: "NO", Remarks: "good" },
+      { "Roll No": "3", "Student Name": "Student", "Internal / 20": 0, "Theory / 80": 0, Absent: "YES", Remarks: "Absent" },
+      { "Roll No": "6", "Student Name": "ramya sri", "Internal / 20": 15, "Theory / 80": 45, Absent: "NO", Remarks: "need to improve" },
+      { "Roll No": "11", "Student Name": "Rohit R", "Internal / 20": 20, "Theory / 80": 80, Absent: "NO", Remarks: "very good" },
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
@@ -569,7 +405,7 @@ export default function FacultyMarks() {
     setBulkFileName(file.name);
   };
 
-  // Handle Validate & Apply Bulk File
+  // Handle Validate & Apply Bulk File (Matching Image 1)
   const handleValidateAndImportFile = () => {
     if (!bulkFile) {
       notify("Please select an Excel file (.xlsx, .xls) to validate.", "error");
@@ -639,7 +475,7 @@ export default function FacultyMarks() {
   const evaluationsList = useMemo(() => {
     return Object.values(evaluationsLedger).filter((e) => {
       if (reportStatusFilter !== "ALL" && e.status !== reportStatusFilter) return false;
-      if (reportExamFilter !== "ALL" && String(e.examId) !== String(reportExamFilter)) return false;
+      if (reportExamFilter !== "ALL" && e.examId !== reportExamFilter) return false;
       if (reportSearch.trim()) {
         const q = reportSearch.toLowerCase();
         const match =
@@ -675,7 +511,7 @@ export default function FacultyMarks() {
     return evaluationsList.slice(start, start + reportPageSize);
   }, [evaluationsList, reportPage, reportPageSize]);
 
-  // Results Modal calculations
+  // Results Modal calculations (Matching Screenshot 2)
   const resultsModalRows = useMemo(() => {
     if (!viewResultsEval) return [];
     return viewResultsEval.rows || [];
@@ -697,7 +533,7 @@ export default function FacultyMarks() {
 
   return (
     <div className="cms-marks-entry">
-      {/* 1. Page Header */}
+      {/* 1. Header (Matching Reference) */}
       <div className="cms-page-head" style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div
@@ -714,177 +550,203 @@ export default function FacultyMarks() {
               boxShadow: "0 2px 5px rgba(224, 86, 56, 0.15)",
             }}
           >
-            📊
+            📝
           </div>
           <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Faculty Marks Entry & Evaluation</h1>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "var(--cms-text, #171A17)" }}>
+              Marks Entry
+            </h1>
             <p style={{ margin: "2px 0 0 0", color: "var(--cms-muted, #7B8275)", fontSize: 13 }}>
-              Manage student internal and theory marks, bulk imports, and verification workflows
+              Enter and submit subject-wise examination marks
             </p>
           </div>
         </div>
+      </div>
 
-        {/* Top-Right Primary Tabs Switcher */}
-        <div className="cms-tabs" style={{ margin: 0 }}>
+      {/* 2. Main Navigation Tabs: Marks Entry & Report */}
+      <div className="cms-tabs-row" style={{ marginBottom: 16 }}>
+        <div className="cms-tabs" role="tablist">
           <button
             type="button"
-            className={`cms-tab-btn ${activeTab === "entry" ? "active" : ""}`}
+            role="tab"
+            aria-selected={activeTab === "entry"}
+            className={activeTab === "entry" ? "active" : ""}
             onClick={() => setActiveTab("entry")}
           >
             Marks Entry
           </button>
           <button
             type="button"
-            className={`cms-tab-btn ${activeTab === "report" ? "active" : ""}`}
+            role="tab"
+            aria-selected={activeTab === "report"}
+            className={activeTab === "report" ? "active" : ""}
             onClick={() => setActiveTab("report")}
           >
-            Evaluation Report
+            Report
           </button>
         </div>
       </div>
 
-      {/* TAB 1: MARKS ENTRY WORKSPACE */}
+      {/* ======================================================== */}
+      {/* TAB 1: MARKS ENTRY WORKFLOW                              */}
+      {/* ======================================================== */}
       {activeTab === "entry" && (
         <>
-          {/* Card 1: Academic Context Filters */}
-          <div className="cms-card" style={{ marginBottom: 16 }}>
-            <div className="cms-card-body">
-              <div className="cms-filters" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
-                <div className="cms-field">
-                  <label>Board</label>
-                  <select
-                    value={selectedBoard}
-                    onChange={(e) => {
-                      setSelectedBoard(e.target.value);
-                      setContextApplied(false);
-                    }}
-                  >
-                    <option value="">Select Board</option>
-                    {boardsList.map((b) => (
-                      <option key={b.boardId || b.id} value={b.boardId || b.id}>
-                        {b.boardName || b.name || b.boardCode}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          {/* Card 1: Academic Context */}
+          <div className="cms-card cms-card-filter" style={{ marginBottom: 16 }}>
+            <div className="cms-section-heading">
+              <div>
+                <h2>Academic Context</h2>
+                <p>Select the academic scope before opening Marks Entry.</p>
+              </div>
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                style={{ height: 35, padding: "0 18px", borderRadius: 8 }}
+                disabled={
+                  !selectedBoard ||
+                  !selectedYear ||
+                  !selectedLevel ||
+                  !selectedGroup ||
+                  !selectedProgram ||
+                  !selectedSection
+                }
+                onClick={handleEnterMarks}
+              >
+                Enter Marks
+              </button>
+            </div>
 
-                <div className="cms-field">
-                  <label>Academic Year</label>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => {
-                      setSelectedYear(e.target.value);
-                      setContextApplied(false);
-                    }}
-                  >
-                    <option value="">Select Year</option>
-                    {yearsList.map((y) => (
-                      <option key={y.academicYearId || y.id} value={y.academicYearId || y.id}>
-                        {y.yearName || y.academicYearName || y.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            <div className="cms-filter-grid">
+              <div className="cms-field-group">
+                <label className="cms-field-label">BOARD</label>
+                <select
+                  className="cms-select-input"
+                  value={selectedBoard}
+                  onChange={(e) => {
+                    setSelectedBoard(e.target.value);
+                    setContextApplied(false);
+                  }}
+                >
+                  <option value="">Select Board</option>
+                  <option value="BIEAP">Board of Intermediate Ed...</option>
+                  <option value="CBSE">Central Board of Sec...</option>
+                </select>
+              </div>
 
-                <div className="cms-field">
-                  <label>Academic Level</label>
-                  <select
-                    value={selectedLevel}
-                    onChange={(e) => {
-                      setSelectedLevel(e.target.value);
-                      setContextApplied(false);
-                    }}
-                  >
-                    <option value="">Select Level</option>
-                    {levelsList.map((l) => (
-                      <option key={l.academicLevelId || l.id} value={l.academicLevelId || l.id}>
-                        {l.levelName || l.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="cms-field-group">
+                <label className="cms-field-label">ACADEMIC YEAR</label>
+                <select
+                  className="cms-select-input"
+                  value={selectedYear}
+                  onChange={(e) => {
+                    setSelectedYear(e.target.value);
+                    setContextApplied(false);
+                  }}
+                >
+                  <option value="">Select Academic Year</option>
+                  <option value="2026-2027">2026-2027</option>
+                  <option value="2025-2026">2025-2026</option>
+                </select>
+              </div>
 
-                <div className="cms-field">
-                  <label>Group</label>
-                  <select
-                    value={selectedGroup}
-                    onChange={(e) => {
-                      setSelectedGroup(e.target.value);
-                      setContextApplied(false);
-                    }}
-                  >
-                    <option value="">Select Group</option>
-                    {groupsList.map((g) => (
-                      <option key={g.groupId || g.id} value={g.groupId || g.id}>
-                        {g.groupName || g.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="cms-field-group">
+                <label className="cms-field-label">ACADEMIC LEVEL</label>
+                <select
+                  className="cms-select-input"
+                  value={selectedLevel}
+                  onChange={(e) => {
+                    setSelectedLevel(e.target.value);
+                    setContextApplied(false);
+                  }}
+                >
+                  <option value="">Select Academic Level</option>
+                  <option value="Intermediate 1st Year">Intermediate 1st Year</option>
+                  <option value="Intermediate 2nd Year">Intermediate 2nd Year</option>
+                </select>
+              </div>
 
-                <div className="cms-field">
-                  <label>Program</label>
-                  <select
-                    value={selectedProgram}
-                    onChange={(e) => {
-                      setSelectedProgram(e.target.value);
-                      setContextApplied(false);
-                    }}
-                  >
-                    <option value="">Select Program</option>
-                    {programsList.map((p) => (
-                      <option key={p.programId || p.id} value={p.programId || p.id}>
-                        {p.programName || p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="cms-field-group">
+                <label className="cms-field-label">GROUP</label>
+                <select
+                  className="cms-select-input"
+                  value={selectedGroup}
+                  onChange={(e) => {
+                    setSelectedGroup(e.target.value);
+                    setSelectedSubject("");
+                    setContextApplied(false);
+                  }}
+                >
+                  <option value="">Select Group</option>
+                  <option value="MPC">MPC</option>
+                  <option value="MEC">MEC</option>
+                </select>
+              </div>
 
-                <div className="cms-field">
-                  <label>Section</label>
-                  <select
-                    value={selectedSection}
-                    onChange={(e) => {
-                      setSelectedSection(e.target.value);
-                      setContextApplied(false);
-                    }}
-                  >
-                    <option value="">Select Section</option>
-                    {sectionsList.map((s) => (
-                      <option key={s.sectionId || s.id} value={s.sectionId || s.id}>
-                        {s.sectionName || s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="cms-field-group">
+                <label className="cms-field-label">PROGRAM</label>
+                <select
+                  className="cms-select-input"
+                  value={selectedProgram}
+                  onChange={(e) => {
+                    setSelectedProgram(e.target.value);
+                    setContextApplied(false);
+                  }}
+                >
+                  <option value="">Select Program</option>
+                  <option value="Regular">Regular</option>
+                  <option value="General">General</option>
+                </select>
+              </div>
 
-                <div className="att-filter-action" style={{ alignSelf: "flex-end" }}>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    onClick={handleEnterMarks}
-                    style={{ height: 38 }}
-                  >
-                    Enter Marks
-                  </button>
-                </div>
+              <div className="cms-field-group">
+                <label className="cms-field-label">SECTION</label>
+                <select
+                  className="cms-select-input"
+                  value={selectedSection}
+                  onChange={(e) => {
+                    setSelectedSection(e.target.value);
+                    setContextApplied(false);
+                  }}
+                >
+                  <option value="">Select Section</option>
+                  <option value="REG-1">REG-1</option>
+                  <option value="REG-2">REG-2</option>
+                  <option value="REG-3">REG-3</option>
+                </select>
               </div>
             </div>
           </div>
 
-          {/* Prompt before clicking "Enter Marks" */}
+          {/* Empty State before clicking "Enter Marks" */}
           {!contextApplied && (
             <div className="cms-card">
-              <div style={{ padding: "44px 20px", textAlign: "center", color: "var(--cms-muted)", fontSize: 14 }}>
-                Please select your Academic Context filters above and click <strong>Enter Marks</strong> to load examinations and student marks entry sheet.
+              <div
+                style={{
+                  padding: "48px 20px",
+                  textAlign: "center",
+                  color: "var(--cms-muted, #7B8275)",
+                  fontSize: 14,
+                }}
+              >
+                Select all academic filters and click Enter Marks.
               </div>
             </div>
           )}
 
-          {/* Card 2: Marks Entry Workspace (Revealed after clicking "Enter Marks") */}
+          {/* After clicking "Enter Marks" */}
           {contextApplied && (
-            <div className="cms-card">
-              <div className="cms-card-body" style={{ padding: 18 }}>
+            <>
+              {/* Context Summary Box (Theme-based support) */}
+              <div className="cms-context-summary">
+                <strong>
+                  {selectedGroup} {selectedProgram} · {selectedSection}
+                  {selectedExam ? ` · ${selectedExamName}` : ""}
+                </strong>
+              </div>
+
+              {/* Workspace Card (Examination, Subject, Table) */}
+              <div className="cms-card cms-card-filter">
                 <div
                   style={{
                     display: "flex",
@@ -915,16 +777,17 @@ export default function FacultyMarks() {
                           handleExamOrSubjectChange(e.target.value, selectedSubject);
                         }}
                       >
-                        <option value="">Select Examination</option>
-                        {examinationsList.map((ex) => (
-                          <option key={ex.examinationId || ex.id} value={ex.examinationId || ex.id}>
-                            {ex.examName || ex.name} ({ex.examCode || ex.code || "EXAM"})
+                        <option value="">Select EXAMINATION</option>
+                        {EXAMINATIONS_LIST.map((ex) => (
+                          <option key={ex.id} value={ex.id}>
+                            {ex.name} ({ex.code})
                           </option>
                         ))}
                       </select>
                     </div>
 
-                    <div className="cms-field-group" style={{ flex: 1.4, minWidth: 300 }}>
+                    {/* SUBJECT: strictly only faculty-related subjects */}
+                    <div className="cms-field-group" style={{ flex: 1.4, minWidth: 320 }}>
                       <label className="cms-field-label">SUBJECT</label>
                       <select
                         className="cms-select-input"
@@ -934,10 +797,10 @@ export default function FacultyMarks() {
                           handleExamOrSubjectChange(selectedExam, e.target.value);
                         }}
                       >
-                        <option value="">Select Subject</option>
-                        {subjectsList.map((sub) => (
-                          <option key={sub.subjectId || sub.id} value={sub.subjectId || sub.id}>
-                            {sub.subjectName || sub.name} ({sub.subjectCode || sub.code || "SUB"})
+                        <option value="">Select SUBJECT</option>
+                        {facultySubjectOptions.map((sub) => (
+                          <option key={sub.id} value={sub.id}>
+                            {sub.name} ({sub.code}) — Faculty: {sub.faculty} ({sub.empId})
                           </option>
                         ))}
                       </select>
@@ -952,6 +815,7 @@ export default function FacultyMarks() {
                       height: 35,
                     }}
                   >
+                    {/* Bulk Import Button: Disabled for Approved and Submitted marks */}
                     <button
                       type="button"
                       className="cms-btn cms-btn-ghost"
@@ -961,22 +825,30 @@ export default function FacultyMarks() {
                         setBulkFileName("");
                         setShowBulkModal(true);
                       }}
-                      title="Upload and bulk import marks from Excel file"
+                      title={
+                        !selectedExam || !selectedSubject
+                          ? "Select examination and subject first"
+                          : isApproved
+                          ? "Bulk import is disabled for approved marks"
+                          : isSubmitted
+                          ? "Bulk import is disabled for submitted marks (under admin review)"
+                          : "Upload and bulk import marks from Excel file"
+                      }
                     >
                       Bulk Import
                     </button>
                     <button
                       type="button"
                       className="cms-btn cms-btn-secondary"
-                      disabled={!selectedExam || !selectedSubject || isApproved || savingMarks}
+                      disabled={!selectedExam || !selectedSubject || isApproved}
                       onClick={handleSaveDraft}
                     >
-                      {savingMarks ? <Loader2 size={13} className="spin" /> : "Save Draft"}
+                      Save Draft
                     </button>
                     <button
                       type="button"
                       className="cms-btn cms-btn-primary"
-                      disabled={!selectedExam || !selectedSubject || isApproved || savingMarks}
+                      disabled={!selectedExam || !selectedSubject || isApproved}
                       onClick={handleSubmitSubject}
                       style={{
                         backgroundColor: isRejected ? "#dc2626" : undefined,
@@ -999,7 +871,7 @@ export default function FacultyMarks() {
                       marginTop: 14,
                     }}
                   >
-                    Select an Examination and Subject above to populate student marks records.
+                    No subjects are configured for the selected examination.
                   </div>
                 )}
 
@@ -1034,7 +906,7 @@ export default function FacultyMarks() {
                           {evaluationStatus}
                         </span>
                         <span>
-                          {selectedSubjectName} · {selectedSectionName} · Maximum 100 · Passing 35%
+                          Dr. Ananya Rao (EMP-104) · REGULAR · Maximum 100 · Pass 40%
                         </span>
                       </div>
                     </div>
@@ -1066,96 +938,102 @@ export default function FacultyMarks() {
                           </tr>
                         </thead>
                         <tbody>
-                          {loadingStudents ? (
-                            <tr>
-                              <td colSpan={8} style={{ textAlign: "center", padding: 32 }}>
-                                <Loader2 size={20} className="spin" style={{ marginInline: "auto" }} />
-                                <div style={{ marginTop: 8, fontSize: 13, color: "var(--cms-muted)" }}>
-                                  Loading student roster...
-                                </div>
-                              </td>
-                            </tr>
-                          ) : pagedRows.length ? (
-                            pagedRows.map((row) => {
-                              const isRowAbsent = Boolean(row.absent);
-                              const total = isRowAbsent
-                                ? 0
-                                : Number(row.internal || 0) + Number(row.theory || 0);
-                              const pct = isRowAbsent ? 0 : (total / 100) * 100;
-                              const isLocked = isApproved;
+                          {pagedRows.map((row) => {
+                            const isRowAbsent = Boolean(row.absent);
+                            const total = isRowAbsent
+                              ? 0
+                              : Number(row.internal || 0) + Number(row.theory || 0);
+                            const pct = isRowAbsent ? 0 : (total / 100) * 100;
+                            const isLocked = isApproved;
 
-                              return (
-                                <tr key={row.studentId}>
-                                  <td className="cms-cell-center cms-cell-bold">{row.rollNo}</td>
-                                  <td>
-                                    <div className="cms-cell-bold">{row.name}</div>
-                                  </td>
-                                  <td className="cms-cell-center">
-                                    <input
-                                      type="number"
-                                      className="cms-num-input"
-                                      value={row.internal ?? ""}
-                                      min={0}
-                                      max={20}
-                                      disabled={isRowAbsent || isLocked}
-                                      onChange={(e) => handleInternalChange(row.studentId, e.target.value)}
-                                    />
-                                  </td>
-                                  <td className="cms-cell-center">
-                                    <input
-                                      type="number"
-                                      className="cms-num-input"
-                                      value={row.theory ?? ""}
-                                      min={0}
-                                      max={80}
-                                      disabled={isRowAbsent || isLocked}
-                                      onChange={(e) => handleTheoryChange(row.studentId, e.target.value)}
-                                    />
-                                  </td>
-                                  <td className="cms-cell-center cms-cell-bold">{total}</td>
-                                  <td className="cms-cell-center cms-cell-bold">{pct.toFixed(2)}%</td>
-                                  <td className="cms-cell-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={isRowAbsent}
-                                      disabled={isLocked}
-                                      onChange={(e) => handleAbsentToggle(row.studentId, e.target.checked)}
-                                    />
-                                  </td>
-                                  <td>
-                                    <input
-                                      type="text"
-                                      className="cms-text-input"
-                                      value={row.remarks || ""}
-                                      disabled={isLocked}
-                                      onChange={(e) => handleRemarksChange(row.studentId, e.target.value)}
-                                      placeholder="Remarks"
-                                    />
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          ) : (
-                            <tr>
-                              <td colSpan={8} style={{ textAlign: "center", padding: 32 }}>
-                                <div className="cms-empty">No students found in {selectedSectionName}.</div>
-                              </td>
-                            </tr>
-                          )}
+                            return (
+                              <tr key={row.studentId}>
+                                <td className="cms-cell-center">{row.rollNo || ""}</td>
+                                <td>{row.name}</td>
+                                <td className="cms-cell-center">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={20}
+                                    disabled={isLocked || isRowAbsent}
+                                    className="cms-num-input"
+                                    value={row.internal ?? ""}
+                                    placeholder="0"
+                                    onChange={(e) =>
+                                      handleInternalChange(row.studentId, e.target.value)
+                                    }
+                                  />
+                                </td>
+                                <td className="cms-cell-center">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={80}
+                                    disabled={isLocked || isRowAbsent}
+                                    className="cms-num-input"
+                                    value={row.theory ?? ""}
+                                    placeholder="0"
+                                    onChange={(e) =>
+                                      handleTheoryChange(row.studentId, e.target.value)
+                                    }
+                                  />
+                                </td>
+                                <td className="cms-cell-center">
+                                  {isRowAbsent ? "ABS" : total}
+                                </td>
+                                <td className="cms-cell-center">
+                                  {isRowAbsent ? "ABS" : `${pct.toFixed(2)}%`}
+                                </td>
+                                <td className="cms-cell-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isRowAbsent}
+                                    disabled={isLocked}
+                                    onChange={(e) =>
+                                      handleAbsentToggle(row.studentId, e.target.checked)
+                                    }
+                                    style={{
+                                      width: 16,
+                                      height: 16,
+                                      cursor: isLocked ? "not-allowed" : "pointer",
+                                    }}
+                                  />
+                                </td>
+                                <td>
+                                  <input
+                                    type="text"
+                                    className="cms-remarks-input"
+                                    disabled={isLocked}
+                                    value={row.remarks || ""}
+                                    placeholder=""
+                                    onChange={(e) =>
+                                      handleRemarksChange(row.studentId, e.target.value)
+                                    }
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
 
-                    {/* Pagination Bar */}
-                    <nav className="att-pagination">
-                      <span className="att-pagination-summary">
-                        Showing{" "}
-                        {currentStudents.length === 0
-                          ? "0–0 of 0 records"
-                          : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, currentStudents.length)} of ${currentStudents.length} records`}
+                    {/* Pagination Footer */}
+                    <div className="cms-pagination-footer">
+                      <span style={{ fontSize: 13, color: "var(--cms-muted, #7B8275)" }}>
+                        Showing {(currentPage - 1) * pageSize + 1}–
+                        {Math.min(currentPage * pageSize, currentStudents.length)} of{" "}
+                        {currentStudents.length} records{" "}
+                        {isApproved
+                          ? "(This approved subject is published and read-only.)"
+                          : isRejected
+                          ? "(This subject was rejected. Please correct and click Resubmit.)"
+                          : isSubmitted
+                          ? "(This submitted subject is pending admin approval.)"
+                          : ""}
                       </span>
-                      <div className="att-pagination-controls">
-                        <div className="att-per-page-wrap">
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
                           <span>Per page:</span>
                           <select
                             value={pageSize}
@@ -1163,260 +1041,366 @@ export default function FacultyMarks() {
                               setPageSize(Number(e.target.value));
                               setCurrentPage(1);
                             }}
-                            className="att-per-page-select"
+                            className="cms-select-input"
+                            style={{ width: "auto", height: 28, padding: "2px 6px" }}
                           >
                             <option value={5}>5</option>
                             <option value={10}>10</option>
                             <option value={15}>15</option>
-                            <option value={20}>20</option>
                           </select>
                         </div>
                         <button
                           type="button"
+                          className="cms-btn cms-btn-ghost"
                           disabled={currentPage === 1}
                           onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                         >
                           Previous
                         </button>
-                        <span className="att-page-number">
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>
                           {currentPage} / {totalPages}
                         </span>
                         <button
                           type="button"
-                          disabled={currentPage >= totalPages || totalPages === 0}
+                          className="cms-btn cms-btn-ghost"
+                          disabled={currentPage >= totalPages}
                           onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                         >
                           Next
                         </button>
                       </div>
-                    </nav>
+                    </div>
                   </>
                 )}
               </div>
-            </div>
+            </>
           )}
         </>
       )}
 
-      {/* TAB 2: EVALUATION REPORT & RESULTS */}
+      {/* ======================================================== */}
+      {/* TAB 2: REPORT — STATUS & RESULTS VIEW MODAL              */}
+      {/* ======================================================== */}
       {activeTab === "report" && (
-        <>
-          {/* Summary Metric Cards */}
-          <div className="cms-stats-grid" style={{ marginBottom: 14 }}>
-            <div className="cms-stat-card">
-              <div className="cms-stat-label">TOTAL EVALUATIONS</div>
-              <div className="cms-stat-val">{reportStats.total}</div>
-            </div>
-            <div className="cms-stat-card approved">
-              <div className="cms-stat-label">APPROVED & PUBLISHED</div>
-              <div className="cms-stat-val">{reportStats.approved}</div>
-            </div>
-            <div className="cms-stat-card under-review">
-              <div className="cms-stat-label">PENDING / UNDER REVIEW</div>
-              <div className="cms-stat-val">{reportStats.underReview}</div>
-            </div>
-            <div className="cms-stat-card rejected">
-              <div className="cms-stat-label">NEEDS REVISION</div>
-              <div className="cms-stat-val">{reportStats.rejected}</div>
+        <div className="cms-card cms-card-filter">
+          <div className="cms-section-heading">
+            <div>
+              <h2>Examination Submissions & Approval Report</h2>
+              <p>
+                Track status of submitted examinations, admin verification, approvals, and resolve rejection feedback.
+              </p>
             </div>
           </div>
 
-          <div className="cms-card">
-            <div className="cms-card-body" style={{ padding: 18 }}>
-              {/* Search & Filter Bar */}
-              <div className="cms-report-search-bar" style={{ display: "flex", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-                <div style={{ flex: 1, minWidth: 240, position: "relative" }}>
-                  <input
-                    type="search"
-                    className="cms-text-input"
-                    value={reportSearch}
-                    onChange={(e) => setReportSearch(e.target.value)}
-                    placeholder="Search by exam, subject, or section..."
-                    style={{ paddingLeft: 32 }}
-                  />
-                  <Search size={15} style={{ position: "absolute", left: 10, top: 11, color: "var(--cms-muted)" }} />
-                </div>
+          {/* Report Statistics Cards */}
+          <div className="sp-report-stats">
+            <div className="sp-stat-card">
+              <span className="label">Total Submissions</span>
+              <span className="val">{reportStats.total}</span>
+            </div>
+            <div className="sp-stat-card">
+              <span className="label" style={{ color: "#2E7D32" }}>Approved & Published</span>
+              <span className="val" style={{ color: "#2E7D32" }}>{reportStats.approved}</span>
+            </div>
+            <div className="sp-stat-card">
+              <span className="label" style={{ color: "#1D4ED8" }}>Under Review</span>
+              <span className="val" style={{ color: "#1D4ED8" }}>{reportStats.underReview}</span>
+            </div>
+            <div className="sp-stat-card">
+              <span className="label" style={{ color: "#DC2626" }}>Rejected / Needs Action</span>
+              <span className="val" style={{ color: "#DC2626" }}>{reportStats.rejected}</span>
+            </div>
+          </div>
 
+          {/* Search and Filters Strip */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 16,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flex: 1 }}>
+              <div style={{ minWidth: 170 }}>
                 <select
                   className="cms-select-input"
-                  style={{ width: 170 }}
                   value={reportStatusFilter}
                   onChange={(e) => setReportStatusFilter(e.target.value)}
                 >
                   <option value="ALL">All Statuses</option>
-                  <option value="APPROVED">Approved</option>
-                  <option value="SUBMITTED">Submitted</option>
+                  <option value="APPROVED">Approved (Published)</option>
                   <option value="VERIFIED">Verified</option>
-                  <option value="REJECTED">Needs Revision</option>
-                  <option value="DRAFT">Draft</option>
+                  <option value="SUBMITTED">Submitted</option>
+                  <option value="REJECTED">Rejected (Needs Action)</option>
                 </select>
               </div>
 
-              {/* Evaluations Table */}
-              <div className="cms-table-wrap">
-                <table className="cms-table">
-                  <thead>
-                    <tr>
-                      <th>EXAMINATION</th>
-                      <th>SUBJECT</th>
-                      <th>SECTION</th>
-                      <th>STATUS</th>
-                      <th>ADMIN REMARKS</th>
-                      <th style={{ textAlign: "center", width: 120 }}>ACTIONS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedEvaluations.length ? (
-                      pagedEvaluations.map((ev) => (
-                        <tr key={ev.evaluationId}>
-                          <td className="cms-cell-bold">{ev.examName}</td>
-                          <td>{ev.subjectName}</td>
-                          <td>{ev.section}</td>
-                          <td>
-                            <span className={`cms-status-pill ${ev.status.toLowerCase()}`}>
-                              <span className="cms-status-dot" />
-                              {ev.status}
-                            </span>
-                          </td>
-                          <td style={{ fontSize: 12.5, color: ev.status === "REJECTED" ? "#dc2626" : "var(--cms-muted)" }}>
-                            {ev.adminRemarks || "—"}
-                          </td>
-                          <td style={{ textAlign: "center" }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <div style={{ minWidth: 220 }}>
+                <select
+                  className="cms-select-input"
+                  value={reportExamFilter}
+                  onChange={(e) => setReportExamFilter(e.target.value)}
+                >
+                  <option value="ALL">All Examinations</option>
+                  {EXAMINATIONS_LIST.map((ex) => (
+                    <option key={ex.id} value={ex.id}>
+                      {ex.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ width: 240 }}>
+              <input
+                type="search"
+                value={reportSearch}
+                onChange={(e) => setReportSearch(e.target.value)}
+                placeholder="Search subject or remark..."
+                className="cms-select-input"
+              />
+            </div>
+          </div>
+
+          {/* Submissions Report Table (Matching Image 1 & 3) */}
+          <div className="sp-report-table-wrap">
+            <table className="sp-report-table">
+              <thead>
+                <tr>
+                  <th style={{ width: "24%" }}>EXAMINATION</th>
+                  <th style={{ width: "22%" }}>SUBJECT & FACULTY</th>
+                  <th style={{ width: "8%", textAlign: "center" }}>SECTION</th>
+                  <th style={{ width: "7%", textAlign: "center" }}>STUDENTS</th>
+                  <th style={{ width: "13%", minWidth: 125, textAlign: "center" }}>STATUS</th>
+                  <th style={{ width: "14%" }}>ADMIN FEEDBACK & REMARKS</th>
+                  <th style={{ width: "12%", minWidth: 130, textAlign: "right" }}>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evaluationsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center", padding: 32, color: "var(--cms-muted)" }}>
+                      No submission records match the selected filter.
+                    </td>
+                  </tr>
+                ) : (
+                  pagedEvaluations.map((ev) => {
+                    const isEvApproved = ev.status === "APPROVED";
+                    const isEvRejected = ev.status === "REJECTED";
+                    const isEvSubmitted = ev.status === "SUBMITTED" || ev.status === "VERIFIED";
+
+                    return (
+                      <tr key={ev.evaluationId}>
+                        <td>
+                          <strong>{ev.examName}</strong>
+                          <div style={{ fontSize: 11, color: "var(--cms-muted)", marginTop: 2 }}>
+                            Submitted: {ev.submittedAt || "Recent"}
+                          </div>
+                        </td>
+                        <td>
+                          <div><strong>{ev.subjectName}</strong></div>
+                          <small style={{ color: "var(--cms-muted)" }}>
+                            Faculty: {ev.faculty} ({ev.empId})
+                          </small>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className="cms-strong">{ev.section}</span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>{ev.rows?.length || 0}</td>
+                        <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                          <span className={`cms-status-pill ${ev.status.toLowerCase()}`}>
+                            <span className="cms-status-dot" />
+                            {ev.status}
+                          </span>
+                        </td>
+                        <td>
+                          {isEvRejected ? (
+                            <div style={{ color: "#DC2626", fontSize: 12, display: "flex", alignItems: "flex-start", gap: 4 }}>
+                              <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                              <span>{ev.adminRemarks || "Rejected by Admin. Please revise."}</span>
+                            </div>
+                          ) : isEvApproved ? (
+                            <div style={{ color: "#2E7D32", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
+                              <CheckCircle size={14} style={{ flexShrink: 0 }} />
+                              <span>{ev.adminRemarks || "Approved. Results published for students."}</span>
+                            </div>
+                          ) : (
+                            <div style={{ color: "var(--cms-muted)", fontSize: 12 }}>
+                              {ev.adminRemarks || "Submitted to Admin. Awaiting verification review."}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <div style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+                            {/* If Approved: View Results opens Results Modal (Screenshot 2) */}
+                            {isEvApproved && (
                               <button
                                 type="button"
-                                className="cms-action-btn"
+                                className="cms-btn cms-btn-ghost"
+                                style={{ height: 30, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}
                                 onClick={() => {
                                   setViewResultsEval(ev);
                                   setResultsModalPage(1);
                                 }}
-                                title="View student score breakdown"
+                                title="View published student marks"
                               >
-                                <Eye size={14} />
+                                <Eye size={13} /> View Results
                               </button>
-                              {ev.status === "REJECTED" && (
-                                <button
-                                  type="button"
-                                  className="cms-action-btn"
-                                  onClick={() => handleEditAndResubmit(ev)}
-                                  title="Edit scores and resubmit to Admin"
-                                  style={{ color: "#dc2626" }}
-                                >
-                                  <RotateCcw size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={6} style={{ textAlign: "center", padding: 32 }}>
-                          <div className="cms-empty">No evaluation reports match the search criteria.</div>
+                            )}
+
+                            {/* If Submitted or Verified: View Results is DISABLED */}
+                            {isEvSubmitted && (
+                              <button
+                                type="button"
+                                className="cms-btn cms-btn-ghost"
+                                disabled={true}
+                                style={{ height: 30, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}
+                                title="Results are awaiting Admin verification and approval"
+                              >
+                                <Eye size={13} /> View Results
+                              </button>
+                            )}
+
+                            {/* If Rejected: Prominent Edit & Resubmit button */}
+                            {isEvRejected && (
+                              <button
+                                type="button"
+                                className="cms-btn cms-btn-primary"
+                                style={{ height: 30, fontSize: 11.5, background: "#DC2626", borderColor: "#DC2626", display: "inline-flex", alignItems: "center", gap: 5 }}
+                                onClick={() => handleEditAndResubmit(ev)}
+                                title="Open marks in editor to correct issues and resubmit"
+                              >
+                                <RotateCcw size={13} /> Edit & Resubmit
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
-              {/* Report Tab Pagination */}
-              <nav className="att-pagination">
-                <span className="att-pagination-summary">
-                  Showing{" "}
-                  {evaluationsList.length === 0
-                    ? "0–0 of 0 records"
-                    : `${(reportPage - 1) * reportPageSize + 1}–${Math.min(reportPage * reportPageSize, evaluationsList.length)} of ${evaluationsList.length} records`}
-                </span>
-                <div className="att-pagination-controls">
-                  <button
-                    type="button"
-                    disabled={reportPage === 1}
-                    onClick={() => setReportPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </button>
-                  <span className="att-page-number">
-                    {reportPage} / {reportTotalPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={reportPage >= reportTotalPages || reportTotalPages === 0}
-                    onClick={() => setReportPage((p) => Math.min(reportTotalPages, p + 1))}
-                  >
-                    Next
-                  </button>
-                </div>
-              </nav>
+          {/* Report Tab Pagination Footer (Matching Image 3) */}
+          <div className="cms-pagination-footer">
+            <span style={{ fontSize: 13, color: "var(--cms-muted, #7B8275)" }}>
+              Showing {evaluationsList.length === 0 ? "0–0 of 0" : `${(reportPage - 1) * reportPageSize + 1}–${Math.min(reportPage * reportPageSize, evaluationsList.length)} of ${evaluationsList.length}`} records
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                <span>Per page:</span>
+                <select
+                  value={reportPageSize}
+                  onChange={(e) => {
+                    setReportPageSize(Number(e.target.value));
+                    setReportPage(1);
+                  }}
+                  className="cms-select-input"
+                  style={{ width: "auto", height: 28, padding: "2px 6px" }}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                disabled={reportPage === 1}
+                onClick={() => setReportPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>
+                {reportPage} / {reportTotalPages}
+              </span>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                disabled={reportPage >= reportTotalPages || evaluationsList.length === 0}
+                onClick={() => setReportPage((p) => Math.min(reportTotalPages, p + 1))}
+              >
+                Next
+              </button>
             </div>
           </div>
-        </>
+        </div>
       )}
 
-      {/* MODAL 1: Bulk Import Modal */}
+      {/* Upload & Import Marks Modal (Matching Image 1) */}
       {showBulkModal && (
-        <div className="sp-modal-overlay" onClick={() => setShowBulkModal(false)}>
-          <div className="sp-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
-            <div className="sp-modal-head">
+        <div className="sp-modal-overlay">
+          <div className="sp-upload-import-modal">
+            {/* Hidden native file input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".xlsx, .xls, .csv"
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+            />
+
+            {/* Modal Header */}
+            <div className="sp-upload-import-head">
               <div>
-                <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16 }}>Bulk Import Marks</h3>
-                <p className="sp-modal-subtitle" style={{ margin: "2px 0 0 0", fontSize: 12.5 }}>
-                  Import student marks for {selectedSubjectName} ({selectedSectionName})
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "var(--cms-text, #171A17)" }}>
+                  Upload & Import Marks
+                </h3>
+                <p style={{ margin: "5px 0 0 0", fontSize: 13, color: "var(--cms-muted, #7B8275)" }}>
+                  Upload an Excel (.xlsx, .xls) file to validate and bulk import marks for{" "}
+                  <strong>{selectedSubjectName}</strong>.
                 </p>
               </div>
               <button
                 type="button"
-                className="sp-modal-close-btn"
+                className="sp-upload-close-btn"
                 onClick={() => setShowBulkModal(false)}
+                title="Close"
               >
-                <X size={18} />
+                <X size={17} />
               </button>
             </div>
 
-            <div className="sp-modal-body" style={{ padding: 18 }}>
-              <div
-                style={{
-                  border: "2px dashed var(--cms-border, #E6E7DE)",
-                  borderRadius: 10,
-                  padding: "28px 16px",
-                  textAlign: "center",
-                  background: "var(--cms-surface-soft, #fafafa)",
-                  cursor: "pointer",
-                }}
-                onClick={handleTriggerFileInput}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx, .xls, .csv"
-                  style={{ display: "none" }}
-                  onChange={handleFileChange}
-                />
-                <Upload size={32} style={{ color: "var(--cms-primary, #6F8400)", marginBottom: 8 }} />
-                <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--cms-text)" }}>
-                  {bulkFileName ? bulkFileName : "Click or drag Excel/CSV spreadsheet here"}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 4 }}>
-                  Supports .xlsx, .xls, and .csv files formatted with standard Roll No & Marks headers
-                </div>
-              </div>
-
-              <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {/* Modal Body */}
+            <div className="sp-upload-import-body">
+              {/* Right-aligned Download Excel Template button */}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
                 <button
                   type="button"
-                  className="cms-btn cms-btn-ghost"
-                  style={{ fontSize: 12, padding: "4px 8px" }}
+                  className="cms-btn cms-btn-secondary"
+                  style={{ gap: 6, fontSize: 12.5, borderRadius: 8, height: 34, padding: "0 14px" }}
                   onClick={handleDownloadTemplate}
                 >
-                  <Download size={13} /> Download Sample Template
+                  <Download size={14} /> Download Excel Template
                 </button>
+              </div>
+
+              {/* Drag & Drop Upload Container */}
+              <div
+                className="sp-upload-dropzone"
+                onClick={handleTriggerFileInput}
+              >
+                <Upload size={32} style={{ color: "var(--cms-primary, #6F8400)", marginBottom: 8 }} />
+                <p style={{ margin: "0 0 4px 0", fontSize: 13.5, fontWeight: 600, color: "var(--cms-text, #171A17)" }}>
+                  {bulkFileName ? `Selected: ${bulkFileName}` : "Click to upload or drag & drop file"}
+                </p>
+                <span style={{ fontSize: 11.5, color: "var(--cms-muted, #7B8275)" }}>
+                  {bulkFileName ? "File ready for validation" : "Supported formats: .xlsx, .xls, .csv"}
+                </span>
               </div>
             </div>
 
-            <div className="sp-modal-foot">
+            {/* Modal Footer */}
+            <div className="sp-upload-import-foot">
               <button
                 type="button"
-                className="cms-btn cms-btn-ghost"
+                className="cms-btn cms-btn-secondary"
+                style={{ height: 36, padding: "0 18px", borderRadius: 8 }}
                 onClick={() => setShowBulkModal(false)}
               >
                 Cancel
@@ -1424,121 +1408,144 @@ export default function FacultyMarks() {
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
+                style={{ height: 36, padding: "0 18px", borderRadius: 8 }}
                 onClick={handleValidateAndImportFile}
-                disabled={!bulkFile}
               >
-                Validate & Import Marks
+                <CheckCircle size={14} /> Validate File
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: View Results Modal */}
+      {/* View Results Modal (Matching Screenshot 2) */}
       {viewResultsEval && (
-        <div className="sp-modal-overlay" onClick={() => setViewResultsEval(null)}>
-          <div className="sp-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680 }}>
-            <div className="sp-modal-head">
-              <div>
-                <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16 }}>
-                  Evaluation Results — {viewResultsEval.subjectName}
-                </h3>
-                <p className="sp-modal-subtitle" style={{ margin: "2px 0 0 0", fontSize: 12.5 }}>
-                  {viewResultsEval.examName} · {viewResultsEval.section}
-                </p>
+        <div className="sp-modal-overlay">
+          <div className="sp-results-modal">
+            {/* Modal Header */}
+            <div className="sp-results-modal-head">
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 8,
+                    background: "#EAF7EC",
+                    color: "#1E7E34",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <UserCheck size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--cms-text, #171A17)" }}>
+                    Passed Students List ({passedStudentsCount})
+                  </h3>
+                  <small style={{ color: "var(--cms-muted, #7B8275)", fontSize: 12 }}>
+                    {viewResultsEval.examName} · {viewResultsEval.subjectName} ({viewResultsEval.section})
+                  </small>
+                </div>
               </div>
               <button
                 type="button"
-                className="sp-modal-close-btn"
+                className="sp-upload-close-btn"
                 onClick={() => setViewResultsEval(null)}
+                title="Close"
               >
-                <X size={18} />
+                <X size={17} />
               </button>
             </div>
 
-            <div className="sp-modal-body" style={{ padding: 18 }}>
-              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                <span className="cms-badge cms-badge-success">
-                  {passedStudentsCount} Passed (≥ 35%)
-                </span>
-                <span className="cms-badge cms-badge-danger">
-                  {resultsModalRows.length - passedStudentsCount} Needs Improvement
-                </span>
-              </div>
+            {/* Modal Table */}
+            <div className="sp-results-modal-body">
+              <table className="sp-results-table">
+                <thead>
+                  <tr>
+                    <th>ROLL NO</th>
+                    <th>STUDENT NAME</th>
+                    <th>SECTION</th>
+                    <th style={{ textAlign: "center" }}>TOTAL</th>
+                    <th style={{ textAlign: "center" }}>PERCENTAGE</th>
+                    <th style={{ textAlign: "center" }}>RESULT</th>
+                    <th style={{ textAlign: "center" }}>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedResultsModalRows.map((r, i) => {
+                    const isAb = Boolean(r.absent);
+                    const total = isAb
+                      ? 0
+                      : r.totalScore !== undefined
+                      ? Number(r.totalScore)
+                      : Number(r.internal || 0) + Number(r.theory || 0);
+                    const pct = isAb
+                      ? 0
+                      : r.percentage !== undefined
+                      ? parseFloat(r.percentage)
+                      : total > 100
+                      ? (total / 400) * 100
+                      : (total / 100) * 100;
+                    const isPass = !isAb && (total > 100 ? total >= 140 : total >= 40);
 
-              <div className="cms-table-wrap">
-                <table className="cms-table">
-                  <thead>
-                    <tr>
-                      <th>Roll No</th>
-                      <th>Student</th>
-                      <th className="cms-cell-center">Internal / 20</th>
-                      <th className="cms-cell-center">Theory / 80</th>
-                      <th className="cms-cell-center">Total / 100</th>
-                      <th className="cms-cell-center">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedResultsModalRows.map((r) => {
-                      const total = r.absent ? 0 : Number(r.internal || 0) + Number(r.theory || 0);
-                      const isPass = total >= 35 && !r.absent;
-
-                      return (
-                        <tr key={r.studentId}>
-                          <td className="cms-cell-bold">{r.rollNo}</td>
-                          <td>{r.name}</td>
-                          <td className="cms-cell-center">{r.absent ? "—" : r.internal}</td>
-                          <td className="cms-cell-center">{r.absent ? "—" : r.theory}</td>
-                          <td className="cms-cell-center cms-cell-bold">{r.absent ? "0" : total}</td>
-                          <td className="cms-cell-center">
-                            {r.absent ? (
-                              <span style={{ color: "var(--cms-red)", fontWeight: 700 }}>Absent</span>
-                            ) : isPass ? (
-                              <span style={{ color: "var(--cms-green)", fontWeight: 700 }}>PASS</span>
-                            ) : (
-                              <span style={{ color: "var(--cms-red)", fontWeight: 700 }}>FAIL</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <nav className="att-pagination" style={{ marginTop: 12 }}>
-                <span className="att-pagination-summary">
-                  Showing {(resultsModalPage - 1) * resultsPageSize + 1}–{Math.min(resultsModalPage * resultsPageSize, resultsModalRows.length)} of {resultsModalRows.length} students
-                </span>
-                <div className="att-pagination-controls">
-                  <button
-                    type="button"
-                    disabled={resultsModalPage === 1}
-                    onClick={() => setResultsModalPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </button>
-                  <span className="att-page-number">
-                    {resultsModalPage} / {resultsModalTotalPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={resultsModalPage >= resultsModalTotalPages || resultsModalTotalPages === 0}
-                    onClick={() => setResultsModalPage((p) => Math.min(resultsModalTotalPages, p + 1))}
-                  >
-                    Next
-                  </button>
-                </div>
-              </nav>
+                    return (
+                      <tr key={r.studentId || i}>
+                        <td style={{ fontWeight: 600 }}>{r.rollNo || (i + 1)}</td>
+                        <td>{r.name}</td>
+                        <td style={{ color: "var(--cms-muted)" }}>{viewResultsEval.section}</td>
+                        <td style={{ textAlign: "center", fontWeight: 700 }}>
+                          {isAb ? "ABS" : total}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          {isAb ? "ABS" : `${pct.toFixed(2)}%`}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className={`cms-result-badge ${isPass ? "pass" : "fail"}`}>
+                            {isAb ? "ABS" : isPass ? "PASS" : "FAIL"}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <button
+                            type="button"
+                            className="sp-eye-btn"
+                            title={`View details for ${r.name}`}
+                            onClick={() =>
+                              notify(
+                                `${r.name}: Internal ${r.internal}/20, Theory ${r.theory}/80, Total ${total}/100 (${r.remarks || "Regular"})`
+                              )
+                            }
+                          >
+                            <Eye size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
-            <div className="sp-modal-foot">
+            {/* Modal Pagination Footer (Matching Screenshot 2) */}
+            <div className="sp-results-modal-foot">
               <button
                 type="button"
-                className="cms-btn cms-btn-primary"
-                onClick={() => setViewResultsEval(null)}
+                className="sp-modal-page-btn"
+                disabled={resultsModalPage === 1}
+                onClick={() => setResultsModalPage((p) => Math.max(1, p - 1))}
               >
-                Close
+                Previous
+              </button>
+              <span style={{ fontSize: 12.5, color: "var(--cms-muted, #7B8275)", margin: "0 6px" }}>
+                Page {resultsModalPage} of {resultsModalTotalPages}
+              </span>
+              <button
+                type="button"
+                className={`sp-modal-page-btn ${resultsModalPage < resultsModalTotalPages ? "active" : ""}`}
+                disabled={resultsModalPage >= resultsModalTotalPages}
+                onClick={() => setResultsModalPage((p) => Math.min(resultsModalTotalPages, p + 1))}
+              >
+                Next
               </button>
             </div>
           </div>
@@ -1546,7 +1553,7 @@ export default function FacultyMarks() {
       )}
 
       {toast && (
-        <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`}>
+        <div className={`cms-toast-banner cms-toast-${toast.type}`} style={{ zIndex: 99999 }}>
           {toast.text}
         </div>
       )}

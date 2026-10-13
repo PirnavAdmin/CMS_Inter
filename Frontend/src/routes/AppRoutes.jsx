@@ -1,6 +1,5 @@
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/components/pages/LandingPage.jsx";
-import ExamCellPortalRoutes from "@/Dashboard/ExamCellDashboard/ExamCellPortalRoutes.jsx";
 import DashboardPage from "@/components/pages/DashboardPage.jsx";
 import PrincipalDashboard from "@/Dashboard/PrincipalDashboard/PrincipalDashboard.jsx";
 import ListPage from "@/components/pages/ListPage.jsx";
@@ -43,6 +42,7 @@ import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPag
 import PayrollPage from "@/components/pages/PayrollPage.jsx";
 import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
+import AdminReimbursementsPage from "@/components/pages/AdminReimbursementsPage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
 import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
@@ -188,7 +188,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/staff/:id/edit" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id/review" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id" element={<StaffManagementPage />} />
-        <Route path="/dashboard/reimbursements" element={<ReimbursementPage />} />
+        <Route path="/dashboard/reimbursements" element={<AdminReimbursementsPage />} />
         <Route path="/dashboard/departments" element={<DepartmentManagementPage />} />
         <Route path="/dashboard/departments/add" element={<MasterFormPage kind="department" />} />
         <Route path="/dashboard/departments/:id/edit" element={<MasterFormPage kind="department" />} />
@@ -304,11 +304,9 @@ export default function AppRoutes() {
         <Route path="/dashboard/payroll/settings" element={<PayrollPage mode="settings" />} />
         <Route path="/dashboard/payroll/import" element={<PayrollPage mode="import" />} />
 
-        {/* Faculty & Staff Reimbursement Canonical & Finance Routes */}
+        {/* Faculty Reimbursement Canonical & Finance Routes */}
         <Route path="/dashboard/reimbursement" element={<ReimbursementPage />} />
-        <Route path="/dashboard/reimbursements" element={<ReimbursementPage />} />
         <Route path="/dashboard/finance/reimbursement" element={<ReimbursementPage />} />
-        <Route path="/dashboard/finance/reimbursements" element={<ReimbursementPage />} />
 
         {/* Backward-Compatible Staff Salary Aliases */}
         <Route path="/dashboard/staff-salary" element={<PayrollPage mode="payroll" />} />
@@ -393,9 +391,6 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute requireExamCell />}>
-        <Route path="/exam-cell-dashboard/*" element={<ExamCellPortalRoutes />} />
-      </Route>
       <Route element={<ProtectedRoute requireFaculty />}>
         <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
       </Route>
