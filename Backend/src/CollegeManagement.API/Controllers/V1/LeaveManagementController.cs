@@ -12,8 +12,8 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/staff-attendance")]
-    [EnableCors("AllowFrontend")]
-    [Authorize(Roles = "Faculty,Admin,Super Admin,HOD")]
+    [Authorize(Roles = "Faculty,Admin,Super Admin,HOD,Principal")]
+    [CollegeManagement.API.Filters.RequirePermission("staff-leave-management")]
     [Produces("application/json")]
     
     public class LeaveManagementController : ControllerBase

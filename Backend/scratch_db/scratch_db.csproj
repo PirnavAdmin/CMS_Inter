@@ -13,8 +13,4 @@
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\src\CollegeManagement.API\CollegeManagement.API.csproj" />
-  </ItemGroup>
-
 </Project>

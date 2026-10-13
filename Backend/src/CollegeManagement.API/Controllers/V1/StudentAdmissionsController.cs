@@ -1,5 +1,6 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.StudentAdmission;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +11,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/student-admissions")]
     [Authorize]
+    [RequirePermission("student-admission")]
     public class StudentAdmissionController : ControllerBase
     {
         private readonly IStudentAdmissionService _service;

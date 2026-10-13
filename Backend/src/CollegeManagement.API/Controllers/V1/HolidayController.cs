@@ -4,7 +4,9 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using System.IO;
 using CollegeManagement.API.DTOs.Holiday;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,6 +16,8 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v1/holidays")]
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
+    [Authorize]
+    [RequirePermission("holiday-management")]
     public class HolidayController : ControllerBase
     {
         private readonly IHolidayService _holidayService;

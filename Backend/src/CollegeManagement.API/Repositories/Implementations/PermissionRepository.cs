@@ -265,7 +265,13 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<bool> HasModulePermissionAsync(int userId, string module, string action)
         {
-            return await HasPermissionAsync(userId, $"{module}_{action}".ToUpper());
+            var conn = await GetOpenConnectionAsync();
+            var result = await conn.QueryFirstOrDefaultAsync<int>(
+                "sp_CheckUserModuleAction",
+                new { p_UserId = userId, p_ModuleIdentifier = module, p_Action = action },
+                commandType: CommandType.StoredProcedure);
+
+            return result == 1;
         }
 
         public async Task<bool> HasPermissionAsync(int userId, string permissionCode)

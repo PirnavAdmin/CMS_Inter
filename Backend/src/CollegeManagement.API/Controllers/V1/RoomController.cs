@@ -1,4 +1,5 @@
 using CollegeManagement.API.DTOs.Timetable;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -16,6 +17,7 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v{version:apiVersion}/rooms")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("section-room")]
     public class RoomController : ControllerBase
     {
         private readonly IRoomService _roomService;
@@ -46,6 +48,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Gets all active rooms with optional filtering.
         /// </summary>
         [HttpGet("active")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<RoomResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetActive([FromQuery] RoomFilterDto? filter)
         {
