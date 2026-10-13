@@ -20,7 +20,6 @@ namespace CollegeManagement.API.Services.Implementations
     public class TimetableService : ITimetableService
     {
         private readonly ITimetableRepository _timetableRepository;
-        private readonly ITimetableBackupRepository _timetableBackupRepository;
         private readonly IPeriodRepository _periodRepository;
         private readonly IRoomRepository _roomRepository;
         private readonly AppDbContext _context;
@@ -29,14 +28,12 @@ namespace CollegeManagement.API.Services.Implementations
             ITimetableRepository timetableRepository,
             IPeriodRepository periodRepository,
             IRoomRepository roomRepository,
-            AppDbContext context,
-            ITimetableBackupRepository? timetableBackupRepository = null)
+            AppDbContext context)
         {
             _timetableRepository = timetableRepository;
             _periodRepository = periodRepository;
             _roomRepository = roomRepository;
             _context = context;
-            _timetableBackupRepository = timetableBackupRepository ?? new TimetableBackupRepository(context);
         }
 
         public async Task<TimetableResponseDto?> GetByIdAsync(int id)
@@ -82,16 +79,13 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ArgumentException("StaffId is required and must be greater than 0.");
             }
 
-            var staffTask = _context.Staffs.AsNoTracking().AnyAsync(s => s.Id == dto.StaffId && s.StaffType == "Teaching");
-            var sectionTask = _context.Sections.AsNoTracking().FirstOrDefaultAsync(s => s.SectionId == dto.SectionId && s.IsActive);
-            await Task.WhenAll(staffTask, sectionTask);
-
-            if (!staffTask.Result)
+            var staffExists = await _context.Staffs.AsNoTracking().AnyAsync(s => s.Id == dto.StaffId && s.StaffType == "Teaching");
+            if (!staffExists)
             {
                 throw new ArgumentException($"Teaching Staff with ID {dto.StaffId} not found or is inactive.");
             }
 
-            var section = sectionTask.Result;
+            var section = await _context.Sections.AsNoTracking().FirstOrDefaultAsync(s => s.SectionId == dto.SectionId && s.IsActive);
             if (section == null)
             {
                 throw new ArgumentException($"Section with ID {dto.SectionId} not found.");
@@ -437,9 +431,6 @@ namespace CollegeManagement.API.Services.Implementations
                 SELECT psa.`Id`, psa.`CampusId`, psa.`PeriodStructureId`, psa.`BoardId`, psa.`AcademicLevelId`, psa.`AcademicYearId`, psa.`GroupId`, psa.`IsActive`
                 FROM `PeriodStructureAssignments` psa
                 WHERE psa.`BoardId` = @BoardId AND psa.`AcademicLevelId` = @AcademicLevelId AND psa.`AcademicYearId` = @AcademicYearId AND psa.`IsActive` = 1;
-                SELECT `Id`, `SectionId`, `ApprovalStatus`, `IsPublished`
-                FROM `Timetables`
-                WHERE `AcademicYearId` = @AcademicYearId AND `SectionId` IN @SectionIds;
             ";
 
             using var multi = await dbConn.QueryMultipleAsync(multiSql, new
@@ -479,7 +470,6 @@ namespace CollegeManagement.API.Services.Implementations
             var otherSectionsTimetables = (await multi.ReadAsync<dynamic>()).AsList();
             var activeRooms = (await multi.ReadAsync<Room>()).AsList();
             var contextAssignments = (await multi.ReadAsync<PeriodStructureAssignment>()).AsList();
-            var existingTargetTimetableSlots = (await multi.ReadAsync<dynamic>()).AsList();
 
             // Canonical Program & Campus Verification per Section
             int? resolvedCampusId = dto.CampusId ?? (targetSections.Count > 0 ? targetSections[0].CampusId : (int?)null);
@@ -499,17 +489,6 @@ namespace CollegeManagement.API.Services.Implementations
                 if (dto.CampusId.HasValue && sec.CampusId != dto.CampusId.Value)
                 {
                     throw new ArgumentException($"Section '{sec.SectionName}' (CampusId: {sec.CampusId}) does not match requested CampusId {dto.CampusId.Value}.");
-                }
-            }
-
-            // Safe Handling of Existing Timetable: Protect Approved / Published schedules
-            foreach (var sec in targetSections)
-            {
-                var existingForSec = existingTargetTimetableSlots.Where(s => (int)s.SectionId == sec.SectionId).ToList();
-                bool hasPublishedOrApproved = existingForSec.Any(s => (bool)s.IsPublished || (int)s.ApprovalStatus == (int)TimetableApprovalStatus.Published || (int)s.ApprovalStatus == (int)TimetableApprovalStatus.Approved || (int)s.ApprovalStatus == 3);
-                if (hasPublishedOrApproved)
-                {
-                    throw new InvalidOperationException($"Section '{sec.SectionName}' (ID: {sec.SectionId}) already has an approved or published timetable schedule. Safe automatic replacement is restricted to draft timetables. Please unpublish or archive the active schedule before regenerating.");
                 }
             }
 
@@ -714,7 +693,7 @@ namespace CollegeManagement.API.Services.Implementations
                     int placedCount = 0;
                     for (int pCount = 0; pCount < requiredPeriods; pCount++)
                     {
-                        var candidateSlots = new List<(int Day, Period Period, int StaffId, int Score)>();
+                        var candidateSlots = new List<(int Day, Period Period, int StaffId, int CandidateRoomId, int Score)>();
 
                         foreach (var slot in availableSlots)
                         {
@@ -738,12 +717,24 @@ namespace CollegeManagement.API.Services.Implementations
                                 bool staffClash = bookedStaffIntervals.Any(b => b.StaffId == staffId && b.Day == slot.Day && b.StartTime < slot.Period.EndTime && b.EndTime > slot.Period.StartTime);
                                 if (staffClash) continue;
 
-                                // Time overlap check for Room
-                                bool roomClash = bookedRoomIntervals.Any(b => b.RoomId == sectionRoomId && b.Day == slot.Day && b.StartTime < slot.Period.EndTime && b.EndTime > slot.Period.StartTime);
+                                int candidateRoomId = sectionRoomId;
+                                bool roomClash = bookedRoomIntervals.Any(b => b.RoomId == candidateRoomId && b.Day == slot.Day && b.StartTime < slot.Period.EndTime && b.EndTime > slot.Period.StartTime);
+                                if (roomClash)
+                                {
+                                    // Dynamic room fallback: find another active room in this campus (or global) that is free during this period
+                                    var altRoom = activeRooms.FirstOrDefault(r => 
+                                        (!resolvedCampusId.HasValue || r.CampusId == 0 || r.CampusId == resolvedCampusId.Value) &&
+                                        !bookedRoomIntervals.Any(b => b.RoomId == r.RoomId && b.Day == slot.Day && b.StartTime < slot.Period.EndTime && b.EndTime > slot.Period.StartTime));
+                                    if (altRoom != null)
+                                    {
+                                        candidateRoomId = altRoom.RoomId;
+                                        roomClash = false;
+                                    }
+                                }
                                 if (roomClash) continue;
 
                                 int score = (dailyCount == 0 ? 100 : 0) - (dayLoad * 10) - (periodUsage * 5);
-                                candidateSlots.Add((slot.Day, slot.Period, staffId, score));
+                                candidateSlots.Add((slot.Day, slot.Period, staffId, candidateRoomId, score));
                             }
                         }
 
@@ -757,7 +748,7 @@ namespace CollegeManagement.API.Services.Implementations
                             assignedSlotsThisSection.Add(secSlotKey);
                             bookedSectionIntervals.Add((sec.SectionId, best.Day, best.Period.StartTime, best.Period.EndTime));
                             bookedStaffIntervals.Add((best.StaffId, best.Day, best.Period.StartTime, best.Period.EndTime));
-                            bookedRoomIntervals.Add((sectionRoomId, best.Day, best.Period.StartTime, best.Period.EndTime));
+                            bookedRoomIntervals.Add((best.CandidateRoomId, best.Day, best.Period.StartTime, best.Period.EndTime));
 
                             sectionDailySubjectMap[dailySubKey] = sectionDailySubjectMap.GetValueOrDefault(dailySubKey, 0) + 1;
                             sectionDayLoadMap[best.Day] = sectionDayLoadMap.GetValueOrDefault(best.Day, 0) + 1;
@@ -779,7 +770,7 @@ namespace CollegeManagement.API.Services.Implementations
                                 PeriodId = best.Period.PeriodId,
                                 SubjectId = subject.SubjectId,
                                 StaffId = best.StaffId,
-                                RoomId = sectionRoomId,
+                                RoomId = best.CandidateRoomId,
                                 IsPublished = false,
                                 ApprovalStatus = TimetableApprovalStatus.Draft,
                                 Remarks = "Auto-generated theory slot",
@@ -807,7 +798,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // 7. Transactional Atomic Replacement of Draft Slots and Batch Insertion
+            // 7. Transactional Atomic Replacement of Timetable Slots and Batch Insertion
             await ExecuteInTransactionAsync(async () =>
             {
                 var conn = _context.Database.GetDbConnection();
@@ -823,96 +814,11 @@ namespace CollegeManagement.API.Services.Implementations
                     new { SectionIds = dto.SectionIds, yearId = dto.AcademicYearId },
                     transaction: currentTx);
 
-                foreach (var targetSecId in dto.SectionIds)
-                {
-                    var existingCurrentDrafts = await _context.Timetables
-                        .Where(t => t.SectionId == targetSecId && t.AcademicYearId == dto.AcademicYearId && !t.IsPublished && t.ApprovalStatus == TimetableApprovalStatus.Draft)
-                        .ToListAsync();
-
-                    if (existingCurrentDrafts.Count > 0)
-                    {
-                        var oldBackups = await _context.TimetableBackups
-                            .Where(b => b.SectionId == targetSecId && b.AcademicYearId == dto.AcademicYearId)
-                            .ToListAsync();
-
-                        if (oldBackups.Count > 0)
-                        {
-                            var oldBackupIds = oldBackups.Select(b => b.Id).ToList();
-                            await conn.ExecuteAsync("DELETE FROM `TimetableBackupSlots` WHERE `TimetableBackupId` IN @oldBackupIds;", new { oldBackupIds }, transaction: currentTx);
-                            await conn.ExecuteAsync("DELETE FROM `TimetableBackups` WHERE `Id` IN @oldBackupIds;", new { oldBackupIds }, transaction: currentTx);
-                        }
-
-                        var backup = new TimetableBackup
-                        {
-                            BoardId = dto.BoardId,
-                            AcademicLevelId = dto.AcademicLevelId,
-                            AcademicYearId = dto.AcademicYearId,
-                            GroupId = dto.GroupId,
-                            SectionId = targetSecId,
-                            ArchiveReason = $"Auto backup created before regenerating timetable on {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}",
-                            ArchivedBy = "System",
-                            ArchivedAt = DateTime.UtcNow
-                        };
-
-                        _context.TimetableBackups.Add(backup);
-                        await _context.SaveChangesAsync();
-
-                        var backupSlots = existingCurrentDrafts.Select(slot => new TimetableBackupSlot
-                        {
-                            TimetableBackupId = backup.Id,
-                            OriginalTimetableId = slot.Id,
-                            BoardId = (slot.BoardId > 0) ? slot.BoardId : dto.BoardId,
-                            AcademicLevelId = (slot.AcademicLevelId > 0) ? slot.AcademicLevelId : dto.AcademicLevelId,
-                            AcademicYearId = (slot.AcademicYearId > 0) ? slot.AcademicYearId : dto.AcademicYearId,
-                            GroupId = (slot.GroupId > 0) ? slot.GroupId : dto.GroupId,
-                            ProgramId = (slot.ProgramId.HasValue && slot.ProgramId.Value > 0) ? slot.ProgramId : dto.ProgramId,
-                            SectionId = slot.SectionId,
-                            DayOfWeek = slot.DayOfWeek,
-                            PeriodId = slot.PeriodId,
-                            SubjectId = slot.SubjectId,
-                            StaffId = (slot.StaffId > 0) ? slot.StaffId : 1,
-                            RoomId = (slot.RoomId > 0) ? slot.RoomId : 1,
-                            IsPublished = slot.IsPublished,
-                            ApprovalStatus = slot.ApprovalStatus,
-                            Remarks = slot.Remarks,
-                            CreatedAt = DateTime.UtcNow
-                        }).ToList();
-
-                        if (backupSlots.Count > 0)
-                        {
-                            var sbBackup = new StringBuilder();
-                            sbBackup.Append("INSERT INTO `TimetableBackupSlots` (`TimetableBackupId`, `OriginalTimetableId`, `BoardId`, `AcademicLevelId`, `AcademicYearId`, `GroupId`, `ProgramId`, `SectionId`, `DayOfWeek`, `PeriodId`, `SubjectId`, `StaffId`, `RoomId`, `IsPublished`, `ApprovalStatus`, `Remarks`, `CreatedAt`) VALUES ");
-                            var pBackup = new DynamicParameters();
-                            for (int i = 0; i < backupSlots.Count; i++)
-                            {
-                                if (i > 0) sbBackup.Append(", ");
-                                sbBackup.Append($"(@bkId{i}, @origId{i}, @b{i}, @al{i}, @ay{i}, @g{i}, @pr{i}, @s{i}, @d{i}, @p{i}, @sub{i}, @st{i}, @r{i}, @pub{i}, @app{i}, @rem{i}, @cr{i})");
-                                var bs = backupSlots[i];
-                                pBackup.Add($"bkId{i}", bs.TimetableBackupId);
-                                pBackup.Add($"origId{i}", bs.OriginalTimetableId);
-                                pBackup.Add($"b{i}", bs.BoardId);
-                                pBackup.Add($"al{i}", bs.AcademicLevelId);
-                                pBackup.Add($"ay{i}", bs.AcademicYearId);
-                                pBackup.Add($"g{i}", bs.GroupId);
-                                pBackup.Add($"pr{i}", bs.ProgramId);
-                                pBackup.Add($"s{i}", bs.SectionId);
-                                pBackup.Add($"d{i}", bs.DayOfWeek);
-                                pBackup.Add($"p{i}", bs.PeriodId);
-                                pBackup.Add($"sub{i}", bs.SubjectId);
-                                pBackup.Add($"st{i}", bs.StaffId);
-                                pBackup.Add($"r{i}", bs.RoomId);
-                                pBackup.Add($"pub{i}", bs.IsPublished ? 1 : 0);
-                                pBackup.Add($"app{i}", (int)bs.ApprovalStatus);
-                                pBackup.Add($"rem{i}", bs.Remarks);
-                                pBackup.Add($"cr{i}", bs.CreatedAt);
-                            }
-                            await conn.ExecuteAsync(sbBackup.ToString(), pBackup, transaction: currentTx);
-                        }
-
-                        // Delete ONLY draft slots
-                        await conn.ExecuteAsync("DELETE FROM `Timetables` WHERE `SectionId` = @targetSecId AND `AcademicYearId` = @yearId AND `IsPublished` = 0 AND `ApprovalStatus` = 0;", new { targetSecId, yearId = dto.AcademicYearId }, transaction: currentTx);
-                    }
-                }
+                // Atomically clear any existing timetable slots for target sections & year (whether Draft, Approved, or Published)
+                await conn.ExecuteAsync(
+                    "DELETE FROM `Timetables` WHERE `SectionId` IN @SectionIds AND `AcademicYearId` = @yearId;",
+                    new { SectionIds = dto.SectionIds, yearId = dto.AcademicYearId },
+                    transaction: currentTx);
 
                 if (generatedDraftEntities.Count > 0)
                 {
@@ -955,37 +861,6 @@ namespace CollegeManagement.API.Services.Implementations
                 SectionsProcessedCount = dto.SectionIds.Count,
                 GeneratedSlots = returnedSlots,
                 Warnings = warnings
-            };
-        }
-
-        public async Task<TimetableBackupResponseDto?> GetPreviousTimetableAsync(int sectionId, int? academicYearId = null)
-        {
-            return await _timetableBackupRepository.GetPreviousBySectionAsync(sectionId, academicYearId);
-        }
-
-        public async Task<TimetableBackupResponseDto> ArchiveSectionTimetableAsync(int sectionId, int academicYearId, string? reason = null, string? user = null)
-        {
-            int backupId = await _timetableBackupRepository.ArchiveSectionTimetableAsync(sectionId, academicYearId, reason, user);
-            if (backupId <= 0)
-                throw new InvalidOperationException("Cannot archive empty timetable.");
-
-            var backup = await _timetableBackupRepository.GetPreviousBySectionAsync(sectionId, academicYearId);
-            return backup!;
-        }
-
-        public async Task<RestoreTimetableResultDto> RestorePreviousTimetableAsync(int sectionId, int academicYearId, string? user = null)
-        {
-            int restoredCount = await _timetableBackupRepository.SwapRestoreSectionTimetableAsync(sectionId, academicYearId, user);
-            var restoredSlots = (await _timetableRepository.GetBySectionIdAsync(sectionId, academicYearId)).ToList();
-
-            return new RestoreTimetableResultDto
-            {
-                IsSuccess = restoredCount > 0,
-                Message = restoredCount > 0 ? "Timetable restored successfully." : "No backup found to restore.",
-                SectionId = sectionId,
-                AcademicYearId = academicYearId,
-                RestoredSlotsCount = restoredCount,
-                RestoredSlots = restoredSlots
             };
         }
 
