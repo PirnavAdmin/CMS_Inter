@@ -14,6 +14,7 @@ const studentApiEndpoints = {
   },
   attendance: {
     search: "/api/v1/attendance/search",
+    dailySessions: "/api/v1/attendance/admin/students",
   },
   results: {
     studentResult: "/api/v1/results/student-result",
