@@ -207,7 +207,6 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
-builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
 builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 
 // Inventory Repository
