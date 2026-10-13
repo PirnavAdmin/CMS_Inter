@@ -3,7 +3,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
+using CollegeManagement.API.Helpers;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -11,8 +13,8 @@ using Microsoft.Extensions.Logging;
 namespace CollegeManagement.API.Services.Background
 {
     /// <summary>
-    /// Background service that automatically transitions SCHEDULED examinations to COMPLETED
-    /// once all of their scheduled subject time slots have finished.
+    /// Background service that automatically transitions examinations between SCHEDULED, ONGOING,
+    /// and COMPLETED based on active schedule time slots and examination periods in IST (UTC+5:30).
     /// </summary>
     public class ExamAutoCompletionWorker : BackgroundService
     {
@@ -29,55 +31,62 @@ namespace CollegeManagement.API.Services.Background
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("ExamAutoCompletionWorker started.");
+            _logger.LogInformation("ExamAutoCompletionWorker started with IST timezone evaluation.");
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    await CheckAndCompleteExaminationsAsync(stoppingToken);
+                    await CheckAndTransitionExaminationsAsync(stoppingToken);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error in ExamAutoCompletionWorker cycle.");
                 }
 
-                // Check every 15 minutes to conserve database connection pool limits
-                await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
+                // Check every 1 minute for responsive status transitions in IST
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }
 
-        private async Task CheckAndCompleteExaminationsAsync(CancellationToken ct)
+        private async Task CheckAndTransitionExaminationsAsync(CancellationToken ct)
         {
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var cache = scope.ServiceProvider.GetService<IMemoryCache>();
 
-            var now = DateTime.UtcNow;
-            var today = DateOnly.FromDateTime(now);
-            var currentTime = TimeOnly.FromDateTime(now);
+            var istNow = ExaminationStatusHelper.GetIstNow();
 
-            var scheduledExams = await db.Examinations
+            var candidateExams = await db.Examinations
                 .Include(e => e.ExamSchedules.Where(s => s.IsActive))
-                .Where(e => e.IsActive && e.Status.ToUpper() == "SCHEDULED")
+                .Where(e => e.IsActive && e.Status != "CANCELLED" && e.Status != "DRAFT")
                 .ToListAsync(ct);
 
-            foreach (var exam in scheduledExams)
+            foreach (var exam in candidateExams)
             {
-                var activeSchedules = exam.ExamSchedules.Where(s => s.IsActive).ToList();
-                if (!activeSchedules.Any()) continue;
+                var currentStatus = (exam.Status ?? string.Empty).Trim().ToUpperInvariant();
+                var newStatus = ExaminationStatusHelper.CalculateAuthoritativeStatus(
+                    currentStatus,
+                    exam.StartDate,
+                    exam.EndDate,
+                    exam.ExamSchedules,
+                    istNow);
 
-                // Find the latest exam schedule end point
-                bool allFinished = activeSchedules.All(s =>
-                    s.ExamDate < today || (s.ExamDate == today && s.EndTime <= currentTime));
-
-                if (allFinished)
+                if (!string.Equals(currentStatus, newStatus, StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.LogInformation(
-                        "Auto-completing Examination ID {ExamId} ({ExamCode}) as all schedules have concluded.",
-                        exam.ExaminationId, exam.ExamCode);
+                        "Auto-transitioning Examination ID {ExamId} ({ExamCode}) from '{OldStatus}' to '{NewStatus}' at IST {IstTime:yyyy-MM-dd HH:mm:ss}.",
+                        exam.ExaminationId, exam.ExamCode, currentStatus, newStatus, istNow);
 
-                    exam.Status = "COMPLETED";
+                    exam.Status = newStatus;
                     exam.UpdatedAt = DateTime.UtcNow;
+
+                    if (cache != null)
+                    {
+                        cache.Remove($"exam:details:{exam.ExaminationId}");
+                        cache.Remove($"exam:schedules:{exam.ExaminationId}");
+                        cache.Remove($"exam:eligible-subjects:{exam.ExaminationId}");
+                    }
                 }
             }
 

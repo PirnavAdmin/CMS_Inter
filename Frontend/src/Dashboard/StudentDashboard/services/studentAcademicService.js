@@ -153,7 +153,16 @@ export const getCurrentStudentPhotoFile = async (path, signal) => {
   const url = new URL(path, `${base.origin}/`);
   if (!["http:", "https:"].includes(url.protocol) || url.origin !== base.origin
     || !url.pathname.startsWith("/uploads/")) throw new Error("The profile photo URL is unavailable.");
-  const response = await apiClient.get(url.href, { responseType: "blob", signal, skipGlobalLoader: true });
+  const response = await apiClient.get(url.href, {
+    responseType: "blob",
+    signal,
+    skipGlobalLoader: true,
+    // A missing optional photo is handled locally; other failures still reject.
+    validateStatus: (status) => (status >= 200 && status < 300) || status === 404,
+  });
+  if (response.status === 404) {
+    throw new Error("Your saved profile photo is missing from the server. Please upload a replacement photo.");
+  }
   if (!response.data.type.startsWith("image/")) throw new Error("The photo server did not return an image.");
   return response.data;
 };
@@ -195,6 +204,7 @@ export const changeCurrentStudentPassword = (data) => apiClient.post(studentApiE
 
 export const getStudentExaminations = async (student) => {
   const params = {
+    CampusId: student.campusId,
     BoardId: student.boardId,
     AcademicYearId: student.academicYearId,
     AcademicLevelId: student.academicLevelId,
@@ -205,21 +215,27 @@ export const getStudentExaminations = async (student) => {
     if (!params[key]) delete params[key];
   });
 
-  const response = await apiClient.get(studentApiEndpoints.examinations.list, { params });
+  const examinationEndpoint = apiEndpoints.examinations.getAll;
+  const response = await apiClient.get(examinationEndpoint, { params });
   const payload = getPayload(response.data);
-  const examinations = Array.isArray(payload) ? payload : [];
+  const rows = (value) => Array.isArray(value) ? value : value?.items ?? value?.Items ?? [];
+  const inStudentScope = (record) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => {
+    const actual = record[key] ?? record[key[0].toUpperCase() + key.slice(1)];
+    return actual == null || !student[key] || String(actual) === String(student[key]);
+  });
+  const examinations = rows(payload).filter(inStudentScope);
   const visible = examinations.filter((exam) => ["SCHEDULED", "PUBLISHED", "COMPLETED"].includes(String(exam.status || "").trim().toUpperCase()));
 
   return Promise.all(visible.map(async (exam) => {
-    const examinationId = exam.examinationId ?? exam.examId;
+    const examinationId = exam.examinationId ?? exam.examId ?? exam.id;
     if (!examinationId) return { ...exam, schedules: [] };
     const [detailResponse, scheduleResponse] = await Promise.all([
-      apiClient.get(studentApiEndpoints.examinations.getById(examinationId)),
-      apiClient.get(studentApiEndpoints.examinations.schedules(examinationId)),
+      apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}`),
+      apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}/schedules`),
     ]);
     const detail = getPayload(detailResponse.data) || {};
     const schedules = getPayload(scheduleResponse.data);
-    return { ...exam, ...detail, schedules: Array.isArray(schedules) ? schedules : [] };
+    return { ...exam, ...detail, schedules: rows(schedules).filter(inStudentScope) };
   }));
 };
 

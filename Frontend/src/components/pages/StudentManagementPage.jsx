@@ -557,6 +557,7 @@ export default function StudentManagementPage() {
         <Modal
           title="Import Students"
           size="lg"
+          className="student-import-dialog"
           onClose={closeImportModal}
           footer={<>
             <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(importBusy)} onClick={closeImportModal}>Close</button>
@@ -565,7 +566,12 @@ export default function StudentManagementPage() {
         >
           <div className="student-import-modal">
             <div className="student-import-actions">
+              <section className="student-import-step">
+                <div className="student-import-step-head"><b>1</b><div><h4>Download Import Template</h4><p>Download the Excel template and fill in the student details.</p></div></div>
               <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(importBusy)} onClick={() => downloadImportFile("template")}>{importBusy === "template" ? "Downloading..." : "Download Import Template"}</button>
+              </section>
+              <section className="student-import-step">
+                <div className="student-import-step-head"><b>2</b><div><h4>Upload Student File</h4><p>Choose the completed .xlsx or .xls file containing student records.</p></div></div>
               <label className="cms-btn cms-btn-ghost">Choose Excel File
                 <input type="file" accept=".xlsx,.xls" hidden onChange={(event) => {
                   const file = event.target.files?.[0] ?? null;
@@ -574,9 +580,13 @@ export default function StudentManagementPage() {
                   setImportSuccess(false);
                 }} />
               </label>
+                {importFile ? <p className="cms-muted student-import-filename">Selected file: {importFile.name}</p> : null}
+              </section>
+              <section className="student-import-step">
+                <div className="student-import-step-head"><b>3</b><div><h4>Validate File</h4><p>Check the file and review validation results before importing.</p></div></div>
               <button className="cms-btn cms-btn-primary" type="button" disabled={!importFile || Boolean(importBusy)} onClick={validateImport}>{importBusy === "validate" ? "Validating..." : "Validate File"}</button>
+              </section>
             </div>
-            {importFile ? <p className="cms-muted">Selected file: {importFile.name}</p> : null}
             {importSuccess ? <p className="cms-success-message" role="status">✓ Students imported successfully</p> : null}
             {validationResult ? <ImportValidation result={validationResult} onCredentials={() => downloadImportFile("credentials")} downloading={importBusy === "credentials"} /> : null}
           </div>

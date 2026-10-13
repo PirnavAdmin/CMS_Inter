@@ -12,6 +12,8 @@ public interface ICertificateRepository
         string? status = null,
         string? certificateType = null,
         int? campusId = null,
+        int? boardId = null,
+        int? academicYearId = null,
         CancellationToken ct = default);
 
     Task<CertificateResponseDto?> GetByIdAsync(

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
   Home,
   LayoutDashboard,
@@ -29,7 +29,6 @@ import {
   TrendingUp,
   AlertTriangle,
   FileSpreadsheet,
-  FileText,
   ChevronDown,
   Calendar,
   Sun,
@@ -40,17 +39,13 @@ import {
   Info,
   CheckCircle2,
   XCircle,
-  User,
   LogOut,
   AlertCircle,
   ArrowRight,
-  RefreshCw,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-import { getAuthToken, getAuthUser, clearAuthSession } from "@/features/authStorage.js";
-import hostelManagementIcon from "@/assets/sidebar-3d/hostel-management.svg";
 import * as hostelApi from "@/api/hostelApi.js";
 import "./HostelPage.css";
 
@@ -74,52 +69,6 @@ const studentSubtabs = [
   { id: "attendance", label: "Hostel Attendance Register", title: "Hostel Attendance Register", subtitle: "Biometric and roll call daily logs for resident hostellers", icon: Users },
   { id: "outpasses", label: "Outpass & Leave Management", title: "Outpass & Leave Requests", subtitle: "Manage student gate passes, weekend home permissions, emergency leaves, and warden approvals", icon: ArrowRightLeft },
   { id: "transfers", label: "Transfer & Vacate Student", title: "Hostel Transfers & Bed Vacations", subtitle: "Track inter-block migrations, room swaps, and official bed vacation applications", icon: RotateCcw },
-  { id: "complaints", label: "Student Complaints", title: "Hostel Student Complaints", subtitle: "Review, manage, and resolve student room and facility maintenance complaints", icon: AlertTriangle },
-];
-
-const defaultComplaints = [
-  {
-    id: "CMP-001",
-    complaintId: "CMP-001",
-    studentName: "Aarav Sharma",
-    studentId: 101,
-    admissionNo: "ADM2501",
-    room: "R-A630",
-    block: "Automated Test Block Updated",
-    category: "Plumbing",
-    priority: "High",
-    description: "Bathroom water tap leakage and low pressure in Room R-A630",
-    date: "2026-10-06",
-    status: "In Progress",
-  },
-  {
-    id: "CMP-002",
-    complaintId: "CMP-002",
-    studentName: "Surya S",
-    studentId: 560,
-    admissionNo: "ADM2502",
-    room: "101",
-    block: "mmmm",
-    category: "Electrical",
-    priority: "Medium",
-    description: "Ceiling fan speed regulator faulty, needs replacement",
-    date: "2026-10-07",
-    status: "Pending",
-  },
-  {
-    id: "CMP-003",
-    complaintId: "CMP-003",
-    studentName: "Sarath Nakka",
-    studentId: 547,
-    admissionNo: "ADM2503",
-    room: "101",
-    block: "Padmapujitha Block K",
-    category: "Wi-Fi / Internet",
-    priority: "Low",
-    description: "Intermittent Wi-Fi signal in corner rooms",
-    date: "2026-10-05",
-    status: "Resolved",
-  },
 ];
 
 // Reference Academic Year Months for Monthly Attendance
@@ -205,119 +154,28 @@ const extractCollection = (payload) => {
   const d = payload.data ?? payload.Data ?? payload;
   if (Array.isArray(d)) return d;
   if (Array.isArray(d?.items ?? d?.Items)) return d.items ?? d.Items;
-  if (Array.isArray(d?.records ?? d?.Records)) return d.records ?? d.Records;
+  if (Array.isArray(d?.data ?? d?.Data)) return d.data ?? d.Data;
+  if (Array.isArray(d?.$values)) return d.$values;
+  if (Array.isArray(payload.items ?? payload.Items)) return payload.items ?? payload.Items;
   return [];
 };
 
-const getVal = (o, ...keys) => {
-  if (!o || typeof o !== "object") return undefined;
-  const flatKeys = keys.flat();
-  for (const k of flatKeys) {
-    if (o[k] !== undefined && o[k] !== null && o[k] !== "") return o[k];
+const getVal = (obj, ...keys) => {
+  if (!obj || typeof obj !== "object") return undefined;
+  for (const k of keys) {
+    if (obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim() !== "") return obj[k];
   }
   return undefined;
 };
 
-// ── Warden Section State Component (Loading & Error Handling) ─────────
-function WardenSectionState({ loading, error, loadingTitle, errorTitle, errorMessage, onRetry, children }) {
-  if (loading) {
-    return (
-      <div className="cms-card cms-warden-state-container" style={{ padding: "56px 24px", textAlign: "center" }}>
-        <div className="cms-spinner" style={{ margin: "0 auto 16px auto", width: 36, height: 36 }} />
-        <h3 style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--cms-text-primary, #1e293b)", marginBottom: 8 }}>
-          Loading {loadingTitle || "data"}...
-        </h3>
-        <p style={{ color: "var(--cms-text-secondary, #64748b)", fontSize: "0.9rem", margin: 0 }}>
-          Please wait while we connect to the server.
-        </p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="cms-card cms-warden-state-container" style={{ padding: "48px 24px", textAlign: "center", border: "1px dashed var(--cms-danger-border, #fca5a5)" }}>
-        <div style={{ width: 44, height: 44, borderRadius: "50%", background: "var(--cms-danger-soft, #fee2e2)", color: "var(--cms-danger, #ef4444)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-          <AlertCircle size={24} />
-        </div>
-        <h3 style={{ fontSize: "1.05rem", fontWeight: 600, color: "var(--cms-text-primary, #1e293b)", marginBottom: 8 }}>
-          {errorTitle || "Unable to Load Data"}
-        </h3>
-        <p style={{ color: "var(--cms-text-secondary, #64748b)", fontSize: "0.875rem", maxWidth: 440, margin: "0 auto 20px auto", lineHeight: 1.5 }}>
-          {errorMessage || error}
-        </p>
-        {onRetry && (
-          <button
-            type="button"
-            className="cms-btn cms-btn-primary"
-            onClick={onRetry}
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 18px", borderRadius: 6, fontWeight: 500 }}
-          >
-            <RefreshCw size={15} />
-            <span>Retry Connection</span>
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  return children;
-}
-
 // ── Component Definition ──────────────────────────────────────────────
 export default function HostelPage() {
   const location = useLocation();
-  const navigate = useNavigate();
-
-  const isWarden =
-    location.pathname.startsWith("/warden") ||
-    location.pathname.startsWith("/warden-dashboard");
-
-  const getWardenSection = useCallback((pathname) => {
-    const p = (pathname || "").toLowerCase();
-    if (p.startsWith("/warden-dashboard/blocks") || p.startsWith("/warden/blocks")) return "rooms";
-    if (p.startsWith("/warden-dashboard/room-types") || p.startsWith("/warden/room-types") || p.startsWith("/warden-dashboard/categories") || p.startsWith("/warden/categories")) return "rooms";
-    if (p.startsWith("/warden-dashboard/wardens") || p.startsWith("/warden/wardens")) return "rooms";
-    if (p.startsWith("/warden-dashboard/rooms") || p.startsWith("/warden/rooms") || p.startsWith("/warden-dashboard/beds") || p.startsWith("/warden/beds")) return "rooms";
-    if (p.startsWith("/warden-dashboard/transfer") || p.startsWith("/warden/transfer") || p.startsWith("/warden-dashboard/vacate") || p.startsWith("/warden/vacate")) return "allocations";
-    if (p.startsWith("/warden-dashboard/allocations") || p.startsWith("/warden/allocations")) return "allocations";
-    if (p.startsWith("/warden-dashboard/students") || p.startsWith("/warden/students")) return "students";
-    if (p.startsWith("/warden-dashboard/leave-requests") || p.startsWith("/warden/leave-requests") || p.startsWith("/warden-dashboard/outpasses") || p.startsWith("/warden/outpasses")) return "leave-requests";
-    if (p.startsWith("/warden-dashboard/complaints") || p.startsWith("/warden/complaints")) return "complaints";
-    if (p.startsWith("/warden-dashboard/attendance") || p.startsWith("/warden/attendance")) return "attendance";
-    if (p.startsWith("/warden-dashboard/reports") || p.startsWith("/warden/reports")) return "reports";
-    if (p.startsWith("/warden-dashboard/profile") || p.startsWith("/warden/profile")) return "profile";
-    return "dashboard";
-  }, []);
-  const wardenSection = useMemo(() => getWardenSection(location.pathname), [getWardenSection, location.pathname]);
 
   // ── Navigation Tabs State ───────────────────────────────────────────
-  const wardenRouteTab = () => {
-    const path = window.location.pathname.toLowerCase();
-    if (path.startsWith("/warden-dashboard/blocks") || path.startsWith("/warden/blocks")) return ["setup", "blocks"];
-    if (path.startsWith("/warden-dashboard/room-types") || path.startsWith("/warden/room-types") || path.startsWith("/warden-dashboard/categories") || path.startsWith("/warden/categories")) return ["setup", "categories"];
-    if (path.startsWith("/warden-dashboard/wardens") || path.startsWith("/warden/wardens")) return ["setup", "wardens"];
-    if (path.startsWith("/warden-dashboard/rooms") || path.startsWith("/warden-dashboard/beds") || path.startsWith("/warden/rooms") || path.startsWith("/warden/beds")) return ["setup", "rooms"];
-    if (path.startsWith("/warden-dashboard/transfer") || path.startsWith("/warden/transfer") || path.startsWith("/warden-dashboard/vacate") || path.startsWith("/warden/vacate")) return ["students", "transfers"];
-    if (path.startsWith("/warden-dashboard/students") || path.startsWith("/warden/students")) return ["students", "allocations"];
-    if (path.startsWith("/warden-dashboard/allocations") || path.startsWith("/warden/allocations")) return ["students", "allocations"];
-    if (path.startsWith("/warden-dashboard/attendance") || path.startsWith("/warden/attendance")) return ["students", "attendance"];
-    if (path.startsWith("/warden-dashboard/leave-requests") || path.startsWith("/warden/leave-requests") || path.startsWith("/warden-dashboard/outpasses") || path.startsWith("/warden/outpasses")) return ["students", "outpasses"];
-    if (path.startsWith("/warden-dashboard/complaints") || path.startsWith("/warden/complaints")) return ["students", "complaints"];
-    if (path.startsWith("/warden-dashboard/reports") || path.startsWith("/warden/reports")) return ["reports", "allocations"];
-    if (path.startsWith("/warden-dashboard/profile") || path.startsWith("/warden/profile")) return ["profile", "profile"];
-    return ["dashboard", "allocations"];
-  };
-  const [activeMajorTab, setActiveMajorTab] = useState(() => wardenRouteTab()[0]);
-  const [activeSetupSubtab, setActiveSetupSubtab] = useState(() => wardenRouteTab()[1] === "rooms" ? "rooms" : "blocks");
-  const [activeStudentSubtab, setActiveStudentSubtab] = useState(() => wardenRouteTab()[1]);
-  useEffect(() => {
-    if (!location.pathname.startsWith("/warden") && !location.pathname.startsWith("/warden-dashboard")) return;
-    const [major, subtab] = wardenRouteTab();
-    setActiveMajorTab(major);
-    if (major === "setup") setActiveSetupSubtab(subtab);
-    if (major === "students") setActiveStudentSubtab(subtab);
-  }, [location.pathname]);
+  const [activeMajorTab, setActiveMajorTab] = useState("dashboard");
+  const [activeSetupSubtab, setActiveSetupSubtab] = useState("blocks");
+  const [activeStudentSubtab, setActiveStudentSubtab] = useState("allocations");
 
   // ── Dashboard Interactive State ─────────────────────────────────────
   const [dashBlockSearch, setDashBlockSearch] = useState("");
@@ -339,15 +197,8 @@ export default function HostelPage() {
   const [candidateAdmissions, setCandidateAdmissions] = useState([]);
   const [candidateStudents, setCandidateStudents] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
-  const [wardenProfile, setWardenProfile] = useState(null);
-  const [complaints, setComplaints] = useState([]);
-  const [complaintSearch, setComplaintSearch] = useState("");
-  const [complaintStatus, setComplaintStatus] = useState("");
-  const [complaintCategory, setComplaintCategory] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
-  const [sectionErrors, setSectionErrors] = useState({});
-  const [apiNotice, setApiNotice] = useState("");
 
   // ── API Response Mappers ────────────────────────────────────────────
   const mapBlock = useCallback((b) => {
@@ -372,7 +223,6 @@ export default function HostelPage() {
 
   const mapCategory = useCallback((c) => {
     if (!c) return {};
-    const rawFee = c.standardMonthlyFee ?? c.monthlyFee ?? c.fee ?? "";
     return {
       id: c.roomTypeId ?? c.id ?? "",
       name: c.roomTypeSpecification ?? c.name ?? "",
@@ -380,9 +230,7 @@ export default function HostelPage() {
       type: c.acType === "AC" ? "AC Accommodation" : c.acType === "Non-AC" ? "Non-AC Standard" : (c.type ?? ""),
       capacity: c.bedCapacity ?? c.capacity ?? 1,
       acType: c.acType ?? "Non-AC",
-      fee: rawFee,
-      standardMonthlyFee: rawFee,
-      monthlyFee: rawFee,
+      fee: c.fee ?? "",
       totalRooms: c.totalRooms ?? 0,
       totalBeds: c.totalBeds ?? 0,
       blocks: c.blocks ?? "",
@@ -530,71 +378,12 @@ export default function HostelPage() {
     };
   }, []);
 
-  const mapComplaint = useCallback((c) => ({
-    id: c.complaintId ?? c.id,
-    complaintId: c.complaintId ?? c.id,
-    studentId: c.studentId,
-    studentName: c.studentName ?? "",
-    admissionNo: c.admissionNo ?? "",
-    hostelId: c.hostelId,
-    hostelName: c.hostelName ?? "",
-    roomId: c.roomId,
-    roomNumber: c.roomNumber ?? "",
-    bedId: c.bedId,
-    bedNumber: c.bedNumber ?? "",
-    roomBed: c.roomBed ?? (c.roomNumber && c.bedNumber ? `${c.roomNumber} (${c.bedNumber})` : c.roomNumber || ""),
-    room: c.roomNumber ? `Room #${c.roomNumber}` : (c.room ?? ""),
-    block: c.hostelName ?? c.block ?? "",
-    category: c.category ?? "General",
-    priority: c.priority ?? "Normal",
-    description: c.description ?? "",
-    status: c.status ?? "Pending",
-    actionRemarks: c.actionRemarks ?? "",
-    date: c.createdAt ? (typeof c.createdAt === "string" ? c.createdAt.split("T")[0] : c.createdAt) : (c.date ?? ""),
-    createdAt: c.createdAt ?? "",
-  }), []);
-
-  const mapStudentAdmission = useCallback((s) => {
-    if (!s) return {};
-    return {
-      id: s.studentId ?? s.id ?? "",
-      studentId: s.studentId ?? s.id,
-      admissionNo: s.admissionNo ?? s.admissionNumber ?? "",
-      name: s.studentName ?? s.fullName ?? s.name ?? "",
-      studentName: s.studentName ?? s.fullName ?? s.name ?? "",
-      gender: s.gender ?? "",
-      isEnrolled: Boolean(s.isEnrolled ?? s.studentId),
-    };
-  }, []);
-
   // ── Fetch all hostel data from API on mount ─────────────────────────
   const fetchHostelData = useCallback(async () => {
-    const token = getAuthToken();
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
     setIsLoading(true);
     setApiError(null);
-    setSectionErrors({});
     try {
-      const [
-        blocksRes,
-        catsRes,
-        roomsRes,
-        bedsRes,
-        wardensRes,
-        allocsRes,
-        outpassRes,
-        transferRes,
-        dashRes,
-        attendanceRes,
-        complaintsRes,
-        staffRes,
-        admRes,
-        certStudentsRes,
-        allStudentsRes,
-      ] = await Promise.allSettled([
+      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes, certStudentsRes, allStudentsRes] = await Promise.allSettled([
         hostelApi.getHostelBlocks(),
         hostelApi.getRoomTypes(),
         hostelApi.getRooms(),
@@ -604,108 +393,38 @@ export default function HostelPage() {
         hostelApi.getOutpassLeave(),
         hostelApi.getTransferVacate(),
         hostelApi.getHostelDashboard(),
-        hostelApi.getAttendance(),
-        hostelApi.getComplaints(),
-        apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }),
-        apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true }).catch(() => null),
-        apiClient.get("/api/v1/certificates/students-dropdown?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null),
-        apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null),
+        apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true }),
+        apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null),
+        apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, optionalAuth: true })
+          .catch(() => null),
+        apiClient.get("/api/v1/students?pageSize=1000", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null),
       ]);
 
-      let hadApiFailure = false;
-      const errors = {};
-
-      // 1. Hostel Blocks
       if (blocksRes.status === "fulfilled") {
         const rawBlocks = extractCollection(blocksRes.value?.data);
         setBlocks(Array.isArray(rawBlocks) ? rawBlocks.map(mapBlock) : []);
-      } else {
-        if (blocksRes.status === "rejected") {
-          hadApiFailure = true;
-          const msg = blocksRes.reason?.response?.data?.message || getApiErrorMessage(blocksRes.reason) || "Unable to load hostel blocks data. Please try again.";
-          errors.blocks = msg;
-          console.error("Hostel blocks API error:", blocksRes.reason);
-        }
-        setBlocks([]);
       }
-
-      // 2. Room Categories (Room Types)
       if (catsRes.status === "fulfilled") {
         const rawCats = extractCollection(catsRes.value?.data);
         setCategories(Array.isArray(rawCats) ? rawCats.map(mapCategory) : []);
-      } else {
-        if (catsRes.status === "rejected") {
-          hadApiFailure = true;
-          const msg = catsRes.reason?.response?.data?.message || getApiErrorMessage(catsRes.reason) || "Unable to load room types data. Please try again.";
-          errors.categories = msg;
-          console.error("Room types API error:", catsRes.reason);
-        }
-        setCategories([]);
       }
-
-      // 3. Rooms
       if (roomsRes.status === "fulfilled") {
         const rawRooms = extractCollection(roomsRes.value?.data);
         setRooms(Array.isArray(rawRooms) ? rawRooms.map(mapRoom) : []);
-      } else {
-        if (roomsRes.status === "rejected") {
-          hadApiFailure = true;
-          const msg = roomsRes.reason?.response?.data?.message || getApiErrorMessage(roomsRes.reason) || "Unable to load room management data. Please try again.";
-          errors.rooms = msg;
-          console.error("Rooms API error:", roomsRes.reason);
-        }
-        setRooms([]);
       }
-
-      // 4. Beds
       if (bedsRes.status === "fulfilled") {
         const rawBeds = extractCollection(bedsRes.value?.data);
         setBeds(Array.isArray(rawBeds) ? rawBeds.map(mapBed) : []);
-      } else {
-        if (bedsRes.status === "rejected") {
-          hadApiFailure = true;
-          const msg = bedsRes.reason?.response?.data?.message || getApiErrorMessage(bedsRes.reason) || "Unable to load beds data. Please try again.";
-          errors.beds = msg;
-          console.error("Beds API error:", bedsRes.reason);
-        }
-        setBeds([]);
       }
-
-      // 5. Wardens
       if (wardensRes.status === "fulfilled") {
         const rawWardens = extractCollection(wardensRes.value?.data);
-        const mappedWardens = Array.isArray(rawWardens) ? rawWardens.map(mapWarden) : [];
-        setWardens(mappedWardens);
-        if (isWarden) {
-          const authUser = getAuthUser();
-          const currentWarden =
-            mappedWardens.find((w) => w.email && authUser?.email && w.email.toLowerCase() === authUser.email.toLowerCase()) ||
-            mappedWardens.find((w) => w.status === "Active") ||
-            mappedWardens[0] ||
-            (authUser ? {
-              name: authUser.name || authUser.fullName || "Hostel Warden",
-              email: authUser.email || "warden@cms.com",
-              phone: authUser.phone || authUser.phoneNumber || "+91 98451 22301",
-              designation: "Resident Warden",
-              status: "Active",
-            } : null);
-          if (currentWarden) setWardenProfile(currentWarden);
-        }
-      } else {
-        if (wardensRes.status === "rejected") {
-          hadApiFailure = true;
-          const msg = wardensRes.reason?.response?.data?.message || getApiErrorMessage(wardensRes.reason) || "Unable to load wardens data. Please try again.";
-          errors.wardens = msg;
-          console.error("Wardens API error:", wardensRes.reason);
-        }
-        setWardens([]);
+        setWardens(Array.isArray(rawWardens) ? rawWardens.map(mapWarden) : []);
       }
-
-      // 6. Student Allocations
       if (allocsRes.status === "fulfilled") {
         const rawAllocs = extractCollection(allocsRes.value?.data);
         const mapped = Array.isArray(rawAllocs) ? rawAllocs.map(mapAllocation) : [];
         setAllocations(mapped);
+        // Derive attendance student list from active allocations
         setAttendanceStudents(mapped.filter(a => a.status === "Active").map(a => ({
           id: a.admissionNo || a.id,
           admissionNo: a.admissionNo,
@@ -722,58 +441,18 @@ export default function HostelPage() {
           gender: a.gender,
           inTime: "07:00",
         })));
-      } else {
-        if (allocsRes.status === "rejected") {
-          hadApiFailure = true;
-          const msg = allocsRes.reason?.response?.data?.message || getApiErrorMessage(allocsRes.reason) || "Unable to load student allocation data. Please try again.";
-          errors.allocations = msg;
-          errors.attendance = msg;
-          errors.students = msg;
-          console.error("Student allocations API error:", allocsRes.reason);
-        }
-        setAllocations([]);
-        setAttendanceStudents([]);
       }
-
-      // 7. Outpasses
       if (outpassRes.status === "fulfilled") {
         const rawOutpass = extractCollection(outpassRes.value?.data);
         setOutpasses(Array.isArray(rawOutpass) ? rawOutpass.map(mapOutpass) : []);
-      } else {
-        if (outpassRes.status === "rejected" && isWarden) {
-          errors.leaveRequests = "Unable to load student outpass and leave requests from the server.";
-        }
-        setOutpasses([]);
       }
-
-      // 8. Transfers
       if (transferRes.status === "fulfilled") {
         const rawTransfer = extractCollection(transferRes.value?.data);
         setTransfers(Array.isArray(rawTransfer) ? rawTransfer.map(mapTransfer) : []);
-      } else {
-        setTransfers([]);
       }
-
-      // 9. Dashboard data
-      if (dashRes.status === "fulfilled" && dashRes.value?.data?.data) {
-        setDashboardData(dashRes.value.data.data);
-      } else {
-        if (dashRes.status === "rejected") {
-          hadApiFailure = true;
-          const msg = dashRes.reason?.response?.data?.message || getApiErrorMessage(dashRes.reason) || "Unable to load dashboard overview data. Please try again.";
-          errors.dashboard = msg;
-          console.error("Hostel dashboard API error:", dashRes.reason);
-        }
-        setDashboardData(null);
+      if (dashRes.status === "fulfilled") {
+        setDashboardData(dashRes.value?.data?.data ?? dashRes.value?.data ?? null);
       }
-
-      // 10. Complaints directly from API (Graceful fallback to default tickets if backend endpoint is pending)
-      if (complaintsRes.status === "fulfilled" && Array.isArray(complaintsRes.value?.data?.data) && complaintsRes.value.data.data.length > 0) {
-        setComplaints(complaintsRes.value.data.data.map(mapComplaint));
-      } else {
-        setComplaints((prev) => (prev.length > 0 ? prev : defaultComplaints));
-      }
-
       if (staffRes.status === "fulfilled") {
         const rawStaff = extractCollection(staffRes.value?.data);
         if (Array.isArray(rawStaff) && rawStaff.length > 0) setCandidateStaff(rawStaff);
@@ -793,60 +472,29 @@ export default function HostelPage() {
         const rawCert = extractCollection(certStudentsRes.value.data);
         if (Array.isArray(rawCert) && rawCert.length > 0) {
           if (loadedStudents.length === 0) {
-            loadedStudents = rawCert.map(mapStudentAdmission);
+            loadedStudents = rawCert.map((s) => {
+              const sId = Number(s.studentId || s.id);
+              const isEnrolled = Boolean(sId && !UNENROLLED_ADMISSION_IDS.has(sId));
+              return { ...s, isEnrolled };
+            });
+          } else {
+            const existingIds = new Set(loadedStudents.map((s) => Number(s.studentId || s.id)));
+            const extra = rawCert.filter((cs) => {
+              const csId = Number(cs.studentId || cs.id);
+              return csId && !existingIds.has(csId) && !UNENROLLED_ADMISSION_IDS.has(csId);
+            }).map((s) => ({ ...s, isEnrolled: true }));
+            loadedStudents = [...loadedStudents, ...extra];
           }
         }
       }
-
-      if (allStudentsRes.status === "fulfilled" && allStudentsRes.value?.data) {
-        const rawAll = extractCollection(allStudentsRes.value.data);
-        if (Array.isArray(rawAll) && rawAll.length > 0) {
-          if (loadedStudents.length === 0) {
-            loadedStudents = rawAll.map(mapStudentAdmission);
-          }
-        }
-      }
-      setCandidateStudents(loadedStudents);
-
-      if (isWarden) {
-        // If room management sub-entities had issues, reflect on rooms as well
-        if (!errors.rooms && (errors.blocks || errors.categories || errors.beds)) {
-          errors.rooms = errors.rooms || errors.blocks || errors.categories || errors.beds;
-        }
-        setSectionErrors(errors);
-      }
+      if (loadedStudents.length > 0) setCandidateStudents(loadedStudents);
     } catch (err) {
-      console.error("Hostel data retrieval error:", err);
-      setBlocks([]);
-      setCategories([]);
-      setRooms([]);
-      setBeds([]);
-      setWardens([]);
-      setAllocations([]);
-      setAttendanceStudents([]);
-      setOutpasses([]);
-      setTransfers([]);
-      setComplaints([]);
-      setDashboardData(null);
-      const genericMsg = getApiErrorMessage(err) || "Backend API connection issue. Please verify backend status.";
-      setSectionErrors({
-        dashboard: genericMsg,
-        rooms: genericMsg,
-        blocks: genericMsg,
-        categories: genericMsg,
-        beds: genericMsg,
-        wardens: genericMsg,
-        allocations: genericMsg,
-        outpasses: genericMsg,
-        transfers: genericMsg,
-        attendance: genericMsg,
-        complaints: genericMsg,
-        reports: genericMsg,
-      });
+      console.error("Failed to fetch hostel data:", err);
+      setApiError(getApiErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
-  }, [isWarden, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapComplaint]);
+  }, [mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer]);
 
   useEffect(() => {
     fetchHostelData();
@@ -943,19 +591,8 @@ export default function HostelPage() {
     } catch (err) { console.error("Refresh dashboard error:", err); }
   }, []);
 
-  const refreshComplaints = useCallback(async () => {
-    try {
-      const res = await hostelApi.getComplaints();
-      const raw = res?.data?.data;
-      if (Array.isArray(raw) && raw.length > 0) setComplaints(raw.map(mapComplaint));
-    } catch {
-      // Keep existing local complaints state if endpoint is not available
-    }
-  }, [mapComplaint]);
-
   // ── Synchronize route location with initial tab ──────────────────────
   useEffect(() => {
-    if (isWarden) return;
     const path = location.pathname.toLowerCase();
     if (path.includes("master") || path.includes("block")) {
       setActiveMajorTab("setup");
@@ -1007,16 +644,13 @@ export default function HostelPage() {
   const [isTransferFilterOpen, setIsTransferFilterOpen] = useState(false);
 
   // Attendance specific state matching Screenshot 1 & 2
-  const [attendanceShift, setAttendanceShift] = useState("morning");
-  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [attendanceShift, setAttendanceShift] = useState("night");
+  const [attendanceDate, setAttendanceDate] = useState("2026-09-17");
   const [attendanceFrequency, setAttendanceFrequency] = useState("daily");
-  const [attendanceMonth, setAttendanceMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [customRangeStart, setCustomRangeStart] = useState(() => new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
-  const [customRangeEnd, setCustomRangeEnd] = useState(() => new Date().toISOString().slice(0, 10));
-  const [appliedCustomRange, setAppliedCustomRange] = useState(() => ({
-    start: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
-    end: new Date().toISOString().slice(0, 10),
-  }));
+  const [attendanceMonth, setAttendanceMonth] = useState("2026-09");
+  const [customRangeStart, setCustomRangeStart] = useState("2026-09-01");
+  const [customRangeEnd, setCustomRangeEnd] = useState("2026-09-17");
+  const [appliedCustomRange, setAppliedCustomRange] = useState({ start: "2026-09-01", end: "2026-09-17" });
   const [rangeError, setRangeError] = useState("");
   const [attendanceSearch, setAttendanceSearch] = useState("");
   const [attendanceBlock, setAttendanceBlock] = useState("all");
@@ -1032,71 +666,6 @@ export default function HostelPage() {
   const [reportPageSize, setReportPageSize] = useState(5);
   const [isCustomReportPage, setIsCustomReportPage] = useState(false);
   const [customReportPageInput, setCustomReportPageInput] = useState("5");
-  const [serverReportData, setServerReportData] = useState(null);
-
-  // Live Attendance Sync when shift or date changes
-  useEffect(() => {
-    let isCancelled = false;
-    const loadShiftAttendance = async () => {
-      if (!attendanceDate) return;
-      try {
-        const sessionLabel = attendanceShift === "morning" ? "Morning" : "Night";
-        const res = await hostelApi.getAttendance({
-          attendanceDate: new Date(`${attendanceDate}T00:00:00Z`).toISOString(),
-          session: sessionLabel,
-        });
-        if (isCancelled) return;
-        const raw = res?.data?.data;
-        if (Array.isArray(raw) && raw.length > 0) {
-          setAttendanceMap((prev) => {
-            const shiftCopy = { ...(prev[attendanceShift] || {}) };
-            raw.forEach((rec) => {
-              const statusVal = rec.attendanceStatus || "Present";
-              if (rec.studentId) shiftCopy[rec.studentId] = { status: statusVal, remarks: rec.remarks || "" };
-              if (rec.admissionNo) shiftCopy[rec.admissionNo] = { status: statusVal, remarks: rec.remarks || "" };
-            });
-            return { ...prev, [attendanceShift]: shiftCopy };
-          });
-        }
-      } catch {
-        // silent catch on background attendance sync
-      }
-    };
-    loadShiftAttendance();
-    return () => { isCancelled = true; };
-  }, [attendanceDate, attendanceShift]);
-
-  // Live Reports Sync when reportCategory changes
-  useEffect(() => {
-    let isCancelled = false;
-    const loadReportData = async () => {
-      try {
-        let res = null;
-        if (reportCategory === "Block Report") {
-          res = await hostelApi.getOccupancyReport();
-        } else if (reportCategory === "Student Allocation Report" || reportCategory === "Bed Allocation Report") {
-          res = await hostelApi.getStudentsReport();
-        } else if (reportCategory === "Attendance Report") {
-          res = await hostelApi.getAttendanceReport();
-        } else if (reportCategory === "Outpass & Leave Report") {
-          res = await hostelApi.getOutpassLeaveReport();
-        } else if (reportCategory === "Transfer & Vacate Report") {
-          res = await hostelApi.getTransferVacateReport();
-        }
-        if (isCancelled) return;
-        const items = res?.data?.data || res?.data?.items;
-        if (Array.isArray(items) && items.length > 0) {
-          setServerReportData(items);
-        } else {
-          setServerReportData(null);
-        }
-      } catch {
-        if (!isCancelled) setServerReportData(null);
-      }
-    };
-    loadReportData();
-    return () => { isCancelled = true; };
-  }, [reportCategory]);
 
   useEffect(() => {
     setReportPage(1);
@@ -1203,14 +772,10 @@ export default function HostelPage() {
   const handleSaveBlock = async (blockData) => {
     try {
       const payload = {
-        campusId: Number(blockData.campusId) || 0,
         hostelName: blockData.name,
         hostelCode: blockData.code,
         hostelType: blockData.type || "Boys",
         totalFloors: Number(blockData.floors) || 1,
-        primaryMobileNumber: blockData.primaryMobileNumber || blockData.wardenPhone || "",
-        alternateMobileNumber: blockData.alternateMobileNumber || "",
-        email: blockData.email || "",
         address: blockData.address || blockData.location || "",
         status: blockData.status || "Active",
       };
@@ -1340,14 +905,10 @@ export default function HostelPage() {
     try {
       const isAc = (catData.type?.includes("AC") || catData.name?.includes("AC")) &&
                    !catData.type?.includes("Non-AC") && !catData.name?.includes("Non-AC");
-      const rawFee = Number(String(catData.fee || catData.standardMonthlyFee || catData.monthlyFee || 0).replace(/[^0-9.]/g, "")) || 0;
       const payload = {
         roomTypeSpecification: catData.name || catData.specification || "Standard Room",
         bedCapacity: Number(catData.capacity) || 2,
         acType: isAc ? "AC" : "Non-AC",
-        standardMonthlyFee: rawFee,
-        monthlyFee: rawFee,
-        fee: rawFee,
         status: catData.status || "Active",
         description: catData.specification || catData.description || catData.type || "",
       };
@@ -1786,21 +1347,20 @@ export default function HostelPage() {
   };
 
   const handleUpdateOutpassStatus = async (outpassId, newStatus) => {
-    let apiStatus = "Pending";
-    const s = (newStatus || "").toLowerCase();
-    if (s.includes("approve")) apiStatus = "Approved";
-    else if (s.includes("reject")) apiStatus = "Rejected";
-
-    // Optimistically update UI immediately without reloading
     try {
+      let apiStatus = "Pending";
+      const s = (newStatus || "").toLowerCase();
+      if (s.includes("approve")) apiStatus = "Approved";
+      else if (s.includes("reject")) apiStatus = "Rejected";
+
       await hostelApi.approveOutpassLeave(outpassId, {
         approvalStatus: apiStatus,
         approvalRemarks: `Warden status update: ${apiStatus}`,
       });
       await refreshOutpasses();
-      showToast(`Leave request ${apiStatus.toLowerCase()} successfully!`);
+      showToast(`Outpass marked as ${apiStatus}.`);
     } catch (err) {
-      console.error("Backend outpass sync failed:", err);
+      console.error("Update outpass error:", err);
       showToast(getApiErrorMessage(err), "danger");
     }
   };
@@ -1814,103 +1374,6 @@ export default function HostelPage() {
       console.error("Delete outpass error:", err);
       showToast(getApiErrorMessage(err), "danger");
     }
-  };
-
-  const handleUpdateComplaintStatus = async (complaintId, newStatus) => {
-    try {
-      setComplaints((prev) =>
-        prev.map((c) =>
-          String(c.id || c.complaintId) === String(complaintId)
-            ? { ...c, status: newStatus }
-            : c
-        )
-      );
-      showToast(`Complaint status updated to ${newStatus}!`);
-      try {
-        await hostelApi.updateComplaintStatus(complaintId, {
-          status: newStatus,
-          actionRemarks: `Complaint status updated to ${newStatus}`,
-        });
-        await refreshComplaints();
-        await refreshDashboard();
-      } catch {
-        // Backend complaints endpoint pending deployment; local state updated optimistically
-      }
-    } catch (err) {
-      console.error("Update complaint status error:", err);
-    }
-  };
-
-  const handleSaveComplaint = async (data) => {
-    try {
-      const newComplaint = {
-        id: `CMP-${Date.now().toString().slice(-4)}`,
-        complaintId: `CMP-${Date.now().toString().slice(-4)}`,
-        studentId: Number(data.studentId),
-        studentName: data.studentName,
-        admissionNo: data.admissionNo || "",
-        hostelId: Number(data.hostelId || 1),
-        hostelName: data.blockName || data.hostelName || "Hostel",
-        roomId: Number(data.roomId || 1),
-        roomNumber: data.roomNumber || data.roomNo || "Room",
-        room: data.roomNumber || data.roomNo || "Room",
-        block: data.blockName || data.hostelName || "Hostel",
-        bedId: Number(data.bedId || 1),
-        bedNumber: data.bedNumber || "",
-        roomBed: `${data.roomNumber || "Room"} (${data.bedNumber || "Bed"})`,
-        category: data.category || "Plumbing",
-        priority: data.priority || "Medium",
-        description: data.description || "",
-        status: "Pending",
-        date: new Date().toISOString().slice(0, 10),
-      };
-
-      setComplaints((prev) => [newComplaint, ...prev]);
-      closeModal();
-      showToast("Complaint registered successfully!");
-
-      try {
-        await hostelApi.createComplaint({
-          studentId: newComplaint.studentId,
-          studentName: newComplaint.studentName,
-          admissionNo: newComplaint.admissionNo,
-          hostelId: newComplaint.hostelId,
-          hostelName: newComplaint.hostelName,
-          roomId: newComplaint.roomId,
-          roomNumber: newComplaint.roomNumber,
-          bedId: newComplaint.bedId,
-          bedNumber: newComplaint.bedNumber,
-          roomBed: newComplaint.roomBed,
-          category: newComplaint.category,
-          priority: newComplaint.priority,
-          description: newComplaint.description,
-          status: newComplaint.status,
-          actionRemarks: "",
-        });
-      } catch {
-        // Optimistic local state updated successfully
-      }
-    } catch (err) {
-      console.error("Save complaint error:", err);
-      showToast(getApiErrorMessage(err), "danger");
-    }
-  };
-
-  const handleCreateComplaint = handleSaveComplaint;
-
-  const handleDeleteComplaint = async (complaint) => {
-    setComplaints((prev) =>
-      prev.filter(
-        (c) =>
-          String(c.id || c.complaintId) !== String(complaint.id || complaint.complaintId)
-      )
-    );
-    try {
-      await hostelApi.deleteComplaint(complaint.id || complaint.complaintId);
-    } catch {
-      // Optimistic delete
-    }
-    showToast("Complaint ticket removed.");
   };
 
   // ── Transfer CRUD (Screenshots 1, 2, 3) ──────────────────────────────
@@ -2205,19 +1668,6 @@ export default function HostelPage() {
 
   // 1. Dashboard
   const renderDashboard = () => {
-    if (isWarden && (isLoading || sectionErrors.dashboard)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.dashboard}
-          loadingTitle="Warden Dashboard Overview"
-          errorTitle="Unable to load dashboard overview data"
-          errorMessage="Unable to load dashboard overview data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
     // Blocks filtered by search query
     const filteredDashBlocks = enrichedBlocks.filter((b) => {
       if (!dashBlockSearch) return true;
@@ -2248,22 +1698,14 @@ export default function HostelPage() {
     // Outpass requests for dashboard display
     const dashOutpassesList = outpasses.slice(0, 4);
 
-    const pendingLeaveCount = outpasses.filter(
-      (o) => o.status === "Pending" || o.approvalStatus === "Pending"
-    ).length;
-    const pendingComplaintsCount = complaints.filter(
-      (c) => c.status === "Pending" || c.status === "In Progress" || c.status === "Open"
-    ).length;
-    const totalStudentsCount = dashboardData?.totalStudents ?? allocations.length;
-
     return (
       <div className="cms-hostel-stack">
         {/* 1. Header & Live Status matching Screenshot 3 */}
         <div className="cms-dash-header-row">
           <div>
             <div className="cms-dash-header-title">
-              <img className="cms-hostel-dashboard-icon" src={hostelManagementIcon} alt="" aria-hidden="true" />
-              <span>{isWarden ? "Hostel Warden Dashboard" : "Hostel Management Dashboard"}</span>
+              <Building2 size={24} style={{ color: "var(--cms-primary)" }} />
+              <span>Hostel Management Dashboard</span>
             </div>
             <p className="cms-dash-header-sub">
               Monitor bed occupancy, manage block capacities, and process student outpass permissions.
@@ -2275,23 +1717,6 @@ export default function HostelPage() {
           </div>
         </div>
 
-        {/* Live Data Notice Banner (when API is unavailable) */}
-        {apiNotice && (
-          <div
-            className="cms-dash-info-banner"
-            style={{
-              background: "var(--cms-amber-soft, #fffbeb)",
-              border: "1px solid var(--cms-amber, #f59e0b)",
-              color: "var(--cms-amber, #b45309)",
-              marginBottom: 12,
-              fontWeight: 600,
-            }}
-          >
-            <AlertTriangle size={18} style={{ color: "var(--cms-amber)", flexShrink: 0 }} />
-            <span>{apiNotice}</span>
-          </div>
-        )}
-
         {/* 2. Info Banner matching Screenshot 3 */}
         <div className="cms-dash-info-banner">
           <Info size={18} style={{ color: "var(--cms-primary)", flexShrink: 0 }} />
@@ -2300,26 +1725,26 @@ export default function HostelPage() {
           </span>
         </div>
 
-        {/* 3. 8 Metric KPI Cards (2 rows of 4) */}
+        {/* 3. 8 Metric KPI Cards matching Screenshot 3 (2 rows of 4) */}
         <div className="cms-dash-kpi-grid">
-          {/* Card 1: TOTAL STUDENTS */}
+          {/* Card 1: TOTAL HOSTELS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
               <Building2 size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">TOTAL STUDENTS</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-                  Enrolled
+                <span className="cms-dash-kpi-label">TOTAL HOSTELS</span>
+                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                  Active
                 </span>
               </div>
-              <div className="cms-dash-kpi-val">{totalStudentsCount}</div>
-              <div className="cms-dash-kpi-sub">Resident hostellers</div>
+              <div className="cms-dash-kpi-val">{blocks.length}</div>
+              <div className="cms-dash-kpi-sub">Operational blocks</div>
             </div>
           </div>
 
-          {/* Card 2: OCCUPIED BEDS / TOTAL CAPACITY */}
+          {/* Card 2: TOTAL CAPACITY */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
               <BedDouble size={20} />
@@ -2370,14 +1795,14 @@ export default function HostelPage() {
             </div>
           </div>
 
-          {/* Card 3: AVAILABLE BEDS */}
+          {/* Card 5: VACANT BEDS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
               <Home size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">AVAILABLE BEDS</span>
+                <span className="cms-dash-kpi-label">VACANT BEDS</span>
                 <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
                   Available
                 </span>
@@ -2387,71 +1812,39 @@ export default function HostelPage() {
             </div>
           </div>
 
-          {/* Card 4: OCCUPANCY RATE */}
+          {/* Card 6: HOSTELLERS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
               <UserCheck size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">OCCUPANCY RATE</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "color-mix(in srgb, var(--cms-primary) 18%, transparent)", color: "var(--cms-primary)" }}>
-                  Optimal
+                <span className="cms-dash-kpi-label">HOSTELLERS</span>
+                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                  Students
                 </span>
               </div>
-              <div className="cms-dash-kpi-val">{occupancyRate}%</div>
-              <div className="cms-dash-kpi-sub">Live capacity utilized</div>
+              <div className="cms-dash-kpi-val">{occupiedBeds}</div>
+              <div className="cms-dash-kpi-sub">Active residents</div>
             </div>
           </div>
 
-          {/* Card 5: PENDING LEAVE REQUESTS */}
+          {/* Card 7: MONTHLY REVENUE */}
           <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
-              <ArrowRightLeft size={20} />
+            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+              <IndianRupee size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">PENDING LEAVE</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
-                  {pendingLeaveCount > 0 ? "Action Req" : "Clear"}
-                </span>
-              </div>
-              <div className="cms-dash-kpi-val">{pendingLeaveCount}</div>
-              <div className="cms-dash-kpi-sub">Awaiting approval</div>
-            </div>
-          </div>
-
-          {/* Card 6: PENDING COMPLAINTS */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
-              <AlertTriangle size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">COMPLAINTS</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
-                  {pendingComplaintsCount > 0 ? "Open" : "Resolved"}
-                </span>
-              </div>
-              <div className="cms-dash-kpi-val">{pendingComplaintsCount}</div>
-              <div className="cms-dash-kpi-sub">Maintenance issues</div>
-            </div>
-          </div>
-
-          {/* Card 7: TOTAL HOSTELS */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Building2 size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">TOTAL HOSTELS</span>
+                <span className="cms-dash-kpi-label">MONTHLY REVENUE</span>
                 <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
-                  Active
+                  Billed
                 </span>
               </div>
-              <div className="cms-dash-kpi-val">{blocks.length}</div>
-              <div className="cms-dash-kpi-sub">Operational blocks</div>
+              <div className="cms-dash-kpi-val">
+                {monthlyRevenue > 0 ? `₹${monthlyRevenue.toLocaleString()}` : "₹0"}
+              </div>
+              <div className="cms-dash-kpi-sub">Hostel fees billing</div>
             </div>
           </div>
 
@@ -2480,12 +1873,8 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              if (isWarden) {
-                navigate("/warden-dashboard/rooms");
-              } else {
-                setActiveMajorTab("setup");
-                setActiveSetupSubtab("blocks");
-              }
+              setActiveMajorTab("setup");
+              setActiveSetupSubtab("blocks");
             }}
           >
             <Building2 size={14} style={{ color: "var(--cms-primary)" }} />
@@ -2495,12 +1884,8 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              if (isWarden) {
-                navigate("/warden-dashboard/students");
-              } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("allocations");
-              }
+              setActiveMajorTab("students");
+              setActiveStudentSubtab("allocations");
             }}
           >
             <Users size={14} style={{ color: "var(--cms-primary)" }} />
@@ -2510,12 +1895,8 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              if (isWarden) {
-                navigate("/warden-dashboard/allocations");
-              } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("allocations");
-              }
+              setActiveMajorTab("students");
+              setActiveStudentSubtab("allocations");
               setModal({ isOpen: true, type: "allocation", mode: "add", data: null });
             }}
           >
@@ -2526,12 +1907,8 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              if (isWarden) {
-                navigate("/warden-dashboard/attendance");
-              } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("attendance");
-              }
+              setActiveMajorTab("students");
+              setActiveStudentSubtab("attendance");
             }}
           >
             <CheckCircle2 size={14} style={{ color: "var(--cms-primary)" }} />
@@ -2541,11 +1918,7 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              if (isWarden) {
-                navigate("/warden-dashboard/reports");
-              } else {
-                setActiveMajorTab("reports");
-              }
+              setActiveMajorTab("reports");
             }}
           >
             <BarChart3 size={14} style={{ color: "var(--cms-primary)" }} />
@@ -2816,12 +2189,8 @@ export default function HostelPage() {
                 type="button"
                 className="cms-dash-split-link"
                 onClick={() => {
-                  if (isWarden) {
-                    navigate("/warden-dashboard/allocations");
-                  } else {
-                    setActiveMajorTab("students");
-                    setActiveStudentSubtab("allocations");
-                  }
+                  setActiveMajorTab("students");
+                  setActiveStudentSubtab("allocations");
                 }}
               >
                 View All &gt;
@@ -2880,12 +2249,8 @@ export default function HostelPage() {
                 type="button"
                 className="cms-dash-split-link"
                 onClick={() => {
-                  if (isWarden) {
-                    navigate("/warden-dashboard/leave-requests");
-                  } else {
-                    setActiveMajorTab("students");
-                    setActiveStudentSubtab("outpasses");
-                  }
+                  setActiveMajorTab("students");
+                  setActiveStudentSubtab("outpasses");
                 }}
               >
                 View All &gt;
@@ -2984,131 +2349,12 @@ export default function HostelPage() {
             </div>
           </div>
         </div>
-
-        {/* 8. Recent Complaints Section */}
-        <div className="cms-dash-split-card" style={{ marginTop: 14 }}>
-          <div className="cms-dash-split-head">
-            <div className="cms-dash-split-title">
-              <AlertTriangle size={16} style={{ color: "var(--cms-amber)" }} />
-              <span>RECENT HOSTEL COMPLAINTS</span>
-            </div>
-            <button
-              type="button"
-              className="cms-dash-split-link"
-              onClick={() => {
-                if (isWarden) {
-                  navigate("/warden-dashboard/complaints");
-                } else {
-                  setActiveMajorTab("students");
-                  setActiveStudentSubtab("complaints");
-                }
-              }}
-            >
-              View All &gt;
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {complaints.slice(0, 4).length === 0 ? (
-              <div style={{ textAlign: "center", padding: "24px 10px", color: "var(--cms-muted)", fontSize: 12 }}>
-                No active complaints recorded.
-              </div>
-            ) : (
-              complaints.slice(0, 4).map((c) => {
-                const isResolved = c.status === "Resolved";
-                const isPending = c.status === "Pending";
-                return (
-                  <div key={c.id || c.complaintId} className="cms-dash-item-row">
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
-                      <div style={{ color: isResolved ? "var(--cms-green)" : isPending ? "var(--cms-amber)" : "var(--cms-info)", display: "flex", alignItems: "center" }}>
-                        <AlertTriangle size={18} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--cms-text)" }}>
-                            {c.studentName}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              borderRadius: 9999,
-                              padding: "1px 7px",
-                              background: isResolved
-                                ? "var(--cms-green-soft)"
-                                : isPending
-                                ? "var(--cms-amber-soft)"
-                                : "var(--cms-info-soft)",
-                              color: isResolved
-                                ? "var(--cms-green)"
-                                : isPending
-                                ? "var(--cms-amber)"
-                                : "var(--cms-info)",
-                            }}
-                          >
-                            {c.status}
-                          </span>
-                          <span style={{ fontSize: 11, color: "var(--cms-muted)" }}>
-                            ({c.category})
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 11, color: "var(--cms-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {c.room} • {c.description}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {isPending && (
-                        <button
-                          type="button"
-                          className="cms-dash-btn-approve"
-                          onClick={() => handleUpdateComplaintStatus(c.id || c.complaintId, "Resolved")}
-                          style={{ padding: "4px 8px", fontSize: 11 }}
-                        >
-                          <Check size={12} /> Resolve
-                        </button>
-                      )}
-                      <span
-                        style={{
-                          background: "var(--cms-subtle)",
-                          border: "1px solid var(--cms-border)",
-                          color: "var(--cms-muted)",
-                          borderRadius: 9999,
-                          padding: "2px 8px",
-                          fontSize: 11,
-                          fontWeight: 600,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {c.date || (c.createdAt ? c.createdAt.split("T")[0] : "-")}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
       </div>
     );
   };
 
   // 2. Hostel Blocks
   const renderHostelBlocks = () => {
-    if (isWarden && (isLoading || sectionErrors.blocks)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.blocks}
-          loadingTitle="Hostel Blocks"
-          errorTitle="Unable to load hostel blocks data"
-          errorMessage="Unable to load hostel blocks data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
     const isHostelSelected = Boolean(filterBlock);
 
     const filtered = !isHostelSelected
@@ -3314,19 +2560,6 @@ export default function HostelPage() {
 
   // 3. Room Categories
   const renderRoomCategories = () => {
-    if (isWarden && (isLoading || sectionErrors.categories)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.categories}
-          loadingTitle="Room Categories"
-          errorTitle="Unable to load room types data"
-          errorMessage="Unable to load room types data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
     const filtered = categories.filter((c) => {
       const q = searchQuery.toLowerCase().trim();
       const cType = String(c.type || "").toLowerCase();
@@ -3495,19 +2728,6 @@ export default function HostelPage() {
 
   // 4. Rooms & Bed Allocation (Matching user screenshot reference)
   const renderRooms = () => {
-    if (isWarden && (isLoading || sectionErrors.rooms)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.rooms}
-          loadingTitle="Room Management"
-          errorTitle="Unable to load room management data"
-          errorMessage="Unable to load room management data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
     // Floor matcher helper (supports "Ground Floor", "1st Floor", "Floor 1", etc.)
     const isFloorMatch = (roomFloor, filterVal) => {
       if (!filterVal || filterVal === "all") return true;
@@ -3859,19 +3079,6 @@ export default function HostelPage() {
 
   // 5. Wardens (Matching user screenshot reference)
   const renderWardens = () => {
-    if (isWarden && (isLoading || sectionErrors.wardens)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.wardens}
-          loadingTitle="Warden Allocation"
-          errorTitle="Unable to load warden allocation data"
-          errorMessage="Unable to load warden allocation data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
     const filtered = wardens.filter((w) => {
       const q = searchQuery.toLowerCase().trim();
       const matchQ =
@@ -4138,19 +3345,6 @@ export default function HostelPage() {
 
   // 6. Student Allocations (Student Room Allocations)
   const renderAllocations = () => {
-    if (isWarden && (isLoading || sectionErrors.allocations)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.allocations}
-          loadingTitle="Student Allocations"
-          errorTitle="Unable to load student allocations data"
-          errorMessage="Unable to load student allocation data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
     // Unique list of hostels for dropdown
     const hostelOptions = Array.from(
       new Set([
@@ -4216,7 +3410,7 @@ export default function HostelPage() {
         <div className="cms-alloc-header-row">
           <div className="cms-alloc-title-group">
             <UserPlus size={22} style={{ color: "var(--cms-primary)" }} />
-            <h2>{isWarden && wardenSection === "students" ? "Hostel Resident Students" : "Student Room Allocations"}</h2>
+            <h2>Student Room Allocations</h2>
           </div>
           <button
             type="button"
@@ -4445,52 +3639,43 @@ export default function HostelPage() {
 
   // 7. Outpass & Leave
   const renderOutpasses = () => {
-    if (isWarden && (isLoading || sectionErrors.outpasses)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.outpasses}
-          loadingTitle="Leave & Outpass Requests"
-          errorTitle="Unable to load leave requests data"
-          errorMessage="Unable to load outpass and leave requests data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
+    const isFiltered = Boolean(outpassSearch.trim() || outpassStatus || outpassType);
 
-    const filtered = outpasses.filter((o) => {
-      const q = outpassSearch.toLowerCase().trim();
-      const matchQ =
-        !q ||
-        String(o.studentName || "").toLowerCase().includes(q) ||
-        String(o.admissionNo || "").toLowerCase().includes(q) ||
-        String(o.roomNo || "").toLowerCase().includes(q) ||
-        String(o.roomNumber || "").toLowerCase().includes(q) ||
-        String(o.blockName || "").toLowerCase().includes(q) ||
-        String(o.reason || "").toLowerCase().includes(q);
+    const filtered = !isFiltered
+      ? []
+      : outpasses.filter((o) => {
+          const q = outpassSearch.toLowerCase().trim();
+          const matchQ =
+            !q ||
+            String(o.studentName || "").toLowerCase().includes(q) ||
+            String(o.admissionNo || "").toLowerCase().includes(q) ||
+            String(o.roomNo || "").toLowerCase().includes(q) ||
+            String(o.roomNumber || "").toLowerCase().includes(q) ||
+            String(o.blockName || "").toLowerCase().includes(q) ||
+            String(o.reason || "").toLowerCase().includes(q);
 
-      const reqType = o.outpassType || o.requestType || "";
-      const matchType =
-        !outpassType ||
-        reqType.toLowerCase().includes(outpassType.toLowerCase()) ||
-        outpassType.toLowerCase().includes(reqType.toLowerCase());
+          const reqType = o.outpassType || o.requestType || "";
+          const matchType =
+            !outpassType ||
+            reqType.toLowerCase().includes(outpassType.toLowerCase()) ||
+            outpassType.toLowerCase().includes(reqType.toLowerCase());
 
-      const matchStatus =
-        !outpassStatus ||
-        outpassStatus === "all" ||
-        o.status?.toLowerCase() === outpassStatus.toLowerCase() ||
-        (outpassStatus === "Pending" && (o.status === "Pending" || o.status === "Pending Approval"));
+          const matchStatus =
+            !outpassStatus ||
+            outpassStatus === "all" ||
+            o.status?.toLowerCase() === outpassStatus.toLowerCase() ||
+            (outpassStatus === "Pending" && (o.status === "Pending" || o.status === "Pending Approval"));
 
-      return matchQ && matchType && matchStatus;
-    });
+          return matchQ && matchType && matchStatus;
+        });
 
     return (
       <div className="cms-hostel-stack">
-        {/* Top Header Row */}
+        {/* Top Header Row matching Screenshot 1 */}
         <div className="cms-outpass-header-row">
           <div className="cms-outpass-title-group">
             <ArrowRightLeft size={20} style={{ color: "var(--cms-primary)" }} />
-            <h2>Outpass &amp; Leave Requests</h2>
+            <h2>Outpass &amp; Leave Management</h2>
           </div>
           <button
             type="button"
@@ -4511,8 +3696,9 @@ export default function HostelPage() {
           </button>
         </div>
 
-        {/* Filter Bar */}
+        {/* Filter Bar matching Screenshot 1 & 4 */}
         <div className="cms-outpass-toolbar">
+          {/* Search Box */}
           <div className="cms-outpass-search-wrap">
             <div className="cms-outpass-search-icon">
               <Search size={15} />
@@ -4520,13 +3706,15 @@ export default function HostelPage() {
             <input
               type="text"
               className="cms-outpass-search-input"
-              placeholder="Search student, ID, room, reason..."
+              placeholder="Search student, adm no, room..."
               value={outpassSearch}
               onChange={(e) => setOutpassSearch(e.target.value)}
             />
           </div>
 
+          {/* Filters & Export */}
           <div className="cms-outpass-filters-wrap">
+            {/* Outpass Type Filter matching Screenshot 4 */}
             <select
               className="cms-outpass-select"
               value={outpassType}
@@ -4538,12 +3726,13 @@ export default function HostelPage() {
               <option value="Emergency Outpass">Emergency Outpass</option>
             </select>
 
+            {/* Status Filter matching Screenshot 1 & 2 */}
             <select
               className="cms-outpass-select"
               value={outpassStatus}
               onChange={(e) => setOutpassStatus(e.target.value)}
             >
-              <option value="">All Statuses</option>
+              <option value="">Select Option</option>
               <option value="all">All Statuses</option>
               <option value="Approved">Approved</option>
               <option value="Pending">Pending</option>
@@ -4555,16 +3744,15 @@ export default function HostelPage() {
               className="cms-btn cms-btn-ghost"
               style={{ height: 38, borderRadius: 8, padding: "0 12px", fontSize: 12.5 }}
               onClick={() =>
-                exportCsv("leave-requests.csv", filtered.length ? filtered : outpasses, [
-                  { key: "studentName", label: "Student Name" },
-                  { key: "admissionNo", label: "Student ID" },
-                  { key: "roomNo", label: "Room Number", value: (r) => r.roomNo?.replace("Room #", "") || r.roomNumber || "101" },
-                  { key: "course", label: "Course", value: (r) => r.course || "B.Tech" },
-                  { key: "departureDate", label: "Leave From", value: (r) => r.departureDate || r.outDate || r.fromDateTime },
-                  { key: "returnDate", label: "Leave To", value: (r) => r.returnDate || r.toDateTime },
-                  { key: "reason", label: "Reason" },
-                  { key: "requestDate", label: "Request Date", value: (r) => r.requestDate || r.departureDate },
+                exportCsv("outpass-requests.csv", filtered.length ? filtered : outpasses, [
+                  { key: "studentName", label: "Student" },
+                  { key: "admissionNo", label: "Adm No" },
+                  { key: "blockName", label: "Hostel & Room", value: (r) => `${r.blockName} (Room #${r.roomNo?.replace("Room #", "") || r.roomNumber || "101"})` },
+                  { key: "requestType", label: "Outpass Type", value: (r) => r.outpassType || r.requestType },
+                  { key: "departureDate", label: "Departure", value: (r) => r.departureDate || r.outDate },
+                  { key: "returnDate", label: "Expected Return" },
                   { key: "status", label: "Status" },
+                  { key: "reason", label: "Reason" },
                 ])
               }
             >
@@ -4573,145 +3761,134 @@ export default function HostelPage() {
           </div>
         </div>
 
-        {/* Table Card */}
-        <div className="cms-outpass-table-card cms-hostel-table-scroll">
-          <table className="cms-outpass-table">
-            <thead>
-              <tr>
-                <th className="cms-outpass-th">Student Name</th>
-                <th className="cms-outpass-th">Student ID</th>
-                <th className="cms-outpass-th">Room Number</th>
-                <th className="cms-outpass-th">Course</th>
-                <th className="cms-outpass-th">Leave From</th>
-                <th className="cms-outpass-th">Leave To</th>
-                <th className="cms-outpass-th">Reason</th>
-                <th className="cms-outpass-th">Request Date</th>
-                <th className="cms-outpass-th" style={{ textAlign: "center" }}>Status</th>
-                <th className="cms-outpass-th" style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
+        {/* Empty State Prompt matching Screenshot 1 */}
+        {!isFiltered ? (
+          <div className="cms-outpass-empty-prompt">
+            <div className="cms-outpass-empty-icon">
+              <LogOut size={28} />
+            </div>
+            <p className="cms-outpass-empty-text">
+              Please enter a search query to load records.
+            </p>
+          </div>
+        ) : (
+          /* Table Card matching Screenshot 2 & 3 */
+          <div className="cms-outpass-table-card cms-hostel-table-scroll">
+            <table className="cms-outpass-table">
+              <thead>
                 <tr>
-                  <td colSpan={10} style={{ padding: "40px 16px", textAlign: "center", color: "var(--cms-muted)", fontStyle: "italic", fontWeight: 600 }}>
-                    No leave requests found.
-                  </td>
+                  <th className="cms-outpass-th">Student</th>
+                  <th className="cms-outpass-th">Adm No</th>
+                  <th className="cms-outpass-th">Hostel &amp; Room</th>
+                  <th className="cms-outpass-th">Outpass Type</th>
+                  <th className="cms-outpass-th">Departure</th>
+                  <th className="cms-outpass-th">Expected Return</th>
+                  <th className="cms-outpass-th" style={{ textAlign: "center" }}>Status</th>
+                  <th className="cms-outpass-th" style={{ textAlign: "right" }}>Actions</th>
                 </tr>
-              ) : (
-                filtered.map((r) => {
-                  const isPending = r.status === "Pending" || r.status === "Pending Approval";
-                  const isApproved = r.status === "Approved";
-                  const roomDisplay = String(r.roomNo || r.roomNumber || "").replace("Room #", "").trim() || "-";
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: "40px 16px", textAlign: "center", color: "var(--cms-muted)", fontStyle: "italic", fontWeight: 600 }}>
+                      No outpass records found matching filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((r) => {
+                    const isPending = r.status === "Pending" || r.status === "Pending Approval";
+                    const isApproved = r.status === "Approved";
+                    const roomDisplay = String(r.roomNo || r.roomNumber || "").replace("Room #", "").trim() || "-";
 
-                  return (
-                    <tr key={r.id} className="cms-outpass-row">
-                      <td className="cms-outpass-td" style={{ fontWeight: 700, color: "var(--cms-text)" }}>
-                        {r.studentName}
-                      </td>
-                      <td className="cms-outpass-td" style={{ fontFamily: "monospace", color: "var(--cms-muted)", fontSize: 12 }}>
-                        {r.admissionNo || r.studentId || "-"}
-                      </td>
-                      <td className="cms-outpass-td">
-                        <span className="cms-outpass-hostel-link">
-                          Room #{roomDisplay} ({r.blockName || "Hostel"})
-                        </span>
-                      </td>
-                      <td className="cms-outpass-td" style={{ fontSize: 12, color: "var(--cms-text)" }}>
-                        {r.course || "B.Tech"}
-                      </td>
-                      <td className="cms-outpass-td" style={{ fontFamily: "monospace", color: "var(--cms-muted)", fontSize: 12 }}>
-                        {r.departureDate || r.outDate || (r.fromDateTime ? r.fromDateTime.split("T")[0] : "-")}
-                      </td>
-                      <td className="cms-outpass-td" style={{ fontFamily: "monospace", color: "var(--cms-muted)", fontSize: 12 }}>
-                        {r.returnDate || (r.toDateTime ? r.toDateTime.split("T")[0] : "-")}
-                      </td>
-                      <td className="cms-outpass-td" style={{ maxWidth: 200, fontSize: 12 }}>
-                        {r.reason || "Personal Leave"}
-                      </td>
-                      <td className="cms-outpass-td" style={{ fontFamily: "monospace", color: "var(--cms-muted)", fontSize: 12 }}>
-                        {r.requestDate || r.departureDate || "2026-09-28"}
-                      </td>
-                      <td className="cms-outpass-td" style={{ textAlign: "center" }}>
-                        <span
-                          className={`cms-outpass-status-pill ${
-                            isApproved
-                              ? "cms-outpass-status-approved"
-                              : isPending
-                              ? "cms-outpass-status-pending"
-                              : "cms-outpass-status-rejected"
-                          }`}
-                        >
-                          {r.status}
-                        </span>
-                      </td>
-                      <td className="cms-outpass-td" style={{ textAlign: "right" }}>
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                          {isPending && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateOutpassStatus(r.id, "Approved")}
-                                className="cms-dash-btn-approve"
-                                style={{ padding: "4px 10px", fontSize: 12 }}
-                                title="Approve Leave Request"
-                              >
-                                <Check size={14} /> Approve
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateOutpassStatus(r.id, "Rejected")}
-                                className="cms-dash-btn-reject"
-                                style={{ padding: "4px 10px", fontSize: 12 }}
-                                title="Reject Leave Request"
-                              >
-                                <X size={14} /> Reject
-                              </button>
-                            </>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setModal({ isOpen: true, type: "outpass", mode: "view", data: r })}
-                            className="cms-outpass-action-btn view"
-                            title="View details"
+                    return (
+                      <tr key={r.id} className="cms-outpass-row">
+                        <td className="cms-outpass-td" style={{ fontWeight: 700, color: "var(--cms-text)" }}>
+                          {r.studentName}
+                        </td>
+                        <td className="cms-outpass-td" style={{ fontFamily: "monospace", color: "var(--cms-muted)", fontSize: 12 }}>
+                          {r.admissionNo}
+                        </td>
+                        <td className="cms-outpass-td">
+                          <span className="cms-outpass-hostel-link">
+                            {r.blockName} (Room #{roomDisplay})
+                          </span>
+                        </td>
+                        <td className="cms-outpass-td" style={{ fontWeight: 700, color: "var(--cms-text)" }}>
+                          {r.outpassType || r.requestType}
+                        </td>
+                        <td className="cms-outpass-td" style={{ fontFamily: "monospace", color: "var(--cms-muted)", fontSize: 12 }}>
+                          {r.departureDate || r.outDate}
+                        </td>
+                        <td className="cms-outpass-td" style={{ fontFamily: "monospace", color: "var(--cms-muted)", fontSize: 12 }}>
+                          {r.returnDate}
+                        </td>
+                        <td className="cms-outpass-td" style={{ textAlign: "center" }}>
+                          <span
+                            className={`cms-outpass-status-pill ${
+                              isApproved
+                                ? "cms-outpass-status-approved"
+                                : isPending
+                                ? "cms-outpass-status-pending"
+                                : "cms-outpass-status-rejected"
+                            }`}
                           >
-                            <Eye size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteOutpass(r)}
-                            className="cms-outpass-action-btn delete"
-                            title="Delete Record"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                            {isPending ? "Pending" : r.status}
+                          </span>
+                        </td>
+                        <td className="cms-outpass-td" style={{ textAlign: "right" }}>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            {isPending && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateOutpassStatus(r.id, "Approved")}
+                                  className="cms-outpass-action-btn approve"
+                                  title="Approve Outpass"
+                                >
+                                  <CheckCircle2 size={16} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateOutpassStatus(r.id, "Rejected")}
+                                  className="cms-outpass-action-btn reject"
+                                  title="Reject Outpass"
+                                >
+                                  <XCircle size={16} />
+                                </button>
+                              </>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setModal({ isOpen: true, type: "outpass", mode: "view", data: r })}
+                              className="cms-outpass-action-btn view"
+                              title="View details"
+                            >
+                              <Eye size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOutpass(r)}
+                              className="cms-outpass-action-btn delete"
+                              title="Delete Record"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   };
 
   // 8. Transfer & Vacate (Screenshots 1 & 2 - Theme-based & Compact)
   const renderTransfers = () => {
-    if (isWarden && (isLoading || sectionErrors.transfers)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.transfers}
-          loadingTitle="Transfer & Vacate"
-          errorTitle="Unable to load transfer & vacate data"
-          errorMessage="Unable to load transfer and vacate requests data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
     const filtered = transfers.filter((t) => {
       const q = transferSearch.toLowerCase().trim();
       const matchQ =
@@ -4934,19 +4111,6 @@ export default function HostelPage() {
 
   // 9. Attendance (Exact match for Screenshots 1 & 2)
   const renderAttendance = () => {
-    if (isWarden && (isLoading || sectionErrors.attendance)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.attendance}
-          loadingTitle="Hostel Attendance Register"
-          errorTitle="Unable to load attendance data"
-          errorMessage="Unable to load hostel attendance register data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
     const shiftData = attendanceMap[attendanceShift] || {};
 
     const filtered = attendanceStudents.filter((s) => {
@@ -5501,399 +4665,11 @@ export default function HostelPage() {
     );
   };
 
-  // 10. Student Complaints (Maintenance & Facility Management)
-  const renderComplaints = () => {
-    if (isWarden && isLoading) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          loadingTitle="Hostel Maintenance & Complaints"
-        />
-      );
-    }
-
-    const filtered = complaints.filter((c) => {
-      const q = (complaintSearch || "").toLowerCase().trim();
-      const matchQ =
-        !q ||
-        c.studentName?.toLowerCase().includes(q) ||
-        (c.complaintId && String(c.complaintId).toLowerCase().includes(q)) ||
-        (c.room && String(c.room).toLowerCase().includes(q)) ||
-        (c.block && String(c.block).toLowerCase().includes(q)) ||
-        (c.category && String(c.category).toLowerCase().includes(q)) ||
-        (c.description && String(c.description).toLowerCase().includes(q));
-
-      const matchCat =
-        !complaintCategory ||
-        complaintCategory === "all" ||
-        c.category?.toLowerCase() === complaintCategory.toLowerCase();
-
-      const matchStatus =
-        !complaintStatus ||
-        complaintStatus === "all" ||
-        c.status?.toLowerCase() === complaintStatus.toLowerCase();
-
-      return matchQ && matchCat && matchStatus;
-    });
-
-    const pendingCount = complaints.filter((c) => c.status === "Pending").length;
-    const inProgressCount = complaints.filter((c) => c.status === "In Progress").length;
-
-    return (
-      <div className="cms-hostel-stack">
-        {/* Header Row */}
-        <div className="cms-outpass-header-row">
-          <div className="cms-outpass-title-group">
-            <AlertTriangle size={20} style={{ color: "var(--cms-amber)" }} />
-            <div>
-              <h2 style={{ margin: 0 }}>Hostel Maintenance &amp; Complaints</h2>
-              <p style={{ margin: "2px 0 0 0", fontSize: 12, color: "var(--cms-muted)" }}>
-                Track, review and resolve student hostel room and facility complaints.
-              </p>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>
-              Total: <strong>{complaints.length}</strong> (Pending: <strong style={{ color: "var(--cms-amber)" }}>{pendingCount}</strong>, In Progress: <strong>{inProgressCount}</strong>)
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-primary"
-              onClick={() => setModal({ isOpen: true, type: "complaint", mode: "add", data: null })}
-              style={{
-                borderRadius: 9999,
-                height: 36,
-                padding: "0 18px",
-                fontSize: 13,
-                fontWeight: 700,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <Plus size={16} /> Register Complaint
-            </button>
-          </div>
-        </div>
-
-        {/* Filters Toolbar */}
-        <div className="cms-outpass-toolbar">
-          <div className="cms-outpass-search-wrap">
-            <div className="cms-outpass-search-icon">
-              <Search size={15} />
-            </div>
-            <input
-              type="text"
-              className="cms-outpass-search-input"
-              placeholder="Search by student, room, category, ticket ID..."
-              value={complaintSearch}
-              onChange={(e) => setComplaintSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="cms-outpass-filters-wrap">
-            <select
-              className="cms-outpass-select"
-              value={complaintCategory}
-              onChange={(e) => setComplaintCategory(e.target.value)}
-            >
-              <option value="">All Categories</option>
-              <option value="Plumbing">Plumbing</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Cleanliness">Cleanliness</option>
-              <option value="Food">Food / Mess</option>
-              <option value="Wi-Fi / Internet">Wi-Fi / Internet</option>
-              <option value="Carpentry">Carpentry</option>
-              <option value="Security / Noise">Security / Noise</option>
-              <option value="Other">Other</option>
-            </select>
-
-            <select
-              className="cms-outpass-select"
-              value={complaintStatus}
-              onChange={(e) => setComplaintStatus(e.target.value)}
-            >
-              <option value="">All Statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Resolved">Resolved</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Complaints Table Card */}
-        <div className="cms-outpass-table-card cms-hostel-table-scroll">
-          <table className="cms-outpass-table">
-            <thead>
-              <tr>
-                <th className="cms-outpass-th">Ticket ID</th>
-                <th className="cms-outpass-th">Student Name</th>
-                <th className="cms-outpass-th">Room &amp; Block</th>
-                <th className="cms-outpass-th">Category</th>
-                <th className="cms-outpass-th">Description</th>
-                <th className="cms-outpass-th">Filed Date</th>
-                <th className="cms-outpass-th" style={{ textAlign: "center" }}>Status</th>
-                <th className="cms-outpass-th" style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: "center", padding: "48px 24px", color: "var(--cms-muted)" }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                      <AlertTriangle size={32} style={{ color: "var(--cms-muted)", opacity: 0.6 }} />
-                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--cms-text)" }}>No Student Complaints Found</div>
-                      <p style={{ margin: 0, fontSize: 13, maxWidth: 460 }}>
-                        No complaints match your current search criteria. Click &quot;Register Complaint&quot; above to log a new maintenance ticket.
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((c) => {
-                  const isPending = c.status === "Pending";
-                  const isResolved = c.status === "Resolved";
-                  return (
-                    <tr key={c.id || c.complaintId} className="cms-outpass-row">
-                      <td className="cms-outpass-td" style={{ fontWeight: 700, fontFamily: "monospace", color: "var(--cms-primary)" }}>
-                        {c.complaintId || c.id}
-                      </td>
-                      <td className="cms-outpass-td" style={{ fontWeight: 700, color: "var(--cms-text)" }}>
-                        {c.studentName}
-                        {c.admissionNo && (
-                          <span style={{ display: "block", fontSize: 11, color: "var(--cms-muted)", fontWeight: 500 }}>
-                            {c.admissionNo}
-                          </span>
-                        )}
-                      </td>
-                      <td className="cms-outpass-td">
-                        <span className="cms-outpass-hostel-link">
-                          Room #{c.room} ({c.block})
-                        </span>
-                      </td>
-                      <td className="cms-outpass-td">
-                        <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-subtle)" }}>
-                          {c.category}
-                        </span>
-                      </td>
-                      <td className="cms-outpass-td" style={{ maxWidth: 260, fontSize: 12 }}>
-                        {c.description}
-                      </td>
-                      <td className="cms-outpass-td" style={{ fontSize: 12, color: "var(--cms-muted)", fontFamily: "monospace" }}>
-                        {c.date}
-                      </td>
-                      <td className="cms-outpass-td" style={{ textAlign: "center" }}>
-                        <span
-                          className={`cms-outpass-status-pill ${
-                            isResolved
-                              ? "cms-outpass-status-approved"
-                              : isPending
-                              ? "cms-outpass-status-pending"
-                              : "cms-outpass-status-inprogress"
-                          }`}
-                        >
-                          {c.status}
-                        </span>
-                      </td>
-                      <td className="cms-outpass-td" style={{ textAlign: "right" }}>
-                        <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                          {isPending && (
-                            <button
-                              type="button"
-                              className="cms-dash-btn-approve"
-                              style={{ padding: "4px 10px", fontSize: 11 }}
-                              title="Mark ticket as in progress"
-                              onClick={() => handleUpdateComplaintStatus(c.id || c.complaintId, "In Progress")}
-                            >
-                              In Progress
-                            </button>
-                          )}
-                          {!isResolved && (
-                            <button
-                              type="button"
-                              className="cms-dash-btn-approve"
-                              style={{ padding: "4px 10px", fontSize: 11, background: "var(--cms-green)", color: "#fff" }}
-                              title="Resolve ticket"
-                              onClick={() => handleUpdateComplaintStatus(c.id || c.complaintId, "Resolved")}
-                            >
-                              Resolve
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setModal({ isOpen: true, type: "complaint", mode: "view", data: c })}
-                            className="cms-outpass-action-btn view"
-                            title="View Complaint Details"
-                          >
-                            <Eye size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteComplaint(c)}
-                            className="cms-outpass-action-btn delete"
-                            title="Remove Ticket"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  // 11. Warden Profile Section
-  const renderWardenProfile = () => {
-    if (isWarden && (isLoading || (sectionErrors.profile && wardens.length === 0))) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={sectionErrors.profile}
-          loadingTitle="Warden Profile"
-          errorTitle="Unable to load warden profile data"
-          errorMessage="Unable to load warden profile details. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
-    const handleLogout = () => {
-      clearAuthSession();
-      window.location.href = "/login";
-    };
-
-    const activeWarden = wardenProfile || wardens.find((w) => w.status === "Active") || wardens[0] || null;
-    const wardenName = activeWarden?.wardenName || activeWarden?.name || [activeWarden?.firstName, activeWarden?.middleName, activeWarden?.lastName].filter(Boolean).join(" ") || "Hostel Warden";
-    const initials = wardenName
-      .split(" ")
-      .filter(Boolean)
-      .map((part) => part[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || "HW";
-    const wardenEmail = activeWarden?.email || (activeWarden?.employeeId || activeWarden?.empId ? `${(activeWarden.employeeId || activeWarden.empId).toLowerCase()}@cms.com` : "warden@cms.com");
-    const wardenEmpId = activeWarden?.employeeId || activeWarden?.empId || "WRD-ACT";
-    const wardenPhone = activeWarden?.phone || activeWarden?.primaryMobileNumber || activeWarden?.mobileNumber || "+91 98451 22301";
-    const supervisedBlock = blocks.find((b) => b.id === activeWarden?.hostelId || b.name === (activeWarden?.hostelName || activeWarden?.assignedHostels));
-    const supervisedBlockName = supervisedBlock
-      ? `${supervisedBlock.name} (${supervisedBlock.code || "Main"})`
-      : (activeWarden?.hostelName || activeWarden?.assignedHostels || (blocks[0]?.name ? `${blocks[0].name} (${blocks[0].code || "Main"})` : "Hostel Residences"));
-    const supervisedRooms = blocks.length > 0
-      ? rooms.filter((r) => r.blockId === supervisedBlock?.id || r.block === supervisedBlock?.name)
-      : rooms;
-    const supervisedCapacity = supervisedBlock
-      ? `${supervisedRooms.length || (supervisedBlock.floors || 3) * 10} Rooms • ${(supervisedBlock.floors || 3) * 20} Bed Capacity`
-      : `${rooms.length} Rooms • ${beds.length} Bed Capacity`;
-
-    return (
-      <div className="cms-hostel-stack">
-        <div className="cms-outpass-header-row">
-          <div className="cms-outpass-title-group">
-            <Users size={20} style={{ color: "var(--cms-primary)" }} />
-            <h2>Chief Resident Warden Profile</h2>
-          </div>
-          <button
-            type="button"
-            className="cms-btn cms-btn-danger"
-            onClick={handleLogout}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--cms-red)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer" }}
-          >
-            <LogOut size={15} /> Logout
-          </button>
-        </div>
-
-        <div className="cms-dash-block-section" style={{ padding: 24 }}>
-          <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap", borderBottom: "1px solid var(--cms-border)", paddingBottom: 20 }}>
-            <div
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: "50%",
-                background: "var(--cms-primary)",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 26,
-                fontWeight: 800,
-              }}
-            >
-              {initials}
-            </div>
-            <div>
-              <h3 style={{ margin: "0 0 4px 0", fontSize: "1.25rem", color: "var(--cms-text)" }}>{wardenName}</h3>
-              <p style={{ margin: "0 0 6px 0", color: "var(--cms-muted)", fontSize: 13 }}>Chief Resident Warden • Hostel Administration Office</p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <span className="cms-dash-live-badge"><span className="cms-dash-live-dot" /> On Active Duty</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>Hostel Warden</span>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginTop: 20 }}>
-            <div className="cms-dash-kpi-card" style={{ padding: 16 }}>
-              <span className="cms-dash-kpi-label">OFFICIAL EMAIL</span>
-              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4 }}>{wardenEmail}</div>
-              <span className="cms-dash-kpi-sub">Campus administrative directory</span>
-            </div>
-            <div className="cms-dash-kpi-card" style={{ padding: 16 }}>
-              <span className="cms-dash-kpi-label">EMPLOYEE / STAFF ID</span>
-              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4 }}>{wardenEmpId}</div>
-              <span className="cms-dash-kpi-sub">Hostel Administration Division</span>
-            </div>
-            <div className="cms-dash-kpi-card" style={{ padding: 16 }}>
-              <span className="cms-dash-kpi-label">DUTY PHONE LINE</span>
-              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4 }}>{wardenPhone}</div>
-              <span className="cms-dash-kpi-sub">Emergency intercom ext: 401</span>
-            </div>
-            <div className="cms-dash-kpi-card" style={{ padding: 16 }}>
-              <span className="cms-dash-kpi-label">SUPERVISED RESIDENCES</span>
-              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4 }}>{supervisedBlockName}</div>
-              <span className="cms-dash-kpi-sub">{supervisedCapacity}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // 12. Hostel Reports (Matching User Reference Screenshot)
+  // 10. Hostel Reports (Matching User Reference Screenshot)
   const renderReports = () => {
-    const reportError =
-      sectionErrors.reports ||
-      (reportCategory === "Block Report" ? sectionErrors.blocks :
-       reportCategory === "Room Report" ? sectionErrors.rooms :
-       (reportCategory === "Bed Allocation Report" || reportCategory === "Student Allocation Report") ? sectionErrors.allocations :
-       reportCategory === "Attendance Report" ? sectionErrors.attendance :
-       reportCategory === "Outpass & Leave Report" ? sectionErrors.outpasses :
-       reportCategory === "Transfer & Vacate Report" ? sectionErrors.transfers :
-       reportCategory === "Warden Report" ? sectionErrors.wardens :
-       null);
-
-    if (isWarden && (isLoading || reportError)) {
-      return (
-        <WardenSectionState
-          loading={isLoading}
-          error={reportError}
-          loadingTitle="Hostel Reports"
-          errorTitle="Unable to load report data"
-          errorMessage="Unable to load hostel report data. Please try again."
-          onRetry={fetchHostelData}
-        />
-      );
-    }
-
-    // 1. Raw dataset by category (prefer direct server report API dataset if available)
+    // 1. Raw dataset by category
     let rawData = [];
-    if (Array.isArray(serverReportData) && serverReportData.length > 0) {
-      rawData = serverReportData;
-    } else if (reportCategory === "Block Report") {
+    if (reportCategory === "Block Report") {
       rawData = blocks;
     } else if (reportCategory === "Room Report") {
       rawData = rooms;
@@ -5962,13 +4738,13 @@ export default function HostelPage() {
       switch (cat) {
         case "Block Report":
           return [
-            { key: "code", label: "Block Code", getter: (r) => r.code || r.blockCode || "-" },
-            { key: "name", label: "Block Name", getter: (r) => r.name || r.blockName || "-" },
-            { key: "type", label: "Category", getter: (r) => r.category || r.type || "Boys" },
-            { key: "floors", label: "Total Floors", getter: (r) => r.totalFloors ?? r.floors ?? 1 },
-            { key: "warden", label: "Warden Name", getter: (r) => r.wardenName || r.warden || "Unassigned" },
-            { key: "wardenPhone", label: "Primary Mobile", getter: (r) => r.primaryMobile || r.wardenPhone || "-" },
-            { key: "address", label: "Location", getter: (r) => r.location || r.address || "Main Campus" },
+            { key: "code", label: "Block Code", getter: (r) => r.code || "-" },
+            { key: "name", label: "Block Name", getter: (r) => r.name || "-" },
+            { key: "type", label: "Category", getter: (r) => r.type || r.category || "Boys" },
+            { key: "floors", label: "Total Floors", getter: (r) => r.floors ?? r.totalFloors ?? 1 },
+            { key: "warden", label: "Warden Name", getter: (r) => r.warden || r.wardenName || "Unassigned" },
+            { key: "wardenPhone", label: "Primary Mobile", getter: (r) => r.wardenPhone || r.primaryMobile || "-" },
+            { key: "address", label: "Location", getter: (r) => r.address || r.location || "Main Campus" },
             { key: "status", label: "Status", getter: (r) => r.status || "Active" },
           ];
         case "Room Report":
@@ -6229,11 +5005,34 @@ export default function HostelPage() {
 
     return (
       <div className="cms-hostel-stack">
-        {/* Top Header Row */}
+        {/* Top Header Row Matching User Screenshot */}
         <div className="cms-report-header-row">
           <div className="cms-report-title-group">
             <FileSpreadsheet size={24} style={{ color: "var(--cms-primary)" }} />
             <h2>Hostel Reports</h2>
+          </div>
+          <div className="cms-report-actions">
+            <button
+              type="button"
+              className="cms-report-btn-print"
+              onClick={handlePrintReport}
+            >
+              <Printer size={15} /> Print
+            </button>
+            <button
+              type="button"
+              className="cms-report-btn-pdf"
+              onClick={handleExportPdf}
+            >
+              <FileSpreadsheet size={15} /> Export PDF
+            </button>
+            <button
+              type="button"
+              className="cms-report-btn-download"
+              onClick={handleDownloadReport}
+            >
+              <Download size={15} /> Download
+            </button>
           </div>
         </div>
 
@@ -6339,38 +5138,10 @@ export default function HostelPage() {
         {/* Report Content Card & Table */}
         <div className="cms-report-table-card cms-hostel-table-scroll">
           <div className="cms-report-table-header">
-            <div className="cms-report-table-header-left">
-              <h3 className="cms-report-table-title">{reportCategory}</h3>
-              <span className="cms-report-badge-total">
-                Total Records: {filtered.length}
-              </span>
-            </div>
-            <div className="cms-report-actions">
-              <button
-                type="button"
-                className="cms-report-btn-print"
-                onClick={handlePrintReport}
-                title={`Print ${reportCategory}`}
-              >
-                <Printer size={15} /> Print
-              </button>
-              <button
-                type="button"
-                className="cms-report-btn-pdf"
-                onClick={handleExportPdf}
-                title={`Export ${reportCategory} to PDF`}
-              >
-                <FileText size={15} /> Export PDF
-              </button>
-              <button
-                type="button"
-                className="cms-report-btn-download"
-                onClick={handleDownloadReport}
-                title={`Download ${reportCategory} (Excel / CSV)`}
-              >
-                <Download size={15} /> Download
-              </button>
-            </div>
+            <h3 className="cms-report-table-title">{reportCategory}</h3>
+            <span className="cms-report-badge-total">
+              Total Records: {filtered.length}
+            </span>
           </div>
 
           <table className="cms-report-table">
@@ -6718,7 +5489,6 @@ export default function HostelPage() {
       {activeStudentSubtab === "attendance" && renderAttendance()}
       {activeStudentSubtab === "outpasses" && renderOutpasses()}
       {activeStudentSubtab === "transfers" && renderTransfers()}
-      {activeStudentSubtab === "complaints" && renderComplaints()}
     </div>
   );
 
@@ -6729,38 +5499,9 @@ export default function HostelPage() {
   // ═════════════════════════════════════════════════════════════════════
   return (
     <DashboardLayout
-      title={isWarden ? "Warden Dashboard" : "Hostel Management"}
-      subtitle={
-        isWarden
-          ? (
-              wardenSection === "students" ? "Active hostel resident students and enrollment directory." :
-              wardenSection === "rooms" ? "Physical room inventory, floor allocation, and bed capacity." :
-              wardenSection === "allocations" ? "Resident student room and bed allocation assignments." :
-              wardenSection === "leave-requests" ? "Manage and approve student outpass and leave applications." :
-              wardenSection === "complaints" ? "Track, review and resolve student hostel complaints." :
-              wardenSection === "attendance" ? "Hostel daily morning and night roll-call attendance registers." :
-              wardenSection === "reports" ? "Comprehensive hostel occupancy, allocation and audit reports." :
-              wardenSection === "profile" ? "Hostel warden personal details and contact profile." :
-              "Hostel supervision, student allocations, room inventory, leave requests, attendance and complaints."
-            )
-          : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
-      }
-      breadcrumb={
-        isWarden
-          ? [
-              "Warden Dashboard",
-              wardenSection === "students" ? "Students" :
-              wardenSection === "rooms" ? "Rooms / Beds" :
-              wardenSection === "allocations" ? "Allocations" :
-              wardenSection === "leave-requests" ? "Leave Requests" :
-              wardenSection === "complaints" ? "Complaints" :
-              wardenSection === "attendance" ? "Attendance" :
-              wardenSection === "reports" ? "Hostel Reports" :
-              wardenSection === "profile" ? "Profile" :
-              "Overview"
-            ]
-          : ["Hostel Management"]
-      }
+      title="Hostel Management"
+      subtitle="Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
+      breadcrumb={["Hostel Management"]}
     >
       <div className="cms-hostel-page">
         {/* Toast Notification */}
@@ -6772,104 +5513,33 @@ export default function HostelPage() {
           />
         )}
 
-        {/* Horizontal Navigation Tabs (Admin Only) */}
-        {!isWarden && (
-          <div className="cms-hostel-tabs">
-            {majorTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeMajorTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
-                  onClick={() => {
-                    setActiveMajorTab(tab.id);
-                    setSearchQuery("");
-                  }}
-                >
-                  <Icon size={16} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* 4 Major Horizontal Navigation Tabs */}
+        <div className="cms-hostel-tabs">
+          {majorTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeMajorTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
+                onClick={() => {
+                  setActiveMajorTab(tab.id);
+                  setSearchQuery("");
+                }}
+              >
+                <Icon size={16} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
         {/* Active Tab Screen */}
-        {isWarden ? (
-          <>
-            {wardenSection === "dashboard" && renderDashboard()}
-            {wardenSection === "rooms" && (
-              <div className="cms-hostel-stack">
-                <div className="cms-hostel-tabs is-compact">
-                  {setupSubtabs.map((tab) => {
-                    const isActive = activeSetupSubtab === tab.id;
-                    const SubIcon = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
-                        onClick={() => {
-                          setActiveSetupSubtab(tab.id);
-                          setSearchQuery("");
-                        }}
-                      >
-                        {SubIcon && <SubIcon size={14} />}
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {activeSetupSubtab === "blocks" && renderHostelBlocks()}
-                {activeSetupSubtab === "categories" && renderRoomCategories()}
-                {activeSetupSubtab === "rooms" && renderRooms()}
-                {activeSetupSubtab === "wardens" && renderWardens()}
-              </div>
-            )}
-            {(wardenSection === "students" || wardenSection === "allocations") && (
-              <div className="cms-hostel-stack">
-                <div className="cms-hostel-tabs is-compact">
-                  {[
-                    { id: "allocations", label: "Student Allocations", icon: UserPlus },
-                    { id: "transfers", label: "Transfer & Vacate Student", icon: RotateCcw },
-                  ].map((tab) => {
-                    const isActive = activeStudentSubtab === tab.id;
-                    const SubIcon = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
-                        onClick={() => {
-                          setActiveStudentSubtab(tab.id);
-                          setSearchQuery("");
-                        }}
-                      >
-                        {SubIcon && <SubIcon size={14} />}
-                        <span>{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {activeStudentSubtab === "transfers" ? renderTransfers() : renderAllocations()}
-              </div>
-            )}
-            {wardenSection === "leave-requests" && renderOutpasses()}
-            {wardenSection === "complaints" && renderComplaints()}
-            {wardenSection === "attendance" && renderAttendance()}
-            {wardenSection === "reports" && renderReportsSection()}
-            {wardenSection === "profile" && renderWardenProfile()}
-          </>
-        ) : (
-          <>
-            {activeMajorTab === "dashboard" && renderDashboard()}
-            {activeMajorTab === "setup" && renderSetupMasters()}
-            {activeMajorTab === "students" && renderStudentManagement()}
-            {activeMajorTab === "reports" && renderReportsSection()}
-          </>
-        )}
+        {activeMajorTab === "dashboard" && renderDashboard()}
+        {activeMajorTab === "setup" && renderSetupMasters()}
+        {activeMajorTab === "students" && renderStudentManagement()}
+        {activeMajorTab === "reports" && renderReportsSection()}
 
         {/* Global Modals */}
         {modal.isOpen && modal.type === "block" && (
@@ -6954,18 +5624,6 @@ export default function HostelPage() {
             beds={beds}
             allocations={allocations}
             handleSaveTransfer={handleSaveTransfer}
-            showToast={showToast}
-          />
-        )}
-        {modal.isOpen && modal.type === "complaint" && (
-          <ComplaintModal
-            modal={modal}
-            closeModal={closeModal}
-            allocations={allocations}
-            candidateStudents={candidateStudents}
-            blocks={blocks}
-            handleCreateComplaint={handleCreateComplaint}
-            handleUpdateComplaintStatus={handleUpdateComplaintStatus}
             showToast={showToast}
           />
         )}
@@ -8681,7 +7339,6 @@ function AllocationModal({
 
         const sources = [admission, adm, student, assign].filter(Boolean);
 
-
         let isHostel = false;
         let prefBlock = "";
         let prefRoom = "";
@@ -9369,493 +8026,360 @@ const formatToDatetimeLocal = (val, offsetMs = 0, baseTimestamp = null) => {
   return `${YYYY}-${MM}-${DD}T${hh}:${mm}`;
 };
 
-const formatDisplayDateTime = (val) => {
-  if (!val) return "-";
-  try {
-    const d = new Date(val);
-    if (isNaN(d.getTime())) return String(val).replace("T", " ");
-    return new Intl.DateTimeFormat("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }).format(d);
-  } catch {
-    return String(val);
-  }
-};
-
-// Outpass Modal (Enhanced with Conflict Pre-Validation & Inline Error Feedback)
+// Outpass Modal (Screenshot 4 - Theme-based & Exact Fields Only)
 function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSaveOutpass, showToast }) {
-  const isView = modal.mode === "view";
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
-
-  const [selectedStudentId, setSelectedStudentId] = useState(
-    modal.data?.studentId ? String(modal.data.studentId) : (modal.data?.admissionNo || "")
-  );
-  const [outpassCategory, setOutpassCategory] = useState(
-    modal.data?.outpassType || modal.data?.requestType || "Local Outpass (Same Day)"
-  );
-
-  const initialDep = modal.data
-    ? formatToDatetimeLocal(modal.data?.fromDateTime || modal.data?.departureDate || modal.data?.outDate)
-    : formatToDatetimeLocal(null, 0);
-
-  const isLeaveInitial = (modal.data?.requestType || modal.data?.outpassType || outpassCategory || "").toLowerCase().includes("leave");
-  const initialRet = modal.data
-    ? formatToDatetimeLocal(modal.data?.toDateTime || modal.data?.returnDate)
-    : formatToDatetimeLocal(null, isLeaveInitial ? 48 * 3600 * 1000 : 4 * 3600 * 1000);
-
-  const [departureDateTime, setDepartureDateTime] = useState(initialDep);
-  const [returnDateTime, setReturnDateTime] = useState(initialRet);
-  const [reason, setReason] = useState(modal.data?.reason || "");
-
-  const isDateOrderInvalid = Boolean(
-    departureDateTime &&
-    returnDateTime &&
-    new Date(returnDateTime).getTime() <= new Date(departureDateTime).getTime()
-  );
-
-  // Resident candidates for student dropdown - strictly active allocations with valid studentId
-  const studentCandidates = useMemo(() => {
-    const map = new Map();
-    allocations.forEach((a) => {
-      if (a.status === "Active" && a.studentId) {
-        map.set(String(a.studentId), {
-          id: a.id,
-          allocationId: a.id,
-          studentId: a.studentId,
-          admissionNo: a.admissionNo,
-          name: a.studentName,
-          blockName: a.blockName,
-          hostelId: a.hostelId,
-          room: a.room,
-          roomId: a.roomId,
-          bed: a.bed,
-          bedId: a.bedId,
-          wardenAssignmentId: a.wardenAssignmentId,
-        });
-      }
-    });
-    return Array.from(map.values());
-  }, [allocations]);
-
-  // Active/Pending requests for currently selected student
-  const studentActiveRequests = useMemo(() => {
-    if (!selectedStudentId) return [];
-    return outpasses.filter((op) => {
-      const isMatch =
-        String(op.studentId) === String(selectedStudentId) ||
-        (op.admissionNo && String(op.admissionNo) === String(selectedStudentId));
-      const st = String(op.approvalStatus || op.status || "").toLowerCase();
-      const isActive =
-        st === "pending" ||
-        st === "approved" ||
-        st === "active" ||
-        st.includes("pending") ||
-        st.includes("approv");
-      return isMatch && isActive;
-    });
-  }, [selectedStudentId, outpasses]);
-
-  // Check date interval overlap between selected dates and existing requests
-  const conflictRequest = useMemo(() => {
-    if (!departureDateTime || !returnDateTime || studentActiveRequests.length === 0) return null;
-    const start = new Date(departureDateTime).getTime();
-    const end = new Date(returnDateTime).getTime();
-    if (isNaN(start) || isNaN(end) || end <= start) return null;
-
-    return studentActiveRequests.find((req) => {
-      if (modal.data?.requestId && req.requestId === modal.data.requestId) return false;
-      const rStartStr = req.fromDateTime || req.departureDate || req.outDate;
-      const rEndStr = req.toDateTime || req.returnDate;
-      if (!rStartStr || !rEndStr) return false;
-      const rStart = new Date(rStartStr).getTime();
-      const rEnd = new Date(rEndStr).getTime();
-      if (isNaN(rStart) || isNaN(rEnd)) return false;
-      return start < rEnd && end > rStart;
-    });
-  }, [departureDateTime, returnDateTime, studentActiveRequests, modal.data]);
-
-  const handleSetDatesAfterConflict = (req) => {
-    const rEnd = new Date(req.returnDate || req.toDateTime);
-    if (!isNaN(rEnd.getTime())) {
-      const newStart = new Date(rEnd.getTime() + 3600 * 1000); // 1 hour after return
-      const newEnd = new Date(newStart.getTime() + 4 * 3600 * 1000);
-      setDepartureDateTime(formatToDatetimeLocal(newStart));
-      setReturnDateTime(formatToDatetimeLocal(newEnd));
-      setSubmitError(null);
-    }
-  };
-
-  const handleCategoryChange = (newCat) => {
-    setOutpassCategory(newCat);
-    setSubmitError(null);
-    if (isView) return;
-    const depDate = departureDateTime ? new Date(departureDateTime) : new Date();
-    const baseTime = isNaN(depDate.getTime()) ? Date.now() : depDate.getTime();
-    const isLeave = newCat.toLowerCase().includes("leave") || newCat.toLowerCase().includes("home");
-    const defaultDurationMs = isLeave ? 48 * 3600 * 1000 : 4 * 3600 * 1000;
-    setReturnDateTime(formatToDatetimeLocal(null, defaultDurationMs, baseTime));
-  };
-
-  const handleDepartureChange = (newDep) => {
-    setDepartureDateTime(newDep);
-    setSubmitError(null);
-    if (!newDep) return;
-    const newDepTime = new Date(newDep).getTime();
-    const curRetTime = returnDateTime ? new Date(returnDateTime).getTime() : 0;
-    if (isNaN(newDepTime)) return;
-    if (!returnDateTime || isNaN(curRetTime) || curRetTime <= newDepTime) {
-      const isLeave = outpassCategory.toLowerCase().includes("leave") || outpassCategory.toLowerCase().includes("home");
-      const defaultDurationMs = isLeave ? 48 * 3600 * 1000 : 4 * 3600 * 1000;
-      setReturnDateTime(formatToDatetimeLocal(null, defaultDurationMs, newDepTime));
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    setSubmitError(null);
-
-    if (!selectedStudentId) {
-      showToast("Please select a registered resident student", "error");
-      return;
-    }
-
-    if (isDateOrderInvalid) {
-      setSubmitError("Expected Return date and time must be strictly after Departure date and time.");
-      return;
-    }
-
-    if (conflictRequest) {
-      setSubmitError(
-        `Student already has an active ${conflictRequest.status || conflictRequest.approvalStatus || "request"} ${conflictRequest.requestType || conflictRequest.outpassType || "outpass"} between ${formatDisplayDateTime(conflictRequest.departureDate || conflictRequest.outDate || conflictRequest.fromDateTime)} and ${formatDisplayDateTime(conflictRequest.returnDate || conflictRequest.toDateTime)}. Please choose a later date or resolve the existing request.`
-      );
-      return;
-    }
-
-    const studentObj = studentCandidates.find(
-      (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId)
+    const isView = modal.mode === "view";
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [selectedStudentId, setSelectedStudentId] = useState(
+      modal.data?.studentId ? String(modal.data.studentId) : (modal.data?.admissionNo || "")
+    );
+    const [outpassCategory, setOutpassCategory] = useState(
+      modal.data?.outpassType || modal.data?.requestType || "Local Outpass (Same Day)"
     );
 
-    if (!studentObj) {
-      showToast("Please select an active resident hosteller.", "error");
-      return;
-    }
+    const initialDep = modal.data
+      ? formatToDatetimeLocal(modal.data?.fromDateTime || modal.data?.departureDate || modal.data?.outDate)
+      : formatToDatetimeLocal(null, 0);
 
-    if (!departureDateTime) {
-      showToast("Please select Departure Date & Time.", "error");
-      return;
-    }
+    const isLeaveInitial = (modal.data?.requestType || modal.data?.outpassType || outpassCategory || "").toLowerCase().includes("leave");
+    const initialRet = modal.data
+      ? formatToDatetimeLocal(modal.data?.toDateTime || modal.data?.returnDate)
+      : formatToDatetimeLocal(null, isLeaveInitial ? 48 * 3600 * 1000 : 4 * 3600 * 1000);
 
-    if (!returnDateTime) {
-      showToast("Please select Expected Return Date & Time.", "error");
-      return;
-    }
+    const [departureDateTime, setDepartureDateTime] = useState(initialDep);
+    const [returnDateTime, setReturnDateTime] = useState(initialRet);
+    const [reason, setReason] = useState(modal.data?.reason || "");
 
-    const depMs = new Date(departureDateTime).getTime();
-    const retMs = new Date(returnDateTime).getTime();
-    if (isNaN(depMs) || isNaN(retMs)) {
-      showToast("Please enter valid departure and return dates.", "error");
-      return;
-    }
+    const isDateInvalid = Boolean(
+      departureDateTime &&
+      returnDateTime &&
+      new Date(returnDateTime).getTime() <= new Date(departureDateTime).getTime()
+    );
 
-    if (retMs <= depMs) {
-      showToast("To date and time must be greater than From date and time.", "error");
-      return;
-    }
+    const conflictingRequest = useMemo(() => {
+      if (!selectedStudentId || !departureDateTime || !returnDateTime || !Array.isArray(outpasses)) {
+        return null;
+      }
+      const newStart = new Date(departureDateTime).getTime();
+      const newEnd = new Date(returnDateTime).getTime();
+      if (isNaN(newStart) || isNaN(newEnd) || newEnd <= newStart) return null;
 
-    try {
-      setIsSubmitting(true);
-      await handleSaveOutpass({
-        studentId: studentObj.studentId,
-        studentName: studentObj.name,
-        admissionNo: studentObj.admissionNo,
-        hostelId: studentObj.hostelId,
-        blockName: studentObj.blockName,
-        roomId: studentObj.roomId,
-        roomNo: studentObj.room,
-        roomNumber: studentObj.room,
-        bedId: studentObj.bedId,
-        wardenAssignmentId: studentObj.wardenAssignmentId,
-        outpassType: outpassCategory,
-        requestType: outpassCategory,
-        departureDate: departureDateTime,
-        outDate: departureDateTime,
-        returnDate: returnDateTime,
-        reason: reason || "Outpass permission request",
-        destination: "City",
+      return outpasses.find((op) => {
+        if (modal.data?.requestId && op.requestId === modal.data.requestId) return false;
+
+        const isSameStudent =
+          String(op.studentId) === String(selectedStudentId) ||
+          (op.admissionNo && op.admissionNo === selectedStudentId);
+        if (!isSameStudent) return false;
+
+        const status = String(op.approvalStatus || op.status || "").toLowerCase();
+        const isActive = status === "pending" || status === "approved" || status === "active";
+        if (!isActive) return false;
+
+        const existingStartStr = op.fromDateTime || op.departureDate || op.outDate;
+        const existingEndStr = op.toDateTime || op.returnDate;
+        if (!existingStartStr || !existingEndStr) return false;
+
+        const existingStart = new Date(existingStartStr).getTime();
+        const existingEnd = new Date(existingEndStr).getTime();
+        if (isNaN(existingStart) || isNaN(existingEnd)) return false;
+
+        return newStart < existingEnd && newEnd > existingStart;
       });
-    } catch (err) {
-      setSubmitError(getApiErrorMessage(err));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    }, [selectedStudentId, departureDateTime, returnDateTime, outpasses, modal.data]);
 
-  return (
-    <Modal
-      title={isView ? `Outpass Details: ${modal.data?.studentName}` : "Apply Outpass / Leave"}
-      onClose={closeModal}
-      className="cms-hostel-modal-lg"
-    >
-      <form onSubmit={handleSubmit}>
-        <div className="cms-alloc-modal-form">
-          {/* Inline Error Banner if submission failed */}
-          {submitError && (
-            <div
-              style={{
-                padding: "11px 14px",
-                borderRadius: 8,
-                background: "color-mix(in srgb, var(--cms-danger, #ef4444) 12%, transparent)",
-                border: "1px solid color-mix(in srgb, var(--cms-danger, #ef4444) 30%, transparent)",
-                color: "var(--cms-danger, #ef4444)",
-                fontSize: 13,
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 8,
-                lineHeight: 1.4,
-              }}
-            >
-              <AlertCircle size={16} style={{ marginTop: 2, flexShrink: 0 }} />
-              <div style={{ flex: 1 }}>
-                <strong>Unable to save request:</strong> {submitError}
-              </div>
-            </div>
-          )}
+    const handleCategoryChange = (newCat) => {
+      setOutpassCategory(newCat);
+      if (isView) return;
+      const depDate = departureDateTime ? new Date(departureDateTime) : new Date();
+      const baseTime = isNaN(depDate.getTime()) ? Date.now() : depDate.getTime();
+      const isLeave = newCat.toLowerCase().includes("leave") || newCat.toLowerCase().includes("home");
+      const defaultDurationMs = isLeave ? 48 * 3600 * 1000 : 4 * 3600 * 1000;
+      setReturnDateTime(formatToDatetimeLocal(null, defaultDurationMs, baseTime));
+    };
 
-          {/* 1. Select Student * */}
-          <div className="cms-alloc-modal-field">
-            <label className="cms-alloc-modal-label">
-              Select Student <span style={{ color: "var(--cms-red)" }}>*</span>
-            </label>
-            <div style={{ position: "relative" }}>
-              <select
-                required
-                disabled={isView || isSubmitting}
-                value={selectedStudentId}
-                onChange={(e) => {
-                  setSelectedStudentId(e.target.value);
-                  setSubmitError(null);
-                }}
-                className="cms-alloc-modal-select"
-              >
-                <option value="">Select Student...</option>
-                {studentCandidates.map((st) => {
-                  const activeReq = outpasses.find((o) =>
-                    (String(o.studentId) === String(st.studentId) || (o.admissionNo && o.admissionNo === st.admissionNo)) &&
-                    (o.status === "Pending" || o.status === "Approved" || o.status === "Active" || o.status === "Pending Approval")
-                  );
-                  return (
+    const handleDepartureChange = (newDep) => {
+      setDepartureDateTime(newDep);
+      if (!newDep) return;
+      const newDepTime = new Date(newDep).getTime();
+      const curRetTime = returnDateTime ? new Date(returnDateTime).getTime() : 0;
+      if (isNaN(newDepTime)) return;
+      if (!returnDateTime || isNaN(curRetTime) || curRetTime <= newDepTime) {
+        const isLeave = outpassCategory.toLowerCase().includes("leave") || outpassCategory.toLowerCase().includes("home");
+        const defaultDurationMs = isLeave ? 48 * 3600 * 1000 : 4 * 3600 * 1000;
+        setReturnDateTime(formatToDatetimeLocal(null, defaultDurationMs, newDepTime));
+      }
+    };
+
+    // Resident candidates for student dropdown - strictly active allocations with valid studentId
+    const studentCandidates = useMemo(() => {
+      const map = new Map();
+      allocations.forEach((a) => {
+        if (a.status === "Active" && a.studentId) {
+          map.set(String(a.studentId), {
+            id: a.id,
+            allocationId: a.id,
+            studentId: a.studentId,
+            admissionNo: a.admissionNo,
+            name: a.studentName,
+            blockName: a.blockName,
+            hostelId: a.hostelId,
+            room: a.room,
+            roomId: a.roomId,
+            bed: a.bed,
+            bedId: a.bedId,
+            wardenAssignmentId: a.wardenAssignmentId,
+          });
+        }
+      });
+      return Array.from(map.values());
+    }, [allocations]);
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (isSubmitting) return;
+
+      if (!selectedStudentId) {
+        showToast("Please select a registered resident student", "error");
+        return;
+      }
+      const studentObj = studentCandidates.find(
+        (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId)
+      );
+
+      if (!studentObj) {
+        showToast("Please select an active resident hosteller.", "error");
+        return;
+      }
+
+      if (!departureDateTime) {
+        showToast("Please select Departure Date & Time.", "error");
+        return;
+      }
+
+      if (!returnDateTime) {
+        showToast("Please select Expected Return Date & Time.", "error");
+        return;
+      }
+
+      const depMs = new Date(departureDateTime).getTime();
+      const retMs = new Date(returnDateTime).getTime();
+      if (isNaN(depMs) || isNaN(retMs)) {
+        showToast("Please enter valid departure and return dates.", "error");
+        return;
+      }
+
+      if (retMs <= depMs) {
+        showToast("To date and time must be greater than From date and time.", "error");
+        return;
+      }
+
+      if (conflictingRequest) {
+        showToast("Student already has a pending or approved request for the selected date and time range.", "warning");
+        return;
+      }
+
+      try {
+        setIsSubmitting(true);
+        await handleSaveOutpass({
+          studentId: studentObj.studentId,
+          studentName: studentObj.name,
+          admissionNo: studentObj.admissionNo,
+          hostelId: studentObj.hostelId,
+          blockName: studentObj.blockName,
+          roomId: studentObj.roomId,
+          roomNo: studentObj.room,
+          roomNumber: studentObj.room,
+          bedId: studentObj.bedId,
+          wardenAssignmentId: studentObj.wardenAssignmentId,
+          outpassType: outpassCategory,
+          requestType: outpassCategory,
+          departureDate: departureDateTime,
+          outDate: departureDateTime,
+          returnDate: returnDateTime,
+          reason: reason || "Outpass permission request",
+          destination: "City",
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    return (
+      <Modal
+        title={isView ? `Outpass Details: ${modal.data?.studentName}` : "Apply Outpass / Leave"}
+        onClose={closeModal}
+        className="cms-hostel-modal-lg"
+      >
+        <form onSubmit={handleSubmit}>
+          <div className="cms-alloc-modal-form">
+            {/* 1. Select Student * */}
+            <div className="cms-alloc-modal-field">
+              <label className="cms-alloc-modal-label">
+                Select Student <span style={{ color: "var(--cms-red)" }}>*</span>
+              </label>
+              <div style={{ position: "relative" }}>
+                <select
+                  required
+                  disabled={isView || isSubmitting}
+                  value={selectedStudentId}
+                  onChange={(e) => setSelectedStudentId(e.target.value)}
+                  className="cms-alloc-modal-select"
+                >
+                  <option value="">Select Student...</option>
+                  {studentCandidates.map((st) => (
                     <option key={st.studentId} value={String(st.studentId)}>
                       {st.name} ({st.admissionNo || `ID: ${st.studentId}`}) — {st.blockName || ""} {st.room ? `Room ${st.room}` : ""}
-                      {activeReq ? ` [⚠️ Has ${activeReq.status} ${activeReq.requestType || "Request"}]` : ""}
                     </option>
-                  );
-                })}
-              </select>
-              <div className="cms-alloc-modal-chevron">
-                <ChevronDown size={16} />
+                  ))}
+                </select>
+                <div className="cms-alloc-modal-chevron">
+                  <ChevronDown size={16} />
+                </div>
               </div>
             </div>
 
-            {/* Informational badge when selected student has active/pending request */}
-            {studentActiveRequests.length > 0 && !conflictRequest && (
+            {/* 2. Outpass Category * */}
+            <div className="cms-alloc-modal-field">
+              <label className="cms-alloc-modal-label">
+                Outpass Category <span style={{ color: "var(--cms-red)" }}>*</span>
+              </label>
+              <div style={{ position: "relative" }}>
+                <select
+                  required
+                  disabled={isView || isSubmitting}
+                  value={outpassCategory}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                  className="cms-alloc-modal-select"
+                >
+                  <option value="Local Outpass (Same Day)">Local Outpass (Same Day)</option>
+                  <option value="Home Leave (Multiple Days)">Home Leave (Multiple Days)</option>
+                  <option value="Emergency Outpass">Emergency Outpass</option>
+                </select>
+                <div className="cms-alloc-modal-chevron">
+                  <ChevronDown size={16} />
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Grid: Departure Date & Time * and Expected Return * */}
+            <div className="cms-alloc-modal-grid">
+              <div>
+                <label className="cms-alloc-modal-label">
+                  Departure Date &amp; Time <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <input
+                  required
+                  disabled={isView || isSubmitting}
+                  type="datetime-local"
+                  value={departureDateTime}
+                  onChange={(e) => handleDepartureChange(e.target.value)}
+                  className="cms-alloc-modal-input"
+                  placeholder="dd-mm-yyyy --:--"
+                />
+              </div>
+
+              <div>
+                <label className="cms-alloc-modal-label">
+                  Expected Return <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <input
+                  required
+                  disabled={isView || isSubmitting}
+                  type="datetime-local"
+                  min={departureDateTime || undefined}
+                  value={returnDateTime}
+                  onChange={(e) => setReturnDateTime(e.target.value)}
+                  className="cms-alloc-modal-input"
+                  style={isDateInvalid || conflictingRequest ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                  placeholder="dd-mm-yyyy --:--"
+                />
+                {isDateInvalid && (
+                  <span
+                    style={{
+                      color: "var(--cms-red, #dc2626)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                      display: "block",
+                      fontWeight: 500,
+                    }}
+                  >
+                    To date and time must be greater than From date and time.
+                  </span>
+                )}
+                {conflictingRequest && !isDateInvalid && (
+                  <span
+                    style={{
+                      color: "var(--cms-warning-text, #b45309)",
+                      fontSize: "12px",
+                      marginTop: "4px",
+                      display: "block",
+                      fontWeight: 500,
+                    }}
+                  >
+                    ⚠️ Conflict: Active ({conflictingRequest.approvalStatus || "Pending"}) request exists for this range.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {conflictingRequest && !isDateInvalid && (
               <div
                 style={{
-                  padding: "7px 10px",
-                  borderRadius: 6,
-                  background: "color-mix(in srgb, var(--cms-primary, #3b82f6) 10%, transparent)",
-                  border: "1px solid color-mix(in srgb, var(--cms-primary, #3b82f6) 25%, transparent)",
-                  color: "var(--cms-primary, #2563eb)",
-                  fontSize: 12,
-                  marginTop: 6,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  backgroundColor: "rgba(234, 179, 8, 0.12)",
+                  border: "1px solid rgba(234, 179, 8, 0.35)",
+                  color: "var(--cms-warning-text, #b45309)",
+                  fontSize: "12px",
+                  lineHeight: "1.4",
+                  fontWeight: 500,
                 }}
               >
-                <Info size={14} style={{ flexShrink: 0 }} />
-                <span>
-                  Existing {studentActiveRequests[0].status || studentActiveRequests[0].approvalStatus} {studentActiveRequests[0].requestType || studentActiveRequests[0].outpassType || "Outpass"} until{" "}
-                  <strong>{formatDisplayDateTime(studentActiveRequests[0].returnDate || studentActiveRequests[0].toDateTime)}</strong>.
-                </span>
+                ⚠️ Student already has an active ({conflictingRequest.approvalStatus || "Pending"}) request for this date/time range. Please select another date or time.
               </div>
             )}
-          </div>
 
-          {/* Date Conflict Warning Banner */}
-          {conflictRequest && (
-            <div
-              style={{
-                padding: "10px 14px",
-                borderRadius: 8,
-                background: "#fffbeb",
-                border: "1px solid #f59e0b",
-                color: "#92400e",
-                fontSize: 12.5,
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
-                <AlertTriangle size={15} color="#d97706" />
-                <span>Date Overlap Conflict</span>
-              </div>
-              <div style={{ lineHeight: 1.4 }}>
-                This student already has a <strong>{conflictRequest.status || conflictRequest.approvalStatus}</strong> {conflictRequest.requestType || conflictRequest.outpassType || "request"} scheduled from{" "}
-                <strong>{formatDisplayDateTime(conflictRequest.departureDate || conflictRequest.outDate || conflictRequest.fromDateTime)}</strong> to{" "}
-                <strong>{formatDisplayDateTime(conflictRequest.returnDate || conflictRequest.toDateTime)}</strong>.
-                The backend rejects overlapping requests.
-              </div>
-              <div>
-                <button
-                  type="button"
-                  onClick={() => handleSetDatesAfterConflict(conflictRequest)}
-                  style={{
-                    background: "#fef3c7",
-                    border: "1px solid #d97706",
-                    color: "#92400e",
-                    borderRadius: 6,
-                    padding: "4px 10px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  Set departure to after this request <ArrowRight size={12} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* 2. Outpass Category * */}
-          <div className="cms-alloc-modal-field">
-            <label className="cms-alloc-modal-label">
-              Outpass Category <span style={{ color: "var(--cms-red)" }}>*</span>
-            </label>
-            <div style={{ position: "relative" }}>
-              <select
-                required
-                disabled={isView || isSubmitting}
-                value={outpassCategory}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                className="cms-alloc-modal-select"
-              >
-                <option value="Local Outpass (Same Day)">Local Outpass (Same Day)</option>
-                <option value="Home Leave (Multiple Days)">Home Leave (Multiple Days)</option>
-                <option value="Emergency Outpass">Emergency Outpass</option>
-              </select>
-              <div className="cms-alloc-modal-chevron">
-                <ChevronDown size={16} />
-              </div>
-            </div>
-          </div>
-
-          {/* 3. Grid: Departure Date & Time * and Expected Return * */}
-          <div className="cms-alloc-modal-grid">
-            <div>
+            {/* 4. Reason */}
+            <div className="cms-alloc-modal-field">
               <label className="cms-alloc-modal-label">
-                Departure Date &amp; Time <span style={{ color: "var(--cms-red)" }}>*</span>
+                Reason
               </label>
               <input
-                required
                 disabled={isView || isSubmitting}
-                type="datetime-local"
-                value={departureDateTime}
-                onChange={(e) => handleDepartureChange(e.target.value)}
+                placeholder="e.g. Medical appointment, family visit"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
                 className="cms-alloc-modal-input"
-                placeholder="dd-mm-yyyy --:--"
               />
-            </div>
-
-            <div>
-              <label className="cms-alloc-modal-label">
-                Expected Return <span style={{ color: "var(--cms-red)" }}>*</span>
-              </label>
-              <input
-                required
-                disabled={isView || isSubmitting}
-                type="datetime-local"
-                min={departureDateTime || undefined}
-                value={returnDateTime}
-                onChange={(e) => {
-                  setReturnDateTime(e.target.value);
-                  setSubmitError(null);
-                }}
-                className="cms-alloc-modal-input"
-                style={isDateOrderInvalid || conflictRequest ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
-                placeholder="dd-mm-yyyy --:--"
-              />
-              {isDateOrderInvalid && (
-                <span style={{ color: "var(--cms-danger, #ef4444)", fontSize: 11.5, marginTop: 4, display: "block" }}>
-                  To date and time must be greater than From date and time.
-                </span>
-              )}
-              {conflictRequest && !isDateOrderInvalid && (
-                <span
-                  style={{
-                    color: "var(--cms-warning-text, #b45309)",
-                    fontSize: "12px",
-                    marginTop: "4px",
-                    display: "block",
-                    fontWeight: 500,
-                  }}
-                >
-                  ⚠️ Conflict: Active ({conflictRequest.status || conflictRequest.approvalStatus || "Pending"}) request exists for this range.
-                </span>
-              )}
             </div>
           </div>
 
-          {/* 4. Reason */}
-          <div className="cms-alloc-modal-field">
-            <label className="cms-alloc-modal-label">
-              Reason
-            </label>
-            <input
-              disabled={isView || isSubmitting}
-              placeholder="e.g. Medical appointment, family visit"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className="cms-alloc-modal-input"
-            />
-          </div>
-        </div>
-
-        {/* Footer Buttons matching Screenshot 4 */}
-        <div className="cms-alloc-modal-footer">
-          <button
-            type="button"
-            className="cms-alloc-modal-cancel-btn"
-            onClick={closeModal}
-            disabled={isSubmitting}
-          >
-            Cancel
-          </button>
-          {!isView && (
+          {/* Footer Buttons matching Screenshot 4 */}
+          <div className="cms-alloc-modal-footer">
             <button
-              type="submit"
-              disabled={Boolean(conflictRequest) || isDateOrderInvalid || isSubmitting}
-              className="cms-alloc-modal-submit-btn"
-              style={isDateOrderInvalid || Boolean(conflictRequest) || isSubmitting ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
+              type="button"
+              className="cms-alloc-modal-cancel-btn"
+              onClick={closeModal}
+              disabled={isSubmitting}
             >
-              {isSubmitting ? "Saving..." : conflictRequest ? "Date Conflict" : "Save"}
+              Cancel
             </button>
-          )}
-        </div>
-      </form>
-    </Modal>
-  );
-}
+            {!isView && (
+              <button
+                type="submit"
+                className="cms-alloc-modal-submit-btn"
+                disabled={isDateInvalid || Boolean(conflictingRequest) || isSubmitting}
+                style={isDateInvalid || Boolean(conflictingRequest) || isSubmitting ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
+              >
+                {isSubmitting ? "Saving..." : "Save"}
+              </button>
+            )}
+          </div>
+        </form>
+      </Modal>
+    );
+  };
 
 function TransferModal({
   modal,
@@ -10178,218 +8702,4 @@ function TransferModal({
         </form>
       </Modal>
     );
-  };
-
-  function ComplaintModal({
-  modal,
-  closeModal,
-  allocations,
-  candidateStudents,
-  blocks,
-  handleCreateComplaint,
-  handleUpdateComplaintStatus,
-  showToast,
-}) {
-  const isView = modal.mode === "view";
-  const editData = modal.data || {};
-
-  const residentStudents = useMemo(() => {
-    const map = new Map();
-    allocations.forEach((a) => {
-      if (a.status === "Active" && a.studentId) {
-        map.set(String(a.studentId), {
-          id: a.id,
-          allocationId: a.id,
-          studentId: a.studentId,
-          name: a.studentName || a.student?.name || "Student",
-          admissionNo: a.admissionNo || a.student?.admissionNo || "",
-          blockName: a.blockName || a.block || "Block A",
-          hostelId: a.hostelId || 1,
-          room: a.room || a.roomNumber || "101",
-          roomId: a.roomId || 1,
-          bed: a.bed || a.bedNumber || "A",
-          bedId: a.bedId || 1,
-        });
-      }
-    });
-    if (map.size === 0) {
-      candidateStudents.forEach((s) => {
-        if (s.id || s.studentId) {
-          map.set(String(s.id || s.studentId), {
-            id: s.id || s.studentId,
-            allocationId: s.id || s.studentId,
-            studentId: s.id || s.studentId,
-            name: s.fullName || s.name || s.studentName || "Student",
-            admissionNo: s.admissionNo || s.regNo || "",
-            blockName: blocks[0]?.name || "Main Block",
-            hostelId: blocks[0]?.id || 1,
-            room: "101",
-            roomId: 1,
-            bed: "A",
-            bedId: 1,
-          });
-        }
-      });
-    }
-    return Array.from(map.values());
-  }, [allocations, candidateStudents, blocks]);
-
-  const [studentId, setStudentId] = useState(editData.studentId ? String(editData.studentId) : "");
-  const [complaintType, setComplaintType] = useState(editData.complaintType || "Maintenance");
-  const [description, setDescription] = useState(editData.description || "");
-  const [status, setStatus] = useState(editData.status || "Open");
-  const [priority, setPriority] = useState(editData.priority || "Medium");
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!studentId) {
-      showToast("Please select a student resident.", "error");
-      return;
-    }
-    if (!description.trim()) {
-      showToast("Please describe the complaint issue.", "error");
-      return;
-    }
-
-    const studentInfo = residentStudents.find((s) => String(s.studentId) === String(studentId)) || residentStudents[0];
-    const payload = {
-      complaintId: editData.id || editData.complaintId || Date.now(),
-      studentId: Number(studentId),
-      studentName: studentInfo?.name || "Student",
-      admissionNo: studentInfo?.admissionNo || "",
-      blockName: studentInfo?.blockName || "Block A",
-      roomNo: studentInfo?.room || "101",
-      complaintType,
-      description: description.trim(),
-      priority,
-      status,
-      date: new Date().toISOString(),
-    };
-
-    if (modal.mode === "edit") {
-      handleUpdateComplaintStatus(payload.complaintId, status);
-    } else {
-      handleCreateComplaint(payload);
-    }
-    closeModal();
-  };
-
-  return (
-    <Modal
-      title={isView ? "Hostel Complaint Details" : modal.mode === "edit" ? "Update Complaint Ticket" : "Register Hostel Complaint"}
-      isOpen={modal.isOpen}
-      onClose={closeModal}
-    >
-      <form onSubmit={handleSubmit} className="cms-alloc-modal-form">
-        <div className="cms-alloc-modal-grid">
-          <div className="cms-alloc-modal-col">
-            <label className="cms-alloc-modal-label">Resident Student</label>
-            {isView ? (
-              <p className="cms-alloc-modal-static-text">{editData.studentName} ({editData.admissionNo || "No Reg"})</p>
-            ) : (
-              <select
-                className="cms-alloc-modal-select"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                disabled={modal.mode === "edit"}
-                required
-              >
-                <option value="">Select resident student...</option>
-                {residentStudents.map((s) => (
-                  <option key={s.studentId} value={s.studentId}>
-                    {s.name} ({s.admissionNo}) - Room {s.room}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          <div className="cms-alloc-modal-col">
-            <label className="cms-alloc-modal-label">Issue Category</label>
-            {isView ? (
-              <p className="cms-alloc-modal-static-text">{editData.complaintType}</p>
-            ) : (
-              <select
-                className="cms-alloc-modal-select"
-                value={complaintType}
-                onChange={(e) => setComplaintType(e.target.value)}
-              >
-                <option value="Maintenance">Maintenance (Plumbing, Electrical, Furniture)</option>
-                <option value="Cleanliness">Cleanliness & Hygiene</option>
-                <option value="Food & Mess">Mess / Food Quality</option>
-                <option value="Noise & Discipline">Noise & Roommate Issue</option>
-                <option value="Security">Security & Access</option>
-                <option value="Other">Other Issues</option>
-              </select>
-            )}
-          </div>
-        </div>
-
-        <div className="cms-alloc-modal-grid">
-          <div className="cms-alloc-modal-col">
-            <label className="cms-alloc-modal-label">Priority</label>
-            {isView ? (
-              <p className="cms-alloc-modal-static-text">{editData.priority || "Medium"}</p>
-            ) : (
-              <select
-                className="cms-alloc-modal-select"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-              >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Urgent">Urgent</option>
-              </select>
-            )}
-          </div>
-
-          <div className="cms-alloc-modal-col">
-            <label className="cms-alloc-modal-label">Status</label>
-            {isView ? (
-              <p className="cms-alloc-modal-static-text">{editData.status || "Open"}</p>
-            ) : (
-              <select
-                className="cms-alloc-modal-select"
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                <option value="Open">Open</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Resolved">Resolved</option>
-                <option value="Closed">Closed</option>
-              </select>
-            )}
-          </div>
-        </div>
-
-        <div className="cms-alloc-modal-col" style={{ marginTop: 12 }}>
-          <label className="cms-alloc-modal-label">Complaint Description</label>
-          {isView ? (
-            <p className="cms-alloc-modal-static-text" style={{ whiteSpace: "pre-wrap" }}>{editData.description}</p>
-          ) : (
-            <textarea
-              className="cms-alloc-modal-textarea"
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the complaint details and maintenance required..."
-              required
-            />
-          )}
-        </div>
-
-        <div className="cms-alloc-modal-actions">
-          <button type="button" className="cms-btn cms-btn-outline" onClick={closeModal}>
-            {isView ? "Close" : "Cancel"}
-          </button>
-          {!isView && (
-            <button type="submit" className="cms-btn cms-btn-primary">
-              {modal.mode === "edit" ? "Save Changes" : "Submit Ticket"}
-            </button>
-          )}
-        </div>
-      </form>
-    </Modal>
-  );
-}
+  }

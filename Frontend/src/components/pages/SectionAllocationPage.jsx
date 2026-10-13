@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CheckCircle2, Pencil, Search, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, Modal, SkeletonTable, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { generateNextNumber } from "@/api/numberSeriesApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./SectionAllocationPage.css";
@@ -52,13 +53,14 @@ const mapStudent = (admission = {}, record = {}) => ({ id: studentId(record), ad
 
 export default function SectionAllocationPage() {
   const { selectedBoardId, selectedAcademicYear, selectedAcademicYearId, academicYearsLoading } = useAcademicContext();
-  const { selectedCampusId } = useCampusContext();
+  const { selectedCampusId, selectedCampus } = useCampusContext();
   const [filters, setFilters] = useState({ academicLevelId: "", groupId: "", programId: "", sectionId: "" });
   const [masters, setMasters] = useState({ levels: [], groups: [], programs: [], sections: [] });
   const [students, setStudents] = useState([]); const [sectionCounts, setSectionCounts] = useState({}); const [sectionStudents, setSectionStudents] = useState([]);
   const [loading, setLoading] = useState(true); const [studentLoading, setStudentLoading] = useState(false); const [busy, setBusy] = useState(""); const [confirming, setConfirming] = useState("");
   const [preview, setPreview] = useState(null); const [search, setSearch] = useState(""); const [editing, setEditing] = useState(null); const [refresh, setRefresh] = useState(0); const [toast, setToast] = useState({ message: "", type: "success" });
   const [rollPreview, setRollPreview] = useState(null);
+  const generatedRolls = useRef(new Map());
   useEffect(() => { setRollPreview(null); setConfirming(""); }, [selectedCampusId, selectedBoardId, selectedAcademicYearId, filters.academicLevelId, filters.groupId, filters.programId, filters.sectionId]);
   const [allocatedPage, setAllocatedPage] = useState(1);
   const [rollPage, setRollPage] = useState(1);
@@ -96,9 +98,31 @@ export default function SectionAllocationPage() {
   useEffect(() => { setAllocatedPage(1); setRollPage(1); }, [search, filters.academicLevelId, filters.groupId, filters.programId, filters.sectionId, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   const previewRows = list(preview?.students); const totalAvailable = sections.reduce((sum, section) => sum + section.available, 0); const rollAssigned = allocatedRows.filter((student) => filled(student.rollNo)).length;
   const previewAllocation = async () => { if (!readyContext) return say("Select Academic Level, Group and Program first."); setBusy("section-preview"); try { setPreview(body(await apiClient.post(apiEndpoints.sectionRollAllocation.sectionPreview, scopeContext))); } catch (error) { say(error); } finally { setBusy(""); } };
-  const confirmSections = async () => { if (!readyContext) return say("Select Campus, Board, Academic Year, Academic Level, Group and Program first."); setBusy("section-confirm"); try { const response = await apiClient.post(apiEndpoints.sectionRollAllocation.sectionConfirm, scopeContext); setToast({ message: get(body(response), "message", "Message") ?? "Section allocation completed successfully.", type: "success" }); setPreview(null); setConfirming(""); setRefresh((value) => value + 1); await loadStudents(); } catch (error) { say(error); } finally { setBusy(""); } };
+  const assignRollNumbers = async (records) => {
+    for (const student of records) {
+      const id = studentId(student);
+      const existingRoll = get(student, "rollNo", "RollNo", "rollNumber", "RollNumber");
+      if (filled(existingRoll)) continue;
+      const targetSectionId = sectionValue(student);
+      const targetSection = sections.find((section) => String(section.id) === String(targetSectionId));
+      const contextPayload = Object.fromEntries(["campusId", "boardId", "academicYearId", "groupId", "programId"].map((key) => [key, number(get(targetSection, key, key[0].toUpperCase() + key.slice(1)) ?? scopeContext[key])]));
+      if (!filled(id) || !filled(targetSectionId) || Object.values(contextPayload).some((value) => !Number.isInteger(value) || value <= 0)) throw new Error("Student allocation and all five roll-number dependencies are required.");
+      const cacheKey = JSON.stringify([id, contextPayload]);
+      let rollNo = generatedRolls.current.get(cacheKey);
+      if (!rollNo) {
+        const campusCode = String(contextPayload.campusId) === String(selectedCampusId) ? get(selectedCampus, "campusCode", "code", "CampusCode", "Code") : undefined;
+        const response = await generateNextNumber("ROLL_NO", contextPayload, contextPayload.campusId, campusCode);
+        const result = response?.data ?? response?.Data ?? response;
+        rollNo = typeof result === "string" ? result : get(result, "generatedNumber", "GeneratedNumber");
+        if (!filled(rollNo)) throw new Error("The number series API did not return a generated roll number.");
+        generatedRolls.current.set(cacheKey, rollNo);
+      }
+      await apiClient.put(apiEndpoints.sectionRollAllocation.updateStudent(id), { ...contextPayload, sectionId: number(targetSectionId), rollNo });
+    }
+  };
+  const confirmSections = async () => { if (!readyContext) return say("Select Campus, Board, Academic Year, Academic Level, Group and Program first."); setBusy("section-confirm"); try { await apiClient.post(apiEndpoints.sectionRollAllocation.sectionConfirm, scopeContext); const records = list(body(await loadAllocationStudentRecords(scopeContext))); const batchIds = new Set(previewRows.map((student) => String(studentId(student)))); await assignRollNumbers(records.filter((student) => batchIds.has(String(studentId(student))))); setToast({ message: "Section allocation and roll number assignment completed successfully.", type: "success" }); setPreview(null); setConfirming(""); setRefresh((value) => value + 1); await loadStudents(); } catch (error) { say(error); setRefresh((value) => value + 1); await loadStudents(); } finally { setBusy(""); } };
   const previewRolls = async () => { if (!readySection) return say("Please select a Section."); setBusy("roll-preview"); try { const result = body(await apiClient.post(apiEndpoints.sectionRollAllocation.rollPreview, scopeContext)); setRollPreview(result); setConfirming("roll"); } catch (error) { say(error); } finally { setBusy(""); } };
-  const confirmRolls = async () => { if (!readySection) return say("Select Campus, Board, Academic Year, Academic Level, Group, Program and Section first."); setBusy("roll-confirm"); try { const response = await apiClient.post(apiEndpoints.sectionRollAllocation.rollConfirm, scopeContext); setToast({ message: get(body(response), "message", "Message") ?? "Roll number allocation completed successfully.", type: "success" }); setConfirming(""); setRefresh((value) => value + 1); await loadStudents(); } catch (error) { say(error); } finally { setBusy(""); } };
+  const confirmRolls = async () => { if (!readySection) return say("Select Campus, Board, Academic Year, Academic Level, Group, Program and Section first."); setBusy("roll-confirm"); try { const records = list(body(await apiClient.get(apiEndpoints.students.getBySection(filters.sectionId)))); await assignRollNumbers(records.filter((student) => matches(student, scopeContext)).map((student) => ({ ...student, sectionId: sectionValue(student) ?? number(filters.sectionId) }))); setToast({ message: "Roll number allocation completed successfully.", type: "success" }); setConfirming(""); setRefresh((value) => value + 1); await loadStudents(); } catch (error) { say(error); setRefresh((value) => value + 1); await loadStudents(); } finally { setBusy(""); } };
   const saveEdit = async () => { const destination = sections.find((section) => String(section.id) === String(editing?.nextSectionId)); if (destination && destination.available <= 0 && String(editing.sectionId) !== String(editing.nextSectionId)) return say("The selected section has reached its maximum strength."); setBusy("edit"); try { await apiClient.put(apiEndpoints.sectionRollAllocation.updateStudent(editing.id), { campusId: number(selectedCampusId), groupId: number(editing.groupId), programId: number(editing.programId), sectionId: number(editing.nextSectionId), ...(filled(editing.rollNo) ? { rollNo: editing.rollNo } : {}) }); setToast({ message: "Allocation updated successfully.", type: "success" }); setEditing(null); setRefresh((value) => value + 1); await loadStudents(); } catch (error) { say(error); } finally { setBusy(""); } };
   const selectOptions = (items, ids, labels) => items.map((item) => <option key={get(item, ...ids)} value={get(item, ...ids)}>{get(item, ...labels) ?? "Unnamed"}</option>);
   const tabPath = (tab) => tab === "allocated" ? "/dashboard/section-allocation/allocated" : tab === "roll" ? "/dashboard/section-allocation/roll-numbers" : "/dashboard/section-allocation";

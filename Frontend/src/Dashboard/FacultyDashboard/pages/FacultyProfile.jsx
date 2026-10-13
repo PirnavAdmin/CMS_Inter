@@ -276,7 +276,7 @@ export default function FacultyProfile() {
   });
 
   const [newDoc, setNewDoc] = useState({
-    type: "Aadhaar Card Copy",
+    type: "",
     title: "",
     file: null,
   });
@@ -543,6 +543,20 @@ export default function FacultyProfile() {
       ctx.restore();
 
       const croppedDataUrl = outCanvas.toDataURL("image/jpeg", 0.92);
+      
+      if (profileData.id) {
+        outCanvas.toBlob((blob) => {
+          if (blob) {
+            const formData = new FormData();
+            formData.append("file", blob, "profile.jpg");
+            formData.append("staffId", profileData.id);
+            apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, {
+              headers: { "Content-Type": "multipart/form-data" },
+            }).catch(e => console.error("Photo upload failed:", e));
+          }
+        }, "image/jpeg", 0.92);
+      }
+
       setProfileData((prev) => {
         const updated = { ...prev, photoUrl: croppedDataUrl };
         persistStaffProfile(updated);
@@ -984,14 +998,9 @@ export default function FacultyProfile() {
       3: [
         ["houseNumber", "House number"],
         ["street", "Street / area"],
-        ["city", "City / village"],
-        ["pin", "Pincode"],
-        ["district", "District"],
-        ["state", "State"],
-        ["country", "Country"],
       ],
     };
-    const fallbacks = { houseNumber: "address", street: "streetArea", city: "cityVillage", pin: "pincode" };
+    const fallbacks = { houseNumber: "address", street: "streetArea" };
     const missing = (requiredByStep[profileStep] || [])
       .filter(([key]) => !String(profileData[key] ?? profileData[fallbacks[key]] ?? "").trim())
       .map(([, label]) => label);
@@ -1335,7 +1344,7 @@ export default function FacultyProfile() {
                   </label>
                   <SelectInput
                     value={profileData.maritalStatus || "Single"}
-                    disabled={true}
+                    disabled={!isEditingProfile}
                     placeholder="Select Marital Status"
                     options={["Single", "Married", "Divorced", "Widowed"]}
                   />
@@ -1347,8 +1356,7 @@ export default function FacultyProfile() {
                   <input
                     type="tel"
                     value={profileData.mobile || ""}
-                    readOnly
-                    disabled
+                    disabled={!isEditingProfile}
                   />
                 </div>
                 <div className="cms-field">
@@ -1445,8 +1453,7 @@ export default function FacultyProfile() {
                     type="text"
                     maxLength={14}
                     value={profileData.aadhaar || ""}
-                    readOnly
-                    disabled
+                    disabled={!isEditingProfile}
                   />
                 </div>
                 <div className="cms-field">
@@ -1457,8 +1464,7 @@ export default function FacultyProfile() {
                     type="text"
                     maxLength={10}
                     value={profileData.pan || ""}
-                    readOnly
-                    disabled
+                    disabled={!isEditingProfile}
                   />
                 </div>
               </div>
@@ -1545,7 +1551,7 @@ export default function FacultyProfile() {
                 <div className="cms-field">
                   <label>Account Type</label>
                   <SelectInput
-                    value={profileData.accountType || "Salary Account"}
+                    value={profileData.accountType || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData({ ...profileData, accountType: e.target.value })}
                     placeholder="Select Account Type"
@@ -1588,9 +1594,9 @@ export default function FacultyProfile() {
                   </label>
                   <input
                     type="text"
-                    value={profileData.houseNumber || profileData.address || ""}
+                    value={profileData.houseNumber || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, houseNumber: e.target.value, address: e.target.value })}
+                    onChange={(e) => setProfileData({ ...profileData, houseNumber: e.target.value })}
                     placeholder="e.g. 15-18-387"
                   />
                 </div>
@@ -1600,9 +1606,9 @@ export default function FacultyProfile() {
                   </label>
                   <input
                     type="text"
-                    value={profileData.street || profileData.streetArea || ""}
+                    value={profileData.street || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, street: e.target.value, streetArea: e.target.value })}
+                    onChange={(e) => setProfileData({ ...profileData, street: e.target.value })}
                     placeholder="e.g. Brindavan Gardens"
                   />
                 </div>
@@ -1613,8 +1619,8 @@ export default function FacultyProfile() {
                   <input
                     type="text"
                     value={profileData.city || profileData.cityVillage || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, city: e.target.value, cityVillage: e.target.value })}
+                    disabled={true}
+                    readOnly
                     placeholder="e.g. Guntur"
                   />
                 </div>
@@ -1635,8 +1641,8 @@ export default function FacultyProfile() {
                     type="text"
                     maxLength={6}
                     value={profileData.pin || profileData.pincode || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => handlePincodeChange(e.target.value)}
+                    disabled={true}
+                    readOnly
                     placeholder="Enter 6-digit PIN (e.g. 522007)"
                   />
                 </div>
@@ -1647,8 +1653,8 @@ export default function FacultyProfile() {
                   <input
                     type="text"
                     value={profileData.district || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, district: e.target.value })}
+                    disabled={true}
+                    readOnly
                     placeholder="Auto-filled from PIN (e.g. Guntur)"
                   />
                 </div>
@@ -1659,8 +1665,8 @@ export default function FacultyProfile() {
                   <input
                     type="text"
                     value={profileData.state || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, state: e.target.value })}
+                    disabled={true}
+                    readOnly
                     placeholder="Auto-filled from PIN (e.g. Andhra Pradesh)"
                   />
                 </div>
@@ -1673,8 +1679,8 @@ export default function FacultyProfile() {
                   <input
                     type="text"
                     value={profileData.country || "India"}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
+                    disabled={true}
+                    readOnly
                     placeholder="e.g. India"
                   />
                 </div>
@@ -1764,11 +1770,13 @@ export default function FacultyProfile() {
                   <div className="cms-field">
                     <label>Total Experience</label>
                     <input
-                      type="text"
+                      type="number"
+                      min="0"
+                      step="1"
                       value={newExp.totalExp}
                       disabled={!isEditingProfile}
                       onChange={(e) => setNewExp({ ...newExp, totalExp: e.target.value })}
-                      placeholder="e.g. 2 Years 6 Months"
+                      placeholder="e.g. 2"
                     />
                   </div>
                 </div>
