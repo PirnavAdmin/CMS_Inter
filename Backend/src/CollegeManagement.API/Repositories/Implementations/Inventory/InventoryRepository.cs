@@ -89,13 +89,34 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                 commandType: CommandType.StoredProcedure);
         }
 
+        public async Task<string> GetNextItemCodeAsync()
+        {
+            var maxId = await _dbContext.InventoryItems.MaxAsync(i => (int?)i.ItemId) ?? 0;
+            int nextNum = maxId + 1;
+            string generatedCode = $"ITEM-{nextNum:D4}";
+            while (await _dbContext.InventoryItems.AnyAsync(i => i.Code.ToLower() == generatedCode.ToLower()))
+            {
+                nextNum++;
+                generatedCode = $"ITEM-{nextNum:D4}";
+            }
+            return generatedCode;
+        }
+
         public async Task<ItemDto> CreateItemAsync(CreateItemRequest request, int userId)
         {
-            // Verify code uniqueness
-            bool exists = await _dbContext.InventoryItems.AnyAsync(i => i.Code.ToLower() == request.Code.Trim().ToLower());
-            if (exists)
+            if (string.IsNullOrWhiteSpace(request.Code))
             {
-                throw new InvalidOperationException("This item code already exists.");
+                request.Code = await GetNextItemCodeAsync();
+            }
+            else
+            {
+                request.Code = request.Code.Trim();
+                // Verify code uniqueness
+                bool exists = await _dbContext.InventoryItems.AnyAsync(i => i.Code.ToLower() == request.Code.ToLower());
+                if (exists)
+                {
+                    throw new InvalidOperationException("This item code already exists.");
+                }
             }
 
             var item = new InventoryItem

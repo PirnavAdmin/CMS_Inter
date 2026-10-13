@@ -13,6 +13,7 @@ namespace CollegeManagement.API.Repositories.Interfaces.Inventory
         Task<ItemDetailDto?> GetItemByIdAsync(int itemId);
         Task<IEnumerable<ItemLedgerEntryDto>> GetItemLedgerAsync(int itemId, DateTime? fromDate, DateTime? toDate);
         Task<ItemDto> CreateItemAsync(CreateItemRequest request, int userId);
+        Task<string> GetNextItemCodeAsync();
         Task<ItemDto> UpdateItemAsync(int itemId, UpdateItemRequest request, int userId);
         Task<bool> DeleteItemAsync(int itemId);
         Task<bool> DeactivateItemAsync(int itemId);
