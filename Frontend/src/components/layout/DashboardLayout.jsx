@@ -14,7 +14,6 @@ import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
-import { reimbursementApi } from "@/api/staffApi";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -77,7 +76,9 @@ const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
   templates: settingsTemplatesIcon,
   "audit logs": settingsAuditLogsIcon,
   "faculty reimbursement": reimbursementIcon,
+  "staff reimbursements": reimbursementIcon,
   reimbursement: reimbursementIcon,
+  reimbursements: reimbursementIcon,
   "inventory management": Boxes,
 });
 
@@ -92,7 +93,9 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/reimbursement", icon: reimbursementIcon },
+  { path: "/dashboard/reimbursements", icon: reimbursementIcon },
   { path: "/dashboard/finance/reimbursement", icon: reimbursementIcon },
+  { path: "/dashboard/finance/reimbursements", icon: reimbursementIcon },
   { path: "/dashboard/inventory-management", icon: Boxes },
   { path: "/dashboard/inventory", icon: Boxes },
   { path: "/warden-dashboard/students", icon: studentsIcon },
@@ -187,7 +190,7 @@ export const menu = [
       { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon },
     ],
   },
   {
@@ -203,6 +206,7 @@ export const menu = [
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
       { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
+      { to: "/dashboard/reimbursements", label: "Reimbursements", icon: reimbursementIcon },
     ],
   },
   {
@@ -263,7 +267,7 @@ export const principalMenu = [
     items: [
       { to: "/dashboard/students", label: "Students", icon: studentsIcon },
       { to: "/dashboard/staff", label: "Staff", icon: staffIcon },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon },
       { to: "/dashboard/attendance/student", label: "Student Attendance", icon: attendanceIcon },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/sections", label: "Classes & Sections", icon: sectionsIcon },
@@ -300,9 +304,7 @@ const EMPTY_CAMPUS_CONTEXT = Object.freeze({
   selectedCampus: null,
   setSelectedCampus: () => undefined,
 });
-const MOCK_NOTIFICATIONS = [
-  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/dashboard/reimbursements", label: "reimbursements" }
-];
+const MOCK_NOTIFICATIONS = [];
 const PARENT_NOTIFICATIONS = [
   { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
   { id: "pn-2", title: "Upcoming Examinations", count: 5, to: "/parent-dashboard/examinations", label: "exam timetable" },
@@ -527,43 +529,6 @@ export default function DashboardLayout({
     const menuLabels = pageMenuItem?.labels ?? [];
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
-  useEffect(() => {
-    if (!isParent) {
-      const fetchLiveNotifications = async () => {
-        try {
-          const res = await reimbursementApi.getAllReimbursements({ status: "Pending" });
-          if (res.data?.status && res.data.data?.length > 0) {
-            setLiveNotifications([{
-              id: "admin-notif-1",
-              title: "New Staff Reimbursement Request",
-              count: res.data.data.length,
-              to: "/dashboard/reimbursements",
-              label: "reimbursements"
-            }]);
-          } else {
-            setLiveNotifications([]);
-          }
-        } catch (e) {
-          console.error("Failed to fetch pending reimbursements", e);
-        }
-      };
-      
-      fetchLiveNotifications();
-
-      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim)
-      const channel = new BroadcastChannel("cms_notifications");
-      channel.onmessage = (event) => {
-        if (event.data?.type === "NEW_REIMBURSEMENT") {
-          setHasViewedNotifications(false);
-          fetchLiveNotifications();
-        }
-      };
-
-      return () => {
-        channel.close();
-      };
-    }
-  }, [isParent]);
 
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 

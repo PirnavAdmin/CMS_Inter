@@ -788,8 +788,16 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const group = displayNameFor(groupName, groupId, lookups.groups);
     const academicYear = displayNameFor(academicYearName, academicYearId, lookups.years);
     const program = displayNameFor(programName, programId, lookups.programs, programId ? "-" : "Regular");
+    const academicLevelId = read(item, "academicLevelId", "AcademicLevelId");
+    const academicLevelName = read(item, "academicLevelName", "AcademicLevelName") || (Number(academicLevelId) === 2 ? "2nd Year" : Number(academicLevelId) === 1 ? "1st Year" : "");
+    const yearFeeMode = read(item, "yearFeeMode", "YearFeeMode");
+    const incrementType = read(item, "incrementType", "IncrementType");
+    const incrementValue = read(item, "incrementValue", "IncrementValue");
+    const pairedStructureId = read(item, "pairedStructureId", "PairedStructureId");
     const structureId = String(read(item, "feeStructureId", "FeeStructureId", "id", "Id") ?? `api-${index}`);
-    const key = [academicYearId || academicYear, groupId || group, programId || program].join("|");
+    const key = structureId && !structureId.startsWith("api-")
+      ? `struct-${structureId}`
+      : [academicYearId || academicYear, groupId || group, programId || program, academicLevelId || ""].join("|");
     const explicitTotal = optionalNumberValue(item, "totalFee", "TotalFee", "feeTotal", "FeeTotal", "totalAmount", "TotalAmount", "totalActiveFees", "TotalActiveFees", "activeFeeTotal", "ActiveFeeTotal");
     const existing = grouped.get(key);
     const row = existing || {
@@ -800,6 +808,12 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
       board: textValue(item, "boardName", "BoardName") || textValue(itemBoard, "boardName", "BoardName", "name", "Name") || textValue(item, "boardId", "BoardId"),
       academicYearId,
       academicYear,
+      academicLevelId,
+      academicLevelName,
+      yearFeeMode,
+      incrementType,
+      incrementValue,
+      pairedStructureId,
       groupId,
       group,
       programId,
@@ -2624,7 +2638,7 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
 }
 
 /* ----------------------------- Fee structure ----------------------------- */
-function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTypes, masters, masterErrors = {}, masterLoading = false, yearFeeMode = "same", onDraftTotalChange }) {
+function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTypes, masters, masterErrors = {}, masterLoading = false, yearFeeMode = "same", yearIncrementType = "percentage", yearIncrementValue = "", onDraftTotalChange }) {
   const initialProgram = initial?.programId || "";
   const initialValues = initial || {
     boardId: masters.selectedBoardId ? String(masters.selectedBoardId) : "",
@@ -2818,16 +2832,17 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
       academicYearId: Number(values.academicYearId || values.academicYear || 0),
       groupId: Number(values.groupId || values.group || 0),
       ...(programId ? { programId } : {}),
+      yearFeeMode: yearFeeMode || "same",
+      ...(yearFeeMode === "different" ? {
+        incrementType: yearIncrementType || "percentage",
+        incrementValue: Number(yearIncrementValue || 0),
+      } : {}),
       items: items.map((item) => buildStructureItemPayload(item, true)),
     };
   };
 
   const save = async () => {
     if (savingRef.current) return null;
-    if (yearFeeMode === "different") {
-      setError("Saving different 1st-year and 2nd-year fees requires backend integration. This configuration is currently preview-only.");
-      return null;
-    }
     const configuredItems = dedupeConfiguredFeeItems(values.feeItems).filter((item) => item.structureItemId || item.required || Number(item.originalAmount || 0) > 0);
     const activeItems = configuredItems.filter((item) => item.selected !== false);
     if (!values.academicYear && !values.academicYearId) return setError("Academic Year is required");
@@ -2845,6 +2860,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
       && String(row.academicYearId || row.academicYear) === String(values.academicYearId || values.academicYear)
       && String(row.groupId || row.group) === String(values.groupId || values.group)
       && String(row.programId || row.program || "regular") === String(values.programId || values.program || "regular")
+      && (!row.academicLevelId || Number(row.academicLevelId) === 1)
     ));
     if (duplicate) return setError("A fee structure already exists for the selected Academic Year, Group and Program.");
     savingRef.current = true;
@@ -3633,7 +3649,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
             </label>
           ))}
         </fieldset>
-        <p className="cms-fee-year-helper">Year-wise fee configuration preview only. Saving separate 2nd-year fees will be available after backend integration.</p>
+        <p className="cms-fee-year-helper">When configured, 1st-Year and 2nd-Year fee structures are automatically generated with specified increments.</p>
         {yearFeeMode === "different" ? (
           <div className="cms-fee-year-increment">
             <h4>2nd-Year Fee Increment</h4>
@@ -3696,7 +3712,27 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
               const activeTotal = row.totalFee ?? activeItems.reduce((sum, item) => sum + Number(item.originalAmount || item.payableAmount || 0), 0);
               return (
                 <tr key={row.id}>
-                  <td><strong>{row.academicYear}</strong></td>
+                  <td>
+                    <strong>{row.academicYear}</strong>
+                    {row.academicLevelName ? (
+                      <span
+                        className="cms-badge"
+                        style={{
+                          marginLeft: "8px",
+                          display: "inline-block",
+                          fontSize: "11px",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          background: Number(row.academicLevelId) === 2 ? "#e0f2fe" : "#f0fdf4",
+                          color: Number(row.academicLevelId) === 2 ? "#0369a1" : "#15803d",
+                          border: `1px solid ${Number(row.academicLevelId) === 2 ? "#bae6fd" : "#bbf7d0"}`,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {row.academicLevelName}
+                      </span>
+                    ) : null}
+                  </td>
                   <td>{row.group}</td>
                   <td>{row.program || "Regular"}</td>
                   <td>
@@ -3740,6 +3776,8 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
           masterLoading={loading}
           structures={structures}
           yearFeeMode={isAdding ? yearFeeMode : "same"}
+          yearIncrementType={isAdding ? yearIncrementType : "percentage"}
+          yearIncrementValue={isAdding ? yearIncrementValue : ""}
           onDraftTotalChange={isAdding ? setFirstYearTotal : undefined}
         />
       ) : null}

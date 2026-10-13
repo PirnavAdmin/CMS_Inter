@@ -692,13 +692,8 @@ export default function ReimbursementPage({ isAccountantView = false }) {
       : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  return (
-    <DashboardLayout
-      title="Faculty Reimbursement"
-      subtitle="Submit, track, and manage faculty expense reimbursement claims."
-      breadcrumb={["Home", "Finance", "Reimbursement"]}
-    >
-      <div className="reimb-page-container">
+  const pageContent = (
+    <div className="reimb-page-container">
         {/* Toast Notification */}
         {toast && (
           <Toast
@@ -2663,6 +2658,23 @@ export default function ReimbursementPage({ isAccountantView = false }) {
           </Modal>
         )}
       </div>
+  );
+
+  if (isAccountantView) {
+    return pageContent;
+  }
+
+  return (
+    <DashboardLayout
+      title={isFinanceUser ? "Staff Reimbursements" : "Faculty Reimbursement"}
+      subtitle={
+        isFinanceUser
+          ? "Review, approve, and disburse faculty & staff expense reimbursement claims."
+          : "Submit, track, and manage faculty expense reimbursement claims."
+      }
+      breadcrumb={["Home", isFinanceUser ? "Staff" : "Finance", "Reimbursements"]}
+    >
+      {pageContent}
     </DashboardLayout>
   );
 }
