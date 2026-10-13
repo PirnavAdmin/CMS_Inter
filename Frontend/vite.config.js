@@ -14,9 +14,12 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     resolve: {
-      alias: {
-        "@": path.resolve(__dirname, "./src"),
-      },
+      alias: [
+        {
+          find: /^@\//,
+          replacement: `${path.resolve(__dirname, "src").replace(/\\/g, "/")}/`,
+        },
+      ],
     },
     optimizeDeps: {
       include: ["@microsoft/signalr"],
@@ -34,7 +37,7 @@ export default defineConfig(({ mode }) => {
         "/api": {
           target: apiBaseUrl,
           changeOrigin: true,
-          secure: false,
+          secure: !isHttpsApi ? true : false,
           agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
           proxyTimeout: 120000,
           timeout: 120000,
@@ -46,13 +49,7 @@ export default defineConfig(({ mode }) => {
               if (res && !res.headersSent && typeof res.writeHead === "function") {
                 try {
                   res.writeHead(502, { "Content-Type": "application/json" });
-                  res.end(
-                    JSON.stringify({
-                      success: false,
-                      message: `Backend proxy unreachable at ${apiBaseUrl}. Please ensure the backend server is running.`,
-                      error: err?.message,
-                    })
-                  );
+                  res.end(JSON.stringify({ success: false, message: "Backend proxy unreachable", error: err?.message }));
                 } catch {
                   // ignore
                 }

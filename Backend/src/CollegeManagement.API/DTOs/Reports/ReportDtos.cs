@@ -90,6 +90,8 @@ public class StudentStrengthReportDto
     public string? SectionName { get; set; } = string.Empty;
     public string? BoardName { get; set; } = string.Empty;
     public int TotalStudents { get; set; }
+    public int MaximumStrength { get; set; }
+    public decimal UtilizationPercentage { get; set; }
     public int MaleStudents { get; set; }
     public int FemaleStudents { get; set; }
     public int OtherStudents { get; set; }
@@ -324,6 +326,13 @@ public class StudentPerformanceReportDto
     public string? Grade { get; set; }
 }
 
+public class AuditFieldChangeDto
+{
+    public string Field { get; set; } = string.Empty;
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+}
+
 public class AuditLogDto
 {
     public long AuditLogId { get; set; }
@@ -339,7 +348,20 @@ public class AuditLogDto
     public string? Ip { get; set; }
     public string? Device { get; set; }
     public string? Details { get; set; }
+    public List<AuditFieldChangeDto>? Changes { get; set; }
+    public Dictionary<string, object?>? UserInput { get; set; }
+    public string? RawPayload { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class ActiveAdminInfoDto
+{
+    public string UserName { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public int ActionCount { get; set; }
+    public DateTime LastActive { get; set; }
+    public string? LastIp { get; set; }
+    public string? LastAction { get; set; }
 }
 
 public class AuditLogStatsDto
@@ -347,6 +369,7 @@ public class AuditLogStatsDto
     public int EventsToday { get; set; }
     public int SecurityAlerts { get; set; }
     public int ActiveAdministrators { get; set; }
+    public List<ActiveAdminInfoDto> Administrators { get; set; } = new();
 }
 
 public class AuditLogPagedResultDto

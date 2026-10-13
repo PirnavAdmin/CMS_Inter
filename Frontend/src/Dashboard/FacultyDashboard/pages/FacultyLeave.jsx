@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import "../styles/FacultyLeave.css";
-import { facultyMockData } from "../data/facultyMockData.js";
 
 import { useFacultySafe } from "../FacultyContext.jsx";
+import { leaveApi } from "@/api/staffApi";
 
 const STATUS_BADGE = {
   Approved: "cms-badge-active",
@@ -15,10 +15,11 @@ const STATUS_BADGE = {
 
 export default function FacultyLeave() {
   const context = useFacultySafe();
-  const [leaveList, setLeaveList] = useState(facultyMockData.leaveRequests);
+  const [leaveList, setLeaveList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
-    type: "Casual Leave (CL)",
+    type: 1, // 1 for CasualLeave
     fromDate: "",
     toDate: "",
     reason: "",
@@ -26,14 +27,36 @@ export default function FacultyLeave() {
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
 
+  // Mapped to backend enum LeaveType: CasualLeave = 1, SickLeave = 2, EarnedLeave = 5, DutyLeave = 7, MaternityLeave = 3, CompensatoryOff = 6
   const [leaveCategories] = useState([
-    { code: "CL", name: "Casual Leave (CL)" },
-    { code: "SL", name: "Sick Leave (SL)" },
-    { code: "EL", name: "Earned Leave (EL)" },
-    { code: "OD", name: "On-Duty (OD) / Academic Duty" },
-    { code: "ML", name: "Maternity / Paternity Leave" },
-    { code: "CO", name: "Compensatory Off (CO)" },
+    { code: 1, name: "Casual Leave (CL)" },
+    { code: 2, name: "Sick Leave (SL)" },
+    { code: 5, name: "Earned Leave (EL)" },
+    { code: 7, name: "On-Duty (OD) / Academic Duty" },
+    { code: 3, name: "Maternity / Paternity Leave" },
+    { code: 6, name: "Compensatory Off (CO)" },
   ]);
+
+  const staffId = context?.profileData?.facultyId || 0;
+
+  useEffect(() => {
+    fetchLeaveHistory();
+  }, [staffId]);
+
+  const fetchLeaveHistory = async () => {
+    if (!staffId) return;
+    try {
+      setLoading(true);
+      const res = await leaveApi.getLeaveHistory(staffId);
+      if (res.data?.status) {
+        setLeaveList(res.data.data?.history || []);
+      }
+    } catch (error) {
+      console.error("Failed to load leave history", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const notify = (text, type = "success") => {
     if (context?.notify) {
@@ -49,41 +72,50 @@ export default function FacultyLeave() {
       ? Math.floor((new Date(leaveForm.toDate) - new Date(leaveForm.fromDate)) / 86400000) + 1
       : 0;
 
-  const affectedClassCount = (() => {
-    if (!leavePreviewDays) return 0;
-    let count = 0;
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    for (let offset = 0; offset < leavePreviewDays; offset++) {
-      const date = new Date(leaveForm.fromDate);
-      date.setDate(date.getDate() + offset);
-      count += facultyMockData.timetable.filter((slot) => slot[dayNames[date.getDay()]]).length;
-    }
-    return count;
-  })();
-
   const applyLeave = async () => {
     if (!leaveForm.fromDate || !leaveForm.toDate || !leaveForm.reason.trim()) {
       return notify("Please complete all required fields.", "error");
     }
     setLeaveSubmitting(true);
-    const start = new Date(leaveForm.fromDate), end = new Date(leaveForm.toDate);
-    const days = Math.max(1, Math.round((end - start) / 86400000) + 1);
-    const newLeave = {
-      id: Date.now(),
-      type: leaveForm.type,
-      fromDate: leaveForm.fromDate,
-      toDate: leaveForm.toDate,
-      totalDays: days,
-      reason: leaveForm.reason,
-      appliedOn: new Date().toLocaleDateString("en-GB"),
-      status: "Pending",
-      approvedBy: "Principal Office",
-    };
-    setLeaveList((items) => [newLeave, ...items]);
-    setShowLeaveModal(false);
-    setLeaveForm({ type: "Casual Leave (CL)", fromDate: "", toDate: "", reason: "" });
-    setLeaveSubmitting(false);
-    notify("Leave application submitted successfully!");
+    try {
+      const payload = {
+        staffId: staffId,
+        leaveType: Number(leaveForm.type),
+        startDate: leaveForm.fromDate,
+        endDate: leaveForm.toDate,
+        reason: leaveForm.reason,
+        departmentId: context?.profileData?.departmentId || null,
+        academicYearId: 1 // Default or dynamically fetched
+      };
+
+      const res = await leaveApi.createLeave(payload);
+      if (res.data?.status) {
+        notify("Leave application submitted successfully!");
+        setShowLeaveModal(false);
+        setLeaveForm({ type: 1, fromDate: "", toDate: "", reason: "" });
+        fetchLeaveHistory();
+      }
+    } catch (error) {
+      console.error("Failed to apply for leave", error);
+      notify(error.response?.data?.message || "Failed to apply for leave", "error");
+    } finally {
+      setLeaveSubmitting(false);
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleDateString("en-GB");
+  };
+
+  const getLeaveTypeName = (enumVal) => {
+    const found = leaveCategories.find(c => c.code === enumVal || c.name === enumVal);
+    if (found) return found.name;
+    // Fallbacks if backend sends string
+    if (enumVal === "CasualLeave") return "Casual Leave (CL)";
+    if (enumVal === "SickLeave") return "Sick Leave (SL)";
+    if (enumVal === "EarnedLeave") return "Earned Leave (EL)";
+    return enumVal;
   };
 
   return (
@@ -137,35 +169,48 @@ export default function FacultyLeave() {
               </tr>
             </thead>
             <tbody>
-              {leaveList.map((l) => (
-                <tr key={l.id}>
-                  <td className="cms-strong">{l.type}</td>
-                  <td>{l.fromDate}</td>
-                  <td>{l.toDate}</td>
-                  <td><strong>{l.totalDays}</strong></td>
-                  <td>{l.reason}</td>
-                  <td style={{ color: "var(--cms-muted)" }}>{l.appliedOn}</td>
-                  <td><span className={`cms-badge ${STATUS_BADGE[l.status] || "cms-badge-warn"}`}>{l.status}</span></td>
-                  <td>{l.approvedBy}</td>
-                  <td>
-                    {l.status === "Pending" ? (
-                      <button
-                        type="button"
-                        className="cms-btn cms-btn-ghost"
-                        onClick={() =>
-                          setLeaveList((items) =>
-                            items.map((item) => (item.id === l.id ? { ...item, status: "Cancelled" } : item))
-                          )
-                        }
-                      >
-                        Cancel
-                      </button>
-                    ) : (
-                      <span style={{ color: "var(--cms-muted)" }}>--</span>
-                    )}
+              {loading ? (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: "center", padding: "20px" }}>
+                    <Loader2 size={24} className="spin" style={{ margin: "0 auto", color: "var(--cms-primary)" }} />
                   </td>
                 </tr>
-              ))}
+              ) : leaveList.length === 0 ? (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: "center", padding: "20px", color: "var(--cms-muted)" }}>
+                    No leave history found.
+                  </td>
+                </tr>
+              ) : (
+                leaveList.map((l) => (
+                  <tr key={l.staffLeaveRequestId || l.id}>
+                    <td className="cms-strong">{getLeaveTypeName(l.leaveType)}</td>
+                    <td>{formatDate(l.startDate)}</td>
+                    <td>{formatDate(l.endDate)}</td>
+                    <td><strong>{l.totalDays}</strong></td>
+                    <td>{l.reason}</td>
+                    <td style={{ color: "var(--cms-muted)" }}>{formatDate(l.createdAt)}</td>
+                    <td><span className={`cms-badge ${STATUS_BADGE[l.status] || "cms-badge-warn"}`}>{l.status}</span></td>
+                    <td>{l.approvedByUserName || "--"}</td>
+                    <td>
+                      {l.status === "Pending" ? (
+                        <button
+                          type="button"
+                          className="cms-btn cms-btn-ghost"
+                          onClick={() => {
+                            // Cancel functionality can be integrated later via actionLeave api
+                            notify("Cancel feature is not implemented fully yet.", "error");
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      ) : (
+                        <span style={{ color: "var(--cms-muted)" }}>--</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -185,7 +230,7 @@ export default function FacultyLeave() {
                   <label>Leave Type <span className="req">*</span></label>
                   <select value={leaveForm.type} onChange={(e) => setLeaveForm({ ...leaveForm, type: e.target.value })}>
                     {leaveCategories.map((c) => (
-                      <option key={c.code || c.name} value={c.name}>{c.name}</option>
+                      <option key={c.code} value={c.code}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -204,7 +249,7 @@ export default function FacultyLeave() {
               </div>
               {leavePreviewDays > 0 && (
                 <p style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 12 }}>
-                  Calculated leave: {leavePreviewDays} day(s) · Affected timetable classes: {affectedClassCount}
+                  Calculated leave: {leavePreviewDays} day(s)
                 </p>
               )}
             </div>
@@ -228,4 +273,3 @@ export default function FacultyLeave() {
     </div>
   );
 }
-

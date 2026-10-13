@@ -29,6 +29,8 @@ public class CertificateRepository : ICertificateRepository
         string? status = null,
         string? certificateType = null,
         int? campusId = null,
+        int? boardId = null,
+        int? academicYearId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
@@ -51,7 +53,19 @@ public class CertificateRepository : ICertificateRepository
             var results = rawRows.Select(MapDynamicToDto).ToList();
             if (campusId.HasValue)
             {
-                results = results.Where(r => r.CampusId == campusId.Value).ToList();
+                // If CampusId is missing from the DB response, we include it to avoid hiding all legacy history
+                results = results.Where(r => r.CampusId == null || r.CampusId == campusId.Value).ToList();
+            }
+            
+            if (boardId.HasValue || academicYearId.HasValue)
+            {
+                var sParams = new DynamicParameters();
+                string sQuery = "SELECT StudentId FROM Students WHERE IsActive = 1";
+                if (boardId.HasValue) { sQuery += " AND BoardId = @BoardId"; sParams.Add("BoardId", boardId.Value); }
+                if (academicYearId.HasValue) { sQuery += " AND AcademicYearId = @AYId"; sParams.Add("AYId", academicYearId.Value); }
+                
+                var validStudentIds = (await connection.QueryAsync<int>(sQuery, sParams)).ToHashSet();
+                results = results.Where(r => validStudentIds.Contains(r.StudentId)).ToList();
             }
             return results;
         }
@@ -749,10 +763,32 @@ public class CertificateRepository : ICertificateRepository
             parameters.Add("p_BoardId", boardId, DbType.Int32);
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
 
+            string sql = @"
+                SELECT 
+                    sa.AdmissionId AS StudentId,
+                    COALESCE(NULLIF(sa.AdmissionNo, ''), CONCAT('ADM-', sa.AdmissionId)) AS AdmissionNo,
+                    '' AS RollNo,
+                    TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))) AS StudentName,
+                    COALESCE(g.GroupName, '') AS GroupName,
+                    COALESCE(ay.AcademicYearName, '') AS AcademicYear,
+                    COALESCE(al.LevelName, '1st Year') AS AcademicLevel,
+                    '' AS Section
+                FROM StudentAdmissions sa
+                LEFT JOIN Groups g ON g.GroupId = sa.GroupId
+                LEFT JOIN AcademicYears ay ON ay.AcademicYearId = sa.AcademicYearId
+                LEFT JOIN AcademicLevels al ON al.AcademicLevelId = sa.AcademicLevelId
+                WHERE sa.IsActive = 1
+                  AND sa.Status IN ('Approved', 'Request Approved', 'Admitted', 'Active', '')
+                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR sa.CampusId = @p_CampusId)
+                  AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR sa.BoardId = @p_BoardId)
+                  AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR sa.AcademicYearId = @p_AcademicYearId)
+                ORDER BY CAST(REGEXP_REPLACE(COALESCE(NULLIF(sa.AdmissionNo, ''), '0'), '[^0-9]', '') AS UNSIGNED) ASC, sa.AdmissionNo ASC
+            ";
+
             var list = await connection.QueryAsync<StudentCertificateDropdownDto>(new CommandDefinition(
-                "sp_GetStudentsForCertificateDropdown",
+                sql,
                 parameters,
-                commandType: CommandType.StoredProcedure,
+                commandType: CommandType.Text,
                 cancellationToken: ct));
 
             return list.ToList();
@@ -906,7 +942,7 @@ public class CertificateRepository : ICertificateRepository
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
-            var all = await GetAllAsync(request.AdmissionNo.Trim(), null, null, null, ct);
+            var all = await GetAllAsync(request.AdmissionNo.Trim(), null, null, null, null, null, ct);
             return all.FirstOrDefault();
         }
         catch (Exception ex)

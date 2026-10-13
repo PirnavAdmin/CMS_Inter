@@ -151,7 +151,42 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
                 .FirstOrDefaultAsync();
 
-            if (existing != null)
+            if (existing == null && !string.IsNullOrWhiteSpace(baseSeriesCode))
+            {
+                var baseTemplate = await _context.Set<NumberSeriesConfiguration>()
+                    .Where(n => n.SeriesCode == baseSeriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
+                    .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
+                    .FirstOrDefaultAsync();
+
+                if (baseTemplate != null)
+                {
+                    // Create new scoped sequence
+                    var autoPrefix = seriesCode.Contains("|")
+                        ? seriesCode.Split('|').Last().ToUpperInvariant()
+                        : baseTemplate.Prefix;
+
+                    var newConfig = new NumberSeriesConfiguration
+                    {
+                        SeriesCode = seriesCode,
+                        SeriesName = seriesCode.Contains("|") ? $"Student Roll No. - {autoPrefix}" : baseTemplate.SeriesName,
+                        Prefix = autoPrefix,
+                        FormatPattern = baseTemplate.FormatPattern,
+                        NumberLength = baseTemplate.NumberLength,
+                        StartNumber = baseTemplate.StartNumber,
+                        CurrentSequence = baseTemplate.StartNumber,
+                        Description = baseTemplate.Description,
+                        CampusId = campusId,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    
+                    _context.Set<NumberSeriesConfiguration>().Add(newConfig);
+                    await _context.SaveChangesAsync();
+                    return newConfig;
+                }
+            }
+            else if (existing != null)
             {
                 // If we need a sequence for a specific campus but only found the global fallback,
                 // we must NOT increment the global fallback. We must create a new sequence counter for this campus.
@@ -191,11 +226,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
                 else
                 {
-                    existing.CurrentSequence = existing.CurrentSequence < existing.StartNumber
-                        ? existing.StartNumber
-                        : existing.CurrentSequence + 1;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
+                    // Thread-safe atomic increment via database row update
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "UPDATE `NumberSeriesConfigurations` SET `CurrentSequence` = CASE WHEN `CurrentSequence` < `StartNumber` THEN `StartNumber` ELSE `CurrentSequence` + 1 END, `UpdatedAt` = UTC_TIMESTAMP() WHERE `Id` = {0}",
+                        existing.Id);
+                    await _context.Entry(existing).ReloadAsync();
                 }
             }
 

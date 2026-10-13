@@ -69,6 +69,8 @@
 .holiday-status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 750; }
 .holiday-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .holiday-status.is-active { color: #167244; background: #e8f7ee; }
+.holiday-status.is-ongoing { color: #0284c7; background: #e0f2fe; }
+.holiday-status.is-upcoming { color: #8b5cf6; background: #ede9fe; }
 .holiday-status.is-completed { color: #5d6862; background: #edf0ee; }
 .holiday-status.is-inactive { color: var(--cms-muted); background: var(--cms-subtle); }
 .holiday-description { max-width: 260px; overflow: hidden; color: var(--cms-muted); text-overflow: ellipsis; }
@@ -97,3 +99,4 @@
 @media (max-width: 1150px) { .holiday-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .holiday-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .holiday-filters > select, .holiday-date-filter { flex: 1 1 180px; width: auto; } }
 @media (max-width: 620px) { .holiday-summary, .holiday-filters, .holiday-form-grid, .holiday-detail-grid { grid-template-columns: 1fr; } .holiday-detail-grid .full { grid-column: auto; } .holiday-pagination { align-items: flex-start; flex-direction: column; } .holiday-pagination > div { width: 100%; justify-content: space-between; } .holiday-date-type { flex-direction: column; gap: 8px; } }
+

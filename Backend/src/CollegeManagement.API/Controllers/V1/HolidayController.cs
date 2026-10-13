@@ -1,6 +1,8 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using System.IO;
 using CollegeManagement.API.DTOs.Holiday;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Cors;
@@ -234,6 +236,27 @@ namespace CollegeManagement.API.Controllers.V1
                     details = ex.Message
                 });
             }
+        }
+    
+        [HttpGet("import/template")]
+        public async Task<IActionResult> DownloadImportTemplate()
+        {
+            var bytes = await _holidayService.GenerateImportTemplateAsync();
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Holiday_ImportTemplate.xlsx");
+        }
+
+        [HttpPost("import/excel")]
+        public async Task<IActionResult> ImportExcel(IFormFile file, [FromQuery] bool validateOnly = false, [FromQuery] int? campusId = null, [FromQuery] int? academicYearId = null, [FromQuery] int? boardId = null)
+        {
+            if (file == null || file.Length == 0) return BadRequest(new { success = false, message = "File is empty or not provided." });
+            
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms);
+            
+            int? currentUserId = null; 
+
+            var result = await _holidayService.ImportHolidaysFromExcelAsync(ms.ToArray(), validateOnly, currentUserId, campusId, academicYearId, boardId);
+            return Ok(result);
         }
     }
 }

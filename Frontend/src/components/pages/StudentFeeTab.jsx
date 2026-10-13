@@ -469,13 +469,15 @@ async function loadFacilityFee(studentId) {
     "busRouteName",
     "BusRouteName",
   );
-  const point = facilityRows(result.data).find(
+  let point = facilityRows(result.data).find(
     (row) =>
       facilityActive(row) &&
       facilityMatches(
         pickup,
         row.pickupPointId,
         row.PickupPointId,
+        row.id,
+        row.Id,
         row.stopName,
         row.StopName,
         row.pickupPointName,
@@ -485,12 +487,25 @@ async function loadFacilityFee(studentId) {
         !(row.routeId ?? row.RouteId ?? row.routeName ?? row.RouteName) ||
         facilityMatches(route, row.routeId, row.RouteId, row.routeName, row.RouteName)),
   );
+  // The list can contain lookup-only records; the detail endpoint includes the fare.
+  const pickupId = readText(point, "pickupPointId", "PickupPointId", "id", "Id") ||
+    text("pickupPointId", "PickupPointId");
+  if (pickupId) {
+    const detailResponse = await apiClient.get(apiEndpoints.transport.pickupPointById(pickupId), {
+      skipGlobalLoader: true,
+    });
+    const detail = getObject(detailResponse.data);
+    point = { ...point, ...(detail.pickupPoint ?? detail.PickupPoint ?? detail) };
+  }
   if (!point)
     return { error: "No transport fee is configured for this student's route and pickup point." };
+  const amount = readNumber(point, "monthlyFee", "MonthlyFee", "monthlyFare", "MonthlyFare", "fare", "Fare");
+  if (amount === null)
+    return { error: "No transport fare is configured for this student's assigned pickup point." };
   return {
     fee: {
       type: "Transport Fee",
-      amount: readNumber(point, "monthlyFee", "MonthlyFee", "fare", "Fare"),
+      amount,
       plan: "Monthly",
       detail: readText(point, "stopName", "StopName", "pickupPointName", "PickupPointName"),
     },

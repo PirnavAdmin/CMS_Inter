@@ -5,18 +5,26 @@ export function unwrapDriverData(response) {
 }
 
 export function assignmentProfile(data = {}, profile = {}) {
-  if (Object.hasOwn(data, "vehicle")) {
+  if (Object.hasOwn(data, "assignedVehicle") || Object.hasOwn(data, "vehicle")) {
+    const vehicle = Object.hasOwn(data, "assignedVehicle") ? data.assignedVehicle : data.vehicle;
     return {
       ...profile,
-      assignedVehicle: data.vehicle?.registrationNumber,
-      vehicleRegistration: data.vehicle?.registrationNumber,
-      vehicleModel: data.vehicle?.vehicleType,
-      vehicleDetails: data.vehicle?.capacity != null ? `${data.vehicle.capacity} seats` : undefined,
+      assignedVehicle: typeof vehicle === "string" ? vehicle : vehicle?.vehicleNumber || vehicle?.registrationNumber,
+      vehicleRegistration: vehicle?.registrationNumber,
+      vehicleModel: vehicle?.vehicleName || vehicle?.vehicleType,
+      vehicleDetails: vehicle?.capacity != null ? `${vehicle.capacity} seats` : undefined,
       assignedRoute: data.route?.routeName,
+      assignedAttendant: data.attendant?.attendantName,
+      attendantPhone: data.attendant?.contactNumber,
+      assignmentId: data.assignmentId,
+      shift: data.shift,
     };
   }
   const assignment = data.assignment;
-  if (!assignment) return profile;
+  if (!assignment) {
+    if (Object.hasOwn(data, "assignment") && assignment === null) return { ...profile, assignedVehicle: undefined, assignedRoute: undefined, vehicleModel: undefined, vehicleRegistration: undefined, vehicleDetails: undefined, assignedAttendant: undefined, assignmentId: undefined };
+    return data.route?.routeName ? { ...profile, assignedRoute: data.route.routeName } : profile;
+  }
   return {
     ...profile,
     assignedVehicle: assignment.vehicleNumber,

@@ -345,6 +345,7 @@
 
 .dashboard-row-three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
 }
 
 .dashboard-card {
@@ -358,9 +359,6 @@
 }
 
 .dashboard-row-three > .dashboard-card {
-  height: 226px;
-  min-height: 226px;
-  max-height: 226px;
   box-sizing: border-box;
 }
 
@@ -499,7 +497,6 @@
 .dashboard-area-chart-wrap:active {
   cursor: grabbing;
 }
-
 .dashboard-area-chart-wrap::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -1003,6 +1000,33 @@
 .dashboard-exams-card {
   display: flex;
   flex-direction: column;
+}
+
+:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-card-head {
+  flex-shrink: 0;
+}
+
+:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-info-list {
+  flex: 1;
+  max-height: none;
+}
+
+:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-info-item,
+:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-days-badge {
+  flex-shrink: 0;
+}
+
+:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-info-content strong,
+:is(.dashboard-holiday-card, .dashboard-exams-card) .dashboard-info-content small,
+:is(.dashboard-holiday-card, .dashboard-exams-card) :is(.holiday-type-pill, .exam-type-pill) {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+:is(.dashboard-holiday-card, .dashboard-exams-card) :is(.dashboard-holiday-meta, .dashboard-exam-meta) {
+  flex-wrap: wrap;
 }
 
 .dashboard-holiday-item,

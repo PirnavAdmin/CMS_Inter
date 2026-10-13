@@ -20,6 +20,6 @@ public class AuditLog
     [MaxLength(500)] public string? UserAgent { get; set; }
     public int? UserId { get; set; }
     public int? StaffId { get; set; }
-    [MaxLength(1000)] public string? Description { get; set; }
+    [Column(TypeName = "longtext")] public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }
 }

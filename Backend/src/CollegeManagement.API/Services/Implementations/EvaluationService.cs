@@ -92,8 +92,8 @@ namespace CollegeManagement.API.Services.Implementations
                         TotalMarks = subjectMaxMarks,
                         HighestMarks = max,
                         LowestMarks = min,
-                        Status = first.Status.ToString().ToUpperInvariant(),
-                        StatusCode = first.Status,
+                        Status = !g.Any(m => (m.TotalMarks > 0 || m.TheoryMarks > 0 || m.InternalMarks > 0 || m.PracticalMarks > 0) || m.IsAbsent) ? "NOT STARTED" : first.Status.ToString().ToUpperInvariant(),
+                        StatusCode = !g.Any(m => (m.TotalMarks > 0 || m.TheoryMarks > 0 || m.InternalMarks > 0 || m.PracticalMarks > 0) || m.IsAbsent) ? 0 : first.Status,
                         IsLocked = first.IsLocked,
                         AdminReviewMessage = first.Status == EvaluationStatus.VERIFIED ? first.Remarks : null,
                         RejectionReason = first.Status == EvaluationStatus.REJECTED ? first.Remarks : null,
@@ -685,11 +685,28 @@ namespace CollegeManagement.API.Services.Implementations
                 };
             }
 
-            var scheduleSubjectIds = exam.ExamSchedules
-                .Where(s => s.IsActive)
-                .Select(s => s.SubjectId)
-                .Distinct()
-                .ToList();
+            var scheduleSubjectIds = new HashSet<int>();
+            foreach (var sch in exam.ExamSchedules.Where(s => s.IsActive))
+            {
+                if (sch.SubjectId > 0) scheduleSubjectIds.Add(sch.SubjectId);
+                foreach (var incId in sch.IncludedSubjectIdList)
+                {
+                    if (incId > 0) scheduleSubjectIds.Add(incId);
+                }
+            }
+
+            try
+            {
+                var conn = _context.Database.GetDbConnection();
+                var junctionSubjects = await Dapper.SqlMapper.QueryAsync<int>(conn,
+                    "SELECT SubjectId FROM ExaminationSubjects WHERE ExamId = @ExamId",
+                    new { ExamId = exam.ExaminationId });
+                foreach (var sId in junctionSubjects)
+                {
+                    if (sId > 0) scheduleSubjectIds.Add(sId);
+                }
+            }
+            catch { }
 
             List<Subject> requiredSubjectsList;
             if (scheduleSubjectIds.Any())
@@ -706,7 +723,6 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var marksQuery = _context.Marks
-                .Include(m => m.Faculty)
                 .Where(m => m.IsActive && m.ExaminationId == examinationId.Value);
 
             if (sectionId.HasValue && sectionId.Value > 0)

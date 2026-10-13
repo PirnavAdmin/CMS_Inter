@@ -19,11 +19,6 @@ export function summarizeStudentAttendance(payload, viewBy) {
   const rows = Array.isArray(data) ? data : data?.items ?? data?.Items ?? data?.$values;
   if (!Array.isArray(rows)) throw new Error("The student attendance API returned an unsupported response.");
   const processed = rows.map((row) => {
-    const unmarkedValue = (value) => value == null || ["", "0", "unmarked", "notmarked", "notset"].includes(String(value).toLowerCase().replace(/[\s_-]/g, ""));
-    const morningValue = field(row, "morningStatus", "morningAttendanceStatus", "morningSessionStatus", "morning", "morningAttendance");
-    const afternoonValue = field(row, "afternoonStatus", "afternoonAttendanceStatus", "afternoonSessionStatus", "afternoon", "afternoonAttendance");
-    const legacyValue = field(row, "status");
-    const marked = field(row, "isAttendanceMarked");
     const session = (name) => normalizeStudentStatus(field(row, `${name}Status`, `${name}AttendanceStatus`, `${name}SessionStatus`, name, `${name}Attendance`));
     const morning = session("morning"), afternoon = session("afternoon");
     let status = null;
@@ -35,9 +30,6 @@ export function summarizeStudentAttendance(payload, viewBy) {
     // Legacy attendance is a fallback only when neither session has a value.
     else if (field(row, "morningStatus", "morningAttendanceStatus", "morningSessionStatus", "morning", "morningAttendance") == null &&
              field(row, "afternoonStatus", "afternoonAttendanceStatus", "afternoonSessionStatus", "afternoon", "afternoonAttendance") == null) status = normalizeStudentStatus(field(row, "status"));
-    // Dashboard policy: an unmarked student is counted as absent for today.
-    if (status !== "Holiday" && (marked === false || marked === 0 || marked === "false" ||
-        (unmarkedValue(morningValue) && unmarkedValue(afternoonValue) && unmarkedValue(legacyValue)))) status = "Absent";
     return { row, status };
   }).filter(({ status }) => ["Present", "Absent", "Half Day"].includes(status));
   const count = (items) => {

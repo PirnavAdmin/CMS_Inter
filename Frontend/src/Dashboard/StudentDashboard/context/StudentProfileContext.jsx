@@ -2,7 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { getApiErrorMessage } from "@/api/axios.js";
 import { getCurrentStudent, getCurrentStudentPhotoFile } from "../services/studentAcademicService.js";
 
-const StudentProfileContext = createContext(null);
+// Keep provider and consumers on the same context during Vite Fast Refresh.
+const StudentProfileContext = import.meta.hot?.data.studentProfileContext ?? createContext(null);
+if (import.meta.hot) import.meta.hot.data.studentProfileContext = StudentProfileContext;
 
 export function StudentProfileProvider({ children }) {
   const [profile, setProfile] = useState(null);
