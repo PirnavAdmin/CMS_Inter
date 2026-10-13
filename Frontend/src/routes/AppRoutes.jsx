@@ -188,7 +188,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/staff/:id/edit" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id/review" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id" element={<StaffManagementPage />} />
-        <Route path="/dashboard/reimbursements" element={<AdminReimbursementsPage />} />
+        <Route path="/dashboard/reimbursements" element={<ReimbursementPage />} />
         <Route path="/dashboard/departments" element={<DepartmentManagementPage />} />
         <Route path="/dashboard/departments/add" element={<MasterFormPage kind="department" />} />
         <Route path="/dashboard/departments/:id/edit" element={<MasterFormPage kind="department" />} />
@@ -304,9 +304,11 @@ export default function AppRoutes() {
         <Route path="/dashboard/payroll/settings" element={<PayrollPage mode="settings" />} />
         <Route path="/dashboard/payroll/import" element={<PayrollPage mode="import" />} />
 
-        {/* Faculty Reimbursement Canonical & Finance Routes */}
+        {/* Faculty & Staff Reimbursement Canonical & Finance Routes */}
         <Route path="/dashboard/reimbursement" element={<ReimbursementPage />} />
+        <Route path="/dashboard/reimbursements" element={<ReimbursementPage />} />
         <Route path="/dashboard/finance/reimbursement" element={<ReimbursementPage />} />
+        <Route path="/dashboard/finance/reimbursements" element={<ReimbursementPage />} />
 
         {/* Backward-Compatible Staff Salary Aliases */}
         <Route path="/dashboard/staff-salary" element={<PayrollPage mode="payroll" />} />
