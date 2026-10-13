@@ -60,6 +60,10 @@ export const apiEndpoints = {
     deleteSubjectAssignment: (id) => `/api/v1/staff/assign-subject/${id}`,
     getSubjectAllocations: (staffId) => `/api/v1/staff/${staffId}/subject-allocations`,
     getWorkload: (staffId) => `/api/v1/staff/workload/${staffId}`,
+    settings: "/api/v1/staff/settings",
+    updateProfileSettings: "/api/v1/staff/settings/profile",
+    updatePreferences: "/api/v1/staff/settings/preferences",
+    changePassword: "/api/v1/staff/settings/change-password",
   },
   boards: {
     list: "/api/v1/boards",
