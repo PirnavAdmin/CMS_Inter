@@ -24,14 +24,21 @@ namespace CollegeManagement.API.DTOs.Roles
             get
             {
                 var list = new List<string>();
-                if (CanView) list.Add("view");
+                if (!CanView) return list;
+
+                list.Add("view");
                 if (CanAdd)
                 {
                     list.Add("create");
-                    list.Add("add");
                 }
-                if (CanEdit) list.Add("edit");
-                if (CanDelete) list.Add("delete");
+                if (CanEdit)
+                {
+                    list.Add("edit");
+                }
+                if (CanDelete)
+                {
+                    list.Add("delete");
+                }
                 return list;
             }
         }

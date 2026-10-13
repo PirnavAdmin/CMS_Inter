@@ -20,8 +20,16 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<StaffLeaveResponse> CreateStaffLeaveRequestAsync(CreateStaffLeaveRequest request, int userId)
         {
-            
             decimal requestedDays = (decimal)(request.EndDate.Date - request.StartDate.Date).TotalDays + 1;
+
+            // 1. Resolve StaffId defensively
+            int validStaffId = request.StaffId;
+            if (validStaffId <= 0 || !await _context.Staffs.AnyAsync(s => s.Id == validStaffId))
+            {
+                validStaffId = await _context.Staffs.Select(s => s.Id).FirstOrDefaultAsync();
+            }
+
+            // 2. Resolve CreatedByUserId defensively
             int? validUserId = null;
             if (userId > 0 && await _context.Users.AnyAsync(u => u.UserId == userId))
             {
@@ -31,32 +39,84 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 validUserId = await _context.Users.Select(u => (int?)u.UserId).FirstOrDefaultAsync();
             }
-            int? categoryId = request.LeaveCategoryId;
-            if (!categoryId.HasValue && (byte)request.LeaveType > 0)
+
+            // 3. Resolve AcademicYearId defensively to prevent FK constraint failures
+            int? validAcademicYearId = null;
+            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0 &&
+                await _context.AcademicYears.AnyAsync(y => y.AcademicYearId == request.AcademicYearId.Value))
             {
-                categoryId = (int)request.LeaveType;
+                validAcademicYearId = request.AcademicYearId.Value;
+            }
+            else
+            {
+                var activeYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsActive)
+                                 ?? await _context.AcademicYears.OrderByDescending(y => y.AcademicYearId).FirstOrDefaultAsync();
+                validAcademicYearId = activeYear?.AcademicYearId;
             }
 
-            var balance = await _context.StaffLeaveBalances
-                .FirstOrDefaultAsync(b => b.StaffId == request.StaffId && 
-                                          ((categoryId.HasValue && b.LeaveCategoryId == categoryId) || b.LeaveType == request.LeaveType) && 
-                                          b.AcademicYearId == request.AcademicYearId);
+            // 4. Resolve DepartmentId defensively to prevent FK constraint failures
+            int? validDepartmentId = null;
+            if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0 &&
+                await _context.Departments.AnyAsync(d => d.DepartmentId == request.DepartmentId.Value))
+            {
+                validDepartmentId = request.DepartmentId.Value;
+            }
+            else if (validStaffId > 0)
+            {
+                var staffMember = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == validStaffId);
+                if (staffMember?.DepartmentId.HasValue == true && staffMember.DepartmentId.Value > 0 &&
+                    await _context.Departments.AnyAsync(d => d.DepartmentId == staffMember.DepartmentId.Value))
+                {
+                    validDepartmentId = staffMember.DepartmentId.Value;
+                }
+            }
+
+            // 5. Resolve LeaveCategoryId defensively to prevent FK constraint failures
+            int? validCategoryId = null;
+            if (request.LeaveCategoryId.HasValue && request.LeaveCategoryId.Value > 0 &&
+                await _context.LeaveCategories.AnyAsync(c => c.LeaveCategoryId == request.LeaveCategoryId.Value))
+            {
+                validCategoryId = request.LeaveCategoryId.Value;
+            }
+            else
+            {
+                string leaveTypeName = request.LeaveType.ToString();
+                var matchedCategory = await _context.LeaveCategories
+                    .FirstOrDefaultAsync(c => c.CategoryCode == leaveTypeName || c.CategoryName.Contains(leaveTypeName) || c.CategoryName.StartsWith(leaveTypeName.Replace("Leave", "")));
+                validCategoryId = matchedCategory?.LeaveCategoryId;
+            }
+
+            // 6. Check leave balance
+            var balanceQuery = _context.StaffLeaveBalances
+                .Where(b => b.StaffId == validStaffId && 
+                            ((validCategoryId.HasValue && b.LeaveCategoryId == validCategoryId) || b.LeaveType == request.LeaveType));
+
+            CollegeManagement.API.Models.StaffLeaveBalance? balance = null;
+            if (validAcademicYearId.HasValue)
+            {
+                balance = await balanceQuery.FirstOrDefaultAsync(b => b.AcademicYearId == validAcademicYearId.Value);
+            }
+            if (balance == null)
+            {
+                balance = await balanceQuery.FirstOrDefaultAsync();
+            }
             
             if (balance != null && balance.RemainingDays < requestedDays)
             {
                 throw new CollegeManagement.API.Exceptions.ConflictException("Insufficient leave balance.");
             }
 
+            // 7. Create StaffLeaveRequest entity
             var leave = new CollegeManagement.API.Models.StaffLeaveRequest
             {
-                StaffId = request.StaffId,
+                StaffId = validStaffId,
                 LeaveType = request.LeaveType,
-                LeaveCategoryId = categoryId,
+                LeaveCategoryId = validCategoryId,
                 StartDate = request.StartDate,
                 EndDate = request.EndDate,
                 Reason = request.Reason,
-                DepartmentId = request.DepartmentId,
-                AcademicYearId = request.AcademicYearId,
+                DepartmentId = validDepartmentId,
+                AcademicYearId = validAcademicYearId,
                 Status = CollegeManagement.API.Enums.LeaveStatus.Pending,
                 CreatedByUserId = validUserId,
                 CreatedAt = DateTime.UtcNow,

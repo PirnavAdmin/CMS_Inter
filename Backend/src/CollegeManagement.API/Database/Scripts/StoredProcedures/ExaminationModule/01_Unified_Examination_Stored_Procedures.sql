@@ -88,7 +88,7 @@ BEGIN
               AND s.GroupId = e.GroupId
         ) AS TotalEligibleSubjects,
         (
-            SELECT COUNT(*) 
+            SELECT COUNT(DISTINCT es.SubjectId) 
             FROM ExamSchedules es 
             WHERE es.ExamId = e.ExamId AND es.IsActive = 1
         ) AS ScheduledSubjectsCount
@@ -166,7 +166,7 @@ BEGIN
               AND s.GroupId = e.GroupId
         ) AS TotalEligibleSubjects,
         (
-            SELECT COUNT(*) 
+            SELECT COUNT(DISTINCT es.SubjectId) 
             FROM ExamSchedules es 
             WHERE es.ExamId = e.ExamId AND es.IsActive = 1
         ) AS ScheduledSubjectsCount
@@ -337,6 +337,13 @@ BEGIN
         COALESCE(s.SubjectName, '') AS SubjectName,
         COALESCE(s.SubjectCode, '') AS SubjectCode
     FROM ExamSchedules es
+    INNER JOIN (
+        SELECT MAX(ScheduleId) AS MaxScheduleId
+        FROM ExamSchedules
+        WHERE (p_ExaminationId IS NULL OR p_ExaminationId = 0 OR ExamId = p_ExaminationId)
+          AND IsActive = 1
+        GROUP BY ExamId, SubjectId
+    ) latest ON es.ScheduleId = latest.MaxScheduleId
     LEFT JOIN Subjects s ON es.SubjectId = s.SubjectId
     WHERE (p_ExaminationId IS NULL OR p_ExaminationId = 0 OR es.ExamId = p_ExaminationId)
       AND es.IsActive = 1
@@ -400,6 +407,11 @@ CREATE PROCEDURE `sp_CreateExamSchedule`(
 ,
     IN p_CampusId INT)
 BEGIN
+    -- Deactivate any prior active schedule for the same (ExamId, SubjectId) to prevent duplicates
+    UPDATE ExamSchedules
+    SET IsActive = 0, UpdatedAt = UTC_TIMESTAMP()
+    WHERE ExamId = p_ExamId AND SubjectId = p_SubjectId AND IsActive = 1;
+
     INSERT INTO ExamSchedules (
         ExamId,
         SubjectId,

@@ -10,12 +10,15 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/evaluations")]
     [Authorize]
+    [RequirePermission("marks-evaluation")]
     public class EvaluationsController : ControllerBase
     {
         private readonly IEvaluationService _evaluationService;

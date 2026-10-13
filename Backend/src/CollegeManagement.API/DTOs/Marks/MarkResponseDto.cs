@@ -24,6 +24,8 @@ namespace CollegeManagement.API.DTOs.Marks
         public int PracticalMarks { get; set; }
         public int TheoryMarks { get; set; }
         public int TotalMarks { get; set; }
+        public int ObtainedMarks => TotalMarks;
+        public int Total => TotalMarks;
         public int PassingMarks { get; set; }
         public bool IsPass => !IsAbsent && TotalMarks >= PassingMarks;
         public bool IsAbsent { get; set; }

@@ -9,6 +9,7 @@ using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Models.Holiday;
 using CollegeManagement.API.Models.Transport;
+using CollegeManagement.API.Models.Inventory;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -266,6 +267,7 @@ namespace CollegeManagement.API.Data
         public DbSet<Role> Roles { get; set; }
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<RoleModule> RoleModules { get; set; } = null!;
         public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<OTP> OTPs { get; set; }
         public DbSet<AcademicYear> AcademicYears { get; set; }
@@ -385,6 +387,13 @@ namespace CollegeManagement.API.Data
         public DbSet<AuditLog> AuditLogs { get; set; }
         public DbSet<Template> Templates { get; set; }
         public DbSet<NumberSeriesConfiguration> NumberSeriesConfigurations { get; set; }
+
+        public DbSet<InventoryCategory> InventoryCategories { get; set; }
+        public DbSet<InventorySupplier> InventorySuppliers { get; set; }
+        public DbSet<InventorySupplierCategory> InventorySupplierCategories { get; set; }
+        public DbSet<InventoryItem> InventoryItems { get; set; }
+        public DbSet<InventoryTransaction> InventoryTransactions { get; set; }
+        public DbSet<InventoryActivity> InventoryActivities { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1506,6 +1515,11 @@ namespace CollegeManagement.API.Data
                 entity.HasIndex(n => n.SeriesCode).IsUnique();
             });
             #endregion
+
+            #region Inventory
+            modelBuilder.Entity<InventorySupplierCategory>()
+                .HasKey(sc => new { sc.SupplierId, sc.CategoryId });
+            #endregion
         }
     
 private static void ConfigureTransportRoute(ModelBuilder modelBuilder)
@@ -1959,6 +1973,16 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                 entity.HasOne(e => e.Permission)
                     .WithMany(p => p.UserPermissions)
                     .HasForeignKey(e => e.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // RoleModules Configuration
+            modelBuilder.Entity<RoleModule>(entity =>
+            {
+                entity.HasIndex(e => new { e.RoleId, e.SubModule }).IsUnique();
+                entity.HasOne(e => e.Role)
+                    .WithMany(r => r.RoleModules)
+                    .HasForeignKey(e => e.RoleId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
         }

@@ -3,8 +3,10 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "r
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
-  Building2, LayoutDashboard, Users, BarChart3,
+  Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
+  ReceiptIndianRupee, Boxes,
 } from "lucide-react";
+import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -73,6 +75,11 @@ const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
   "id & number series": settingsNumberSeriesIcon,
   templates: settingsTemplatesIcon,
   "audit logs": settingsAuditLogsIcon,
+  "faculty reimbursement": reimbursementIcon,
+  "staff reimbursements": reimbursementIcon,
+  reimbursement: reimbursementIcon,
+  reimbursements: reimbursementIcon,
+  "inventory management": Boxes,
 });
 
 const PAGE_ICON_ROUTE_ALIASES = [
@@ -85,6 +92,22 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
+  { path: "/dashboard/reimbursement", icon: reimbursementIcon },
+  { path: "/dashboard/reimbursements", icon: reimbursementIcon },
+  { path: "/dashboard/finance/reimbursement", icon: reimbursementIcon },
+  { path: "/dashboard/finance/reimbursements", icon: reimbursementIcon },
+  { path: "/dashboard/inventory-management", icon: Boxes },
+  { path: "/dashboard/inventory", icon: Boxes },
+  { path: "/warden-dashboard/students", icon: studentsIcon },
+  { path: "/warden-dashboard/rooms", icon: sectionsIcon },
+  { path: "/warden-dashboard/beds", icon: sectionsIcon },
+  { path: "/warden-dashboard/allocations", icon: allocateSectionIcon },
+  { path: "/warden-dashboard/leave-requests", icon: generatedSidebarIcons.staffLeave },
+  { path: "/warden-dashboard/complaints", icon: settingsAuditLogsIcon },
+  { path: "/warden-dashboard/attendance", icon: attendanceIcon },
+  { path: "/warden-dashboard/reports", icon: reportsAnalyticsIcon },
+  { path: "/warden-dashboard/profile", icon: staffIcon },
+  { path: "/warden-dashboard", icon: dashboardIcon },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -146,6 +169,7 @@ export const menu = [
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
       { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
+      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes },
     ],
   },
   {
@@ -166,6 +190,7 @@ export const menu = [
       { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon },
     ],
   },
   {
@@ -181,6 +206,7 @@ export const menu = [
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
       { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
+      { to: "/dashboard/reimbursements", label: "Reimbursements", icon: reimbursementIcon },
     ],
   },
   {
@@ -241,6 +267,7 @@ export const principalMenu = [
     items: [
       { to: "/dashboard/students", label: "Students", icon: studentsIcon },
       { to: "/dashboard/staff", label: "Staff", icon: staffIcon },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon },
       { to: "/dashboard/attendance/student", label: "Student Attendance", icon: attendanceIcon },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/sections", label: "Classes & Sections", icon: sectionsIcon },

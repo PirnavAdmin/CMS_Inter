@@ -1,4 +1,4 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.Marks;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
@@ -14,6 +16,7 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v{version:apiVersion}/marks")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("marks-evaluation")]
     public class MarksController : ControllerBase
     {
         private readonly IMarksService _marksService;

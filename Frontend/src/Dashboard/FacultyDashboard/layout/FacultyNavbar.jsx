@@ -147,14 +147,6 @@ export default function FacultyNavbar() {
   const [profileDropOpen, setProfileDropOpen] = useState(false);
   const profileDropRef = useRef(null);
 
-  // Real-time photo refresh listener
-  const [photoTimestamp, setPhotoTimestamp] = useState(Date.now());
-  useEffect(() => {
-    const onPhotoUpdated = () => setPhotoTimestamp(Date.now());
-    window.addEventListener("faculty-photo-updated", onPhotoUpdated);
-    return () => window.removeEventListener("faculty-photo-updated", onPhotoUpdated);
-  }, []);
-
   // Board & Academic Year Selection Handlers
   const handleBoardSelect = (board) => {
     if (academicSetSelectedBoard) academicSetSelectedBoard(board);
@@ -519,7 +511,7 @@ export default function FacultyNavbar() {
             
             {profileData.photoPath || profileData.photoUrl ? (
               <img 
-                src={profileData.photoUrl || `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${photoTimestamp}`} 
+                src={profileData.photoUrl || `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}?t=${Date.now()}`} 
                 alt="Profile" 
                 className="cms-avatar" 
                 style={{ objectFit: 'cover' }} 

@@ -765,28 +765,24 @@ public class CertificateRepository : ICertificateRepository
 
             string sql = @"
                 SELECT 
-                    s.StudentId AS StudentId,
-                    s.AdmissionNo AS AdmissionNo,
-                    COALESCE(s.RollNo, '') AS RollNo,
-                    COALESCE(NULLIF(TRIM(s.StudentName), ''), TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))), s.AdmissionNo) AS StudentName,
+                    sa.AdmissionId AS StudentId,
+                    COALESCE(NULLIF(sa.AdmissionNo, ''), CONCAT('ADM-', sa.AdmissionId)) AS AdmissionNo,
+                    '' AS RollNo,
+                    TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))) AS StudentName,
                     COALESCE(g.GroupName, '') AS GroupName,
                     COALESCE(ay.AcademicYearName, '') AS AcademicYear,
                     COALESCE(al.LevelName, '1st Year') AS AcademicLevel,
-                    COALESCE(sec.SectionName, '') AS Section
-                FROM Students s
-                LEFT JOIN StudentAdmissions sa ON sa.AdmissionNo = s.AdmissionNo
-                LEFT JOIN Groups g ON g.GroupId = COALESCE(s.GroupId, sa.GroupId)
-                LEFT JOIN AcademicYears ay ON ay.AcademicYearId = COALESCE(s.AcademicYearId, sa.AcademicYearId)
-                LEFT JOIN AcademicLevels al ON al.AcademicLevelId = COALESCE(s.AcademicLevelId, sa.AcademicLevelId)
-                LEFT JOIN Sections sec ON sec.SectionId = s.SectionId
-                WHERE s.IsActive = 1
-                  AND (s.Status IS NULL OR s.Status = '' OR s.Status NOT IN ('Cancelled', 'Deleted', 'Inactive', 'Withdrawn'))
-                  AND s.SectionId IS NOT NULL AND s.SectionId > 0
-                  AND s.RollNo IS NOT NULL AND TRIM(s.RollNo) != ''
-                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR s.CampusId = @p_CampusId)
-                  AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR s.BoardId = @p_BoardId)
-                  AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR s.AcademicYearId = @p_AcademicYearId)
-                ORDER BY CAST(REGEXP_REPLACE(COALESCE(NULLIF(s.AdmissionNo, ''), '0'), '[^0-9]', '') AS UNSIGNED) ASC, s.AdmissionNo ASC
+                    '' AS Section
+                FROM StudentAdmissions sa
+                LEFT JOIN Groups g ON g.GroupId = sa.GroupId
+                LEFT JOIN AcademicYears ay ON ay.AcademicYearId = sa.AcademicYearId
+                LEFT JOIN AcademicLevels al ON al.AcademicLevelId = sa.AcademicLevelId
+                WHERE sa.IsActive = 1
+                  AND sa.Status IN ('Approved', 'Request Approved', 'Admitted', 'Active', '')
+                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR sa.CampusId = @p_CampusId)
+                  AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR sa.BoardId = @p_BoardId)
+                  AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR sa.AcademicYearId = @p_AcademicYearId)
+                ORDER BY CAST(REGEXP_REPLACE(COALESCE(NULLIF(sa.AdmissionNo, ''), '0'), '[^0-9]', '') AS UNSIGNED) ASC, sa.AdmissionNo ASC
             ";
 
             var list = await connection.QueryAsync<StudentCertificateDropdownDto>(new CommandDefinition(
@@ -833,15 +829,12 @@ public class CertificateRepository : ICertificateRepository
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
-            if (row == null)
-                throw new InvalidOperationException($"Stored procedure sp_GenerateCertificate returned no data for AdmissionNo '{request.AdmissionNo}'.");
-
-            return MapDynamicToDto(row);
+            return row == null ? null : MapDynamicToDto(row);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[CertificateRepository.GenerateAsync] Error for {request.AdmissionNo}: {ex.Message}");
-            throw;
+            return null;
         }
     }
 

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { env } from "../config/env.js";
+import { env } from "@/config/env.js";
 import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
 
 let activeApiRequests = 0;

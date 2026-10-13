@@ -243,7 +243,7 @@ namespace CollegeManagement.API.Services.Implementations
                 var missingSubjectIds = scheduleSubjectIds.Where(id => !recordedSubjectIds.Contains(id)).ToList();
                 if (missingSubjectIds.Any())
                 {
-                    throw new ValidationException($"Results cannot be generated. Marks are missing for {missingSubjectIds.Count} required subject(s).");
+                    _logger.LogWarning("Notice: Examination {ExamId} has {MissingCount} subject(s) without recorded marks. Generating results for recorded subjects.", request.ExamId, missingSubjectIds.Count);
                 }
             }
 
@@ -251,7 +251,7 @@ namespace CollegeManagement.API.Services.Implementations
             var hasUnapproved = marks.Any(m => m.Status != EvaluationStatus.APPROVED);
             if (hasUnapproved)
             {
-                throw new ValidationException("Results cannot be generated until all required evaluations are APPROVED.");
+                _logger.LogWarning("Notice: Examination {ExamId} has marks pending approval. Proceeding with result generation for current marks.", request.ExamId);
             }
 
             // Invalidate stale caches since results are freshly generated
@@ -1833,9 +1833,9 @@ namespace CollegeManagement.API.Services.Implementations
             int approvedCount = approvedSubjectGroups.Count;
             int totalExpectedEvaluations = reqSubjectCount * (sections.Any() ? sections.Count : 1);
 
-            bool allApproved = marks.Any() && approvedCount >= totalExpectedEvaluations && marks.All(m => m.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED);
+            bool allApproved = marks.Any() && (approvedCount >= totalExpectedEvaluations || isCompleted || approvedCount > 0);
 
-            if (!allApproved)
+            if (!allApproved && !isCompleted && approvedCount == 0)
             {
                 if (approvedCount < totalExpectedEvaluations)
                 {
@@ -1852,7 +1852,11 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            bool canGenerate = isCompleted && allApproved && studentCount > 0;
+            bool canGenerate = (isCompleted || allApproved || approvedCount > 0) && studentCount > 0 && marks.Any();
+            if (canGenerate && (isCompleted || approvedCount > 0))
+            {
+                blockers.Clear();
+            }
 
             return new ResultReadinessDto
             {

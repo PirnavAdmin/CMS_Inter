@@ -9,13 +9,13 @@ import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
-import { getStudentResult } from "../services/studentAcademicService.js";
+import { getStudentResult, getStudentExaminations } from "../services/studentAcademicService.js";
 
 const unwrap = (input) => {
   let value = input;
   for (let i = 0; i < 4; i += 1) {
     const nested = value?.data ?? value?.Data ?? value?.result ?? value?.Result;
-    if (nested == null || nested === value) break;
+    if (nested == null || typeof nested !== "object" || nested === value) break;
     value = nested;
   }
   return value;
@@ -45,15 +45,25 @@ export default function StudentResults() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [examId, setExamId] = useState("");
+  const [exams, setExams] = useState([]);
+  useEffect(() => {
+    let active = true;
+    if (student?.studentId) getStudentExaminations(student).then((items) => {
+      if (active) setExams(items);
+    }).catch(() => { if (active) setExams([]); });
+    return () => { active = false; };
+  }, [student]);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
       setLoading(true);
       setError("");
+      setMemo(null);
       try {
         if (!student?.studentId) throw new Error("Student ID is unavailable.");
-        const data = await getStudentResult(student);
+        const data = await getStudentResult(student, examId || undefined);
         if (active) setMemo(unwrap(data));
       } catch (requestError) {
         if (active) setError(getApiErrorMessage(requestError));
@@ -61,7 +71,7 @@ export default function StudentResults() {
     };
     if (!profileLoading) load();
     return () => { active = false; };
-  }, [profileLoading, student]);
+  }, [profileLoading, student, examId]);
 
   const subjects = useMemo(() => rowsFrom(memo).filter((row) => read(row, "isPublished", "IsPublished") !== false).map((row) => {
     const theory = Number(read(row, "theoryMarks", "TheoryMarks", "theory", "Theory") || 0);
@@ -77,7 +87,7 @@ export default function StudentResults() {
   const publishedFlag = read(memo, "isPublished", "IsPublished");
   const published = publishedFlag != null
     ? publishedFlag === true
-    : /published/i.test(String(read(memo, "status", "Status", "resultStatus", "ResultStatus") || "")) || subjects.length > 0;
+    : /^published$/i.test(String(read(memo, "status", "Status", "resultStatus", "ResultStatus") || ""));
 
   const downloadMemo = async () => {
     if (!student?.studentId || downloading) return;
@@ -96,6 +106,10 @@ export default function StudentResults() {
   return <div className="sp-page">
     <StudentPageHeader title="Results" subtitle="Published academic results only." action={<button className="sp-btn" type="button" onClick={downloadMemo} disabled={!published || downloading}><Download size={16}/>{downloading ? " Downloading..." : " Download Marks Memo"}</button>}/>
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
+    <label className="sp-field">Examination<select value={examId} onChange={(event) => setExamId(event.target.value)}><option value="">Latest result</option>{exams.map((exam) => {
+      const id = exam.examinationId ?? exam.examId ?? exam.id;
+      return id ? <option key={id} value={id}>{exam.examName || exam.examinationName || exam.name || exam.examCode || id}</option> : null;
+    })}</select></label>
     {!error && !published ? <StudentEmptyState icon={Award} title="No published results" text="Your published examination results will appear here when available."/> : null}
     {published ? <>
       <div className="sp-summary-grid five"><StudentSummaryCard icon={Sigma} label="Total Marks" value={maximum}/><StudentSummaryCard icon={CheckCircle2} label="Obtained" value={obtained} tone="blue"/><StudentSummaryCard icon={Percent} label="Percentage" value={`${percentage}%`} tone="orange"/><StudentSummaryCard icon={Award} label="Grade" value={read(memo, "overallGrade", "OverallGrade", "grade", "Grade") || "—"} tone="purple"/><StudentSummaryCard icon={CheckCircle2} label="Result" value={read(memo, "finalResult", "FinalResult", "resultStatus", "ResultStatus", "result", "Result") || "—"} tone="green"/></div>

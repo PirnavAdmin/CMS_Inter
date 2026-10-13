@@ -324,7 +324,17 @@ namespace CollegeManagement.API.Services.Implementations
             var response = _mapper.Map<ExaminationResponse>(exam);
             var eligibleSubjects = await _examinationRepository.GetEligibleSubjectsForExamAsync(examinationId);
             response.TotalEligibleSubjects = eligibleSubjects.Count();
-            response.ScheduledSubjectsCount = exam.ExamSchedules?.Count(s => s.IsActive) ?? 0;
+
+            // De-duplicate schedules by SubjectId, keeping latest schedule
+            if (response.Schedules != null && response.Schedules.Any())
+            {
+                response.Schedules = response.Schedules
+                    .GroupBy(s => s.SubjectId)
+                    .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
+                    .ToList();
+            }
+
+            response.ScheduledSubjectsCount = response.Schedules?.Count ?? 0;
 
             // Populate SelectedSubjectIds from ExaminationSubjects or schedules
             var persistedSubIds = await _examinationRepository.GetExaminationSubjectIdsAsync(examinationId);
@@ -416,6 +426,15 @@ namespace CollegeManagement.API.Services.Implementations
 
             foreach (var r in results)
             {
+                if (r.Schedules != null && r.Schedules.Any())
+                {
+                    r.Schedules = r.Schedules
+                        .GroupBy(s => s.SubjectId)
+                        .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
+                        .ToList();
+                    r.ScheduledSubjectsCount = r.Schedules.Count;
+                }
+
                 if (r.Status != "CANCELLED" && r.Status != "DRAFT")
                 {
                     var authoritative = Helpers.ExaminationStatusHelper.CalculateAuthoritativeStatusForResponse(
@@ -804,9 +823,12 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     if (s.SubjectId == request.SubjectId)
                     {
-                        _logger.LogWarning("Duplicate schedule detected: Subject ID {SubId} already scheduled for Exam {ExamId} on {Date}",
-                            request.SubjectId, exam.ExamId, s.ExamDate);
-                        throw new ValidationException($"Subject '{subject.SubjectName}' is already scheduled for examination '{exam.ExamName}' on {s.ExamDate:yyyy-MM-dd}.");
+                        _logger.LogInformation("Re-scheduling subject ID {SubId} for Exam {ExamId}. Deactivating prior schedule {SchedId}.",
+                            request.SubjectId, exam.ExamId, s.ExamScheduleId);
+                        s.IsActive = false;
+                        s.UpdatedAt = DateTime.UtcNow;
+                        await _examinationRepository.UpdateExamScheduleAsync(s);
+                        continue;
                     }
 
                     if (s.ExamDate == request.ExamDate && !(request.EndTime <= s.StartTime || request.StartTime >= s.EndTime))

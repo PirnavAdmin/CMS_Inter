@@ -288,40 +288,9 @@ async function excelPreview(blob) {
   const workbook = XLSX.read(await blob.arrayBuffer(), { type: "array" });
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!firstSheet) return { rows: [], columns: [] };
-
-  const rawMatrix = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
-  if (!rawMatrix || rawMatrix.length === 0) return { rows: [], columns: [] };
-
-  // Detect the true table header row (e.g. S.No, Rank, Metric Name, Admission No, etc.)
-  let headerRowIdx = rawMatrix.findIndex((r) =>
-    Array.isArray(r) && r.some((c) => {
-      const s = String(c).trim();
-      return s === "S.No" || s === "Rank" || s === "Metric Name" || s === "Admission No" || s === "Receipt / ID" || s === "Exam Code";
-    })
-  );
-
-  if (headerRowIdx === -1) {
-    headerRowIdx = rawMatrix.findIndex((r) => Array.isArray(r) && r.filter((c) => String(c).trim() !== "").length >= 3);
-  }
-
-  if (headerRowIdx === -1) {
-    const fallbackRows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
-    const fallbackCols = [...new Set(fallbackRows.flatMap((r) => Object.keys(r)))];
-    return { rows: fallbackRows, columns: fallbackCols };
-  }
-
-  const headerRow = rawMatrix[headerRowIdx].map((c) => String(c).trim()).filter(Boolean);
-  const dataRows = rawMatrix.slice(headerRowIdx + 1).filter((r) => Array.isArray(r) && r.some((c) => String(c).trim() !== ""));
-
-  const rows = dataRows.map((r) => {
-    const obj = {};
-    headerRow.forEach((col, idx) => {
-      obj[col] = r[idx] !== undefined && String(r[idx]).trim() !== "" ? String(r[idx]) : "—";
-    });
-    return obj;
-  });
-
-  return { rows, columns: headerRow };
+  const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+  const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  return { rows, columns };
 }
 
 export default function ReportsPage() {

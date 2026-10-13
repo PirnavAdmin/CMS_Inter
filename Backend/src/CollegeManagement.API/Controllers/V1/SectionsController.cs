@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Sections;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -15,6 +16,7 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v{version:apiVersion}/sections")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("section-room")]
     public class SectionsController : ControllerBase
     {
         private readonly ISectionService _sectionService;

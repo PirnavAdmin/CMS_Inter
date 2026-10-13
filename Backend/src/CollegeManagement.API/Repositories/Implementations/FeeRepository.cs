@@ -116,85 +116,132 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeStructureResponse?> CreateFeeStructureAsync(
         CreateFeeStructureRequest request)
     {
-        var c = Connection();
-        c.Open();
-        using var tx = c.BeginTransaction();
+        var group = await _db.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.GroupId == request.GroupId);
+        var program = request.ProgramId.HasValue ? await _db.Programs.AsNoTracking().FirstOrDefaultAsync(p => p.ProgramId == request.ProgramId.Value) : null;
+        string baseName = program != null ? $"{group?.GroupName ?? "Group"} ({program.ProgramName})" : (group?.GroupName ?? $"Group {request.GroupId}");
 
-        try
+        string yearMode = request.YearFeeMode?.Trim().ToLowerInvariant() ?? "";
+        bool isMultiYear = yearMode == "same" || yearMode == "different";
+
+        // Step 1: Create 1st Year Structure
+        var firstYearEntity = new FeeStructure
         {
-            var created =
-                await c.QueryFirstOrDefaultAsync<FeeStructureResponse>(
-                    "sp_CreateFeeStructure",
-                    new
-                    {
-                        p_CampusId = request.CampusId,
-                        p_BoardId = request.BoardId,
-                        p_AcademicYearId = request.AcademicYearId,
-                        p_GroupId = request.GroupId,
-                        p_ProgramId = request.ProgramId
-                    },
-                    tx,
-                    commandType: CommandType.StoredProcedure);
+            CampusId = request.CampusId,
+            BoardId = request.BoardId,
+            AcademicYearId = request.AcademicYearId,
+            AcademicLevelId = request.AcademicLevelId ?? 1,
+            GroupId = request.GroupId,
+            ProgramId = request.ProgramId,
+            StructureName = isMultiYear ? $"{baseName} - 1st Year" : $"Fee Structure {baseName}",
+            YearFeeMode = request.YearFeeMode,
+            IncrementType = request.IncrementType,
+            IncrementValue = request.IncrementValue,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.FeeStructures.Add(firstYearEntity);
+        await _db.SaveChangesAsync();
 
-            if (created == null)
+        foreach (var item in request.Items)
+        {
+            _db.FeeStructureComponents.Add(new FeeStructureComponent
             {
-                // Fallback to direct EF insertion
-                var entity = new FeeStructure
-                {
-                    CampusId = request.CampusId,
-                    BoardId = request.BoardId,
-                    AcademicYearId = request.AcademicYearId,
-                    AcademicLevelId = 1,
-                    GroupId = request.GroupId,
-                    ProgramId = request.ProgramId,
-                    StructureName = $"Fee Structure {request.GroupId}-{request.AcademicYearId}",
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _db.FeeStructures.Add(entity);
-                await _db.SaveChangesAsync();
+                FeeStructureId = firstYearEntity.FeeStructureId,
+                FeeTypeId = item.FeeTypeId,
+                Rule = item.Rule,
+                Amount = item.Amount,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+        await _db.SaveChangesAsync();
 
-                foreach (var item in request.Items)
+        decimal secondYearTotal = 0;
+
+        // Step 2: If year configuration is enabled ("same" or "different"), generate 2nd Year Structure
+        if (isMultiYear)
+        {
+            var secondYearEntity = new FeeStructure
+            {
+                CampusId = request.CampusId,
+                BoardId = request.BoardId,
+                AcademicYearId = request.AcademicYearId,
+                AcademicLevelId = 2, // 2nd Year
+                GroupId = request.GroupId,
+                ProgramId = request.ProgramId,
+                StructureName = $"{baseName} - 2nd Year",
+                YearFeeMode = request.YearFeeMode,
+                IncrementType = request.IncrementType,
+                IncrementValue = request.IncrementValue,
+                PairedStructureId = firstYearEntity.FeeStructureId,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.FeeStructures.Add(secondYearEntity);
+            await _db.SaveChangesAsync();
+
+            firstYearEntity.PairedStructureId = secondYearEntity.FeeStructureId;
+
+            var feeTypeIds = request.Items.Select(i => i.FeeTypeId).Distinct().ToList();
+            var feeTypesDict = await _db.FeeTypes.AsNoTracking().Where(ft => feeTypeIds.Contains(ft.FeeTypeId)).ToDictionaryAsync(ft => ft.FeeTypeId);
+
+            decimal incrementRupees = 0;
+            if (yearMode == "different" && request.IncrementValue.HasValue && request.IncrementValue.Value > 0)
+            {
+                decimal firstYearTotal = request.Items.Sum(i => i.Amount);
+                if (string.Equals(request.IncrementType, "percentage", StringComparison.OrdinalIgnoreCase))
                 {
-                    _db.FeeStructureComponents.Add(new FeeStructureComponent
-                    {
-                        FeeStructureId = entity.FeeStructureId,
-                        FeeTypeId = item.FeeTypeId,
-                        Rule = item.Rule,
-                        Amount = item.Amount,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    });
+                    incrementRupees = Math.Round((firstYearTotal * request.IncrementValue.Value) / 100m, 2);
                 }
-                await _db.SaveChangesAsync();
-                return await GetFeeStructureByIdAsync(entity.FeeStructureId);
+                else
+                {
+                    incrementRupees = request.IncrementValue.Value;
+                }
             }
+
+            var tuitionItem = request.Items.FirstOrDefault(i => feeTypesDict.TryGetValue(i.FeeTypeId, out var ft) &&
+                (ft.FeeTypeName.Contains("Tuition", StringComparison.OrdinalIgnoreCase) || ft.FeeTypeName.Contains("Course", StringComparison.OrdinalIgnoreCase)))
+                ?? request.Items.OrderByDescending(i => i.Amount).FirstOrDefault();
 
             foreach (var item in request.Items)
             {
-                await c.ExecuteAsync(
-                    "sp_AddFeeStructureItem",
-                    new
+                feeTypesDict.TryGetValue(item.FeeTypeId, out var ft);
+                bool isAdmission = ft != null && (string.Equals(ft.Category, "Admission", StringComparison.OrdinalIgnoreCase) || ft.FeeTypeName.Contains("Admission", StringComparison.OrdinalIgnoreCase));
+
+                decimal itemAmount = item.Amount;
+                if (yearMode == "different" && isAdmission)
+                {
+                    itemAmount = 0;
+                }
+                else if (item == tuitionItem && incrementRupees > 0)
+                {
+                    itemAmount += incrementRupees;
+                }
+
+                if (itemAmount > 0)
+                {
+                    _db.FeeStructureComponents.Add(new FeeStructureComponent
                     {
-                        p_FeeStructureId = created.FeeStructureId,
-                        p_FeeTypeId = item.FeeTypeId,
-                        p_Rule = item.Rule,
-                        p_Amount = item.Amount
-                    },
-                    tx,
-                    commandType: CommandType.StoredProcedure);
+                        FeeStructureId = secondYearEntity.FeeStructureId,
+                        FeeTypeId = item.FeeTypeId,
+                        Rule = item.Rule,
+                        Amount = itemAmount,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                    secondYearTotal += itemAmount;
+                }
             }
 
-            tx.Commit();
+            await _db.SaveChangesAsync();
+        }
 
-            return await GetFeeStructureByIdAsync(
-                created.FeeStructureId);
-        }
-        catch
+        var response = await GetFeeStructureByIdAsync(firstYearEntity.FeeStructureId);
+        if (response != null && isMultiYear)
         {
-            tx.Rollback();
-            throw;
+            response.SecondYearTotalAmount = secondYearTotal;
         }
+        return response;
     }
 
 
@@ -207,10 +254,12 @@ public class FeeRepository : IFeeRepository
                 .AsNoTracking()
                 .Include(f => f.Board)
                 .Include(f => f.AcademicYear)
+                .Include(f => f.AcademicLevel)
                 .Include(f => f.Group)
                 .Include(f => f.Program)
                 .Include(f => f.Campus)
                 .Include(f => f.Components)
+                    .ThenInclude(c => c.FeeType)
                 .Where(f => f.IsActive);
 
             if (campusId.HasValue && campusId.Value > 0)
@@ -233,6 +282,12 @@ public class FeeRepository : IFeeRepository
                 ProgramId = f.ProgramId,
                 ProgramName = f.Program?.ProgramName,
                 StructureName = f.StructureName,
+                AcademicLevelId = f.AcademicLevelId,
+                AcademicLevelName = f.AcademicLevel?.LevelName ?? (f.AcademicLevelId == 2 ? "2nd Year" : "1st Year"),
+                YearFeeMode = f.YearFeeMode,
+                IncrementType = f.IncrementType,
+                IncrementValue = f.IncrementValue,
+                PairedStructureId = f.PairedStructureId,
                 TotalAmount = f.Components.Where(c => c.IsActive).Sum(c => c.Amount),
                 IsActive = f.IsActive,
                 CreatedAt = f.CreatedAt,
@@ -242,6 +297,8 @@ public class FeeRepository : IFeeRepository
                     FeeStructureComponentId = c.FeeStructureComponentId,
                     FeeStructureId = c.FeeStructureId,
                     FeeTypeId = c.FeeTypeId,
+                    FeeTypeName = c.FeeType?.FeeTypeName ?? string.Empty,
+                    Category = c.FeeType?.Category ?? string.Empty,
                     Rule = c.Rule,
                     Amount = c.Amount,
                     IsActive = c.IsActive
@@ -287,6 +344,58 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeStructureResponse?> GetFeeStructureByIdAsync(
         int id)
     {
+        var f = await _db.FeeStructures
+            .AsNoTracking()
+            .Include(x => x.Board)
+            .Include(x => x.AcademicYear)
+            .Include(x => x.AcademicLevel)
+            .Include(x => x.Group)
+            .Include(x => x.Program)
+            .Include(x => x.Campus)
+            .Include(x => x.Components)
+                .ThenInclude(c => c.FeeType)
+            .FirstOrDefaultAsync(x => x.FeeStructureId == id);
+
+        if (f != null)
+        {
+            return new FeeStructureResponse
+            {
+                FeeStructureId = f.FeeStructureId,
+                CampusId = f.CampusId,
+                CampusName = f.Campus != null ? f.Campus.CampusName : (f.CampusId.HasValue ? $"Campus {f.CampusId}" : "All Campuses"),
+                BoardId = f.BoardId,
+                BoardName = f.Board?.BoardName ?? string.Empty,
+                AcademicYearId = f.AcademicYearId,
+                AcademicYearName = f.AcademicYear?.AcademicYearName ?? string.Empty,
+                GroupId = f.GroupId,
+                GroupName = f.Group?.GroupName ?? string.Empty,
+                ProgramId = f.ProgramId,
+                ProgramName = f.Program?.ProgramName,
+                StructureName = f.StructureName,
+                AcademicLevelId = f.AcademicLevelId,
+                AcademicLevelName = f.AcademicLevel?.LevelName ?? (f.AcademicLevelId == 2 ? "2nd Year" : "1st Year"),
+                YearFeeMode = f.YearFeeMode,
+                IncrementType = f.IncrementType,
+                IncrementValue = f.IncrementValue,
+                PairedStructureId = f.PairedStructureId,
+                TotalAmount = f.Components.Where(c => c.IsActive).Sum(c => c.Amount),
+                IsActive = f.IsActive,
+                CreatedAt = f.CreatedAt,
+                UpdatedAt = f.UpdatedAt,
+                Items = f.Components.Where(c => c.IsActive).Select(c => new FeeStructureItemResponse
+                {
+                    FeeStructureComponentId = c.FeeStructureComponentId,
+                    FeeStructureId = c.FeeStructureId,
+                    FeeTypeId = c.FeeTypeId,
+                    FeeTypeName = c.FeeType?.FeeTypeName ?? string.Empty,
+                    Category = c.FeeType?.Category ?? string.Empty,
+                    Rule = c.Rule,
+                    Amount = c.Amount,
+                    IsActive = c.IsActive
+                }).ToList()
+            };
+        }
+
         var c = Connection();
 
         using var multi = await c.QueryMultipleAsync(

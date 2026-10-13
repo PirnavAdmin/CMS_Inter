@@ -16,6 +16,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     /// <summary>
@@ -26,6 +28,7 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v{version:apiVersion}/results")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("results")]
     public class ResultController : ControllerBase
     {
         private readonly IResultService _resultService;

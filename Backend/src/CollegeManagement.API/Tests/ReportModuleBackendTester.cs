@@ -46,15 +46,13 @@ public class ReportModuleBackendTester
                         IN p_GroupId INT,
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME,
-                        IN p_CampusId INT
+                        IN p_ToDate DATETIME
                     )
                     BEGIN
                         -- 1.1 Overview 10 Metrics Summary Card
                         SELECT
                             (SELECT COUNT(*) FROM `StudentAdmissions` sa 
                              WHERE sa.`IsActive` = 1 AND sa.`IsRejected` = 0 AND sa.`Status` != 'Rejected'
-                               AND (p_CampusId IS NULL OR sa.`CampusId` = p_CampusId)
                                AND (p_BoardId IS NULL OR sa.`BoardId` = p_BoardId) 
                                AND (p_AcademicYearId IS NULL OR sa.`AcademicYearId` = p_AcademicYearId) 
                                AND (p_AcademicLevelId IS NULL OR sa.`AcademicLevelId` = p_AcademicLevelId)
@@ -68,14 +66,12 @@ public class ReportModuleBackendTester
                                 COALESCE(
                                     (SELECT SUM(a.`Status` = 1) * 100.0 / NULLIF(COUNT(*), 0)
                                      FROM `Attendances` a 
-                                     LEFT JOIN `Students` s ON s.`StudentId` = a.`StudentId`
                                      WHERE a.`IsActive` = 1 
-                                       AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
-                                       AND (p_BoardId IS NULL OR a.`BoardId` = p_BoardId OR (a.`BoardId` IS NULL AND s.`BoardId` = p_BoardId)) 
-                                       AND (p_AcademicYearId IS NULL OR a.`AcademicYearId` = p_AcademicYearId OR (a.`AcademicYearId` IS NULL AND s.`AcademicYearId` = p_AcademicYearId)) 
-                                       AND (p_AcademicLevelId IS NULL OR a.`AcademicLevelId` = p_AcademicLevelId OR (a.`AcademicLevelId` IS NULL AND s.`AcademicLevelId` = p_AcademicLevelId)) 
-                                       AND (p_GroupId IS NULL OR a.`GroupId` = p_GroupId OR (a.`GroupId` IS NULL AND s.`GroupId` = p_GroupId)) 
-                                       AND (p_SectionId IS NULL OR a.`SectionId` = p_SectionId OR (a.`SectionId` IS NULL AND s.`SectionId` = p_SectionId)) 
+                                       AND (p_BoardId IS NULL OR a.`BoardId` = p_BoardId) 
+                                       AND (p_AcademicYearId IS NULL OR a.`AcademicYearId` = p_AcademicYearId) 
+                                       AND (p_AcademicLevelId IS NULL OR a.`AcademicLevelId` = p_AcademicLevelId) 
+                                       AND (p_GroupId IS NULL OR a.`GroupId` = p_GroupId) 
+                                       AND (p_SectionId IS NULL OR a.`SectionId` = p_SectionId) 
                                        AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate) 
                                        AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate)), 
                                     0.0
@@ -87,7 +83,6 @@ public class ReportModuleBackendTester
                                  FROM `FeePayments` fp 
                                  LEFT JOIN `Students` s ON s.`StudentId` = fp.`StudentId` 
                                  WHERE fp.`Status` NOT IN ('Cancelled', 'Failed')
-                                   AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
                                    AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
                                    AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
                                    AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
@@ -103,7 +98,6 @@ public class ReportModuleBackendTester
                                  FROM `StudentFees` sf 
                                  LEFT JOIN `Students` s ON s.`StudentId` = sf.`StudentId` 
                                  WHERE sf.`BalanceAmount` > 0 AND sf.`Status` != 'Cancelled'
-                                   AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
                                    AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
                                    AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
                                    AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
@@ -115,7 +109,6 @@ public class ReportModuleBackendTester
                             (SELECT COUNT(*) 
                              FROM `Examinations` e 
                              WHERE e.`IsActive` = 1 
-                               AND (p_CampusId IS NULL OR e.`CampusId` = p_CampusId)
                                AND (p_BoardId IS NULL OR e.`BoardId` = p_BoardId) 
                                AND (p_AcademicYearId IS NULL OR e.`AcademicYearId` = p_AcademicYearId) 
                                AND (p_AcademicLevelId IS NULL OR e.`AcademicLevelId` = p_AcademicLevelId)
@@ -128,7 +121,6 @@ public class ReportModuleBackendTester
                              FROM `Results` r 
                              LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
                              WHERE r.`IsPublished` = 1 
-                               AND (p_CampusId IS NULL OR r.`CampusId` = p_CampusId OR s.`CampusId` = p_CampusId)
                                AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
                                AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
                                AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
@@ -139,13 +131,10 @@ public class ReportModuleBackendTester
                             ) AS `ResultsPublished`,
 
                             COALESCE(
-                                (SELECT ROUND(SUM(TIMESTAMPDIFF(MINUTE, p.`StartTime`, p.`EndTime`) / 60.0) / NULLIF(COUNT(DISTINCT tt.`StaffId`), 0), 1) 
+                                (SELECT ROUND(SUM(TIMESTAMPDIFF(MINUTE, p.`StartTime`, p.`EndTime`) / 60.0), 1) 
                                  FROM `Timetables` tt 
                                  JOIN `Periods` p ON p.`PeriodId` = tt.`PeriodId`
-                                 LEFT JOIN `Sections` sec ON sec.`SectionId` = tt.`SectionId`
-                                 LEFT JOIN `Staffs` st ON st.`Id` = tt.`StaffId`
                                  WHERE tt.`IsPublished` = 1 AND p.`IsBreak` = 0
-                                   AND (p_CampusId IS NULL OR tt.`CampusId` = p_CampusId OR sec.`CampusId` = p_CampusId OR st.`CampusId` = p_CampusId)
                                    AND (p_BoardId IS NULL OR tt.`BoardId` = p_BoardId) 
                                    AND (p_AcademicYearId IS NULL OR tt.`AcademicYearId` = p_AcademicYearId) 
                                    AND (p_AcademicLevelId IS NULL OR tt.`AcademicLevelId` = p_AcademicLevelId)
@@ -157,7 +146,6 @@ public class ReportModuleBackendTester
                             (SELECT COUNT(*) 
                              FROM `Students` s 
                              WHERE s.`IsActive` = 1 
-                               AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId) 
                                AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
                                AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
                                AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)

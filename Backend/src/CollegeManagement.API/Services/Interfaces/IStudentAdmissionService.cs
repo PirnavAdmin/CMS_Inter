@@ -21,7 +21,6 @@ namespace CollegeManagement.API.Services.Interfaces
         //generate//
         Task<string?> GetAdmissionNumberPreviewAsync(int? campusId = null, int? boardId = null, int? academicYearId = null, bool isReferral = false);
         Task<string?> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null, bool isReferral = false);
-        Task<string?> AllocateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
 
 
         // Verify / Approve / Reject

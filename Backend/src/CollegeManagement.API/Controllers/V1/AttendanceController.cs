@@ -20,6 +20,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/attendance")]
     [Authorize]
+    [RequirePermission("attendance")]
     [Produces("application/json")]
     public class AttendanceController : ControllerBase
     {
@@ -251,7 +252,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Saves or updates student attendance records in bulk for Admin (session-based).
         /// </summary>
         [HttpPost("admin/bulk-save")]
-        [Authorize(Roles = "Super Admin,Admin,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -265,7 +266,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("defaulters")]
-        [Authorize(Roles = "Super Admin,Admin,HOD,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher")]
         [ProducesResponseType(typeof(IEnumerable<AttendanceDefaulterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -372,7 +373,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="sessionId">The session identifier.</param>
         /// <returns>A success indicator.</returns>
         [HttpPost("session/{sessionId}/unlock")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -480,7 +481,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         private bool IsCurrentUserAdmin()
         {
-            return User.IsInRole("Super Admin") || User.IsInRole("Admin");
+            return User.IsInRole("Super Admin") || User.IsInRole("Admin") || User.IsInRole("Principal");
         }
 
         private int GetCurrentUserId()
@@ -507,7 +508,7 @@ namespace CollegeManagement.API.Controllers.V1
             return userName;
         }
         [HttpPost("audit")]
-        [Authorize(Roles = "Super Admin,Admin,HOD")]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal")]
         public async Task<IActionResult> GetAuditHistory([FromBody] CollegeManagement.API.DTOs.Attendance.Requests.AuditHistorySearchRequest request)
         {
             var result = await _attendanceService.GetAuditHistoryAsync(request);

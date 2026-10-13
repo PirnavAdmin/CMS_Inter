@@ -1034,32 +1034,6 @@ namespace CollegeManagement.API.Services.Implementations
                 staff.ProfileStatus = "NeedsCorrection";
                 staff.CorrectionRequestedAt = DateTime.UtcNow;
                 staff.CorrectionNotes = dto.CorrectionNotes?.Trim();
-
-                if (!string.IsNullOrWhiteSpace(staff.Email))
-                {
-                    try
-                    {
-                        var portalUrl = _configuration["InstitutionSettings:PortalUrl"] ?? _configuration["StudentPortal:LoginUrl"] ?? "http://localhost:5173";
-                        var institutionName = _configuration["InstitutionSettings:InstitutionName"] ?? "College Management System";
-                        var emailBody = StaffCredentialHelper.BuildCorrectionRequestedEmailHtml(
-                            $"{staff.FirstName} {staff.LastName}".Trim(),
-                            staff.EmployeeId,
-                            staff.CorrectionNotes ?? string.Empty,
-                            portalUrl,
-                            institutionName);
-
-                        await _emailService.SendEmailAsync(
-                            staff.Email,
-                            $"Profile Revision Required - {institutionName}",
-                            emailBody);
-
-                        _logger.LogInformation("Sent profile correction email to {Email} for StaffId {StaffId}", staff.Email, staff.Id);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to send profile correction email to {Email} for StaffId {StaffId}", staff.Email, staff.Id);
-                    }
-                }
             }
             else
             {

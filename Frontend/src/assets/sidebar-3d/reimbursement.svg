@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <!-- Paper Bill Gradients -->
+    <linearGradient id="receiptPaper" x1="18" y1="10" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.6" stop-color="#F7FAF0"/>
+      <stop offset="1" stop-color="#E2EDC8"/>
+    </linearGradient>
+    <linearGradient id="receiptEdge" x1="16" y1="46" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CBDDA7"/>
+      <stop offset="1" stop-color="#9CB370"/>
+    </linearGradient>
+    <linearGradient id="receiptHeader" x1="16" y1="9" x2="48" y2="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9BBF25"/>
+      <stop offset="1" stop-color="#678500"/>
+    </linearGradient>
+
+    <!-- Gold Rupee Coin Gradients -->
+    <linearGradient id="coinFace" x1="26" y1="28" x2="52" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF5B8"/>
+      <stop offset="0.5" stop-color="#FCD036"/>
+      <stop offset="1" stop-color="#DF9515"/>
+    </linearGradient>
+    <linearGradient id="coinRim" x1="26" y1="28" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5B82A"/>
+      <stop offset="1" stop-color="#9C5B00"/>
+    </linearGradient>
+    <linearGradient id="coinDepth" x1="26" y1="44" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D98008"/>
+      <stop offset="1" stop-color="#733E00"/>
+    </linearGradient>
+
+    <!-- Approved Badge Gradients -->
+    <linearGradient id="badgeGrad" x1="8" y1="22" x2="22" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4ADE80"/>
+      <stop offset="1" stop-color="#15803D"/>
+    </linearGradient>
+
+    <!-- 3D Volumetric Soft Drop Shadow -->
+    <filter id="reimbShadow" x="4" y="6" width="56" height="54" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="1.5" dy="3.5" stdDeviation="2.5" flood-color="#1F3316" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#reimbShadow)">
+    <!-- 3D Receipt Base Paper (Angled Isometric) -->
+    <!-- Side 3D extrusion / paper thickness -->
+    <path d="M14 14.5 C14 11.5 16.5 9 19.5 9 H42.5 C45.5 9 48 11.5 48 14.5 V48 L44.5 45.5 L41 48 L37.5 45.5 L34 48 L30.5 45.5 L27 48 L23.5 45.5 L20 48 L16.5 45.5 L14 47.5 Z"
+          fill="url(#receiptEdge)"/>
+    
+    <!-- Front Face of Receipt -->
+    <path d="M14 13.5 C14 10.8 16.2 8.5 19 8.5 H41 C43.8 8.5 46 10.8 46 13.5 V46 L43 44 L40 46 L37 44 L34 46 L31 44 L28 46 L25 44 L22 46 L19 44 L16 46 L14 44.5 Z"
+          fill="url(#receiptPaper)" stroke="#819C34" stroke-width="1.2"/>
+
+    <!-- Green Header Banner -->
+    <path d="M14 13.5 C14 10.8 16.2 8.5 19 8.5 H41 C43.8 8.5 46 10.8 46 13.5 V18.5 H14 Z"
+          fill="url(#receiptHeader)"/>
+    <!-- Banner Highlight Clip -->
+    <rect x="25" y="6.5" width="10" height="4.5" rx="2" fill="#E8F4BA" stroke="#5D7900" stroke-width="1"/>
+
+    <!-- Receipt Lines / Text Rows -->
+    <line x1="19" y1="23" x2="31" y2="23" stroke="#8CA63E" stroke-width="2.2" stroke-linecap="round"/>
+    <line x1="19" y1="28" x2="35" y2="28" stroke="#ADC468" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="19" y1="33" x2="27" y2="33" stroke="#ADC468" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="19" y1="38" x2="25" y2="38" stroke="#C4D78E" stroke-width="1.8" stroke-linecap="round"/>
+
+    <!-- Small Receipt Stamp / Seal -->
+    <rect x="33" y="32" width="10" height="7" rx="1.5" fill="#EBF4D3" stroke="#829D2F" stroke-width="1" stroke-dasharray="1.5 1"/>
+  </g>
+
+  <!-- 3D Gold Rupee Coin Overlay (Front Right) -->
+  <g>
+    <!-- Coin 3D Bottom Depth Extrusion -->
+    <path d="M28 42 C28 49 34 54.5 41.5 54.5 C49 54.5 55 49 55 42 V45 C55 52 49 57.5 41.5 57.5 C34 57.5 28 52 28 45 Z"
+          fill="url(#coinDepth)"/>
+
+    <!-- Coin Outer Rim -->
+    <circle cx="41.5" cy="42" r="13.5" fill="url(#coinRim)" stroke="#8C4D00" stroke-width="1.2"/>
+
+    <!-- Coin Inner Inset Face -->
+    <circle cx="41.5" cy="42" r="11" fill="url(#coinFace)"/>
+
+    <!-- Inner Rim Highlight -->
+    <circle cx="41.5" cy="42" r="10.2" fill="none" stroke="#FFF7C9" stroke-width="0.8" opacity="0.8"/>
+
+    <!-- Embossed Indian Rupee Symbol (₹) in 3D -->
+    <!-- Shadow for Rupee -->
+    <path d="M37 36 H46 M37 39 H44 M37 36 V44 C39.5 44 42.5 43.5 42.5 40.5 M40 43 L45.5 48.5"
+          stroke="#995200" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(0.5, 0.5)"/>
+    <!-- Highlight Rupee -->
+    <path d="M37 36 H46 M37 39 H44 M37 36 V44 C39.5 44 42.5 43.5 42.5 40.5 M40 43 L45.5 48.5"
+          stroke="#522900" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M37 35.6 H46 M37 38.6 H43.8"
+          stroke="#FFFADC" stroke-width="0.9" stroke-linecap="round"/>
+  </g>
+
+  <!-- Floating Green Approved Check Badge (Top Left Corner) -->
+  <g>
+    <!-- 3D Badge Depth -->
+    <circle cx="13" cy="27.5" r="5.5" fill="#0F5128"/>
+    <!-- Badge Face -->
+    <circle cx="13" cy="26" r="5.5" fill="url(#badgeGrad)" stroke="#14532D" stroke-width="0.9"/>
+    <!-- White Checkmark -->
+    <path d="M10.8 26 L12.3 27.5 L15.5 24.2" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
