@@ -13,7 +13,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/leave-categories")]
     [EnableCors("AllowFrontend")]
-    [Authorize]
+    [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD,Driver,Bus Driver")]
     [Produces("application/json")]
     public class LeaveCategoryController : ControllerBase
     {
