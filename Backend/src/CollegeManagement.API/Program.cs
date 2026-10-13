@@ -212,7 +212,6 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
-builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
 #endregion
 
 #region Services
@@ -247,7 +246,6 @@ builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
 builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
-builder.Services.AddScoped<IStaffReimbursementService, StaffReimbursementService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IStudentAdmissionService, StudentAdmissionService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
@@ -559,8 +557,9 @@ app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifi
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
-using (var scope = app.Services.CreateScope())
+try
 {
+    using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var allRollNoConfigs = dbContext.NumberSeriesConfigurations
         .Where(n => n.SeriesCode.StartsWith("ROLL_NO"))
@@ -581,6 +580,11 @@ using (var scope = app.Services.CreateScope())
     {
         dbContext.SaveChanges();
     }
+
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Failed to run startup NumberSeriesConfigurations migration check.");
 }
 
 app.Run();

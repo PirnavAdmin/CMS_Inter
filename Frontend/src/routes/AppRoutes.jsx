@@ -33,7 +33,6 @@ import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
-import AdminReimbursementsPage from "@/components/pages/AdminReimbursementsPage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
@@ -163,7 +162,6 @@ export default function AppRoutes() {
         <Route path="/dashboard/staff/:id/edit" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id/review" element={<StaffManagementPage />} />
         <Route path="/dashboard/staff/:id" element={<StaffManagementPage />} />
-        <Route path="/dashboard/reimbursements" element={<AdminReimbursementsPage />} />
         <Route path="/dashboard/departments" element={<DepartmentManagementPage />} />
         <Route path="/dashboard/departments/add" element={<MasterFormPage kind="department" />} />
         <Route path="/dashboard/departments/:id/edit" element={<MasterFormPage kind="department" />} />

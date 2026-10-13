@@ -263,6 +263,143 @@
   margin-top: 2px;
 }
 
+/* Prevent Edge/IE native password reveal icon from causing duplicate eye icons */
+.faculty-settings-password-wrap input::-ms-reveal,
+.faculty-settings-password-wrap input::-ms-clear,
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.faculty-settings-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.faculty-settings-password-wrap input {
+  width: 100%;
+  padding-right: 38px;
+}
+
+.faculty-settings-password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--cms-muted, #64748b);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.faculty-settings-password-toggle:hover {
+  color: var(--cms-text, #1e293b);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .faculty-settings-password-toggle,
+.dark-theme .faculty-settings-password-toggle {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .faculty-settings-password-toggle:hover,
+.dark-theme .faculty-settings-password-toggle:hover {
+  color: var(--cms-text, #f2f3ee) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Password Strength & Criteria Indicators */
+.faculty-password-strength-box {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.faculty-password-strength-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: var(--cms-border, #e2e8f0);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .faculty-password-strength-bar-bg,
+.dark-theme .faculty-password-strength-bar-bg {
+  background: #2b3028 !important;
+}
+
+.faculty-password-strength-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease, background-color 0.25s ease;
+}
+
+.faculty-password-strength-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+}
+
+[data-theme="dark"] .faculty-password-strength-label,
+.dark-theme .faculty-password-strength-label {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+.faculty-password-criteria-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.faculty-password-criteria-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--cms-subtle, #f1f5f9);
+  color: var(--cms-muted, #64748b);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  transition: all 0.2s ease;
+}
+
+.faculty-password-criteria-item.met {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  border-color: rgba(34, 197, 94, 0.35);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .faculty-password-criteria-item,
+.dark-theme .faculty-password-criteria-item {
+  background: #1c221a !important;
+  border-color: #2e3828 !important;
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .faculty-password-criteria-item.met,
+.dark-theme .faculty-password-criteria-item.met {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #4ade80 !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+}
+
 .faculty-settings-switch-row {
   display: flex;
   align-items: center;

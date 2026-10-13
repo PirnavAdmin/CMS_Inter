@@ -44,7 +44,6 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
 import { loadCachedDepartments, loadCachedDesignations } from "./DepartmentManagementPage.jsx";
 import * as XLSX from "xlsx";
-import AdminReimbursementsPage from "./AdminReimbursementsPage.jsx";
 import "./StaffManagementPage.css";
 import totalStaffIcon from "@/assets/dashboard-3d/add-staff.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -4024,7 +4023,6 @@ function StaffList({ records = [], setRecords, forced }) {
                 ["Teaching", "Teaching Staff"],
                 ["Non-Teaching", "Non-Teaching Staff"],
                 ["Pending", "Pending Completion"],
-                ["Reimbursements", "Reimbursements"],
               ].map(([v, l]) => (
                 <button className={tab === v ? "is-active" : ""} onClick={() => setTab(v)} key={v} style={{ position: 'relative' }}>
                   {l}
@@ -4109,9 +4107,6 @@ function StaffList({ records = [], setRecords, forced }) {
               </button>
             </div>
           </div>
-          {tab === "Reimbursements" ? (
-            <AdminReimbursementsPage isTab={true} />
-          ) : (
           <div className="staff-table-wrap">
             <table>
               <thead>
@@ -4178,26 +4173,22 @@ function StaffList({ records = [], setRecords, forced }) {
               </tbody>
             </table>
           </div>
-          )}
 
-
-          {tab !== "Reimbursements" && (
-            <footer className="staff-pagination">
-              <span>
-                Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
-                {Math.min(page * size, totalRowsCount)} of {totalRowsCount}
-              </span>
-              <div>
-                <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-                  Prev
-                </button>
-                <strong>{page}</strong>
-                <button disabled={page * size >= totalRowsCount} onClick={() => setPage((p) => p + 1)}>
-                  Next
-                </button>
-              </div>
-            </footer>
-          )}
+          <footer className="staff-pagination">
+            <span>
+              Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
+              {Math.min(page * size, totalRowsCount)} of {totalRowsCount}
+            </span>
+            <div>
+              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+                Prev
+              </button>
+              <strong>{page}</strong>
+              <button disabled={page * size >= totalRowsCount} onClick={() => setPage((p) => p + 1)}>
+                Next
+              </button>
+            </div>
+          </footer>
         </section>
       </main>
       {remove ? (
