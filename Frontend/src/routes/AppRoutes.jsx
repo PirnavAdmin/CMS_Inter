@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/components/pages/LandingPage.jsx";
+import ExamCellPortalRoutes from "@/Dashboard/ExamCellDashboard/ExamCellPortalRoutes.jsx";
 import DashboardPage from "@/components/pages/DashboardPage.jsx";
 import PrincipalDashboard from "@/Dashboard/PrincipalDashboard/PrincipalDashboard.jsx";
 import ListPage from "@/components/pages/ListPage.jsx";
@@ -393,6 +394,9 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
+      <Route element={<ProtectedRoute requireExamCell />}>
+        <Route path="/exam-cell-dashboard/*" element={<ExamCellPortalRoutes />} />
+      </Route>
       <Route element={<ProtectedRoute requireFaculty />}>
         <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
       </Route>
