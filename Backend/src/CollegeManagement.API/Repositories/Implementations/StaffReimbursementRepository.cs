@@ -29,7 +29,9 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             return await _context.StaffReimbursements
                 .Include(r => r.Staff)
-                .ThenInclude(s => s.Designation)
+                    .ThenInclude(s => s.DesignationRef)
+                .Include(r => r.Staff)
+                    .ThenInclude(s => s.DepartmentRef)
                 .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         }
 
@@ -37,7 +39,9 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var query = _context.StaffReimbursements
                 .Include(r => r.Staff)
-                .ThenInclude(s => s.Designation)
+                    .ThenInclude(s => s.DesignationRef)
+                .Include(r => r.Staff)
+                    .ThenInclude(s => s.DepartmentRef)
                 .Where(r => !r.IsDeleted)
                 .AsQueryable();
 

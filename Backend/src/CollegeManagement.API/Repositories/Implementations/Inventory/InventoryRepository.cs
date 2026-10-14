@@ -5,10 +5,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Inventory;
+using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Models.Inventory;
 using CollegeManagement.API.Repositories.Interfaces.Inventory;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 
 namespace CollegeManagement.API.Repositories.Implementations.Inventory
 {
@@ -530,6 +532,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                 .Include(t => t.ReturnOf)
                 .AsQueryable();
 
+            if (filter.TransactionId.HasValue && filter.TransactionId.Value > 0)
+                query = query.Where(t => t.TransactionId == filter.TransactionId.Value);
+
             if (filter.FromDate.HasValue)
                 query = query.Where(t => t.TransactionDate >= filter.FromDate.Value.Date);
 
@@ -550,6 +555,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
 
             if (!string.IsNullOrWhiteSpace(filter.Type))
                 query = query.Where(t => t.MovementType == filter.Type);
+
+            if (!string.IsNullOrWhiteSpace(filter.PaymentMethod))
+                query = query.Where(t => t.PaymentMethod == filter.PaymentMethod);
 
             if (!string.IsNullOrWhiteSpace(filter.Search))
             {
@@ -583,6 +591,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                     TotalAmount = t.TotalAmount,
                     PreviousUnitCost = t.PreviousUnitCost,
                     Status = t.Status,
+                    PaymentMethod = t.PaymentMethod,
+                    PaymentTransactionNumber = t.PaymentTransactionNumber,
+                    CashReceiptPath = t.CashReceiptPath,
                     CorrectionOfId = t.CorrectionOfId,
                     CorrectionOfNumber = t.CorrectionOf != null ? t.CorrectionOf.TransactionNumber : null,
                     ReturnOfId = t.ReturnOfId,
@@ -613,12 +624,98 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                 })
                 .ToListAsync();
 
+            await EnrichMovementReversalEligibilityAsync(list);
+
             return list;
+        }
+
+        private async Task EnrichMovementReversalEligibilityAsync(List<TransactionDto> list)
+        {
+            if (list == null || list.Count == 0) return;
+
+            var itemIds = list.Select(m => m.ItemId).Distinct().ToList();
+            var txnIds = list.Select(m => m.TransactionId).Distinct().ToList();
+
+            // 1. Get latest transaction ID for each relevant item across InventoryTransactions
+            string latestSql = @"
+                SELECT t.ItemId, t.TransactionId
+                FROM (
+                    SELECT ItemId, TransactionId,
+                           ROW_NUMBER() OVER (PARTITION BY ItemId ORDER BY TransactionDate DESC, Sequence DESC, TransactionId DESC) as rn
+                    FROM InventoryTransactions
+                    WHERE ItemId IN @ItemIds
+                ) t
+                WHERE t.rn = 1;";
+
+            var latestRows = await _dbConnection.QueryAsync<(int ItemId, int TransactionId)>(latestSql, new { ItemIds = itemIds });
+            var latestTxnByItemId = latestRows.ToDictionary(x => x.ItemId, x => x.TransactionId);
+
+            // 2. Check which transactions have been returned
+            string returnedSql = @"
+                SELECT DISTINCT ReturnOfId
+                FROM InventoryTransactions
+                WHERE ReturnOfId IS NOT NULL AND ReturnOfId IN @TxnIds;";
+
+            var returnedRows = await _dbConnection.QueryAsync<int>(returnedSql, new { TxnIds = txnIds });
+            var returnedTxnIds = new HashSet<int>(returnedRows);
+
+            // 3. Get current stock for negative stock check
+            string stockSql = "SELECT ItemId, Quantity FROM InventoryItems WHERE ItemId IN @ItemIds;";
+            var stockRows = await _dbConnection.QueryAsync<(int ItemId, decimal Quantity)>(stockSql, new { ItemIds = itemIds });
+            var stockByItemId = stockRows.ToDictionary(x => x.ItemId, x => x.Quantity);
+
+            foreach (var dto in list)
+            {
+                bool isLatest = latestTxnByItemId.TryGetValue(dto.ItemId, out int latestId) && latestId == dto.TransactionId;
+                bool hasBeenReturned = returnedTxnIds.Contains(dto.TransactionId);
+                decimal currentItemStock = stockByItemId.GetValueOrDefault(dto.ItemId, 0m);
+
+                if (dto.Status == "Reversed")
+                {
+                    dto.CanReverse = false;
+                    dto.ReverseBlockedReason = "This movement has already been reversed.";
+                }
+                else if (dto.CorrectionOfId.HasValue || dto.Status == "Correction")
+                {
+                    dto.CanReverse = false;
+                    dto.ReverseBlockedReason = "A return or correction movement cannot be reversed.";
+                }
+                else if (dto.ReturnOfId.HasValue || dto.Status == "Returned")
+                {
+                    dto.CanReverse = false;
+                    dto.ReverseBlockedReason = "A return or correction movement cannot be reversed.";
+                }
+                else if (dto.Status != "Posted")
+                {
+                    dto.CanReverse = false;
+                    dto.ReverseBlockedReason = "Only posted movements can be reversed.";
+                }
+                else if (hasBeenReturned)
+                {
+                    dto.CanReverse = false;
+                    dto.ReverseBlockedReason = "Cannot reverse an issue that has already been returned.";
+                }
+                else if (!isLatest)
+                {
+                    dto.CanReverse = false;
+                    dto.ReverseBlockedReason = "A newer movement exists for this item.";
+                }
+                else if (dto.MovementType == "Stock In" && (currentItemStock - dto.Quantity) < 0)
+                {
+                    dto.CanReverse = false;
+                    dto.ReverseBlockedReason = "Reversing this movement would result in negative stock.";
+                }
+                else
+                {
+                    dto.CanReverse = true;
+                    dto.ReverseBlockedReason = null;
+                }
+            }
         }
 
         public async Task<TransactionDto?> GetMovementByIdAsync(int transactionId)
         {
-            var filter = new MovementFilterRequest();
+            var filter = new MovementFilterRequest { TransactionId = transactionId };
             var list = await GetMovementsAsync(filter);
             return list.FirstOrDefault(t => t.TransactionId == transactionId);
         }
@@ -653,6 +750,30 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             parameters.Add("p_Remarks", request.Remarks);
             parameters.Add("p_UserId", userId);
 
+            string paymentMethod = !string.IsNullOrWhiteSpace(request.PaymentMethod)
+                ? request.PaymentMethod.Trim()
+                : "Cash";
+
+            string? paymentTxnNumber = !string.IsNullOrWhiteSpace(request.PaymentTransactionNumber)
+                ? request.PaymentTransactionNumber.Trim()
+                : (!string.IsNullOrWhiteSpace(request.TransactionNumber)
+                    ? request.TransactionNumber.Trim()
+                    : (!string.IsNullOrWhiteSpace(request.PaymentReference)
+                        ? request.PaymentReference.Trim()
+                        : (!string.IsNullOrWhiteSpace(request.OnlineTransactionNumber) ? request.OnlineTransactionNumber.Trim() : null)));
+
+            string? cashReceipt = !string.IsNullOrWhiteSpace(request.CashReceiptPath)
+                ? request.CashReceiptPath.Trim()
+                : (!string.IsNullOrWhiteSpace(request.CashReceipt)
+                    ? request.CashReceipt.Trim()
+                    : (!string.IsNullOrWhiteSpace(request.ReceiptUrl)
+                        ? request.ReceiptUrl.Trim()
+                        : (!string.IsNullOrWhiteSpace(request.ReceiptPath) ? request.ReceiptPath.Trim() : null)));
+
+            parameters.Add("p_PaymentMethod", paymentMethod);
+            parameters.Add("p_PaymentTransactionNumber", paymentTxnNumber);
+            parameters.Add("p_CashReceiptPath", cashReceipt);
+
             var postResult = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_Inventory_PostMovement",
                 parameters,
@@ -669,14 +790,42 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             parameters.Add("p_PerformedBy", performedBy);
             parameters.Add("p_UserId", userId);
 
-            var revResult = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
-                "sp_Inventory_ReverseMovement",
-                parameters,
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var revResult = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
+                    "sp_Inventory_ReverseMovement",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
 
-            string correctionNumber = (string)revResult.CorrectionTransactionNumber;
-            var correctionTxn = await _dbContext.InventoryTransactions.FirstAsync(t => t.TransactionNumber == correctionNumber);
-            return (await GetMovementByIdAsync(correctionTxn.TransactionId))!;
+                if (revResult == null || revResult.CorrectionTransactionNumber == null)
+                {
+                    throw new InvalidOperationException("Failed to reverse movement.");
+                }
+
+                string correctionNumber = (string)revResult.CorrectionTransactionNumber;
+                var correctionTxn = await _dbContext.InventoryTransactions.FirstAsync(t => t.TransactionNumber == correctionNumber);
+                return (await GetMovementByIdAsync(correctionTxn.TransactionId))!;
+            }
+            catch (MySqlException ex)
+            {
+                if (ex.Message.Contains("not exist", StringComparison.OrdinalIgnoreCase) ||
+                    ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new KeyNotFoundException(ex.Message);
+                }
+
+                if (ex.Number == 1644 ||
+                    ex.Message.Contains("latest unreturned", StringComparison.OrdinalIgnoreCase) ||
+                    ex.Message.Contains("Only posted", StringComparison.OrdinalIgnoreCase) ||
+                    ex.Message.Contains("already been returned", StringComparison.OrdinalIgnoreCase) ||
+                    ex.Message.Contains("cannot be reversed", StringComparison.OrdinalIgnoreCase) ||
+                    ex.Message.Contains("negative stock", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new MovementNotReversibleException(ex.Message);
+                }
+
+                throw;
+            }
         }
 
         public async Task<TransactionDto> RecordReturnAsync(int transactionId, int userId, string performedBy)
@@ -686,14 +835,37 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             parameters.Add("p_PerformedBy", performedBy);
             parameters.Add("p_UserId", userId);
 
-            var retResult = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
-                "sp_Inventory_RecordReturn",
-                parameters,
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var retResult = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
+                    "sp_Inventory_RecordReturn",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
 
-            string returnNumber = (string)retResult.ReturnTransactionNumber;
-            var returnTxn = await _dbContext.InventoryTransactions.FirstAsync(t => t.TransactionNumber == returnNumber);
-            return (await GetMovementByIdAsync(returnTxn.TransactionId))!;
+                if (retResult == null || retResult.ReturnTransactionNumber == null)
+                {
+                    throw new InvalidOperationException("Failed to record return.");
+                }
+
+                string returnNumber = (string)retResult.ReturnTransactionNumber;
+                var returnTxn = await _dbContext.InventoryTransactions.FirstAsync(t => t.TransactionNumber == returnNumber);
+                return (await GetMovementByIdAsync(returnTxn.TransactionId))!;
+            }
+            catch (MySqlException ex)
+            {
+                if (ex.Message.Contains("not exist", StringComparison.OrdinalIgnoreCase) ||
+                    ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new KeyNotFoundException(ex.Message);
+                }
+
+                if (ex.Number == 1644)
+                {
+                    throw new ConflictException(ex.Message);
+                }
+
+                throw;
+            }
         }
         #endregion
 

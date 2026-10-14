@@ -44,6 +44,15 @@ namespace CollegeManagement.API.Models.Inventory
         [StringLength(20)]
         public string Status { get; set; } = "Posted"; // 'Posted', 'Reversed', 'Correction', 'Returned'
 
+        [StringLength(50)]
+        public string? PaymentMethod { get; set; } // 'Cash', 'Online Transaction'
+
+        [StringLength(100)]
+        public string? PaymentTransactionNumber { get; set; }
+
+        [StringLength(500)]
+        public string? CashReceiptPath { get; set; }
+
         public int? CorrectionOfId { get; set; }
 
         [ForeignKey(nameof(CorrectionOfId))]
