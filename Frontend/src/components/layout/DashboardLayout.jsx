@@ -15,7 +15,6 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
-import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
 import { reimbursementApi } from "@/api/staffApi";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -336,19 +335,6 @@ const createSearchIndex = (items) => items.flatMap((g) =>
   ]),
 );
 
-const filterMenuByViewPermission = (sourceMenu, canViewModule) =>
-  sourceMenu.flatMap((group) => {
-    const items = group.items.flatMap((item) => {
-      const children = item.children?.filter((child) => canViewModule(child.moduleKey));
-      const hasViewAccess = canViewModule(item.moduleKey);
-      if (!hasViewAccess && !children?.length) return [];
-      return [{ ...item, ...(children ? { children } : {}) }];
-    });
-    return items.length ? [{ ...group, items }] : [];
-  });
-
-const principalSearchIndex = createSearchIndex(principalMenu);
-
 const searchIndex = createSearchIndex(menu);
 
 const parentSearchIndex = [
@@ -531,19 +517,17 @@ export default function DashboardLayout({
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
-  const principalPermissions = useEffectivePermissions({ enabled: isPrincipal && !isParent && !isWarden && !menuOverride });
   const activeMenu = useMemo(() => {
     if (menuOverride) return menuOverride;
     if (isWarden) return wardenMenu;
     if (isParent) return parentMenu;
-    if (!isPrincipal) return menu;
-    if (principalPermissions.loading || principalPermissions.error) return [];
-    return filterMenuByViewPermission(principalMenu, principalPermissions.canView);
-  }, [isWarden, isParent, isPrincipal, menuOverride, principalPermissions.canView, principalPermissions.error, principalPermissions.loading]);
+    if (isPrincipal) return principalMenu;
+    return menu;
+  }, [isWarden, isParent, isPrincipal, menuOverride]);
   const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : searchIndex);
   const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
-  const canManageAcademicContext = !isParent && !isWarden && !menuOverride && (!isPrincipal || principalPermissions.canView("settings"));
+  const canManageAcademicContext = !isParent && !isWarden && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
   const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
@@ -746,14 +730,6 @@ export default function DashboardLayout({
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges"  />
         </div>
         <nav className="cms-nav" ref={sidebarNavRef} onScroll={rememberSidebarScroll}>
-          {isPrincipal && principalPermissions.loading ? (
-            <div className="cms-nav-group">Loading permissions...</div>
-          ) : null}
-          {isPrincipal && principalPermissions.error ? (
-            <div className="cms-nav-group" title={principalPermissions.error}>
-              Permissions unavailable
-            </div>
-          ) : null}
           {activeMenu.map((group) => (
             <div key={group.section}>
               <div className="cms-nav-group">{group.section}</div>

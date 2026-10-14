@@ -536,7 +536,6 @@ function RoleDetails({
   modules,
   permissions,
   setPermissions,
-  onPersistPermissions,
   onUseRolePermissions,
   loading,
   saving,
@@ -556,8 +555,7 @@ function RoleDetails({
     const withoutModule = previousPermissions.filter((row) => row.module !== moduleId);
     const nextPermissions = normalizePermissionPayload([...withoutModule, { module: moduleId, actions: nextActions }]);
     setPermissions(nextPermissions);
-    onPersistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, nextPermissions, previousPermissions);
-  }, [loading, modules, onPersistPermissions, permissions, saving, selectedMember, selectedRole, setPermissions]);
+  }, [loading, modules, permissions, saving, selectedRole, setPermissions]);
 
   const editablePermissionTargets = useMemo(
     () => getEditablePermissionTargets(modules, selectedRole, loading || saving),
@@ -598,7 +596,6 @@ function RoleDetails({
     });
     const nextPermissions = normalizePermissionPayload([...byModule.entries()].map(([module, actions]) => ({ module, actions })));
     setPermissions(nextPermissions);
-    onPersistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, nextPermissions, previousPermissions);
   };
 
   if (!selectedRole) {
@@ -1164,7 +1161,7 @@ export default function RolesPermissionsPage() {
           : role
       ));
     } catch (err) {
-      console.error("Failed to refresh role counts from /api/v1/roles/cards:", err);
+      console.error("Failed to refresh mock role counts:", err);
     }
   }, [activeContextFilters]);
 
@@ -1378,12 +1375,18 @@ export default function RolesPermissionsPage() {
     await persistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, permissions, lastSavedPermissions);
   };
 
-  const routeNote = "Connected to RBAC service";
+  const visiblePermissionModules = useMemo(() => {
+    const permissionModuleIds = new Set(permissions.map((row) => row.module));
+    if (!permissionModuleIds.size) return modules;
+    return modules.filter((module) => permissionModuleIds.has(module.id));
+  }, [modules, permissions]);
+
+  const routeNote = "Mock preview mode";
 
   return (
     <DashboardLayout
       title="Roles & Permissions"
-      subtitle="Manage system roles and module-level permissions to control access across the college management system."
+      subtitle="Preview system roles and module-level permissions with mock data."
       breadcrumb={["Home", "Administration", "Roles & Permissions"]}
     >
       <main className="rbac-page">
@@ -1397,7 +1400,7 @@ export default function RolesPermissionsPage() {
           <span className="rbac-route-note"><Check size={14} /> {routeNote}</span>
         </div>
 
-        {loading ? <div className="rbac-loading-card"><Loader label="Loading RBAC configuration..." /></div> : null}
+        {loading ? <div className="rbac-loading-card"><Loader label="Loading mock permissions..." /></div> : null}
         {error && !loading ? (
           <EmptyState
             title="Unable to load Roles & Permissions"
@@ -1419,10 +1422,9 @@ export default function RolesPermissionsPage() {
             <RoleDetails
               selectedRole={selectedRole}
               selectedMember={selectedMember}
-              modules={modules}
+              modules={visiblePermissionModules}
               permissions={permissions}
               setPermissions={setPermissions}
-              onPersistPermissions={persistPermissions}
               onUseRolePermissions={useRolePermissions}
               loading={permissionLoading}
               saving={saving}
