@@ -952,8 +952,6 @@ BEGIN
 
     ELSEIF p_ReportType = 'Low Stock Report' THEN
         SELECT 
-            i.ItemId,
-            i.Code AS ItemCode,
             i.Name AS Item,
             c.Name AS Category,
             i.Quantity AS CurrentStock,

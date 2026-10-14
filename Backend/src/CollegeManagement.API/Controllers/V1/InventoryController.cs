@@ -117,20 +117,6 @@ namespace CollegeManagement.API.Controllers.V1
             }
         }
 
-        [HttpGet("items/next-code")]
-        public async Task<IActionResult> GetNextItemCode()
-        {
-            try
-            {
-                var code = await _service.GetNextItemCodeAsync();
-                return Ok(new { success = true, data = new { code }, code });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
-
         [HttpPost("items")]
         public async Task<IActionResult> CreateItem([FromBody] CreateItemRequest request)
         {

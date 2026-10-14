@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import "../styles/FacultyLeave.css";
 
 import { useFacultySafe } from "../FacultyContext.jsx";
@@ -37,47 +37,19 @@ export default function FacultyLeave() {
     { code: 6, name: "Compensatory Off (CO)" },
   ]);
 
-  const [leaveSummary, setLeaveSummary] = useState({
-    balance: { total: 0, used: 0, remaining: 0 },
-    totalRequests: 0,
-    approved: 0,
-    pending: 0,
-    rejected: 0,
-  });
-
-  const staffId =
-    context?.profileData?.facultyId ||
-    context?.profileData?.staffId ||
-    context?.profileData?.id ||
-    context?.profileData?.employeeId ||
-    0;
+  const staffId = context?.profileData?.facultyId || 0;
 
   useEffect(() => {
     fetchLeaveHistory();
   }, [staffId]);
 
   const fetchLeaveHistory = async () => {
-    if (!staffId) {
-      setLoading(false);
-      return;
-    }
+    if (!staffId) return;
     try {
       setLoading(true);
       const res = await leaveApi.getLeaveHistory(staffId);
-      const resData = res.data?.data || res.data?.Data;
-      if (res.data?.status && resData) {
-        setLeaveSummary({
-          balance: resData.balance || resData.Balance || { total: 0, used: 0, remaining: 0 },
-          totalRequests: resData.totalRequests ?? resData.TotalRequests ?? 0,
-          approved: resData.approved ?? resData.Approved ?? 0,
-          pending: resData.pending ?? resData.Pending ?? 0,
-          rejected: resData.rejected ?? resData.Rejected ?? 0,
-          staffName: resData.staffName || resData.StaffName || "",
-          staffCode: resData.staffCode || resData.StaffCode || "",
-          department: resData.department || resData.Department || "",
-          staffType: resData.staffType || resData.StaffType || "",
-        });
-        setLeaveList(resData.history || resData.History || []);
+      if (res.data?.status) {
+        setLeaveList(res.data.data?.history || []);
       }
     } catch (error) {
       console.error("Failed to load leave history", error);
@@ -158,45 +130,23 @@ export default function FacultyLeave() {
         </button>
       </div>
 
-      {/* Leave Balances Strip (Dynamic from API) */}
+      {/* Leave Balances Strip */}
       <div className="sp-stat-grid" style={{ marginBottom: 16 }}>
         <div className="cms-stat">
+          <div className="cms-stat-icon tone-green"><Calendar size={20} /></div>
+          <div><div className="cms-stat-label">Casual Leave (CL)</div><div className="cms-stat-value">8 / 12 Days</div></div>
+        </div>
+        <div className="cms-stat">
           <div className="cms-stat-icon tone-blue"><Calendar size={20} /></div>
-          <div>
-            <div className="cms-stat-label">Total Leaves</div>
-            <div className="cms-stat-value">{leaveSummary.balance?.total ?? 0} Days</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>Allocated quota</div>
-          </div>
+          <div><div className="cms-stat-label">Sick Leave (SL)</div><div className="cms-stat-value">7 / 10 Days</div></div>
         </div>
         <div className="cms-stat">
-          <div className="cms-stat-icon tone-amber"><Clock size={20} /></div>
-          <div>
-            <div className="cms-stat-label">Used Leaves</div>
-            <div className="cms-stat-value">{leaveSummary.balance?.used ?? 0} Days</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>Availed to date</div>
-          </div>
+          <div className="cms-stat-icon tone-amber"><Calendar size={20} /></div>
+          <div><div className="cms-stat-label">Earned Leave (EL)</div><div className="cms-stat-value">15 / 15 Days</div></div>
         </div>
         <div className="cms-stat">
-          <div className="cms-stat-icon tone-green"><CheckCircle2 size={20} /></div>
-          <div>
-            <div className="cms-stat-label">Remaining Leaves</div>
-            <div className="cms-stat-value" style={{ color: "var(--cms-green)" }}>
-              {leaveSummary.balance?.remaining ?? 0} Days
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>Available balance</div>
-          </div>
-        </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-violet"><AlertCircle size={20} /></div>
-          <div>
-            <div className="cms-stat-label">Pending Requests</div>
-            <div className="cms-stat-value" style={{ color: (leaveSummary.pending ?? 0) > 0 ? "var(--cms-amber)" : "inherit" }}>
-              {leaveSummary.pending ?? 0}
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>
-              {leaveSummary.approved ?? 0} Approved · {leaveSummary.rejected ?? 0} Rejected
-            </div>
-          </div>
+          <div className="cms-stat-icon tone-violet"><Calendar size={20} /></div>
+          <div><div className="cms-stat-label">On-Duty (OD)</div><div className="cms-stat-value">6 / 8 Days</div></div>
         </div>
       </div>
 

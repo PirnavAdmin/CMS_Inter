@@ -1,11 +1,61 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
 import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/features/authStorage.js";
 import { getJwtExpiryState } from "@/api/apiClient.js";
-import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
-import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
+import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+
+export function isWardenRole(role, user) {
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  if (
+    normalizedRole.includes("warden") ||
+    normalizedRole === "hostel_warden" ||
+    normalizedRole === "hostel-warden" ||
+    normalizedRole === "chief_warden" ||
+    normalizedRole === "assistant_warden"
+  ) {
+    return true;
+  }
+  if (user && typeof user === "object") {
+    const userRole = String(user.role || "").trim().toLowerCase();
+    if (
+      userRole.includes("warden") ||
+      userRole === "hostel_warden" ||
+      userRole === "hostel-warden" ||
+      userRole === "chief_warden" ||
+      userRole === "assistant_warden"
+    ) {
+      return true;
+    }
+    const designation = String(user.designation || user.Designation || user.designationName || "").trim().toLowerCase();
+    if (designation.includes("warden")) {
+      return true;
+    }
+    const roleCodes = Array.isArray(user.roleCodes) ? user.roleCodes : [user.roleCodes];
+    if (roleCodes.some((rc) => String(rc || "").toLowerCase().includes("warden"))) {
+      return true;
+    }
+    const roles = Array.isArray(user.roles) ? user.roles : [user.roles];
+    if (
+      roles.some((r) => {
+        if (typeof r === "string") return r.toLowerCase().includes("warden");
+        if (r && typeof r === "object") {
+          return (
+            String(r.code || "").toLowerCase().includes("warden") ||
+            String(r.name || "").toLowerCase().includes("warden") ||
+            String(r.role || "").toLowerCase().includes("warden")
+          );
+        }
+        return false;
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function isFacultyOrStaffRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
+  if (normalized.includes("warden")) return false;
   return (
     normalized === "faculty" ||
     normalized === "staff" ||
@@ -41,57 +91,6 @@ function isAdminRole(role) {
   return normalized === "admin" || normalized.includes("admin");
 }
 
-const PRINCIPAL_DASHBOARD_ROUTE_RULES = [
-  ["/dashboard/settings/roles-permissions", "roles-permissions"],
-  ["/dashboard/settings", "settings"],
-  ["/dashboard/board-academic-year", "settings"],
-  ["/dashboard/courses", "group-management"],
-  ["/dashboard/subjects", "subject-management"],
-  ["/dashboard/sections", "section-room"],
-  ["/dashboard/timetable", "timetable"],
-  ["/dashboard/holidays", "holiday-management"],
-  ["/dashboard/inventory-management", "inventory-management"],
-  ["/dashboard/inventory", "inventory-management"],
-  ["/dashboard/admission", "student-admission"],
-  ["/dashboard/students", "student-management"],
-  ["/dashboard/section-allocation", "section-allocation"],
-  ["/dashboard/attendance/staff", "staff-attendance"],
-  ["/dashboard/attendance/student", "attendance"],
-  ["/dashboard/attendance", "attendance"],
-  ["/dashboard/promotion", "promotion"],
-  ["/dashboard/promotions", "promotion"],
-  ["/dashboard/transport", "transport"],
-  ["/dashboard/staff", "staff-management"],
-  ["/dashboard/departments", "department-designation"],
-  ["/dashboard/designations", "department-designation"],
-  ["/dashboard/leave-management", "staff-leave-management"],
-  ["/dashboard/reimbursements", "reimbursement"],
-  ["/dashboard/reimbursement", "reimbursement"],
-  ["/dashboard/finance/reimbursement", "reimbursement"],
-  ["/dashboard/examinations", "examination"],
-  ["/dashboard/marks-entry", "marks-evaluation"],
-  ["/dashboard/results", "results"],
-  ["/dashboard/fee-structure", "fee-management"],
-  ["/dashboard/payroll", "payroll"],
-  ["/dashboard/staff-salary", "payroll"],
-  ["/dashboard/certificates", "certificates"],
-  ["/dashboard/reports", "reports-analytics"],
-  ["/dashboard/hostel", "hostel-management"],
-  ["/hostel", "hostel-management"],
-  ["/dashboard", "dashboard"],
-];
-
-function principalPermissionForPath(pathname) {
-  const match = PRINCIPAL_DASHBOARD_ROUTE_RULES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-  if (!match) return null;
-  const action = /\/add(?:\/|$)|\/generate(?:\/|$)|\/upload(?:\/|$)|\/import(?:\/|$)/.test(pathname)
-    ? ACTIONS.CREATE
-    : /\/edit(?:\/|$)/.test(pathname)
-      ? ACTIONS.EDIT
-      : ACTIONS.VIEW;
-  return { moduleKey: match[1], action };
-}
-
 export default function ProtectedRoute({
   children,
   requireAdmin = false,
@@ -100,26 +99,75 @@ export default function ProtectedRoute({
   requireAccountant = false,
   requirePrincipal = false,
   requireFaculty = false,
+  requireExamCell = false,
+  requireWarden = false,
 }) {
-  const location = useLocation();
-  const token = getAuthToken();
+  // Discard sessions created by the removed local preview login.
+  const storedToken = getAuthToken();
+  if (storedToken === "exam-cell-local-preview") clearAuthSession();
+  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenExpired = Boolean(tokenState?.isJwt && tokenState?.isExpired);
-  const user = getAuthUser();
-  const role = getAuthItem("role") || user?.role || user?.staffType;
-  const isAdmin = user?.isAdmin || isAdminRole(role);
-  const isFaculty = isFacultyOrStaffRole(role);
-  const isPrincipal = isPrincipalRole(role);
-  const isParent = isParentRole(role);
-  const isAccountant = isAccountantRole(role);
-  const principalPermissions = useEffectivePermissions({ enabled: requireAdmin && isPrincipal });
 
   if (!token || isTokenExpired) {
     if (isTokenExpired) clearAuthSession();
     return <Navigate to="/login" replace />;
   }
 
+  const user = getAuthUser();
+  const role = getAuthItem("role") || user?.role || user?.staffType;
+  const isWarden = isWardenRole(role, user);
+  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden;
+  const isFaculty = !isWarden && isFacultyOrStaffRole(role);
+  const isPrincipal = !isWarden && isPrincipalRole(role);
+  const isParent = !isWarden && isParentRole(role);
+  const isAccountant = !isWarden && isAccountantRole(role);
+
+  const isExamCell = !isWarden && isExamCellRole(role);
+
+  // Warden check
+  if (requireWarden && !isWarden && !isAdmin) {
+    const destination = isPrincipal
+      ? "/principal-dashboard"
+      : isAccountant
+      ? "/accountant-dashboard"
+      : isParent
+      ? "/parent-dashboard"
+      : isFaculty
+      ? "/faculty-dashboard"
+      : isExamCell
+      ? "/exam-cell-dashboard"
+      : "/student-dashboard";
+    return <Navigate to={destination} replace />;
+  }
+
+  // If a Warden attempts to access routes restricted to other roles, redirect them to warden dashboard
+  if (isWarden && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell)) {
+    return <Navigate to="/warden-dashboard" replace />;
+  }
+
+  if (requireExamCell && !isExamCell) {
+    const destination = isWarden
+      ? "/warden-dashboard"
+      : isAdmin
+      ? "/dashboard"
+      : isPrincipal
+      ? "/principal-dashboard"
+      : isAccountant
+      ? "/accountant-dashboard"
+      : isParent
+      ? "/parent-dashboard"
+      : isFaculty
+      ? "/faculty-dashboard"
+      : "/student-dashboard";
+    return <Navigate to={destination} replace />;
+  }
+  if (isExamCell && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireWarden)) {
+    return <Navigate to="/exam-cell-dashboard" replace />;
+  }
+
   if (requireFaculty && !isFaculty) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
@@ -127,50 +175,32 @@ export default function ProtectedRoute({
     return <Navigate to="/student-dashboard" replace />;
   }
   if (requireAdmin && !isAdmin && !isPrincipal) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     return <Navigate to={isFaculty ? "/faculty-dashboard" : "/student-dashboard"} replace />;
   }
-  if (requireAdmin && isPrincipal && !isAdmin) {
-    if (location.pathname === "/dashboard") return <Navigate to="/principal-dashboard" replace />;
-    const requiredPermission = principalPermissionForPath(location.pathname);
-    if (!requiredPermission) return <Navigate to="/principal-dashboard" replace />;
-    if (principalPermissions.loading) return null;
-    if (principalPermissions.error) {
-      return (
-        <div style={{ padding: 24 }}>
-          <h2>Permissions unavailable</h2>
-          <p>{principalPermissions.error}</p>
-          <button type="button" onClick={principalPermissions.refresh}>Retry</button>
-        </div>
-      );
-    }
-    if (!principalPermissions.canDo(requiredPermission.moduleKey, requiredPermission.action)) {
-      return (
-        <div style={{ padding: 24 }}>
-          <h2>Access denied</h2>
-          <p>You do not have permission to open this module.</p>
-        </div>
-      );
-    }
-  }
   if (requirePrincipal && !isPrincipal) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
   }
+  if (requireStudent && isWarden) return <Navigate to="/warden-dashboard" replace />;
   if (requireStudent && (isAdmin || isPrincipal)) return <Navigate to={isPrincipal ? "/principal-dashboard" : "/dashboard"} replace />;
   if (requireStudent && isAccountant) return <Navigate to="/accountant-dashboard" replace />;
   if (requireStudent && isFaculty) return <Navigate to="/faculty-dashboard" replace />;
   if (requireStudent && isParent) return <Navigate to="/parent-dashboard" replace />;
 
   if (requireParent && !isParent && !isAdmin) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
   }
   if (requireAccountant && !isAccountant) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
@@ -181,19 +211,25 @@ export default function ProtectedRoute({
 }
 
 export function PublicOnlyRoute({ children }) {
-  const token = getAuthToken();
+  // Discard sessions created by the removed local preview login.
+  const storedToken = getAuthToken();
+  if (storedToken === "exam-cell-local-preview") clearAuthSession();
+  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenValid = Boolean(token && (!tokenState?.isJwt || !tokenState?.isExpired));
 
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
-  const isAdmin = user?.isAdmin || isAdminRole(role);
-  const isFaculty = isFacultyOrStaffRole(role);
-  const isPrincipal = isPrincipalRole(role);
-  const isParent = isParentRole(role);
-  const isAccountant = isAccountantRole(role);
+  const isWarden = isWardenRole(role, user);
+  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden;
+  const isFaculty = !isWarden && isFacultyOrStaffRole(role);
+  const isPrincipal = !isWarden && isPrincipalRole(role);
+  const isParent = !isWarden && isParentRole(role);
+  const isAccountant = !isWarden && isAccountantRole(role);
 
   if (isTokenValid) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
+    if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;

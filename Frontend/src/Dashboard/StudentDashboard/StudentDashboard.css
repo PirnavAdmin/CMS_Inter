@@ -161,12 +161,15 @@
 .sp-dashboard-page .sp-card-head h2{font-size:15px}
 .sp-dashboard-page .sp-card-body{padding:12px}
 .sp-dashboard-page .sp-text-link{font-size:11px;white-space:nowrap;margin:0;color:var(--sp-primary);font-weight:600}
-.sp-dashboard-quick-actions .sp-card-head{border-bottom:0;padding-bottom:0}
-.sp-dashboard-action-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
-.sp-dashboard-action{--action-accent:#2586e8;display:flex;align-items:center;flex-direction:column;justify-content:center;gap:5px;padding:9px 5px;min-width:0;border:1px solid color-mix(in srgb,var(--sp-border) 60%,var(--action-accent));border-radius:8px;background:color-mix(in srgb,var(--sp-surface) 94%,var(--action-accent));color:var(--sp-text);text-decoration:none;text-align:center;transition:background .15s,border-color .15s}
+.sp-dashboard-page .sp-dashboard-quick-actions{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;padding:5px 8px}
+.sp-dashboard-page .sp-dashboard-quick-actions .sp-card-head{border-bottom:0;padding:0;min-height:0}
+.sp-dashboard-page .sp-dashboard-quick-actions .sp-card-head h2{font-size:13px;white-space:nowrap}
+.sp-dashboard-page .sp-dashboard-quick-actions .sp-card-body{padding:0;min-width:0}
+.sp-dashboard-action-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.sp-dashboard-action{--action-accent:#2586e8;display:flex;align-items:center;justify-content:center;gap:6px;padding:4px 6px;min-height:32px;box-sizing:border-box;min-width:0;border:1px solid color-mix(in srgb,var(--sp-border) 60%,var(--action-accent));border-radius:6px;background:color-mix(in srgb,var(--sp-surface) 94%,var(--action-accent));color:var(--sp-text);text-decoration:none;text-align:center;transition:background .15s,border-color .15s}
 .sp-dashboard-action.tone-green{--action-accent:#14a65b}.sp-dashboard-action.tone-red{--action-accent:#ec5970}.sp-dashboard-action.tone-orange{--action-accent:#ed9a18}.sp-dashboard-action.tone-purple{--action-accent:#9855e8}
-.sp-dashboard-action img{width:34px;height:34px;object-fit:contain}
-.sp-dashboard-action strong{font-size:12px}.sp-dashboard-action small{color:var(--sp-muted);font-size:10px;line-height:1.4}
+.sp-dashboard-action img{width:22px;height:22px;object-fit:contain;flex-shrink:0}
+.sp-dashboard-action strong{font-size:11px;line-height:1.25}
 .sp-dashboard-action:hover{background:color-mix(in srgb,var(--sp-surface) 85%,var(--action-accent));border-color:var(--action-accent)}
 .sp-dashboard-page a:focus-visible{outline:2px solid var(--sp-primary);outline-offset:3px}
 .sp-dashboard-page .sp-dashboard-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px;align-items:start}
@@ -181,6 +184,7 @@
 .sp-dashboard-page .sp-fee-overview span{font-size:11px;color:var(--sp-muted)}.sp-dashboard-page .sp-fee-overview strong{font-size:19px;overflow-wrap:anywhere}.sp-dashboard-page .sp-muted{font-size:11px;margin:10px 0 0}
 @media(max-width:1200px){.sp-dashboard-action-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.sp-dashboard-page .sp-student-strip{flex-wrap:wrap}.sp-dashboard-page .sp-student-detail{flex-basis:20%}}
 @media(max-width:900px){.sp-dashboard-page .sp-summary-grid.four{grid-template-columns:repeat(2,minmax(0,1fr))}.sp-dashboard-page .sp-dashboard-grid{grid-template-columns:minmax(0,1fr)}.sp-dashboard-page .sp-student-detail{flex-basis:30%;padding-left:10px}}
+@media(max-width:620px){.sp-dashboard-page .sp-dashboard-quick-actions{grid-template-columns:minmax(0,1fr);gap:6px;padding:8px}.sp-dashboard-action{min-height:38px}}
 @media(max-width:620px){.sp-dashboard-page .sp-summary-grid.four{grid-template-columns:minmax(0,1fr)}.sp-dashboard-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sp-dashboard-page .sp-student-name{flex-basis:calc(100% - 80px)}.sp-dashboard-page .sp-student-detail{flex-basis:100%;border-left:0;padding-left:0}.sp-dashboard-greeting{gap:10px}.sp-dashboard-greeting>svg{width:30px}.sp-dashboard-page .sp-page-header h1{font-size:20px}.sp-dashboard-page .sp-fee-overview{gap:6px}.sp-dashboard-page .sp-fee-overview>div{padding:9px}.sp-dashboard-page .sp-fee-overview strong{font-size:16px}}
 
 /* Selected-day attendance presentation; calendar styles remain unchanged. */
