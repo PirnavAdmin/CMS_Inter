@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Dashboard;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -15,9 +16,9 @@ namespace CollegeManagement.API.Controllers.V1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/dashboard")]
 [EnableCors("AllowFrontend")]
-[AllowAnonymous]
 [Produces("application/json")]
 [Authorize]
+[RequirePermission("dashboard")]
 public class DashboardController : ControllerBase
 {
     private readonly IDashboardService _dashboardService;
@@ -36,7 +37,6 @@ public class DashboardController : ControllerBase
     /// Retrieves active Academic Years and Boards for global dashboard filtering.
     /// </summary>
     [HttpGet("filters")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(DashboardFilterOptionsResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFilterOptions(CancellationToken ct = default)
     {
@@ -56,7 +56,6 @@ public class DashboardController : ControllerBase
     /// </summary>
     [HttpGet("summary")]
     [HttpGet("stats")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(DashboardSummaryResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> Summary(
         [FromQuery] int? academicYearId = null,
@@ -78,7 +77,6 @@ public class DashboardController : ControllerBase
     /// academic level distribution (1st Year, 2nd Year), and monthly admission trajectory.
     /// </summary>
     [HttpGet("students-overview")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(StudentsOverviewResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> StudentsOverview(
         [FromQuery] int? academicYearId = null,
@@ -99,7 +97,6 @@ public class DashboardController : ControllerBase
     /// Retrieves monthly student admissions timeline for area and bar chart visualizations.
     /// </summary>
     [HttpGet("admission-trend")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(StudentsOverviewResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> AdmissionTrend(
         [FromQuery] int? academicYearId = null,
@@ -119,7 +116,6 @@ public class DashboardController : ControllerBase
     /// Retrieves distribution of enrolled students per academic group/stream (e.g., MPC, BiPC, CEC, MEC, HEC).
     /// </summary>
     [HttpGet("group-distribution")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(GroupDistributionResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GroupDistribution(
         [FromQuery] int? academicYearId = null,
@@ -139,7 +135,6 @@ public class DashboardController : ControllerBase
     /// Retrieves today's student attendance metrics and category breakdowns (Overall, Academic Level, Group, Section).
     /// </summary>
     [HttpGet("students-attendance-today")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(StudentsAttendanceTodayResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> StudentsAttendanceToday(
         [FromQuery] int? academicYearId = null,
@@ -160,7 +155,6 @@ public class DashboardController : ControllerBase
     /// Retrieves today's staff attendance metrics filtered by staff type (All Staff, Teaching Staff, Non-Teaching Staff).
     /// </summary>
     [HttpGet("staff-attendance-today")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(StaffAttendanceTodayResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> StaffAttendanceToday(
         [FromQuery] int? boardId = null,
@@ -181,7 +175,6 @@ public class DashboardController : ControllerBase
     /// Retrieves certificate request counts categorized by type (Bonafide, Study, Conduct, Transfer, Others) and recent request records.
     /// </summary>
     [HttpGet("certificate-requests")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(CertificateRequestsSummaryResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> CertificateRequests(
         [FromQuery] int? academicYearId = null,
@@ -202,7 +195,6 @@ public class DashboardController : ControllerBase
     /// Retrieves scheduled and upcoming examinations with date ranges and countdown badges.
     /// </summary>
     [HttpGet("upcoming-examinations")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(List<UpcomingExaminationItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpcomingExaminations(
         [FromQuery] int? academicYearId = null,
@@ -223,7 +215,6 @@ public class DashboardController : ControllerBase
     /// </summary>
     [HttpGet("upcoming-holidays")]
     [HttpGet("holidays")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(List<UpcomingHolidayItemDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> UpcomingHolidays(
         [FromQuery] int? academicYearId = null,
@@ -244,7 +235,6 @@ public class DashboardController : ControllerBase
     /// Retrieves summary counts of today's key events: admissions, certificate requests, examinations, and student birthdays.
     /// </summary>
     [HttpGet("todays-highlights")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(TodaysHighlightsResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> TodaysHighlights(
         [FromQuery] int? academicYearId = null,
@@ -257,10 +247,32 @@ public class DashboardController : ControllerBase
     }
 
     // =========================================================================
+    // 10B. PRINCIPAL DASHBOARD AGGREGATOR
+    // =========================================================================
+    /// <summary>
+    /// 10B. GET /api/v1/dashboard/principal
+    /// Retrieves full live aggregated metrics for the Principal Dashboard scoped to Campus, Board, Academic Year, and Period.
+    /// Eliminates multiple fragmented API calls and replaces fallback data with live college operational data.
+    /// </summary>
+    [HttpGet("principal")]
+    [ProducesResponseType(typeof(PrincipalDashboardResponseDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPrincipalDashboard(
+        [FromQuery] int? campusId = null,
+        [FromQuery] int? boardId = null,
+        [FromQuery] int? academicYearId = null,
+        [FromQuery] string? period = "Today",
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        CancellationToken ct = default)
+    {
+        var result = await _dashboardService.GetPrincipalDashboardAsync(campusId, boardId, academicYearId, period, fromDate, toDate, ct);
+        return Ok(result);
+    }
+
+    // =========================================================================
     // 11. COMPATIBILITY & TESTER ENDPOINTS
     // =========================================================================
     [HttpGet("weekly-attendance")]
-    [AllowAnonymous]
     public async Task<IActionResult> WeeklyAttendance(
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
@@ -275,7 +287,6 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("recent-activity")]
-    [AllowAnonymous]
     public async Task<IActionResult> RecentActivity([FromQuery] int limit = 15, CancellationToken ct = default)
     {
         var result = await _dashboardService.GetRecentActivityAsync(limit, ct);
@@ -283,7 +294,6 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("faculty-workload")]
-    [AllowAnonymous]
     public async Task<IActionResult> FacultyWorkload(
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
@@ -295,7 +305,6 @@ public class DashboardController : ControllerBase
     }
 
     [HttpGet("test-verify-all")]
-    [AllowAnonymous]
     public async Task<IActionResult> TestVerifyAll([FromQuery] int? academicYearId = null, [FromQuery] int? boardId = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
     {
         var filtersRes = await GetFilterOptions(ct) as OkObjectResult;

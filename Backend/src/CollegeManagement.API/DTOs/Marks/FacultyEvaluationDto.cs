@@ -63,6 +63,8 @@ namespace CollegeManagement.API.DTOs.Marks
         public int PracticalMarks { get; set; }
         public int TheoryMarks { get; set; }
         public int TotalMarks { get; set; }
+        public int ObtainedMarks => TotalMarks;
+        public int Total => TotalMarks;
         public bool IsAbsent { get; set; }
         public string? Remarks { get; set; }
     }

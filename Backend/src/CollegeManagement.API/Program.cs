@@ -163,7 +163,6 @@ builder.Services.AddScoped<IResultRepository, ResultRepository>();
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<ITimetableRepository, TimetableRepository>();
 builder.Services.AddScoped<ITimetableSubstitutionRepository, TimetableSubstitutionRepository>();
-builder.Services.AddScoped<ITimetableBackupRepository, TimetableBackupRepository>();
 builder.Services.AddScoped<IPeriodRepository, PeriodRepository>();
 builder.Services.AddScoped<IPeriodStructureRepository, PeriodStructureRepository>();
 builder.Services.AddScoped<IBreakTypeRepository, BreakTypeRepository>();
@@ -433,6 +432,14 @@ builder.Services.AddSwaggerGen(c =>
 #endregion
 
 var app = builder.Build();
+
+if (args.Contains("--test-principal-dashboard"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var tester = new CollegeManagement.API.Tests.PrincipalDashboardTester(connStr);
+    await tester.RunAsync();
+    return;
+}
 
 if (args.Contains("--test-timetable"))
 {

@@ -8,18 +8,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || "https://heroics-ambush-baton.ngrok-free.dev";
+  const apiBaseUrl = env.VITE_API_BASE_URL || "http://localhost:5167";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
     plugins: [react()],
     resolve: {
-      alias: [
-        {
-          find: /^@\//,
-          replacement: `${path.resolve(__dirname, "src").replace(/\\/g, "/")}/`,
-        },
-      ],
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
     },
     optimizeDeps: {
       include: ["@microsoft/signalr"],

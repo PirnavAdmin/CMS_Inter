@@ -1,4 +1,5 @@
 using CollegeManagement.API.DTOs.Fees;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ namespace CollegeManagement.API.Controllers.V1;
 [ApiController]
 [Route("api/v1/fees")]
 [Authorize]
+[RequirePermission("fee-management")]
 public class FeeController : ControllerBase
 {
     private readonly IFeeService _service;

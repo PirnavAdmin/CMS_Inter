@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Subject;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -19,6 +20,7 @@ namespace CollegeManagement.API.Controllers
     [Route("api/v1/[controller]")]
     [EnableCors("AllowFrontend")]
     [Authorize]
+    [RequirePermission("subject-management")]
     public class SubjectsController : ControllerBase
     {
         private readonly ISubjectService _service;

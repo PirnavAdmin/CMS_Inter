@@ -222,16 +222,23 @@ namespace CollegeManagement.API.Repositories.Implementations
                     splitOn: "SubjectName",
                     commandType: CommandType.StoredProcedure);
 
-                exam.ExamSchedules = schedules.ToList();
+                exam.ExamSchedules = schedules
+                    .Where(s => s.IsActive)
+                    .GroupBy(s => s.SubjectId)
+                    .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
+                    .ToList();
             }
             catch (Exception ex)
             {
                 _logger?.LogWarning(ex, "sp_GetExamSchedulesByExamination failed for Exam {Id}, falling back to EF query", examinationId);
-                exam.ExamSchedules = await _context.ExamSchedules
+                exam.ExamSchedules = (await _context.ExamSchedules
                     .Include(s => s.Subject)
                     .Where(s => s.ExaminationId == examinationId && s.IsActive)
                     .AsNoTracking()
-                    .ToListAsync();
+                    .ToListAsync())
+                    .GroupBy(s => s.SubjectId)
+                    .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
+                    .ToList();
             }
 
             return exam;
@@ -444,6 +451,13 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             try
             {
+                if (schedule.ExaminationId > 0 && schedule.SubjectId > 0)
+                {
+                    await Connection.ExecuteAsync(
+                        "UPDATE ExamSchedules SET IsActive = 0, UpdatedAt = UTC_TIMESTAMP() WHERE ExamId = @ExamId AND SubjectId = @SubjectId AND IsActive = 1;",
+                        new { ExamId = schedule.ExaminationId, SubjectId = schedule.SubjectId });
+                }
+
                 var rawId = await Connection.ExecuteScalarAsync<object>(
                     "sp_CreateExamSchedule",
                     p,
@@ -584,7 +598,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var list = await query.ToListAsync();
                 if (list != null && list.Any())
                 {
-                    return list;
+                    return list.Where(s => s.IsActive)
+                        .GroupBy(s => s.SubjectId)
+                        .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
+                        .ToList();
                 }
             }
             catch (Exception ex)
@@ -607,7 +624,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 splitOn: "SubjectName",
                 commandType: CommandType.StoredProcedure);
 
-            return results;
+            return results.Where(s => s.IsActive)
+                .GroupBy(s => s.SubjectId)
+                .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
+                .ToList();
         }
 
         public async Task UpdateExamScheduleAsync(ExamSchedule schedule)
