@@ -69,7 +69,6 @@ export default function ProtectedRoute({
   const isPrincipal = isPrincipalRole(role);
   const isParent = isParentRole(role);
   const isAccountant = isAccountantRole(role);
-
   const isExamCell = isExamCellRole(role);
   if (requireExamCell && !isExamCell) {
     const destination = isAdmin ? "/dashboard" : isPrincipal ? "/principal-dashboard" : isAccountant ? "/accountant-dashboard" : isParent ? "/parent-dashboard" : isFaculty ? "/faculty-dashboard" : "/student-dashboard";

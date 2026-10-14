@@ -396,6 +396,7 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute requireExamCell />}>
         <Route path="/exam-cell-dashboard/*" element={<ExamCellPortalRoutes />} />
       </Route>
+
       <Route element={<ProtectedRoute requireFaculty />}>
         <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
       </Route>
