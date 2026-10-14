@@ -33,6 +33,7 @@ export const STAFF_SEARCH_INDEX = [
   { id: "myattendance", label: "My Attendance", group: "HR & FINANCE", moduleId: "myattendance", keywords: "biometric punch logs clock in check in history hours worked faculty attendance daily log punch status biometric machine" },
   { id: "leave", label: "Leave Management", group: "HR & FINANCE", moduleId: "leave", keywords: "apply leave casual leave sick leave earned leave on duty od balance leave history cl sl el leave request permissions" },
   { id: "salary", label: "Salary & Payslips", group: "HR & FINANCE", moduleId: "salary", keywords: "payslip download salary slip ctc gross net pay deductions hra da pf allowances earnings payroll tax tds" },
+  { id: "reimbursements", label: "Reimbursements", group: "HR & FINANCE", moduleId: "reimbursements", keywords: "claim reimbursement expenses bills receipts claim proof approval books conference medical travel claims fuel" },
 ];
 
 const FALLBACK_ACADEMIC_YEARS = [

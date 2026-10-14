@@ -41,6 +41,5 @@ namespace CollegeManagement.API.Services.Interfaces
         // Invigilator Methods
         Task AssignInvigilatorsAsync(AssignInvigilatorRequest request);
         Task<IEnumerable<InvigilatorAssignmentResponse>> GetInvigilatorsAsync(int examScheduleId);
-        Task<IEnumerable<FacultyExamDutyDto>> GetFacultyExamDutiesAsync(int? staffId = null, string? status = null);
     }
 }

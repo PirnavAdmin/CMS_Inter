@@ -113,6 +113,7 @@ export const pathToModule = {
   leave: "leave",
   payslips: "salary",
   holidays: "holidays",
+  reimbursements: "reimbursements",
   settings: "settings",
 };
 
@@ -128,6 +129,7 @@ export const moduleToPath = {
   leave: "leave",
   salary: "payslips",
   holidays: "holidays",
+  reimbursements: "reimbursements",
   settings: "settings",
 };
 

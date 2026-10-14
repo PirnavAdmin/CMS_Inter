@@ -13,7 +13,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/leave-categories")]
     [EnableCors("AllowFrontend")]
-    [Authorize]
+    [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD")]
     [Produces("application/json")]
     public class LeaveCategoryController : ControllerBase
     {
@@ -25,7 +25,6 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
-        [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD,Driver,Bus Driver")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetAll()
@@ -35,7 +34,6 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("summary")]
-        [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetSummary()
@@ -45,7 +43,6 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("{id:int}")]
-        [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]

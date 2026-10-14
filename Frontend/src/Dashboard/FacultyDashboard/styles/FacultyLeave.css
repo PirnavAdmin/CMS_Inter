@@ -5,12 +5,28 @@
   gap: 14px;
   margin-bottom: 20px;
 }
+
 .sp-leave-card {
-  background: var(--cms-surface, #fff);
+  background: var(--cms-card-bg, #ffffff);
   border: 1px solid var(--cms-border, #e4e8f0);
   border-radius: 12px;
   padding: 16px;
   display: flex;
   align-items: center;
   gap: 14px;
+  box-shadow: var(--cms-shadow);
+  transition: transform var(--cms-transition, 0.18s ease), box-shadow var(--cms-transition, 0.18s ease);
+}
+
+.sp-leave-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--cms-shadow-hover);
+}
+
+/* Theme-based dark mode support */
+[data-theme="dark"] .sp-leave-card,
+:root[data-theme="dark"] .sp-leave-card,
+.dark-theme .sp-leave-card {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }

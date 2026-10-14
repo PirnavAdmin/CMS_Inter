@@ -29,10 +29,6 @@ public class FeeStructure
     public int? ProgramId { get; set; }
     [Required, MaxLength(150)] public string StructureName { get; set; } = string.Empty;
     [MaxLength(500)] public string? Description { get; set; }
-    [MaxLength(50)] public string? YearFeeMode { get; set; }
-    [MaxLength(50)] public string? IncrementType { get; set; }
-    [Column(TypeName = "decimal(18,2)")] public decimal? IncrementValue { get; set; }
-    public int? PairedStructureId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }

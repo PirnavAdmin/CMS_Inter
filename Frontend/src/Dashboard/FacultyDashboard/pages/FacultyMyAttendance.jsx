@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Clock, LogOut, Calendar, CheckCircle2, Briefcase, UserX, X, AlertCircle } from "lucide-react";
+import { Clock, LogOut, Calendar, CheckCircle2, Briefcase, UserX, AlertCircle } from "lucide-react";
 import "../styles/FacultyMyAttendance.css";
 
 import { useFacultySafe } from "../FacultyContext.jsx";
@@ -42,14 +42,14 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
 
 export default function FacultyMyAttendance() {
   const context = useFacultySafe();
-  const [liveClock, setLiveClock] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
-  );
+  // Shift duration updates on page load/refresh and periodically every minute/hour
+  const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
 
   useEffect(() => {
+    // Recalculates shift duration periodically every minute and updates on refresh
     const timer = setInterval(() => {
-      setLiveClock(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
-    }, 1000);
+      setShiftUpdateTick((prev) => prev + 1);
+    }, 60000);
     return () => clearInterval(timer);
   }, []);
 
@@ -86,8 +86,8 @@ export default function FacultyMyAttendance() {
   // Can regularize if logged in late and not yet approved
   const canTodayRegularize = dailyPunch.status !== "not_punched" && isLateLogin && todayRegularization !== "approved";
 
-  // Shift duration for the Biometric Clock:
-  // - Actively calculated live while punched in (recalculates every second with liveClock)
+  // Shift duration for Attendance & Shift Card:
+  // - Calculated on page load / refresh and updated hourly while punched in
   // - Finalized between inTime and outTime when punched out
   // - "--" when not punched in
   const clockShiftDuration = useMemo(() => {
@@ -98,16 +98,18 @@ export default function FacultyMyAttendance() {
       return calculateDurationStr(dailyPunch.inTime, null, true);
     }
     return "--";
-  }, [dailyPunch, liveClock]);
+  }, [dailyPunch, shiftUpdateTick]);
 
   // Finalized shift duration for attendance logs (table):
-  // Shown only after punch out is clicked; "--" while active, "0h 0m" before punch in
   const finalizedShiftDuration = useMemo(() => {
     if (dailyPunch.status === "punched_out" && dailyPunch.inTime && dailyPunch.outTime) {
       return calculateDurationStr(dailyPunch.inTime, dailyPunch.outTime, false);
     }
+    if (dailyPunch.status === "punched_in" && dailyPunch.inTime) {
+      return calculateDurationStr(dailyPunch.inTime, null, true);
+    }
     return "--";
-  }, [dailyPunch]);
+  }, [dailyPunch, shiftUpdateTick]);
 
   const [toast, setToast] = useState(null);
 
@@ -496,9 +498,6 @@ export default function FacultyMyAttendance() {
     }
   };
 
-  const [showRegularizeModal, setShowRegularizeModal] = useState(false);
-  const [regularizeForm, setRegularizeForm] = useState({ date: "", reason: "Forgot Biometric Punch", inTime: "08:30 AM", outTime: "04:30 PM", notes: "" });
-
   return (
     <div>
       <div className="cms-page-head">
@@ -506,71 +505,68 @@ export default function FacultyMyAttendance() {
           <h1>My Attendance & Biometric Punch</h1>
           <p>Daily biometric check-in, punch times, shift logs & monthly attendance calendar.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setShowRegularizeModal(true)}>
-          <Clock size={14} /> Request Attendance Regularization
-        </button>
       </div>
 
       {/* Punch In / Out Grid */}
       <div className="sp-attendance-punch-grid">
-        {/* Live Digital Clock Card (Professional Theme-Based) */}
+        {/* Attendance & Shift Details Card */}
         <div className="sp-live-clock-card">
           <div>
-            <span className="sp-live-badge">
-              CAMPUS BIOMETRIC CLOCK
-            </span>
-            <div className="sp-live-clock-time">
-              {liveClock}
-            </div>
-            <div className="sp-live-clock-date">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-            </div>
-          </div>
+            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Attendance & Shift Summary</h3>
+            <p style={{ fontSize: 12.5, color: "var(--cms-muted)", marginBottom: 16 }}>
+              Campus shift schedule, punch status timings & calculated shift duration.
+            </p>
 
-          <div className="sp-clock-status-box">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="sp-clock-sublabel">Punch Status:</span>
-              <span
-                className={`sp-punch-status-badge ${dailyPunch.status === "punched_in"
-                  ? "in"
-                  : dailyPunch.status === "punched_out"
-                    ? "completed"
-                    : "pending"
-                  }`}
-              >
-                ● {dailyPunch.status === "punched_in"
-                  ? `Checked In (${dailyPunch.inTime})`
-                  : dailyPunch.status === "punched_out"
-                    ? `Completed (${dailyPunch.outTime})`
-                    : "Not Checked In"}
-              </span>
-            </div>
-
-            {/* Timings row inside Time Tab */}
-            <div className="sp-clock-timings-grid">
-              <div className="sp-clock-timing-item">
-                <span className="label">Punch In</span>
-                <span className={`val ${dailyPunch.inTime ? "highlight" : ""}`}>
-                  {dailyPunch.inTime || "--"}
+            <div className="sp-clock-status-box">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="sp-clock-sublabel">Punch Status:</span>
+                <span
+                  className={`sp-punch-status-badge ${dailyPunch.status === "punched_in"
+                    ? "in"
+                    : dailyPunch.status === "punched_out"
+                      ? "completed"
+                      : "pending"
+                    }`}
+                >
+                  ● {dailyPunch.status === "punched_in"
+                    ? `Checked In (${dailyPunch.inTime})`
+                    : dailyPunch.status === "punched_out"
+                      ? `Completed (${dailyPunch.outTime})`
+                      : "Not Checked In"}
                 </span>
               </div>
-              <div className="sp-clock-timing-item">
-                <span className="label">Punch Out</span>
-                <span className="val">
-                  {dailyPunch.outTime || "--"}
-                </span>
-              </div>
-              <div className="sp-clock-timing-item">
-                <span className="label">Shift Duration</span>
-                <span className={`val ${dailyPunch.status === "punched_in" ? "highlight" : ""}`}>
-                  {clockShiftDuration}
-                </span>
-              </div>
-            </div>
 
-            <div style={{ display: "flex", gap: "0.8rem", alignItems: "center" }}>
-              <span className="sp-clock-sublabel">Campus Shift:</span>
-              <span className="sp-shift-timings-val">09:00 AM – 04:30 PM</span>
+              {/* Timings row inside Time Tab */}
+              <div className="sp-clock-timings-grid">
+                <div className="sp-clock-timing-item">
+                  <span className="label">Punch In</span>
+                  <span className={`val ${dailyPunch.inTime ? "highlight" : ""}`}>
+                    {dailyPunch.inTime || "--"}
+                  </span>
+                </div>
+                <div className="sp-clock-timing-item">
+                  <span className="label">Punch Out</span>
+                  <span className="val">
+                    {dailyPunch.outTime || "--"}
+                  </span>
+                </div>
+                <div className="sp-clock-timing-item">
+                  <span className="label">Shift Duration</span>
+                  <span className={`val ${dailyPunch.status === "punched_in" ? "highlight" : ""}`}>
+                    {clockShiftDuration}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "0.8rem", alignItems: "center" }}>
+                  <span className="sp-clock-sublabel">Campus Shift:</span>
+                  <span className="sp-shift-timings-val">09:00 AM – 04:30 PM</span>
+                </div>
+                <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>
+                  {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -745,14 +741,12 @@ export default function FacultyMyAttendance() {
           <table className="sp-attendance-table">
             <thead>
               <tr>
-                <th style={{ width: "13%" }}>DAY</th>
-                <th style={{ width: "18%" }}>SHIFT</th>
-                <th style={{ width: "12%" }}>PUNCH IN</th>
-                <th style={{ width: "12%" }}>PUNCH OUT</th>
-                <th style={{ width: "11%" }}>HOURS</th>
-                <th style={{ width: "16%" }}>BIOMETRIC DEVICE</th>
-                <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                <th style={{ width: "8%", textAlign: "center" }}>REGULARIZATION</th>
+                <th style={{ width: "16%" }}>DAY</th>
+                <th style={{ width: "22%" }}>SHIFT</th>
+                <th style={{ width: "16%", textAlign: "center" }}>PUNCH IN</th>
+                <th style={{ width: "16%", textAlign: "center" }}>PUNCH OUT</th>
+                <th style={{ width: "14%", textAlign: "center" }}>HOURS</th>
+                <th style={{ width: "16%", textAlign: "center" }}>STATUS</th>
               </tr>
             </thead>
             <tbody>
@@ -767,24 +761,19 @@ export default function FacultyMyAttendance() {
                     <td>
                       <span className="sp-shift-text">{log.shift}</span>
                     </td>
-                    <td>
+                    <td style={{ textAlign: "center" }}>
                       <span className={`sp-time-text ${log.inTime !== "--" && !isUpcoming ? "highlight" : ""}`}>
                         {log.inTime}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ textAlign: "center" }}>
                       <span className="sp-time-text">
                         {log.outTime}
                       </span>
                     </td>
-                    <td>
+                    <td style={{ textAlign: "center" }}>
                       <span className="sp-hours-text">
                         {log.hours}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="sp-device-text">
-                        {log.device}
                       </span>
                     </td>
                     <td style={{ textAlign: "center" }}>
@@ -796,37 +785,6 @@ export default function FacultyMyAttendance() {
                         </span>
                       )}
                     </td>
-                    <td style={{ textAlign: "center" }}>
-                      {log.isToday && log.regularizationState === "approved" ? (
-                        <span className="sp-regularize-badge approved">
-                          <span className="sp-badge-dot">●</span> Approved
-                        </span>
-                      ) : log.isToday && log.regularizationState === "pending" ? (
-                        <span className="sp-regularize-badge pending">
-                          <span className="sp-badge-dot">●</span> Pending
-                        </span>
-                      ) : log.canRegularize ? (
-                        <button
-                          type="button"
-                          className="sp-regularize-btn"
-                          onClick={() => {
-                            setRegularizeForm((p) => ({
-                              ...p,
-                              date: log.rawDate || "2026-10-07",
-                              inTime: "09:00 AM",
-                              outTime: "04:30 PM",
-                              reason: "Emergency Late Arrival",
-                              isToday: Boolean(log.isToday),
-                            }));
-                            setShowRegularizeModal(true);
-                          }}
-                        >
-                          Regularize
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>--</span>
-                      )}
-                    </td>
                   </tr>
                 );
               })}
@@ -834,87 +792,6 @@ export default function FacultyMyAttendance() {
           </table>
         </div>
       </div>
-
-      {/* Attendance Regularization Modal */}
-      {showRegularizeModal && (
-        <div className="cms-overlay" onClick={(e) => e.target === e.currentTarget && setShowRegularizeModal(false)}>
-          <div className="cms-modal sm faculty-regularization-modal">
-            <div className="cms-modal-head">
-              <div>
-                <h3 style={{ margin: 0, fontSize: 16 }}>Request Attendance Regularization</h3>
-                <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Submit adjustment for missed or late punch to Admin</span>
-              </div>
-              <button className="cms-icon-btn" onClick={() => setShowRegularizeModal(false)}><X size={16} /></button>
-            </div>
-            <div className="cms-modal-body">
-              <div className="cms-form-grid">
-                <div className="cms-field full">
-                  <label>Date of Incident <span className="req">*</span></label>
-                  <input
-                    type="date"
-                    value={regularizeForm.date || new Date().toISOString().split("T")[0]}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, date: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field full">
-                  <label>Reason for Regularization <span className="req">*</span></label>
-                  <select
-                    value={regularizeForm.reason}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, reason: e.target.value })}
-                  >
-                    <option>Forgot Biometric Punch</option>
-                    <option>Biometric Scanner / Power Outage</option>
-                    <option>On-Duty / Board Examination Duty</option>
-                    <option>Official Campus Assignment</option>
-                    <option>Emergency Late Arrival</option>
-                  </select>
-                </div>
-                <div className="cms-field">
-                  <label>Proposed Punch In</label>
-                  <input
-                    type="text"
-                    value={regularizeForm.inTime}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, inTime: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field">
-                  <label>Proposed Punch Out</label>
-                  <input
-                    type="text"
-                    value={regularizeForm.outTime}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, outTime: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field full">
-                  <label>Explanation & Notes <span className="req">*</span></label>
-                  <textarea
-                    rows={2}
-                    placeholder="Briefly state reason for attendance adjustment..."
-                    value={regularizeForm.notes}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="cms-modal-foot">
-              <button className="cms-btn cms-btn-ghost" onClick={() => setShowRegularizeModal(false)}>Cancel</button>
-              <button
-                className="cms-btn cms-btn-primary"
-                onClick={() => {
-                  if (regularizeForm.isToday || regularizeForm.date === "2026-10-07" || regularizeForm.date === "07/10/2026") {
-                    setTodayRegularization("pending");
-                  }
-                  notify("Attendance Regularization request submitted to Principal / Admin office!");
-                  setShowRegularizeModal(false);
-                }}
-              >
-                Submit Request to Admin
-              </button>
-
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Toast Notification */}
       {toast && (
