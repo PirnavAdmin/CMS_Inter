@@ -44,8 +44,8 @@ namespace CollegeManagement.API.Services.Background
                     _logger.LogError(ex, "Error in ExamAutoCompletionWorker cycle.");
                 }
 
-                // Check every 5 minutes for status transitions in IST
-                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                // Check every 1 minute for responsive status transitions in IST
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }
 

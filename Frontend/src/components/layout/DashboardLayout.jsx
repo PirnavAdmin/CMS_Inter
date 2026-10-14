@@ -520,9 +520,11 @@ export default function DashboardLayout({
     if (canReviewReimbursements) {
       const fetchLiveNotifications = async () => {
         try {
-          const res = await getReimbursements({ status: "Pending", campusId: reimbursementCampusId || undefined });
+          const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
+          if (!fetchFn) return;
+          const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
           if (disposed) return;
-          const payload = res.data?.data ?? res.data?.Data ?? res.data;
+          const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
           const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
           if (claims.length > 0) {
             setLiveNotifications([{
@@ -535,8 +537,8 @@ export default function DashboardLayout({
           } else {
             setLiveNotifications([]);
           }
-        } catch (e) {
-          if (!disposed) console.error("Failed to fetch pending reimbursements", e);
+        } catch {
+          // Gracefully handle offline or pending notification counter without console noise
         }
       };
       

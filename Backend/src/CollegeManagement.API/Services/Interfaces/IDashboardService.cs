@@ -22,5 +22,4 @@ public interface IDashboardService
     Task<IReadOnlyList<RecentActivityItemDto>> GetRecentActivityAsync(int limit = 15, CancellationToken ct = default);
     Task<IReadOnlyList<FacultyWorkloadItemDto>> GetFacultyWorkloadAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default);
     Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(int? academicYearId, int? boardId, int limit = 20, int? campusId = null, CancellationToken ct = default);
-    Task<PrincipalDashboardResponseDto> GetPrincipalDashboardAsync(int? campusId, int? boardId, int? academicYearId, string? period, DateTime? fromDate, DateTime? toDate, CancellationToken ct = default);
 }

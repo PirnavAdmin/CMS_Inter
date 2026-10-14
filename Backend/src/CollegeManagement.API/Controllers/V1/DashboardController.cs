@@ -247,29 +247,6 @@ public class DashboardController : ControllerBase
     }
 
     // =========================================================================
-    // 10B. PRINCIPAL DASHBOARD AGGREGATOR
-    // =========================================================================
-    /// <summary>
-    /// 10B. GET /api/v1/dashboard/principal
-    /// Retrieves full live aggregated metrics for the Principal Dashboard scoped to Campus, Board, Academic Year, and Period.
-    /// Eliminates multiple fragmented API calls and replaces fallback data with live college operational data.
-    /// </summary>
-    [HttpGet("principal")]
-    [ProducesResponseType(typeof(PrincipalDashboardResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetPrincipalDashboard(
-        [FromQuery] int? campusId = null,
-        [FromQuery] int? boardId = null,
-        [FromQuery] int? academicYearId = null,
-        [FromQuery] string? period = "Today",
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null,
-        CancellationToken ct = default)
-    {
-        var result = await _dashboardService.GetPrincipalDashboardAsync(campusId, boardId, academicYearId, period, fromDate, toDate, ct);
-        return Ok(result);
-    }
-
-    // =========================================================================
     // 11. COMPATIBILITY & TESTER ENDPOINTS
     // =========================================================================
     [HttpGet("weekly-attendance")]

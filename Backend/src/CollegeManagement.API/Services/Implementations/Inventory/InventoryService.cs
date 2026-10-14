@@ -45,6 +45,8 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
         {
             if (string.IsNullOrWhiteSpace(request.Name))
                 throw new ArgumentException("Item Name is required.");
+            if (string.IsNullOrWhiteSpace(request.Code))
+                throw new ArgumentException("Item Code is required.");
             if (request.CategoryId <= 0)
                 throw new ArgumentException("Valid Category is required.");
             if (request.MaxStock.HasValue && request.MaxStock.Value < request.MinStock)
@@ -62,11 +64,6 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
                 overrideUser: userName);
 
             return item;
-        }
-
-        public async Task<string> GetNextItemCodeAsync()
-        {
-            return await _repository.GetNextItemCodeAsync();
         }
 
         public async Task<ItemDto> UpdateItemAsync(int itemId, UpdateItemRequest request, int userId, string userName)

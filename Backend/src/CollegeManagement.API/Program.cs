@@ -163,6 +163,7 @@ builder.Services.AddScoped<IResultRepository, ResultRepository>();
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<ITimetableRepository, TimetableRepository>();
 builder.Services.AddScoped<ITimetableSubstitutionRepository, TimetableSubstitutionRepository>();
+builder.Services.AddScoped<ITimetableBackupRepository, TimetableBackupRepository>();
 builder.Services.AddScoped<IPeriodRepository, PeriodRepository>();
 builder.Services.AddScoped<IPeriodStructureRepository, PeriodStructureRepository>();
 builder.Services.AddScoped<IBreakTypeRepository, BreakTypeRepository>();
@@ -206,7 +207,6 @@ builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
-builder.Services.AddScoped<IStaffReimbursementRepository, StaffReimbursementRepository>();
 builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 
 // Inventory Repository
@@ -245,7 +245,6 @@ builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
 builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
-builder.Services.AddScoped<IStaffReimbursementService, StaffReimbursementService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IStudentAdmissionService, StudentAdmissionService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
@@ -433,14 +432,6 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-if (args.Contains("--test-principal-dashboard"))
-{
-    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
-    var tester = new CollegeManagement.API.Tests.PrincipalDashboardTester(connStr);
-    await tester.RunAsync();
-    return;
-}
-
 if (args.Contains("--test-timetable"))
 {
     var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
@@ -582,6 +573,36 @@ app.MapControllers();
 app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
+
+try
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var allRollNoConfigs = dbContext.NumberSeriesConfigurations
+        .Where(n => n.SeriesCode.StartsWith("ROLL_NO"))
+        .ToList();
+
+    bool dbModified = false;
+    foreach(var config in allRollNoConfigs)
+    {
+        if (config.FormatPattern != "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}")
+        {
+            config.FormatPattern = "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}";
+            config.Prefix = "";
+            dbModified = true;
+        }
+    }
+
+    if (dbModified)
+    {
+        dbContext.SaveChanges();
+    }
+
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Failed to run startup NumberSeriesConfigurations migration check.");
+}
 
 app.Run();
 

@@ -721,30 +721,3 @@
   color: #ffffff !important;
 }
 
-/* Filter Bar in Marks Entry */
-.cms-filters-marks {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px;
-}
-
-.cms-filters-marks .cms-field {
-  flex: 1 1 140px;
-  min-width: 130px;
-}
-
-.cms-filters-marks .att-filter-action {
-  margin-left: auto;
-  display: flex;
-  align-items: flex-end;
-}
-
-.cms-filters-marks .att-filter-action .cms-btn {
-  height: 38px;
-  white-space: nowrap;
-  font-weight: 600;
-  font-size: 13px;
-  padding-inline: 18px;
-}
-

@@ -8,18 +8,23 @@ import {
   CheckCircle2,
   AlertCircle,
   Search,
+  SlidersHorizontal,
+  ChevronDown,
   BookOpen,
+  User,
   UserCheck,
   Eye,
   Edit3,
+  FileText,
   Check,
   X,
+  ChevronLeft,
+  ChevronRight,
+  Printer,
+  Shield,
   FileDown,
   Loader2,
   RefreshCw,
-  Table,
-  LayoutGrid,
-  ShieldAlert,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import "../styles/FacultyExamDuties.css";
@@ -27,11 +32,10 @@ import { useFacultySafe } from "../FacultyContext.jsx";
 import apiClient from "@/api/axios.js";
 import { getAuthUser, getAuthToken } from "@/features/authStorage.js";
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 6;
 
 function getFacultyStaffId(context) {
   if (context?.profile?.staffId) return Number(context.profile.staffId);
-  if (context?.profileData?.staffId) return Number(context.profileData.staffId);
   if (context?.profile?.id) return Number(context.profile.id);
   const auth = getAuthUser();
   if (auth?.staffId) return Number(auth.staffId);
@@ -55,9 +59,6 @@ export default function FacultyExamDuties() {
   const [loading, setLoading] = useState(true);
   const [facultyMembers, setFacultyMembers] = useState([]);
 
-  // View Mode: "table" | "cards"
-  const [viewMode, setViewMode] = useState("table");
-
   // Filter States
   const [activeTab, setActiveTab] = useState("all"); // 'all' | 'upcoming' | 'today' | 'completed' | 'cancelled'
   const [searchQuery, setSearchQuery] = useState("");
@@ -70,6 +71,7 @@ export default function FacultyExamDuties() {
   const [reassignDuty, setReassignDuty] = useState(null);
   const [reassignTarget, setReassignTarget] = useState("");
   const [reassignReason, setReassignReason] = useState("");
+  const [reportDuty, setReportDuty] = useState(null);
   const [toast, setToast] = useState(null);
 
   const notify = (text, type = "success") => {
@@ -96,7 +98,6 @@ export default function FacultyExamDuties() {
       setDutiesList(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn("Error fetching examination duties:", err);
-      // Graceful notification without blocking the UI
       notify("Failed to retrieve live examination duties.", "error");
     } finally {
       setLoading(false);
@@ -157,16 +158,19 @@ export default function FacultyExamDuties() {
         const matchesName = d.examName?.toLowerCase().includes(q);
         const matchesCode = d.examCode?.toLowerCase().includes(q);
         const matchesSubject = d.subject?.toLowerCase().includes(q);
+        const matchesInvigilator = d.invigilator?.toLowerCase().includes(q);
         const matchesVenue = d.venue?.toLowerCase().includes(q);
-        if (!matchesName && !matchesCode && !matchesSubject && !matchesVenue) return false;
+        if (!matchesName && !matchesCode && !matchesSubject && !matchesInvigilator && !matchesVenue) {
+          return false;
+        }
       }
 
       return true;
     });
   }, [dutiesList, activeTab, statusFilter, examTypeFilter, searchQuery]);
 
-  // Pagination calculation
-  const totalPages = Math.max(1, Math.ceil(filteredDuties.length / ITEMS_PER_PAGE));
+  // Pagination
+  const totalPages = Math.ceil(filteredDuties.length / ITEMS_PER_PAGE) || 1;
   const paginatedDuties = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return filteredDuties.slice(start, start + ITEMS_PER_PAGE);
@@ -177,83 +181,72 @@ export default function FacultyExamDuties() {
     setCurrentPage(1);
   };
 
-  // Reassignment Submission
-  const handleReassignSubmit = (e) => {
-    e.preventDefault();
-    if (!reassignTarget.trim()) {
-      notify("Please select a target faculty member.", "error");
-      return;
-    }
-    if (!reassignReason.trim()) {
-      notify("Please provide a legitimate justification reason.", "error");
-      return;
-    }
-
+  const handleConfirmDuty = (duty) => {
     setDutiesList((prev) =>
-      prev.map((d) =>
-        d.id === reassignDuty.id
+      prev.map((item) =>
+        item.id === duty.id
           ? {
-              ...d,
-              status: "Pending Confirmation",
-              reassignedTo: reassignTarget,
-              reassignReason: reassignReason,
+              ...item,
+              status: "Upcoming",
             }
-          : d
+          : item
       )
     );
+    notify(`Invigilation duty confirmed for ${duty.examCode}. Duty allotment confirmed.`);
+  };
 
-    notify(`Reassignment request submitted to Controller of Examinations for review.`);
+  const handleReassignSubmit = (e) => {
+    e.preventDefault();
+    if (!reassignDuty) return;
+
+    setDutiesList((prev) =>
+      prev.map((item) =>
+        item.id === reassignDuty.id
+          ? {
+              ...item,
+              invigilator: `${reassignTarget} (Reassigned)`,
+            }
+          : item
+      )
+    );
+    notify(`Duty for ${reassignDuty.examCode} reassigned to ${reassignTarget}. Notification dispatched.`);
     setReassignDuty(null);
     setReassignReason("");
   };
 
-  // Confirm Duty Slot
-  const handleConfirmDuty = (duty) => {
-    setDutiesList((prev) =>
-      prev.map((d) => (d.id === duty.id ? { ...d, status: "Upcoming" } : d))
-    );
-    notify(`Invigilation slot for ${duty.examCode} confirmed successfully.`);
-  };
-
-  // Download Duty Schedule Report (XLSX)
   const handleDownloadFullReport = () => {
-    if (!dutiesList.length) {
-      notify("No examination duty records found to export.", "error");
-      return;
-    }
+    if (!dutiesList.length) return notify("No exam duties to export.", "error");
 
-    const exportRows = dutiesList.map((d, index) => ({
-      "S.No": index + 1,
+    const exportRows = dutiesList.map((d, idx) => ({
+      "S.No": idx + 1,
+      "Duty ID": d.id,
       "Exam Name": d.examName,
       "Exam Code": d.examCode,
-      Category: d.category,
-      "Subject & Paper": d.subject,
+      "Subject": d.subject,
       "Exam Date": d.date || d.examDate,
-      Session: d.session,
-      "Exam Timings": d.examHours,
-      "Reporting Time": d.reportingTime,
+      "Session": d.session,
+      "Hours": d.examHours,
       "Hall / Venue": d.venue,
-      Role: d.role || "Invigilator",
-      "Invigilator Name": d.invigilator,
-      Status: d.status,
+      "Invigilator": d.invigilator,
+      "Status": d.status,
+      "Reporting Time": d.reportingTime,
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Exam Duties");
-    XLSX.writeFile(workbook, `Faculty_Exam_Duties_Schedule_${staffId || "All"}.xlsx`);
-    notify("Examination duty schedule exported successfully as Excel.");
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Exam Duties");
+    XLSX.writeFile(wb, `Faculty_Exam_Duties_Schedule_${new Date().toISOString().split("T")[0]}.xlsx`);
+    notify("Downloaded complete Examination Duties Schedule as Excel file.");
   };
 
-  // Download Duty Allotment Slip (Text / Order Document)
   const handleDownloadDutySlip = (duty) => {
     const slipText = [
       "================================================================================",
-      "                 COLLEGE EXAMINATION CELL - INVIGILATION DUTY ORDER             ",
+      "                    PIRNAV COLLEGES - EXAMINATION DUTY ALLOTMENT SLIP           ",
       "================================================================================",
-      `DUTY ORDER REFERENCE : CMS/EXAM/DUTY/${duty.examCode || "GEN"}/${duty.id}`,
-      `DATE OF ISSUE        : ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`,
-      "--------------------------------------------------------------------------------",
+      `Date Issued      : ${new Date().toLocaleDateString()}`,
+      `Duty Reference   : DUTY-ASSIGN-${duty.id}`,
+      "",
       "EXAMINATION PARTICULARS:",
       "--------------------------------------------------------------------------------",
       `Exam Name        : ${duty.examName}`,
@@ -275,12 +268,7 @@ export default function FacultyExamDuties() {
       "",
       "STANDARD OPERATING PROCEDURES (SOP):",
       "--------------------------------------------------------------------------------",
-      ...(duty.sops || [
-        "Collect sealed Question Paper packets from Chief Superintendent room 30 mins prior.",
-        "Verify Student Hall Tickets and prohibit unauthorized electronic devices.",
-        "Cross-verify candidate signature on Nominal Roll & OMR Barcode.",
-        "Hand over signed absentee statement within 30 minutes of exam commencement.",
-      ]).map((sop, i) => `${i + 1}. ${sop}`),
+      ...(duty.sops || []).map((sop, i) => `${i + 1}. ${sop}`),
       "",
       "Authorized Signatory / Controller of Examinations: ___________________________",
       "================================================================================",
@@ -319,16 +307,11 @@ export default function FacultyExamDuties() {
     <div className="fed-container">
       {/* 1. Page Header */}
       <div className="fed-header">
-        <div className="fed-header-left">
-          <div className="fed-header-icon-box">
-            <Calendar size={22} />
-          </div>
-          <div>
-            <h1 className="fed-title">Examination Duties & Invigilation</h1>
-            <p className="fed-subtitle">
-              Collegiate invigilation roster, hall allotments, session timings, and examination protocols
-            </p>
-          </div>
+        <div>
+          <h1 className="fed-title">Faculty Examination Duties & Invigilation</h1>
+          <p className="fed-subtitle">
+            Centralized collegiate examination roster, invigilation duties, hall allocations, and SOP protocols
+          </p>
         </div>
         <div className="fed-header-actions">
           <button
@@ -344,14 +327,14 @@ export default function FacultyExamDuties() {
             className="cms-btn cms-btn-primary"
             onClick={handleDownloadFullReport}
           >
-            <FileDown size={15} /> Export Roster
+            <FileDown size={15} /> Export Duties Schedule
           </button>
         </div>
       </div>
 
       {/* 2. KPI Summary Statistics */}
-      <div className="fed-kpi-grid">
-        <div className="fed-kpi-card" onClick={() => handleTabChange("all")}>
+      <div className="fed-kpis-grid">
+        <div className="fed-kpi-card">
           <div className="fed-kpi-info">
             <span className="fed-kpi-label">TOTAL ALLOTTED DUTIES</span>
             <span className="fed-kpi-value">{kpiStats.total}</span>
@@ -361,7 +344,7 @@ export default function FacultyExamDuties() {
           </div>
         </div>
 
-        <div className="fed-kpi-card" onClick={() => handleTabChange("upcoming")}>
+        <div className="fed-kpi-card">
           <div className="fed-kpi-info">
             <span className="fed-kpi-label">UPCOMING SESSIONS</span>
             <span className="fed-kpi-value">{kpiStats.upcoming}</span>
@@ -371,17 +354,17 @@ export default function FacultyExamDuties() {
           </div>
         </div>
 
-        <div className="fed-kpi-card" onClick={() => handleTabChange("today")}>
+        <div className="fed-kpi-card">
           <div className="fed-kpi-info">
-            <span className="fed-kpi-label">TODAY'S DUTIES</span>
+            <span className="fed-kpi-label">TODAY'S SESSIONS</span>
             <span className="fed-kpi-value" style={{ color: "#d97706" }}>{kpiStats.today}</span>
           </div>
-          <div className="fed-kpi-icon today">
+          <div className="fed-kpi-icon" style={{ background: "#fef3c7", color: "#d97706" }}>
             <AlertCircle size={22} />
           </div>
         </div>
 
-        <div className="fed-kpi-card" onClick={() => handleTabChange("completed")}>
+        <div className="fed-kpi-card">
           <div className="fed-kpi-info">
             <span className="fed-kpi-label">COMPLETED DUTIES</span>
             <span className="fed-kpi-value">{kpiStats.completed}</span>
@@ -394,69 +377,42 @@ export default function FacultyExamDuties() {
 
       {/* 3. Filter & Control Toolbar */}
       <div className="fed-toolbar">
-        <div className="fed-toolbar-row">
-          {/* Status Tab Filters */}
-          <div className="fed-tabs-bar">
-            <button
-              type="button"
-              className={`fed-tab-btn ${activeTab === "all" ? "active" : ""}`}
-              onClick={() => handleTabChange("all")}
-            >
-              All Duties ({kpiStats.total})
-            </button>
-            <button
-              type="button"
-              className={`fed-tab-btn ${activeTab === "upcoming" ? "active" : ""}`}
-              onClick={() => handleTabChange("upcoming")}
-            >
-              Upcoming ({kpiStats.upcoming})
-            </button>
-            <button
-              type="button"
-              className={`fed-tab-btn ${activeTab === "today" ? "active" : ""}`}
-              onClick={() => handleTabChange("today")}
-            >
-              Today ({kpiStats.today})
-            </button>
-            <button
-              type="button"
-              className={`fed-tab-btn ${activeTab === "completed" ? "active" : ""}`}
-              onClick={() => handleTabChange("completed")}
-            >
-              Completed ({kpiStats.completed})
-            </button>
-            <button
-              type="button"
-              className={`fed-tab-btn ${activeTab === "cancelled" ? "active" : ""}`}
-              onClick={() => handleTabChange("cancelled")}
-            >
-              Cancelled ({kpiStats.cancelled})
-            </button>
-          </div>
-
-          {/* View Toggle: Table / Grid */}
-          <div className="fed-view-toggle">
-            <button
-              type="button"
-              className={`fed-view-btn ${viewMode === "table" ? "active" : ""}`}
-              onClick={() => setViewMode("table")}
-              title="Table Roster View"
-            >
-              <Table size={14} /> Roster
-            </button>
-            <button
-              type="button"
-              className={`fed-view-btn ${viewMode === "cards" ? "active" : ""}`}
-              onClick={() => setViewMode("cards")}
-              title="Cards Grid View"
-            >
-              <LayoutGrid size={14} /> Cards
-            </button>
-          </div>
+        {/* Tab Filters */}
+        <div className="fed-tabs-bar">
+          <button
+            className={`fed-tab-btn ${activeTab === "all" ? "active" : ""}`}
+            onClick={() => handleTabChange("all")}
+          >
+            All Duties ({kpiStats.total})
+          </button>
+          <button
+            className={`fed-tab-btn ${activeTab === "upcoming" ? "active" : ""}`}
+            onClick={() => handleTabChange("upcoming")}
+          >
+            Upcoming ({kpiStats.upcoming})
+          </button>
+          <button
+            className={`fed-tab-btn ${activeTab === "today" ? "active" : ""}`}
+            onClick={() => handleTabChange("today")}
+          >
+            Today ({kpiStats.today})
+          </button>
+          <button
+            className={`fed-tab-btn ${activeTab === "completed" ? "active" : ""}`}
+            onClick={() => handleTabChange("completed")}
+          >
+            Completed ({kpiStats.completed})
+          </button>
+          <button
+            className={`fed-tab-btn ${activeTab === "cancelled" ? "active" : ""}`}
+            onClick={() => handleTabChange("cancelled")}
+          >
+            Cancelled ({kpiStats.cancelled})
+          </button>
         </div>
 
-        <div className="fed-toolbar-row" style={{ paddingTop: 8, borderTop: "1px solid var(--cms-border, #f1f5f9)" }}>
-          {/* Search Box */}
+        {/* Search & Selectors */}
+        <div className="fed-search-filters">
           <div className="fed-search-box">
             <Search size={16} className="fed-search-icon" />
             <input
@@ -479,29 +435,26 @@ export default function FacultyExamDuties() {
             )}
           </div>
 
-          {/* Category Filter */}
-          <div className="fed-search-filters">
-            <select
-              className="fed-select"
-              value={examTypeFilter}
-              onChange={(e) => {
-                setExamTypeFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-            >
-              <option value="all">All Exam Categories</option>
-              <option value="board">Board Theory / IPE</option>
-              <option value="practical">Practical Labs</option>
-              <option value="internal">Pre-Final / Internal</option>
-            </select>
-          </div>
+          <select
+            className="fed-select"
+            value={examTypeFilter}
+            onChange={(e) => {
+              setExamTypeFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="all">All Exam Categories</option>
+            <option value="board">Board Theory / IPE</option>
+            <option value="practical">Practical Labs</option>
+            <option value="internal">Pre-Final / Internal</option>
+          </select>
         </div>
       </div>
 
-      {/* 4. Examination Duties View (Table or Cards) */}
+      {/* 4. Exam Duties Cards Grid */}
       {loading ? (
         <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <Loader2 size={32} className="spin" style={{ marginInline: "auto", color: "var(--cms-primary, #6F8400)" }} />
+          <Loader2 size={28} className="spin" style={{ marginInline: "auto", color: "var(--cms-primary, #6F8400)" }} />
           <p style={{ marginTop: 12, fontSize: 13.5, color: "var(--cms-muted)" }}>
             Loading live examination duties and hall allotments...
           </p>
@@ -515,7 +468,7 @@ export default function FacultyExamDuties() {
           <p>
             {searchQuery || activeTab !== "all" || examTypeFilter !== "all"
               ? "No exam duties match the active filters or search criteria."
-              : "No invigilation duties are currently scheduled for your faculty profile."}
+              : "No invigilation duties are currently scheduled for your profile."}
           </p>
           {(searchQuery || activeTab !== "all" || examTypeFilter !== "all") && (
             <button
@@ -531,95 +484,7 @@ export default function FacultyExamDuties() {
             </button>
           )}
         </div>
-      ) : viewMode === "table" ? (
-        /* TABLE / ROSTER VIEW */
-        <div className="fed-table-container">
-          <table className="fed-roster-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Exam & Code</th>
-                <th>Subject</th>
-                <th>Date & Timings</th>
-                <th>Session</th>
-                <th>Hall / Room</th>
-                <th>Mandatory Reporting</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedDuties.map((duty, idx) => (
-                <tr key={duty.id}>
-                  <td style={{ fontWeight: 600, color: "var(--cms-muted)" }}>
-                    {(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 700, color: "var(--cms-text)" }}>{duty.examName}</div>
-                    <div style={{ fontSize: 12, color: "var(--cms-muted)", fontWeight: 600 }}>{duty.examCode}</div>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 700, color: "var(--cms-text)" }}>{duty.subject}</div>
-                    {duty.subjectCode && (
-                      <span style={{ fontSize: 11, background: "var(--cms-subtle)", padding: "1px 6px", borderRadius: 4 }}>
-                        {duty.subjectCode}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{duty.date || duty.examDate}</div>
-                    <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{duty.examHours}</div>
-                  </td>
-                  <td>
-                    <span style={{ fontSize: 12.5, fontWeight: 600 }}>{duty.session}</span>
-                  </td>
-                  <td>
-                    <div style={{ fontWeight: 700, color: "var(--cms-primary, #6F8400)" }}>
-                      {duty.venue}
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--cms-muted)" }}>{duty.candidates || "30 Candidates"}</div>
-                  </td>
-                  <td>
-                    <span style={{ fontSize: 12, color: "#b45309", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <Clock size={12} /> {duty.reportingTime}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ fontSize: 12.5, fontWeight: 600 }}>{duty.role || "Invigilator"}</span>
-                  </td>
-                  <td>
-                    <span className={`fed-status-badge ${getStatusClass(duty.status)}`}>
-                      {duty.status}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                      <button
-                        type="button"
-                        className="cms-btn cms-btn-xs cms-btn-outline"
-                        onClick={() => setSelectedDuty(duty)}
-                        title="View SOPs and exam instructions"
-                      >
-                        <Eye size={13} /> SOPs
-                      </button>
-                      <button
-                        type="button"
-                        className="cms-btn cms-btn-xs cms-btn-primary"
-                        onClick={() => handleDownloadDutySlip(duty)}
-                        title="Download duty allotment order"
-                      >
-                        <Download size={13} /> Slip
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       ) : (
-        /* CARDS GRID VIEW */
         <div className="fed-cards-grid">
           {paginatedDuties.map((duty) => (
             <div key={duty.id} className="fed-card">
@@ -712,7 +577,7 @@ export default function FacultyExamDuties() {
 
                 <button
                   type="button"
-                  className="fed-action-btn primary"
+                  className="fed-action-btn outline"
                   onClick={() => handleDownloadDutySlip(duty)}
                   title="Download duty allotment slip"
                 >
@@ -722,10 +587,24 @@ export default function FacultyExamDuties() {
                 {duty.status === "Pending Confirmation" && (
                   <button
                     type="button"
-                    className="fed-action-btn outline"
+                    className="fed-action-btn primary"
                     onClick={() => handleConfirmDuty(duty)}
                   >
-                    <Check size={13} /> Confirm
+                    <Check size={13} /> Confirm Slot
+                  </button>
+                )}
+
+                {duty.status === "Upcoming" && (
+                  <button
+                    type="button"
+                    className="fed-action-btn ghost"
+                    onClick={() => {
+                      setReassignDuty(duty);
+                      setReassignReason("");
+                    }}
+                    title="Request re-assignment of invigilation slot"
+                  >
+                    <Edit3 size={13} /> Reassign
                   </button>
                 )}
               </div>
@@ -765,7 +644,7 @@ export default function FacultyExamDuties() {
       {/* MODAL 1: Duty Details & SOPs Modal */}
       {selectedDuty && (
         <div className="sp-modal-overlay" onClick={() => setSelectedDuty(null)}>
-          <div className="sp-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
+          <div className="sp-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600 }}>
             <div className="sp-modal-head">
               <div>
                 <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16 }}>
@@ -786,28 +665,28 @@ export default function FacultyExamDuties() {
 
             <div className="sp-modal-body" style={{ padding: 18 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-                <div style={{ background: "var(--cms-subtle, #f8f9fa)", padding: 12, borderRadius: 8 }}>
+                <div style={{ background: "var(--cms-surface-soft, #f8f9fa)", padding: 10, borderRadius: 8 }}>
                   <span style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>DATE & SESSION</span>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 2 }}>{selectedDuty.date || selectedDuty.examDate}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{selectedDuty.date || selectedDuty.examDate}</div>
                   <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{selectedDuty.session}</div>
                 </div>
 
-                <div style={{ background: "var(--cms-subtle, #f8f9fa)", padding: 12, borderRadius: 8 }}>
+                <div style={{ background: "var(--cms-surface-soft, #f8f9fa)", padding: 10, borderRadius: 8 }}>
                   <span style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>EXAMINATION HOURS</span>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 2 }}>{selectedDuty.examHours}</div>
-                  <div style={{ fontSize: 12, color: "#b45309", fontWeight: 600 }}>Report: {selectedDuty.reportingTime}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{selectedDuty.examHours}</div>
+                  <div style={{ fontSize: 12, color: "#b45309" }}>Report: {selectedDuty.reportingTime}</div>
                 </div>
 
-                <div style={{ background: "var(--cms-subtle, #f8f9fa)", padding: 12, borderRadius: 8 }}>
+                <div style={{ background: "var(--cms-surface-soft, #f8f9fa)", padding: 10, borderRadius: 8 }}>
                   <span style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>HALL / VENUE</span>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 2 }}>{selectedDuty.venue}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{selectedDuty.venue}</div>
                   <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{selectedDuty.candidates}</div>
                 </div>
 
-                <div style={{ background: "var(--cms-subtle, #f8f9fa)", padding: 12, borderRadius: 8 }}>
+                <div style={{ background: "var(--cms-surface-soft, #f8f9fa)", padding: 10, borderRadius: 8 }}>
                   <span style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>INVIGILATOR IN-CHARGE</span>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 2 }}>{selectedDuty.invigilator}</div>
-                  <div style={{ fontSize: 12, color: "var(--cms-primary, #6F8400)", fontWeight: 600 }}>Status: {selectedDuty.status}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{selectedDuty.invigilator}</div>
+                  <div style={{ fontSize: 12, color: "var(--cms-primary, #6F8400)" }}>Status: {selectedDuty.status}</div>
                 </div>
               </div>
 
@@ -815,12 +694,7 @@ export default function FacultyExamDuties() {
                 Standard Operating Procedures (SOP) & Instructions:
               </h4>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.6, color: "var(--cms-text)" }}>
-                {(selectedDuty.sops || [
-                  "Collect sealed Question Paper packets from Chief Superintendent room 30 mins prior.",
-                  "Verify Student Hall Tickets and prohibit unauthorized electronic devices.",
-                  "Cross-verify candidate signature on Nominal Roll & OMR Barcode.",
-                  "Hand over signed absentee statement within 30 minutes of exam commencement.",
-                ]).map((sop, i) => (
+                {(selectedDuty.sops || []).map((sop, i) => (
                   <li key={i}>{sop}</li>
                 ))}
               </ul>
@@ -843,6 +717,91 @@ export default function FacultyExamDuties() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Reassign Duty Modal */}
+      {reassignDuty && (
+        <div className="sp-modal-overlay" onClick={() => setReassignDuty(null)}>
+          <div className="sp-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="sp-modal-head">
+              <div>
+                <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16 }}>Request Duty Reassignment</h3>
+                <p className="sp-modal-subtitle" style={{ margin: "2px 0 0 0", fontSize: 12.5 }}>
+                  {reassignDuty.examCode} · {reassignDuty.date || reassignDuty.examDate}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="sp-modal-close-btn"
+                onClick={() => setReassignDuty(null)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleReassignSubmit}>
+              <div className="sp-modal-body" style={{ padding: 18 }}>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--cms-muted)", marginBottom: 6 }}>
+                    SELECT SUBSTITUTE FACULTY MEMBER
+                  </label>
+                  <select
+                    className="cms-select-input"
+                    value={reassignTarget}
+                    onChange={(e) => setReassignTarget(e.target.value)}
+                    required
+                  >
+                    {facultyMembers.length ? (
+                      facultyMembers.map((f) => {
+                        const label = `${f.firstName || f.name} ${f.lastName || ""} (EMP-${f.id || f.staffId})`.trim();
+                        return (
+                          <option key={f.id || f.staffId} value={label}>
+                            {label}
+                          </option>
+                        );
+                      })
+                    ) : (
+                      <option value="Dr. S. Ramesh (EMP-1034)">Dr. S. Ramesh (EMP-1034)</option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--cms-muted)", marginBottom: 6 }}>
+                    REASON FOR REASSIGNMENT
+                  </label>
+                  <textarea
+                    rows={3}
+                    className="cms-text-input"
+                    value={reassignReason}
+                    onChange={(e) => setReassignReason(e.target.value)}
+                    placeholder="Enter academic conflict, leave reason, or emergency justification..."
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="sp-modal-foot">
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  onClick={() => setReassignDuty(null)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="cms-btn cms-btn-primary">
+                  Dispatch Reassignment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`}>
+          {toast.text}
         </div>
       )}
     </div>

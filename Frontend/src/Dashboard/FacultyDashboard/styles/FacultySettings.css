@@ -1,4 +1,4 @@
-/* Faculty Settings Page Styles — Matching Driver Settings Modal Aesthetics */
+/* Faculty Settings Page Styles */
 .faculty-settings-container {
   padding: 8px 4px 24px;
   width: 100%;
@@ -23,9 +23,9 @@
   flex-direction: column;
   justify-content: space-between;
   min-height: 160px;
-  padding: 22px;
+  padding: 18px 20px;
   border: 1px solid var(--cms-border, rgba(0, 0, 0, 0.08));
-  border-radius: 13px;
+  border-radius: 12px;
   background: var(--cms-surface, #ffffff);
   box-shadow: 0 2px 10px rgba(43, 55, 26, 0.04);
   transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
@@ -78,7 +78,7 @@
 .faculty-settings-card p {
   margin: 0 0 16px 0;
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.5;
   color: var(--cms-muted, #64748b);
   flex-grow: 1;
 }
@@ -98,18 +98,17 @@
   border-radius: 8px;
 }
 
-/* =========================================================
-   Modal Styling (Matching Driver Settings Modal Structure)
-   ========================================================= */
+/* Modal / Management Dialog */
 .faculty-settings-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  display: grid;
-  place-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 16px;
-  background: rgba(16, 23, 13, 0.55);
-  backdrop-filter: blur(4px);
   animation: fadeInModal 0.2s ease-out;
 }
 
@@ -119,54 +118,47 @@
 }
 
 .faculty-settings-modal {
-  display: flex;
-  flex-direction: column;
-  width: min(680px, calc(100vw - 28px));
+  width: 100%;
   max-width: 680px;
-  max-height: 90dvh;
-  border-radius: 14px;
+  max-height: 90vh;
   background: var(--cms-surface, #ffffff);
   border: 1px solid var(--cms-border, #e2e8f0);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-  overflow-y: auto;
-  overflow-x: hidden;
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .faculty-settings-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--cms-border, #e2e8f0);
-  background: var(--cms-primary-soft, var(--cms-surface-alt, #fafbf5));
+  background: var(--cms-surface-alt, #fafbf5);
 }
 
 .faculty-settings-modal-head h2 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 17px;
   margin: 0;
+  font-size: 17px;
   font-weight: 700;
   color: var(--cms-text, #1e293b);
-}
-
-.faculty-settings-shield-icon {
-  color: var(--cms-primary, #6f8400);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .faculty-settings-modal-close {
   background: transparent;
-  border: 0;
-  font-size: 16px;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
   color: var(--cms-muted, #64748b);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 4px;
   border-radius: 6px;
-  transition: all 0.15s ease;
+  transition: all 0.15s;
 }
 
 .faculty-settings-modal-close:hover {
@@ -174,56 +166,63 @@
   color: var(--cms-text, #1e293b);
 }
 
-/* Modal Tabs Header */
 .faculty-settings-tabs {
   display: flex;
-  background: var(--cms-primary-soft, var(--cms-surface-alt, #fafbf5));
   border-bottom: 1px solid var(--cms-border, #e2e8f0);
-  padding: 0;
+  background: var(--cms-surface, #ffffff);
+  padding: 0 16px;
+  gap: 4px;
+  overflow-x: auto;
 }
 
 .faculty-settings-tab-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 14px 16px;
+  padding: 12px 14px;
+  border: none;
   background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--cms-muted, #64748b);
-  font-size: 12.5px;
-  font-weight: 700;
   cursor: pointer;
-  flex: 1;
-  text-align: center;
+  border-bottom: 2px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.15s;
   white-space: nowrap;
-  transition: all 0.15s ease;
 }
 
 .faculty-settings-tab-btn:hover {
-  color: var(--cms-text, #1e293b);
+  color: var(--cms-primary, #3b5a10);
 }
 
 .faculty-settings-tab-btn.is-active {
-  color: var(--cms-primary, #6f8400) !important;
-  border-bottom-color: var(--cms-primary, #6f8400) !important;
+  color: var(--cms-primary, #3b5a10);
+  border-bottom-color: var(--cms-primary, #3b5a10);
   font-weight: 700;
-  background: transparent !important;
 }
 
-/* Modal Body */
 .faculty-settings-modal-body {
-  padding: 24px;
-  background: var(--cms-primary-soft, var(--cms-surface-alt, #fafbf5));
+  padding: 20px;
   overflow-y: auto;
   flex: 1;
+}
+
+.faculty-settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 16px;
+}
+
+@media (max-width: 580px) {
+  .faculty-settings-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .faculty-settings-field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
 }
 
 .faculty-settings-field label {
@@ -234,122 +233,215 @@
 
 .faculty-settings-field input,
 .faculty-settings-field select {
-  width: 100%;
-  padding: 11px 12px;
+  height: 38px;
+  padding: 0 10px;
   border: 1px solid var(--cms-border, #cbd5e1);
-  border-radius: 8px;
+  border-radius: 7px;
+  font-size: 13px;
   background: var(--cms-surface, #ffffff);
   color: var(--cms-text, #1e293b);
-  font: inherit;
-  font-size: 13.5px;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
-  box-sizing: border-box;
 }
 
 .faculty-settings-field input:focus,
 .faculty-settings-field select:focus {
-  border-color: var(--cms-primary, #6f8400);
-  box-shadow: 0 0 0 2px rgba(111, 132, 0, 0.18);
-  outline: 2px solid var(--cms-primary, #6f8400);
-  outline-offset: 1px;
+  border-color: var(--cms-primary, #3b5a10);
+  box-shadow: 0 0 0 2px var(--cms-primary-soft, #f7f9ea);
+}
+
+.faculty-settings-field input[disabled],
+.faculty-settings-field input:read-only {
+  background: var(--cms-subtle, #f8fafc);
+  color: var(--cms-muted, #64748b);
+  cursor: not-allowed;
 }
 
 .faculty-settings-hint {
   font-size: 11px;
-  font-weight: 400;
   color: var(--cms-muted, #64748b);
-  line-height: 1.5;
   margin-top: 2px;
 }
 
-/* Preferences Toggle Rows */
-.faculty-settings-switch-row {
+/* Prevent Edge/IE native password reveal icon from causing duplicate eye icons */
+.faculty-settings-password-wrap input::-ms-reveal,
+.faculty-settings-password-wrap input::-ms-clear,
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.faculty-settings-password-wrap {
+  position: relative;
   display: flex;
-  flex-direction: row;
+  align-items: center;
+  width: 100%;
+}
+
+.faculty-settings-password-wrap input {
+  width: 100%;
+  padding-right: 38px;
+}
+
+.faculty-settings-password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--cms-muted, #64748b);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.faculty-settings-password-toggle:hover {
+  color: var(--cms-text, #1e293b);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .faculty-settings-password-toggle,
+.dark-theme .faculty-settings-password-toggle {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .faculty-settings-password-toggle:hover,
+.dark-theme .faculty-settings-password-toggle:hover {
+  color: var(--cms-text, #f2f3ee) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Password Strength & Criteria Indicators */
+.faculty-password-strength-box {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.faculty-password-strength-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: var(--cms-border, #e2e8f0);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .faculty-password-strength-bar-bg,
+.dark-theme .faculty-password-strength-bar-bg {
+  background: #2b3028 !important;
+}
+
+.faculty-password-strength-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease, background-color 0.25s ease;
+}
+
+.faculty-password-strength-label {
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 13px 15px;
-  min-height: 62px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+}
+
+[data-theme="dark"] .faculty-password-strength-label,
+.dark-theme .faculty-password-strength-label {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+.faculty-password-criteria-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.faculty-password-criteria-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--cms-subtle, #f1f5f9);
+  color: var(--cms-muted, #64748b);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  transition: all 0.2s ease;
+}
+
+.faculty-password-criteria-item.met {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  border-color: rgba(34, 197, 94, 0.35);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .faculty-password-criteria-item,
+.dark-theme .faculty-password-criteria-item {
+  background: #1c221a !important;
+  border-color: #2e3828 !important;
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .faculty-password-criteria-item.met,
+.dark-theme .faculty-password-criteria-item.met {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #4ade80 !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+}
+
+.faculty-settings-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
   border: 1px solid var(--cms-border, #e2e8f0);
   border-radius: 8px;
   background: var(--cms-surface, #ffffff);
-  gap: 16px;
   margin-bottom: 10px;
-}
-
-.faculty-settings-switch-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .faculty-settings-switch-info h4 {
   margin: 0;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--cms-text, #1e293b);
 }
 
 .faculty-settings-switch-info p {
-  margin: 0;
-  font-size: 11.5px;
+  margin: 3px 0 0;
+  font-size: 12px;
   color: var(--cms-muted, #64748b);
-  font-weight: 400;
-  line-height: 1.4;
 }
 
-.faculty-settings-switch-row input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  accent-color: var(--cms-primary, #6f8400);
-  cursor: pointer;
-}
-
-/* Modal Footer */
 .faculty-settings-modal-foot {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding: 12px 18px;
+  padding: 14px 20px;
   border-top: 1px solid var(--cms-border, #e2e8f0);
-  background: var(--cms-primary-soft, var(--cms-surface-alt, #fafbf5));
+  background: var(--cms-surface-alt, #fafbf5);
 }
 
-.faculty-settings-modal-foot .cms-btn-ghost {
-  padding: 8px 16px;
-  border: 1px solid var(--cms-border, #cbd5e1);
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 13px;
-  background: transparent;
-  color: var(--cms-muted, #64748b);
-  cursor: pointer;
-  transition: all 0.15s ease;
+/* Shield icon */
+.faculty-settings-shield-icon {
+  color: var(--cms-primary, #6f8400);
 }
 
-.faculty-settings-modal-foot .cms-btn-ghost:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--cms-text, #1e293b);
-}
-
-.faculty-settings-modal-foot .cms-btn-primary {
-  padding: 8px 18px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 13px;
-  background: var(--cms-primary, #6f8400);
-  border: 1px solid var(--cms-primary, #6f8400);
-  color: #ffffff;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.faculty-settings-modal-foot .cms-btn-primary:hover {
-  background: var(--cms-primary-dark, #566900);
-  border-color: var(--cms-primary-dark, #566900);
+[data-theme="dark"] .faculty-settings-shield-icon,
+.dark-theme .faculty-settings-shield-icon {
+  color: var(--cms-primary, #879d19) !important;
 }
 
 /* Alert Boxes in Modal */
@@ -369,28 +461,28 @@
   border: 1px solid #fca5a5;
 }
 
+[data-theme="dark"] .faculty-settings-alert.error,
+.dark-theme .faculty-settings-alert.error {
+  background: rgba(239, 68, 68, 0.16) !important;
+  color: #f87171 !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
 .faculty-settings-alert.success {
   background: #dcfce7;
   color: #15803d;
   border: 1px solid #86efac;
 }
 
-/* Responsive adjustments */
-@media (max-width: 540px) {
-  .faculty-settings-tabs {
-    flex-wrap: wrap;
-  }
-  .faculty-settings-tabs button {
-    padding: 12px 8px;
-    min-width: 140px;
-  }
-  .faculty-settings-modal-body {
-    padding: 18px;
-  }
+[data-theme="dark"] .faculty-settings-alert.success,
+.dark-theme .faculty-settings-alert.success {
+  background: rgba(34, 197, 94, 0.16) !important;
+  color: #4ade80 !important;
+  border-color: rgba(34, 197, 94, 0.35) !important;
 }
 
 /* =========================================================
-   DARK THEME OVERRIDES (Faculty Settings Modal)
+   DARK THEME OVERRIDES (Faculty Settings)
    ========================================================= */
 [data-theme="dark"] .faculty-settings-card,
 .dark-theme .faculty-settings-card {
@@ -422,16 +514,11 @@
 }
 
 /* Modal Dark Theme */
-[data-theme="dark"] .faculty-settings-modal-overlay,
-.dark-theme .faculty-settings-modal-overlay {
-  background: rgba(16, 23, 13, 0.65) !important;
-}
-
 [data-theme="dark"] .faculty-settings-modal,
 .dark-theme .faculty-settings-modal {
   background: var(--cms-surface, #171a17) !important;
   border-color: var(--cms-border, #2b3028) !important;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55) !important;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55) !important;
 }
 
 [data-theme="dark"] .faculty-settings-modal-head,
@@ -443,11 +530,6 @@
 [data-theme="dark"] .faculty-settings-modal-head h2,
 .dark-theme .faculty-settings-modal-head h2 {
   color: var(--cms-text, #f2f3ee) !important;
-}
-
-[data-theme="dark"] .faculty-settings-shield-icon,
-.dark-theme .faculty-settings-shield-icon {
-  color: var(--cms-primary, #879d19) !important;
 }
 
 [data-theme="dark"] .faculty-settings-modal-close,
@@ -510,6 +592,15 @@
   box-shadow: 0 0 0 2px rgba(135, 157, 25, 0.22) !important;
 }
 
+[data-theme="dark"] .faculty-settings-field input[disabled],
+[data-theme="dark"] .faculty-settings-field input:read-only,
+.dark-theme .faculty-settings-field input[disabled],
+.dark-theme .faculty-settings-field input:read-only {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--cms-muted, #8f9789) !important;
+}
+
 [data-theme="dark"] .faculty-settings-hint,
 .dark-theme .faculty-settings-hint {
   color: var(--cms-muted, #8f9789) !important;
@@ -535,29 +626,4 @@
 .dark-theme .faculty-settings-modal-foot {
   background: #1c201a !important;
   border-top-color: var(--cms-border, #2b3028) !important;
-}
-
-[data-theme="dark"] .faculty-settings-modal-foot .cms-btn-ghost,
-.dark-theme .faculty-settings-modal-foot .cms-btn-ghost {
-  border-color: rgba(255, 255, 255, 0.15) !important;
-  color: #edf2e7 !important;
-}
-
-[data-theme="dark"] .faculty-settings-modal-foot .cms-btn-ghost:hover,
-.dark-theme .faculty-settings-modal-foot .cms-btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
-}
-
-[data-theme="dark"] .faculty-settings-alert.error,
-.dark-theme .faculty-settings-alert.error {
-  background: rgba(239, 68, 68, 0.16) !important;
-  color: #f87171 !important;
-  border-color: rgba(239, 68, 68, 0.35) !important;
-}
-
-[data-theme="dark"] .faculty-settings-alert.success,
-.dark-theme .faculty-settings-alert.success {
-  background: rgba(34, 197, 94, 0.16) !important;
-  color: #4ade80 !important;
-  border-color: rgba(34, 197, 94, 0.35) !important;
 }
