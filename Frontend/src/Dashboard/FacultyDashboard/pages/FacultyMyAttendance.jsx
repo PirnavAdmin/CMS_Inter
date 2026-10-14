@@ -1,7 +1,16 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Clock, LogOut, Calendar, CheckCircle2, Briefcase, UserX, X, AlertCircle } from "lucide-react";
+import {
+  Clock,
+  LogIn,
+  LogOut,
+  Calendar,
+  CheckCircle2,
+  Briefcase,
+  UserX,
+  AlertCircle,
+  Fingerprint,
+} from "lucide-react";
 import "../styles/FacultyMyAttendance.css";
-
 import { useFacultySafe } from "../FacultyContext.jsx";
 
 const parseTimeToMinutes = (timeStr) => {
@@ -42,19 +51,18 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
 
 export default function FacultyMyAttendance() {
   const context = useFacultySafe();
-  const [liveClock, setLiveClock] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
-  );
+  // Shift duration updates on page load/refresh and periodically every minute
+  const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setLiveClock(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
-    }, 1000);
+      setShiftUpdateTick((prev) => prev + 1);
+    }, 60000);
     return () => clearInterval(timer);
   }, []);
 
   // Daily Punch State: resets every day, no localStorage used
-  // Status lifecycle: "not_punched" -> "punched_in" -> "punched_out" (locked for the rest of today)
+  // Status lifecycle: "not_punched" -> "punched_in" -> "punched_out"
   const [dailyPunch, setDailyPunch] = useState({
     status: "not_punched",
     inTime: null,
@@ -73,9 +81,6 @@ export default function FacultyMyAttendance() {
   }, [dailyPunch.inTime]);
 
   // Today's attendance status in the table:
-  // - "Absent" if not punched in yet
-  // - "Present" if approved by admin through regularization OR punched in on/before 09:00 AM
-  // - "Late" if punched in after 09:00 AM
   const todayStatus = useMemo(() => {
     if (dailyPunch.status === "not_punched") return "Absent";
     if (todayRegularization === "approved") return "Present";
@@ -86,10 +91,7 @@ export default function FacultyMyAttendance() {
   // Can regularize if logged in late and not yet approved
   const canTodayRegularize = dailyPunch.status !== "not_punched" && isLateLogin && todayRegularization !== "approved";
 
-  // Shift duration for the Biometric Clock:
-  // - Actively calculated live while punched in (recalculates every second with liveClock)
-  // - Finalized between inTime and outTime when punched out
-  // - "--" when not punched in
+  // Shift duration for Attendance & Shift Card:
   const clockShiftDuration = useMemo(() => {
     if (dailyPunch.status === "punched_out" && dailyPunch.inTime && dailyPunch.outTime) {
       return calculateDurationStr(dailyPunch.inTime, dailyPunch.outTime, false);
@@ -98,16 +100,18 @@ export default function FacultyMyAttendance() {
       return calculateDurationStr(dailyPunch.inTime, null, true);
     }
     return "--";
-  }, [dailyPunch, liveClock]);
+  }, [dailyPunch, shiftUpdateTick]);
 
   // Finalized shift duration for attendance logs (table):
-  // Shown only after punch out is clicked; "--" while active, "0h 0m" before punch in
   const finalizedShiftDuration = useMemo(() => {
     if (dailyPunch.status === "punched_out" && dailyPunch.inTime && dailyPunch.outTime) {
       return calculateDurationStr(dailyPunch.inTime, dailyPunch.outTime, false);
     }
+    if (dailyPunch.status === "punched_in" && dailyPunch.inTime) {
+      return calculateDurationStr(dailyPunch.inTime, null, true);
+    }
     return "--";
-  }, [dailyPunch]);
+  }, [dailyPunch, shiftUpdateTick]);
 
   const [toast, setToast] = useState(null);
 
@@ -154,12 +158,20 @@ export default function FacultyMyAttendance() {
     notify(`Punched Out Successfully at ${timeStr}`, "success");
   };
 
-  // Attendance Filter: "week" | "last_week" | "month" | "last_month"
+  // Formatted date string matching reference: e.g. "Wed, Oct 14, 2026"
+  const formattedToday = useMemo(() => {
+    return new Date().toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }, []);
+
   // Attendance Filter: "week" | "last_week" | "month" | "last_month"
   const [activeFilter, setActiveFilter] = useState("week");
 
-  // Dynamic datasets for Week, Last Week, Month, Last Month
-  // Intermediate school operates 6 days a week (Mon–Sat)
+  // Dynamic datasets matching school operations (Mon–Sat)
   const thisWeekLogs = useMemo(() => [
     {
       id: "w-1",
@@ -313,7 +325,6 @@ export default function FacultyMyAttendance() {
     },
   ], []);
 
-  // Full Month - October 2026 (Oct 1 to Oct 31, with Oct 2 & Oct 20 & Sundays as Holiday, Mon-Sat as school days)
   const monthLogs = useMemo(() => [
     { id: "m-01", day: "Thu", date: "01/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:32 AM", outTime: "04:30 PM", hours: "7h 58m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
     { id: "m-02", day: "Fri", date: "02/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
@@ -362,7 +373,6 @@ export default function FacultyMyAttendance() {
     { id: "m-31", day: "Sat", date: "31/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
   ], [dailyPunch, finalizedShiftDuration, todayStatus, canTodayRegularize, todayRegularization]);
 
-  // Full Month - September 2026 (All 30 days: Sundays as Holiday, Mon-Sat intermediate school working days with Present, Absent, Late, Half Day)
   const lastMonthLogs = useMemo(() => [
     { id: "lm-01", day: "Tue", date: "01/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:30 PM", hours: "8h 02m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
     { id: "lm-02", day: "Wed", date: "02/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:32 PM", hours: "8h 02m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
@@ -496,219 +506,247 @@ export default function FacultyMyAttendance() {
     }
   };
 
-  const [showRegularizeModal, setShowRegularizeModal] = useState(false);
-  const [regularizeForm, setRegularizeForm] = useState({ date: "", reason: "Forgot Biometric Punch", inTime: "08:30 AM", outTime: "04:30 PM", notes: "" });
-
   return (
-    <div>
-      <div className="cms-page-head">
-        <div>
-          <h1>My Attendance & Biometric Punch</h1>
-          <p>Daily biometric check-in, punch times, shift logs & monthly attendance calendar.</p>
-        </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setShowRegularizeModal(true)}>
-          <Clock size={14} /> Request Attendance Regularization
-        </button>
-      </div>
-
-      {/* Punch In / Out Grid */}
-      <div className="sp-attendance-punch-grid">
-        {/* Live Digital Clock Card (Professional Theme-Based) */}
-        <div className="sp-live-clock-card">
-          <div>
-            <span className="sp-live-badge">
-              CAMPUS BIOMETRIC CLOCK
-            </span>
-            <div className="sp-live-clock-time">
-              {liveClock}
-            </div>
-            <div className="sp-live-clock-date">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-            </div>
+    <div className="sp-faculty-attendance-page">
+      {/* Top Punch & Shift Grid */}
+      <div className="sp-attendance-top-grid">
+        {/* Left Card: Attendance & Shift Summary */}
+        <div className="cms-card sp-shift-summary-card">
+          <div className="sp-card-header">
+            <h3 className="sp-card-title">Attendance & Shift Summary</h3>
+            <p className="sp-card-desc">
+              Campus shift schedule, check-in status & calculated shift duration.
+            </p>
           </div>
 
-          <div className="sp-clock-status-box">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="sp-clock-sublabel">Punch Status:</span>
+          <div className="sp-summary-inner-box">
+            {/* Check Status Row - Centered in middle */}
+            <div className="sp-summary-status-row">
+              <span className="sp-summary-label">Check Status:</span>
               <span
-                className={`sp-punch-status-badge ${dailyPunch.status === "punched_in"
-                  ? "in"
-                  : dailyPunch.status === "punched_out"
+                className={`sp-check-status-badge ${
+                  dailyPunch.status === "punched_in"
+                    ? "in"
+                    : dailyPunch.status === "punched_out"
                     ? "completed"
-                    : "pending"
-                  }`}
+                    : "not-checked"
+                }`}
               >
-                ● {dailyPunch.status === "punched_in"
+                <span className="sp-status-bullet">•</span>
+                {dailyPunch.status === "punched_in"
                   ? `Checked In (${dailyPunch.inTime})`
                   : dailyPunch.status === "punched_out"
-                    ? `Completed (${dailyPunch.outTime})`
-                    : "Not Checked In"}
+                  ? `Completed (${dailyPunch.outTime})`
+                  : "Not Checked In"}
               </span>
             </div>
 
-            {/* Timings row inside Time Tab */}
-            <div className="sp-clock-timings-grid">
-              <div className="sp-clock-timing-item">
-                <span className="label">Punch In</span>
-                <span className={`val ${dailyPunch.inTime ? "highlight" : ""}`}>
-                  {dailyPunch.inTime || "--"}
+            {/* 3 Metric Columns: CHECK IN, CHECK OUT, SHIFT DURATION */}
+            <div className="sp-summary-metric-cols">
+              <div className="sp-summary-col">
+                <span className="sp-metric-col-label">CHECK IN</span>
+                <span className={`sp-metric-col-val ${dailyPunch.inTime ? "highlight" : ""}`}>
+                  {dailyPunch.inTime || "--:-- --"}
                 </span>
               </div>
-              <div className="sp-clock-timing-item">
-                <span className="label">Punch Out</span>
-                <span className="val">
-                  {dailyPunch.outTime || "--"}
+              <div className="sp-summary-col">
+                <span className="sp-metric-col-label">CHECK OUT</span>
+                <span className="sp-metric-col-val">
+                  {dailyPunch.outTime || "--:-- --"}
                 </span>
               </div>
-              <div className="sp-clock-timing-item">
-                <span className="label">Shift Duration</span>
-                <span className={`val ${dailyPunch.status === "punched_in" ? "highlight" : ""}`}>
-                  {clockShiftDuration}
+              <div className="sp-summary-col">
+                <span className="sp-metric-col-label">SHIFT DURATION</span>
+                <span className={`sp-metric-col-val ${dailyPunch.status === "punched_in" ? "highlight" : ""}`}>
+                  {clockShiftDuration === "--" ? "--:--" : clockShiftDuration}
                 </span>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: "0.8rem", alignItems: "center" }}>
-              <span className="sp-clock-sublabel">Campus Shift:</span>
-              <span className="sp-shift-timings-val">09:00 AM – 04:30 PM</span>
+            {/* Bottom Shift & Date Info */}
+            <div className="sp-summary-foot-row">
+              <div className="sp-summary-foot-left">
+                <span className="sp-foot-label">Campus Shift:</span>
+                <Clock size={13} className="sp-foot-icon" />
+                <span className="sp-foot-val">09:00 AM – 04:30 PM</span>
+              </div>
+              <div className="sp-summary-foot-right">
+                <Calendar size={13} className="sp-foot-icon" />
+                <span className="sp-foot-val">{formattedToday}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Punch Actions Form Card */}
-        <div className="sp-punch-form-card">
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Punch Terminal Action</h3>
-            <p style={{ fontSize: 12.5, color: "var(--cms-muted)", marginBottom: 16 }}>
-              Click below to record your campus entry or exit timestamp. Instant biometric verification enabled.
+        {/* Right Card: Check-In / Check-Out */}
+        <div className="cms-card sp-punch-action-card">
+          <div className="sp-card-header">
+            <h3 className="sp-card-title">Check-In / Check-Out</h3>
+            <p className="sp-card-desc">
+              Click below to record your campus entry or exit timestamp.<br />
+              Instant biometric verification enabled.
             </p>
-
-            <div style={{ padding: "14px 16px", borderRadius: 10, background: "var(--cms-surface)", border: "1px solid var(--cms-border)", marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>Current Punch Status</div>
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 800,
-                  color:
-                    dailyPunch.status === "punched_in"
-                      ? "var(--cms-green, #0f9d58)"
-                      : dailyPunch.status === "punched_out"
-                        ? "var(--cms-primary, #6f8400)"
-                        : "var(--cms-text, #10203c)",
-                  marginTop: 4,
-                }}
-              >
-                {dailyPunch.status === "punched_in"
-                  ? `Active — Punched In at ${dailyPunch.inTime}`
-                  : dailyPunch.status === "punched_out"
-                    ? `Completed — Punched Out at ${dailyPunch.outTime}`
-                    : "Inactive — Yet to Punch In Today"}
-              </div>
-              <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 4 }}>
-                Terminal: <strong>Main Campus Gate 01 Bio-Station</strong>
-              </div>
-            </div>
           </div>
 
-          <div>
-            <div className="sp-punch-actions-row">
+          <div className="sp-punch-twin-grid">
+            {/* Check In Panel */}
+            <div className="sp-twin-panel checkin-panel">
+              <div className="sp-twin-icon-box checkin">
+                <LogIn size={16} />
+              </div>
+              <div className="sp-twin-title checkin">CHECK IN</div>
+
+              {/* Dotted Arc Gauge */}
+              <div className="sp-arc-gauge-container">
+                <svg viewBox="0 0 160 82" className="sp-arc-svg checkin-arc" fill="none">
+                  <path
+                    d="M 22 72 A 58 58 0 0 1 138 72"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeDasharray="2 7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="sp-gauge-center">
+                  <span className="sp-gauge-time">{dailyPunch.inTime || "--:-- --"}</span>
+                  <span className="sp-gauge-sub">{dailyPunch.inTime ? "Checked In" : "Not Checked In"}</span>
+                </div>
+              </div>
+
+              {/* Check In Button */}
               <button
-                className="cms-btn cms-btn-primary"
-                style={{ flex: 1, justifyContent: "center", padding: "13px 18px", fontSize: 14 }}
+                type="button"
+                className={`sp-punch-pill-btn checkin ${
+                  dailyPunch.status === "not_punched" ? "active" : "disabled"
+                }`}
                 disabled={dailyPunch.status !== "not_punched"}
                 onClick={handlePunchIn}
               >
-                <Clock size={16} /> Punch In (Check-In)
+                <Fingerprint size={15} />
+                <span>Check In</span>
               </button>
+
+              <div className="sp-punch-foot-hint">Allowed: 09:00 AM – 04:30 PM</div>
+            </div>
+
+            {/* Check Out Panel */}
+            <div className="sp-twin-panel checkout-panel">
+              <div className="sp-twin-icon-box checkout">
+                <LogOut size={16} />
+              </div>
+              <div className="sp-twin-title checkout">CHECK OUT</div>
+
+              {/* Dotted Arc Gauge */}
+              <div className="sp-arc-gauge-container">
+                <svg viewBox="0 0 160 82" className="sp-arc-svg checkout-arc" fill="none">
+                  <path
+                    d="M 22 72 A 58 58 0 0 1 138 72"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeDasharray="2 7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="sp-gauge-center">
+                  <span className="sp-gauge-time">{dailyPunch.outTime || "--:-- --"}</span>
+                  <span className="sp-gauge-sub">{dailyPunch.outTime ? "Checked Out" : "Not Checked Out"}</span>
+                </div>
+              </div>
+
+              {/* Check Out Button */}
               <button
-                className="cms-btn"
-                style={{
-                  flex: 1,
-                  justifyContent: "center",
-                  padding: "13px 18px",
-                  fontSize: 14,
-                  background: dailyPunch.status === "punched_in" ? "#dc2626" : "var(--cms-border, #e4e8f0)",
-                  color: dailyPunch.status === "punched_in" ? "#ffffff" : "var(--cms-muted, #7b8275)",
-                  cursor: dailyPunch.status === "punched_in" ? "pointer" : "not-allowed",
-                  border: "none",
-                }}
+                type="button"
+                className={`sp-punch-pill-btn checkout ${
+                  dailyPunch.status === "punched_in" ? "active" : "inactive"
+                }`}
                 disabled={dailyPunch.status !== "punched_in"}
                 onClick={handlePunchOut}
               >
-                <LogOut size={16} /> Punch Out (Check-Out)
+                <LogOut size={15} />
+                <span>Check Out</span>
               </button>
+
+              <div className="sp-punch-foot-hint">After check-in only</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 4 Attendance Metric Cards (Dynamically tied to selected tab) */}
-      <div className="sp-stat-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-blue"><Calendar size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Working Days</div>
-            <div className="cms-stat-value">{analyticsMetrics.workingDays}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.workingDaysSub}</div>
+      {/* Row 2: 4 Metric Cards */}
+      <div className="sp-metric-cards-grid">
+        {/* Card 1: Working Days */}
+        <div className="cms-card sp-metric-kpi-card">
+          <div className="sp-kpi-icon-box green">
+            <Calendar size={20} />
+          </div>
+          <div className="sp-kpi-content">
+            <div className="sp-kpi-label">Working Days</div>
+            <div className="sp-kpi-value">{analyticsMetrics.workingDays}</div>
+            <div className="sp-kpi-sub">{analyticsMetrics.workingDaysSub}</div>
           </div>
         </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-green"><CheckCircle2 size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Present Days</div>
-            <div className="cms-stat-value" style={{ color: "var(--cms-green)" }}>{analyticsMetrics.presentDays}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.presentDaysSub}</div>
+
+        {/* Card 2: Present Days */}
+        <div className="cms-card sp-metric-kpi-card">
+          <div className="sp-kpi-icon-box green">
+            <CheckCircle2 size={20} />
+          </div>
+          <div className="sp-kpi-content">
+            <div className="sp-kpi-label">Present Days</div>
+            <div className="sp-kpi-value green-val">{analyticsMetrics.presentDays}</div>
+            <div className="sp-kpi-sub">{analyticsMetrics.presentDaysSub}</div>
           </div>
         </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-violet"><Briefcase size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Approved Leaves</div>
-            <div className="cms-stat-value">{analyticsMetrics.leaves}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.leavesSub}</div>
+
+        {/* Card 3: Approved Leaves */}
+        <div className="cms-card sp-metric-kpi-card">
+          <div className="sp-kpi-icon-box purple">
+            <Briefcase size={20} />
+          </div>
+          <div className="sp-kpi-content">
+            <div className="sp-kpi-label">Approved Leaves</div>
+            <div className="sp-kpi-value">{analyticsMetrics.leaves}</div>
+            <div className="sp-kpi-sub">{analyticsMetrics.leavesSub}</div>
           </div>
         </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-red"><UserX size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Absent Days</div>
-            <div
-              className="cms-stat-value"
-              style={{
-                color: analyticsMetrics.absentDays !== "0 Days" ? "var(--cms-red, #dc2626)" : "var(--cms-text, #10203c)",
-              }}
-            >
-              {analyticsMetrics.absentDays}
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.absentDaysSub}</div>
+
+        {/* Card 4: Absent Days */}
+        <div className="cms-card sp-metric-kpi-card">
+          <div className="sp-kpi-icon-box red">
+            <UserX size={20} />
+          </div>
+          <div className="sp-kpi-content">
+            <div className="sp-kpi-label">Absent Days</div>
+            <div className="sp-kpi-value red-val">{analyticsMetrics.absentDays}</div>
+            <div className="sp-kpi-sub">{analyticsMetrics.absentDaysSub}</div>
           </div>
         </div>
       </div>
 
-      {/* Daily Punch History Table (Matching Screenshot 2 layout and user-clarified 8 columns) */}
+      {/* Row 3: Daily Attendance History Table */}
       <div className="cms-card sp-attendance-history-card">
         <div className="sp-attendance-card-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="sp-table-head-left">
             <div className="sp-att-cal-icon">
               <Calendar size={18} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>
+              <h2 className="sp-table-title">
                 {activeFilter === "week"
                   ? "This Week"
                   : activeFilter === "last_week"
-                    ? "Last Week"
-                    : activeFilter === "month"
-                      ? "This Month"
-                      : "Last Month"}
+                  ? "Last Week"
+                  : activeFilter === "month"
+                  ? "This Month"
+                  : "Last Month"}
               </h2>
-              <span style={{ fontSize: 12, color: "var(--cms-muted)", display: "block", marginTop: 2 }}>
-                Biometric Punch History & Daily Attendance Logs
+              <span className="sp-table-subtitle">
+                Biometric Check-In History & Daily Attendance Logs
               </span>
             </div>
           </div>
 
-          {/* Filter Pills matching Screenshot 2: Week | Last Week | Month | Last Month */}
+          {/* Filter Pills matching Screenshot: Week | Last Week | Month | Last Month */}
           <div className="sp-att-filter-tabs">
             <button
               type="button"
@@ -745,14 +783,12 @@ export default function FacultyMyAttendance() {
           <table className="sp-attendance-table">
             <thead>
               <tr>
-                <th style={{ width: "13%" }}>DAY</th>
-                <th style={{ width: "18%" }}>SHIFT</th>
-                <th style={{ width: "12%" }}>PUNCH IN</th>
-                <th style={{ width: "12%" }}>PUNCH OUT</th>
-                <th style={{ width: "11%" }}>HOURS</th>
-                <th style={{ width: "16%" }}>BIOMETRIC DEVICE</th>
-                <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                <th style={{ width: "8%", textAlign: "center" }}>REGULARIZATION</th>
+                <th style={{ width: "16%" }}>DAY</th>
+                <th style={{ width: "24%" }}>SHIFT</th>
+                <th style={{ width: "15%" }}>CHECK IN</th>
+                <th style={{ width: "15%" }}>CHECK OUT</th>
+                <th style={{ width: "15%" }}>HOURS</th>
+                <th style={{ width: "15%", textAlign: "center" }}>STATUS</th>
               </tr>
             </thead>
             <tbody>
@@ -782,11 +818,6 @@ export default function FacultyMyAttendance() {
                         {log.hours}
                       </span>
                     </td>
-                    <td>
-                      <span className="sp-device-text">
-                        {log.device}
-                      </span>
-                    </td>
                     <td style={{ textAlign: "center" }}>
                       {isUpcoming ? (
                         <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
@@ -796,37 +827,6 @@ export default function FacultyMyAttendance() {
                         </span>
                       )}
                     </td>
-                    <td style={{ textAlign: "center" }}>
-                      {log.isToday && log.regularizationState === "approved" ? (
-                        <span className="sp-regularize-badge approved">
-                          <span className="sp-badge-dot">●</span> Approved
-                        </span>
-                      ) : log.isToday && log.regularizationState === "pending" ? (
-                        <span className="sp-regularize-badge pending">
-                          <span className="sp-badge-dot">●</span> Pending
-                        </span>
-                      ) : log.canRegularize ? (
-                        <button
-                          type="button"
-                          className="sp-regularize-btn"
-                          onClick={() => {
-                            setRegularizeForm((p) => ({
-                              ...p,
-                              date: log.rawDate || "2026-10-07",
-                              inTime: "09:00 AM",
-                              outTime: "04:30 PM",
-                              reason: "Emergency Late Arrival",
-                              isToday: Boolean(log.isToday),
-                            }));
-                            setShowRegularizeModal(true);
-                          }}
-                        >
-                          Regularize
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>--</span>
-                      )}
-                    </td>
                   </tr>
                 );
               })}
@@ -834,87 +834,6 @@ export default function FacultyMyAttendance() {
           </table>
         </div>
       </div>
-
-      {/* Attendance Regularization Modal */}
-      {showRegularizeModal && (
-        <div className="cms-overlay" onClick={(e) => e.target === e.currentTarget && setShowRegularizeModal(false)}>
-          <div className="cms-modal sm faculty-regularization-modal">
-            <div className="cms-modal-head">
-              <div>
-                <h3 style={{ margin: 0, fontSize: 16 }}>Request Attendance Regularization</h3>
-                <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Submit adjustment for missed or late punch to Admin</span>
-              </div>
-              <button className="cms-icon-btn" onClick={() => setShowRegularizeModal(false)}><X size={16} /></button>
-            </div>
-            <div className="cms-modal-body">
-              <div className="cms-form-grid">
-                <div className="cms-field full">
-                  <label>Date of Incident <span className="req">*</span></label>
-                  <input
-                    type="date"
-                    value={regularizeForm.date || new Date().toISOString().split("T")[0]}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, date: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field full">
-                  <label>Reason for Regularization <span className="req">*</span></label>
-                  <select
-                    value={regularizeForm.reason}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, reason: e.target.value })}
-                  >
-                    <option>Forgot Biometric Punch</option>
-                    <option>Biometric Scanner / Power Outage</option>
-                    <option>On-Duty / Board Examination Duty</option>
-                    <option>Official Campus Assignment</option>
-                    <option>Emergency Late Arrival</option>
-                  </select>
-                </div>
-                <div className="cms-field">
-                  <label>Proposed Punch In</label>
-                  <input
-                    type="text"
-                    value={regularizeForm.inTime}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, inTime: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field">
-                  <label>Proposed Punch Out</label>
-                  <input
-                    type="text"
-                    value={regularizeForm.outTime}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, outTime: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field full">
-                  <label>Explanation & Notes <span className="req">*</span></label>
-                  <textarea
-                    rows={2}
-                    placeholder="Briefly state reason for attendance adjustment..."
-                    value={regularizeForm.notes}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="cms-modal-foot">
-              <button className="cms-btn cms-btn-ghost" onClick={() => setShowRegularizeModal(false)}>Cancel</button>
-              <button
-                className="cms-btn cms-btn-primary"
-                onClick={() => {
-                  if (regularizeForm.isToday || regularizeForm.date === "2026-10-07" || regularizeForm.date === "07/10/2026") {
-                    setTodayRegularization("pending");
-                  }
-                  notify("Attendance Regularization request submitted to Principal / Admin office!");
-                  setShowRegularizeModal(false);
-                }}
-              >
-                Submit Request to Admin
-              </button>
-
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Toast Notification */}
       {toast && (
@@ -926,4 +845,3 @@ export default function FacultyMyAttendance() {
     </div>
   );
 }
-

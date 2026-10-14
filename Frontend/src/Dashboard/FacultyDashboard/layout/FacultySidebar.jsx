@@ -1,5 +1,5 @@
 import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
-import React from "react";
+import React, { useMemo } from "react";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -74,6 +74,16 @@ export default function FacultySidebar() {
 
   const navGroups = ["MAIN", "ACADEMICS", "HR & FINANCE", "ADMINISTRATION"];
 
+  const activePhoto = useMemo(() => {
+    return (
+      profileData?.photoUrl ||
+      (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
+      (profileData?.photoPath
+        ? `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}`
+        : null)
+    );
+  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
+
   return (
     <aside className={`cms-sidebar ${sidebarOpen ? "open is-open" : ""}`}>
       <div className="cms-brand">
@@ -111,18 +121,47 @@ export default function FacultySidebar() {
         })}
       </nav>
 
-      {/* Sidebar Footer Peer Profile Card */}
+      {/* Sidebar Footer Profile Card (Displays uploaded profile photo or initials) */}
       <div
         className="cms-sidebar-footer"
         style={{
-          padding: "12px 14px",
+          padding: "10px 14px",
           borderTop: "1px solid var(--cms-border, rgba(0, 0, 0, 0.08))",
           display: "flex",
           alignItems: "center",
           gap: 10,
+          cursor: "pointer",
+          userSelect: "none",
         }}
+        onClick={() => {
+          setActiveModule("profile");
+          if (window.innerWidth <= 768) setSidebarOpen(false);
+        }}
+        title="View My Profile"
       >
-        <div className="cms-avatar" style={{ width: 34, height: 34, fontSize: 13, flexShrink: 0 }}>
+        {activePhoto ? (
+          <img
+            src={activePhoto}
+            alt={profileData.fullName || "Profile"}
+            className="cms-avatar"
+            style={{ width: 34, height: 34, objectFit: "cover", borderRadius: "50%", flexShrink: 0 }}
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+              const fb = e.currentTarget.parentElement?.querySelector(".cms-avatar-fallback");
+              if (fb) fb.style.display = "flex";
+            }}
+          />
+        ) : null}
+        <div
+          className="cms-avatar cms-avatar-fallback"
+          style={{
+            width: 34,
+            height: 34,
+            fontSize: 13,
+            flexShrink: 0,
+            display: activePhoto ? "none" : "flex",
+          }}
+        >
           {initials}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -136,7 +175,7 @@ export default function FacultySidebar() {
               color: "var(--cms-text)",
             }}
           >
-            {profileData.fullName}
+            {profileData.fullName || `${profileData.firstName || ""} ${profileData.lastName || ""}`.trim() || "Staff Member"}
           </div>
           <div
             style={{
@@ -147,7 +186,7 @@ export default function FacultySidebar() {
               textOverflow: "ellipsis",
             }}
           >
-            {profileData.designation}
+            {profileData.designation || profileData.role || "Assistant Professor"}
           </div>
         </div>
       </div>

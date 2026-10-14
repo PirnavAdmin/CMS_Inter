@@ -62,9 +62,10 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiBaseUrl = env.VITE_API_BASE_URL || "https://superior-hatchery-gibberish.ngrok-free.dev";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
+  const useHostelMock = env.VITE_USE_MOCK_DATA === "true";
 
   return {
-    plugins: [react(), hostelDevMockPlugin()],
+    plugins: [react(), ...(useHostelMock ? [hostelDevMockPlugin()] : [])],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

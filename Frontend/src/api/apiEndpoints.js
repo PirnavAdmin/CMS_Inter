@@ -649,6 +649,8 @@ export const apiEndpoints = {
     },
   },
   hostel: {
+    fees: "/api/v1/hostel/fees",
+    feeById: (id) => `/api/v1/hostel/fees/${encodeURIComponent(id)}`,
     blocks: "/api/v1/hostel/blocks",
     blockById: (id) => `/api/v1/hostel/blocks/${encodeURIComponent(id)}`,
     roomTypes: "/api/v1/hostel/room-types",

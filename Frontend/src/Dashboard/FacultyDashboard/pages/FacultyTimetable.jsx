@@ -271,9 +271,12 @@ export default function FacultyTimetable() {
             <div className="faculty-tt-icon-badge">
               <Calendar size={22} />
             </div>
-            <div>
+            <div className="faculty-tt-title-group">
               <h1 className="faculty-tt-title">My Timetable</h1>
-              <p className="faculty-tt-subtitle">
+              <p
+                className="faculty-tt-subtitle"
+                title="Weekly academic lecture schedule, assigned sections, and classroom venues."
+              >
                 Weekly academic lecture schedule, assigned sections, and classroom venues.
               </p>
             </div>
