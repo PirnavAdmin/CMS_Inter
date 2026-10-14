@@ -401,7 +401,16 @@ function ConfirmDelete({ name, busy, error, onCancel, onConfirm }) {
 function useLookups(initial = {}) {
   const { selectedCampusId } = useCampusContext();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
-  const [value, setValue] = useState({ ...EMPTY, ...initial, campusId: initial?.campusId || selectedCampusId || "", boardId: initial?.boardId || selectedBoardId || "", academicYearId: initial?.academicYearId || selectedAcademicYearId || "" });
+  const initialContext = {
+    campusId: String(initial?.campusId || selectedCampusId || ""),
+    boardId: String(initial?.boardId || selectedBoardId || ""),
+    academicYearId: String(initial?.academicYearId || selectedAcademicYearId || ""),
+    academicLevelId: String(initial?.academicLevelId || ""),
+    groupId: String(initial?.groupId || ""),
+    programId: String(initial?.programId || ""),
+    sectionId: String(initial?.sectionId || ""),
+  };
+  const [value, setValue] = useState({ ...EMPTY, ...initialContext });
   const [sectionsReloadKey, setSectionsReloadKey] = useState(0);
   const [data, setData] = useState({
     boards: [],
@@ -1404,7 +1413,9 @@ function Generate({ goDraft, notify, initial }) {
   );
   const [capacityError, setCapacityError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [selectedSectionId, setSelectedSectionId] = useState(initial?.sectionId ?? "");
+  const [selectedSectionIds, setSelectedSectionIds] = useState(() =>
+    initial?.sectionId ? [String(initial.sectionId)] : [],
+  );
   const [inputErrors, setInputErrors] = useState({});
   const allocationContextRef = useRef("");
   const allocationStateRef = useRef("");
@@ -1417,7 +1428,7 @@ function Generate({ goDraft, notify, initial }) {
     (total, weeklyPeriods) => total + (Number(weeklyPeriods) || 0),
     0,
   );
-  const selectedSection = data.sections.find((section) => String(section.id) === String(selectedSectionId)) ?? data.sections[0];
+  const selectedSection = data.sections.find((section) => selectedSectionIds.includes(String(section.id))) ?? data.sections[0];
   const remainingCapacity = weeklyCapacity - totalRequiredPeriods;
   const allocationContext = [value.campusId, value.boardId, value.academicYearId, value.academicLevelId, value.groupId, value.programId].join(":");
   const allocationState = `${allocationContext}:${periodsPerDay}:${data.subjects.map((subject) => subject.id).join(",")}`;
@@ -1429,6 +1440,7 @@ function Generate({ goDraft, notify, initial }) {
     value.groupId &&
     value.programId &&
     data.sections.length &&
+    selectedSectionIds.length > 0 &&
     !data.sectionsLoading &&
     workingDays.length;
   const toggleWorkingDay = (day) => {
@@ -1437,12 +1449,30 @@ function Generate({ goDraft, notify, initial }) {
     );
     setCapacityError("");
   };
-  useEffect(() => {
-    setSelectedSectionId((current) =>
-      data.sections.some((section) => String(section.id) === String(current))
-        ? current
-        : (data.sections[0]?.id ?? ""),
+  const toggleSection = (sectionId) => {
+    const sId = String(sectionId);
+    setSelectedSectionIds((current) =>
+      current.includes(sId)
+        ? (current.length > 1 ? current.filter((id) => id !== sId) : current)
+        : [...current, sId],
     );
+  };
+  const toggleAllSections = () => {
+    setSelectedSectionIds((current) =>
+      current.length === data.sections.length
+        ? [String(data.sections[0]?.id)]
+        : data.sections.map((s) => String(s.id)),
+    );
+  };
+  useEffect(() => {
+    if (data.sections && data.sections.length > 0) {
+      setSelectedSectionIds((current) => {
+        const valid = current.filter((id) => data.sections.some((s) => String(s.id) === String(id)));
+        return valid.length > 0 ? valid : data.sections.map((s) => String(s.id));
+      });
+    } else {
+      setSelectedSectionIds([]);
+    }
   }, [data.sections]);
   useEffect(() => {
     const contextChanged = allocationContextRef.current !== allocationContext;
@@ -1493,15 +1523,15 @@ function Generate({ goDraft, notify, initial }) {
     if (!ready) return notify("Select a complete campus and academic context first.");
     const selectedProgram = data.programs.find((program) => String(program.id) === String(value.programId));
     const programId = Number(pick(selectedProgram?.raw, "programId", "ProgramId", "id", "Id"));
-    const sectionIds = data.sections
-      .map((section) => Number(pick(section.raw, "sectionId", "SectionId", "id", "Id", section.id)))
+    const sectionIds = selectedSectionIds
+      .map(Number)
       .filter((sectionId) => Number.isInteger(sectionId) && sectionId > 0);
     if (!Number.isInteger(programId) || programId <= 0) {
       notify("Please select a valid program.");
       return;
     }
     if (!sectionIds.length) {
-      notify("No sections found for the selected group and program. Create sections in Section Management first.");
+      notify("Select at least one section before generating the timetable.");
       return;
     }
     if (totalRequiredPeriods > weeklyCapacity) {
@@ -1615,9 +1645,31 @@ function Generate({ goDraft, notify, initial }) {
                 </div>
               </div>
               <div className="ttm-generate-sections">
-                <b>Sections ({data.sections.length})</b>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <b>Sections ({selectedSectionIds.length} of {data.sections.length} selected)</b>
+                  {data.sections.length > 1 ? (
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-link"
+                      style={{ fontSize: "12px", padding: 0 }}
+                      onClick={toggleAllSections}
+                    >
+                      {selectedSectionIds.length === data.sections.length ? "Deselect Others" : "Select All"}
+                    </button>
+                  ) : null}
+                </div>
                 {data.sectionsLoading ? <div className="ttm-generate-state"><SkeletonText lines={2} widths={["38%", "62%"]} /></div> : data.sectionsError ? <button type="button" className="cms-btn cms-btn-ghost" onClick={state.reloadSections}>Retry sections</button> : <div className="ttm-generate-section-chips">
-                  {data.sections.map((section) => <button type="button" key={section.id} className={String(section.id) === String(selectedSection?.id) ? "active" : ""} aria-pressed={String(section.id) === String(selectedSection?.id)} onClick={() => setSelectedSectionId(section.id)}>{section.name}</button>)}
+                  {data.sections.map((section) => (
+                    <button
+                      type="button"
+                      key={section.id}
+                      className={selectedSectionIds.includes(String(section.id)) ? "active" : ""}
+                      aria-pressed={selectedSectionIds.includes(String(section.id))}
+                      onClick={() => toggleSection(section.id)}
+                    >
+                      {section.name}
+                    </button>
+                  ))}
                 </div>}
               </div>
               <aside className={`ttm-generate-capacity${remainingCapacity < 0 ? " is-exceeded" : ""}`} aria-label="Weekly period capacity">
@@ -1665,9 +1717,9 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
   const [form, setForm] = useState({
     dayOfWeek: String(pick(slot, "dayOfWeek", "DayOfWeek") ?? ""),
     periodId: String(pick(slot, "periodId", "PeriodId") ?? ""),
-    subjectId: String(pick(slot, "subjectId", "SubjectId") ?? ""),
+    subjectId: String(pick(slot, "subjectId", "SubjectId") ?? (data.subjects[0]?.id ?? "")),
     facultyId: String(pick(slot, "staffId", "StaffId", "facultyId", "FacultyId") ?? ""),
-    roomId: String(pick(slot, "roomId", "RoomId") ?? ""),
+    roomId: String(pick(slot, "roomId", "RoomId") ?? (data.rooms[0]?.id ?? "")),
     remarks: pick(slot, "remarks", "Remarks") ?? "",
   });
   const [faculty, setFaculty] = useState([]);
@@ -1676,23 +1728,53 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
     let cancelled = false;
     setFaculty([]);
     if (!form.subjectId || !context.campusId) return;
-    Promise.all([
+
+    const params = {
+      campusId: Number(context.campusId),
+      boardId: Number(context.boardId) || undefined,
+      academicYearId: Number(context.academicYearId) || undefined,
+      academicLevelId: Number(context.academicLevelId) || undefined,
+      groupId: Number(context.groupId) || undefined,
+      sectionId: Number(context.sectionId) || undefined,
+      subjectId: Number(form.subjectId),
+    };
+
+    Promise.allSettled([
+      apiClient.get(apiEndpoints.timetable.getAllocatedFaculties, { params }),
       campusTeachingStaff(context.campusId),
-      apiClient.get(apiEndpoints.timetable.getAllocatedFaculties, {
-        params: { ...context, subjectId: form.subjectId },
-      }),
     ])
-      .then(([staff, r]) => {
+      .then(([allocRes, staffRes]) => {
         if (cancelled) return;
-        const staffIds = new Set(staff.map(staffIdOf));
-        setFaculty(
-          optionize(r.data, ["facultyId", "FacultyId", "staffId", "StaffId", "id", "Id"], ["facultyName", "FacultyName", "staffName", "StaffName", "name", "Name"])
-            .filter((entry) => campusMatches(entry.raw, context.campusId) && isActiveRecord(entry.raw) && staffIds.has(staffIdOf(entry.raw))),
+        const allocData = allocRes.status === "fulfilled" ? list(allocRes.value.data) : [];
+        const campusStaff = staffRes.status === "fulfilled" ? list(staffRes.value) : [];
+
+        let options = optionize(
+          allocData,
+          ["facultyId", "FacultyId", "staffId", "StaffId", "id", "Id"],
+          ["facultyName", "FacultyName", "staffName", "StaffName", "name", "Name"]
         );
+
+        if (!options.length && campusStaff.length) {
+          options = optionize(
+            campusStaff,
+            ["facultyId", "FacultyId", "staffId", "StaffId", "id", "Id"],
+            ["facultyName", "FacultyName", "staffName", "StaffName", "fullName", "FullName", "name", "Name"]
+          );
+        }
+
+        setFaculty(options);
+        if (options.length > 0) {
+          setForm((current) => ({
+            ...current,
+            facultyId: current.facultyId && options.some((o) => String(o.id) === String(current.facultyId))
+              ? current.facultyId
+              : String(options[0].id),
+          }));
+        }
       })
       .catch((e) => { if (!cancelled) notify(getApiErrorMessage(e)); });
     return () => { cancelled = true; };
-  }, [context, form.subjectId, notify]);
+  }, [context.campusId, context.boardId, context.academicYearId, context.academicLevelId, context.groupId, context.sectionId, form.subjectId, notify]);
   const set = (key) => (e) => setForm((x) => ({ ...x, [key]: e.target.value }));
   const save = async () => {
     if (saving) return;
@@ -1703,15 +1785,20 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
     setSaving(true);
     try {
       const payload = {
-        ...Object.fromEntries(Object.entries(context).map(([key, val]) => [key, Number(val)])),
-        ...Object.fromEntries(
-          Object.entries(form).map(([key, val]) => [
-            key === "remarks" ? key : key,
-            key === "remarks" ? val : Number(val),
-          ]),
-        ),
-        isPublished: Boolean(pick(slot, "isPublished") ?? false),
+        campusId: Number(context.campusId),
+        boardId: Number(context.boardId),
+        academicYearId: Number(context.academicYearId),
+        academicLevelId: Number(context.academicLevelId),
+        groupId: Number(context.groupId),
+        programId: Number(context.programId),
+        sectionId: Number(context.sectionId),
+        dayOfWeek: Number(form.dayOfWeek),
+        periodId: Number(form.periodId),
+        subjectId: Number(form.subjectId),
         staffId: Number(form.facultyId),
+        roomId: Number(form.roomId) || 1,
+        remarks: form.remarks || "",
+        isPublished: Boolean(pick(slot, "isPublished") ?? false),
       };
       timetableId(slot)
         ? await apiClient.put(apiEndpoints.timetable.update(timetableId(slot)), payload)

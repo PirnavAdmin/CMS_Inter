@@ -513,16 +513,22 @@ export default function DashboardLayout({
     const menuLabels = pageMenuItem?.labels ?? [];
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
+  const reimbursementCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
+  const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(String(user?.role || "").trim().toLowerCase());
   useEffect(() => {
-    if (!isParent) {
+    let disposed = false;
+    if (canReviewReimbursements) {
       const fetchLiveNotifications = async () => {
         try {
-          const res = await reimbursementApi.getAllReimbursements({ status: "Pending" });
-          if (res.data?.status && res.data.data?.length > 0) {
+          const res = await getReimbursements({ status: "Pending", campusId: reimbursementCampusId || undefined });
+          if (disposed) return;
+          const payload = res.data?.data ?? res.data?.Data ?? res.data;
+          const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
+          if (claims.length > 0) {
             setLiveNotifications([{
               id: "admin-notif-1",
               title: "New Staff Reimbursement Request",
-              count: res.data.data.length,
+              count: claims.length,
               to: "/dashboard/reimbursements",
               label: "reimbursements"
             }]);
@@ -530,7 +536,7 @@ export default function DashboardLayout({
             setLiveNotifications([]);
           }
         } catch (e) {
-          console.error("Failed to fetch pending reimbursements", e);
+          if (!disposed) console.error("Failed to fetch pending reimbursements", e);
         }
       };
       
@@ -546,10 +552,12 @@ export default function DashboardLayout({
       };
 
       return () => {
+        disposed = true;
         channel.close();
       };
     }
-  }, [isParent]);
+    setLiveNotifications([]);
+  }, [canReviewReimbursements, reimbursementCampusId]);
 
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 

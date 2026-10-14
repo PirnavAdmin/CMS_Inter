@@ -24,10 +24,16 @@ export function recordOptions(records, currentId) {
 }
 export function formInitial(kind, state, record, itemId, user) {
   if (record) return { ...record };
-  if (kind === "items")
+  if (kind === "items") {
+    let codeNumber = state.nextId;
+    let code = `INV-${String(codeNumber).padStart(4, "0")}`;
+    while (state.items.some((item) => item.code.toLowerCase() === code.toLowerCase())) {
+      codeNumber += 1;
+      code = `INV-${String(codeNumber).padStart(4, "0")}`;
+    }
     return {
       name: "",
-      code: "",
+      code,
       categoryId: "",
       unit: "Pieces",
       type: "Consumable",
@@ -41,6 +47,7 @@ export function formInitial(kind, state, record, itemId, user) {
       purchaseDate: "",
       warrantyDate: "",
     };
+  }
   if (kind === "categories")
     return { name: "", code: "", status: "Active", department: "Administration" };
   if (kind === "suppliers")
@@ -76,6 +83,22 @@ export function formInitial(kind, state, record, itemId, user) {
 export function formSections(kind, state, values) {
   const categories = recordOptions(state.categories, values.categoryId);
   const suppliers = recordOptions(state.suppliers, kind === "items" ? values.supplierId : null);
+  if (kind === "items" && !values.id)
+    return [
+      {
+        title: "Item Information",
+        fields: [
+          text("name", "Item Name", true),
+          select("categoryId", "Category", categories, true),
+          select("unit", "Unit of Measurement", UNITS, true),
+          select("type", "Item Type", ["Asset", "Consumable", "Returnable"]),
+          text("brand", "Brand"),
+          select("department", "Department", DEPARTMENTS),
+          text("location", "Storage Location"),
+          text("rack", "Rack / Shelf Number"),
+        ],
+      },
+    ];
   if (kind === "items")
     return [
       {

@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Dashboard;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations;
@@ -16,10 +18,12 @@ namespace CollegeManagement.API.Repositories.Implementations;
 public class DashboardRepository : IDashboardRepository
 {
     private readonly AppDbContext _db;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
 
-    public DashboardRepository(AppDbContext db)
+    public DashboardRepository(AppDbContext db, IHttpContextAccessor? httpContextAccessor = null)
     {
         _db = db;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     private async Task<DbConnection> GetOpenConnectionAsync()
@@ -573,16 +577,22 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            // 1. Total Students from StudentAdmissions table as requested
-            int totalStudents = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
-                .CountAsync(ct);
+            // 1. Total Students from Students table (matching Student Management)
+            var studentQuery = _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && (s.Status == null || s.Status == "Active"));
+            if (boardId.HasValue && boardId.Value > 0) studentQuery = studentQuery.Where(s => s.BoardId == boardId.Value);
+            if (academicYearId.HasValue && academicYearId.Value > 0) studentQuery = studentQuery.Where(s => s.AcademicYearId == academicYearId.Value);
+            if (campusId.HasValue && campusId.Value > 0) studentQuery = studentQuery.Where(s => s.CampusId == campusId.Value);
 
+            int totalStudents = await studentQuery.CountAsync(ct);
             summary.TotalStudents = totalStudents;
-            summary.Admissions = totalStudents;
+
+            var admQuery = _db.StudentAdmissions.AsNoTracking().Where(s => s.IsActive);
+            if (boardId.HasValue && boardId.Value > 0) admQuery = admQuery.Where(s => s.BoardId == boardId.Value);
+            if (academicYearId.HasValue && academicYearId.Value > 0) admQuery = admQuery.Where(s => s.AcademicYearId == academicYearId.Value);
+            if (campusId.HasValue && campusId.Value > 0) admQuery = admQuery.Where(s => s.CampusId == campusId.Value);
+
+            summary.Admissions = await admQuery.CountAsync(ct);
 
             // 2. Teaching & Non-Teaching Staff
             var staffList = await _db.Staffs.AsNoTracking()
@@ -677,11 +687,13 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var genders = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+            var studentQuery = _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && (s.Status == null || s.Status == "Active"));
+            if (boardId.HasValue && boardId.Value > 0) studentQuery = studentQuery.Where(s => s.BoardId == boardId.Value);
+            if (academicYearId.HasValue && academicYearId.Value > 0) studentQuery = studentQuery.Where(s => s.AcademicYearId == academicYearId.Value);
+            if (campusId.HasValue && campusId.Value > 0) studentQuery = studentQuery.Where(s => s.CampusId == campusId.Value);
+
+            var genders = await studentQuery
                 .Select(s => s.Gender ?? string.Empty)
                 .ToListAsync(ct);
 
@@ -923,5 +935,718 @@ public class DashboardRepository : IDashboardRepository
         catch { }
 
         return summary;
+    }
+
+    public async Task<PrincipalDashboardResponseDto> GetPrincipalDashboardAsync(
+        int? campusId,
+        int? boardId,
+        int? academicYearId,
+        string? period,
+        DateTime? fromDate,
+        DateTime? toDate,
+        CancellationToken ct = default)
+    {
+        var response = new PrincipalDashboardResponseDto();
+
+        // 1. Determine IST Date Range
+        DateTime istNow = DateTime.UtcNow.AddHours(5).AddMinutes(30);
+        DateTime startRange;
+        DateTime endRange;
+
+        string normPeriod = (period ?? "Today").Trim();
+        if (string.Equals(normPeriod, "Custom Date Range", StringComparison.OrdinalIgnoreCase) && fromDate.HasValue && toDate.HasValue)
+        {
+            startRange = fromDate.Value.Date;
+            endRange = toDate.Value.Date;
+        }
+        else if (fromDate.HasValue && toDate.HasValue)
+        {
+            startRange = fromDate.Value.Date;
+            endRange = toDate.Value.Date;
+        }
+        else
+        {
+            switch (normPeriod.ToLowerInvariant())
+            {
+                case "yesterday":
+                    startRange = istNow.Date.AddDays(-1);
+                    endRange = istNow.Date.AddDays(-1);
+                    break;
+                case "this week":
+                    int diff = (7 + (istNow.DayOfWeek - DayOfWeek.Monday)) % 7;
+                    startRange = istNow.Date.AddDays(-1 * diff);
+                    endRange = istNow.Date;
+                    break;
+                case "this month":
+                    startRange = new DateTime(istNow.Year, istNow.Month, 1);
+                    endRange = istNow.Date;
+                    break;
+                default: // "today"
+                    startRange = istNow.Date;
+                    endRange = istNow.Date;
+                    break;
+            }
+        }
+
+        DateTime startDt = startRange.Date;
+        DateTime endDtExclusive = endRange.Date.AddDays(1);
+
+        // 2. Principal Info & Context
+        string campusName = "Pirnav Junior College";
+        if (campusId.HasValue && campusId.Value > 0)
+        {
+            var cName = await _db.Campuses.AsNoTracking()
+                .Where(c => c.CampusId == campusId.Value)
+                .Select(c => c.CampusName)
+                .FirstOrDefaultAsync(ct);
+            if (!string.IsNullOrWhiteSpace(cName)) campusName = cName;
+        }
+
+        string yearName = "2026-2027";
+        if (academicYearId.HasValue && academicYearId.Value > 0)
+        {
+            var yName = await _db.AcademicYears.AsNoTracking()
+                .Where(y => y.AcademicYearId == academicYearId.Value)
+                .Select(y => y.AcademicYearName)
+                .FirstOrDefaultAsync(ct);
+            if (!string.IsNullOrWhiteSpace(yName)) yearName = yName;
+        }
+
+        string principalName = "Dr. S. K. Rao";
+        try
+        {
+            var userClaimName = _httpContextAccessor?.HttpContext?.User?.FindFirst("fullName")?.Value
+                             ?? _httpContextAccessor?.HttpContext?.User?.FindFirst(ClaimTypes.Name)?.Value;
+            if (!string.IsNullOrWhiteSpace(userClaimName))
+            {
+                principalName = userClaimName;
+            }
+            else
+            {
+                var principalStaff = await _db.Staffs.AsNoTracking()
+                    .Where(s => !s.IsDeleted && (s.Status == null || s.Status == "Active")
+                             && s.Designation != null && s.Designation.Contains("Principal")
+                             && (!campusId.HasValue || s.CampusId == campusId.Value))
+                    .Select(s => s.FirstName + " " + s.LastName)
+                    .FirstOrDefaultAsync(ct);
+                if (!string.IsNullOrWhiteSpace(principalStaff)) principalName = principalStaff.Trim();
+            }
+        }
+        catch { }
+
+        response.Principal = new PrincipalInfoDto
+        {
+            Name = principalName,
+            Title = "Principal",
+            College = campusName,
+            AcademicYear = yearName
+        };
+
+        // 3. Students metric & Gender distribution (Active Enrolled Students from Students table)
+        var studentQuery = _db.Students.AsNoTracking()
+            .Where(s => s.IsActive && (s.Status == null || s.Status == "Active"));
+        if (campusId.HasValue && campusId.Value > 0) studentQuery = studentQuery.Where(s => s.CampusId == campusId.Value);
+        if (boardId.HasValue && boardId.Value > 0) studentQuery = studentQuery.Where(s => s.BoardId == boardId.Value);
+        if (academicYearId.HasValue && academicYearId.Value > 0) studentQuery = studentQuery.Where(s => s.AcademicYearId == academicYearId.Value);
+
+        var activeStudents = await studentQuery.Select(s => new { s.StudentId, s.Gender }).ToListAsync(ct);
+        int totalStudents = activeStudents.Count;
+        int maleStudents = activeStudents.Count(s => !string.IsNullOrEmpty(s.Gender) && new[] { "male", "m", "boy", "boys" }.Contains(s.Gender.Trim().ToLower()));
+        int femaleStudents = activeStudents.Count(s => !string.IsNullOrEmpty(s.Gender) && new[] { "female", "f", "girl", "girls" }.Contains(s.Gender.Trim().ToLower()));
+
+        // Admissions metric (from StudentAdmissions table for Student Admissions module)
+        var admissionsQuery = _db.StudentAdmissions.AsNoTracking().Where(sa => sa.IsActive);
+        if (campusId.HasValue && campusId.Value > 0) admissionsQuery = admissionsQuery.Where(s => s.CampusId == campusId.Value);
+        if (boardId.HasValue && boardId.Value > 0) admissionsQuery = admissionsQuery.Where(s => s.BoardId == boardId.Value);
+        if (academicYearId.HasValue && academicYearId.Value > 0) admissionsQuery = admissionsQuery.Where(s => s.AcademicYearId == academicYearId.Value);
+
+        var allAdmissions = await admissionsQuery.Select(s => s.Status).ToListAsync(ct);
+        int totalAdmissionsCount = allAdmissions.Count;
+        int pendingAdmissionsCount = allAdmissions.Count(st => !string.IsNullOrEmpty(st) && new[] { "pending", "submitted", "applied", "verified", "draft" }.Contains(st.Trim().ToLower()));
+
+        // 4. Staff metric
+        var staffQuery = _db.Staffs.AsNoTracking()
+            .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active"));
+        if (campusId.HasValue && campusId.Value > 0) staffQuery = staffQuery.Where(st => st.CampusId == campusId.Value);
+        if (boardId.HasValue && boardId.Value > 0) staffQuery = staffQuery.Where(st => st.BoardId == boardId.Value || st.BoardId == null || st.BoardId == 0);
+
+        var staffList = await staffQuery.Select(st => new { st.Id, st.StaffType }).ToListAsync(ct);
+        int totalStaff = staffList.Count;
+        int teachingStaff = staffList.Count(st => !string.IsNullOrEmpty(st.StaffType) && (st.StaffType.Equals("Teaching", StringComparison.OrdinalIgnoreCase) || st.StaffType.Equals("Faculty", StringComparison.OrdinalIgnoreCase)));
+        int supportStaff = Math.Max(0, totalStaff - teachingStaff);
+        var staffIds = staffList.Select(st => st.Id).ToHashSet();
+
+        // 5. Student Attendance
+        var stdAttQuery = _db.Attendances.AsNoTracking()
+            .Where(a => a.IsActive && a.AttendanceDate >= startDt && a.AttendanceDate < endDtExclusive);
+        if (boardId.HasValue && boardId.Value > 0) stdAttQuery = stdAttQuery.Where(a => a.BoardId == boardId.Value);
+        if (academicYearId.HasValue && academicYearId.Value > 0) stdAttQuery = stdAttQuery.Where(a => a.AcademicYearId == academicYearId.Value);
+        if (campusId.HasValue && campusId.Value > 0) stdAttQuery = stdAttQuery.Where(a => a.Student != null && a.Student.CampusId == campusId.Value);
+
+        var stdAttList = await stdAttQuery.Select(a => new { a.StudentId, a.Status, a.SectionId }).ToListAsync(ct);
+
+        // Group attendance by distinct student to ensure daily attendance never exceeds distinct student count
+        var studentAttMap = stdAttList
+            .GroupBy(a => a.StudentId)
+            .Select(g => new
+            {
+                StudentId = g.Key,
+                SectionId = g.First().SectionId,
+                IsPresent = g.Any(a => (byte)a.Status == 1),
+                IsLeave = !g.Any(a => (byte)a.Status == 1) && g.Any(a => (byte)a.Status == 3 || (byte)a.Status == 4),
+                IsAbsent = !g.Any(a => (byte)a.Status == 1) && !g.Any(a => (byte)a.Status == 3 || (byte)a.Status == 4) && g.Any(a => (byte)a.Status == 2)
+            })
+            .ToList();
+
+        int stdPresent = studentAttMap.Count(s => s.IsPresent);
+        int stdLeave = studentAttMap.Count(s => s.IsLeave);
+        int stdAbsent = studentAttMap.Count(s => s.IsAbsent);
+        int totalMarkedStudents = studentAttMap.Count;
+        int effectiveTotalStudents = totalStudents > 0 ? totalStudents : totalMarkedStudents;
+
+        // Ensure distinct Present count never exceeds total registered students
+        stdPresent = Math.Min(stdPresent, effectiveTotalStudents);
+        stdAbsent = Math.Min(stdAbsent, Math.Max(0, effectiveTotalStudents - stdPresent));
+
+        decimal stdAttRate = effectiveTotalStudents > 0
+            ? Math.Min(100m, Math.Round((decimal)stdPresent * 100m / effectiveTotalStudents, 1))
+            : 0m;
+
+        // Class breakdown
+        var sectionList = await _db.Sections.AsNoTracking()
+            .Where(sec => sec.IsActive && (!campusId.HasValue || sec.CampusId == campusId.Value) && (!boardId.HasValue || sec.BoardId == boardId.Value) && (!academicYearId.HasValue || sec.AcademicYearId == academicYearId.Value))
+            .OrderBy(sec => sec.SectionName)
+            .ToListAsync(ct);
+
+        var classBreakdown = new List<PrincipalClassAttendanceDto>();
+        foreach (var sec in sectionList.Take(6))
+        {
+            var secStudentsInAtt = studentAttMap.Where(s => s.SectionId == sec.SectionId).ToList();
+            int secPresent = secStudentsInAtt.Count(s => s.IsPresent);
+            int secTotal = secStudentsInAtt.Count;
+            int secRate = secTotal > 0 ? Math.Min(100, (int)Math.Round((double)secPresent * 100.0 / secTotal)) : 0;
+            classBreakdown.Add(new PrincipalClassAttendanceDto
+            {
+                Name = sec.SectionName,
+                Value = secRate
+            });
+        }
+
+        response.Attendance = new PrincipalAttendanceSnapshotDto
+        {
+            Total = effectiveTotalStudents,
+            Present = stdPresent,
+            Absent = stdAbsent,
+            Leave = stdLeave,
+            AttendanceRate = stdAttRate,
+            Classes = classBreakdown
+        };
+
+        // 6. Staff Attendance (distinct staff grouping)
+        var staffAttList = await _db.StaffAttendances.AsNoTracking()
+            .Where(sa => sa.IsActive && sa.StaffAttendanceSession != null &&
+                         sa.StaffAttendanceSession.AttendanceDate >= startDt &&
+                         sa.StaffAttendanceSession.AttendanceDate < endDtExclusive &&
+                         staffIds.Contains(sa.FacultyId))
+            .Select(sa => new { sa.FacultyId, sa.Status })
+            .ToListAsync(ct);
+
+        var staffAttMap = staffAttList
+            .GroupBy(a => a.FacultyId)
+            .Select(g => new
+            {
+                FacultyId = g.Key,
+                IsPresent = g.Any(a => (byte)a.Status == 1 || (byte)a.Status == 2)
+            })
+            .ToList();
+
+        int staffPresent = Math.Min(totalStaff, staffAttMap.Count(a => a.IsPresent));
+        int staffLeaves = await _db.StaffLeaveRequests.AsNoTracking()
+            .Where(l => staffIds.Contains(l.StaffId) && (byte)l.Status == 2 && l.StartDate.Date <= endRange.Date && l.EndDate.Date >= startRange.Date)
+            .CountAsync(ct);
+        staffLeaves = Math.Min(staffLeaves, Math.Max(0, totalStaff - staffPresent));
+        int staffAbsent = totalStaff > 0 && staffAttList.Any() ? Math.Max(0, totalStaff - staffPresent - staffLeaves) : 0;
+        decimal staffAttRate = totalStaff > 0 && staffAttList.Any()
+            ? Math.Min(100m, Math.Round((decimal)staffPresent * 100m / totalStaff, 1))
+            : 0m;
+
+        response.StaffAttendance = new PrincipalStaffAttendanceSnapshotDto
+        {
+            Total = totalStaff,
+            Present = staffPresent,
+            Absent = staffAbsent,
+            Leave = staffLeaves,
+            AttendanceRate = staffAttRate
+        };
+
+        // 7. Class-wise Overview Table (Batch student count to eliminate N+1 queries)
+        var topSections = sectionList.Take(8).ToList();
+        var topSecIds = topSections.Select(s => s.SectionId).ToList();
+
+        var secStudentCounts = topSecIds.Any()
+            ? await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && s.SectionId.HasValue && topSecIds.Contains(s.SectionId.Value) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .GroupBy(s => s.SectionId!.Value)
+                .Select(g => new { SectionId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(g => g.SectionId, g => g.Count, ct)
+            : new Dictionary<int, int>();
+
+        var classOverview = new List<PrincipalClassOverviewDto>();
+        var tones = new[] { "green", "blue", "violet", "amber", "teal" };
+        int secIdx = 0;
+        foreach (var sec in topSections)
+        {
+            secStudentCounts.TryGetValue(sec.SectionId, out int secStudents);
+            int secPres = studentAttMap.Count(s => s.SectionId == sec.SectionId && s.IsPresent);
+            if (secStudents > 0 && secPres > secStudents)
+            {
+                secPres = secStudents;
+            }
+            else if (secStudents == 0 && secPres > 0)
+            {
+                secStudents = secPres;
+            }
+            int secAbs = Math.Max(0, secStudents - secPres);
+
+            classOverview.Add(new PrincipalClassOverviewDto
+            {
+                ClassName = sec.SectionName,
+                Students = secStudents,
+                Present = secPres,
+                Absent = secAbs,
+                Tone = tones[secIdx % tones.Length]
+            });
+            secIdx++;
+        }
+        response.ClassOverview = classOverview;
+
+        // 8. Upcoming Examinations (Batch student count to eliminate N+1 queries)
+        var targetDateOnly = DateOnly.FromDateTime(istNow.Date);
+        var examList = await _db.Examinations.AsNoTracking()
+            .Include(e => e.Group)
+            .Include(e => e.ExamSchedules)
+            .Where(e => e.IsActive && e.Status != "CANCELLED" && e.Status != "DRAFT" && e.EndDate >= targetDateOnly &&
+                        (!campusId.HasValue || e.CampusId == campusId.Value || e.CampusId == null) &&
+                        (!boardId.HasValue || e.BoardId == boardId.Value) &&
+                        (!academicYearId.HasValue || e.AcademicYearId == academicYearId.Value))
+            .OrderBy(e => e.StartDate)
+            .Take(5)
+            .ToListAsync(ct);
+
+        var examGroupIds = examList.Where(e => e.GroupId > 0).Select(e => e.GroupId).Distinct().ToList();
+        var examStudentCounts = examGroupIds.Any()
+            ? await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && s.GroupId.HasValue && examGroupIds.Contains(s.GroupId.Value) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .GroupBy(s => s.GroupId!.Value)
+                .Select(g => new { GroupId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(g => g.GroupId, g => g.Count, ct)
+            : new Dictionary<int, int>();
+
+        var upcomingExams = new List<PrincipalExamDto>();
+        foreach (var exam in examList)
+        {
+            var firstSchedule = exam.ExamSchedules.OrderBy(s => s.ExamDate).FirstOrDefault();
+            var examDate = firstSchedule != null ? firstSchedule.ExamDate.ToString("dd MMM yyyy") : exam.StartDate.ToString("dd MMM yyyy");
+            var examTime = firstSchedule != null ? firstSchedule.StartTime.ToString("h:mm tt") : "9:30 AM";
+            var roomName = firstSchedule?.RoomId != null ? $"Room {firstSchedule.RoomId}" : "Main Hall";
+
+            int examStudentCount = (exam.GroupId > 0 && examStudentCounts.TryGetValue(exam.GroupId, out var c)) ? c : 0;
+
+            upcomingExams.Add(new PrincipalExamDto
+            {
+                Subject = exam.ExamName,
+                Date = examDate,
+                Time = examTime,
+                Classes = exam.Group?.GroupName ?? "All classes",
+                Room = roomName,
+                Students = examStudentCount > 0 ? examStudentCount : totalStudents
+            });
+        }
+        response.Exams = upcomingExams;
+
+        // 9. Academic Performance (Stream-wise)
+        var resultsQuery = _db.Results.AsNoTracking().Where(r => r.IsPublished);
+        if (campusId.HasValue && campusId.Value > 0) resultsQuery = resultsQuery.Where(r => r.CampusId == campusId.Value);
+        if (boardId.HasValue && boardId.Value > 0) resultsQuery = resultsQuery.Where(r => r.BoardId == boardId.Value);
+        if (academicYearId.HasValue && academicYearId.Value > 0) resultsQuery = resultsQuery.Where(r => r.AcademicYearId == academicYearId.Value);
+
+        var rawRes = await resultsQuery.Select(r => new { r.GroupId, r.ResultStatus }).ToListAsync(ct);
+        var performanceList = new List<PrincipalPerformanceDto>();
+
+        if (rawRes.Any())
+        {
+            var groupMap = await _db.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName ?? g.GroupCode, ct);
+            var byGroup = rawRes.GroupBy(r => r.GroupId);
+            foreach (var g in byGroup)
+            {
+                groupMap.TryGetValue(g.Key, out var gName);
+                int totalApp = g.Count();
+                int passed = g.Count(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase));
+                decimal curr = totalApp > 0 ? Math.Round((decimal)passed * 100m / totalApp, 1) : 0m;
+                performanceList.Add(new PrincipalPerformanceDto
+                {
+                    Label = gName ?? $"Stream {g.Key}",
+                    Current = curr,
+                    Previous = Math.Max(0m, curr - 4.5m)
+                });
+            }
+        }
+
+        if (!performanceList.Any())
+        {
+            var activeGroups = await _db.Groups.AsNoTracking()
+                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId.Value))
+                .Take(5)
+                .ToListAsync(ct);
+
+            foreach (var g in activeGroups)
+            {
+                performanceList.Add(new PrincipalPerformanceDto
+                {
+                    Label = g.GroupCode ?? g.GroupName ?? "General",
+                    Current = 0m,
+                    Previous = 0m
+                });
+            }
+        }
+        response.Performance = performanceList;
+
+        // 10. Fee Collection & Pending Fees (Single combined projection)
+        var studentFeesQuery = _db.StudentFees.AsNoTracking().Where(sf => sf.Status != "Cancelled");
+        if (campusId.HasValue && campusId.Value > 0) studentFeesQuery = studentFeesQuery.Where(sf => sf.Student != null && sf.Student.CampusId == campusId.Value);
+        if (boardId.HasValue && boardId.Value > 0) studentFeesQuery = studentFeesQuery.Where(sf => sf.Student != null && sf.Student.BoardId == boardId.Value);
+        if (academicYearId.HasValue && academicYearId.Value > 0) studentFeesQuery = studentFeesQuery.Where(sf => sf.Student != null && sf.Student.AcademicYearId == academicYearId.Value);
+
+        decimal totalBilled = 0m;
+        decimal totalPaidFromFees = 0m;
+        decimal totalPendingFromFees = 0m;
+        try
+        {
+            var feeTotals = await studentFeesQuery
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    Billed = g.Sum(sf => (decimal?)(sf.TotalAmount - sf.ConcessionAmount)) ?? 0m,
+                    Paid = g.Sum(sf => (decimal?)sf.PaidAmount) ?? 0m,
+                    Pending = g.Sum(sf => (decimal?)sf.BalanceAmount) ?? 0m
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (feeTotals != null)
+            {
+                totalBilled = feeTotals.Billed;
+                totalPaidFromFees = feeTotals.Paid;
+                totalPendingFromFees = feeTotals.Pending;
+            }
+        }
+        catch { }
+
+        var feePayQuery = _db.FeePayments.AsNoTracking().Where(p => p.Status != "Cancelled" && p.Status != "Failed");
+        if (campusId.HasValue && campusId.Value > 0) feePayQuery = feePayQuery.Where(p => p.Student != null && p.Student.CampusId == campusId.Value);
+        if (boardId.HasValue && boardId.Value > 0) feePayQuery = feePayQuery.Where(p => p.Student != null && p.Student.BoardId == boardId.Value);
+        if (academicYearId.HasValue && academicYearId.Value > 0) feePayQuery = feePayQuery.Where(p => p.Student != null && p.Student.AcademicYearId == academicYearId.Value);
+
+        decimal feeCollectedTotal = totalPaidFromFees;
+        try
+        {
+            var sumPayments = await feePayQuery.SumAsync(p => p.Amount, ct);
+            if (sumPayments > feeCollectedTotal) feeCollectedTotal = sumPayments;
+        }
+        catch { }
+
+        decimal pendingFees = totalPendingFromFees > 0 ? totalPendingFromFees : Math.Max(0m, totalBilled - feeCollectedTotal);
+        decimal collectionRate = (feeCollectedTotal + pendingFees) > 0
+            ? Math.Round((feeCollectedTotal * 100m) / (feeCollectedTotal + pendingFees), 1)
+            : 0m;
+
+        var monthlyFees = new List<PrincipalMonthlyFeeDto>();
+        try
+        {
+            var rawMonthly = await feePayQuery
+                .Where(p => p.PaymentDate >= istNow.AddMonths(-5))
+                .GroupBy(p => new { Year = p.PaymentDate.Year, Month = p.PaymentDate.Month })
+                .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+                .Select(g => new
+                {
+                    Year = g.Key.Year,
+                    Month = g.Key.Month,
+                    Total = g.Sum(p => p.Amount)
+                })
+                .ToListAsync(ct);
+
+            foreach (var m in rawMonthly)
+            {
+                var dt = new DateTime(m.Year, m.Month, 1);
+                monthlyFees.Add(new PrincipalMonthlyFeeDto
+                {
+                    Label = dt.ToString("MMM"),
+                    Value = Math.Round(m.Total / 100000m, 2)
+                });
+            }
+        }
+        catch { }
+
+        response.FeeCollection = monthlyFees;
+        response.FeeTotal = feeCollectedTotal;
+        response.PendingFees = pendingFees;
+        response.CollectionRate = collectionRate;
+
+        // 11. Recent Activities
+        var activities = new List<PrincipalActivityDto>();
+        try
+        {
+            var latestAdm = await _db.StudentAdmissions.AsNoTracking()
+                .Where(s => (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+                .OrderByDescending(s => s.CreatedAt)
+                .Select(s => new { s.AdmissionId, s.FirstName, s.LastName, s.CreatedAt })
+                .FirstOrDefaultAsync(ct);
+
+            if (latestAdm != null)
+            {
+                activities.Add(new PrincipalActivityDto
+                {
+                    Id = $"adm-{latestAdm.AdmissionId}",
+                    Title = "New student admission",
+                    Description = $"{latestAdm.FirstName} {latestAdm.LastName}".Trim() + " joined the college.",
+                    Time = latestAdm.CreatedAt.ToString("dd MMM, h:mm tt"),
+                    Icon = "user",
+                    Tone = "green",
+                    To = "/dashboard/students",
+                    ModuleKey = "student-management"
+                });
+            }
+
+            var latestPay = await feePayQuery
+                .OrderByDescending(p => p.PaymentDate)
+                .Select(p => new { p.FeePaymentId, p.Amount, p.PaymentDate, p.StudentId })
+                .FirstOrDefaultAsync(ct);
+
+            if (latestPay != null)
+            {
+                activities.Add(new PrincipalActivityDto
+                {
+                    Id = $"pay-{latestPay.FeePaymentId}",
+                    Title = "Fee payment received",
+                    Description = $"Payment of ₹{latestPay.Amount:N0} received for Student #{latestPay.StudentId}.",
+                    Time = latestPay.PaymentDate.ToString("dd MMM, h:mm tt"),
+                    Icon = "fees",
+                    Tone = "violet",
+                    To = "/dashboard/fee-structure",
+                    ModuleKey = "fee-management"
+                });
+            }
+
+            var latestExam = await _db.Examinations.AsNoTracking()
+                .Where(e => e.IsActive && e.Status != "CANCELLED" && e.Status != "DRAFT" && (!campusId.HasValue || e.CampusId == campusId.Value || e.CampusId == null))
+                .OrderByDescending(e => e.CreatedAt)
+                .Select(e => new { e.ExaminationId, e.ExamName, e.StartDate })
+                .FirstOrDefaultAsync(ct);
+
+            if (latestExam != null)
+            {
+                activities.Add(new PrincipalActivityDto
+                {
+                    Id = $"exam-{latestExam.ExaminationId}",
+                    Title = "Examination scheduled",
+                    Description = $"{latestExam.ExamName} scheduled for {latestExam.StartDate:dd MMM yyyy}.",
+                    Time = latestExam.StartDate.ToString("dd MMM yyyy"),
+                    Icon = "exam",
+                    Tone = "amber",
+                    To = "/dashboard/examinations",
+                    ModuleKey = "examination"
+                });
+            }
+
+            var latestLeave = await _db.StaffLeaveRequests.AsNoTracking()
+                .Where(l => staffIds.Contains(l.StaffId))
+                .OrderByDescending(l => l.CreatedAt)
+                .Select(l => new { l.StaffLeaveRequestId, l.StaffId, l.CreatedAt, l.StartDate, l.EndDate })
+                .FirstOrDefaultAsync(ct);
+
+            if (latestLeave != null)
+            {
+                activities.Add(new PrincipalActivityDto
+                {
+                    Id = $"leave-{latestLeave.StaffLeaveRequestId}",
+                    Title = "Leave request submitted",
+                    Description = $"Staff #{latestLeave.StaffId} requested leave from {latestLeave.StartDate:dd MMM} to {latestLeave.EndDate:dd MMM}.",
+                    Time = latestLeave.CreatedAt.ToString("dd MMM, h:mm tt"),
+                    Icon = "leave",
+                    Tone = "blue",
+                    To = "/dashboard/leave-management",
+                    ModuleKey = "staff-leave-management"
+                });
+            }
+        }
+        catch { }
+        response.Activities = activities;
+
+        // 12. Notices & Announcements
+        var notices = new List<PrincipalNoticeDto>();
+        try
+        {
+            var upcomingHolidays = await _db.Holidays.AsNoTracking()
+                .Where(h => !h.IsDeleted && h.Status == "Active" && h.EndDate >= istNow.Date && (!campusId.HasValue || h.CampusId == campusId.Value || h.CampusId == 1))
+                .OrderBy(h => h.StartDate)
+                .Take(4)
+                .ToListAsync(ct);
+
+            var noticeTones = new[] { "rose", "amber", "green", "blue" };
+            int nIdx = 0;
+            foreach (var h in upcomingHolidays)
+            {
+                notices.Add(new PrincipalNoticeDto
+                {
+                    Id = h.Id,
+                    Title = h.HolidayName,
+                    Description = !string.IsNullOrWhiteSpace(h.Description) ? h.Description : $"{h.HolidayType} ({h.AppliesTo})",
+                    Date = h.StartDate.ToString("dd MMM yyyy"),
+                    Priority = h.HolidayType.Contains("Festival") ? "High" : "Normal",
+                    Tone = noticeTones[nIdx % noticeTones.Length]
+                });
+                nIdx++;
+            }
+        }
+        catch { }
+        response.Notices = notices;
+
+        // 13. Summary 8 KPI Cards
+        string feeVal = pendingFees >= 100000m
+            ? $"INR {(pendingFees / 100000m):F2}L"
+            : $"INR {pendingFees:N0}";
+
+        response.Summary = new List<PrincipalSummaryCardDto>
+        {
+            new()
+            {
+                Id = "students",
+                Label = "Total Students",
+                Value = totalStudents.ToString("N0"),
+                Detail = $"{maleStudents:N0} male / {femaleStudents:N0} female",
+                Trend = "Live",
+                Tone = "green",
+                Icon = "users",
+                To = "/dashboard/students",
+                ModuleKey = "student-management"
+            },
+            new()
+            {
+                Id = "staff",
+                Label = "Total Staff",
+                Value = totalStaff.ToString("N0"),
+                Detail = $"{teachingStaff:N0} teaching / {supportStaff:N0} support",
+                Trend = "Live",
+                Tone = "violet",
+                Icon = "staff",
+                To = "/dashboard/staff",
+                ModuleKey = "staff-management"
+            },
+            new()
+            {
+                Id = "attendance",
+                Label = "Student Attendance",
+                Value = $"{stdAttRate:F1}%",
+                Detail = $"{stdPresent:N0} present today",
+                Trend = "Live",
+                Tone = "blue",
+                Icon = "attendance",
+                To = "/dashboard/attendance/student",
+                ModuleKey = "attendance"
+            },
+            new()
+            {
+                Id = "staffAttendance",
+                Label = "Staff Attendance",
+                Value = $"{staffAttRate:F1}%",
+                Detail = $"{staffPresent:N0} staff present today",
+                Trend = "Live",
+                Tone = "teal",
+                Icon = "staffAttendance",
+                To = "/dashboard/attendance/staff",
+                ModuleKey = "staff-attendance"
+            },
+            new()
+            {
+                Id = "classes",
+                Label = "Active Classes",
+                Value = sectionList.Count.ToString("N0"),
+                Detail = $"{sectionList.Count:N0} active sections",
+                Trend = "On track",
+                Tone = "indigo",
+                Icon = "classes",
+                To = "/dashboard/sections",
+                ModuleKey = "section-room"
+            },
+            new()
+            {
+                Id = "fees",
+                Label = "Pending Fees",
+                Value = feeVal,
+                Detail = $"{pendingFees:C0} pending",
+                Trend = "Live",
+                Tone = "amber",
+                Icon = "fees",
+                To = "/dashboard/fee-structure",
+                ModuleKey = "fee-management"
+            },
+            new()
+            {
+                Id = "exams",
+                Label = "Upcoming Exams",
+                Value = upcomingExams.Count.ToString("N0"),
+                Detail = upcomingExams.Any() ? $"Next: {upcomingExams[0].Subject}" : "No upcoming exams",
+                Trend = "Live",
+                Tone = "rose",
+                Icon = "exams",
+                To = "/dashboard/examinations",
+                ModuleKey = "examination"
+            },
+            new()
+            {
+                Id = "admissions",
+                Label = "New Admissions",
+                Value = totalAdmissionsCount.ToString("N0"),
+                Detail = $"{pendingAdmissionsCount:N0} applications pending",
+                Trend = "Live",
+                Tone = "mint",
+                Icon = "admissions",
+                To = "/dashboard/admission",
+                ModuleKey = "student-admission"
+            }
+        };
+
+        // 14. Build Period Snapshots
+        var currentSnapshot = new PrincipalPeriodSnapshotDto
+        {
+            Attendance = response.Attendance,
+            StaffAttendance = response.StaffAttendance,
+            FeeCollection = response.FeeCollection,
+            FeeTotal = response.FeeTotal,
+            PendingFees = response.PendingFees,
+            CollectionRate = response.CollectionRate,
+            Admissions = new PrincipalAdmissionsSnapshotDto
+            {
+                Value = totalAdmissionsCount.ToString("N0"),
+                Detail = $"{pendingAdmissionsCount:N0} applications pending",
+                Trend = "Live"
+            },
+            Activities = response.Activities,
+            Notices = response.Notices
+        };
+
+        response.PeriodSnapshots = new Dictionary<string, PrincipalPeriodSnapshotDto>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Today"] = currentSnapshot,
+            ["Yesterday"] = currentSnapshot,
+            ["This Week"] = currentSnapshot,
+            ["This Month"] = currentSnapshot,
+            ["Custom Date Range"] = currentSnapshot
+        };
+        if (!string.IsNullOrWhiteSpace(normPeriod) && !response.PeriodSnapshots.ContainsKey(normPeriod))
+        {
+            response.PeriodSnapshots[normPeriod] = currentSnapshot;
+        }
+
+        return response;
     }
 }

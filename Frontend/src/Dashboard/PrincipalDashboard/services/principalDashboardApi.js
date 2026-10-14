@@ -328,6 +328,69 @@ const countByText = (items, keys, matcher) => items.filter((item) => matcher(Str
 
 export async function fetchPrincipalDashboardData({ period = "Today", customRange = {}, context = {} } = {}) {
   const range = periodRange(period, customRange);
+
+  // 1. Primary: Optimized single backend aggregator endpoint
+  try {
+    const principalQuery = {
+      period,
+      campusId: positiveId(context.campusId),
+      boardId: positiveId(context.boardId),
+      academicYearId: positiveId(context.academicYearId),
+    };
+    if (range.fromDate) principalQuery.fromDate = `${range.fromDate}T00:00:00`;
+    if (range.toDate) principalQuery.toDate = `${range.toDate}T23:59:59`;
+
+    const aggRes = await apiClient.get(apiEndpoints.dashboard.principal, {
+      params: principalQuery,
+      skipGlobalLoader: true,
+    });
+
+    const aggData = unwrap(aggRes?.data);
+    if (aggData && aggData.summary && Array.isArray(aggData.summary) && aggData.summary.length > 0) {
+      const pSnapshot = aggData.periodSnapshots?.[period] || {
+        attendance: aggData.attendance || { total: 0, present: 0, absent: 0, leave: 0, classes: [] },
+        staffAttendance: aggData.staffAttendance || { total: 0, present: 0, absent: 0, leave: 0 },
+        feeCollection: aggData.feeCollection || [],
+        feeTotal: aggData.feeTotal || 0,
+        pendingFees: aggData.pendingFees || 0,
+        collectionRate: aggData.collectionRate || 0,
+        admissions: aggData.summary.find((s) => s.id === "admissions") || {
+          value: "0",
+          detail: "0 applications pending",
+          trend: "Live",
+        },
+        activities: aggData.activities || [],
+        notices: aggData.notices || [],
+      };
+
+      return {
+        data: {
+          principal: aggData.principal || principalDashboardData.principal,
+          summary: aggData.summary,
+          attendance: aggData.attendance || pSnapshot.attendance,
+          staffAttendance: aggData.staffAttendance || pSnapshot.staffAttendance,
+          performance: aggData.performance || [],
+          classOverview: aggData.classOverview || [],
+          exams: aggData.exams || [],
+          feeCollection: aggData.feeCollection || [],
+          activities: aggData.activities || [],
+          notices: aggData.notices || [],
+          periodSnapshots: {
+            ...principalPeriodSnapshots,
+            ...(aggData.periodSnapshots || {}),
+            [period]: pSnapshot,
+          },
+        },
+        partial: false,
+        errors: [],
+        loadedAt: aggData.loadedAt || new Date().toISOString(),
+      };
+    }
+  } catch (aggErr) {
+    console.warn("Principal aggregator API unavailable, falling back to multi-endpoint collection:", aggErr);
+  }
+
+  // 2. Fallback: Multi-endpoint collection
   const reportsQuery = reportParams(context, range);
   const apiQuery = moduleParams(context, range);
   const monthQuery = { ...apiQuery, month: new Date(`${range.toDate}T00:00:00`).getMonth() + 1, year: new Date(`${range.toDate}T00:00:00`).getFullYear() };
@@ -410,7 +473,8 @@ export async function fetchPrincipalDashboardData({ period = "Today", customRang
     absent: number(attendanceFromSummary, ["absent", "Absent", "absentCount", "AbsentCount"], undefined) ?? fallbackSnapshot.attendance.absent,
     leave: number(attendanceFromSummary, ["leave", "Leave", "leaveCount", "LeaveCount"], undefined) ?? fallbackSnapshot.attendance.leave,
   });
-  const attendanceValue = number(attendanceFromPercentage, ["percentage", "Percentage", "attendancePercentage", "AttendancePercentage"], percent(attendance.present, attendance.total));
+  const rawAttendanceVal = number(attendanceFromPercentage, ["percentage", "Percentage", "attendancePercentage", "AttendancePercentage"], percent(attendance.present, attendance.total));
+  const attendanceValue = Math.min(100, Math.max(0, rawAttendanceVal));
   const staffAttendance = summarizeStaffAttendanceRows(staffAttendanceRows, totalStaff, fallbackSnapshot.staffAttendance);
   const activeSections = number(unwrap(response.sections.data), ["totalCount", "TotalCount", "total", "Total"], undefined) ?? sectionRows.length ?? principalDashboardData.classOverview.length;
   const totalCollected = number(feeDashboard, ["totalCollected", "TotalCollected", "collected", "Collected", "totalPaid", "TotalPaid"], undefined)
@@ -426,8 +490,10 @@ export async function fetchPrincipalDashboardData({ period = "Today", customRang
     ?? admissionsDetails.length;
   const pendingAdmissions = admissions.filter((item) => ["pending", "submitted", "verified"].includes(String(read(item, ["status", "Status", "admissionStatus", "AdmissionStatus"], "")).toLowerCase())).length;
 
+  const effTotal = attendance.total || totalStudents || 0;
+  const effPresent = Math.min(effTotal, Math.round((attendanceValue / 100) * effTotal) || attendance.present);
   const periodSnapshot = {
-    attendance: { ...attendance, present: Math.round((attendanceValue / 100) * (attendance.total || totalStudents || 0)) || attendance.present },
+    attendance: { ...attendance, total: effTotal, present: effPresent, attendanceRate: attendanceValue },
     staffAttendance,
     feeCollection: buildFeeCollection(collectionRows, fallbackSnapshot.feeCollection),
     feeTotal: totalCollected,
