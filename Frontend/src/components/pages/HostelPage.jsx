@@ -1257,61 +1257,7 @@ export default function HostelPage() {
     });
   };
 
-  // Enriched Student Fee & Dues Records tied to active allocations
-  const revenueStudentRecords = useMemo(() => {
-    return activeAllocations.map((a, idx) => {
-      const allocKey = String(a.id || a.allocationId || idx + 1);
-      const studentKey = String(a.studentId || a.admissionNo || allocKey);
-      const paymentInfo = feePayments[allocKey] || feePayments[studentKey] || feePayments[String(idx + 1)] || null;
-      
-      const rawFee = parseFloat(String(a.monthlyFee || a.fee || 0).replace(/[^0-9.]/g, "")) || 0;
-      const monthlyFee = rawFee > 0 ? rawFee : 6000;
-      
-      const paidAmount = paymentInfo?.paidAmount !== undefined 
-        ? Math.min(monthlyFee, Math.max(0, Number(paymentInfo.paidAmount))) 
-        : (paymentInfo === null && idx < 4 ? monthlyFee : 0);
-      const dueAmount = Math.max(0, monthlyFee - paidAmount);
-      const paymentStatus = dueAmount === 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Pending";
-      
-      return {
-        ...a,
-        allocKey,
-        studentId: a.studentId || idx + 1,
-        admissionNo: a.admissionNo || `ADM-2026-00${idx + 1}`,
-        studentName: a.studentName || a.name || `Resident Student #${idx + 1}`,
-        blockName: a.blockName || a.hostelName || blocks.find((b) => Number(b.id) === Number(a.hostelId))?.name || "Hostel Block",
-        roomBadge: a.roomBadge || (a.room && a.bed ? `${a.room} (${a.bed})` : (a.roomNumber || a.room || `Room #${101 + idx}`)),
-        monthlyFee,
-        paidAmount,
-        dueAmount,
-        paymentStatus,
-        lastPaymentDate: paymentInfo?.lastPaymentDate || (paidAmount > 0 ? "2026-10-05" : "-"),
-        receiptNo: paymentInfo?.receiptNo || (paidAmount > 0 ? `RCP-2026-00${idx + 1}` : "-"),
-        paymentMode: paymentInfo?.paymentMode || (paidAmount > 0 ? "UPI" : "-"),
-        notes: paymentInfo?.notes || "",
-      };
-    });
-  }, [activeAllocations, feePayments, blocks]);
 
-  const revenueSummary = useMemo(() => {
-    const totalBilled = revenueStudentRecords.reduce((sum, r) => sum + r.monthlyFee, 0);
-    const totalPaid = revenueStudentRecords.reduce((sum, r) => sum + r.paidAmount, 0);
-    const totalDue = revenueStudentRecords.reduce((sum, r) => sum + r.dueAmount, 0);
-    const paidCount = revenueStudentRecords.filter((r) => r.paymentStatus === "Paid").length;
-    const partialCount = revenueStudentRecords.filter((r) => r.paymentStatus === "Partial").length;
-    const pendingCount = revenueStudentRecords.filter((r) => r.paymentStatus === "Pending").length;
-    const efficiencyRate = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
-
-    return {
-      totalBilled,
-      totalPaid,
-      totalDue,
-      paidCount,
-      partialCount,
-      pendingCount,
-      efficiencyRate,
-    };
-  }, [revenueStudentRecords]);
 
 
   // Global Dialogs & Modals
@@ -1462,6 +1408,64 @@ export default function HostelPage() {
       return sum + num;
     }, 0);
   }, [activeAllocations]);
+
+  // Enriched Student Fee & Dues Records tied to active allocations
+  const revenueStudentRecords = useMemo(() => {
+    const list = Array.isArray(activeAllocations) ? activeAllocations : [];
+    return list.map((a, idx) => {
+      const allocKey = String(a.id || a.allocationId || idx + 1);
+      const studentKey = String(a.studentId || a.admissionNo || allocKey);
+      const paymentInfo = feePayments?.[allocKey] || feePayments?.[studentKey] || feePayments?.[String(idx + 1)] || null;
+      
+      const rawFee = parseFloat(String(a.monthlyFee || a.fee || 0).replace(/[^0-9.]/g, "")) || 0;
+      const monthlyFee = rawFee > 0 ? rawFee : 6000;
+      
+      const paidAmount = paymentInfo?.paidAmount !== undefined 
+        ? Math.min(monthlyFee, Math.max(0, Number(paymentInfo.paidAmount))) 
+        : (paymentInfo === null && idx < 4 ? monthlyFee : 0);
+      const dueAmount = Math.max(0, monthlyFee - paidAmount);
+      const paymentStatus = dueAmount === 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Pending";
+      
+      return {
+        ...a,
+        allocKey,
+        studentId: a.studentId || idx + 1,
+        admissionNo: a.admissionNo || `ADM-2026-00${idx + 1}`,
+        studentName: a.studentName || a.name || `Resident Student #${idx + 1}`,
+        blockName: a.blockName || a.hostelName || blocks?.find((b) => Number(b.id) === Number(a.hostelId))?.name || "Hostel Block",
+        roomBadge: a.roomBadge || (a.room && a.bed ? `${a.room} (${a.bed})` : (a.roomNumber || a.room || `Room #${101 + idx}`)),
+        monthlyFee,
+        paidAmount,
+        dueAmount,
+        paymentStatus,
+        lastPaymentDate: paymentInfo?.lastPaymentDate || (paidAmount > 0 ? "2026-10-05" : "-"),
+        receiptNo: paymentInfo?.receiptNo || (paidAmount > 0 ? `RCP-2026-00${idx + 1}` : "-"),
+        paymentMode: paymentInfo?.paymentMode || (paidAmount > 0 ? "UPI" : "-"),
+        notes: paymentInfo?.notes || "",
+      };
+    });
+  }, [activeAllocations, feePayments, blocks]);
+
+  const revenueSummary = useMemo(() => {
+    const list = Array.isArray(revenueStudentRecords) ? revenueStudentRecords : [];
+    const totalBilled = list.reduce((sum, r) => sum + (Number(r.monthlyFee) || 0), 0);
+    const totalPaid = list.reduce((sum, r) => sum + (Number(r.paidAmount) || 0), 0);
+    const totalDue = list.reduce((sum, r) => sum + (Number(r.dueAmount) || 0), 0);
+    const paidCount = list.filter((r) => r.paymentStatus === "Paid").length;
+    const partialCount = list.filter((r) => r.paymentStatus === "Partial").length;
+    const pendingCount = list.filter((r) => r.paymentStatus === "Pending").length;
+    const efficiencyRate = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
+
+    return {
+      totalBilled,
+      totalPaid,
+      totalDue,
+      paidCount,
+      partialCount,
+      pendingCount,
+      efficiencyRate,
+    };
+  }, [revenueStudentRecords]);
   const activeWardensCount = wardens.filter((w) => (w.status || "").toLowerCase() === "active").length || (dashboardData?.activeWardens ?? 0);
   const pendingOutpasses = useMemo(
     () => outpasses.filter((o) => o.status === "Pending" || o.status === "Pending Approval" || o.status === "Under Review").length,
