@@ -129,16 +129,21 @@ apiClient.interceptors.request.use(
     const token = getStoredAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
 
-    const isExplicitlyOnline = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_online") === "true";
-    const isMockSession =
-      !isExplicitlyOnline ||
-      Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("parent-auth-token-"))) ||
-      Boolean(typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true");
+    // Clean up any stale offline flags so real APIs are never blocked
+    try {
+      if (typeof window !== "undefined") {
+        if (window.localStorage?.getItem("cms_backend_offline")) {
+          window.localStorage.removeItem("cms_backend_offline");
+        }
+        window.localStorage?.setItem("cms_backend_online", "true");
+      }
+    } catch {}
 
-    const isAuthLoginEndpoint = /\/api\/(Auth|Admin)\/login/i.test(config.url || "");
+    // Only route through mock adapter if explicitly configured or using a synthetic mock token (mock- or demo-)
+    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
+    const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
-    // When backend is offline or session is mock-authenticated, use mock adapter for all ERP calls
-    if (isMockSession && !isAuthLoginEndpoint) {
+    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
       config.adapter = handleMockApiRequest;
     }
 
@@ -188,22 +193,12 @@ apiClient.interceptors.response.use(
     const errText = `${error?.message || ""} ${typeof error?.response?.data === "string" ? error.response.data : JSON.stringify(error?.response?.data || "")}`;
     const isNgrokOffline = /ERR_NGROK|is offline/i.test(errText);
 
-    if (isNgrokOffline && typeof window !== "undefined") {
-      try {
-        window.localStorage?.setItem("cms_backend_offline", "true");
-      } catch {}
-    }
+    const token = getStoredAccessToken();
+    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
+    const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
-    // Automatic fallback to mock adapter for missing endpoints (404), offline backend, 502/503 proxy errors, or HTML error pages
-    const isProxyOrBackendFailure =
-      error.response?.status === 404 ||
-      error.response?.status === 502 ||
-      error.response?.status === 503 ||
-      isNgrokOffline ||
-      !error.response ||
-      isHtmlResponse(error.response?.data);
-
-    if (isProxyOrBackendFailure && originalRequest && !originalRequest._isMockFallback) {
+    // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
+    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);

@@ -271,4 +271,25 @@ public class CertificateService : ICertificateService
         if (id <= 0) return false;
         return await _repository.DeleteAsync(id, ct);
     }
+
+    public async Task<bool> UpdateFeeClearanceAsync(
+        int certificateId,
+        UpdateFeeClearanceDto dto,
+        string userName,
+        CancellationToken ct = default)
+    {
+        if (certificateId <= 0 || dto == null) return false;
+        var cert = await _repository.GetByIdAsync(certificateId, ct);
+        if (cert == null) return false;
+
+        decimal dueAmount = dto.DueAmount ?? cert.FeeDueAmount;
+        string status = string.IsNullOrWhiteSpace(dto.Status) ? "Cleared" : dto.Status;
+        if (status.Equals("Cleared", StringComparison.OrdinalIgnoreCase))
+        {
+            dueAmount = 0.00m;
+        }
+
+        string clearedBy = !string.IsNullOrWhiteSpace(dto.ClearedBy) ? dto.ClearedBy : userName;
+        return await _repository.UpdateFeeClearanceAsync(certificateId, status, dueAmount, clearedBy, dto.ExemptionReason, ct);
+    }
 }

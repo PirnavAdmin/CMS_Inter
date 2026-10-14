@@ -361,6 +361,13 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     throw new Error("Authentication failed because the server did not return an access token.");
   }
 
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage?.removeItem("cms_backend_offline");
+      window.localStorage?.setItem("cms_backend_online", "true");
+    }
+  } catch {}
+
   let jwtClaims = {};
   try {
     const parts = token.split(".");
