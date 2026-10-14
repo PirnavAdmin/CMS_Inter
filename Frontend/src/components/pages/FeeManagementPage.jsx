@@ -3541,7 +3541,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
 
 function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
   const [editing, setEditing] = useState(null);
-  const [yearFeeMode, setYearFeeMode] = useState("");
+  const [yearFeeMode, setYearFeeMode] = useState("same");
   const [yearIncrementType, setYearIncrementType] = useState("percentage");
   const [yearIncrementValue, setYearIncrementValue] = useState("");
   const [yearIncrementError, setYearIncrementError] = useState("");
@@ -3628,7 +3628,9 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   };
 
   const openAddStructure = () => {
-    if (!yearFeeMode) return;
+    if (!yearFeeMode) {
+      setYearFeeMode("same");
+    }
     setFirstYearTotal(0);
     setIsAdding(true);
     setEditing({});
@@ -3638,7 +3640,9 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
     <>
       <section className="cms-fee-year-config cms-fee-year-page" aria-labelledby="fs-year-config-title">
         <h4 id="fs-year-config-title">Fee Configuration by Year</h4>
-        <p className="cms-fee-year-warning" role="alert">Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.</p>
+        {!yearFeeMode ? (
+          <p className="cms-fee-year-warning" role="alert">Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.</p>
+        ) : null}
         <fieldset className="cms-fee-year-options">
           <legend className="cms-sr-only">Year fee configuration</legend>
           {[ ["same", "Same Fees for 1st and 2nd Year"], ["different", "Different Fees for 1st and 2nd Year"] ].map(([mode, label]) => (
