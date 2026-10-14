@@ -211,11 +211,9 @@ apiClient.interceptors.response.use(
       } catch (_) {}
     }
 
-    const is404 = error.response?.status === 404;
     const shouldLogDevError =
       import.meta.env.DEV &&
       !isNgrokOffline &&
-      !is404 &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&

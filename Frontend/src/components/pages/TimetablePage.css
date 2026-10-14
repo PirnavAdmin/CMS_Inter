@@ -685,23 +685,3 @@
     flex: 1;
   }
 }
-.ttm-slot-editor-modal .ttm-leisure-preview {
-  padding: 14px;
-  margin-top: 12px;
-  border: 1px solid var(--cms-border);
-  border-left: 3px solid var(--cms-violet);
-  border-radius: 8px;
-  background: var(--cms-violet-soft);
-  color: var(--cms-text);
-}
-.ttm-slot-editor-modal .ttm-leisure-badge {
-  display: inline-block;
-  padding: 5px 12px;
-  border-radius: 6px;
-  background: var(--cms-surface);
-  color: var(--cms-violet);
-  font-weight: 700;
-}
-.ttm-slot-editor-modal .ttm-leisure-preview p { margin: 10px 0; font-size: 13px; }
-.ttm-slot-editor-modal .ttm-leisure-preview small { color: var(--cms-muted); }
-.ttm-slot-editor-modal .ttm-leisure-preview .ttm-leisure-notice { margin-bottom: 0; font-size: 12px; line-height: 1.5; }

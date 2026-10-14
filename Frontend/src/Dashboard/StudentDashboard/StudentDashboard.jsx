@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpenCheck, CalendarClock, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, Sun } from "lucide-react";
+import { Award, BookOpenCheck, CalendarClock, IndianRupee, CheckCircle2, XCircle, Clock3, GraduationCap, Users, FileText, Sun } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { SkeletonDashboard } from "@/components/common/Ui.jsx";
-import StudentDashboardHighlights from "./components/StudentDashboardHighlights.jsx";
 import StudentCard from "./components/StudentCard.jsx";
 import StudentDataTable from "./components/StudentDataTable.jsx";
 import StudentPageHeader from "./components/StudentPageHeader.jsx";
@@ -20,10 +19,6 @@ import feeIcon from "@/assets/sidebar-3d/fee-management.png";
 import certificateIcon from "@/assets/sidebar-3d/certificates.png";
 
 const money = (value) => `₹${Number(value).toLocaleString("en-IN")}`;
-const getGreeting = () => {
-  const hour = new Date().getHours();
-  return hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
-};
 
 const getObject = (payload) => {
   let value = payload?.data ?? payload?.Data ?? payload;
@@ -36,7 +31,7 @@ const getRows = (payload) => {
   let value = payload;
   for (let depth = 0; depth < 4; depth += 1) {
     const nested = value?.data ?? value?.Data ?? value?.result ?? value?.Result;
-    if (nested == null || typeof nested !== "object" || nested === value) break;
+    if (nested == null || nested === value) break;
     value = nested;
   }
   if (Array.isArray(value)) return value;
@@ -51,7 +46,7 @@ const unwrap = (payload) => {
   let value = payload;
   for (let depth = 0; depth < 4; depth += 1) {
     const nested = value?.data ?? value?.Data ?? value?.result ?? value?.Result;
-    if (nested == null || typeof nested !== "object" || nested === value) break;
+    if (nested == null || nested === value) break;
     value = nested;
   }
   return value;
@@ -102,16 +97,6 @@ const normalizeFeeSummary = (detailsPayload, ledgerPayload) => {
 };
 
 export default function StudentDashboard() {
-  const [greeting, setGreeting] = useState(getGreeting);
-  useEffect(() => {
-    const updateGreeting = () => setGreeting(getGreeting());
-    const timer = window.setInterval(updateGreeting, 60000);
-    window.addEventListener("focus", updateGreeting);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", updateGreeting);
-    };
-  }, []);
   const { profile, loading, error } = useStudentProfile();
   const [examinations, setExaminations] = useState([]);
   const [examsLoading, setExamsLoading] = useState(true);
@@ -198,16 +183,14 @@ export default function StudentDashboard() {
   const feeValue = (key) => feeLoading ? "..." : feeSummary ? money(feeSummary[key]) : "-";
   const feeDate = feeLoading ? "Loading..." : feeSummary?.nextDueDate || "-";
   const attendance = attendanceData || { percentage: "—", present: "—", absent: "—", workingDays: "—" };
-  const publishedFlag = read(latestResult, "isPublished", "IsPublished");
-  const resultPublished = publishedFlag != null ? publishedFlag === true : /^published$/i.test(String(read(latestResult, "status", "Status", "resultStatus", "ResultStatus") || ""));
-  const resultRows = latestResult && resultPublished
-    ? [[read(latestResult, "examName", "ExamName") || "Latest Exam", `${Number(read(latestResult, "percentage", "Percentage") || 0)}%`, read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—", read(latestResult, "finalResult", "FinalResult", "resultStatus", "ResultStatus", "result", "Result", "status", "Status") || "Published"]]
+  const resultRows = latestResult && read(latestResult, "isPublished", "IsPublished") !== false
+    ? [[read(latestResult, "examName", "ExamName") || "Latest Exam", `${Number(read(latestResult, "percentage", "Percentage") || 0)}%`, read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—", read(latestResult, "finalResult", "FinalResult", "resultStatus", "ResultStatus", "status", "Status") || "Published"]]
     : [];
   return (
     <div className="sp-page sp-dashboard-page">
       <div className="sp-dashboard-greeting"><Sun size={42} aria-hidden="true" />
       <StudentPageHeader
-        title={`${greeting}, ${studentName.split(" ")[0]}`}
+        title={`Good Morning, ${studentName.split(" ")[0]}`}
         subtitle="Welcome back! Here's what's happening with your academics today."
       />
       </div>
@@ -224,7 +207,7 @@ export default function StudentDashboard() {
         <StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={attendanceData ? `${attendance.percentage}%` : "—"} note={attendanceError ? "Unable to load" : `${attendance.present} present · ${attendance.absent} absent`} />
         <StudentSummaryCard icon={IndianRupee} label="Fee Due" value={feeValue("due")} note={feeError ? "Unable to load fee data" : `Due ${feeDate}`} tone="orange" />
         <StudentSummaryCard icon={CalendarClock} label="Upcoming Exams" value={upcomingSchedules.length} note={upcomingSchedules[0] ? `Next on ${formatExamDate(upcomingSchedules[0].schedule.examDate)}` : "No upcoming exams"} tone="purple" />
-        <StudentSummaryCard icon={Award} label="Latest Result" value={resultPublished ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : resultPublished ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
+        <StudentSummaryCard icon={Award} label="Latest Result" value={latestResult ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : latestResult ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
       </section>
       <StudentCard title="Quick Actions" className="sp-dashboard-quick-actions">
         <div className="sp-dashboard-action-grid">
@@ -236,11 +219,18 @@ export default function StudentDashboard() {
             ["Results", "View performance", "results", resultsIcon, "orange"],
             ["Fees", "View fee details", "fees", feeIcon, "blue"],
             ["Request Certificate", "Request certificates", "certificates", certificateIcon, "purple"],
-          ].map(([title, description, route, icon, tone]) => <Link key={route} className={`sp-dashboard-action tone-${tone}`} title={description} to={route} state={route === "certificates" ? { openRequestCertificate: true } : undefined}><img src={icon} alt="" aria-hidden="true" /><strong>{title}</strong></Link>)}
+          ].map(([title, description, route, icon, tone]) => <Link key={route} className={`sp-dashboard-action tone-${tone}`} to={route} state={route === "certificates" ? { openRequestCertificate: true } : undefined}><img src={icon} alt="" aria-hidden="true" /><strong>{title}</strong><small>{description}</small></Link>)}
         </div>
       </StudentCard>
-      <StudentDashboardHighlights student={profile} upcomingSchedules={upcomingSchedules} examsError={examsError} formatExamDate={formatExamDate} formatExamTime={formatExamTime} />
       <div className="sp-dashboard-grid">
+        <StudentCard title="Attendance Overview" action={<Link className="sp-text-link" to="attendance">View Details →</Link>}>
+          <div className="sp-metric-list">
+            {[["Overall", `${attendance.percentage}%`, Users, "green"], ["Present", attendance.present, CheckCircle2, "green"], ["Absent", attendance.absent, XCircle, "red"], ["Working Days", attendance.workingDays, Clock3, "orange"]].map(([label, value, Icon, tone]) => <div key={label} className={`tone-${tone}`}><Icon size={28} aria-hidden="true" /><div><span>{label}</span><strong>{value}</strong></div></div>)}
+          </div>
+        </StudentCard>
+        <StudentCard title="Upcoming Exams" action={<Link className="sp-text-link" to="examinations">View All →</Link>}>
+          {examsError ? <div className="sp-empty">{examsError}</div> : <StudentDataTable columns={["Subject", "Date", "Time"]} rows={upcomingSchedules.slice(0, 5).map(({ schedule }) => [schedule.subjectName, formatExamDate(schedule.examDate), `${formatExamTime(schedule.startTime)} - ${formatExamTime(schedule.endTime)}`])} empty="No upcoming examinations." />}
+        </StudentCard>
         <StudentCard title="Recent Results" action={<Link className="sp-text-link" to="results">View All →</Link>}>
           <StudentDataTable columns={["Exam", "Percentage", "Grade", "Status"]} rows={resultRows} statusColumns={[3]} empty={resultError || "No published results available."} />
         </StudentCard>
