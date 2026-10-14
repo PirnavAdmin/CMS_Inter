@@ -2012,7 +2012,50 @@ export function handleMockApiRequest(config) {
     return ok(config, { success: true, data: rawCertificates, items: rawCertificates });
   }
 
-  // 21. GENERAL DEFAULT FALLBACK FOR ANY OTHER API ROUTE
+  // 21. REIMBURSEMENTS
+  if (path.startsWith("/api/v1/staff-reimbursements") || path.startsWith("/api/v1/reimbursements")) {
+    let storedClaims = [];
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage?.getItem("cms_reimbursement_claims") : null;
+      storedClaims = raw ? JSON.parse(raw) : [];
+    } catch {}
+    if (!Array.isArray(storedClaims) || storedClaims.length === 0) {
+      storedClaims = [
+        {
+          id: 1,
+          claimId: "CLM-2026-001",
+          facultyName: "Dr. Ananya Rao",
+          department: "Mathematics",
+          category: "Teaching Materials",
+          amount: 3200,
+          status: "Pending",
+          submissionDate: "2026-10-03",
+        },
+      ];
+    }
+    if (path.includes("/summary")) {
+      const pendingCount = storedClaims.filter((c) => (c.status || "").toLowerCase() === "pending").length;
+      const approvedCount = storedClaims.filter((c) => (c.status || "").toLowerCase() === "approved").length;
+      return ok(config, {
+        success: true,
+        data: {
+          pendingCount,
+          approvedCount,
+          totalCount: storedClaims.length,
+          items: storedClaims,
+        },
+      });
+    }
+    return ok(config, {
+      success: true,
+      status: true,
+      data: storedClaims,
+      items: storedClaims,
+      totalCount: storedClaims.length,
+    });
+  }
+
+  // 22. GENERAL DEFAULT FALLBACK FOR ANY OTHER API ROUTE
   if (method === "get") {
     return ok(config, { success: true, data: [], items: [], totalCount: 0 });
   }
