@@ -284,18 +284,17 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 12px;
   margin-left: auto;
-  color: var(--cms-text, #10203c);
+  color: var(--cms-muted, #7B8275);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .att-month-legend span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+  gap: 5px;
 }
 
 .att-month-legend i,
@@ -303,16 +302,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  width: 26px;
+  min-width: 25px;
   height: 22px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: 10.5px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 750;
   line-height: 1;
-  text-align: center;
-  flex-shrink: 0;
 }
 
 /* Monthly Pills */

@@ -69,63 +69,63 @@ namespace CollegeManagement.API.Services.Implementations
                 LEFT JOIN Programs p ON p.ProgramId = params.pId
                 LEFT JOIN Sections s ON s.SectionId = params.sId;";
 
-            var row = await dbConn.QueryFirstOrDefaultAsync(hierarchySql, new
+            var row = await dbConn.QueryFirstOrDefaultAsync<SectionHierarchyRow>(hierarchySql, new
             {
                 boardId, academicLevelId, academicYearId, groupId, programId, sectionId
             });
 
-            if (row == null || row.BoardId == null || row.BoardIsActive != 1)
+            if (row == null || row.BoardId == null || !row.BoardIsActive)
             {
                 throw new ArgumentException($"Board with ID {boardId} not found or inactive.");
             }
 
-            if (row.AcademicLevelId == null || row.LevelIsActive != 1)
+            if (row.AcademicLevelId == null || !row.LevelIsActive)
             {
                 throw new ArgumentException($"AcademicLevel with ID {academicLevelId} not found or inactive.");
             }
 
-            if (row.AcademicYearId == null || row.YearIsActive != 1)
+            if (row.AcademicYearId == null || !row.YearIsActive)
             {
                 throw new ArgumentException($"AcademicYear with ID {academicYearId} not found or inactive.");
             }
 
-            if (row.GroupId == null || row.GroupIsActive != 1)
+            if (row.GroupId == null || !row.GroupIsActive)
             {
                 throw new ArgumentException($"Group with ID {groupId} not found or inactive.");
             }
 
-            if (row.ProgramId == null || row.ProgramIsActive != 1)
+            if (row.ProgramId == null || !row.ProgramIsActive)
             {
                 throw new ArgumentException($"Program with ID {programId} not found or inactive.");
             }
 
-            if (row.SectionId == null || row.SectionIsActive != 1)
+            if (row.SectionId == null || !row.SectionIsActive)
             {
                 throw new ArgumentException($"Section with ID {sectionId} not found or inactive.");
             }
 
             // Matching checks
-            if (row.SectionBoardId != null && (int)row.SectionBoardId != boardId)
+            if (row.SectionBoardId != null && row.SectionBoardId.Value != boardId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to Board ID {boardId}.");
             }
 
-            if (row.SectionAcademicLevelId != null && (int)row.SectionAcademicLevelId != academicLevelId)
+            if (row.SectionAcademicLevelId != null && row.SectionAcademicLevelId.Value != academicLevelId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to AcademicLevel ID {academicLevelId}.");
             }
 
-            if (row.SectionGroupId != null && (int)row.SectionGroupId != groupId)
+            if (row.SectionGroupId != null && row.SectionGroupId.Value != groupId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to Group ID {groupId}.");
             }
 
-            if (row.SectionProgramId != null && (int)row.SectionProgramId != programId)
+            if (row.SectionProgramId != null && row.SectionProgramId.Value != programId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to Program ID {programId}.");
             }
 
-            if ((int)row.SectionAcademicYearId != academicYearId)
+            if (row.SectionAcademicYearId != null && row.SectionAcademicYearId.Value != academicYearId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to AcademicYear ID {academicYearId}.");
             }
@@ -252,37 +252,37 @@ namespace CollegeManagement.API.Services.Implementations
                 LEFT JOIN AcademicYears ay ON ay.AcademicYearId = params.ayId
                 LEFT JOIN `Groups` g ON g.GroupId = params.gId;";
 
-            var row = await dbConn.QueryFirstOrDefaultAsync(hierarchySql, new
+            var row = await dbConn.QueryFirstOrDefaultAsync<GroupHierarchyRow>(hierarchySql, new
             {
                 boardId, academicLevelId, academicYearId, groupId
             });
 
-            if (row == null || row.BoardId == null || row.BoardIsActive != 1)
+            if (row == null || row.BoardId == null || !row.BoardIsActive)
             {
                 throw new ArgumentException($"Board with ID {boardId} not found or inactive.");
             }
 
-            if (row.AcademicLevelId == null || row.LevelIsActive != 1)
+            if (row.AcademicLevelId == null || !row.LevelIsActive)
             {
                 throw new ArgumentException($"AcademicLevel with ID {academicLevelId} not found or inactive.");
             }
 
-            if (row.AcademicYearId == null || row.YearIsActive != 1)
+            if (row.AcademicYearId == null || !row.YearIsActive)
             {
                 throw new ArgumentException($"AcademicYear with ID {academicYearId} not found or inactive.");
             }
 
-            if (row.GroupId == null || row.GroupIsActive != 1)
+            if (row.GroupId == null || !row.GroupIsActive)
             {
                 throw new ArgumentException($"Group with ID {groupId} not found or inactive.");
             }
 
-            if ((int)row.GroupBoardId != boardId)
+            if (row.GroupBoardId != null && row.GroupBoardId.Value != boardId)
             {
                 throw new ArgumentException($"Group with ID {groupId} does not belong to Board ID {boardId}.");
             }
 
-            if ((int)row.GroupAcademicLevelId != academicLevelId)
+            if (row.GroupAcademicLevelId != null && row.GroupAcademicLevelId.Value != academicLevelId)
             {
                 throw new ArgumentException($"Group with ID {groupId} does not belong to AcademicLevel ID {academicLevelId}.");
             }
@@ -588,5 +588,55 @@ namespace CollegeManagement.API.Services.Implementations
             return string.IsNullOrWhiteSpace(cleaned) ? "Export" : cleaned;
         }
         #endregion
+
+        private class SectionHierarchyRow
+        {
+            public int? BoardId { get; set; }
+            public string? BoardName { get; set; }
+            public bool BoardIsActive { get; set; }
+            public int? AcademicLevelId { get; set; }
+            public string? LevelName { get; set; }
+            public bool LevelIsActive { get; set; }
+            public int? AcademicYearId { get; set; }
+            public string? AcademicYearName { get; set; }
+            public bool YearIsActive { get; set; }
+            public int? GroupId { get; set; }
+            public string? GroupName { get; set; }
+            public int? GroupBoardId { get; set; }
+            public int? GroupAcademicLevelId { get; set; }
+            public bool GroupIsActive { get; set; }
+            public int? ProgramId { get; set; }
+            public string? ProgramName { get; set; }
+            public bool ProgramIsActive { get; set; }
+            public int? SectionId { get; set; }
+            public string? SectionName { get; set; }
+            public int? SectionBoardId { get; set; }
+            public int? SectionAcademicLevelId { get; set; }
+            public int? SectionGroupId { get; set; }
+            public int? SectionProgramId { get; set; }
+            public int? SectionAcademicYearId { get; set; }
+            public bool SectionIsActive { get; set; }
+        }
+
+        private class GroupHierarchyRow
+        {
+            public int? BoardId { get; set; }
+            public string? BoardName { get; set; }
+            public string? BoardCode { get; set; }
+            public bool BoardIsActive { get; set; }
+            public int? AcademicLevelId { get; set; }
+            public string? LevelName { get; set; }
+            public string? LevelCode { get; set; }
+            public bool LevelIsActive { get; set; }
+            public int? AcademicYearId { get; set; }
+            public string? AcademicYearName { get; set; }
+            public bool YearIsActive { get; set; }
+            public int? GroupId { get; set; }
+            public string? GroupName { get; set; }
+            public string? GroupCode { get; set; }
+            public int? GroupBoardId { get; set; }
+            public int? GroupAcademicLevelId { get; set; }
+            public bool GroupIsActive { get; set; }
+        }
     }
 }

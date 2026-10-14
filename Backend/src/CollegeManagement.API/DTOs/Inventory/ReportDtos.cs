@@ -59,12 +59,19 @@ namespace CollegeManagement.API.DTOs.Inventory
 
     public class LowStockReportRowDto
     {
+        public int ItemId { get; set; }
+        public int Id => ItemId;
+        public string ItemCode { get; set; } = string.Empty;
+        public string Code => ItemCode;
         public string Item { get; set; } = string.Empty;
+        public string Name => Item;
         public string Category { get; set; } = string.Empty;
         public decimal CurrentStock { get; set; }
+        public decimal Quantity => CurrentStock;
         public decimal MinStock { get; set; }
         public decimal SuggestedReorder { get; set; }
         public string PreferredSupplier { get; set; } = string.Empty;
+        public string Supplier => PreferredSupplier;
     }
 
     public class DepartmentIssueReportRowDto

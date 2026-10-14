@@ -136,17 +136,11 @@ public class FeeService : IFeeService
             BoardName = match.Board?.BoardName ?? string.Empty,
             AcademicYearId = match.AcademicYearId,
             AcademicYearName = match.AcademicYear?.AcademicYearName ?? string.Empty,
-            AcademicLevelId = match.AcademicLevelId,
-            AcademicLevelName = match.AcademicLevel?.LevelName ?? (match.AcademicLevelId == 2 ? "2nd Year" : (match.AcademicLevelId == 1 ? "1st Year" : null)),
             GroupId = match.GroupId,
             GroupName = groupName,
             ProgramId = match.ProgramId,
             ProgramName = programName,
             StructureName = formattedName,
-            YearFeeMode = match.YearFeeMode,
-            IncrementType = match.IncrementType,
-            IncrementValue = match.IncrementValue,
-            PairedStructureId = match.PairedStructureId,
             TotalAmount = match.Components.Where(c => c.IsActive).Sum(c => c.Amount),
             IsActive = match.IsActive,
             CreatedAt = match.CreatedAt,
@@ -171,7 +165,6 @@ public class FeeService : IFeeService
             .AsNoTracking()
             .Include(f => f.Board)
             .Include(f => f.AcademicYear)
-            .Include(f => f.AcademicLevel)
             .Include(f => f.Group)
             .Include(f => f.Program)
             .Include(f => f.Campus)
@@ -216,7 +209,6 @@ public class FeeService : IFeeService
             .AsNoTracking()
             .Include(f => f.Board)
             .Include(f => f.AcademicYear)
-            .Include(f => f.AcademicLevel)
             .Include(f => f.Group)
             .Include(f => f.Program)
             .Include(f => f.Campus)

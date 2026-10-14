@@ -16,18 +16,15 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, Toast } from "@/components/common/Ui.jsx";
 import { getAuthUser } from "@/features/authStorage.js";
-import { createDemoState } from "./data/inventoryMockData.js";
 import {
-  deactivateRecord,
-  deleteItem,
-  loadInventory,
-  persistInventory,
-  postMovement,
-  recordReturn,
-  reverseMovement,
-  saveRecord,
-  validateRecord,
-} from "./inventoryModel.js";
+  loadInventoryApi,
+  saveInventoryApi,
+  inventoryAction,
+  inventoryDetail,
+  normalizeInventory,
+} from "./inventoryApi.js";
+import { getApiErrorMessage } from "@/api/apiClient.js";
+import { validateRecord } from "./inventoryModel.js";
 import { formSections } from "./inventoryFields.js";
 import InventoryForm from "./components/InventoryForm.jsx";
 import InventoryDetails from "./components/InventoryDetails.jsx";
@@ -76,12 +73,19 @@ function InventoryConfirmation({ config, onClose }) {
   return <ConfirmDialog {...config} onCancel={onClose} />;
 }
 export default function InventoryManagementPage() {
-  const [loaded] = useState(() => loadInventory());
-  const [state, setState] = useState(loaded.state);
+  const [state, setState] = useState({
+    items: [],
+    categories: [],
+    suppliers: [],
+    movements: [],
+    orders: [],
+    activities: [],
+    nextId: 1,
+  });
   const stateRef = useRef(state);
-  const [notice, setNotice] = useState(
-    loaded.warning ? { message: loaded.warning, type: "warning" } : null,
-  );
+  const [notice, setNotice] = useState(null);
+  const requestVersion = useRef(0);
+  const mutationLock = useRef(false);
   const [modal, setModal] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
   const [revision, setRevision] = useState(0);
@@ -95,47 +99,72 @@ export default function InventoryManagementPage() {
   const closeConfirmation = useCallback(() => setConfirmation(null), []);
   const closeToast = useCallback(() => setNotice(null), []);
   const notify = (message, type = "success") => setNotice({ message, type });
-  const open = (kind, record = null, itemId = null) => {
-    const canonical = record && stateRef.current[kind]?.find((value) => value.id === record.id);
-    setModal({ kind, record: canonical || record, itemId });
+  const open = async (kind, record = null, itemId = null) => {
+    try {
+      const collection =
+        kind === "item-detail" || kind === "items"
+          ? "items"
+          : kind === "movement-detail"
+            ? "movements"
+            : null;
+      if (record && collection) {
+        const detail = await inventoryDetail(collection, record.id);
+        const next = {
+          ...stateRef.current,
+          [collection]: stateRef.current[collection].map((r) => (r.id === detail.id ? detail : r)),
+        };
+        stateRef.current = next;
+        setState(next);
+        record = detail;
+      }
+      setModal({ kind, record, itemId });
+    } catch (error) {
+      notify(getApiErrorMessage(error), "error");
+    }
   };
   const go = (slug, scope) =>
     navigate(`${BASE}${slug ? `/${slug}` : ""}${scope ? `?scope=${scope}` : ""}`);
-  const commit = (operation, message) => {
+  const refresh = useCallback(async () => {
+    const version = ++requestVersion.current;
     try {
-      const next = operation(stateRef.current);
-      // Persist before applying the local mutation. Failed storage does not silently lose demo edits.
-      persistInventory(next);
-      stateRef.current = next;
-      setState(next);
-      notify(message);
+      const next = await loadInventoryApi();
+      if (version === requestVersion.current) {
+        stateRef.current = next;
+        setState(next);
+      }
       return true;
     } catch (error) {
-      notify(error.message || "The local operation could not be saved.", "error");
+      if (version === requestVersion.current)
+        setNotice({ message: getApiErrorMessage(error), type: "error" });
       return false;
+    }
+  }, []);
+  const commit = async (operation, message) => {
+    if (mutationLock.current) return false;
+    mutationLock.current = true;
+    try {
+      await operation();
+      notify(message);
+      await refresh();
+      return true;
+    } catch (error) {
+      notify(getApiErrorMessage(error), "error");
+      return false;
+    } finally {
+      mutationLock.current = false;
     }
   };
   useEffect(() => {
-    try {
-      persistInventory(loaded.state);
-    } catch {
-      setNotice({
-        message: "Browser storage is unavailable. Enable local storage to save demo changes.",
-        type: "warning",
-      });
-    }
-  }, [loaded]);
+    refresh();
+    return () => {
+      requestVersion.current += 1;
+    };
+  }, [refresh]);
   useEffect(() => {
     setModal(null);
     setConfirmation(null);
   }, [location.pathname]);
-  const refresh = () => {
-    const next = { ...stateRef.current };
-    stateRef.current = next;
-    setState(next);
-    notify("Dashboard and tables recalculated from local demo data.");
-  };
-  const save = (values) => {
+  const save = async (values) => {
     const kind = modal.kind;
     const errors = validateRecord(
       kind,
@@ -145,20 +174,35 @@ export default function InventoryManagementPage() {
     );
     if (Object.keys(errors).length) {
       notify(Object.values(errors)[0], "error");
-      return;
+      throw new Error(Object.values(errors)[0]);
     }
-    if (
-      commit(
-        (current) =>
-          kind.startsWith("stock-")
-            ? postMovement(current, kind, values)
-            : saveRecord(current, kind, values),
-        kind.startsWith("stock-")
-          ? "Stock transaction posted. Balances and reports updated."
-          : "Inventory record saved.",
-      )
-    )
+    if (mutationLock.current) return;
+    mutationLock.current = true;
+    try {
+      const saved = await saveInventoryApi(kind, values);
+      if (!kind.startsWith("stock-")) {
+        const record = normalizeInventory(saved, kind);
+        if (!record.id)
+          throw new Error(
+            "The server saved the record but returned no record ID. Reload inventory to verify it before retrying.",
+          );
+        const next = {
+          ...stateRef.current,
+          [kind]: [...stateRef.current[kind].filter((r) => r.id !== record.id), record],
+        };
+        stateRef.current = next;
+        setState(next);
+      }
       closeModal();
+      notify(kind.startsWith("stock-") ? "Stock transaction posted." : "Inventory record saved.");
+      await refresh();
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      notify(message, "error");
+      throw new Error(message);
+    } finally {
+      mutationLock.current = false;
+    }
   };
   const remove = (kind, record) => {
     const blocked =
@@ -169,18 +213,19 @@ export default function InventoryManagementPage() {
       title: `${deactivate ? "Deactivate" : "Delete"} ${record.name}?`,
       message: deactivate
         ? `${blocked ? "This item has stock or transaction history and cannot be deleted. " : ""}Deactivation preserves existing stock and historical references. It will no longer be selectable for new transactions or records.`
-        : "This item has no stock or transaction history. Delete it from the local demo? Deleting items with history could affect inventory records.",
+        : "This item has no stock or transaction history. Delete it from inventory? Deleting items with history could affect inventory records.",
       confirmLabel: deactivate ? "Deactivate" : "Delete",
       danger: true,
-      onConfirm: () => {
-        commit(
-          (current) =>
-            deactivate
-              ? deactivateRecord(current, kind, record.id)
-              : deleteItem(current, record.id),
+      onConfirm: async () => {
+        const succeeded = await commit(
+          () =>
+            inventoryAction(
+              `${kind}/${encodeURIComponent(record.id)}${deactivate ? "/deactivate" : ""}`,
+              deactivate ? "patch" : "delete",
+            ),
           `${record.name} ${deactivate ? "deactivated" : "deleted"}.`,
         );
-        closeConfirmation();
+        if (succeeded) closeConfirmation();
       },
     });
   };
@@ -191,12 +236,12 @@ export default function InventoryManagementPage() {
         "A compensating stock movement will be added to the ledger. Only the latest unreturned movement for this item can be reversed, to preserve later quantities and costs.",
       confirmLabel: "Reverse Transaction",
       danger: true,
-      onConfirm: () => {
-        commit(
-          (current) => reverseMovement(current, movement.id, userName),
+      onConfirm: async () => {
+        const succeeded = await commit(
+          () => inventoryAction(`movements/${encodeURIComponent(movement.id)}/reverse`),
           "Transaction reversed. Correction recorded in the ledger.",
         );
-        closeConfirmation();
+        if (succeeded) closeConfirmation();
       },
     });
   const returnItem = (movement) =>
@@ -204,27 +249,18 @@ export default function InventoryManagementPage() {
       title: "Record full return?",
       message: `Confirm that all ${movement.quantity} units from ${movement.number} have physically returned. This adds a receipt at the original issue cost. Expected return dates alone never add stock.`,
       confirmLabel: "Record Return",
-      onConfirm: () => {
-        commit(
-          (current) => recordReturn(current, movement.id, userName),
+      onConfirm: async () => {
+        const succeeded = await commit(
+          () => inventoryAction(`movements/${encodeURIComponent(movement.id)}/return`),
           "Full return recorded. Stock balance updated.",
         );
-        closeConfirmation();
+        if (succeeded) closeConfirmation();
       },
     });
-  const resetDemo = () =>
-    setConfirmation({
-      title: "Reset Demo Data?",
-      message:
-        "All inventory demo edits will be replaced with the original sample items, suppliers, categories and movements. Authentication storage is unaffected.",
-      confirmLabel: "Reset Demo Data",
-      danger: true,
-      onConfirm: () => {
-        commit(() => createDemoState(), "Original inventory demo dataset restored.");
-        closeConfirmation();
-        setRevision((value) => value + 1);
-      },
-    });
+  const resetDemo = () => {
+    setRevision((value) => value + 1);
+    refresh();
+  };
   if (!active) return <Navigate to={BASE} replace />;
   const shared = { state, open, refresh };
   return (
@@ -250,11 +286,11 @@ export default function InventoryManagementPage() {
       <div className="inventory-module">
         <div className="inventory-demo-banner">
           <span>
-            <Boxes size={18} /> Local demo · Changes saved in this browser · Weighted-average
+            <Boxes size={18} /> Server inventory · Changes saved to the backend · Weighted-average
             valuation
           </span>
           <button className="cms-btn cms-btn-ghost" onClick={resetDemo}>
-            <RotateCcw size={15} /> Reset Demo Data
+            <RotateCcw size={15} /> Reload Inventory
           </button>
         </div>
         <nav className="inventory-tabs" aria-label="Inventory sections">

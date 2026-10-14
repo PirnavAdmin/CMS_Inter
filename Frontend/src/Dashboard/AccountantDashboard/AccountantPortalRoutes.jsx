@@ -9,7 +9,6 @@ import {
   AccountantProfile,
   AccountantReports,
 } from "./pages/AccountantPages.jsx";
-import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
 
 export default function AccountantPortalRoutes() {
   return (
@@ -20,8 +19,6 @@ export default function AccountantPortalRoutes() {
         <Route path="payments" element={<AccountantPayments />} />
         <Route path="payroll" element={<AccountantPayroll />} />
         <Route path="payroll/attendance-impact" element={<AccountantAttendanceImpact />} />
-        <Route path="reimbursement" element={<ReimbursementPage isAccountantView={true} />} />
-        <Route path="reimbursements" element={<ReimbursementPage isAccountantView={true} />} />
         <Route path="reports" element={<AccountantReports />} />
         <Route path="profile" element={<AccountantProfile />} />
         <Route path="*" element={<Navigate to="/accountant-dashboard" replace />} />

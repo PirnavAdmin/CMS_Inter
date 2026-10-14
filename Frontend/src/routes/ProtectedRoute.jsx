@@ -1,7 +1,8 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/features/authStorage.js";
 import { getJwtExpiryState } from "@/api/apiClient.js";
-import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
+import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
 
 function isFacultyOrStaffRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
@@ -40,6 +41,57 @@ function isAdminRole(role) {
   return normalized === "admin" || normalized.includes("admin");
 }
 
+const PRINCIPAL_DASHBOARD_ROUTE_RULES = [
+  ["/dashboard/settings/roles-permissions", "roles-permissions"],
+  ["/dashboard/settings", "settings"],
+  ["/dashboard/board-academic-year", "settings"],
+  ["/dashboard/courses", "group-management"],
+  ["/dashboard/subjects", "subject-management"],
+  ["/dashboard/sections", "section-room"],
+  ["/dashboard/timetable", "timetable"],
+  ["/dashboard/holidays", "holiday-management"],
+  ["/dashboard/inventory-management", "inventory-management"],
+  ["/dashboard/inventory", "inventory-management"],
+  ["/dashboard/admission", "student-admission"],
+  ["/dashboard/students", "student-management"],
+  ["/dashboard/section-allocation", "section-allocation"],
+  ["/dashboard/attendance/staff", "staff-attendance"],
+  ["/dashboard/attendance/student", "attendance"],
+  ["/dashboard/attendance", "attendance"],
+  ["/dashboard/promotion", "promotion"],
+  ["/dashboard/promotions", "promotion"],
+  ["/dashboard/transport", "transport"],
+  ["/dashboard/staff", "staff-management"],
+  ["/dashboard/departments", "department-designation"],
+  ["/dashboard/designations", "department-designation"],
+  ["/dashboard/leave-management", "staff-leave-management"],
+  ["/dashboard/reimbursements", "reimbursement"],
+  ["/dashboard/reimbursement", "reimbursement"],
+  ["/dashboard/finance/reimbursement", "reimbursement"],
+  ["/dashboard/examinations", "examination"],
+  ["/dashboard/marks-entry", "marks-evaluation"],
+  ["/dashboard/results", "results"],
+  ["/dashboard/fee-structure", "fee-management"],
+  ["/dashboard/payroll", "payroll"],
+  ["/dashboard/staff-salary", "payroll"],
+  ["/dashboard/certificates", "certificates"],
+  ["/dashboard/reports", "reports-analytics"],
+  ["/dashboard/hostel", "hostel-management"],
+  ["/hostel", "hostel-management"],
+  ["/dashboard", "dashboard"],
+];
+
+function principalPermissionForPath(pathname) {
+  const match = PRINCIPAL_DASHBOARD_ROUTE_RULES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  if (!match) return null;
+  const action = /\/add(?:\/|$)|\/generate(?:\/|$)|\/upload(?:\/|$)|\/import(?:\/|$)/.test(pathname)
+    ? ACTIONS.CREATE
+    : /\/edit(?:\/|$)/.test(pathname)
+      ? ACTIONS.EDIT
+      : ACTIONS.VIEW;
+  return { moduleKey: match[1], action };
+}
+
 export default function ProtectedRoute({
   children,
   requireAdmin = false,
@@ -48,20 +100,11 @@ export default function ProtectedRoute({
   requireAccountant = false,
   requirePrincipal = false,
   requireFaculty = false,
-  requireExamCell = false,
 }) {
-  // Discard sessions created by the removed local preview login.
-  const storedToken = getAuthToken();
-  if (storedToken === "exam-cell-local-preview") clearAuthSession();
-  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
+  const location = useLocation();
+  const token = getAuthToken();
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenExpired = Boolean(tokenState?.isJwt && tokenState?.isExpired);
-
-  if (!token || isTokenExpired) {
-    if (isTokenExpired) clearAuthSession();
-    return <Navigate to="/login" replace />;
-  }
-
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
   const isAdmin = user?.isAdmin || isAdminRole(role);
@@ -69,14 +112,11 @@ export default function ProtectedRoute({
   const isPrincipal = isPrincipalRole(role);
   const isParent = isParentRole(role);
   const isAccountant = isAccountantRole(role);
+  const principalPermissions = useEffectivePermissions({ enabled: requireAdmin && isPrincipal });
 
-  const isExamCell = isExamCellRole(role);
-  if (requireExamCell && !isExamCell) {
-    const destination = isAdmin ? "/dashboard" : isPrincipal ? "/principal-dashboard" : isAccountant ? "/accountant-dashboard" : isParent ? "/parent-dashboard" : isFaculty ? "/faculty-dashboard" : "/student-dashboard";
-    return <Navigate to={destination} replace />;
-  }
-  if (isExamCell && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal)) {
-    return <Navigate to="/exam-cell-dashboard" replace />;
+  if (!token || isTokenExpired) {
+    if (isTokenExpired) clearAuthSession();
+    return <Navigate to="/login" replace />;
   }
 
   if (requireFaculty && !isFaculty) {
@@ -90,6 +130,29 @@ export default function ProtectedRoute({
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     return <Navigate to={isFaculty ? "/faculty-dashboard" : "/student-dashboard"} replace />;
+  }
+  if (requireAdmin && isPrincipal && !isAdmin) {
+    if (location.pathname === "/dashboard") return <Navigate to="/principal-dashboard" replace />;
+    const requiredPermission = principalPermissionForPath(location.pathname);
+    if (!requiredPermission) return <Navigate to="/principal-dashboard" replace />;
+    if (principalPermissions.loading) return null;
+    if (principalPermissions.error) {
+      return (
+        <div style={{ padding: 24 }}>
+          <h2>Permissions unavailable</h2>
+          <p>{principalPermissions.error}</p>
+          <button type="button" onClick={principalPermissions.refresh}>Retry</button>
+        </div>
+      );
+    }
+    if (!principalPermissions.canDo(requiredPermission.moduleKey, requiredPermission.action)) {
+      return (
+        <div style={{ padding: 24 }}>
+          <h2>Access denied</h2>
+          <p>You do not have permission to open this module.</p>
+        </div>
+      );
+    }
   }
   if (requirePrincipal && !isPrincipal) {
     if (isAdmin) return <Navigate to="/dashboard" replace />;
@@ -118,10 +181,7 @@ export default function ProtectedRoute({
 }
 
 export function PublicOnlyRoute({ children }) {
-  // Discard sessions created by the removed local preview login.
-  const storedToken = getAuthToken();
-  if (storedToken === "exam-cell-local-preview") clearAuthSession();
-  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
+  const token = getAuthToken();
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenValid = Boolean(token && (!tokenState?.isJwt || !tokenState?.isExpired));
 
@@ -134,7 +194,6 @@ export function PublicOnlyRoute({ children }) {
   const isAccountant = isAccountantRole(role);
 
   if (isTokenValid) {
-    if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
