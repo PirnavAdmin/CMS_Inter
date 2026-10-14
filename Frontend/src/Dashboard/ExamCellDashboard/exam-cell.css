@@ -1,5 +1,40 @@
 .ec-shell { --ec-sidebar-width: 245px; display: flex; height: 100dvh; overflow: hidden; background: var(--cms-bg); color: var(--cms-text); }
 .ec-shell * { box-sizing: border-box; }
+/* Match the Admin's green palette without changing the other portals. */
+:root:not([data-theme="dark"]) .ec-shell {
+  --cms-sidebar: linear-gradient(180deg, #dce5bd 0%, #cedba3 100%);
+  --cms-header: linear-gradient(90deg, #dce5bd 0%, #d1dfaa 100%);
+  --cms-hover: #e4ebca;
+  --cms-border: #d7dec5;
+  --cms-secondary: #f7f8ef;
+  --cms-table-header: #eff3e0;
+  --cms-primary: #6f8400;
+  --cms-primary-dark: #566900;
+  background: linear-gradient(135deg, #e3e9c9 0%, #f8faf1 42%, #d5dfb7 100%);
+}
+:root:not([data-theme="dark"]) .ec-shell .ec-nav-group a.active {
+  background: linear-gradient(110deg, #6f8400, #566900);
+  box-shadow: 0 5px 12px rgb(86 105 0 / 20%);
+}
+:root:not([data-theme="dark"]) .ec-shell .ec-nav-group h2 {
+  color: #3f4d1d;
+  opacity: 1;
+  font-weight: 800;
+}
+.ec-shell .ec-sidebar { background: var(--cms-sidebar); }
+.ec-shell .ec-topbar { background: var(--cms-header); }
+.ec-shell .ec-sidebar, .ec-shell .ec-topbar {
+  -webkit-backdrop-filter: blur(16px) saturate(118%);
+  backdrop-filter: blur(16px) saturate(118%);
+}
+.ec-shell .ec-nav-group a:hover,
+.ec-shell .ec-search-results a:hover,
+.ec-shell .ec-dropdown a:hover,
+.ec-shell .ec-dropdown button:hover { background: var(--cms-hover); }
+.ec-shell .ec-nav-group a.active { background: var(--cms-primary); color: #fff; }
+.ec-shell .ec-table-scroll th { background: var(--cms-table-header); }
+.ec-shell .ec-card-heading { background: var(--cms-secondary); }
+.ec-shell .ec-primary:hover { background: var(--cms-primary-dark); border-color: var(--cms-primary-dark); }
 .ec-shell button, .ec-shell input, .ec-shell select { font: inherit; }
 .ec-shell button { cursor: pointer; }
 .ec-shell button:disabled { opacity: .55; cursor: not-allowed; }
