@@ -322,7 +322,6 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportStudentAttendance> TransportStudentAttendances { get; set; } = null!;
         public DbSet<TransportGpsTelemetry> TransportGpsTelemetries { get; set; } = null!;
         public DbSet<Staff> Staffs { get; set; }
-        public DbSet<StaffReimbursement> StaffReimbursements { get; set; }
         public DbSet<StaffSubjectAllocation> StaffSubjectAllocations { get; set; }
         public DbSet<Faculty> Faculties { get; set; }
         public DbSet<FacultySubjectAllocation> FacultySubjectAllocations { get; set; }
@@ -381,6 +380,8 @@ namespace CollegeManagement.API.Data
         public DbSet<Period> Periods { get; set; }
         public DbSet<Room> Rooms { get; set; }
         public DbSet<Timetable> Timetables { get; set; }
+        public DbSet<TimetableBackup> TimetableBackups { get; set; }
+        public DbSet<TimetableBackupSlot> TimetableBackupSlots { get; set; }
         public DbSet<TimetableSubstitution> TimetableSubstitutions { get; set; }
         public DbSet<Certificate> Certificates { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
@@ -1343,6 +1344,47 @@ namespace CollegeManagement.API.Data
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
                 entity.HasIndex(x => x.CreatedAt);
                 entity.HasIndex(x => new { x.EntityName, x.EntityId });
+            });
+            #endregion
+
+            #region TimetableBackup
+            modelBuilder.Entity<TimetableBackup>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.ArchiveReason).HasMaxLength(250);
+                entity.Property(x => x.ArchivedBy).HasMaxLength(100);
+                entity.HasIndex(x => new
+                {
+                    x.BoardId,
+                    x.AcademicLevelId,
+                    x.AcademicYearId,
+                    x.GroupId,
+                    x.SectionId
+                }).IsUnique();
+                entity.HasOne(x => x.Board).WithMany().HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.AcademicLevel).WithMany().HasForeignKey(x => x.AcademicLevelId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.AcademicYear).WithMany().HasForeignKey(x => x.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Section).WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
+                entity.Property(x => x.ProgramId).IsRequired(false);
+            });
+
+            modelBuilder.Entity<TimetableBackupSlot>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.Remarks).HasMaxLength(250);
+                entity.HasIndex(x => x.TimetableBackupId);
+                entity.HasOne(x => x.Board).WithMany().HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.AcademicLevel).WithMany().HasForeignKey(x => x.AcademicLevelId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.AcademicYear).WithMany().HasForeignKey(x => x.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Section).WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
+                entity.Property(x => x.ProgramId).IsRequired(false);
+                entity.Property(x => x.StaffId).HasColumnName("StaffId");
+                entity.HasOne(x => x.Period).WithMany().HasForeignKey(x => x.PeriodId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Room).WithMany().HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Restrict);
             });
             #endregion
 

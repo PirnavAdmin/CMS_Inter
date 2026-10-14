@@ -2969,3 +2969,12 @@
   }
 }
 
+/* Leaflet map overrides */
+.leaflet-container {
+  z-index: 1 !important;
+  border-bottom: 1px solid var(--border-color);
+}
+.custom-div-icon, .custom-bus-icon {
+  background: transparent;
+  border: none;
+}

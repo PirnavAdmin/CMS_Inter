@@ -14,6 +14,7 @@ import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
+import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
 import { reimbursementApi } from "@/api/staffApi";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
@@ -255,6 +256,31 @@ export const parentMenu = [
   },
 ];
 
+export const wardenMenu = [
+  {
+    section: "Overview",
+    items: [
+      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon },
+    ],
+  },
+  {
+    section: "Hostel Operations",
+    items: [
+      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon },
+      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon },
+      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon },
+      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave },
+    ],
+  },
+  {
+    section: "Residents & Analytics",
+    items: [
+      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon },
+      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
+    ],
+  },
+];
+
 export const principalMenu = menu.map((group) => (
   group.section === "Overview"
     ? { ...group, items: [{ ...group.items[0], to: "/principal-dashboard" }] }
@@ -337,6 +363,17 @@ const parentSearchIndex = [
   { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
 ];
 
+const wardenSearchIndex = [
+  ...wardenMenu.flatMap((g) =>
+    g.items.flatMap((item) => [
+      { to: item.to, label: item.label, section: g.section },
+    ]),
+  ),
+  { to: "/warden-dashboard/overview", label: "Overview", section: "Overview" },
+  { to: "/warden-dashboard/beds", label: "Bed Allocation", section: "Hostel Operations" },
+  { to: "/warden-dashboard/profile", label: "My Profile", section: "Account" },
+];
+
 const breadcrumbLinkForLabel = (label) =>
   searchIndex.find((item) => item.label.toLowerCase() === String(label).toLowerCase())?.to;
 
@@ -370,7 +407,13 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : pathname.startsWith("/principal-dashboard") ? principalMenu : menu;
+  const activeMenus = pathname.startsWith("/parent-dashboard")
+    ? parentMenu
+    : pathname.startsWith("/principal-dashboard")
+    ? principalMenu
+    : pathname.startsWith("/warden")
+    ? wardenMenu
+    : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
@@ -485,20 +528,22 @@ export default function DashboardLayout({
   const location = useLocation();
   const pathname = location.pathname;
   const user = readUser();
-  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
-  const principalPermissions = useEffectivePermissions({ enabled: isPrincipal && !isParent && !menuOverride });
+  const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
+  const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
+  const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
+  const principalPermissions = useEffectivePermissions({ enabled: isPrincipal && !isParent && !isWarden && !menuOverride });
   const activeMenu = useMemo(() => {
     if (menuOverride) return menuOverride;
+    if (isWarden) return wardenMenu;
     if (isParent) return parentMenu;
     if (!isPrincipal) return menu;
     if (principalPermissions.loading || principalPermissions.error) return [];
     return filterMenuByViewPermission(principalMenu, principalPermissions.canView);
-  }, [isParent, isPrincipal, menuOverride, principalPermissions.canView, principalPermissions.error, principalPermissions.loading]);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : searchIndex);
-  const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
-  const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
-  const canManageAcademicContext = !isParent && !menuOverride && (!isPrincipal || principalPermissions.canView("settings"));
+  }, [isWarden, isParent, isPrincipal, menuOverride, principalPermissions.canView, principalPermissions.error, principalPermissions.loading]);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : searchIndex);
+  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
+  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  const canManageAcademicContext = !isParent && !isWarden && !menuOverride && (!isPrincipal || principalPermissions.canView("settings"));
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
   const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
@@ -520,9 +565,11 @@ export default function DashboardLayout({
     if (canReviewReimbursements) {
       const fetchLiveNotifications = async () => {
         try {
-          const res = await getReimbursements({ status: "Pending", campusId: reimbursementCampusId || undefined });
+          const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
+          if (!fetchFn) return;
+          const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
           if (disposed) return;
-          const payload = res.data?.data ?? res.data?.Data ?? res.data;
+          const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
           const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
           if (claims.length > 0) {
             setLiveNotifications([{
@@ -535,8 +582,8 @@ export default function DashboardLayout({
           } else {
             setLiveNotifications([]);
           }
-        } catch (e) {
-          if (!disposed) console.error("Failed to fetch pending reimbursements", e);
+        } catch {
+          // Gracefully handle offline or pending notification counter without console noise
         }
       };
       
@@ -563,8 +610,8 @@ export default function DashboardLayout({
 
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
-  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
-  const profileRole = user?.role || "admin";
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : "CMS Admin"));
+  const profileRole = isWarden ? (user?.designation || "Hostel Warden") : (user?.role || "admin");
   
   const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
   const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
@@ -908,7 +955,7 @@ export default function DashboardLayout({
 
               {/* Board Selector */}
               <div className="cms-academic-dropdown-wrap" ref={boardRef}>
-                {isParent ? (
+                {isParent || isWarden ? (
                   <div
                     className="cms-academic-btn"
                     style={{ cursor: "default", userSelect: "none" }}
@@ -954,7 +1001,7 @@ export default function DashboardLayout({
                   </button>
                 )}
 
-                {!isParent && boardOpen && (
+                {!isParent && !isWarden && boardOpen && (
                   <div className="cms-academic-dropdown-panel">
                     <div className="cms-academic-panel-header">Select Board</div>
                     <div className="cms-academic-panel-list">

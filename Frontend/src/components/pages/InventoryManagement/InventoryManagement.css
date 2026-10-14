@@ -4,72 +4,6 @@
   gap: 18px;
   color: var(--cms-text);
 }
-.inventory-module .cms-card:has(> .cms-toolbar),
-.inventory-dialog .cms-card:has(> .cms-toolbar) {
-  overflow: visible;
-}
-.inventory-module .cms-toolbar,
-.inventory-dialog .cms-toolbar {
-  position: relative;
-  z-index: 10;
-  overflow: visible;
-}
-.inventory-module .cms-toolbar-right,
-.inventory-dialog .cms-toolbar-right {
-  overflow: visible;
-}
-.inventory-module .cms-table-wrap,
-.inventory-dialog .cms-table-wrap {
-  position: relative;
-  z-index: 0;
-}
-.inventory-module .cms-export-control,
-.inventory-dialog .cms-export-control {
-  position: relative;
-  overflow: visible;
-}
-.inventory-module .cms-export-menu,
-.inventory-dialog .cms-export-menu {
-  top: calc(100% + 6px);
-  right: 0;
-  bottom: auto;
-  min-width: 180px;
-  background: #ffffff;
-  opacity: 1;
-  backdrop-filter: none;
-}
-[data-theme="dark"] .inventory-module .cms-export-menu,
-[data-theme="dark"] .inventory-dialog .cms-export-menu {
-  background: #1c2416;
-}
-.inventory-module .inventory-row-actions {
-  flex-wrap: nowrap;
-  align-items: center;
-}
-@media (min-width: 1100px) {
-  .inventory-module .cms-toolbar {
-    flex-wrap: nowrap;
-    align-items: flex-end;
-  }
-  .inventory-module .cms-search {
-    min-width: 150px;
-    flex: 1 1 260px;
-  }
-  .inventory-module .cms-toolbar-right {
-    flex-wrap: nowrap;
-    align-items: flex-end;
-    flex: 0 0 auto;
-    width: auto;
-  }
-  .inventory-module .cms-toolbar-right > .cms-btn,
-  .inventory-module .cms-export-control {
-    flex-shrink: 0;
-  }
-  .inventory-module .inventory-movement-toolbar-filters,
-  .inventory-module .inventory-items-toolbar-filters {
-    flex-wrap: nowrap;
-  }
-}
 .inventory-module h2 {
   font-size: 17px;
   margin: 0;
@@ -132,33 +66,29 @@
 .inventory-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 .inventory-kpi {
-  padding: 14px 16px;
+  padding: 20px;
   position: relative;
-  min-height: 115px;
+  min-height: 155px;
 }
 .inventory-kpi-icon {
   display: inline-flex;
-  padding: 7px;
-  border-radius: 9px;
+  padding: 9px;
+  border-radius: 12px;
   color: var(--cms-primary);
   background: var(--cms-primary-soft);
   float: right;
 }
-.inventory-kpi-icon svg {
-  width: 18px;
-  height: 18px;
-}
 .inventory-kpi p {
   color: var(--cms-muted);
-  font-size: 12px;
-  margin: 2px 0 8px;
+  font-size: 13px;
+  margin: 3px 0 14px;
 }
 .inventory-kpi strong {
-  font-size: clamp(20px, 1.6vw, 24px);
+  font-size: clamp(22px, 2vw, 29px);
   display: block;
   letter-spacing: -0.03em;
   overflow-wrap: anywhere;
@@ -166,7 +96,7 @@
 .inventory-kpi small {
   color: var(--cms-muted);
   display: block;
-  margin-top: 8px;
+  margin-top: 12px;
   font-size: 11px;
 }
 .inventory-panel-head {
@@ -254,57 +184,6 @@
   min-height: 30px;
   font-size: 11px !important;
   white-space: nowrap;
-}
-.inventory-module .cms-table th,
-.inventory-module .cms-table td {
-  white-space: nowrap;
-}
-.inventory-items-screen .cms-table th,
-.inventory-items-screen .cms-table td {
-  text-align: center;
-  vertical-align: middle;
-}
-.inventory-items-screen .cms-table thead th {
-  text-align: center !important;
-}
-.inventory-items-screen .cms-actions {
-  justify-content: center;
-}
-.inventory-items-toolbar-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-.inventory-items-toolbar-filters select {
-  max-width: 100%;
-}
-.inventory-movement-toolbar-filters {
-  display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-.inventory-movement-toolbar-filters label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 100%;
-  color: var(--cms-muted);
-  font-size: 11px;
-}
-.inventory-movement-toolbar-filters :is(select, input) {
-  max-width: 100%;
-  min-width: 0;
-}
-.inventory-item-actions {
-  flex-wrap: nowrap;
-  align-items: center;
-}
-.inventory-item-actions .inventory-small-btn {
-  flex-shrink: 0;
-  min-height: 38px;
 }
 .inventory-note {
   color: var(--cms-muted);

@@ -16,7 +16,7 @@ React + Vite frontend for the Pirnav College Management System. This version kee
 Create one local `.env` file using `.env.example`:
 
 ```env
-VITE_API_BASE_URL=http://localhost:5167
+VITE_API_BASE_URL=https://willfully-external-disinfect.ngrok-free.dev
 VITE_USE_DEV_PROXY=true
 ```
 
@@ -164,7 +164,7 @@ copy .env.example .env
 Confirm `Frontend/.env` contains:
 
 ```env
-VITE_API_BASE_URL=http://localhost:5167
+VITE_API_BASE_URL=https://willfully-external-disinfect.ngrok-free.dev
 VITE_USE_DEV_PROXY=true
 ```
 

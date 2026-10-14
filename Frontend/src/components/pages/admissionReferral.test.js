@@ -10,7 +10,7 @@ test("referrals use the destination campus, retain source, and discard a preview
   assert.equal(result.campus, 2);
   assert.equal(result.sourceCampusId, 1);
   assert.equal(result.isReferral, true);
-  assert.equal(result.admissionNo, null);
+  assert.equal(result.admissionNo, "");
   assert.equal(result.photo, values.photo);
   assert.equal(values.admissionNo, "PREVIEW-001");
 });
