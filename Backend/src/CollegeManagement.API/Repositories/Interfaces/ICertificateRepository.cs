@@ -96,4 +96,12 @@ public interface ICertificateRepository
     Task<bool> DeleteAsync(
         int id,
         CancellationToken ct = default);
+
+    Task<bool> UpdateFeeClearanceAsync(
+        int certificateId,
+        string status,
+        decimal dueAmount,
+        string? clearedBy,
+        string? exemptionReason,
+        CancellationToken ct = default);
 }
