@@ -309,6 +309,47 @@ public class CertificatesController : ControllerBase
     }
 
     // =========================================================
+    // 9.01. UPDATE CERTIFICATE FEE CLEARANCE
+    // PATCH /api/v1/certificates/{id}/fee-clearance
+    // =========================================================
+    [HttpPatch("{id:int}/fee-clearance")]
+    public async Task<IActionResult> UpdateFeeClearance(
+        int id,
+        [FromBody] UpdateFeeClearanceDto? dto = null,
+        CancellationToken ct = default)
+    {
+        if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
+        dto ??= new UpdateFeeClearanceDto();
+
+        var userName = User.Identity?.Name ?? "Admin";
+        var success = await _service.UpdateFeeClearanceAsync(id, dto, userName, ct);
+        if (!success) return NotFound(new { message = "Certificate not found or fee clearance could not be updated." });
+
+        return Ok(new { success = true, message = $"Fee clearance status updated to '{dto.Status}' successfully." });
+    }
+
+    // =========================================================
+    // 9.02. GRANT PRINCIPAL PERMISSION / EXEMPTION
+    // PATCH /api/v1/certificates/{id}/fee-exemption
+    // =========================================================
+    [HttpPatch("{id:int}/fee-exemption")]
+    public async Task<IActionResult> GrantFeeExemption(
+        int id,
+        [FromBody] UpdateFeeClearanceDto? dto = null,
+        CancellationToken ct = default)
+    {
+        if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
+        dto ??= new UpdateFeeClearanceDto();
+
+        dto.Status = "Principal Permitted";
+        var userName = User.Identity?.Name ?? "Admin";
+        var success = await _service.UpdateFeeClearanceAsync(id, dto, userName, ct);
+        if (!success) return NotFound(new { message = "Certificate not found or permission could not be recorded." });
+
+        return Ok(new { success = true, message = "Principal permission / fee exemption granted successfully." });
+    }
+
+    // =========================================================
     // 9.1. BULK REVIEW (Review All Generated/Pending)
     // PATCH /api/v1/certificates/bulk-review
     // =========================================================
