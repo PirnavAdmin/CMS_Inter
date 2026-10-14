@@ -151,7 +151,14 @@ export default function StudentAttendance() {
     return cells;
   }, [dailyRows, selectedMonth]);
 
-  const halfDayTotal = useMemo(() => dailyRows.reduce((count, row) => count + [row.morning, row.afternoon].filter((status) => status === "Half Day").length, 0), [dailyRows]);
+  const monthlyDayCounts = useMemo(() => dailyRows.reduce((counts, row) => {
+    if (row.morning === "Present" && row.afternoon === "Present") counts.present += 1;
+    else if (row.morning === "Absent" && row.afternoon === "Absent") counts.absent += 1;
+    else if ((row.morning === "Present" && row.afternoon === "Absent")
+      || (row.morning === "Absent" && row.afternoon === "Present")
+      || row.morning === "Half Day" || row.afternoon === "Half Day") counts.halfDay += 1;
+    return counts;
+  }, { present: 0, absent: 0, halfDay: 0 }), [dailyRows]);
   const selectedDay = dailyRows.find((row) => row.date === selectedDate);
   const recentRows = dailyRows.slice(0, 5);
   const selectedDateLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString("en-IN", {
@@ -174,7 +181,7 @@ export default function StudentAttendance() {
     <StudentPageHeader title="My Attendance" subtitle="View your daily and monthly attendance."/>
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
     {!profileLoading && !loading && !profileError && !error ? <>
-      <div className="sp-summary-grid four"><StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={`${totals.percentage}%`}/><StudentSummaryCard icon={UserCheck} label="Present Sessions" value={totals.present} tone="blue"/><StudentSummaryCard icon={UserX} label="Absent Sessions" value={totals.absent} tone="red"/><StudentSummaryCard icon={CalendarDays} label="Attendance Days" value={totals.days} tone="orange"/></div>
+      {view === "monthly" ? <div className="sp-summary-grid four"><StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={`${totals.percentage}%`}/><StudentSummaryCard icon={UserCheck} label="Present Sessions" value={totals.present} tone="blue"/><StudentSummaryCard icon={UserX} label="Absent Sessions" value={totals.absent} tone="red"/><StudentSummaryCard icon={CalendarDays} label="Attendance Days" value={totals.days} tone="orange"/></div> : null}
       <div className="sp-attendance-tabs"><button className={view === "daily" ? "is-active" : ""} onClick={() => { setView("daily"); }}>Daily Attendance</button><button className={view === "monthly" ? "is-active" : ""} onClick={() => { setView("monthly"); }}>Attendance Calendar</button></div>
       <StudentCard
         title={view === "daily" ? "Daily Attendance" : "Attendance Calendar"}
@@ -193,7 +200,7 @@ export default function StudentAttendance() {
               <p><FileText size={16}/><span>Remarks</span><span>{sessionRemarks(key)}</span></p>
             </article>)}
           </div> : <StudentEmptyState icon={CalendarX} title="No attendance record available for this date."/>}
-        </> : <div className="sp-attendance-calendar-wrap"><div className="sp-attendance-calendar"><div className="sp-attendance-weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div><div className="sp-attendance-calendar-grid">{calendarDays.map((cell, index) => cell ? <div className={`sp-attendance-calendar-day ${tone(cell.status)} ${cell.status === "Holiday" ? "is-holiday" : ""}`} key={`${selectedMonth}-${cell.day}`}><strong>{cell.day}</strong><span>{cell.status}</span></div> : <div className="sp-attendance-calendar-day is-empty" key={`empty-${index}`} aria-hidden="true"/>)}</div></div><div className="sp-attendance-month-summary"><div><span>Working / Attendance Days</span><strong>{totals.days}</strong></div><div><span>Present</span><strong>{totals.present}</strong></div><div><span>Absent</span><strong>{totals.absent}</strong></div><div><span>Half Day</span><strong>{halfDayTotal}</strong></div><div><span>Attendance %</span><strong>{totals.percentage}%</strong></div></div></div>}
+        </> : <div className="sp-attendance-calendar-wrap"><div className="sp-attendance-calendar"><div className="sp-attendance-weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div><div className="sp-attendance-calendar-grid">{calendarDays.map((cell, index) => cell ? <div className={`sp-attendance-calendar-day ${tone(cell.status)} ${cell.status === "Holiday" ? "is-holiday" : ""}`} key={`${selectedMonth}-${cell.day}`}><strong>{cell.day}</strong><span>{cell.status}</span></div> : <div className="sp-attendance-calendar-day is-empty" key={`empty-${index}`} aria-hidden="true"/>)}</div></div><div className="sp-attendance-month-summary"><div><span>Working / Attendance Days</span><strong>{totals.days}</strong></div><div><span>Present</span><strong>{monthlyDayCounts.present}</strong></div><div><span>Absent</span><strong>{monthlyDayCounts.absent}</strong></div><div><span>Half Day</span><strong>{monthlyDayCounts.halfDay}</strong></div><div><span>Attendance %</span><strong>{totals.percentage}%</strong></div></div></div>}
       </StudentCard>
       {view === "daily" ? <StudentCard className="sp-recent-attendance" title={<><Clock3 size={20}/>Recent Attendance</>} subtitle="Your last 5 attendance records.">
         {recentRows.length ? <div className="sp-table-wrap"><table className="sp-table"><thead><tr><th>Date</th><th>Morning</th><th>Afternoon</th><th>Remarks</th></tr></thead><tbody>{recentRows.map((row) => <tr key={row.date}><td>{formatDate(row.date)}</td><td><AttendancePill value={row.morning} compact/></td><td><AttendancePill value={row.afternoon} compact/></td><td>{row.remarks.join(" • ") || "—"}</td></tr>)}</tbody></table></div> : <StudentEmptyState icon={CalendarX} title="No attendance available" text="No attendance records were returned for your academic period."/>}

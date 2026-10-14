@@ -153,6 +153,7 @@ export function AccountantPayments() {
             department: c.department,
             category: c.category,
             approvedAmount: c.approvedAmount || c.amount,
+            approvalDate: c.approvedDate || c.date || "—",
             paymentStatus: c.status === "Paid" ? "Paid / Disbursed" : "Payable (Awaiting Disbursement)",
             disbursedDate: c.disbursedDate,
             paymentRef: c.paymentReference,
@@ -253,7 +254,7 @@ export function AccountantPayments() {
         action={
           <div className="sp-actions" style={{ display: "flex", gap: "8px" }}>
             <Link className="sp-btn" to="fees">Fee ledger</Link>
-            <Link className="sp-btn primary" to="/accountant-dashboard/reimbursement">
+            <Link className="sp-btn primary" to="/accountant-dashboard/reimbursements">
               <img src={reimbursementIcon} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /> Reimbursement Portal
             </Link>
           </div>

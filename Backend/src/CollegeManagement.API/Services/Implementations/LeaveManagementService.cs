@@ -73,16 +73,20 @@ namespace CollegeManagement.API.Services.Implementations
 
             // 5. Resolve LeaveCategoryId defensively to prevent FK constraint failures
             int? validCategoryId = null;
-            if (request.LeaveCategoryId.HasValue && request.LeaveCategoryId.Value > 0 &&
-                await _context.LeaveCategories.AnyAsync(c => c.LeaveCategoryId == request.LeaveCategoryId.Value))
+            if (request.LeaveCategoryId.HasValue && request.LeaveCategoryId.Value > 0)
             {
-                validCategoryId = request.LeaveCategoryId.Value;
+                var cat = await _context.LeaveCategories.FirstOrDefaultAsync(c => c.LeaveCategoryId == request.LeaveCategoryId.Value);
+                if (cat == null || !cat.IsActive)
+                {
+                    throw new CollegeManagement.API.Exceptions.ValidationException("Selected leave category does not exist or is inactive.");
+                }
+                validCategoryId = cat.LeaveCategoryId;
             }
             else
             {
                 string leaveTypeName = request.LeaveType.ToString();
                 var matchedCategory = await _context.LeaveCategories
-                    .FirstOrDefaultAsync(c => c.CategoryCode == leaveTypeName || c.CategoryName.Contains(leaveTypeName) || c.CategoryName.StartsWith(leaveTypeName.Replace("Leave", "")));
+                    .FirstOrDefaultAsync(c => c.IsActive && (c.CategoryCode == leaveTypeName || c.CategoryName.Contains(leaveTypeName) || c.CategoryName.StartsWith(leaveTypeName.Replace("Leave", ""))));
                 validCategoryId = matchedCategory?.LeaveCategoryId;
             }
 

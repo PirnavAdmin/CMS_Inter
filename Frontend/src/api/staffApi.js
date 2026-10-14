@@ -168,7 +168,11 @@ export const reimbursementApi = {
   },
 
   getAllReimbursements: async (params) => {
-    return api.get(REIMBURSEMENT_BASE_URL, { params });
+    return api.get(REIMBURSEMENT_BASE_URL, { params, skipErrorLog: true, optionalAuth: true });
+  },
+
+  getReimbursements: async (params) => {
+    return api.get(REIMBURSEMENT_BASE_URL, { params, skipErrorLog: true, optionalAuth: true });
   },
 
   getReimbursementSummary: async (campusId) => {
