@@ -216,6 +216,16 @@ export default function FacultyNavbar() {
   const boardDisplayName = activeBoard?.name || activeBoard?.boardName || activeBoard?.code || (boardsLoading ? "Loading boards..." : "Board of Intermediate Education, Andhra Pradesh");
   const yearDisplayName = activeAcademicYear?.name || activeAcademicYear?.label || activeAcademicYear?.code || "2026-2027";
 
+  const activePhoto = useMemo(() => {
+    return (
+      profileData?.photoUrl ||
+      (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
+      (profileData?.photoPath
+        ? `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}`
+        : null)
+    );
+  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
+
   return (
     <header className="cms-topbar">
       {/* 3-bar Hamburger Toggle */}
@@ -509,17 +519,20 @@ export default function FacultyNavbar() {
         {/* Profile Avatar & Dropdown */}
         <div style={{ position: "relative" }} ref={profileDropRef}>
           <button className="cms-profile-btn" onClick={() => setProfileDropOpen((p) => !p)}>
-            
-            {profileData.photoPath || profileData.photoUrl ? (
+            {activePhoto ? (
               <img 
-                src={profileData.photoUrl || `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}?t=${Date.now()}`} 
+                src={activePhoto} 
                 alt="Profile" 
                 className="cms-avatar" 
                 style={{ objectFit: 'cover' }} 
-                onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} 
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const fb = e.currentTarget.parentElement?.querySelector('.cms-avatar-fallback');
+                  if (fb) fb.style.display = 'flex';
+                }} 
               />
             ) : null}
-            <div className="cms-avatar" style={{ display: (profileData.photoPath || profileData.photoUrl) ? 'none' : 'flex' }}>
+            <div className="cms-avatar cms-avatar-fallback" style={{ display: activePhoto ? 'none' : 'flex' }}>
               {initials}
             </div>
 
@@ -537,10 +550,36 @@ export default function FacultyNavbar() {
           {profileDropOpen && (
             <div className="cms-dropdown" onClick={() => setProfileDropOpen(false)}>
               <div className="cms-dropdown-head">
-                <div style={{ fontSize: 13.5, fontWeight: 700 }}>
-                  {profileData.fullName ||
-                    `${profileData.firstName || ""} ${profileData.lastName || ""}`.trim() ||
-                    "Staff Member"}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  {activePhoto ? (
+                    <img 
+                      src={activePhoto} 
+                      alt="Profile" 
+                      className="cms-avatar" 
+                      style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: "50%", flexShrink: 0 }} 
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fb = e.currentTarget.parentElement?.querySelector('.cms-dropdown-avatar-fallback');
+                        if (fb) fb.style.display = 'flex';
+                      }} 
+                    />
+                  ) : null}
+                  <div
+                    className="cms-avatar cms-dropdown-avatar-fallback"
+                    style={{ width: 36, height: 36, fontSize: 13, display: activePhoto ? 'none' : 'flex', flexShrink: 0 }}
+                  >
+                    {initials}
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {profileData.fullName ||
+                        `${profileData.firstName || ""} ${profileData.lastName || ""}`.trim() ||
+                        "Staff Member"}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--cms-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {profileData.designation || profileData.role || "Staff"}
+                    </div>
+                  </div>
                 </div>
                 <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>
                   {typeof profileData.email === "string"
@@ -549,7 +588,7 @@ export default function FacultyNavbar() {
                     ? profileData.email[0]
                     : ""}
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>
+                <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>
                   ID: {profileData.employeeId || profileData.id || "—"}
                 </div>
               </div>
