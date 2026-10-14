@@ -348,7 +348,6 @@ const filterMenuByViewPermission = (sourceMenu, canViewModule) =>
   });
 
 const principalSearchIndex = createSearchIndex(principalMenu);
-const wardenSearchIndex = createSearchIndex(wardenMenu);
 
 const searchIndex = createSearchIndex(menu);
 

@@ -97,18 +97,18 @@ function getDerivedBeds(store = getHostelStore()) {
 
 // ==================== HOSTEL BLOCKS ====================
 
-export const  = (params, config = {}) =>
+export const getHostelBlocks = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/blocks", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(store.blocks || []);
     }
   );
 
-export const  = (id, config = {}) =>
+export const getHostelBlockById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/blocks/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const item = (store.blocks || []).find((b) => String(b.id) === String(id) || b.code === id);
@@ -116,9 +116,9 @@ export const  = (id, config = {}) =>
     }
   );
 
-export const  = (data, config = {}) =>
+export const createHostelBlock = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/blocks", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const id = `blk-${Date.now()}`;
@@ -147,9 +147,9 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateHostelBlock = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/blocks/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelBlockStore(id, {
         name: data.hostelName || data.name,
@@ -167,9 +167,9 @@ export const  = (id, data, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const deleteHostelBlock = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/blocks/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       deleteHostelBlockStore(id);
       return wrapSuccess();
@@ -178,18 +178,18 @@ export const  = (id, config = {}) =>
 
 // ==================== ROOM CATEGORIES (Room Types) ====================
 
-export const  = (params, config = {}) =>
+export const getRoomTypes = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/room-types", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(store.categories || []);
     }
   );
 
-export const  = (id, config = {}) =>
+export const getRoomTypeById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/room-types/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const item = (store.categories || []).find((c) => String(c.id) === String(id));
@@ -197,9 +197,9 @@ export const  = (id, config = {}) =>
     }
   );
 
-export const  = (data, config = {}) =>
+export const createRoomType = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/room-types", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const id = `cat-${Date.now()}`;
       const newCat = {
@@ -224,9 +224,9 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateRoomType = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/room-types/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelCategoryStore(id, {
         name: data.roomTypeSpecification || data.name,
@@ -242,9 +242,9 @@ export const  = (id, data, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const deleteRoomType = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/room-types/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       deleteHostelCategoryStore(id);
       return wrapSuccess();
@@ -253,9 +253,9 @@ export const  = (id, config = {}) =>
 
 // ==================== ROOMS ====================
 
-export const  = (params, config = {}) =>
+export const getRooms = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/rooms", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const mappedRooms = (store.rooms || []).map((r, idx) => ({
@@ -273,9 +273,9 @@ export const  = (params, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const getRoomById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/rooms/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const room = (store.rooms || []).find(
@@ -285,9 +285,9 @@ export const  = (id, config = {}) =>
     }
   );
 
-export const  = (data, config = {}) =>
+export const createRoom = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/rooms", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const id = `rm-${Date.now()}`;
@@ -328,9 +328,9 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateRoom = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/rooms/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelRoomStore(id, {
         roomNo: data.roomNumber || data.roomNo,
@@ -342,9 +342,9 @@ export const  = (id, data, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const deleteRoom = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/rooms/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const room = store.rooms.find((r) => String(r.id) === String(id) || String(r.roomNo) === String(id));
@@ -357,18 +357,18 @@ export const  = (id, config = {}) =>
 
 // ==================== BEDS ====================
 
-export const  = (params, config = {}) =>
+export const getBeds = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/beds", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(getDerivedBeds(store));
     }
   );
 
-export const  = (id, config = {}) =>
+export const getBedById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/beds/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const beds = getDerivedBeds(store);
@@ -377,9 +377,9 @@ export const  = (id, config = {}) =>
     }
   );
 
-export const  = (data, config = {}) =>
+export const createBed = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/beds", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const id = `bed-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const newBed = {
@@ -400,9 +400,9 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateBed = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/beds/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       saveHostelStore((prev) => ({
         ...prev,
@@ -414,9 +414,9 @@ export const  = (id, data, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const deleteBed = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/beds/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       saveHostelStore((prev) => ({
         ...prev,
@@ -428,9 +428,9 @@ export const  = (id, config = {}) =>
 
 // ==================== WARDEN ALLOCATION ====================
 
-export const  = (params, config = {}) =>
+export const getWardens = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/wardens", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const mappedWardens = (store.wardens || []).map((w) => ({
@@ -445,9 +445,9 @@ export const  = (params, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const getWardenById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/wardens/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const warden = (store.wardens || []).find((w) => String(w.id) === String(id));
@@ -455,9 +455,9 @@ export const  = (id, config = {}) =>
     }
   );
 
-export const  = (data, config = {}) =>
+export const createWarden = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/wardens", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const id = `w-${Date.now()}`;
       const store = getHostelStore();
@@ -486,9 +486,9 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateWarden = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/wardens/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelWardenStore(id, {
         name: data.wardenName || data.name,
@@ -503,9 +503,9 @@ export const  = (id, data, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const deleteWarden = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/wardens/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       deleteHostelWardenStore(id);
       return wrapSuccess();
@@ -514,9 +514,9 @@ export const  = (id, config = {}) =>
 
 // ==================== STUDENT HOSTEL ALLOCATION ====================
 
-export const  = (params, config = {}) =>
+export const getStudentAllocations = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/student-allocations", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const mapped = (store.allocations || []).map((a) => ({
@@ -535,9 +535,9 @@ export const  = (params, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const getStudentAllocationById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/student-allocations/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const alloc = (store.allocations || []).find(
@@ -547,9 +547,9 @@ export const  = (id, config = {}) =>
     }
   );
 
-export const  = (data, config = {}) =>
+export const createStudentAllocation = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/student-allocations", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const id = `alloc-${Date.now()}`;
       const store = getHostelStore();
@@ -601,9 +601,9 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateStudentAllocation = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/student-allocations/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelAllocationStore(id, {
         monthlyFee: data.monthlyFee,
@@ -616,9 +616,9 @@ export const  = (id, data, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const deleteStudentAllocation = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/student-allocations/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       vacateHostelAllocationStore(id, "Allocation removed");
       return wrapSuccess();
@@ -627,24 +627,24 @@ export const  = (id, config = {}) =>
 
 // ==================== HOSTEL ATTENDANCE ====================
 
-export const  = (params, config = {}) =>
+export const getAttendance = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/attendance", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(store.attendanceRecords || {});
     }
   );
 
-export const  = (id, config = {}) =>
+export const getAttendanceById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/attendance/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => wrapResponse({})
   );
 
-export const  = (data, config = {}) =>
+export const createAttendance = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/attendance", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const session = String(data.session || "morning").toLowerCase().includes("night") ? "night" : "morning";
       const studentId = String(data.studentId || data.admissionNo || "st-1");
@@ -673,23 +673,23 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateAttendance = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/attendance/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => wrapSuccess()
   );
 
-export const  = (id, config = {}) =>
+export const deleteAttendance = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/attendance/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => wrapSuccess()
   );
 
 // ==================== OUTPASS & LEAVE MANAGEMENT ====================
 
-export const  = (params, config = {}) =>
+export const getOutpassLeave = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/outpass-leave", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const mapped = (store.outpasses || []).map((o) => ({
@@ -704,9 +704,9 @@ export const  = (params, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const getOutpassLeaveById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/outpass-leave/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const item = (store.outpasses || []).find((o) => String(o.id) === String(id));
@@ -714,9 +714,9 @@ export const  = (id, config = {}) =>
     }
   );
 
-export const  = (data, config = {}) =>
+export const createOutpassLeave = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/outpass-leave", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const id = `out-${Date.now()}`;
       const newOutpass = {
@@ -749,27 +749,27 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateOutpassLeave = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/outpass-leave/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelOutpassStatusStore(id, data.approvalStatus || data.status || "Approved");
       return wrapSuccess();
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const approveOutpassLeave = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/outpass-leave/${id}/approval`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelOutpassStatusStore(id, data.approvalStatus || data.status || "Approved");
       return wrapSuccess();
     }
   );
 
-export const  = (id, config = {}) =>
+export const deleteOutpassLeave = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/outpass-leave/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       deleteHostelOutpassStore(id);
       return wrapSuccess();
@@ -778,9 +778,9 @@ export const  = (id, config = {}) =>
 
 // ==================== TRANSFER & VACATE ====================
 
-export const  = (params, config = {}) =>
+export const getTransferVacate = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/transfer-vacate", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const mapped = (store.transfers || []).map((t) => ({
@@ -798,9 +798,9 @@ export const  = (params, config = {}) =>
     }
   );
 
-export const  = (id, config = {}) =>
+export const getTransferVacateById = (id, config = {}) =>
   callOrFallback(
-    () => api.get(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.get(`/api/v1/hostel/transfer-vacate/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const item = (store.transfers || []).find((t) => String(t.id) === String(id));
@@ -808,9 +808,9 @@ export const  = (id, config = {}) =>
     }
   );
 
-export const  = (data, config = {}) =>
+export const createTransferVacate = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/transfer-vacate", data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       const id = `tr-${Date.now()}`;
       const newTransfer = {
@@ -848,42 +848,42 @@ export const  = (data, config = {}) =>
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const updateTransferVacate = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/transfer-vacate/${id}`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelTransferStatusStore(id, data.approvalStatus || data.status || "Approved");
       return wrapSuccess();
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const approveTransferVacate = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/transfer-vacate/${id}/approval`, data, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelTransferStatusStore(id, data.approvalStatus || "Approved");
       return wrapSuccess();
     }
   );
 
-export const  = (id, data, config = {}) =>
+export const settleTransferVacate = (id, data, config = {}) =>
   callOrFallback(
-    () => api.put(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.put(`/api/v1/hostel/transfer-vacate/${id}/settlement`, data, { silent: true, skipErrorLog: true, ...config }),
     () => wrapSuccess()
   );
 
 export const completeTransferVacate = (id, config = {}) =>
   callOrFallback(
-    () => api.post(, {}, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post(`/api/v1/hostel/transfer-vacate/${id}/complete`, {}, { silent: true, skipErrorLog: true, ...config }),
     () => {
       updateHostelTransferStatusStore(id, "Processed");
       return wrapSuccess();
     }
   );
 
-export const  = (id, config = {}) =>
+export const deleteTransferVacate = (id, config = {}) =>
   callOrFallback(
-    () => api.delete(, { silent: true, skipErrorLog: true, ...config }),
+    () => api.delete(`/api/v1/hostel/transfer-vacate/${id}`, { silent: true, skipErrorLog: true, ...config }),
     () => {
       deleteHostelTransferStore(id);
       return wrapSuccess();
@@ -892,9 +892,9 @@ export const  = (id, config = {}) =>
 
 // ==================== HOSTEL DASHBOARD ====================
 
-export const  = (params, config = {}) =>
+export const getHostelDashboard = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/dashboard", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       const metrics = computeHostelMetrics(store);
@@ -917,45 +917,45 @@ export const  = (params, config = {}) =>
 
 // ==================== HOSTEL REPORTS ====================
 
-export const  = (params, config = {}) =>
+export const getOccupancyReport = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/reports/occupancy", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(store.blocks || []);
     }
   );
 
-export const  = (params, config = {}) =>
+export const getStudentsReport = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/reports/students", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(store.allocations || []);
     }
   );
 
-export const  = (params, config = {}) =>
+export const getAttendanceReport = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/reports/attendance", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(store.attendanceStudents || []);
     }
   );
 
-export const  = (params, config = {}) =>
+export const getOutpassLeaveReport = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/reports/outpass-leave", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(store.outpasses || []);
     }
   );
 
-export const  = (params, config = {}) =>
+export const getTransferVacateReport = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/reports/transfer-vacate", { params, silent: true, skipErrorLog: true, ...config }),
     () => {
       const store = getHostelStore();
       return wrapResponse(store.transfers || []);
@@ -964,14 +964,14 @@ export const  = (params, config = {}) =>
 
 // ==================== COMPLAINTS ====================
 
-export const  = (params, config = {}) =>
+export const getHostelComplaints = (params, config = {}) =>
   callOrFallback(
-    () => api.get(, { params, silent: true, skipErrorLog: true, ...config }),
+    () => api.get("/api/v1/hostel/complaints", { params, silent: true, skipErrorLog: true, ...config }),
     () => wrapResponse([])
   );
 
-export const  = (data, config = {}) =>
+export const createHostelComplaint = (data, config = {}) =>
   callOrFallback(
-    () => api.post(, data, { silent: true, skipErrorLog: true, ...config }),
+    () => api.post("/api/v1/hostel/complaints", data, { silent: true, skipErrorLog: true, ...config }),
     () => wrapSuccess({ id: `comp-${Date.now()}` })
   );
