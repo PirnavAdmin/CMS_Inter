@@ -501,6 +501,120 @@
   margin: 0;
   font-size: 13.5px;
 }
+.cms-fee-year-config {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cms-border);
+}
+.cms-fee-year-config h4 {
+  margin: 0;
+  font-size: 13.5px;
+}
+.cms-fee-year-config.cms-fee-year-page {
+  margin: 0 0 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  background: var(--cms-surface);
+}
+.cms-fee-year-config .cms-fee-year-warning {
+  margin: 0;
+  color: var(--cms-text);
+  font-size: 12px;
+  line-height: 1.5;
+  padding-left: 10px;
+  border-left: 3px solid var(--cms-primary);
+}
+.cms-fee-year-config .cms-fee-year-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.cms-fee-year-config .cms-fee-year-options label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--cms-text);
+  cursor: pointer;
+}
+.cms-fee-year-config .cms-fee-year-options input[type="radio"] {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  max-width: 18px;
+  max-height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  border: 1.5px solid var(--cms-border-strong, var(--cms-border));
+  border-radius: 50%;
+  background: var(--cms-surface);
+  box-shadow: none;
+  cursor: pointer;
+}
+.cms-fee-year-config .cms-fee-year-options input[type="radio"]:checked {
+  background: radial-gradient(circle, var(--cms-primary) 0 38%, transparent 42%);
+}
+.cms-fee-year-config .cms-fee-year-options input[type="radio"]:focus-visible {
+  outline: 2px solid var(--cms-primary);
+  outline-offset: 2px;
+}
+.cms-fee-year-config .cms-fee-year-options input[type="radio"]:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.cms-fee-year-config .cms-fee-year-helper {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cms-muted);
+}
+.cms-fee-year-config .cms-fee-year-increment {
+  display: grid;
+  gap: 12px;
+}
+.cms-fee-year-config .cms-fee-year-value {
+  width: 100%;
+  max-width: 280px;
+}
+.cms-fee-year-config .cms-fee-year-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 10px 20px;
+  margin: 0;
+}
+.cms-fee-year-config .cms-fee-year-summary div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.cms-fee-year-config .cms-fee-year-summary dt {
+  font-size: 12px;
+  color: var(--cms-muted);
+}
+.cms-fee-year-config .cms-fee-year-summary dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  color: var(--cms-text);
+}
+.cms-fee-year-config .cms-fee-year-total dd {
+  font-weight: 750;
+  color: var(--cms-primary-dark);
+}
 .cms-fee-config-wrap {
   overflow-x: hidden;
 }

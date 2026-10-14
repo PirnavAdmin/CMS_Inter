@@ -11,13 +11,11 @@ import {
   UserCheck,
   Loader2,
   FileSpreadsheet,
-  ClipboardCheck,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient from "@/api/axios.js";
-import { getAuthUser } from "@/features/authStorage.js";
 import "../styles/FacultyMarks.css";
 
 export default function FacultyMarks() {
@@ -52,8 +50,6 @@ export default function FacultyMarks() {
   const [groupsList, setGroupsList] = useState([]);
   const [programsList, setProgramsList] = useState([]);
   const [sectionsList, setSectionsList] = useState([]);
-  const [allocatedSections, setAllocatedSections] = useState([]);
-  const [allocatedSubjects, setAllocatedSubjects] = useState([]);
 
   // Filter loading flags
   const [loadingFilters, setLoadingFilters] = useState(false);
@@ -161,96 +157,6 @@ export default function FacultyMarks() {
     return () => { isMounted = false; };
   }, [academicCtx.boards, academicCtx.academicYears]);
 
-  // 0. Fetch Faculty Timetable Allocated Sections & Allocated Subjects
-  useEffect(() => {
-    let isMounted = true;
-    const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
-    if (!staffId) return;
-
-    // 1. Fetch faculty timetable (provides allocated sections and subjects)
-    apiClient
-      .get(`/api/v1/timetable/faculty/${staffId}`)
-      .then((res) => {
-        const slots = res.data?.data || res.data || [];
-        if (!isMounted || !Array.isArray(slots)) return;
-
-        const secMap = new Map();
-        const subMap = new Map();
-        slots.forEach((s) => {
-          if (s.sectionId && !secMap.has(s.sectionId)) {
-            secMap.set(s.sectionId, {
-              sectionId: s.sectionId,
-              sectionName: s.sectionName || `Section #${s.sectionId}`,
-              academicLevelId: s.academicLevelId,
-              academicLevelName: s.levelName || s.academicLevelName,
-              groupId: s.groupId,
-              groupName: s.groupName,
-              programId: s.programId,
-              programName: s.programName,
-            });
-          }
-          if (s.subjectId && !subMap.has(s.subjectId)) {
-            subMap.set(s.subjectId, {
-              subjectId: s.subjectId,
-              subjectName: s.subjectName || `Subject #${s.subjectId}`,
-              subjectCode: s.subjectCode || "",
-              academicLevelId: s.academicLevelId,
-            });
-          }
-        });
-        const secList = Array.from(secMap.values());
-        const subList = Array.from(subMap.values());
-        if (isMounted) {
-          setAllocatedSections(secList);
-          if (subList.length > 0) {
-            setAllocatedSubjects((prev) => {
-              const map = new Map();
-              prev.forEach((p) => map.set(p.subjectId, p));
-              subList.forEach((s) => map.set(s.subjectId, s));
-              return Array.from(map.values());
-            });
-          }
-          if (secList.length > 0 && !selectedSection) {
-            const first = secList[0];
-            setSelectedSection(first.sectionId);
-            if (first.academicLevelId) setSelectedLevel(first.academicLevelId);
-            if (first.groupId) setSelectedGroup(first.groupId);
-            if (first.programId) setSelectedProgram(first.programId);
-            setContextApplied(true);
-          }
-        }
-      })
-      .catch((err) => console.warn("Could not load faculty timetable sections:", err));
-
-    // 2. Fetch staff subject allocations (strictly enforces Chemistry allocations e.g. IDs 14, 19, 33)
-    apiClient
-      .get(`/api/v1/staff/${staffId}/subject-allocations`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (!isMounted || !Array.isArray(list)) return;
-        setAllocatedSubjects((prev) => {
-          const map = new Map();
-          prev.forEach((p) => map.set(p.subjectId, p));
-          list.forEach((s) => {
-            const subId = s.subjectId || s.id;
-            if (subId) {
-              map.set(subId, {
-                subjectId: subId,
-                subjectName: s.subjectName || s.name || `Subject #${subId}`,
-                subjectCode: s.subjectCode || s.code || "",
-                academicLevelId: s.academicLevelId,
-              });
-            }
-          });
-          return Array.from(map.values());
-        });
-      })
-      .catch((err) => console.warn("Could not load faculty subject allocations:", err));
-
-    return () => { isMounted = false; };
-  }, [context?.profile?.staffId, context?.profileData?.staffId]);
-
   // 2. Fetch Academic Levels
   useEffect(() => {
     if (!selectedBoard) return;
@@ -261,7 +167,7 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setLevelsList(list);
-          if (list.length && !selectedLevel) setSelectedLevel(list[0].academicLevelId || list[0].id);
+          if (list.length) setSelectedLevel(list[0].academicLevelId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching levels for marks:", err));
@@ -283,7 +189,7 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setGroupsList(list);
-          if (list.length && !selectedGroup) setSelectedGroup(list[0].groupId || list[0].id);
+          if (list.length) setSelectedGroup(list[0].groupId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching groups for marks:", err));
@@ -299,7 +205,7 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setProgramsList(list);
-          if (list.length && !selectedProgram) setSelectedProgram(list[0].programId || list[0].id);
+          if (list.length) setSelectedProgram(list[0].programId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching programs for marks:", err));
@@ -323,38 +229,14 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setSectionsList(list);
-          if (list.length && !selectedSection) setSelectedSection(list[0].sectionId || list[0].id);
+          if (list.length) setSelectedSection(list[0].sectionId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching sections for marks:", err));
     return () => { isMounted = false; };
   }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, selectedProgram]);
 
-  // Merge live sections with allocated timetable sections
-  const displaySections = useMemo(() => {
-    const map = new Map();
-    allocatedSections.forEach((s) => {
-      if (!selectedLevel || String(s.academicLevelId) === String(selectedLevel)) {
-        map.set(String(s.sectionId), { ...s, isAssigned: true });
-      }
-    });
-    sectionsList.forEach((s) => {
-      const id = String(s.sectionId || s.id);
-      if (!map.has(id)) {
-        map.set(id, {
-          sectionId: s.sectionId || s.id,
-          sectionName: s.sectionName || s.name || `Section #${id}`,
-          academicLevelId: s.academicLevelId,
-          groupId: s.groupId,
-          programId: s.programId,
-          isAssigned: false,
-        });
-      }
-    });
-    return Array.from(map.values());
-  }, [allocatedSections, sectionsList, selectedLevel]);
-
-  // 6. Fetch Examinations & Subjects
+  // 6. Fetch Examinations & Subjects when context is applied
   useEffect(() => {
     let isMounted = true;
 
@@ -384,69 +266,15 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted && Array.isArray(list)) {
           setSubjectsList(list);
+          if (list.length && !selectedSubject) {
+            setSelectedSubject(list[0].subjectId || list[0].id);
+          }
         }
       })
       .catch((err) => console.warn("Error fetching subjects:", err));
 
     return () => { isMounted = false; };
   }, [selectedBoard, selectedGroup, selectedLevel]);
-
-  // Filtered Subjects strictly constrained to Faculty's allocated subjects (e.g. Chemistry - I, Chemistry - II, Chemistry)
-  const filteredSubjects = useMemo(() => {
-    if (allocatedSubjects.length > 0) {
-      const allowedIds = new Set(allocatedSubjects.map((s) => Number(s.subjectId)));
-      const filtered = subjectsList.filter((s) => allowedIds.has(Number(s.subjectId || s.id)));
-      if (filtered.length > 0) {
-        return filtered;
-      }
-      // If subjectsList hasn't matched yet or is empty, use allocated subjects matching level
-      const matchLevel = allocatedSubjects.filter(
-        (s) => !selectedLevel || !s.academicLevelId || String(s.academicLevelId) === String(selectedLevel)
-      );
-      return matchLevel.length > 0 ? matchLevel : allocatedSubjects;
-    }
-    return subjectsList;
-  }, [subjectsList, allocatedSubjects, selectedLevel]);
-
-  // Auto-sync selectedSubject to a valid allocated subject
-  useEffect(() => {
-    if (filteredSubjects.length > 0) {
-      const exists = filteredSubjects.some((s) => String(s.subjectId || s.id) === String(selectedSubject));
-      if (!exists) {
-        const nextSub = filteredSubjects[0].subjectId || filteredSubjects[0].id;
-        setSelectedSubject(nextSub);
-        if (contextApplied && selectedExam) {
-          handleExamOrSubjectChange(selectedExam, nextSub);
-        }
-      }
-    }
-  }, [filteredSubjects]);
-
-  // Quick helper to select assigned class from chips
-  const selectAssignedClass = (sec) => {
-    setSelectedSection(sec.sectionId);
-    if (sec.academicLevelId) setSelectedLevel(sec.academicLevelId);
-    if (sec.groupId) setSelectedGroup(sec.groupId);
-    if (sec.programId) setSelectedProgram(sec.programId);
-    setContextApplied(true);
-    if (selectedExam && selectedSubject) {
-      handleExamOrSubjectChange(selectedExam, selectedSubject, sec.sectionId);
-    }
-  };
-
-  // Section Change Handler
-  const handleSectionChange = (val) => {
-    setSelectedSection(val);
-    const matched =
-      allocatedSections.find((s) => String(s.sectionId) === String(val)) ||
-      sectionsList.find((s) => String(s.sectionId || s.id) === String(val));
-    if (matched) {
-      if (matched.academicLevelId) setSelectedLevel(matched.academicLevelId);
-      if (matched.groupId) setSelectedGroup(matched.groupId);
-      if (matched.programId) setSelectedProgram(matched.programId);
-    }
-    setContextApplied(true);
-  };
 
   // Selected Exam Metadata
   const selectedExamInfo = useMemo(() => {
@@ -459,12 +287,8 @@ export default function FacultyMarks() {
 
   // Selected Subject Metadata
   const selectedSubjectObj = useMemo(() => {
-    return (
-      filteredSubjects.find((s) => String(s.subjectId || s.id) === String(selectedSubject)) ||
-      subjectsList.find((s) => String(s.subjectId || s.id) === String(selectedSubject)) ||
-      null
-    );
-  }, [filteredSubjects, subjectsList, selectedSubject]);
+    return subjectsList.find((s) => String(s.subjectId || s.id) === String(selectedSubject)) || null;
+  }, [subjectsList, selectedSubject]);
 
   const selectedSubjectName = selectedSubjectObj
     ? (selectedSubjectObj.subjectName || selectedSubjectObj.name)
@@ -472,41 +296,32 @@ export default function FacultyMarks() {
 
   // Selected Section Metadata
   const selectedSectionName = useMemo(() => {
-    const found =
-      displaySections.find((s) => String(s.sectionId || s.id) === String(selectedSection)) ||
-      sectionsList.find((s) => String(s.sectionId || s.id) === String(selectedSection));
-    return found ? (found.sectionName || found.name) : (selectedSection ? `Section #${selectedSection}` : "Select Section");
-  }, [displaySections, sectionsList, selectedSection]);
+    const found = sectionsList.find((s) => String(s.sectionId || s.id) === String(selectedSection));
+    return found ? (found.sectionName || found.name) : `Section #${selectedSection}`;
+  }, [sectionsList, selectedSection]);
 
   // Handle clicking "Enter Marks" button
   const handleEnterMarks = () => {
-    if (!selectedSection) {
-      notify("Please select a Section before loading Marks Entry.", "error");
+    if (!selectedBoard || !selectedYear || !selectedLevel || !selectedGroup || !selectedProgram || !selectedSection) {
+      notify("Please select all Academic Context filters before opening Marks Entry.", "error");
       return;
     }
     setContextApplied(true);
     notify(`Marks Entry workspace loaded for ${selectedSectionName}.`);
-    const examToLoad =
-      selectedExam || (examinationsList.length ? examinationsList[0].examinationId || examinationsList[0].id : "");
-    const subToLoad =
-      selectedSubject || (filteredSubjects.length ? filteredSubjects[0].subjectId || filteredSubjects[0].id : "");
-    if (examToLoad && !selectedExam) setSelectedExam(examToLoad);
-    if (subToLoad && !selectedSubject) setSelectedSubject(subToLoad);
-    if (examToLoad && subToLoad) {
-      handleExamOrSubjectChange(examToLoad, subToLoad, selectedSection);
+    if (selectedExam && selectedSubject) {
+      handleExamOrSubjectChange(selectedExam, selectedSubject);
     }
   };
 
   // Handle changing Exam or Subject inside workspace
-  const handleExamOrSubjectChange = async (newExam, newSubject, explicitSection) => {
-    const targetSec = explicitSection || selectedSection;
-    if (!newExam || !newSubject || !targetSec) {
+  const handleExamOrSubjectChange = async (newExam, newSubject) => {
+    if (!newExam || !newSubject) {
       setCurrentStudents([]);
       setCurrentRejectionRemarks("");
       return;
     }
 
-    const key = `${targetSec}_${newExam}_${newSubject}`;
+    const key = `${selectedSection}_${newExam}_${newSubject}`;
     const existing = evaluationsLedger[key];
 
     if (existing && existing.rows && existing.rows.length) {
@@ -526,54 +341,29 @@ export default function FacultyMarks() {
         academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
         groupId: selectedGroup ? Number(selectedGroup) : undefined,
         programId: selectedProgram ? Number(selectedProgram) : undefined,
-        sectionId: Number(targetSec),
+        sectionId: Number(selectedSection),
       };
 
       const res = await apiClient.get("/api/v1/attendance/admin/students", { params: studentParams });
       const raw = res.data?.data || res.data || [];
 
-      // Check if marks are already persisted in DB for this subject & exam
-      let savedMarksMap = new Map();
-      try {
-        const marksRes = await apiClient.get(`/api/v1/marks/subject/${newSubject}`);
-        const marksData = marksRes.data?.data || marksRes.data || [];
-        if (Array.isArray(marksData)) {
-          marksData.forEach((m) => {
-            if (String(m.examinationId) === String(newExam)) {
-              savedMarksMap.set(Number(m.studentId), m);
-            }
-          });
-        }
-      } catch (e) {
-        // ignore if endpoint not found
-      }
-
       let mapped = [];
       if (Array.isArray(raw) && raw.length) {
-        mapped = raw.map((s) => {
-          const sId = Number(s.studentId || s.id);
-          const existingMark = savedMarksMap.get(sId);
-          const internal = existingMark ? Number(existingMark.internalMarks || 0) : 18;
-          const theory = existingMark ? Number(existingMark.theoryMarks || 0) : 55;
-          const totalScore = internal + theory;
-          const isAbsent = existingMark ? Boolean(existingMark.isAbsent) : false;
-          const remarks = existingMark ? (existingMark.remarks || "Regular") : "Regular";
-          return {
-            studentId: sId,
-            rollNo: s.rollNumber || s.rollNo || `RL-${sId}`,
-            name: s.studentName || s.name || `Student #${sId}`,
-            internal: isAbsent ? 0 : internal,
-            theory: isAbsent ? 0 : theory,
-            totalScore: isAbsent ? 0 : totalScore,
-            percentage: isAbsent ? "0.00%" : `${totalScore.toFixed(2)}%`,
-            absent: isAbsent,
-            remarks: isAbsent ? "Absent" : remarks,
-          };
-        });
+        mapped = raw.map((s) => ({
+          studentId: s.studentId || s.id,
+          rollNo: s.rollNumber || s.rollNo || `RL-${s.studentId}`,
+          name: s.studentName || s.name || `Student #${s.studentId}`,
+          internal: 18,
+          theory: 55,
+          totalScore: 73,
+          percentage: "73.00%",
+          absent: false,
+          remarks: "Regular",
+        }));
       }
 
       setCurrentStudents(mapped);
-      setEvaluationStatus(savedMarksMap.size > 0 ? "SUBMITTED" : "DRAFT");
+      setEvaluationStatus("DRAFT");
       setCurrentRejectionRemarks("");
     } catch (err) {
       console.warn("Could not load section students for marks, setting empty roster:", err);
@@ -626,9 +416,6 @@ export default function FacultyMarks() {
     if (!selectedExam || !selectedSubject) return;
     setSavingMarks(true);
 
-    const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
-
     const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const updatedEval = {
       evaluationId: key,
@@ -637,8 +424,8 @@ export default function FacultyMarks() {
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Tanjiro Kamado",
-      empId: `EMP-${staffId}`,
+      faculty: "Faculty In-Charge",
+      empId: "EMP-FACULTY",
       status: "DRAFT",
       adminRemarks: "",
       rows: currentStudents,
@@ -658,7 +445,6 @@ export default function FacultyMarks() {
           examinationId: Number(selectedExam),
           subjectId: Number(selectedSubject),
           studentId: Number(s.studentId),
-          facultyId: Number(staffId),
           rollNo: s.rollNo,
           studentName: s.name,
           internalMarks: Number(s.internal || 0),
@@ -684,9 +470,6 @@ export default function FacultyMarks() {
     if (!selectedExam || !selectedSubject) return;
     setSavingMarks(true);
 
-    const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
-
     const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const wasRejected = evaluationStatus === "REJECTED";
 
@@ -697,8 +480,8 @@ export default function FacultyMarks() {
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Tanjiro Kamado",
-      empId: `EMP-${staffId}`,
+      faculty: "Faculty In-Charge",
+      empId: "EMP-FACULTY",
       status: "SUBMITTED",
       adminRemarks: "Submitted to Admin. Awaiting verification review.",
       rows: currentStudents,
@@ -718,7 +501,6 @@ export default function FacultyMarks() {
           examinationId: Number(selectedExam),
           subjectId: Number(selectedSubject),
           studentId: Number(s.studentId),
-          facultyId: Number(staffId),
           rollNo: s.rollNo,
           studentName: s.name,
           internalMarks: Number(s.internal || 0),
@@ -967,27 +749,7 @@ export default function FacultyMarks() {
           {/* Card 1: Academic Context Filters */}
           <div className="cms-card" style={{ marginBottom: 16 }}>
             <div className="cms-card-body">
-              {/* Quick Assigned Classes Selector Bar */}
-              {allocatedSections.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap", padding: "10px 14px", background: "var(--cms-subtle, #f8fafc)", borderRadius: 8, border: "1px solid var(--cms-border, #e2e8f0)" }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--cms-text)", display: "flex", alignItems: "center", gap: 6 }}>
-                    <ClipboardCheck size={15} style={{ color: "var(--cms-primary, #6F8400)" }} /> My Allocated Classes:
-                  </span>
-                  {allocatedSections.map((sec) => (
-                    <button
-                      key={sec.sectionId}
-                      type="button"
-                      className={`cms-btn cms-btn-xs ${String(selectedSection) === String(sec.sectionId) ? "cms-btn-primary" : "cms-btn-outline"}`}
-                      onClick={() => selectAssignedClass(sec)}
-                      style={{ fontWeight: 600 }}
-                    >
-                      ⭐ {sec.sectionName} ({sec.academicLevelName || `Year ${sec.academicLevelId}`})
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="cms-filters-marks">
+              <div className="cms-filters" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}>
                 <div className="cms-field">
                   <label>Board</label>
                   <select
@@ -1030,7 +792,6 @@ export default function FacultyMarks() {
                     value={selectedLevel}
                     onChange={(e) => {
                       setSelectedLevel(e.target.value);
-                      setSelectedSection("");
                       setContextApplied(false);
                     }}
                   >
@@ -1049,7 +810,6 @@ export default function FacultyMarks() {
                     value={selectedGroup}
                     onChange={(e) => {
                       setSelectedGroup(e.target.value);
-                      setSelectedSection("");
                       setContextApplied(false);
                     }}
                   >
@@ -1068,7 +828,6 @@ export default function FacultyMarks() {
                     value={selectedProgram}
                     onChange={(e) => {
                       setSelectedProgram(e.target.value);
-                      setSelectedSection("");
                       setContextApplied(false);
                     }}
                   >
@@ -1085,18 +844,21 @@ export default function FacultyMarks() {
                   <label>Section</label>
                   <select
                     value={selectedSection}
-                    onChange={(e) => handleSectionChange(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedSection(e.target.value);
+                      setContextApplied(false);
+                    }}
                   >
                     <option value="">Select Section</option>
-                    {displaySections.map((s) => (
+                    {sectionsList.map((s) => (
                       <option key={s.sectionId || s.id} value={s.sectionId || s.id}>
-                        {s.isAssigned ? `⭐ ${s.sectionName || s.name} (Assigned)` : (s.sectionName || s.name || `Section ${s.sectionId || s.id}`)}
+                        {s.sectionName || s.name}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="att-filter-action">
+                <div className="att-filter-action" style={{ alignSelf: "flex-end" }}>
                   <button
                     type="button"
                     className="cms-btn cms-btn-primary"
@@ -1109,6 +871,15 @@ export default function FacultyMarks() {
               </div>
             </div>
           </div>
+
+          {/* Prompt before clicking "Enter Marks" */}
+          {!contextApplied && (
+            <div className="cms-card">
+              <div style={{ padding: "44px 20px", textAlign: "center", color: "var(--cms-muted)", fontSize: 14 }}>
+                Please select your Academic Context filters above and click <strong>Enter Marks</strong> to load examinations and student marks entry sheet.
+              </div>
+            </div>
+          )}
 
           {/* Card 2: Marks Entry Workspace (Revealed after clicking "Enter Marks") */}
           {contextApplied && (
@@ -1164,7 +935,7 @@ export default function FacultyMarks() {
                         }}
                       >
                         <option value="">Select Subject</option>
-                        {filteredSubjects.map((sub) => (
+                        {subjectsList.map((sub) => (
                           <option key={sub.subjectId || sub.id} value={sub.subjectId || sub.id}>
                             {sub.subjectName || sub.name} ({sub.subjectCode || sub.code || "SUB"})
                           </option>

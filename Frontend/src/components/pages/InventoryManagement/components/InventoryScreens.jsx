@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { inventoryReport } from "../inventoryApi.js";
-import { getApiErrorMessage } from "@/api/apiClient.js";
-import { Boxes, CircleAlert, IndianRupee, ShoppingCart } from "lucide-react";
+import { useMemo, useState } from "react";
+import { BarChart3, Boxes, CircleAlert, IndianRupee, ShoppingCart } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   actionColumn,
   Action,
@@ -22,21 +21,27 @@ import {
   validRange,
 } from "../inventoryModel.js";
 import { buildReport, MOVEMENT_COLUMNS, REPORTS } from "../inventoryReports.js";
-import { DEPARTMENTS } from "../data/inventoryMockData.js";
 
 const fieldsToColumns = (fields) =>
   fields.map(([key, label, type]) =>
     type === "money" ? currencyColumn(key, label) : column(key, label),
   );
 export const ITEM_COLUMNS = [
+  column("index", "#"),
   column("name", "Item Name"),
+  column("code", "Item Code"),
   column("category", "Category"),
-  column("unit", "Unit of Measurement"),
-  column("type", "Item Type"),
-  column("brand", "Brand"),
-  column("department", "Department"),
+  column("description", "Description"),
+  column("unit", "Unit"),
+  column("quantity", "Current Stock"),
+  column("minStock", "Minimum Stock"),
+  currencyColumn("unitCost", "Unit Cost"),
+  currencyColumn("stockValue", "Total Stock Value"),
+  column("supplier", "Supplier"),
   column("location", "Storage Location"),
-  column("rack", "Rack / Shelf Number"),
+  column("department", "Department"),
+  column("status", "Status"),
+  column("stockStatus", "Stock Status"),
 ];
 const movementColumns = fieldsToColumns(MOVEMENT_COLUMNS);
 
@@ -59,34 +64,36 @@ export function InventoryDashboard({ state, open, navigate, refresh }) {
     .reverse()
     .slice(0, 8)
     .map((m) => enrichMovement(state, m));
+  const categoryData = state.categories
+    .map((c) => {
+      const records = items.filter((i) => i.categoryId === c.id);
+      return {
+        id: c.id,
+        name: c.name,
+        count: records.length,
+        value: records.reduce((total, item) => total + stockValue(item), 0),
+      };
+    })
+    .filter((c) => c.count);
   const stats = [
-    [
-      "Total Items",
-      state.dashboard?.kpis?.totalItems ?? items.length,
-      Boxes,
-      "Distinct item records",
-    ],
+    ["Total Items", items.length, Boxes, "Distinct item records"],
     [
       "Total Stock Value",
-      money(
-        state.dashboard?.kpis?.totalStockValue ??
-          items.reduce((total, item) => total + stockValue(item), 0),
-      ),
+      money(items.reduce((total, item) => total + stockValue(item), 0)),
       IndianRupee,
       "Moving weighted-average cost",
     ],
     [
       "Low Stock Items",
-      state.dashboard?.kpis?.lowStockCount ?? alerts.length,
+      alerts.length,
       CircleAlert,
       "Active items below minimum, including zero stock",
     ],
     [
       "Pending Orders",
-      state.dashboard?.kpis?.pendingOrdersCount ??
-        state.orders.filter((o) => o.status === "Pending").length,
+      state.orders.filter((o) => o.status === "Pending").length,
       ShoppingCart,
-      "Pending purchase orders",
+      state.orders.length ? "Local demo purchase orders" : "No purchase orders in this demo",
     ],
   ];
   return (
@@ -121,59 +128,131 @@ export function InventoryDashboard({ state, open, navigate, refresh }) {
         ]}
         rows={recent}
         onView={(m) => open("movement-detail", m)}
+        exportable={false}
       />
+      <div className="inventory-panel-head">
+        <h2>Low Stock Alerts</h2>
+        <span>{alerts.length} items need attention</span>
+      </div>
+      <InventoryTable
+        title="Low Stock Alerts"
+        rows={alerts}
+        columns={[
+          column("name", "Item Name"),
+          column("code", "Item Code"),
+          column("quantity", "Current Stock"),
+          column("minStock", "Minimum Stock"),
+          column("stockStatus", "Status"),
+          actionColumn((item) => (
+            <div className="inventory-row-actions">
+              <Action onClick={() => open("item-detail", item)}>View Item</Action>
+              <Action onClick={() => open("stock-in", null, item.id)}>Restock</Action>
+            </div>
+          )),
+        ]}
+        exportable={false}
+      />
+      <div className="inventory-two-columns">
+        <section className="cms-card inventory-panel">
+          <h2>
+            <BarChart3 size={18} /> Inventory by Category
+          </h2>
+          <div className="inventory-chart">
+            <ResponsiveContainer width="100%" height={330}>
+              <BarChart data={categoryData} layout="vertical" margin={{ left: 6, right: 20 }}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  horizontal={false}
+                  stroke="var(--cms-border)"
+                />
+                <XAxis type="number" allowDecimals={false} stroke="var(--cms-muted)" />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={145}
+                  tick={{ fontSize: 10 }}
+                  stroke="var(--cms-muted)"
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--cms-surface)",
+                    color: "var(--cms-text)",
+                    borderColor: "var(--cms-border)",
+                  }}
+                />
+                <Bar dataKey="count" name="Items" fill="var(--cms-primary)" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+        <section className="cms-card inventory-panel">
+          <h2>Inventory Value Summary</h2>
+          {categoryData.map((c) => (
+            <div className="inventory-value-row" key={c.id}>
+              <span>{c.name}</span>
+              <strong>{money(c.value)}</strong>
+            </div>
+          ))}
+        </section>
+      </div>
+      <section className="cms-card inventory-panel">
+        <h2>Recent Activity</h2>
+        <ul className="inventory-activity">
+          {state.activities.slice(0, 8).map((a) => (
+            <li key={a.id}>
+              <time>{a.date}</time>
+              <span>{a.text}</span>
+            </li>
+          ))}
+          {recent.slice(0, 5).map((m) => (
+            <li key={`activity-${m.id}`}>
+              <time>{m.date}</time>
+              <span>
+                {m.type}: {m.quantity} {m.unit} · {m.item} · {m.performedBy}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
     </>
   );
 }
 
 export function InventoryItems({ state, open, remove, refresh }) {
   const { filters, change, reset } = useFilters();
-  const rows = filterItems(state, filters);
+  const rows = filterItems(state, filters).map((item, index) => ({ ...item, index: index + 1 }));
+  const columns = [
+    ...ITEM_COLUMNS,
+    actionColumn((item) => (
+      <div className="inventory-row-actions">
+        <Action onClick={() => open("item-detail", item)}>View / Ledger</Action>
+        <Action onClick={() => open("items", item)}>Edit</Action>
+        <Action onClick={() => open("stock-in", null, item.id)} disabled={item.status !== "Active"}>
+          Stock In
+        </Action>
+        <Action
+          onClick={() => open("stock-out", null, item.id)}
+          disabled={item.status !== "Active" || item.quantity === 0}
+        >
+          Stock Out
+        </Action>
+        <Action onClick={() => remove("items", item)}>Delete / Deactivate</Action>
+      </div>
+    )),
+  ];
   return (
-    <div className="inventory-items-screen">
+    <>
+      <InventoryFilters state={state} values={filters} onChange={change} />
       <InventoryTable
         key={reset}
         title="Inventory Items"
         rows={rows}
-        columns={ITEM_COLUMNS}
-        onView={(item) => open("item-detail", item)}
-        onEdit={(item) => open("items", item)}
-        onDelete={(item) => remove("items", item)}
+        columns={columns}
         onAdd={() => open("items")}
         addLabel="Add Item"
         onRefresh={refresh}
-        toolbarExtra={
-          <div className="inventory-items-toolbar-filters">
-            <select
-              className="cms-btn cms-btn-ghost"
-              aria-label="Filter by department"
-              value={filters.department || ""}
-              onChange={(event) => change("department", event.target.value)}
-            >
-              <option value="">Department: All</option>
-              {DEPARTMENTS.map((department) => (
-                <option key={department} value={department}>
-                  {department}
-                </option>
-              ))}
-            </select>
-            <select
-              className="cms-btn cms-btn-ghost"
-              aria-label="Filter by stock status"
-              value={filters.stockStatus || ""}
-              onChange={(event) => change("stockStatus", event.target.value)}
-            >
-              <option value="">Stock Status: All</option>
-              {["In Stock", "Low Stock", "Out of Stock"].map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-        }
       />
-    </div>
+    </>
   );
 }
 
@@ -205,6 +284,7 @@ export function InventoryMovements({ state, type, all, open, correct, returnItem
         are immutable. Reverse the latest movement for an item to correct it; the correction stays
         in the ledger.
       </p>
+      <InventoryFilters state={state} values={scope} onChange={change} mode="movements" />
       <InventoryTable
         key={reset}
         title={all ? "Stock Movement History" : type}
@@ -213,54 +293,6 @@ export function InventoryMovements({ state, type, all, open, correct, returnItem
         onAdd={() => open(type === "Stock In" ? "stock-in" : "stock-out")}
         addLabel={`Add ${type}`}
         onRefresh={refresh}
-        toolbarExtra={
-          <div className="inventory-movement-toolbar-filters">
-            <label>
-              <span>Department</span>
-              <select
-                className="cms-btn cms-btn-ghost"
-                value={filters.department || ""}
-                onChange={(event) => change("department", event.target.value)}
-              >
-                <option value="">All Departments</option>
-                {DEPARTMENTS.map((department) => (
-                  <option key={department} value={department}>
-                    {department}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Date From</span>
-              <input
-                className="cms-btn cms-btn-ghost"
-                type="date"
-                value={filters.from || ""}
-                max={filters.to || undefined}
-                onChange={(event) => change("from", event.target.value)}
-              />
-            </label>
-            <label>
-              <span>Date To</span>
-              <input
-                className="cms-btn cms-btn-ghost"
-                type="date"
-                value={filters.to || ""}
-                min={filters.from || undefined}
-                aria-invalid={!validRange(filters)}
-                aria-describedby={
-                  !validRange(filters) ? "inventory-movement-date-error" : undefined
-                }
-                onChange={(event) => change("to", event.target.value)}
-              />
-            </label>
-            {!validRange(filters) && (
-              <span id="inventory-movement-date-error" role="status">
-                Date To must be on or after Date From.
-              </span>
-            )}
-          </div>
-        }
       />
     </>
   );
@@ -373,39 +405,11 @@ export function InventoryReports({ state, open, returnItem }) {
       setReset((r) => r + 1);
     } else setDraft((f) => ({ ...f, [name]: value }));
   };
-  const fallback = useMemo(() => buildReport(state, report, applied), [state, report, applied]);
-  const [remote, setRemote] = useState(null);
-  const [reportError, setReportError] = useState("");
-  useEffect(() => {
-    const controller = new AbortController();
-    setRemote(null);
-    setReportError("");
-    inventoryReport(report, applied, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) setRemote(result);
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setReportError(getApiErrorMessage(error));
-      });
-    return () => controller.abort();
-  }, [report, applied, state]);
-  const result = remote || { columns: fallback.columns, rows: [] };
+  const result = useMemo(() => buildReport(state, report, applied), [state, report, applied]);
   const columns = fieldsToColumns(result.columns);
   if (report === "Low Stock Report")
     columns.push(
-      actionColumn((i) => {
-        const matches = state.items.filter(
-          (item) =>
-            item.name === i.name &&
-            state.categories.find((c) => c.id === item.categoryId)?.name === i.category,
-        );
-        const item = matches.length === 1 ? matches[0] : null;
-        return (
-          <Action disabled={!item} onClick={() => open("stock-in", null, item.id)}>
-            Restock
-          </Action>
-        );
-      }),
+      actionColumn((i) => <Action onClick={() => open("stock-in", null, i.id)}>Restock</Action>),
     );
   if (report === "Returnable Items Report")
     columns.push(
@@ -459,11 +463,6 @@ export function InventoryReports({ state, open, returnItem }) {
         columns={columns}
         rows={result.rows}
       />
-      {reportError && (
-        <p className="inventory-note" role="alert">
-          {reportError}
-        </p>
-      )}
     </>
   );
 }

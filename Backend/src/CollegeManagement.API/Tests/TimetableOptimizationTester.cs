@@ -35,10 +35,14 @@ namespace CollegeManagement.API.Tests
 
             Console.WriteLine("\n[1] Checking Timetable Table Row Counts & Existing Indexes...");
             var ttCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM `Timetables`;");
+            var backupCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM `TimetableBackups`;");
+            var backupSlotCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM `TimetableBackupSlots`;");
             var periodsCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM `Periods`;");
             var roomsCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM `Rooms`;");
 
             Console.WriteLine($"  - Timetables: {ttCount} rows");
+            Console.WriteLine($"  - TimetableBackups: {backupCount} rows");
+            Console.WriteLine($"  - TimetableBackupSlots: {backupSlotCount} rows");
             Console.WriteLine($"  - Periods: {periodsCount} rows");
             Console.WriteLine($"  - Rooms: {roomsCount} rows");
 

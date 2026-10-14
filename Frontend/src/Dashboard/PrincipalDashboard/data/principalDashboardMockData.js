@@ -6,14 +6,14 @@ export const principalDashboardData = {
     academicYear: "2026-2027",
   },
   summary: [
-    { id: "students", label: "Total Students", value: "1,248", detail: "642 male  /  606 female", trend: "+5.6%", tone: "green", icon: "users", to: "/dashboard/students", moduleKey: "student-management" },
-    { id: "staff", label: "Total Staff", value: "96", detail: "72 teaching  /  24 support", trend: "+3.2%", tone: "violet", icon: "staff", to: "/dashboard/staff", moduleKey: "staff-management" },
-    { id: "attendance", label: "Student Attendance", value: "88.4%", detail: "1,103 present today", trend: "+2.8%", tone: "blue", icon: "attendance", to: "/dashboard/attendance/student", moduleKey: "attendance" },
-    { id: "staffAttendance", label: "Staff Attendance", value: "94.8%", detail: "91 staff present today", trend: "+1.4%", tone: "teal", icon: "staffAttendance", to: "/dashboard/attendance/staff", moduleKey: "staff-attendance" },
-    { id: "classes", label: "Active Classes", value: "32", detail: "16 sections per year", trend: "On track", tone: "indigo", icon: "classes", to: "/dashboard/sections", moduleKey: "section-room" },
-    { id: "fees", label: "Pending Fees", value: "INR 7.45L", detail: "184 students pending", trend: "-4.6%", tone: "amber", icon: "fees", to: "/dashboard/fee-structure", moduleKey: "fee-management" },
-    { id: "exams", label: "Upcoming Exams", value: "6", detail: "Next: Unit Test - I", trend: "This month", tone: "rose", icon: "exams", to: "/dashboard/examinations", moduleKey: "examination" },
-    { id: "admissions", label: "New Admissions", value: "84", detail: "17 applications pending", trend: "+12.5%", tone: "mint", icon: "admissions", to: "/dashboard/admission", moduleKey: "student-admission" },
+    { id: "students", label: "Total Students", value: "1,248", detail: "642 male  /  606 female", trend: "+5.6%", tone: "green", icon: "users", to: "/dashboard/students" },
+    { id: "staff", label: "Total Staff", value: "96", detail: "72 teaching  /  24 support", trend: "+3.2%", tone: "violet", icon: "staff", to: "/dashboard/staff" },
+    { id: "attendance", label: "Student Attendance", value: "88.4%", detail: "1,103 present today", trend: "+2.8%", tone: "blue", icon: "attendance", to: "/dashboard/attendance/student" },
+    { id: "staffAttendance", label: "Staff Attendance", value: "94.8%", detail: "91 staff present today", trend: "+1.4%", tone: "teal", icon: "staffAttendance", to: "/dashboard/attendance/staff" },
+    { id: "classes", label: "Active Classes", value: "32", detail: "16 sections per year", trend: "On track", tone: "indigo", icon: "classes", to: "/dashboard/sections" },
+    { id: "fees", label: "Pending Fees", value: "INR 7.45L", detail: "184 students pending", trend: "-4.6%", tone: "amber", icon: "fees", to: "/dashboard/fee-structure" },
+    { id: "exams", label: "Upcoming Exams", value: "6", detail: "Next: Unit Test - I", trend: "This month", tone: "rose", icon: "exams", to: "/dashboard/examinations" },
+    { id: "admissions", label: "New Admissions", value: "84", detail: "17 applications pending", trend: "+12.5%", tone: "mint", icon: "admissions", to: "/dashboard/admission" },
   ],
   attendance: {
     total: 1248,
@@ -55,10 +55,10 @@ export const principalDashboardData = {
     { id: 3, title: "Staff Meeting", description: "Monthly academic review in the seminar hall.", date: "05 Oct 2026", priority: "Normal", tone: "green" },
   ],
   activities: [
-    { id: 1, title: "New student admission", description: "Ravi Kumar joined 1st Year MPC.", time: "Today, 10:30 AM", icon: "user", tone: "green", to: "/dashboard/students", moduleKey: "student-management" },
-    { id: 2, title: "Fee payment received", description: "Ananya Rao paid INR 25,000 toward tuition.", time: "Today, 09:45 AM", icon: "fees", tone: "violet", to: "/dashboard/fee-structure", moduleKey: "fee-management" },
-    { id: 3, title: "Examination schedule published", description: "Unit Test - I schedule is ready for review.", time: "Yesterday, 04:15 PM", icon: "exam", tone: "amber", to: "/dashboard/examinations", moduleKey: "examination" },
-    { id: 4, title: "Leave request submitted", description: "Dr. Siva Geddam requested casual leave.", time: "Yesterday, 11:20 AM", icon: "leave", tone: "blue", to: "/dashboard/leave-management", moduleKey: "staff-leave-management" },
+    { id: 1, title: "New student admission", description: "Ravi Kumar joined 1st Year MPC.", time: "Today, 10:30 AM", icon: "user", tone: "green", to: "/dashboard/students" },
+    { id: 2, title: "Fee payment received", description: "Ananya Rao paid INR 25,000 toward tuition.", time: "Today, 09:45 AM", icon: "fees", tone: "violet", to: "/dashboard/fee-structure" },
+    { id: 3, title: "Examination schedule published", description: "Unit Test - I schedule is ready for review.", time: "Yesterday, 04:15 PM", icon: "exam", tone: "amber", to: "/dashboard/examinations" },
+    { id: 4, title: "Leave request submitted", description: "Dr. Siva Geddam requested casual leave.", time: "Yesterday, 11:20 AM", icon: "leave", tone: "blue", to: "/dashboard/leave-management" },
   ],
   feeCollection: [
     { label: "May", value: 12.8 },
@@ -124,17 +124,17 @@ export const principalPeriodSnapshots = {
 };
 
 export const principalQuickActions = [
-  { label: "Add Student", to: "/dashboard/admission", icon: "student", tone: "green", moduleKey: "student-admission", action: "create" },
-  { label: "Add Staff", to: "/dashboard/staff/add", icon: "staff", tone: "blue", moduleKey: "staff-management", action: "create" },
-  { label: "Mark Attendance", to: "/dashboard/attendance/student", icon: "attendance", tone: "violet", moduleKey: "attendance", action: "view" },
-  { label: "Create Exam", to: "/dashboard/examinations/add", icon: "exam", tone: "amber", moduleKey: "examination", action: "create" },
-  { label: "Publish Result", to: "/dashboard/results", icon: "result", tone: "teal", moduleKey: "results", action: "view" },
-  { label: "Generate Report", to: "/dashboard/reports", icon: "report", tone: "rose", moduleKey: "reports-analytics", action: "view" },
+  { label: "Add Student", to: "/dashboard/admission", icon: "student", tone: "green" },
+  { label: "Add Staff", to: "/dashboard/staff/add", icon: "staff", tone: "blue" },
+  { label: "Mark Attendance", to: "/dashboard/attendance/student", icon: "attendance", tone: "violet" },
+  { label: "Create Exam", to: "/dashboard/examinations/add", icon: "exam", tone: "amber" },
+  { label: "Publish Result", to: "/dashboard/results", icon: "result", tone: "teal" },
+  { label: "Generate Report", to: "/dashboard/reports", icon: "report", tone: "rose" },
 ];
 
 export const principalReports = [
-  { label: "Student Attendance", meta: "Daily overview", to: "/dashboard/attendance/student", icon: "attendance", tone: "green", moduleKey: "attendance" },
-  { label: "Academic Performance", meta: "Term comparison", to: "/dashboard/reports", icon: "performance", tone: "violet", moduleKey: "reports-analytics" },
-  { label: "Fee Collection", meta: "Monthly summary", to: "/dashboard/fee-structure", icon: "fees", tone: "amber", moduleKey: "fee-management" },
-  { label: "Student Strength", meta: "Class distribution", to: "/dashboard/reports", icon: "students", tone: "blue", moduleKey: "reports-analytics" },
+  { label: "Student Attendance", meta: "Daily overview", to: "/dashboard/attendance/student", icon: "attendance", tone: "green" },
+  { label: "Academic Performance", meta: "Term comparison", to: "/dashboard/reports", icon: "performance", tone: "violet" },
+  { label: "Fee Collection", meta: "Monthly summary", to: "/dashboard/fee-structure", icon: "fees", tone: "amber" },
+  { label: "Student Strength", meta: "Class distribution", to: "/dashboard/reports", icon: "students", tone: "blue" },
 ];
