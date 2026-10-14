@@ -42,6 +42,8 @@ import {
   LogOut,
   AlertCircle,
   ArrowRight,
+  Receipt,
+  CreditCard,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
@@ -104,6 +106,7 @@ const isUnenrolledAdmissionCandidate = (candidate) => {
 };
 
 const hostelReportCategories = [
+  { id: "Monthly Revenue & Fee Report", label: "Monthly Revenue & Fee Report" },
   { id: "Block Report", label: "Block Report" },
   { id: "Room Report", label: "Room Report" },
   { id: "Bed Allocation Report", label: "Bed Allocation Report" },
@@ -1224,6 +1227,91 @@ export default function HostelPage() {
   useEffect(() => {
     setReportPage(1);
   }, [reportCategory, reportBlockFilter, reportCategoryFilter, reportSearch]);
+
+  // ── Monthly Revenue & Fee Collections Persistent State ────────────────
+  const STORAGE_KEY_HOSTEL_PAYMENTS = "cms_hostel_fee_payments";
+  const [feePayments, setFeePayments] = useState(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage?.getItem(STORAGE_KEY_HOSTEL_PAYMENTS) : null;
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {
+      "1": { paidAmount: 12000, lastPaymentDate: "2026-10-02", paymentMode: "UPI (GPay)", receiptNo: "RCP-2026-001", notes: "Full payment received" },
+      "2": { paidAmount: 8500, lastPaymentDate: "2026-10-03", paymentMode: "Net Banking", receiptNo: "RCP-2026-002", notes: "Paid via College Portal" },
+      "3": { paidAmount: 6000, lastPaymentDate: "2026-10-04", paymentMode: "UPI (PhonePe)", receiptNo: "RCP-2026-003", notes: "Full fee cleared" },
+      "4": { paidAmount: 4500, lastPaymentDate: "2026-10-05", paymentMode: "Cash", receiptNo: "RCP-2026-004", notes: "Cash counter payment" },
+      "5": { paidAmount: 3500, lastPaymentDate: "2026-10-06", paymentMode: "UPI", receiptNo: "RCP-2026-005", notes: "Partial fee received (Due: ₹2,500)" },
+      "6": { paidAmount: 0, lastPaymentDate: "-", paymentMode: "-", receiptNo: "-", notes: "Fee pending" },
+    };
+  });
+
+  const handleSaveFeePayment = (allocationId, paymentRecord) => {
+    setFeePayments((prev) => {
+      const next = { ...prev, [String(allocationId)]: paymentRecord };
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage?.setItem(STORAGE_KEY_HOSTEL_PAYMENTS, JSON.stringify(next));
+        }
+      } catch {}
+      return next;
+    });
+  };
+
+  // Enriched Student Fee & Dues Records tied to active allocations
+  const revenueStudentRecords = useMemo(() => {
+    return activeAllocations.map((a, idx) => {
+      const allocKey = String(a.id || a.allocationId || idx + 1);
+      const studentKey = String(a.studentId || a.admissionNo || allocKey);
+      const paymentInfo = feePayments[allocKey] || feePayments[studentKey] || feePayments[String(idx + 1)] || null;
+      
+      const rawFee = parseFloat(String(a.monthlyFee || a.fee || 0).replace(/[^0-9.]/g, "")) || 0;
+      const monthlyFee = rawFee > 0 ? rawFee : 6000;
+      
+      const paidAmount = paymentInfo?.paidAmount !== undefined 
+        ? Math.min(monthlyFee, Math.max(0, Number(paymentInfo.paidAmount))) 
+        : (paymentInfo === null && idx < 4 ? monthlyFee : 0);
+      const dueAmount = Math.max(0, monthlyFee - paidAmount);
+      const paymentStatus = dueAmount === 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Pending";
+      
+      return {
+        ...a,
+        allocKey,
+        studentId: a.studentId || idx + 1,
+        admissionNo: a.admissionNo || `ADM-2026-00${idx + 1}`,
+        studentName: a.studentName || a.name || `Resident Student #${idx + 1}`,
+        blockName: a.blockName || a.hostelName || blocks.find((b) => Number(b.id) === Number(a.hostelId))?.name || "Hostel Block",
+        roomBadge: a.roomBadge || (a.room && a.bed ? `${a.room} (${a.bed})` : (a.roomNumber || a.room || `Room #${101 + idx}`)),
+        monthlyFee,
+        paidAmount,
+        dueAmount,
+        paymentStatus,
+        lastPaymentDate: paymentInfo?.lastPaymentDate || (paidAmount > 0 ? "2026-10-05" : "-"),
+        receiptNo: paymentInfo?.receiptNo || (paidAmount > 0 ? `RCP-2026-00${idx + 1}` : "-"),
+        paymentMode: paymentInfo?.paymentMode || (paidAmount > 0 ? "UPI" : "-"),
+        notes: paymentInfo?.notes || "",
+      };
+    });
+  }, [activeAllocations, feePayments, blocks]);
+
+  const revenueSummary = useMemo(() => {
+    const totalBilled = revenueStudentRecords.reduce((sum, r) => sum + r.monthlyFee, 0);
+    const totalPaid = revenueStudentRecords.reduce((sum, r) => sum + r.paidAmount, 0);
+    const totalDue = revenueStudentRecords.reduce((sum, r) => sum + r.dueAmount, 0);
+    const paidCount = revenueStudentRecords.filter((r) => r.paymentStatus === "Paid").length;
+    const partialCount = revenueStudentRecords.filter((r) => r.paymentStatus === "Partial").length;
+    const pendingCount = revenueStudentRecords.filter((r) => r.paymentStatus === "Pending").length;
+    const efficiencyRate = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
+
+    return {
+      totalBilled,
+      totalPaid,
+      totalDue,
+      paidCount,
+      partialCount,
+      pendingCount,
+      efficiencyRate,
+    };
+  }, [revenueStudentRecords]);
 
 
   // Global Dialogs & Modals
@@ -3504,7 +3592,16 @@ export default function HostelPage() {
           </div>
 
           {/* Card 7: MONTHLY REVENUE */}
-          <div className="cms-dash-kpi-card">
+          <div
+            className="cms-dash-kpi-card"
+            style={{ cursor: "pointer", transition: "all 0.2s ease" }}
+            onClick={() => {
+              setActiveMajorTab("reports");
+              setReportCategory("Monthly Revenue & Fee Report");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            title="Click to view Student-by-Student Dues & Fee Collection Report →"
+          >
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
               <IndianRupee size={20} />
             </div>
@@ -3518,7 +3615,10 @@ export default function HostelPage() {
               <div className="cms-dash-kpi-val">
                 {monthlyRevenue > 0 ? `₹${monthlyRevenue.toLocaleString()}` : "₹0"}
               </div>
-              <div className="cms-dash-kpi-sub">Hostel fees billing</div>
+              <div className="cms-dash-kpi-sub" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>Hostel fees billing</span>
+                <span style={{ color: "var(--cms-primary)", fontWeight: 700, fontSize: "11px" }}>View Dues →</span>
+              </div>
             </div>
           </div>
 
@@ -7413,7 +7513,9 @@ export default function HostelPage() {
   const renderReports = () => {
     // 1. Raw dataset by category
     let rawData = [];
-    if (reportCategory === "Block Report") {
+    if (reportCategory === "Monthly Revenue & Fee Report") {
+      rawData = revenueStudentRecords;
+    } else if (reportCategory === "Block Report") {
       rawData = blocks;
     } else if (reportCategory === "Room Report") {
       rawData = rooms;
@@ -7428,7 +7530,7 @@ export default function HostelPage() {
     } else if (reportCategory === "Warden Report") {
       rawData = wardens;
     } else {
-      rawData = blocks;
+      rawData = revenueStudentRecords;
     }
 
     // 2. Filter by Block
@@ -7485,6 +7587,14 @@ export default function HostelPage() {
       const cFilter = String(reportCategoryFilter || "").toLowerCase().trim();
       filtered = filtered.filter((item) => {
         if (!item) return false;
+        if (reportCategory === "Monthly Revenue & Fee Report") {
+          const pStatus = String(item.paymentStatus || "").toLowerCase().trim();
+          if (cFilter === "paid") return pStatus === "paid";
+          if (cFilter === "partial") return pStatus === "partial";
+          if (cFilter === "pending") return pStatus === "pending";
+          return pStatus.includes(cFilter);
+        }
+
         const iStatus = String(item.status || "").toLowerCase().trim();
         if (cFilter === "active") return iStatus === "active";
         if (cFilter === "inactive") return iStatus !== "active";
@@ -7529,6 +7639,20 @@ export default function HostelPage() {
     // Helper to get structured columns for report export and printing
     const getReportColumns = (cat) => {
       switch (cat) {
+        case "Monthly Revenue & Fee Report":
+          return [
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || "-" },
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || "-" },
+            { key: "blockName", label: "Hostel Block", getter: (r) => r.blockName || "-" },
+            { key: "roomBadge", label: "Room & Bed", getter: (r) => r.roomBadge || "-" },
+            { key: "monthlyFee", label: "Monthly Fee", getter: (r) => `₹${Number(r.monthlyFee || 0).toLocaleString()}` },
+            { key: "paidAmount", label: "Amount Paid", getter: (r) => `₹${Number(r.paidAmount || 0).toLocaleString()}` },
+            { key: "dueAmount", label: "Amount Due", getter: (r) => `₹${Number(r.dueAmount || 0).toLocaleString()}` },
+            { key: "paymentStatus", label: "Status", getter: (r) => r.paymentStatus || "Pending" },
+            { key: "lastPaymentDate", label: "Payment Date", getter: (r) => r.lastPaymentDate || "-" },
+            { key: "receiptNo", label: "Receipt No", getter: (r) => r.receiptNo || "-" },
+            { key: "paymentMode", label: "Payment Mode", getter: (r) => r.paymentMode || "-" },
+          ];
         case "Block Report":
           return [
             { key: "code", label: "Block Code", getter: (r) => r.code || r.hostelCode || "-" },
@@ -7922,8 +8046,19 @@ export default function HostelPage() {
               >
                 <option value="">-- Filter by Category / Status --</option>
                 <option value="all">All</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
+                {reportCategory === "Monthly Revenue & Fee Report" && (
+                  <>
+                    <option value="Paid">Fully Paid (₹0 Due)</option>
+                    <option value="Partial">Partially Paid (Has Due)</option>
+                    <option value="Pending">Pending / Unpaid</option>
+                  </>
+                )}
+                {reportCategory !== "Monthly Revenue & Fee Report" && (
+                  <>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </>
+                )}
                 {reportCategory === "Block Report" && (
                   <>
                     <option value="Boys Hostel">Boys Hostel</option>
@@ -7969,17 +8104,103 @@ export default function HostelPage() {
           </div>
         </div>
 
+        {/* Real-time KPI Overview for Monthly Revenue & Fee Report */}
+        {reportCategory === "Monthly Revenue & Fee Report" && (
+          <div className="cms-revenue-report-kpis">
+            <div className="cms-rev-kpi-card is-billed">
+              <div className="cms-rev-kpi-icon">
+                <IndianRupee size={22} />
+              </div>
+              <div className="cms-rev-kpi-data">
+                <span className="cms-rev-kpi-label">TOTAL MONTHLY BILLED</span>
+                <span className="cms-rev-kpi-value">₹{revenueSummary.totalBilled.toLocaleString()}</span>
+                <span className="cms-rev-kpi-sub">{revenueStudentRecords.length} Active Residents</span>
+              </div>
+            </div>
+
+            <div className="cms-rev-kpi-card is-collected">
+              <div className="cms-rev-kpi-icon">
+                <CheckCircle2 size={22} />
+              </div>
+              <div className="cms-rev-kpi-data">
+                <span className="cms-rev-kpi-label">TOTAL COLLECTED (PAID)</span>
+                <span className="cms-rev-kpi-value" style={{ color: "var(--cms-green)" }}>
+                  ₹{revenueSummary.totalPaid.toLocaleString()}
+                </span>
+                <span className="cms-rev-kpi-sub">{revenueSummary.paidCount} Fully Paid Residents</span>
+              </div>
+            </div>
+
+            <div className="cms-rev-kpi-card is-pending">
+              <div className="cms-rev-kpi-icon">
+                <AlertCircle size={22} />
+              </div>
+              <div className="cms-rev-kpi-data">
+                <span className="cms-rev-kpi-label">TOTAL OUTSTANDING (DUE)</span>
+                <span className="cms-rev-kpi-value" style={{ color: "var(--cms-red)" }}>
+                  ₹{revenueSummary.totalDue.toLocaleString()}
+                </span>
+                <span className="cms-rev-kpi-sub">{revenueSummary.partialCount + revenueSummary.pendingCount} Students with Dues</span>
+              </div>
+            </div>
+
+            <div className="cms-rev-kpi-card is-efficiency">
+              <div className="cms-rev-kpi-icon">
+                <TrendingUp size={22} />
+              </div>
+              <div className="cms-rev-kpi-data">
+                <span className="cms-rev-kpi-label">COLLECTION EFFICIENCY</span>
+                <span className="cms-rev-kpi-value">{revenueSummary.efficiencyRate}%</span>
+                <div className="cms-rev-progress-bg">
+                  <div
+                    className="cms-rev-progress-fill"
+                    style={{ width: `${Math.min(100, Math.max(0, revenueSummary.efficiencyRate))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Report Content Card & Table */}
         <div className="cms-report-table-card cms-hostel-table-scroll">
-          <div className="cms-report-table-header">
-            <h3 className="cms-report-table-title">{reportCategory}</h3>
-            <span className="cms-report-badge-total">
-              Total Records: {filtered.length}
-            </span>
+          <div className="cms-report-table-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <h3 className="cms-report-table-title">{reportCategory}</h3>
+              <span className="cms-report-badge-total">
+                Total Records: {filtered.length}
+              </span>
+            </div>
+            {reportCategory === "Monthly Revenue & Fee Report" && (
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                style={{ height: 32, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 8 }}
+                onClick={() => setModal({ isOpen: true, type: "feePayment", mode: "add", data: revenueStudentRecords[0] || null })}
+              >
+                <Plus size={14} />
+                Record Fee Payment
+              </button>
+            )}
           </div>
 
           <table className="cms-report-table">
             <thead>
+              {reportCategory === "Monthly Revenue & Fee Report" && (
+                <tr>
+                  <th className="cms-report-th">ADM NO</th>
+                  <th className="cms-report-th">STUDENT NAME</th>
+                  <th className="cms-report-th">HOSTEL BLOCK</th>
+                  <th className="cms-report-th">ROOM &amp; BED</th>
+                  <th className="cms-report-th">MONTHLY FEE</th>
+                  <th className="cms-report-th">AMOUNT PAID</th>
+                  <th className="cms-report-th">AMOUNT DUE</th>
+                  <th className="cms-report-th">STATUS</th>
+                  <th className="cms-report-th">RECEIPT &amp; MODE</th>
+                  <th className="cms-report-th">PAYMENT DATE</th>
+                  <th className="cms-report-th" style={{ textAlign: "center" }}>ACTION</th>
+                </tr>
+              )}
               {reportCategory === "Block Report" && (
                 <tr>
                   <th className="cms-report-th">BLOCK CODE</th>
@@ -8069,6 +8290,59 @@ export default function HostelPage() {
                 </tr>
               ) : (
                 paginatedReports.map((item, idx) => {
+                  if (reportCategory === "Monthly Revenue & Fee Report") {
+                    const statusColor = item.paymentStatus === "Paid" 
+                      ? "var(--cms-green)" 
+                      : item.paymentStatus === "Partial" 
+                      ? "var(--cms-amber)" 
+                      : "var(--cms-red)";
+                    return (
+                      <tr key={item.allocKey || item.id || idx} className="cms-report-row">
+                        <td className="cms-report-td" style={{ fontWeight: 600 }}>{item.admissionNo}</td>
+                        <td className="cms-report-td" style={{ fontWeight: 700, color: "var(--cms-text)" }}>{item.studentName}</td>
+                        <td className="cms-report-td">{item.blockName}</td>
+                        <td className="cms-report-td">{item.roomBadge}</td>
+                        <td className="cms-report-td" style={{ fontWeight: 700 }}>₹{item.monthlyFee.toLocaleString()}</td>
+                        <td className="cms-report-td" style={{ fontWeight: 700, color: "var(--cms-green)" }}>₹{item.paidAmount.toLocaleString()}</td>
+                        <td className="cms-report-td" style={{ fontWeight: 700, color: item.dueAmount > 0 ? "var(--cms-red)" : "var(--cms-muted)" }}>
+                          {item.dueAmount > 0 ? `₹${item.dueAmount.toLocaleString()}` : "₹0 (Cleared)"}
+                        </td>
+                        <td className="cms-report-td">
+                          <span style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            padding: "3px 10px",
+                            borderRadius: 9999,
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            background: item.paymentStatus === "Paid" ? "var(--cms-green-soft)" : item.paymentStatus === "Partial" ? "var(--cms-amber-soft)" : "var(--cms-red-soft)",
+                            color: statusColor,
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor }} />
+                            {item.paymentStatus}
+                          </span>
+                        </td>
+                        <td className="cms-report-td">
+                          <div style={{ fontSize: 12, fontWeight: 600 }}>{item.receiptNo || "-"}</div>
+                          {item.paymentMode !== "-" && <div style={{ fontSize: 11, color: "var(--cms-muted)" }}>{item.paymentMode}</div>}
+                        </td>
+                        <td className="cms-report-td">{item.lastPaymentDate || "-"}</td>
+                        <td className="cms-report-td" style={{ textAlign: "center" }}>
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-primary"
+                            style={{ height: 28, padding: "0 10px", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 6 }}
+                            onClick={() => setModal({ isOpen: true, type: "feePayment", mode: "edit", data: item })}
+                            title="Record or update fee payment"
+                          >
+                            <CreditCard size={12} />
+                            {item.dueAmount > 0 ? "Collect Fee" : "Update"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
                   if (reportCategory === "Block Report") {
                     return (
                       <tr key={item.id || idx} className="cms-report-row">
@@ -8212,6 +8486,27 @@ export default function HostelPage() {
                 })
               )}
             </tbody>
+            {reportCategory === "Monthly Revenue & Fee Report" && filtered.length > 0 && (
+              <tfoot className="cms-report-tfoot">
+                <tr>
+                  <td colSpan={4} style={{ fontWeight: 800, textAlign: "right", letterSpacing: "0.5px" }}>
+                    FILTERED TOTALS ({filtered.length} Students):
+                  </td>
+                  <td style={{ fontWeight: 800, color: "var(--cms-text)" }}>
+                    ₹{filtered.reduce((s, r) => s + (r.monthlyFee || 0), 0).toLocaleString()}
+                  </td>
+                  <td style={{ fontWeight: 800, color: "var(--cms-green)" }}>
+                    ₹{filtered.reduce((s, r) => s + (r.paidAmount || 0), 0).toLocaleString()}
+                  </td>
+                  <td style={{ fontWeight: 800, color: "var(--cms-red)" }}>
+                    ₹{filtered.reduce((s, r) => s + (r.dueAmount || 0), 0).toLocaleString()}
+                  </td>
+                  <td colSpan={4} style={{ fontWeight: 700, color: "var(--cms-muted)" }}>
+                    Collection Efficiency: {Math.round((filtered.reduce((s, r) => s + (r.paidAmount || 0), 0) / (filtered.reduce((s, r) => s + (r.monthlyFee || 0), 0) || 1)) * 100)}%
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
 
           {/* Report Pagination Controls matching Screenshot 4 & SectionManagement reference */}
@@ -8538,6 +8833,15 @@ export default function HostelPage() {
             beds={beds}
             allocations={allocations}
             handleSaveTransfer={handleSaveTransfer}
+            showToast={showToast}
+          />
+        )}
+        {modal.isOpen && modal.type === "feePayment" && (
+          <FeePaymentModal
+            modal={modal}
+            closeModal={closeModal}
+            revenueStudentRecords={revenueStudentRecords}
+            handleSaveFeePayment={handleSaveFeePayment}
             showToast={showToast}
           />
         )}
@@ -13771,6 +14075,293 @@ function TransferModal({
                 {isSubmitting ? "Processing..." : "Approve & Release Bed"}
               </button>
             )}
+          </div>
+        </form>
+      </Modal>
+    );
+  }
+
+  // ── 11. FeePaymentModal (Live Hostel Fee Collection & Payment Recording) ──
+  function FeePaymentModal({
+    modal,
+    closeModal,
+    revenueStudentRecords = [],
+    handleSaveFeePayment,
+    showToast,
+  }) {
+    const currentItem = modal.data || revenueStudentRecords[0] || {};
+    const [selectedStudentKey, setSelectedStudentKey] = useState(
+      String(currentItem.allocKey || currentItem.allocationId || currentItem.id || "")
+    );
+
+    const selectedRecord = useMemo(() => {
+      return (
+        revenueStudentRecords.find(
+          (r) => String(r.allocKey || r.allocationId || r.id) === String(selectedStudentKey)
+        ) || currentItem
+      );
+    }, [revenueStudentRecords, selectedStudentKey, currentItem]);
+
+    const monthlyFee = selectedRecord.monthlyFee || 0;
+    const currentPaid = selectedRecord.paidAmount || 0;
+    const currentDue = Math.max(0, monthlyFee - currentPaid);
+
+    const [paymentAmount, setPaymentAmount] = useState(
+      currentDue > 0 ? String(currentDue) : String(monthlyFee)
+    );
+    const [paymentMode, setPaymentMode] = useState(selectedRecord.paymentMode !== "-" ? selectedRecord.paymentMode : "UPI (GPay / PhonePe)");
+    const [receiptNo, setReceiptNo] = useState(
+      selectedRecord.receiptNo && selectedRecord.receiptNo !== "-"
+        ? selectedRecord.receiptNo
+        : `RCP-${new Date().getFullYear()}-${String(Math.floor(1000 + Math.random() * 9000))}`
+    );
+    const [paymentDate, setPaymentDate] = useState(() => {
+      if (selectedRecord.lastPaymentDate && selectedRecord.lastPaymentDate !== "-") return selectedRecord.lastPaymentDate;
+      const now = new Date();
+      return now.toISOString().split("T")[0];
+    });
+    const [notes, setNotes] = useState(selectedRecord.notes || "");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Sync input when switching student
+    const handleStudentChange = (newKey) => {
+      setSelectedStudentKey(newKey);
+      const rec = revenueStudentRecords.find(
+        (r) => String(r.allocKey || r.allocationId || r.id) === String(newKey)
+      );
+      if (rec) {
+        const due = Math.max(0, rec.monthlyFee - rec.paidAmount);
+        setPaymentAmount(due > 0 ? String(due) : String(rec.monthlyFee));
+        if (rec.receiptNo && rec.receiptNo !== "-") setReceiptNo(rec.receiptNo);
+        if (rec.paymentMode && rec.paymentMode !== "-") setPaymentMode(rec.paymentMode);
+        setNotes(rec.notes || "");
+      }
+    };
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (isSubmitting) return;
+
+      const amt = parseFloat(paymentAmount);
+      if (isNaN(amt) || amt < 0) {
+        showToast("Please enter a valid numeric payment amount.", "warning");
+        return;
+      }
+
+      const newTotalPaid = Math.min(monthlyFee, amt);
+      const updatedRecord = {
+        paidAmount: newTotalPaid,
+        lastPaymentDate: paymentDate,
+        paymentMode,
+        receiptNo: receiptNo.trim() || `RCP-${Date.now()}`,
+        notes: notes.trim(),
+      };
+
+      setIsSubmitting(true);
+      try {
+        handleSaveFeePayment(selectedRecord.allocKey || selectedRecord.id, updatedRecord);
+        showToast(
+          `Fee payment of ₹${amt.toLocaleString()} recorded for ${selectedRecord.studentName || "student"} successfully!`,
+          "success"
+        );
+        closeModal();
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    return (
+      <Modal isOpen={true} onClose={closeModal} title="Record Hostel Fee Payment" size="md">
+        <form onSubmit={handleSubmit} className="cms-alloc-modal-form">
+          <div className="cms-alloc-modal-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Student Info Highlight Card */}
+            <div style={{
+              background: "var(--cms-subtle)",
+              border: "1px solid var(--cms-border)",
+              borderRadius: 12,
+              padding: "14px 16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)", textTransform: "uppercase" }}>Resident Student</span>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "var(--cms-text)" }}>{selectedRecord.studentName}</div>
+                </div>
+                <span style={{
+                  background: "var(--cms-surface)",
+                  border: "1px solid var(--cms-border)",
+                  borderRadius: 6,
+                  padding: "3px 8px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--cms-muted)",
+                }}>
+                  {selectedRecord.admissionNo}
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: "var(--cms-muted)", flexWrap: "wrap" }}>
+                <span><strong>Block:</strong> {selectedRecord.blockName}</span>
+                <span>•</span>
+                <span><strong>Room &amp; Bed:</strong> {selectedRecord.roomBadge}</span>
+              </div>
+            </div>
+
+            {/* Financial Status Summary */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 10,
+              background: "var(--cms-surface)",
+              border: "1px solid var(--cms-border)",
+              borderRadius: 10,
+              padding: "10px 14px",
+              textAlign: "center",
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>MONTHLY FEE</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--cms-text)", marginTop: 2 }}>
+                  ₹{monthlyFee.toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>ALREADY PAID</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--cms-green)", marginTop: 2 }}>
+                  ₹{currentPaid.toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>CURRENT DUE</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: currentDue > 0 ? "var(--cms-red)" : "var(--cms-green)", marginTop: 2 }}>
+                  ₹{currentDue.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {/* Resident Student Selector if multiple */}
+            <div className="cms-alloc-modal-field">
+              <label className="cms-alloc-modal-label">Select Resident Student</label>
+              <select
+                className="cms-alloc-modal-select"
+                value={selectedStudentKey}
+                onChange={(e) => handleStudentChange(e.target.value)}
+              >
+                {revenueStudentRecords.map((r) => (
+                  <option key={r.allocKey || r.id} value={String(r.allocKey || r.id)}>
+                    {r.studentName} ({r.admissionNo}) - Fee: ₹{r.monthlyFee.toLocaleString()} | Due: ₹{r.dueAmount.toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Payment Amount & Payment Date Grid */}
+            <div className="cms-hostel-form-grid">
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">
+                  Total Paid Amount (₹) <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontWeight: 700, color: "var(--cms-muted)" }}>₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={monthlyFee}
+                    step="50"
+                    required
+                    style={{ paddingLeft: 28 }}
+                    className="cms-alloc-modal-input"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="Enter amount paid"
+                  />
+                </div>
+                <span style={{ fontSize: 11, color: "var(--cms-muted)", marginTop: 3 }}>
+                  Max monthly bill: ₹{monthlyFee.toLocaleString()}
+                </span>
+              </div>
+
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">
+                  Payment Date <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  className="cms-alloc-modal-input"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Payment Mode & Receipt Number */}
+            <div className="cms-hostel-form-grid">
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">Payment Mode</label>
+                <select
+                  className="cms-alloc-modal-select"
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                >
+                  <option value="UPI (GPay / PhonePe)">UPI (GPay / PhonePe / Paytm)</option>
+                  <option value="Net Banking">Net Banking / NEFT / RTGS</option>
+                  <option value="Cash">Cash (Counter Deposit)</option>
+                  <option value="Debit / Credit Card">Debit / Credit Card (POS)</option>
+                  <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
+                </select>
+              </div>
+
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">Receipt / Transaction Ref No.</label>
+                <input
+                  type="text"
+                  className="cms-alloc-modal-input"
+                  value={receiptNo}
+                  onChange={(e) => setReceiptNo(e.target.value)}
+                  placeholder="e.g. RCP-2026-008"
+                />
+              </div>
+            </div>
+
+            {/* Notes / Remarks */}
+            <div className="cms-alloc-modal-field">
+              <label className="cms-alloc-modal-label">Notes / Remarks</label>
+              <input
+                type="text"
+                className="cms-alloc-modal-input"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. October hostel fee payment received via UPI"
+              />
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="cms-alloc-modal-footer">
+            <button
+              type="button"
+              className="cms-alloc-modal-cancel-btn"
+              onClick={closeModal}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="cms-alloc-modal-submit-btn"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "var(--cms-primary)",
+                color: "#fff",
+              }}
+            >
+              <Save size={14} />
+              {isSubmitting ? "Saving..." : "Save Payment Receipt"}
+            </button>
           </div>
         </form>
       </Modal>
