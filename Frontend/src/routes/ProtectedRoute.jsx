@@ -3,8 +3,59 @@ import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/feat
 import { getJwtExpiryState } from "@/api/apiClient.js";
 import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 
+export function isWardenRole(role, user) {
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  if (
+    normalizedRole.includes("warden") ||
+    normalizedRole === "hostel_warden" ||
+    normalizedRole === "hostel-warden" ||
+    normalizedRole === "chief_warden" ||
+    normalizedRole === "assistant_warden"
+  ) {
+    return true;
+  }
+  if (user && typeof user === "object") {
+    const userRole = String(user.role || "").trim().toLowerCase();
+    if (
+      userRole.includes("warden") ||
+      userRole === "hostel_warden" ||
+      userRole === "hostel-warden" ||
+      userRole === "chief_warden" ||
+      userRole === "assistant_warden"
+    ) {
+      return true;
+    }
+    const designation = String(user.designation || user.Designation || user.designationName || "").trim().toLowerCase();
+    if (designation.includes("warden")) {
+      return true;
+    }
+    const roleCodes = Array.isArray(user.roleCodes) ? user.roleCodes : [user.roleCodes];
+    if (roleCodes.some((rc) => String(rc || "").toLowerCase().includes("warden"))) {
+      return true;
+    }
+    const roles = Array.isArray(user.roles) ? user.roles : [user.roles];
+    if (
+      roles.some((r) => {
+        if (typeof r === "string") return r.toLowerCase().includes("warden");
+        if (r && typeof r === "object") {
+          return (
+            String(r.code || "").toLowerCase().includes("warden") ||
+            String(r.name || "").toLowerCase().includes("warden") ||
+            String(r.role || "").toLowerCase().includes("warden")
+          );
+        }
+        return false;
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isFacultyOrStaffRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
+  if (normalized.includes("warden")) return false;
   return (
     normalized === "faculty" ||
     normalized === "staff" ||
@@ -49,6 +100,7 @@ export default function ProtectedRoute({
   requirePrincipal = false,
   requireFaculty = false,
   requireExamCell = false,
+  requireWarden = false,
 }) {
   // Discard sessions created by the removed local preview login.
   const storedToken = getAuthToken();
@@ -64,22 +116,58 @@ export default function ProtectedRoute({
 
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
-  const isAdmin = user?.isAdmin || isAdminRole(role);
-  const isFaculty = isFacultyOrStaffRole(role);
-  const isPrincipal = isPrincipalRole(role);
-  const isParent = isParentRole(role);
-  const isAccountant = isAccountantRole(role);
+  const isWarden = isWardenRole(role, user);
+  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden;
+  const isFaculty = !isWarden && isFacultyOrStaffRole(role);
+  const isPrincipal = !isWarden && isPrincipalRole(role);
+  const isParent = !isWarden && isParentRole(role);
+  const isAccountant = !isWarden && isAccountantRole(role);
 
-  const isExamCell = isExamCellRole(role);
-  if (requireExamCell && !isExamCell) {
-    const destination = isAdmin ? "/dashboard" : isPrincipal ? "/principal-dashboard" : isAccountant ? "/accountant-dashboard" : isParent ? "/parent-dashboard" : isFaculty ? "/faculty-dashboard" : "/student-dashboard";
+  const isExamCell = !isWarden && isExamCellRole(role);
+
+  // Warden check
+  if (requireWarden && !isWarden && !isAdmin) {
+    const destination = isPrincipal
+      ? "/principal-dashboard"
+      : isAccountant
+      ? "/accountant-dashboard"
+      : isParent
+      ? "/parent-dashboard"
+      : isFaculty
+      ? "/faculty-dashboard"
+      : isExamCell
+      ? "/exam-cell-dashboard"
+      : "/student-dashboard";
     return <Navigate to={destination} replace />;
   }
-  if (isExamCell && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal)) {
+
+  // If a Warden attempts to access routes restricted to other roles, redirect them to warden dashboard
+  if (isWarden && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell)) {
+    return <Navigate to="/warden-dashboard" replace />;
+  }
+
+  if (requireExamCell && !isExamCell) {
+    const destination = isWarden
+      ? "/warden-dashboard"
+      : isAdmin
+      ? "/dashboard"
+      : isPrincipal
+      ? "/principal-dashboard"
+      : isAccountant
+      ? "/accountant-dashboard"
+      : isParent
+      ? "/parent-dashboard"
+      : isFaculty
+      ? "/faculty-dashboard"
+      : "/student-dashboard";
+    return <Navigate to={destination} replace />;
+  }
+  if (isExamCell && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireWarden)) {
     return <Navigate to="/exam-cell-dashboard" replace />;
   }
 
   if (requireFaculty && !isFaculty) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
@@ -87,27 +175,32 @@ export default function ProtectedRoute({
     return <Navigate to="/student-dashboard" replace />;
   }
   if (requireAdmin && !isAdmin && !isPrincipal) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     return <Navigate to={isFaculty ? "/faculty-dashboard" : "/student-dashboard"} replace />;
   }
   if (requirePrincipal && !isPrincipal) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
   }
+  if (requireStudent && isWarden) return <Navigate to="/warden-dashboard" replace />;
   if (requireStudent && (isAdmin || isPrincipal)) return <Navigate to={isPrincipal ? "/principal-dashboard" : "/dashboard"} replace />;
   if (requireStudent && isAccountant) return <Navigate to="/accountant-dashboard" replace />;
   if (requireStudent && isFaculty) return <Navigate to="/faculty-dashboard" replace />;
   if (requireStudent && isParent) return <Navigate to="/parent-dashboard" replace />;
 
   if (requireParent && !isParent && !isAdmin) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
   }
   if (requireAccountant && !isAccountant) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
@@ -127,13 +220,15 @@ export function PublicOnlyRoute({ children }) {
 
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
-  const isAdmin = user?.isAdmin || isAdminRole(role);
-  const isFaculty = isFacultyOrStaffRole(role);
-  const isPrincipal = isPrincipalRole(role);
-  const isParent = isParentRole(role);
-  const isAccountant = isAccountantRole(role);
+  const isWarden = isWardenRole(role, user);
+  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden;
+  const isFaculty = !isWarden && isFacultyOrStaffRole(role);
+  const isPrincipal = !isWarden && isPrincipalRole(role);
+  const isParent = !isWarden && isParentRole(role);
+  const isAccountant = !isWarden && isAccountantRole(role);
 
   if (isTokenValid) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;

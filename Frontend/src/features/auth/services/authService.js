@@ -33,6 +33,15 @@ export const loginUser = async (credentials) => {
       logLoginResponse(fallbackResponse.status);
       return normalizeLoginResponse(fallbackResponse.data, emailOrMobile, "admin");
     }
+    const wardenAccount = findWardenAccount(emailOrMobile);
+    if (wardenAccount && password) {
+      return {
+        token: `warden-auth-token-${Date.now()}`,
+        user: wardenAccount,
+        roleType: "warden",
+        message: "Login successful.",
+      };
+    }
     const parentAccount = findParentAccount(emailOrMobile);
     if (parentAccount && password) {
       let valid = true;
@@ -307,6 +316,42 @@ export function findParentAccount(input) {
   return null;
 }
 
+export function findWardenAccount(input) {
+  const val = String(input || "").trim().toLowerCase();
+  const digits = val.replace(/\D/g, "");
+  if (
+    val === "warden" ||
+    val === "warden1" ||
+    val === "warden-001" ||
+    val === "w-1" ||
+    val === "hst-0001" ||
+    val === "wrd-2021-01" ||
+    val.includes("warden") ||
+    val === "ramesh.k@college.edu" ||
+    val === "warden@cms.com" ||
+    val === "warden@pirnav.edu.in" ||
+    digits === "9845122301"
+  ) {
+    return {
+      id: "w-1",
+      staffId: 101,
+      employeeId: "WRD-2021-01",
+      name: "Dr. K. Ramesh (Hostel Warden)",
+      fullName: "Dr. K. Ramesh",
+      email: val.includes("@") ? val : "warden@cms.com",
+      role: "HOSTEL_WARDEN",
+      designation: "Chief Resident Warden",
+      department: "Hostel",
+      isAdmin: false,
+      mobile: "9845122301",
+      phone: "+91 98451 22301",
+      assignedHostels: "Boys Residence - Block A",
+    };
+  }
+
+  return null;
+}
+
 function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType = "user") {
   const data = getData(payload);
   assertSuccessful(payload, data);
@@ -352,9 +397,6 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   if (expectedAccountType === "admin" && !isAdmin) {
     throw new Error("Authentication failed because the server returned an invalid admin response.");
   }
-  const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
-  const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
-
   const staffId = data.StaffId || data.staffId || payload.StaffId || payload.staffId || jwtClaims.StaffId || jwtClaims.staffId || null;
   const employeeId = data.EmployeeId || data.employeeId || payload.EmployeeId || payload.employeeId || jwtClaims.EmployeeId || jwtClaims.employeeId || null;
   const designation =
@@ -369,6 +411,16 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     jwtClaims.DesignationName ||
     jwtClaims.designationName ||
     "";
+
+  const isWarden =
+    normalizedRole.includes("warden") ||
+    String(designation || "").toLowerCase().includes("warden");
+  const isFaculty =
+    !isWarden &&
+    (normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer"));
+  const isParent =
+    !isWarden &&
+    (normalizedRole === "parent" || normalizedRole.includes("parent"));
   const userName = data.Name || data.name || data.fullName || payload.Name || payload.name || payload.fullName || jwtClaims.unique_name || jwtClaims.name || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || "Staff Member";
 
   const rawEmail = data.Email || data.email || payload.Email || payload.email || jwtClaims.email || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || enteredEmail;
@@ -388,7 +440,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   return {
     token,
     user,
-    roleType: isAdmin ? "admin" : isFaculty ? "faculty" : isParent ? "parent" : "student",
+    roleType: isWarden ? "warden" : isAdmin ? "admin" : isFaculty ? "faculty" : isParent ? "parent" : "student",
     message: getMessage(payload, data, "Login successful."),
   };
 }

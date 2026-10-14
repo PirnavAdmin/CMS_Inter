@@ -173,7 +173,8 @@ apiClient.interceptors.response.use(
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&
       !originalRequest?.silentAuth &&
-      !originalRequest?.optionalAuth;
+      !originalRequest?.optionalAuth &&
+      !originalRequest?.url?.includes("/api/v1/hostel");
 
     if (shouldLogDevError) {
       if (!error.response) {

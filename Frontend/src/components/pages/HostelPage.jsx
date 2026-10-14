@@ -46,6 +46,8 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { getAuthUser } from "@/features/authStorage.js";
+import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import * as hostelApi from "@/api/hostelApi.js";
 import "./HostelPage.css";
 
@@ -171,6 +173,10 @@ const getVal = (obj, ...keys) => {
 // ── Component Definition ──────────────────────────────────────────────
 export default function HostelPage() {
   const location = useLocation();
+  const user = getAuthUser();
+  const isWarden = isWardenRole(user?.role, user) || location.pathname.toLowerCase().includes("warden");
+  const isAdmin = Boolean(user?.isAdmin || String(user?.role || "").toLowerCase().includes("admin"));
+  const canAccessAdminEndpoints = isAdmin && !isWarden;
 
   // ── Navigation Tabs State ───────────────────────────────────────────
   const [activeMajorTab, setActiveMajorTab] = useState("dashboard");
@@ -383,6 +389,10 @@ export default function HostelPage() {
     setIsLoading(true);
     setApiError(null);
     try {
+      const shouldFetchStaff = canAccessAdminEndpoints;
+      const shouldFetchAdmissions = canAccessAdminEndpoints;
+      const shouldFetchAllStudents = canAccessAdminEndpoints;
+
       const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes, certStudentsRes, allStudentsRes] = await Promise.allSettled([
         hostelApi.getHostelBlocks(),
         hostelApi.getRoomTypes(),
@@ -393,11 +403,18 @@ export default function HostelPage() {
         hostelApi.getOutpassLeave(),
         hostelApi.getTransferVacate(),
         hostelApi.getHostelDashboard(),
-        apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true }),
-        apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null),
-        apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, optionalAuth: true })
-          .catch(() => null),
-        apiClient.get("/api/v1/students?pageSize=1000", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null),
+        shouldFetchStaff
+          ? apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null)
+          : Promise.resolve(null),
+        shouldFetchAdmissions
+          ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null)
+          : Promise.resolve(null),
+        canAccessAdminEndpoints
+          ? apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null)
+          : Promise.resolve(null),
+        shouldFetchAllStudents
+          ? apiClient.get("/api/v1/students?pageSize=1000", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null)
+          : Promise.resolve(null),
       ]);
 
       if (blocksRes.status === "fulfilled") {
@@ -420,6 +437,7 @@ export default function HostelPage() {
         const rawWardens = extractCollection(wardensRes.value?.data);
         setWardens(Array.isArray(rawWardens) ? rawWardens.map(mapWarden) : []);
       }
+      let derivedStudents = [];
       if (allocsRes.status === "fulfilled") {
         const rawAllocs = extractCollection(allocsRes.value?.data);
         const mapped = Array.isArray(rawAllocs) ? rawAllocs.map(mapAllocation) : [];
@@ -441,6 +459,19 @@ export default function HostelPage() {
           gender: a.gender,
           inTime: "07:00",
         })));
+
+        derivedStudents = mapped.map((a) => ({
+          id: a.studentId || a.id,
+          studentId: a.studentId || a.id,
+          name: a.studentName,
+          fullName: a.studentName,
+          admissionNo: a.admissionNo,
+          gender: a.gender,
+          blockName: a.blockName,
+          room: a.room,
+          bed: a.bed,
+          isEnrolled: true,
+        }));
       }
       if (outpassRes.status === "fulfilled") {
         const rawOutpass = extractCollection(outpassRes.value?.data);
@@ -487,6 +518,9 @@ export default function HostelPage() {
           }
         }
       }
+      if (loadedStudents.length === 0 && derivedStudents.length > 0) {
+        loadedStudents = derivedStudents;
+      }
       if (loadedStudents.length > 0) setCandidateStudents(loadedStudents);
     } catch (err) {
       console.error("Failed to fetch hostel data:", err);
@@ -494,7 +528,7 @@ export default function HostelPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer]);
+  }, [canAccessAdminEndpoints, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer]);
 
   useEffect(() => {
     fetchHostelData();
@@ -598,23 +632,29 @@ export default function HostelPage() {
       setActiveMajorTab("setup");
       if (path.includes("category")) setActiveSetupSubtab("categories");
       else if (path.includes("room")) setActiveSetupSubtab("rooms");
-      else if (path.includes("warden")) setActiveSetupSubtab("wardens");
+      else if (path.includes("warden") && !path.includes("warden-dashboard")) setActiveSetupSubtab("wardens");
       else setActiveSetupSubtab("blocks");
-    } else if (path.includes("students") || path.includes("student-allocation") || path.includes("allocat")) {
+    } else if (path.includes("room") || path.includes("bed")) {
+      setActiveMajorTab("setup");
+      setActiveSetupSubtab("rooms");
+    } else if (path.includes("allocat")) {
       setActiveMajorTab("students");
       setActiveStudentSubtab("allocations");
     } else if (path.includes("attendance")) {
       setActiveMajorTab("students");
       setActiveStudentSubtab("attendance");
-    } else if (path.includes("outpass")) {
+    } else if (path.includes("outpass") || path.includes("leave")) {
       setActiveMajorTab("students");
       setActiveStudentSubtab("outpasses");
     } else if (path.includes("transfer") || path.includes("vacat")) {
       setActiveMajorTab("students");
       setActiveStudentSubtab("transfers");
+    } else if (path.includes("students") || path.includes("student-allocation")) {
+      setActiveMajorTab("students");
+      setActiveStudentSubtab("allocations");
     } else if (path.includes("report")) {
       setActiveMajorTab("reports");
-    } else if (path.includes("hostel")) {
+    } else if (path.includes("hostel") || path.includes("warden")) {
       setActiveMajorTab("dashboard");
     }
   }, [location.pathname]);
@@ -5497,11 +5537,17 @@ export default function HostelPage() {
   // ═════════════════════════════════════════════════════════════════════
   // MAIN RENDER WITH DASHBOARDLAYOUT
   // ═════════════════════════════════════════════════════════════════════
+  const isWardenRoute = location.pathname.toLowerCase().includes("warden");
+
   return (
     <DashboardLayout
-      title="Hostel Management"
-      subtitle="Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
-      breadcrumb={["Hostel Management"]}
+      title={isWardenRoute ? "Hostel Warden Portal" : "Hostel Management"}
+      subtitle={
+        isWardenRoute
+          ? "Resident student oversight, room & bed allocations, daily attendance, outpass approvals, and hostel analytics."
+          : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
+      }
+      breadcrumb={[isWardenRoute ? "Warden Dashboard" : "Hostel Management"]}
     >
       <div className="cms-hostel-page">
         {/* Toast Notification */}
@@ -5594,6 +5640,7 @@ export default function HostelPage() {
             allocations={allocations}
             candidateAdmissions={candidateAdmissions}
             candidateStudents={candidateStudents}
+            canAccessAdminEndpoints={canAccessAdminEndpoints}
             handleSaveAllocation={handleSaveAllocation}
             showToast={showToast}
           />
@@ -7216,6 +7263,7 @@ function AllocationModal({
   allocations,
   candidateAdmissions,
   candidateStudents,
+  canAccessAdminEndpoints = false,
   handleSaveAllocation,
   showToast,
 }) {
@@ -7256,7 +7304,7 @@ function AllocationModal({
       let cancelled = false;
       const needAdm = !candidateAdmissions || candidateAdmissions.length === 0;
       const needStu = !candidateStudents || candidateStudents.length === 0;
-      if (needAdm || needStu) {
+      if (canAccessAdminEndpoints && (needAdm || needStu)) {
         Promise.allSettled([
           needAdm ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null) : Promise.resolve(null),
           needStu ? (
@@ -7276,7 +7324,7 @@ function AllocationModal({
         }).catch(() => {});
       }
       return () => { cancelled = true; };
-    }, [candidateAdmissions, candidateStudents]);
+    }, [canAccessAdminEndpoints, candidateAdmissions, candidateStudents]);
 
     const effectiveAdmissions = useMemo(() => {
       return (candidateAdmissions && candidateAdmissions.length > 0) ? candidateAdmissions : modalAdmissions;
