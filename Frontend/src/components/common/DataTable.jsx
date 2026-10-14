@@ -44,6 +44,8 @@ export default function DataTable({
   enableExport = true,
   enablePdfExport = false,
   enableTablePrint = true,
+  excelExportLabel = "Export Excel",
+  pdfExportLabel = "Export PDF",
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -171,11 +173,11 @@ export default function DataTable({
               {exportOpen ? (
                 <div className="cms-export-menu" role="menu">
                   <button type="button" role="menuitem" onClick={exportExcel}>
-                    <FileSpreadsheet size={15} /> Export Excel
+                    <FileSpreadsheet size={15} /> {excelExportLabel}
                   </button>
                   {enablePdfExport ? (
                     <button type="button" role="menuitem" onClick={exportPdf}>
-                      <FileText size={15} /> Export PDF
+                      <FileText size={15} /> {pdfExportLabel}
                     </button>
                   ) : null}
                   {enableTablePrint ? (

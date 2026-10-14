@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { inventoryLedger } from "../inventoryApi.js";
+import { getApiErrorMessage } from "@/api/apiClient.js";
 import { Field, Modal } from "@/components/common/Ui.jsx";
 import { column, currencyColumn, InventoryTable, useDialogFocus } from "./InventoryUi.jsx";
 import {
   dateInRange,
   enrichItem,
   enrichMovement,
-  ledger,
   money,
   stockValue,
   validRange,
@@ -80,6 +81,22 @@ function Details({ values }) {
 export default function InventoryDetails({ kind, record, state, onClose }) {
   const [dates, setDates] = useState({ from: "", to: "" });
   const [reset, setReset] = useState(0);
+  const [serverLedger, setServerLedger] = useState([]);
+  const [ledgerError, setLedgerError] = useState("");
+  useEffect(() => {
+    if (kind !== "item-detail" || !validRange(dates)) return undefined;
+    const controller = new AbortController();
+    setServerLedger([]);
+    setLedgerError("");
+    inventoryLedger(record.id, dates, controller.signal)
+      .then((rows) => {
+        if (!controller.signal.aborted) setServerLedger(rows);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setLedgerError(getApiErrorMessage(error));
+      });
+    return () => controller.abort();
+  }, [kind, record.id, dates]);
   useDialogFocus(onClose);
   let title;
   let values;
@@ -88,7 +105,7 @@ export default function InventoryDetails({ kind, record, state, onClose }) {
     const item = state.items.find((i) => i.id === record.id);
     if (!item) return null;
     title = `${item.name} · Item Details & Stock Ledger`;
-    const movements = ledger(state, item.id).map((m) => ({
+    const movements = serverLedger.map((m) => ({
       ...enrichMovement(state, m),
       destination: [
         m.department,
@@ -99,13 +116,18 @@ export default function InventoryDetails({ kind, record, state, onClose }) {
     }));
     values = {
       ...enrichItem(state, item),
-      totalStockIn: movements.reduce((total, m) => total + m.quantityIn, 0),
-      totalStockOut: movements.reduce((total, m) => total + m.quantityOut, 0),
+      totalStockIn: item.totalStockIn ?? movements.reduce((total, m) => total + m.quantityIn, 0),
+      totalStockOut: item.totalStockOut ?? movements.reduce((total, m) => total + m.quantityOut, 0),
     };
     const filtered = validRange(dates) ? movements.filter((m) => dateInRange(m.date, dates)) : [];
     history = (
       <>
         <h3>Stock Ledger</h3>
+        {ledgerError && (
+          <p className="inventory-note" role="alert">
+            {ledgerError}
+          </p>
+        )}
         <p className="inventory-note">
           Opening balance: {item.openingQty} {item.unit} · Final running balance:{" "}
           {movements.at(-1)?.balance ?? item.openingQty} · Current stock: {item.quantity}. Running
