@@ -148,14 +148,170 @@
 }
 
 /* --------------------------------------------------------------------------
+   Allocated Subjects Banner
+   -------------------------------------------------------------------------- */
+.faculty-tt-alloc-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: var(--cms-radius, 14px);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.03);
+}
+
+.faculty-tt-alloc-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.faculty-tt-alloc-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary, #6f8400);
+  flex-shrink: 0;
+}
+
+.faculty-tt-alloc-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+}
+
+.faculty-tt-alloc-badge {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary-dark, #566900);
+}
+
+.faculty-tt-alloc-desc {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--cms-muted, #64748b);
+}
+
+.faculty-tt-alloc-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.faculty-tt-alloc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  background: var(--cms-subtle, #f8fafc);
+  color: var(--cms-text, #10203c);
+  transition: all 0.15s ease;
+}
+
+.faculty-tt-alloc-pill.pill-scheduled {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.faculty-tt-alloc-pill.pill-scheduled .alloc-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.faculty-tt-alloc-pill.pill-scheduled .alloc-pill-meta {
+  color: #15803d;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.faculty-tt-alloc-pill.pill-pending {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.faculty-tt-alloc-pill.pill-pending .alloc-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.faculty-tt-alloc-pill.pill-pending .alloc-pill-meta {
+  color: #b45309;
+  font-weight: 650;
+  font-size: 11px;
+}
+
+/* --------------------------------------------------------------------------
    Main Schedule Card
    -------------------------------------------------------------------------- */
 .faculty-tt-main-card {
+  position: relative;
   background: var(--cms-surface, #ffffff);
   border: 1px solid var(--cms-border, #e2e8f0);
   border-radius: var(--cms-radius, 14px);
   box-shadow: 0 4px 18px rgba(16, 24, 40, 0.04);
   overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Skeleton Grid State (Matching Admin Dashboard Aesthetics)
+   -------------------------------------------------------------------------- */
+.faculty-slot-skeleton {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 72px;
+  border-radius: 9px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  box-sizing: border-box;
+}
+
+.faculty-slot-skeleton .skeleton-sub {
+  width: 70%;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.faculty-slot-skeleton-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.faculty-slot-skeleton .skeleton-badge {
+  width: 42%;
+  height: 12px;
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .faculty-slot-skeleton {
+  background: var(--cms-surface, #1e221e) !important;
+  border-color: var(--cms-border, #2d3629) !important;
 }
 
 .faculty-tt-table-wrap {
@@ -764,10 +920,18 @@
 }
 
 .modal-detail-item .detail-value {
-  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--cms-text, #10203c);
   line-height: 1.35;
+}
+
+.modal-detail-item .detail-icon {
+  color: var(--cms-primary, #6f8400);
+  flex-shrink: 0;
 }
 
 .faculty-tt-modal-footer {
