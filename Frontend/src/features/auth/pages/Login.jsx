@@ -5,6 +5,8 @@ import { Field, useForm } from "@/components/common/Ui.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { clearPasswordResetContext, loginUser } from "@/features/auth/services/authService.js";
 import { clearAuthSession, saveAuthSession } from "@/features/authStorage.js";
+import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../campusImages.js";
 import { getCampusContent } from "../../campusContent.js";
 
@@ -83,24 +85,38 @@ export default function Login() {
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
-      const userRole = String(result.user.role || "").toLowerCase();
-      const isPrincipal = userRole === "principal" || userRole.includes("principal");
+      const isWarden =
+        isWardenRole(result.user?.role, result.user) ||
+        result.roleType === "warden" ||
+        String(result.user?.role || "").toLowerCase().includes("warden") ||
+        String(result.user?.designation || "").toLowerCase().includes("warden");
+      const userRole = String(result.user?.role || "").toLowerCase();
+      const isExamCell = !isWarden && isExamCellRole(userRole);
+      const isPrincipal = !isWarden && (userRole === "principal" || userRole.includes("principal"));
       const isFacultyOrStaff =
-        userRole === "faculty" ||
+        !isWarden &&
+        (userRole === "faculty" ||
         userRole === "teacher" ||
         userRole === "staff" ||
         userRole === "hod" ||
         userRole.includes("faculty") ||
         userRole.includes("teacher") ||
         userRole.includes("staff") ||
-        userRole.includes("lecturer");
+        userRole.includes("lecturer"));
       const isParent =
-        userRole === "parent" ||
+        !isWarden &&
+        (userRole === "parent" ||
         userRole.includes("parent") ||
-        result.roleType === "parent";
-      const isAccountant = userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier";
+        result.roleType === "parent");
+      const isAccountant =
+        !isWarden &&
+        (userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier");
 
-      if (result.user.isAdmin || userRole.includes("admin")) {
+      if (isWarden) {
+        navigate("/warden-dashboard", { replace: true });
+      } else if (isExamCell) {
+        navigate("/exam-cell-dashboard", { replace: true });
+      } else if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
       } else if (isPrincipal) {
         navigate("/principal-dashboard", { replace: true });

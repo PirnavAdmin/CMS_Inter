@@ -25,6 +25,12 @@ export const persistStaffProfile = (data) => {
     if (key) {
       localStorage.setItem(key, JSON.stringify(data));
     }
+    localStorage.setItem("staff_profile_data", JSON.stringify(data));
+    if (data?.photoUrl) {
+      localStorage.setItem("staff_profile_photo", data.photoUrl);
+    } else if (data && data.photoUrl === "") {
+      localStorage.removeItem("staff_profile_photo");
+    }
   } catch {}
 };
 
@@ -86,6 +92,11 @@ const getInitialProfileData = () => {
       }
     } catch {}
 
+    const savedPhoto = localStorage.getItem("staff_profile_photo");
+    if (savedPhoto && !mergedUser.photoUrl) {
+      mergedUser.photoUrl = savedPhoto;
+    }
+
     return mergedUser;
   } catch {
     return {};
@@ -113,7 +124,6 @@ export const pathToModule = {
   leave: "leave",
   payslips: "salary",
   holidays: "holidays",
-  reimbursements: "reimbursements",
   settings: "settings",
 };
 
@@ -129,7 +139,6 @@ export const moduleToPath = {
   leave: "leave",
   salary: "payslips",
   holidays: "holidays",
-  reimbursements: "reimbursements",
   settings: "settings",
 };
 
@@ -185,8 +194,15 @@ export function FacultyProvider({ children }) {
           if (apiStaff && typeof apiStaff === "object") {
             setProfileData((current) => {
               const updated = { ...current, ...apiStaff };
-              if (apiStaff.photoPath || apiStaff.photoUrl) {
-                updated.photoUrl = "/api/v1/staff/photo/" + apiStaff.id + "?t=" + Date.now();
+              const savedPhoto = localStorage.getItem("staff_profile_photo");
+              const activePhoto =
+                current.photoUrl ||
+                savedPhoto ||
+                (apiStaff.photoPath || apiStaff.photoUrl
+                  ? "/api/v1/staff/photo/" + apiStaff.id + "?t=" + Date.now()
+                  : "");
+              if (activePhoto) {
+                updated.photoUrl = activePhoto;
               }
               if (apiStaff.firstName || apiStaff.lastName) {
                 updated.fullName = `${apiStaff.firstName || ""} ${apiStaff.lastName || ""}`.trim();
@@ -199,6 +215,22 @@ export function FacultyProvider({ children }) {
           console.warn("Could not fetch detailed staff profile from API:", err?.message || err);
         });
     }
+  }, []);
+
+  // Sync profile updates across tabs and storage events
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key === "staff_profile_photo" && e.newValue) {
+        setProfileData((prev) => ({ ...prev, photoUrl: e.newValue }));
+      } else if (e.key === "staff_profile_data" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setProfileData((prev) => ({ ...prev, ...parsed }));
+        } catch {}
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   // Biometric Punch State

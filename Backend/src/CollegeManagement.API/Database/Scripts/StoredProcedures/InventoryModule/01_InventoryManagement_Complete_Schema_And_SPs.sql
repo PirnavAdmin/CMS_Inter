@@ -122,6 +122,9 @@ CREATE TABLE IF NOT EXISTS `InventoryTransactions` (
     `TotalAmount` DECIMAL(14,2) NOT NULL,
     `PreviousUnitCost` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     `Status` VARCHAR(20) NOT NULL DEFAULT 'Posted', -- 'Posted', 'Reversed', 'Correction', 'Returned'
+    `PaymentMethod` VARCHAR(50) NULL DEFAULT 'Cash', -- 'Cash', 'Online Transaction'
+    `PaymentTransactionNumber` VARCHAR(100) NULL,
+    `CashReceiptPath` VARCHAR(500) NULL,
     `CorrectionOfId` INT NULL,
     `ReturnOfId` INT NULL,
     `SupplierId` INT NULL,
@@ -492,7 +495,10 @@ CREATE PROCEDURE `sp_Inventory_PostMovement`(
     IN p_ExpectedReturnDate DATE,
     IN p_PerformedBy VARCHAR(150),
     IN p_Remarks TEXT,
-    IN p_UserId INT
+    IN p_UserId INT,
+    IN p_PaymentMethod VARCHAR(50),
+    IN p_PaymentTransactionNumber VARCHAR(100),
+    IN p_CashReceiptPath VARCHAR(500)
 )
 proc: BEGIN
     DECLARE v_CurrentQty DECIMAL(12,2);
@@ -592,6 +598,7 @@ proc: BEGIN
     INSERT INTO `InventoryTransactions` (
         `TransactionNumber`, `Sequence`, `TransactionDate`, `MovementType`, `ItemId`,
         `Quantity`, `UnitCost`, `TotalAmount`, `PreviousUnitCost`, `Status`,
+        `PaymentMethod`, `PaymentTransactionNumber`, `CashReceiptPath`,
         `SupplierId`, `SupplierInvoice`, `InvoiceNumber`, `PurchaseOrderNumber`,
         `ReferenceNumber`, `Location`, `Condition`, `BatchNumber`, `ExpiryDate`,
         `IssueType`, `Department`, `RecipientName`, `RecipientId`, `Destination`,
@@ -600,6 +607,7 @@ proc: BEGIN
     ) VALUES (
         v_TxnNumber, v_NextSeq, p_TransactionDate, p_MovementType, p_ItemId,
         p_Quantity, p_UnitCost, v_TotalAmount, v_CurrentCost, 'Posted',
+        COALESCE(p_PaymentMethod, 'Cash'), p_PaymentTransactionNumber, p_CashReceiptPath,
         p_SupplierId, p_SupplierInvoice, p_InvoiceNumber, p_PurchaseOrderNumber,
         p_ReferenceNumber, p_Location, p_Condition, p_BatchNumber, p_ExpiryDate,
         p_IssueType, p_Department, p_RecipientName, p_RecipientId, p_Destination,
@@ -652,46 +660,66 @@ BEGIN
     DECLARE v_CorrectionType VARCHAR(20);
     DECLARE v_NextSeq INT;
     DECLARE v_NewTxnNumber VARCHAR(50);
+    DECLARE v_CorrectionOfId INT;
+    DECLARE v_ReturnOfId INT;
 
-    -- Find target transaction
-    SELECT ItemId, MovementType, Status, Quantity, UnitCost, TotalAmount, PreviousUnitCost, TransactionNumber
-    INTO v_ItemId, v_MovementType, v_Status, v_Quantity, v_UnitCost, v_TotalAmount, v_PreviousUnitCost, v_TxnNumber
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    START TRANSACTION;
+
+    -- Lock and retrieve target transaction
+    SELECT ItemId, MovementType, Status, Quantity, UnitCost, TotalAmount, PreviousUnitCost, TransactionNumber, CorrectionOfId, ReturnOfId
+    INTO v_ItemId, v_MovementType, v_Status, v_Quantity, v_UnitCost, v_TotalAmount, v_PreviousUnitCost, v_TxnNumber, v_CorrectionOfId, v_ReturnOfId
     FROM `InventoryTransactions`
-    WHERE TransactionId = p_TransactionId;
+    WHERE TransactionId = p_TransactionId FOR UPDATE;
 
     IF v_ItemId IS NULL THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Transaction not found.';
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Movement does not exist.';
     END IF;
 
-    IF v_Status != 'Posted' THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only posted transactions can be reversed.';
-    END IF;
-
-    -- Verify this transaction is the latest movement for this item
-    SELECT TransactionId INTO v_LatestTxnId
-    FROM `InventoryTransactions`
-    WHERE ItemId = v_ItemId
-    ORDER BY TransactionDate DESC, Sequence DESC
-    LIMIT 1;
-
-    IF v_LatestTxnId != p_TransactionId THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only the latest unreturned movement for an item can be reversed.';
-    END IF;
-
-    -- Verify not returned
-    IF EXISTS (SELECT 1 FROM `InventoryTransactions` WHERE ReturnOfId = p_TransactionId) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot reverse an issue that has already been returned.';
-    END IF;
-
+    -- Lock affected item
     SELECT Quantity, UnitCost, OpeningCost 
     INTO v_CurrentQty, v_CurrentCost, v_OpeningCost
     FROM `InventoryItems`
     WHERE ItemId = v_ItemId FOR UPDATE;
 
+    -- Reversal eligibility checks
+    IF v_Status != 'Posted' THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only posted movements can be reversed.';
+    END IF;
+
+    IF v_CorrectionOfId IS NOT NULL OR v_ReturnOfId IS NOT NULL OR v_Status = 'Correction' OR v_Status = 'Returned' THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A return or correction movement cannot be reversed.';
+    END IF;
+
+    SELECT TransactionId INTO v_LatestTxnId
+    FROM `InventoryTransactions`
+    WHERE ItemId = v_ItemId
+    ORDER BY TransactionDate DESC, Sequence DESC, TransactionId DESC
+    LIMIT 1;
+
+    IF v_LatestTxnId != p_TransactionId THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only the latest unreturned movement for an item can be reversed.';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM `InventoryTransactions` WHERE ReturnOfId = p_TransactionId) THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot reverse an issue that has already been returned.';
+    END IF;
+
     IF v_MovementType = 'Stock In' THEN
         SET v_RevertedQty = v_CurrentQty - v_Quantity;
         IF v_RevertedQty < 0 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Reversal would cause negative stock.';
+            ROLLBACK;
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Reversal would produce negative stock.';
         END IF;
 
         SET v_RevertedCost = CASE 
@@ -706,19 +734,19 @@ BEGIN
         SET v_CorrectionType = 'Stock In';
     END IF;
 
-    -- Update Item
+    -- Update Item balance and valuation
     UPDATE `InventoryItems`
     SET Quantity = v_RevertedQty,
         UnitCost = v_RevertedCost,
         UpdatedAt = CURRENT_TIMESTAMP
     WHERE ItemId = v_ItemId;
 
-    -- Mark original transaction Reversed
+    -- Mark original transaction as Reversed
     UPDATE `InventoryTransactions`
     SET Status = 'Reversed'
     WHERE TransactionId = p_TransactionId;
 
-    -- Create Compensating Correction transaction
+    -- Insert compensating Correction transaction
     SELECT COALESCE(MAX(Sequence), 0) + 1 INTO v_NextSeq FROM `InventoryTransactions`;
     SET v_NewTxnNumber = CONCAT('INV-TXN-', LPAD(v_NextSeq, 6, '0'));
 
@@ -732,9 +760,11 @@ BEGIN
         p_TransactionId, p_PerformedBy, CONCAT('Reversal of ', v_TxnNumber), 'Transaction reversal', p_UserId
     );
 
-    -- Log Activity
+    -- Audit activity log
     INSERT INTO `InventoryActivities` (`ActivityDate`, `ActivityText`, `UserId`, `UserName`)
     VALUES (CURRENT_DATE(), CONCAT('Reversed ', v_TxnNumber), p_UserId, p_PerformedBy);
+
+    COMMIT;
 
     SELECT 
         v_NewTxnNumber AS CorrectionTransactionNumber,
@@ -922,8 +952,6 @@ BEGIN
 
     ELSEIF p_ReportType = 'Low Stock Report' THEN
         SELECT 
-            i.ItemId,
-            i.Code AS ItemCode,
             i.Name AS Item,
             c.Name AS Category,
             i.Quantity AS CurrentStock,
