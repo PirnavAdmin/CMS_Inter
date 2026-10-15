@@ -12,7 +12,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/staff-attendance")]
-    [Authorize(Roles = "Faculty,Admin,Super Admin,HOD,Principal")]
+    [Authorize]
     [CollegeManagement.API.Filters.RequirePermission("staff-leave-management")]
     [Produces("application/json")]
     

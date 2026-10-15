@@ -8,23 +8,10 @@ import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 import { getStudentWeeklyTimetable } from "../services/studentAcademicService.js";
 
-const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const columns = [
-  { key: "period-1", label: "Period 1", period: 1 },
-  { key: "period-2", label: "Period 2", period: 2 },
-  { key: "period-3", label: "Period 3", period: 3 },
-  { key: "lunch", label: "Lunch Break", breakType: "lunch" },
-  { key: "period-4", label: "Period 4", period: 4 },
-  { key: "period-5", label: "Period 5", period: 5 },
-  { key: "short-break", label: "Short Break", breakType: "short" },
-  { key: "period-6", label: "Period 6", period: 6 },
-  { key: "period-7", label: "Period 7", period: 7 },
-];
-
-const periodNumber = (row) => {
-  const match = String(row?.periodName || "").match(/(\d+)/);
-  return match ? Number(match[1]) : null;
-};
+const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const columnKey = (row) => row.isBreak
+  ? `break:${row.periodId || row.periodName}:${row.startTime || ""}`
+  : `period:${row.periodId || row.periodNumber || row.periodName}`;
 
 const timeLabel = (value) => String(value || "").slice(0, 5);
 
@@ -36,43 +23,49 @@ export default function StudentTimetable() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     const load = async () => {
       setLoading(true);
       setError("");
+      setEntries([]);
       try {
         if (!student?.studentId) return;
-        const timetable = await getStudentWeeklyTimetable(student.studentId);
+        const timetable = await getStudentWeeklyTimetable(student, { signal: controller.signal });
         if (!active) return;
-        setEntries(timetable.filter((row) => row.isPublished !== false));
+        setEntries(timetable);
       } catch (requestError) {
         if (active) setError(getApiErrorMessage(requestError));
       } finally {
         if (active) setLoading(false);
       }
     };
-    if (!profileLoading && student?.studentId) load();
-    return () => { active = false; };
-  }, [profileLoading, student?.studentId]);
+    if (!profileLoading) load();
+    return () => { active = false; controller.abort(); };
+  }, [profileLoading, student]);
 
+  const columns = useMemo(() => {
+    const unique = new Map();
+    entries.forEach((entry) => {
+      const key = columnKey(entry);
+      if (!unique.has(key)) unique.set(key, { key, label: entry.periodName,
+        period: entry.periodNumber, startTime: entry.startTime, endTime: entry.endTime,
+        breakType: entry.isBreak ? (/lunch/i.test(entry.periodName) ? "lunch" : "short") : "" });
+    });
+    return [...unique.values()].sort((left, right) => {
+      if (left.startTime && right.startTime) return String(left.startTime).localeCompare(String(right.startTime));
+      return (left.period || 0) - (right.period || 0);
+    });
+  }, [entries]);
+  const days = useMemo(() => weekDays.filter((day) => day !== "Sunday" || entries.some((row) => row.dayName === day)), [entries]);
   const timetable = useMemo(() => {
     const rows = new Map(days.map((day) => [day, []]));
-    [...entries]
-      .sort((left, right) => Number(left.dayOfWeek || 0) - Number(right.dayOfWeek || 0)
-        || String(left.startTime || "").localeCompare(String(right.startTime || "")))
-      .forEach((entry) => {
-        if (rows.has(entry.dayName)) rows.get(entry.dayName).push(entry);
-      });
+    entries.forEach((entry) => {
+      if (rows.has(entry.dayName)) rows.get(entry.dayName).push(entry);
+    });
     return rows;
-  }, [entries]);
+  }, [entries, days]);
+  const findEntry = (dayEntries, column) => dayEntries.find((row) => columnKey(row) === column.key);
 
-  const findEntry = (dayEntries, column) => {
-    if (column.breakType) {
-      return dayEntries.find((row) => row.isBreak && String(row.periodName || "").toLowerCase().includes(column.breakType));
-    }
-    return dayEntries.find((row) => !row.isBreak && periodNumber(row) === column.period);
-  };
-
-  const headerEntry = (column) => entries.find((row) => findEntry([row], column));
   const today = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
   const subtitle = student
     ? `${student.academicLevelName || "Not Assigned"} • ${student.groupName || "Not Assigned"} • Section ${student.sectionName || "Not Assigned"}`
@@ -89,8 +82,7 @@ export default function StudentTimetable() {
       <div className="sp-weekly-timetable-wrap">
         <table className="sp-weekly-timetable">
           <thead><tr><th scope="col">Day</th>{columns.map((column) => {
-            const entry = headerEntry(column);
-            return <th key={column.key} scope="col" className={column.breakType ? "is-break-column" : ""}>{column.label}{entry?.startTime ? <small>{timeLabel(entry.startTime)} - {timeLabel(entry.endTime)}</small> : null}</th>;
+            return <th key={column.key} scope="col" className={column.breakType ? "is-break-column" : ""}>{column.label}{column.startTime ? <small>{timeLabel(column.startTime)} - {timeLabel(column.endTime)}</small> : null}</th>;
           })}</tr></thead>
           <tbody>{days.map((day) => {
             const isToday = day === today;
@@ -100,7 +92,7 @@ export default function StudentTimetable() {
               {columns.map((column) => {
                 const entry = findEntry(dayEntries, column);
                 if (column.breakType) return <td key={column.key} className={`sp-timetable-break is-${column.breakType}`}>{entry?.periodName || column.label}</td>;
-                const isLab = /lab/i.test(`${entry?.subjectName || ""} ${entry?.roomName || ""}`);
+                const isLab = /lab/i.test(`${entry?.slotType?.toLowerCase() === "leisure" ? "Leisure" : entry?.subjectName || ""} ${entry?.roomName || ""}`);
                 return <td key={column.key} className="sp-timetable-period"><div className={isLab ? "is-lab" : "is-regular"}><strong>{entry?.subjectName || "—"}</strong><span>{entry?.staffName || entry?.facultyName || "—"}</span><small>{entry?.roomName || entry?.roomCode || "—"}</small></div></td>;
               })}
             </tr>;

@@ -2,23 +2,72 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, UserRound } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import menuIcon from "@/assets/navbar-3d/menu.png";
+import searchIcon from "@/assets/navbar-3d/search.png";
 import notificationIcon from "@/assets/navbar-3d/notifications.png";
 import darkThemeIcon from "@/assets/navbar-3d/theme-dark.png";
 import lightThemeIcon from "@/assets/navbar-3d/theme-light.png";
 import boardIcon from "@/assets/navbar-3d/board.png";
 import academicYearIcon from "@/assets/navbar-3d/academic-year.png";
-import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { clearAuthSession } from "@/features/authStorage.js";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { studentMenuGroups } from "./StudentSidebar.jsx";
 
-export default function StudentNavbar({ onMenu }) {
+const studentPages = studentMenuGroups.flatMap(([section, links]) => links.map(([label, path, icon]) => ({
+  label, section, icon, to: `/student-dashboard${path ? `/${path}` : ""}`,
+})));
+
+export default function StudentNavbar({ onMenu, sidebarExpanded }) {
   const navigate = useNavigate();
-  const { selectedBoard, selectedAcademicYear } = useAcademicContext();
-  const { profile, photoUrl } = useStudentProfile();
+  const { profile, photoUrl, loading, error } = useStudentProfile();
+  const student = !loading && !error ? profile : null;
   const [failedPhotoUrl, setFailedPhotoUrl] = useState("");
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
   const [profileOpen, setProfileOpen] = useState(false);
   const menuRef = useRef(null);
+  const searchRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [activeResult, setActiveResult] = useState(0);
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const suggestions = studentPages.filter((page) => terms.every((term) => `${page.label} ${page.section}`.toLowerCase().includes(term)));
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  useEffect(() => {
+    const closeSearch = (event) => {
+      if (!searchRef.current?.contains(event.target)) setSearchOpen(false);
+    };
+    document.addEventListener("pointerdown", closeSearch);
+    return () => document.removeEventListener("pointerdown", closeSearch);
+  }, []);
+
+  const openPage = (page) => {
+    if (!page) return;
+    setSearchOpen(false);
+    setQuery("");
+    setActiveResult(0);
+    searchInputRef.current?.blur();
+    navigate(page.to);
+  };
+  const searchKeyDown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setSearchOpen(false);
+      searchInputRef.current?.blur();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setSearchOpen(true);
+      setActiveResult((current) => suggestions.length
+        ? (!searchOpen ? (event.key === "ArrowDown" ? 0 : suggestions.length - 1)
+          : (current + (event.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length) : 0);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      openPage(suggestions[activeResult]);
+    }
+  };
 
   useEffect(() => {
     const close = (event) => !menuRef.current?.contains(event.target) && setProfileOpen(false);
@@ -31,17 +80,10 @@ export default function StudentNavbar({ onMenu }) {
     setDark(next);
     document.documentElement.dataset.theme = next ? "dark" : "light";
   };
-  const assignedBoard = profile?.boardName
-    || selectedBoard?.name
-    || selectedBoard?.boardName
-    || selectedBoard?.code
-    || "Board not assigned";
-  const assignedAcademicYear = profile?.academicYearName
-    || selectedAcademicYear?.name
-    || selectedAcademicYear?.label
-    || selectedAcademicYear?.code
-    || "Year not assigned";
-  const studentName = profile?.studentName || "Student";
+  const unavailable = loading ? "Loading..." : error ? "Unavailable" : "Not Assigned";
+  const assignedBoard = student?.boardName || unavailable;
+  const assignedAcademicYear = student?.academicYearName || unavailable;
+  const studentName = student?.studentName || "Student";
   const initials = studentName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "ST";
   const logout = () => {
     clearAuthSession();
@@ -51,12 +93,27 @@ export default function StudentNavbar({ onMenu }) {
 
   return (
     <header className="sp-navbar">
-      <button className="sp-icon-btn sp-menu-btn" onClick={onMenu} aria-label="Toggle sidebar">
+      <button type="button" className="sp-icon-btn sp-menu-btn" onClick={onMenu} aria-label={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"} aria-expanded={sidebarExpanded} aria-controls="sp-student-sidebar">
         <img src={menuIcon} alt="" aria-hidden="true" />
       </button>
-      <div className="sp-navbar-title">
-        <strong>Student Portal</strong>
-        <span>{assignedAcademicYear} • {profile?.sectionName || "Not Assigned"}</span>
+      <div className={`sp-navbar-search${searchOpen ? " is-open" : ""}`} ref={searchRef} onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false);
+      }}>
+        <button type="button" className="sp-search-trigger" aria-label="Search Student Portal pages" aria-expanded={searchOpen} aria-controls="sp-student-search-results" onClick={() => {
+          setSearchOpen(true);
+          setActiveResult(0);
+          searchInputRef.current?.focus();
+        }}><img src={searchIcon} alt="" aria-hidden="true" /></button>
+        <input ref={searchInputRef} type="search" role="combobox" aria-label="Search Student Portal pages and modules" aria-autocomplete="list" aria-expanded={searchOpen} aria-controls="sp-student-search-results" aria-activedescendant={searchOpen && suggestions[activeResult] ? `sp-student-search-${activeResult}` : undefined}
+          placeholder="Search pages and modules..." autoComplete="off" value={query}
+          onFocus={() => setSearchOpen(true)} onKeyDown={searchKeyDown}
+          onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); setActiveResult(0); }}/>
+        {searchOpen ? <div id="sp-student-search-results" className="sp-navbar-search-results" role="listbox" aria-label="Student Portal pages">
+          {suggestions.length ? suggestions.map((page, index) => <button type="button" role="option" id={`sp-student-search-${index}`} key={page.to} aria-selected={activeResult === index} className={activeResult === index ? "is-highlighted" : ""}
+            onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActiveResult(index)} onClick={() => openPage(page)}>
+            <img src={page.icon} alt="" aria-hidden="true"/><span>{page.label}<small>{page.section}</small></span>
+          </button>) : <p role="status">No matching Student Portal pages</p>}
+        </div> : null}
       </div>
       <div className="sp-student-academic-context" aria-label="Assigned academic context">
         <div className="sp-readonly-context sp-readonly-board">
@@ -74,12 +131,11 @@ export default function StudentNavbar({ onMenu }) {
         </button>
         <button className="sp-icon-btn sp-notification" aria-label="Notifications">
           <img src={notificationIcon} alt="" aria-hidden="true" />
-          <i>2</i>
         </button>
         <div className="sp-profile-menu" ref={menuRef}>
           <button onClick={() => setProfileOpen((value) => !value)}>
-            <span className="sp-avatar">{photoUrl && failedPhotoUrl !== photoUrl ? <img className="sp-navbar-photo" src={photoUrl} alt="" onError={() => setFailedPhotoUrl(photoUrl)}/> : initials}</span>
-            <span><strong>{studentName}</strong><small>Roll No: {profile?.rollNo || "Not Assigned"}</small></span>
+            <span className="sp-avatar">{student && photoUrl && failedPhotoUrl !== photoUrl ? <img className="sp-navbar-photo" src={photoUrl} alt="" onError={() => setFailedPhotoUrl(photoUrl)}/> : initials}</span>
+            <span><strong>{studentName}</strong><small>Roll No: {student?.rollNo || unavailable}</small></span>
             <ChevronDown size={15} />
           </button>
           {profileOpen ? (

@@ -10,7 +10,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/promotions")]
-    [Authorize(Roles = "Super Admin,Admin")]
+    [Authorize]
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
     public class PromotionsController : ControllerBase

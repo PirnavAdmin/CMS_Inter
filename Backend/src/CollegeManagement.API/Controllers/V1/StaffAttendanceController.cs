@@ -13,7 +13,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/staff-attendance")]
-    [Authorize(Roles = "Faculty,Admin,Super Admin,HOD,Principal")]
+    [Authorize]
     [CollegeManagement.API.Filters.RequirePermission("staff-attendance")]
     [Produces("application/json")]
     public class StaffAttendanceController : ControllerBase
@@ -61,7 +61,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates a single staff attendance record.
         /// </summary>
         [HttpPut("update")]
-        [Authorize(Roles = "Admin,Super Admin,HOD,Principal")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]

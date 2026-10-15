@@ -1091,6 +1091,8 @@
   justify-content: center;
   gap: 14px;
   text-align: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cms-border);
 }
 .cms-fee-receipt-head img {
   width: 58px;
@@ -1126,9 +1128,9 @@
   text-transform: uppercase;
 }
 .cms-fee-receipt-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
   margin-bottom: 12px;
   font-size: 13px;
 }
@@ -1181,6 +1183,43 @@
 }
 .cms-fee-receipt-info-table td {
   font-weight: 700;
+}
+.cms-fee-receipt .cms-fee-receipt-payment-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+.cms-fee-receipt .cms-fee-receipt-payment-table th,
+.cms-fee-receipt .cms-fee-receipt-payment-table td {
+  padding: 8px 10px;
+  border: 1px solid var(--cms-border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.cms-fee-receipt .cms-fee-receipt-payment-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cms-fee-receipt .cms-fee-receipt-payment-table thead,
+.cms-fee-receipt .cms-fee-receipt-payment-table tfoot {
+  background: var(--cms-subtle);
+  font-weight: 700;
+}
+.cms-fee-receipt .cms-fee-receipt-payment-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+}
+.cms-fee-receipt .cms-fee-receipt-payment-summary > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr);
+  gap: 12px;
+}
+.cms-fee-receipt .cms-fee-receipt-payment-summary strong {
+  overflow-wrap: anywhere;
 }
 .cms-fee-receipt-breakdown th {
   background: var(--cms-subtle);
@@ -1281,6 +1320,52 @@
 
 @media (max-width: 480px) {
   .cms-fee-stat-grid { grid-template-columns: 1fr; }
+  .cms-fee-receipt .cms-fee-receipt-meta { grid-template-columns: 1fr; }
+}
+
+@media print {
+  body.cms-fee-receipt-document {
+    margin: 0;
+    background: #fff;
+    color: #111;
+    font-family: Arial, sans-serif;
+    overflow: visible;
+    color-scheme: light;
+  }
+  body.cms-fee-receipt-document.cms-fee-print-receipt .cms-fee-receipt-print {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+  body.cms-fee-receipt-document .cms-fee-receipt-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  body.cms-fee-receipt-document.cms-fee-print-receipt .cms-fee-receipt-info-table,
+  body.cms-fee-receipt-document .cms-fee-receipt-payment-table {
+    font-size: 11.5px !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+  body.cms-fee-receipt-document.cms-fee-print-receipt .cms-fee-receipt-payment-section {
+    break-inside: auto !important;
+  }
+  body.cms-fee-receipt-document .cms-fee-receipt-payment-table th,
+  body.cms-fee-receipt-document .cms-fee-receipt-payment-table td {
+    border-color: #9ca3af;
+    color: #111;
+    padding: 6px 8px;
+  }
+  body.cms-fee-receipt-document .cms-fee-receipt-payment-table tr {
+    break-inside: avoid;
+  }
+  body.cms-fee-receipt-document .cms-fee-receipt-payment-table thead {
+    display: table-header-group;
+  }
+  body.cms-fee-receipt-document .cms-fee-receipt-payment-table tfoot {
+    display: table-row-group;
+  }
 }
 
 @media print {
