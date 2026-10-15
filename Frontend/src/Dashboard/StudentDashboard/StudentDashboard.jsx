@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpenCheck, CalendarClock, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, X } from "lucide-react";
+import { Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import studentApiEndpoints from "./api/studentApiEndpoints.js";
+import "./StudentDashboard.css";
 import { SkeletonDashboard } from "@/components/common/Ui.jsx";
-import StudentDashboardHighlights from "./components/StudentDashboardHighlights.jsx";
 import StudentCard from "./components/StudentCard.jsx";
 import StudentDataTable from "./components/StudentDataTable.jsx";
-import StudentPageHeader from "./components/StudentPageHeader.jsx";
 import StudentSummaryCard from "./components/StudentSummaryCard.jsx";
 import { useStudentProfile } from "./context/StudentProfileContext.jsx";
 import { getStudentAttendance, getStudentExaminations, getStudentResult } from "./services/studentAcademicService.js";
@@ -23,6 +23,26 @@ const money = (value) => `₹${Number(value).toLocaleString("en-IN")}`;
 const getGreeting = () => {
   const hour = new Date().getHours();
   return hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
+};
+
+const getUpcomingDashboardExams = (examinations, today) => {
+  const dateOnly = (value) => {
+    const date = String(value || "").slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(`${date}T00:00:00Z`)) ? date : "";
+  };
+  const upcoming = new Map();
+  examinations.forEach((exam) => {
+    if (!["SCHEDULED", "PUBLISHED", "ONGOING"].includes(String(exam.status || "").trim().toUpperCase())) return;
+    const scheduleDates = (exam.schedules || []).map((schedule) => dateOnly(schedule.examDate)).filter(Boolean).sort();
+    const firstDate = dateOnly(exam.startDate) || scheduleDates[0];
+    const lastDate = dateOnly(exam.endDate) || scheduleDates[scheduleDates.length - 1] || firstDate;
+    // Upcoming exams exist independently of whether subjects have been scheduled.
+    if (!firstDate || !lastDate || lastDate < today) return;
+    const nextDate = firstDate >= today ? firstDate : scheduleDates.find((date) => date >= today) || today;
+    const key = exam.examinationId || exam.examId || exam.id || exam.examCode || exam;
+    upcoming.set(key, { exam, firstDate, lastDate, nextDate });
+  });
+  return [...upcoming.values()].sort((left, right) => left.nextDate.localeCompare(right.nextDate));
 };
 
 const getObject = (payload) => {
@@ -187,12 +207,9 @@ export default function StudentDashboard() {
     if (!loading) loadFees();
     return () => { active = false; };
   }, [loading, profile?.studentId]);
-  const upcomingSchedules = useMemo(() => examinations
-    .flatMap((exam) => exam.schedules.map((schedule) => ({ exam, schedule })))
-    .filter(({ schedule }) => String(schedule.examDate || "").slice(0, 10) >= new Date().toISOString().slice(0, 10))
-    .sort((left, right) => String(left.schedule.examDate).localeCompare(String(right.schedule.examDate))), [examinations]);
+  const dashboardToday = dateKey(new Date());
+  const upcomingExams = useMemo(() => getUpcomingDashboardExams(examinations, dashboardToday), [examinations, dashboardToday]);
   const formatExamDate = (value) => value ? new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
-  const formatExamTime = (value) => String(value || "").slice(0, 5) || "—";
   if (error && !profile) return <div className="sp-page"><div className="sp-api-state is-error">{error}</div></div>;
   if (loading || examsLoading) return <div className="sp-page"><SkeletonDashboard cards={4} tableColumns={4}/></div>;
   const feeValue = (key) => feeLoading ? "..." : feeSummary ? money(feeSummary[key]) : "-";
@@ -206,10 +223,8 @@ export default function StudentDashboard() {
   return (
     <div className="sp-page sp-dashboard-page">
       <div className="sp-dashboard-greeting">
-      <StudentPageHeader
-        title={`${greeting}, ${studentName.split(" ")[0]}`}
-        subtitle="Welcome back! Here's what's happening with your academics today."
-      />
+        <h1 className="sp-dashboard-greeting-title"><span className="sp-dashboard-greeting-emoji" aria-hidden="true">{greeting === "Good Morning" ? "🌅" : greeting === "Good Afternoon" ? "☀️" : "🌙"}</span> {greeting}, {studentName.split(" ")[0]}!</h1>
+        <p className="sp-dashboard-greeting-sub">Welcome back! Here's what's happening with your academics today.</p>
       </div>
       {activeAlerts?.length > 0 && (
         <div className={`sp-cert-alert-card is-${String(activeAlerts[0].status).toLowerCase()}`} role="alert">
@@ -255,7 +270,7 @@ export default function StudentDashboard() {
       <section className="sp-summary-grid four">
         <StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={attendanceData ? `${attendance.percentage}%` : "—"} note={attendanceError ? "Unable to load" : `${attendance.present} present · ${attendance.absent} absent`} />
         <StudentSummaryCard icon={IndianRupee} label="Fee Due" value={feeValue("due")} note={feeError ? "Unable to load fee data" : `Due ${feeDate}`} tone="orange" />
-        <StudentSummaryCard icon={CalendarClock} label="Upcoming Exams" value={upcomingSchedules.length} note={upcomingSchedules[0] ? `Next on ${formatExamDate(upcomingSchedules[0].schedule.examDate)}` : "No upcoming exams"} tone="purple" />
+        <StudentSummaryCard icon={CalendarClock} label="Upcoming Exams" value={upcomingExams.length} note={upcomingExams[0] ? `Next on ${formatExamDate(upcomingExams[0].nextDate)}` : "No upcoming exams"} tone="purple" />
         <StudentSummaryCard icon={Award} label="Latest Result" value={resultPublished ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : resultPublished ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
       </section>
       <StudentCard title="Quick Actions" className="sp-dashboard-quick-actions">
@@ -271,12 +286,14 @@ export default function StudentDashboard() {
           ].map(([title, description, route, icon, tone]) => <Link key={route} className={`sp-dashboard-action tone-${tone}`} title={description} to={route} state={route === "certificates" ? { openRequestCertificate: true } : undefined}><img src={icon} alt="" aria-hidden="true" /><strong>{title}</strong></Link>)}
         </div>
       </StudentCard>
-      <StudentDashboardHighlights student={profile} upcomingSchedules={upcomingSchedules} examsError={examsError} formatExamDate={formatExamDate} formatExamTime={formatExamTime} />
+      <StudentDashboardHighlights student={profile} upcomingExams={upcomingExams} examsError={examsError} formatExamDate={formatExamDate} />
       <div className="sp-dashboard-grid">
-        <StudentCard title="Recent Results" action={<Link className="sp-text-link" to="results">View All →</Link>}>
-          <StudentDataTable columns={["Exam", "Percentage", "Grade", "Status"]} rows={resultRows} statusColumns={[3]} empty={resultError || "No published results available."} />
+        <StudentCard className="sp-dashboard-results" title="Recent Results" action={<Link className="sp-text-link" to="results">View All →</Link>}>
+          <div className="sp-dashboard-results-scroll" role="region" aria-label="Recent results" tabIndex={0}>
+            <StudentDataTable columns={["Exam", "Percentage", "Grade", "Status"]} rows={resultRows} statusColumns={[3]} empty={resultError || "No published results available."} />
+          </div>
         </StudentCard>
-        <StudentCard title="Fee Summary" action={<Link className="sp-text-link" to="fees">View Details →</Link>}>
+        <StudentCard className="sp-dashboard-fees" title="Fee Summary" action={<Link className="sp-text-link" to="fees">View Details →</Link>}>
           <div className="sp-fee-overview">
             <div><span>Total Fee</span><strong>{feeValue("total")}</strong></div>
             <div><span>Paid</span><strong>{feeValue("paid")}</strong></div>
@@ -287,4 +304,90 @@ export default function StudentDashboard() {
       </div>
     </div>
   );
+}
+
+
+// Dashboard home: monthly attendance, upcoming holidays and examinations.
+const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const highlightRead = (row, ...keys) => keys.map((key) => row?.[key]).find((value) => value != null && value !== "");
+const status = (value) => ({ 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday", P: "Present", A: "Absent" }[value] || value);
+const holidayTone = (type) => /national/i.test(String(type)) ? "orange" : /festival/i.test(String(type)) ? "violet" : "cyan";
+const examTone = (exam) => /objective/i.test(String(exam.examCategory || exam.category || "")) ? "blue" : "violet";
+const rowsFrom = (response) => {
+  const data = response?.data?.data ?? response?.data ?? response;
+  return Array.isArray(data) ? data : data?.items || data?.Items || data?.records || data?.holidays || data?.Holidays || [];
+};
+
+function StudentDashboardHighlights({ student, upcomingExams, examsError, formatExamDate }) {
+  const [attendance, setAttendance] = useState(null);
+  const [holidays, setHolidays] = useState([]);
+  const [attendanceError, setAttendanceError] = useState("");
+  const [holidayError, setHolidayError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const now = new Date();
+  const today = dateKey(now);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  useEffect(() => {
+    let active = true;
+    if (!student?.studentId) return;
+    setLoading(true); setAttendance(null); setAttendanceError(""); setHolidayError(""); setHolidays([]);
+    Promise.allSettled([
+      getStudentAttendance(student.studentId, monthStart, today),
+      apiClient.get(studentApiEndpoints.holidays.list, { params: { CampusId: student.campusId, AcademicYearId: student.academicYearId, BoardId: student.boardId, Page: 1, PageSize: 100 } }),
+    ]).then(([attendanceResponse, holidaysResponse]) => {
+      if (!active) return;
+      if (attendanceResponse.status === "fulfilled") {
+        const counts = { present: 0, absent: 0, halfDay: 0 };
+        const days = new Map(rowsFrom(attendanceResponse.value).map((row) => [String(highlightRead(row, "attendanceDate", "date") || "").slice(0, 10), row]));
+        days.forEach((row, date) => {
+          if (!date || date < monthStart || date > today) return;
+          const morning = status(highlightRead(row, "morningStatus", "morningAttendanceStatus", "morningSessionStatus", "morning", "morningAttendance", "MorningStatus"));
+          const afternoon = status(highlightRead(row, "afternoonStatus", "afternoonAttendanceStatus", "afternoonSessionStatus", "afternoon", "afternoonAttendance", "AfternoonStatus"));
+          if (morning === "Present" && afternoon === "Present") counts.present += 1;
+          else if (morning === "Absent" && afternoon === "Absent") counts.absent += 1;
+          else if ((morning === "Present" && afternoon === "Absent") || (morning === "Absent" && afternoon === "Present") || morning === "Half Day" || afternoon === "Half Day") counts.halfDay += 1;
+        });
+        counts.days = counts.present + counts.absent + counts.halfDay;
+        counts.percentage = counts.days ? Math.round((counts.present + counts.halfDay * .5) / counts.days * 100) : null;
+        setAttendance(counts);
+      } else setAttendanceError("Unable to load monthly attendance.");
+      if (holidaysResponse.status === "fulfilled") setHolidays(rowsFrom(holidaysResponse.value));
+      else setHolidayError("Unable to load upcoming holidays.");
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [student, monthStart, today]);
+  const upcomingHolidays = holidays.map((row) => ({
+    name: highlightRead(row, "holidayName", "HolidayName", "name", "Name", "title", "Title") || "Holiday",
+    date: String(highlightRead(row, "startDate", "StartDate", "holidayDate", "HolidayDate", "date", "Date", "fromDate", "FromDate") || "").slice(0, 10),
+    endDate: String(highlightRead(row, "endDate", "EndDate", "toDate", "ToDate") || "").slice(0, 10),
+    type: highlightRead(row, "holidayType", "HolidayType", "type", "Type"),
+  })).filter((row) => row.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const daysUntil = (date) => Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
+  const holidayDuration = (row) => {
+    const duration = Math.round((Date.parse(`${row.endDate || row.date}T00:00:00Z`) - Date.parse(`${row.date}T00:00:00Z`)) / 86400000) + 1;
+    return Number.isFinite(duration) && duration > 0 ? `${duration} ${duration === 1 ? "Day" : "Days"}` : "";
+  };
+  const holidayWeekday = (date) => new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { weekday: "short" });
+  const segments = [["Present", attendance?.present || 0, "#1aa54b"], ["Absent", attendance?.absent || 0, "#ef4560"], ["Half Day", attendance?.halfDay || 0, "#f59e0b"]];
+  let offset = 0;
+  return <div className="sp-dashboard-highlights">
+    <StudentCard title="Monthly Attendance" subtitle={now.toLocaleDateString("en-IN", { month: "long", year: "numeric" })} action={<Link className="sp-text-link" to="attendance">View Details →</Link>}>
+      {loading || attendanceError ? <p className="sp-highlight-empty" role="status">{loading ? "Loading attendance…" : attendanceError}</p> : <>
+        <div className="sp-monthly-chart"><svg viewBox="0 0 120 120" role="img" aria-label={attendance?.days ? `Monthly attendance ${attendance.percentage} percent; ${attendance.present} present, ${attendance.absent} absent, ${attendance.halfDay} half days` : "No marked attendance this month"}>
+          <circle cx="60" cy="60" r="44" fill="none" stroke="var(--sp-border)" strokeWidth="12" />
+          {segments.map(([label, count, color]) => { const length = attendance?.days ? count / attendance.days * 100 : 0; const start = offset; offset += length; return <circle key={label} cx="60" cy="60" r="44" fill="none" stroke={color} strokeWidth="12" pathLength="100" strokeDasharray={`${length} ${100 - length}`} strokeDashoffset={-start} transform="rotate(-90 60 60)" />; })}
+          <text x="60" y="59" textAnchor="middle" className="sp-chart-value">{attendance?.percentage != null ? `${attendance.percentage}%` : "—"}</text><text x="60" y="74" textAnchor="middle" className="sp-chart-label">ATTENDANCE</text>
+        </svg><div className="sp-chart-legend">{segments.map(([label, count, color]) => <div key={label}><i style={{ background: color }} /><span>{label}</span><strong>{count}</strong></div>)}</div></div>
+        <div className="sp-monthly-chart-counts">{[["Marked Days", attendance?.days || 0], ...segments.map(([label, count]) => [label, count])].map(([label, count]) => <div key={label}><span>{label}</span><strong>{count}</strong></div>)}</div>
+        {!attendance?.days && <p className="sp-highlight-empty">No complete attendance records for this month.</p>}
+      </>}
+    </StudentCard>
+    <StudentCard className="sp-upcoming-card" title={`Upcoming Holidays${!loading && !holidayError ? ` (${upcomingHolidays.length})` : ""}`} action={<Link className="sp-text-link" to="holidays">View All →</Link>}>
+      <div className="sp-highlight-list">{loading || holidayError ? <p className="sp-highlight-empty">{loading ? "Loading holidays…" : holidayError}</p> : upcomingHolidays.length ? upcomingHolidays.map((row, index) => <article data-tone={holidayTone(row.type)} key={`${row.date}-${row.name}-${index}`}><CalendarDays className="sp-highlight-holiday-icon" size={20} /><div><div className="sp-highlight-title"><strong>{row.name}</strong>{row.type && <span className="sp-highlight-tag">{row.type}</span>}</div><p className="sp-highlight-meta"><span>{row.date} · {holidayWeekday(row.date)}</span>{holidayDuration(row) ? <span className="sp-highlight-duration">{holidayDuration(row)}</span> : null}</p></div><small>{daysUntil(row.date) ? `In ${daysUntil(row.date)} Days` : "Today"}</small></article>) : <p className="sp-highlight-empty">No upcoming holidays.</p>}</div>
+    </StudentCard>
+    <StudentCard className="sp-upcoming-card" title={`Upcoming Examinations${!examsError ? ` (${upcomingExams.length})` : ""}`} action={<Link className="sp-text-link" to="examinations">View All →</Link>}>
+      <div className="sp-highlight-list">{examsError ? <p className="sp-highlight-empty">{examsError}</p> : upcomingExams.length ? upcomingExams.map(({ exam, nextDate, firstDate, lastDate }, index) => <article data-tone={examTone(exam)} key={exam.examinationId || exam.examId || exam.id || exam.examCode || index}><CalendarDays size={20} /><div><div className="sp-highlight-title"><strong>{exam.examName || exam.examinationName}</strong>{(exam.examCode || exam.code) ? <span className="sp-highlight-tag">{exam.examCode || exam.code}</span> : null}</div><p>{student?.groupName ? `${student.groupName} · ` : ""}{formatExamDate(exam.startDate || firstDate)} - {formatExamDate(exam.endDate || lastDate)}</p></div><small>{daysUntil(nextDate) ? `In ${daysUntil(nextDate)} Days` : "Today"}</small></article>) : <p className="sp-highlight-empty">No upcoming examinations.</p>}</div>
+    </StudentCard>
+  </div>;
 }

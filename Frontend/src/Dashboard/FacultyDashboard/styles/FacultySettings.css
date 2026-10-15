@@ -98,17 +98,16 @@
   border-radius: 8px;
 }
 
-/* Modal / Management Dialog */
+/* Modal / Management Dialog - Styled same as Driver Settings Modal */
 .faculty-settings-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(3px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   padding: 16px;
+  background: rgba(16, 23, 13, 0.55);
+  backdrop-filter: blur(4px);
   animation: fadeInModal 0.2s ease-out;
 }
 
@@ -118,15 +117,15 @@
 }
 
 .faculty-settings-modal {
-  width: 100%;
-  max-width: 680px;
-  max-height: 90vh;
-  background: var(--cms-surface, #ffffff);
-  border: 1px solid var(--cms-border, #e2e8f0);
-  border-radius: 14px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
   display: flex;
   flex-direction: column;
+  width: min(680px, calc(100vw - 28px));
+  max-width: 680px;
+  max-height: 90dvh;
+  border-radius: 14px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #d7ddc6);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
 
@@ -134,132 +133,134 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--cms-border, #e2e8f0);
-  background: var(--cms-surface-alt, #fafbf5);
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--cms-border, #d7ddc6);
+  background: var(--cms-soft, #f3f6e8);
 }
 
 .faculty-settings-modal-head h2 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--cms-text, #1e293b);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--cms-text, #1d2519);
+}
+
+.faculty-settings-shield-icon,
+.faculty-settings-modal-head h2 svg {
+  color: var(--cms-primary, #6f8700);
 }
 
 .faculty-settings-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  border: none;
-  font-size: 20px;
-  line-height: 1;
-  color: var(--cms-muted, #64748b);
+  border: 0;
+  font-size: 16px;
+  color: var(--cms-muted, #7b8375);
   cursor: pointer;
   padding: 4px;
   border-radius: 6px;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
 }
 
 .faculty-settings-modal-close:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--cms-text, #1e293b);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--cms-text, #1d2519);
 }
 
 .faculty-settings-tabs {
   display: flex;
-  border-bottom: 1px solid var(--cms-border, #e2e8f0);
-  background: var(--cms-surface, #ffffff);
-  padding: 0 16px;
-  gap: 4px;
-  overflow-x: auto;
+  background: var(--cms-soft, #f3f6e8);
+  border-bottom: 1px solid var(--cms-border, #d7ddc6);
+  padding: 0;
+  margin: 0;
 }
 
 .faculty-settings-tab-btn {
-  padding: 12px 14px;
-  border: none;
-  background: transparent;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--cms-muted, #64748b);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  transition: all 0.15s;
+  padding: 14px 16px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--cms-muted, #7b8375);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex: 1;
   white-space: nowrap;
+  padding-left: 12px;
+  padding-right: 12px;
+  transition: all 0.15s ease;
 }
 
 .faculty-settings-tab-btn:hover {
-  color: var(--cms-primary, #3b5a10);
+  color: var(--cms-primary, #6f8700);
 }
 
 .faculty-settings-tab-btn.is-active {
-  color: var(--cms-primary, #3b5a10);
-  border-bottom-color: var(--cms-primary, #3b5a10);
-  font-weight: 700;
+  color: var(--cms-primary, #6f8700);
+  border-bottom-color: var(--cms-primary, #6f8700);
 }
 
 .faculty-settings-modal-body {
-  padding: 20px;
+  padding: 24px;
+  background: var(--cms-soft, #f3f6e8);
   overflow-y: auto;
   flex: 1;
-}
-
-.faculty-settings-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px 16px;
-}
-
-@media (max-width: 580px) {
-  .faculty-settings-form-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .faculty-settings-field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 7px;
 }
 
 .faculty-settings-field label {
   font-size: 12px;
   font-weight: 700;
-  color: var(--cms-text, #1e293b);
+  color: var(--cms-text, #1d2519);
 }
 
 .faculty-settings-field input,
 .faculty-settings-field select {
-  height: 38px;
-  padding: 0 10px;
-  border: 1px solid var(--cms-border, #cbd5e1);
-  border-radius: 7px;
-  font-size: 13px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--cms-border, #d7ddc6);
+  border-radius: 8px;
   background: var(--cms-surface, #ffffff);
-  color: var(--cms-text, #1e293b);
+  color: var(--cms-text, #1d2519);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .faculty-settings-field input:focus,
 .faculty-settings-field select:focus {
-  border-color: var(--cms-primary, #3b5a10);
-  box-shadow: 0 0 0 2px var(--cms-primary-soft, #f7f9ea);
+  border-color: var(--cms-primary, #6f8700);
+  outline: 2px solid var(--cms-primary, #6f8700);
+  outline-offset: 1px;
 }
 
 .faculty-settings-field input[disabled],
 .faculty-settings-field input:read-only {
-  background: var(--cms-subtle, #f8fafc);
-  color: var(--cms-muted, #64748b);
+  background: var(--cms-primary-soft, #eef3d9);
+  color: var(--cms-muted, #7b8375);
   cursor: not-allowed;
 }
 
 .faculty-settings-hint {
   font-size: 11px;
-  color: var(--cms-muted, #64748b);
+  color: var(--cms-muted, #7b8375);
+  line-height: 1.5;
   margin-top: 2px;
 }
 
@@ -402,26 +403,36 @@ input[type="password"]::-ms-clear {
 
 .faculty-settings-switch-row {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
-  border: 1px solid var(--cms-border, #e2e8f0);
+  min-height: 62px;
+  padding: 13px 15px;
+  border: 1px solid var(--cms-border, #d7ddc6);
   border-radius: 8px;
   background: var(--cms-surface, #ffffff);
+  gap: 16px;
   margin-bottom: 10px;
+}
+
+.faculty-settings-switch-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .faculty-settings-switch-info h4 {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--cms-text, #1e293b);
+  color: var(--cms-text, #1d2519);
 }
 
 .faculty-settings-switch-info p {
-  margin: 3px 0 0;
-  font-size: 12px;
-  color: var(--cms-muted, #64748b);
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--cms-muted, #7b8375);
 }
 
 .faculty-settings-modal-foot {
@@ -429,9 +440,64 @@ input[type="password"]::-ms-clear {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding: 14px 20px;
-  border-top: 1px solid var(--cms-border, #e2e8f0);
-  background: var(--cms-surface-alt, #fafbf5);
+  padding: 12px 18px;
+  border-top: 1px solid var(--cms-border, #d7ddc6);
+  background: var(--cms-soft, #f3f6e8);
+}
+
+.faculty-settings-modal-foot .cms-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 7px 14px;
+  border: 1px solid var(--cms-border, #d7ddc6);
+  border-radius: 9px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #1d2519);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(28, 36, 22, 0.03);
+  transition: all 0.15s ease;
+}
+
+.faculty-settings-modal-foot .cms-btn-ghost:hover:not(:disabled) {
+  border-color: #b8c889;
+  background: var(--cms-soft, #f3f6e8);
+  color: var(--cms-primary-dark, #536600);
+}
+
+.faculty-settings-modal-foot .cms-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 7px 16px;
+  border: 1px solid var(--cms-primary, #6f8700);
+  border-radius: 9px;
+  background: linear-gradient(90deg, var(--cms-primary, #6f8700), var(--cms-primary-hover, #819b08));
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(28, 36, 22, 0.08);
+  transition: all 0.15s ease;
+}
+
+.faculty-settings-modal-foot .cms-btn-primary:hover:not(:disabled) {
+  background: var(--cms-primary-dark, #536600);
+  border-color: var(--cms-primary-dark, #536600);
+  color: #ffffff;
+}
+
+.faculty-settings-modal-foot button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Shield icon */
@@ -514,17 +580,22 @@ input[type="password"]::-ms-clear {
 }
 
 /* Modal Dark Theme */
+[data-theme="dark"] .faculty-settings-modal-overlay,
+.dark-theme .faculty-settings-modal-overlay {
+  background: rgba(16, 23, 13, 0.75) !important;
+}
+
 [data-theme="dark"] .faculty-settings-modal,
 .dark-theme .faculty-settings-modal {
-  background: var(--cms-surface, #171a17) !important;
-  border-color: var(--cms-border, #2b3028) !important;
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55) !important;
+  background: #1d251a !important;
+  border-color: #35422e !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55) !important;
 }
 
 [data-theme="dark"] .faculty-settings-modal-head,
 .dark-theme .faculty-settings-modal-head {
-  background: #1c201a !important;
-  border-bottom-color: var(--cms-border, #2b3028) !important;
+  background: #202a1c !important;
+  border-bottom-color: #35422e !important;
 }
 
 [data-theme="dark"] .faculty-settings-modal-head h2,
@@ -624,6 +695,19 @@ input[type="password"]::-ms-clear {
 
 [data-theme="dark"] .faculty-settings-modal-foot,
 .dark-theme .faculty-settings-modal-foot {
-  background: #1c201a !important;
-  border-top-color: var(--cms-border, #2b3028) !important;
+  background: #202a1c !important;
+  border-top-color: var(--cms-border, #35422e) !important;
+}
+
+[data-theme="dark"] .faculty-settings-modal-foot .cms-btn-ghost,
+.dark-theme .faculty-settings-modal-foot .cms-btn-ghost {
+  background: #1d251a !important;
+  border-color: #35422e !important;
+  color: #edf2e7 !important;
+}
+
+[data-theme="dark"] .faculty-settings-modal-foot .cms-btn-ghost:hover:not(:disabled),
+.dark-theme .faculty-settings-modal-foot .cms-btn-ghost:hover:not(:disabled) {
+  background: #29351f !important;
+  border-color: #879d19 !important;
 }

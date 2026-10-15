@@ -15,7 +15,7 @@ import hostelIcon from "../assets/hostel-3d.svg";
 
 // Shared by the Student sidebar and its navbar search.
 export const studentMenuGroups = [
-  ["STUDENT PORTAL", [["Dashboard", "", dashboardIcon]]],
+  ["OVERVIEW", [["Dashboard", "", dashboardIcon]]],
   ["ACADEMICS", [
     ["My Profile", "profile", profileIcon],
     ["My Timetable", "timetable", timetableIcon],
