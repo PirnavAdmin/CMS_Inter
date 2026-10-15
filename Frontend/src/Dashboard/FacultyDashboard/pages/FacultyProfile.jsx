@@ -1075,7 +1075,7 @@ export default function FacultyProfile() {
         }
 
         if (sectionName && profileData.id) {
-          await apiClient.put(apiEndpoints.faculty.saveProfileDraft(profileData.id), {
+          await apiClient.post(apiEndpoints.faculty.saveProfileDraft(profileData.id), {
             sectionName,
             ...payload,
           });

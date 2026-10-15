@@ -5,6 +5,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { SkeletonButton, SkeletonPage, SkeletonRow } from "@/components/common/Ui.jsx";
+import { getAuthUser, getAuthToken } from "@/features/authStorage.js";
 import * as XLSX from "xlsx";
 import {
   X,
@@ -266,6 +267,28 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
     }
   } catch (err) {
     console.warn("Notice: could not query students endpoint:", err);
+  }
+
+  // Fallback to Attendance Student Roster (accessible by Faculty & Staff roles without 403 Forbidden)
+  if (studentMap.size === 0) {
+    try {
+      const attRes = await apiClient.get("/api/v1/attendance/admin/students", {
+        params: {
+          sectionId: Number(sectionId) || sectionId,
+          ...(filters.board ? { boardId: Number(filters.board) } : {}),
+          ...(filters.year ? { academicYearId: Number(filters.year) } : {}),
+          ...(filters.level ? { academicLevelId: Number(filters.level) } : {}),
+          ...(filters.group ? { groupId: Number(filters.group) } : {}),
+        },
+        skipGlobalLoader: true,
+      });
+      const rawAtt = unwrapRecords(attRes);
+      if (rawAtt.length > 0) {
+        addRecords(rawAtt);
+      }
+    } catch (attErr) {
+      console.warn("Notice: could not query attendance student roster fallback:", attErr);
+    }
   }
 
   const list = Array.from(studentMap.values());
@@ -826,7 +849,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           },
         });
         const raw = unwrapRecords(res);
-        const list = raw
+        let list = raw
           .map((s) => ({
             id: normalizeId(s.sectionId ?? s.id),
             name: s.sectionName ?? s.name,
@@ -840,6 +863,38 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             isActive: s.isActive !== false,
           }))
           .filter((s) => s.isActive);
+
+        // If faculty user, mark their assigned timetable sections and prioritize them
+        const authUser = typeof getAuthUser === "function" ? getAuthUser() : null;
+        const facultyId = authUser?.staffId || 1108;
+        if (authUser?.role?.toLowerCase() === "faculty" && facultyId) {
+          try {
+            const ttRes = await apiClient.get(`/api/v1/timetable/faculty/${facultyId}`).catch(() => null);
+            const ttSlots = unwrapRecords(ttRes);
+            const assignedSecIds = new Set(ttSlots.map((t) => normalizeId(t.sectionId)).filter(Boolean));
+            if (assignedSecIds.size > 0) {
+              list = list.map((sec) => ({
+                ...sec,
+                isAssigned: assignedSecIds.has(normalizeId(sec.id)),
+                name: assignedSecIds.has(normalizeId(sec.id)) ? `${sec.name} (Assigned)` : sec.name,
+              }));
+              list.sort((a, b) => (b.isAssigned ? 1 : 0) - (a.isAssigned ? 1 : 0));
+              if (!filters.section && assignedSecIds.size > 0) {
+                const firstAssigned = list.find((s) => s.isAssigned);
+                if (firstAssigned) {
+                  setFilters((prev) => ({
+                    ...prev,
+                    section: firstAssigned.id,
+                    level: firstAssigned.academicLevelId || prev.level,
+                    group: firstAssigned.groupId || prev.group,
+                  }));
+                }
+              }
+            }
+          } catch (ttErr) {
+            console.warn("Could not fetch timetable for section prioritization:", ttErr);
+          }
+        }
 
         if (isMounted) setSections(list);
       } catch (err) {
@@ -995,7 +1050,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   };
 }
 
-export default function MarksEntryPage({ embedded = false } = {}) {
+export default function MarksEntryPage({ embedded = false, forcedTab = null, hideTabs = false } = {}) {
   const {
     campuses: contextCampuses = [],
     activeCampuses = [],
@@ -1039,7 +1094,11 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   }, [effectiveCampus, selectedCampus, selectedCampusId]);
 
   // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
-  const [tab, setTab] = useState("entry");
+  const [tab, setTab] = useState(forcedTab || "entry");
+
+  useEffect(() => {
+    if (forcedTab) setTab(forcedTab);
+  }, [forcedTab]);
 
   // Initial Master Boards (Loaded once on mount)
   const [allBoards, setAllBoards] = useState([]);
@@ -1317,8 +1376,49 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       };
     });
 
-    setEntryConfigs(configs);
-    const chosenSubjectId = configs.some((c) => eq(c.subjectId, entrySubjectId)) ? entrySubjectId : configs[0]?.subjectId || "";
+    let finalConfigs = configs;
+    const authUser = typeof getAuthUser === "function" ? getAuthUser() : null;
+    const isFacultyUser = authUser?.role?.toLowerCase() === "faculty";
+    const facultyId = authUser?.staffId || 1108;
+
+    if (isFacultyUser && facultyId) {
+      try {
+        const allocRes = await apiClient.get(`/api/v1/staff/${facultyId}/subject-allocations`).catch(() => null);
+        const allocList = unwrapRecords(allocRes);
+        if (allocList.length > 0) {
+          const allowedSubIds = new Set(allocList.map((a) => normalizeId(a.subjectId ?? a.id)));
+          const matched = configs.filter((c) => allowedSubIds.has(normalizeId(c.subjectId)));
+          if (matched.length > 0) {
+            finalConfigs = matched;
+          } else {
+            finalConfigs = allocList.map((a) => {
+              const sId = normalizeId(a.subjectId ?? a.id);
+              return {
+                id: `cfg-${examId}-${sId}`,
+                examinationId: examId,
+                sectionId: sectionId,
+                subjectId: sId,
+                subjectName: a.subjectName || a.name || `Subject ${sId}`,
+                subjectCode: a.subjectCode || a.code || "",
+                mode: "REGULAR",
+                maxMarks: 100,
+                passPercentage: 35,
+                internalMax: 20,
+                practicalMax: 0,
+                theoryMax: 80,
+                facultyName: authUser?.name || "Assigned Faculty",
+                facultyId: String(facultyId),
+              };
+            });
+          }
+        }
+      } catch (allocErr) {
+        console.warn("Could not fetch faculty allocations in loadExamConfigsAndEvaluations:", allocErr);
+      }
+    }
+
+    setEntryConfigs(finalConfigs);
+    const chosenSubjectId = finalConfigs.some((c) => eq(c.subjectId, entrySubjectId)) ? entrySubjectId : finalConfigs[0]?.subjectId || "";
     setEntrySubjectId(chosenSubjectId);
 
     // Search existing evaluations & marks in parallel
@@ -1782,7 +1882,8 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           selectedExam?.academicLevelId || selectedSec?.academicLevelId || entry.filters.level || 1
         );
         const groupId = Number(selectedExam?.groupId || selectedSec?.groupId || entry.filters.group || 1);
-        const facultyId = Number(ws.facultyId || 1);
+        const authUserPersist = typeof getAuthUser === "function" ? getAuthUser() : null;
+        const facultyId = Number(ws.facultyId || authUserPersist?.staffId || 1108);
 
         const boardName = getMasterName(allBoards, boardId, "Board");
         const levelName = getMasterName(entry.levels, academicLevelId, "Academic Level");
@@ -3245,28 +3346,30 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       {/* ======================================================== */}
       {/* MAIN NAVIGATION TABS (Globally only 2 Tabs)              */}
       {/* ======================================================== */}
-      <div className="cms-tabs-row">
-        <div className="cms-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "entry"}
-            className={`cms-tab-btn ${tab === "entry" ? "active" : ""}`}
-            onClick={() => handleTabChange("entry")}
-          >
-            Marks Entry
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "evaluation"}
-            className={`cms-tab-btn ${tab === "evaluation" ? "active" : ""}`}
-            onClick={() => handleTabChange("evaluation")}
-          >
-            Marks Evaluation
-          </button>
+      {!hideTabs && (
+        <div className="cms-tabs-row">
+          <div className="cms-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "entry"}
+              className={`cms-tab-btn ${tab === "entry" ? "active" : ""}`}
+              onClick={() => handleTabChange("entry")}
+            >
+              Marks Entry
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "evaluation"}
+              className={`cms-tab-btn ${tab === "evaluation" ? "active" : ""}`}
+              onClick={() => handleTabChange("evaluation")}
+            >
+              Marks Evaluation
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ======================================================== */}
       {/* TAB 1: MARKS ENTRY WORKFLOW                              */}

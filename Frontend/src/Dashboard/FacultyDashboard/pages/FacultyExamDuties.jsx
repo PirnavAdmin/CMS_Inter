@@ -111,14 +111,16 @@ export default function FacultyExamDuties() {
   useEffect(() => {
     let isMounted = true;
     apiClient
-      .get("/api/v1/staff")
+      .get("/api/v1/staff/dropdown?staffType=Teaching")
       .then((res) => {
         const list = res.data?.data || res.data || [];
         if (isMounted && Array.isArray(list)) {
           setFacultyMembers(list);
           if (list.length > 0 && !reassignTarget) {
             const first = list[0];
-            setReassignTarget(`${first.firstName || first.name} ${first.lastName || ""} (EMP-${first.id || first.staffId})`.trim());
+            const name = first.fullName || `${first.firstName || first.name || ""} ${first.lastName || ""}`.trim();
+            const empId = first.employeeId || first.id || first.staffId;
+            setReassignTarget(`${name} (EMP-${empId})`.trim());
           }
         }
       })
