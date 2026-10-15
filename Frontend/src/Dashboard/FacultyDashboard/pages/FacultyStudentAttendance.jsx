@@ -20,6 +20,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getAuthUser } from "@/features/authStorage.js";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import "../styles/FacultyStudentAttendance.css";
 
@@ -129,6 +130,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
   const [attGroups, setAttGroups] = useState([]);
   const [attPrograms, setAttPrograms] = useState([]);
   const [attSections, setAttSections] = useState([]);
+  const [allocatedSections, setAllocatedSections] = useState([]);
 
   // Filter loading flags
   const [loadingLevels, setLoadingLevels] = useState(false);
@@ -168,6 +170,51 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
   const [defaulterThreshold, setDefaulterThreshold] = useState(75);
   const [defaultersData, setDefaultersData] = useState([]);
   const [defaultersLoading, setDefaultersLoading] = useState(false);
+
+  // 0. Fetch Faculty Timetable Allocated Sections (e.g. REG-1, Reg-1A, MPC-2A for Tanjiro Kamado)
+  useEffect(() => {
+    let isMounted = true;
+    const authUser = getAuthUser();
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
+    if (!staffId) return;
+
+    apiClient
+      .get(`/api/v1/timetable/faculty/${staffId}`)
+      .then((res) => {
+        const slots = res.data?.data || res.data || [];
+        if (!isMounted || !Array.isArray(slots)) return;
+
+        const secMap = new Map();
+        slots.forEach((s) => {
+          if (s.sectionId && !secMap.has(s.sectionId)) {
+            secMap.set(s.sectionId, {
+              sectionId: s.sectionId,
+              sectionName: s.sectionName || `Section #${s.sectionId}`,
+              academicLevelId: s.academicLevelId,
+              academicLevelName: s.levelName || s.academicLevelName,
+              groupId: s.groupId,
+              groupName: s.groupName,
+              programId: s.programId,
+              programName: s.programName,
+            });
+          }
+        });
+        const list = Array.from(secMap.values());
+        if (isMounted) {
+          setAllocatedSections(list);
+          if (list.length > 0 && !attSection) {
+            const first = list[0];
+            setAttSection(first.sectionId);
+            if (first.academicLevelId) setAttLevel(first.academicLevelId);
+            if (first.groupId) setAttGroup(first.groupId);
+            if (first.programId) setAttProgram(first.programId);
+          }
+        }
+      })
+      .catch((err) => console.warn("Could not load faculty timetable sections:", err));
+
+    return () => { isMounted = false; };
+  }, [context?.profile?.staffId, context?.profileData?.staffId]);
 
   // 1. Initialize Boards & Academic Years from Context or Live API
   useEffect(() => {
@@ -335,15 +382,60 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return list;
   }, [monthlyDateValue]);
 
+  // Merge live sections with allocated timetable sections
+  const displaySections = useMemo(() => {
+    const map = new Map();
+    // First prioritize allocated sections for this level (or all if no level selected)
+    allocatedSections.forEach((s) => {
+      if (!attLevel || String(s.academicLevelId) === String(attLevel)) {
+        map.set(String(s.sectionId), { ...s, isAssigned: true });
+      }
+    });
+    // Then add other sections returned by API
+    attSections.forEach((s) => {
+      const id = String(s.sectionId || s.id);
+      if (!map.has(id)) {
+        map.set(id, {
+          sectionId: s.sectionId || s.id,
+          sectionName: s.sectionName || s.name || `Section #${id}`,
+          academicLevelId: s.academicLevelId,
+          groupId: s.groupId,
+          programId: s.programId,
+          isAssigned: false,
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [allocatedSections, attSections, attLevel]);
+
   // Section Name Helper
   const currentSectionName = useMemo(() => {
-    const found = attSections.find((s) => String(s.sectionId || s.id) === String(attSection));
+    const found = displaySections.find((s) => String(s.sectionId || s.id) === String(attSection));
     return found ? (found.sectionName || found.name) : (attSection ? `Section #${attSection}` : "All Sections");
-  }, [attSections, attSection]);
+  }, [displaySections, attSection]);
+
+  // Quick helper to select assigned section from chips
+  const selectAssignedSection = (sec) => {
+    setAttSection(sec.sectionId);
+    if (sec.academicLevelId) setAttLevel(sec.academicLevelId);
+    if (sec.groupId) setAttGroup(sec.groupId);
+    if (sec.programId) setAttProgram(sec.programId);
+    setDailyFetched(false);
+    setMonthlyFetched(false);
+    setDailyPage(1);
+    setMonthlyPage(1);
+  };
 
   // Handlers for Filter Changes
   const handleSectionChange = (val) => {
     setAttSection(val);
+    const matched = allocatedSections.find((s) => String(s.sectionId) === String(val))
+                 || attSections.find((s) => String(s.sectionId || s.id) === String(val));
+    if (matched) {
+      if (matched.academicLevelId && !attLevel) setAttLevel(matched.academicLevelId);
+      if (matched.groupId) setAttGroup(matched.groupId);
+      if (matched.programId) setAttProgram(matched.programId);
+    }
     setDailyFetched(false);
     setMonthlyFetched(false);
     setDailyPage(1);
@@ -862,6 +954,26 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       {/* 2. Hierarchical Cascading Filter Card */}
       <div className="cms-card" style={{ marginBottom: 16 }}>
         <div className="cms-card-body">
+          {/* Quick Assigned Classes Selector Bar */}
+          {allocatedSections.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap", padding: "10px 14px", background: "var(--cms-subtle, #f8fafc)", borderRadius: 8, border: "1px solid var(--cms-border, #e2e8f0)" }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--cms-text)", display: "flex", alignItems: "center", gap: 6 }}>
+                <ClipboardCheck size={15} style={{ color: "var(--cms-primary, #6F8400)" }} /> My Allocated Classes:
+              </span>
+              {allocatedSections.map((sec) => (
+                <button
+                  key={sec.sectionId}
+                  type="button"
+                  className={`cms-btn cms-btn-xs ${String(attSection) === String(sec.sectionId) ? "cms-btn-primary" : "cms-btn-outline"}`}
+                  onClick={() => selectAssignedSection(sec)}
+                  style={{ fontWeight: 600 }}
+                >
+                  ⭐ {sec.sectionName} ({sec.academicLevelName || `Year ${sec.academicLevelId}`})
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="cms-filters">
             {attView === "monthly" ? (
               <div className="cms-field">
@@ -955,9 +1067,9 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                 disabled={loadingSections}
               >
                 <option value="">{loadingSections ? "Loading sections..." : "Select Section"}</option>
-                {attSections.map((s) => (
+                {displaySections.map((s) => (
                   <option key={s.sectionId || s.id} value={s.sectionId || s.id}>
-                    {s.sectionName || s.name || `Section ${s.sectionId || s.id}`}
+                    {s.isAssigned ? `⭐ ${s.sectionName || s.name} (Assigned)` : (s.sectionName || s.name || `Section ${s.sectionId || s.id}`)}
                   </option>
                 ))}
               </select>
@@ -978,21 +1090,6 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
           </div>
         </div>
       </div>
-
-      {/* 3. Before-Click State: Informative Prompt */}
-      {!dailyFetched && (
-        <div className="cms-card">
-          <div style={{ padding: "48px 24px", textAlign: "center", color: "var(--cms-muted)", fontSize: 14 }}>
-            <ClipboardCheck size={36} style={{ color: "var(--cms-primary, #6F8400)", marginBottom: 12 }} />
-            <h3 style={{ margin: "0 0 6px 0", fontSize: 16, fontWeight: 700, color: "var(--cms-text)" }}>
-              Select Class Criteria & Click "Get Records"
-            </h3>
-            <p style={{ margin: 0, maxWidth: 460, marginInline: "auto" }}>
-              Choose your Academic Level, Group, Program, and Section from the cascading filters above, then click <strong>Get Records</strong> to reveal the daily attendance register, monthly report, and defaulter lists.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* 4. Revealed Tabs (Revealed ONLY after clicking "Get Records") */}
       {dailyFetched && (

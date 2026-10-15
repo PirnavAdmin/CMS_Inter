@@ -1300,7 +1300,7 @@ namespace CollegeManagement.API.Repositories
         // COMMON STUDENT PHOTO & DOCUMENT UPDATES (CATEGORY B)
         // =========================================================
 
-        public async Task<bool> UpdatePhotoPathAsync(int studentId, string photoPath)
+        public async Task<bool> UpdatePhotoPathAsync(int studentId, string? photoPath)
         {
             var connection = _context.Database.GetDbConnection();
             var rows = await connection.ExecuteAsync(

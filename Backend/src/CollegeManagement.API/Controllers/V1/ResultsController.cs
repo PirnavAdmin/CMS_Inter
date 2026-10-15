@@ -261,6 +261,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="200">Returns student marks memo with breakdown.</response>
         /// <response code="404">Returned when marks memo is not found.</response>
         [HttpGet("student/{studentId:int}/memo")]
+        [ParentStudentAuthorization]
+        [BypassPermission]
         [ProducesResponseType(typeof(StudentResultDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStudentMemo(
@@ -292,6 +294,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="200">Returns the student result data.</response>
         /// <response code="404">Returned when result is not found.</response>
         [HttpGet("student-result")]
+        [ParentStudentAuthorization]
+        [BypassPermission]
         [ProducesResponseType(typeof(StudentResultDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStudentResult(
@@ -667,6 +671,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="groupId">Group ID (default 1).</param>
         /// <response code="200">Returns the printable Student Marks Memo PDF.</response>
         [HttpGet("students/memo")]
+        [ParentStudentAuthorization]
+        [BypassPermission]
         [Produces("application/pdf")]
         [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
         public async Task<IActionResult> DownloadMemo(

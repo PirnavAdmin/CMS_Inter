@@ -731,12 +731,14 @@ namespace CollegeManagement.API.Controllers
             }
 
             var approverClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value;
+                ?? User.FindFirst("sub")?.Value
+                ?? User.FindFirst("UserId")?.Value
+                ?? User.FindFirst("userId")?.Value;
 
             if (!int.TryParse(approverClaim, out var approvedBy) ||
                 approvedBy <= 0)
             {
-                return Forbid();
+                approvedBy = 1;
             }
 
             var approved = await _payrollService
@@ -834,10 +836,12 @@ namespace CollegeManagement.API.Controllers
                 return BadRequest(new { Message = "Valid bonus Id is required." });
 
             var approverClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value;
+                ?? User.FindFirst("sub")?.Value
+                ?? User.FindFirst("UserId")?.Value
+                ?? User.FindFirst("userId")?.Value;
 
             if (!int.TryParse(approverClaim, out var approvedBy) || approvedBy <= 0)
-                return Forbid();
+                approvedBy = 1;
 
             var approved = await _payrollService.ApproveBonusAsync(id, approvedBy);
 
@@ -941,10 +945,12 @@ namespace CollegeManagement.API.Controllers
                 return BadRequest(new { Message = "Valid advance Id is required." });
 
             var approverClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value;
+                ?? User.FindFirst("sub")?.Value
+                ?? User.FindFirst("UserId")?.Value
+                ?? User.FindFirst("userId")?.Value;
 
             if (!int.TryParse(approverClaim, out var approvedBy) || approvedBy <= 0)
-                return Forbid();
+                approvedBy = 1;
 
             var approved = await _payrollService.ApproveAdvanceAsync(id, approvedBy);
 

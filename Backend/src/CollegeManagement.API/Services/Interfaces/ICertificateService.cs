@@ -101,4 +101,10 @@ public interface ICertificateService
     Task<bool> DeleteAsync(
         int id,
         CancellationToken ct = default);
+
+    Task<bool> UpdateFeeClearanceAsync(
+        int certificateId,
+        UpdateFeeClearanceDto dto,
+        string userName,
+        CancellationToken ct = default);
 }
