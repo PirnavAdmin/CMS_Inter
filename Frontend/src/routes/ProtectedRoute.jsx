@@ -2,6 +2,8 @@ import { Navigate, Outlet } from "react-router-dom";
 import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/features/authStorage.js";
 import { getJwtExpiryState } from "@/api/apiClient.js";
 import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
+import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 
 export function isWardenRole(role, user) {
   const normalizedRole = String(role || "").trim().toLowerCase();
@@ -91,6 +93,71 @@ function isAdminRole(role) {
   return normalized === "admin" || normalized.includes("admin");
 }
 
+export function AccessDeniedView({ module, screen, action }) {
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: "60vh",
+      padding: "2rem",
+      textAlign: "center"
+    }}>
+      <div style={{
+        width: "64px",
+        height: "64px",
+        borderRadius: "50%",
+        background: "#fee2e2",
+        color: "#dc2626",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: "1.5rem",
+        fontSize: "28px"
+      }}>
+        🛡️
+      </div>
+      <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.5rem", color: "#1e293b" }}>
+        Access Restricted
+      </h2>
+      <p style={{ maxWidth: "480px", color: "#64748b", marginBottom: "1.5rem", lineHeight: 1.6 }}>
+        You do not have permission to access <strong>{screen || module || "this resource"}</strong>.
+        Please contact your administrator if you require access.
+      </p>
+      <div style={{ display: "flex", gap: "1rem" }}>
+        <button
+          type="button"
+          onClick={() => window.history.back()}
+          style={{
+            padding: "0.6rem 1.2rem",
+            borderRadius: "8px",
+            border: "1px solid #cbd5e1",
+            background: "#fff",
+            cursor: "pointer",
+            fontWeight: 500
+          }}
+        >
+          Go Back
+        </button>
+        <a
+          href="/dashboard"
+          style={{
+            padding: "0.6rem 1.2rem",
+            borderRadius: "8px",
+            background: "var(--cms-primary, #4361ee)",
+            color: "#fff",
+            textDecoration: "none",
+            fontWeight: 500
+          }}
+        >
+          Return to Dashboard
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export default function ProtectedRoute({
   children,
   requireAdmin = false,
@@ -101,6 +168,9 @@ export default function ProtectedRoute({
   requireFaculty = false,
   requireExamCell = false,
   requireWarden = false,
+  requiredModule = null,
+  requiredScreen = null,
+  requiredAction = ACTIONS.VIEW,
 }) {
   // Discard sessions created by the removed local preview login.
   const storedToken = getAuthToken();
@@ -205,6 +275,14 @@ export default function ProtectedRoute({
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
+  }
+
+  // Fine-grained RBAC Module & Screen permission check
+  if (requiredModule && !isAdmin && !hasRole("SUPER_ADMIN", user)) {
+    const hasPermission = can(requiredModule, requiredAction, undefined, user, requiredScreen);
+    if (!hasPermission) {
+      return <AccessDeniedView module={requiredModule} screen={requiredScreen} action={requiredAction} />;
+    }
   }
 
   return children || <Outlet />;

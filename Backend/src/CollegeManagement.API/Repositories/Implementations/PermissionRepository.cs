@@ -80,6 +80,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             var payload = modules.Select(m => new
             {
                 SubModule = m.SubModule,
+                ScreenId = m.ScreenId ?? string.Empty,
+                ScreenName = m.ScreenName ?? string.Empty,
                 CanView = m.CanView ? 1 : 0,
                 CanAdd = m.CanAdd ? 1 : 0,
                 CanEdit = m.CanEdit ? 1 : 0,
@@ -233,6 +235,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             var payload = overrides.Select(m => new
             {
                 SubModule = m.SubModule,
+                ScreenId = m.ScreenId ?? string.Empty,
+                ScreenName = m.ScreenName ?? string.Empty,
                 CanView = m.CanView ? 1 : 0,
                 CanAdd = m.CanAdd ? 1 : 0,
                 CanEdit = m.CanEdit ? 1 : 0,
