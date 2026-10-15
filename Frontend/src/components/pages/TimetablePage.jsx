@@ -411,8 +411,9 @@ function Field({ label, children }) {
 }
 function Modal({ title, onClose, children, className = "" }) {
   const isPeriodStructureModal = className.split(" ").includes("ttm-period-structure-modal");
+  const isAssignStructureModal = className.split(" ").includes("ttm-assign-structure-modal");
   const modal = (
-    <div className={isPeriodStructureModal ? "timetable-module timetable-period-modal-overlay" : "ttm-overlay"}>
+    <div className={isPeriodStructureModal ? "timetable-module timetable-period-modal-overlay" : isAssignStructureModal ? "timetable-module timetable-assign-modal-overlay" : "ttm-overlay"}>
       <section className={`ttm-modal ${className}${isPeriodStructureModal ? " timetable-period-modal" : ""}`.trim()}>
         <header className={isPeriodStructureModal ? "timetable-period-modal-header" : undefined}>
           <h2>{title}</h2>
@@ -424,7 +425,7 @@ function Modal({ title, onClose, children, className = "" }) {
       </section>
     </div>
   );
-  return isPeriodStructureModal ? createPortal(modal, document.body) : modal;
+  return isPeriodStructureModal || isAssignStructureModal ? createPortal(modal, document.body) : modal;
 }
 function ConfirmDelete({ name, busy, error, onCancel, onConfirm }) {
   return (
@@ -1208,7 +1209,7 @@ function AssignStructureForm({ item, close, assigned, notify, initial }) {
     </Field>
   );
   return (
-    <Modal title="Assign Structure to Group" onClose={saving ? () => {} : close}>
+    <Modal title="Assign Structure to Group" className="ttm-assign-structure-modal" onClose={saving ? () => {} : close}>
       <div className="ttm-modal-body">
         <div className="ttm-form-grid">
           {select("Academic Level", "academicLevelId", data.levels, !value.academicYearId)}
@@ -1218,13 +1219,13 @@ function AssignStructureForm({ item, close, assigned, notify, initial }) {
           <input value={pick(item, "name") ?? ""} readOnly />
         </Field>
         {error ? <p className="ttm-validation-error">{error}</p> : null}
-        <footer>
-          <Btn className="cms-btn cms-btn-ghost" disabled={saving} onClick={close}>Cancel</Btn>
-          <Btn disabled={!ready || saving} onClick={assign}>
-            {saving ? "Assigning…" : "Assign & Continue"}
-          </Btn>
-        </footer>
       </div>
+      <footer className="ttm-assign-modal-footer">
+        <Btn className="cms-btn cms-btn-ghost" disabled={saving} onClick={close}>Cancel</Btn>
+        <Btn disabled={!ready || saving} onClick={assign}>
+          {saving ? "Assigning…" : "Assign & Continue"}
+        </Btn>
+      </footer>
     </Modal>
   );
 }
