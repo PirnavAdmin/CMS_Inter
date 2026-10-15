@@ -127,6 +127,15 @@ export default function StudentProfilePage({ id }) {
       Object.entries(admission || {}).forEach(([key, value]) => {
         if (value != null && value !== "") source[key] = value;
       });
+      // Admission records keep their original placement after a student moves.
+      // Prefer current student values when displaying an edited placement.
+      const currentAcademic = [record.student ?? record.Student ?? record.profile ?? record.Profile,
+        record.academicDetails ?? record.AcademicDetails ?? record.academic ?? record.Academic, record, studentSummary].filter(Boolean);
+      ["campusId", "boardId", "boardName", "academicYearId", "academicYearName", "academicLevelId", "academicLevelName", "levelName", "groupId", "groupName", "programId", "programName", "programmeName", "sectionId", "sectionName"].forEach((key) => {
+        const keys = [key, key[0].toUpperCase() + key.slice(1)];
+        const current = currentAcademic.find((entry) => keys.some((alias) => entry?.[alias] != null));
+        if (current) keys.forEach((alias) => { source[alias] = current[keys[0]] ?? current[keys[1]]; });
+      });
       // Admission is historical; select the current student allocation as a whole
       // so cleared facility fields cannot be repopulated from the admission.
       const currentAllocation = [record.student ?? record.Student ?? record.profile ?? record.Profile, record, studentSummary, admission]
@@ -134,7 +143,7 @@ export default function StudentProfilePage({ id }) {
       const sectionValue = read(source, "section", "Section", "allocatedSection", "AllocatedSection", "assignedSection", "AssignedSection", "sectionDetails", "SectionDetails");
       const sectionId = read(source, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId") ?? read(sectionValue, "sectionId", "SectionId", "id", "Id");
       let sectionRecord = sectionRows.find((item) => String(read(item, "sectionId", "SectionId", "id", "Id")) === String(sectionId));
-      if (!sectionRecord && sectionId != null) {
+      if (!sectionRecord && Number(sectionId) > 0) {
         try {
           const sectionDetail = await apiClient.get(apiEndpoints.sections.getById(sectionId));
           sectionRecord = sectionDetail.data?.data ?? sectionDetail.data?.Data ?? sectionDetail.data;

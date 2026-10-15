@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpenCheck, CalendarClock, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, Sun } from "lucide-react";
+import { Award, BookOpenCheck, CalendarClock, IndianRupee, CheckCircle2, GraduationCap, Users, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -205,7 +205,7 @@ export default function StudentDashboard() {
     : [];
   return (
     <div className="sp-page sp-dashboard-page">
-      <div className="sp-dashboard-greeting"><Sun size={42} aria-hidden="true" />
+      <div className="sp-dashboard-greeting">
       <StudentPageHeader
         title={`${greeting}, ${studentName.split(" ")[0]}`}
         subtitle="Welcome back! Here's what's happening with your academics today."

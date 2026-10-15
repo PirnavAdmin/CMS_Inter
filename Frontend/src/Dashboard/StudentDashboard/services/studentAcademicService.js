@@ -280,10 +280,51 @@ export const getStudentResult = async (student, examId) => {
   return getPayload(response.data);
 };
 
-export const getStudentWeeklyTimetable = async (studentId) => {
-  const response = await apiClient.get(studentApiEndpoints.timetable.weekly(studentId));
-  const payload = getPayload(response.data);
-  return Array.isArray(payload) ? payload : [];
+const timetableValue = (row, key) => row?.[key] ?? row?.[key[0].toUpperCase() + key.slice(1)];
+const timetableRows = (payload) => {
+  let value = payload;
+  for (let depth = 0; depth < 6 && value && !Array.isArray(value); depth += 1) {
+    value = value.$values ?? value.data ?? value.Data ?? value.items ?? value.Items ?? value.result ?? value.Result ?? value.timetableSlots ?? value.slots;
+  }
+  return Array.isArray(value) ? value : [];
+};
+const timetableDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const normalizeTimetableSlot = (row) => {
+  const normalized = Object.fromEntries(Object.keys(row).map((key) => [key[0].toLowerCase() + key.slice(1), row[key]]));
+  const day = Number(normalized.dayOfWeek);
+  const namedDay = timetableDays.find((name) => name.toLowerCase() === String(normalized.dayName || normalized.day || "").toLowerCase());
+  const period = Number(normalized.periodNumber) || Number(String(normalized.periodName || "").match(/\d+/)?.[0]);
+  return { ...normalized,
+    dayName: namedDay || (Number.isInteger(day) ? timetableDays[day === 7 ? 0 : day] : ""),
+    periodNumber: period || null,
+    periodName: normalized.periodName || (period ? `Period ${period}` : "Period"),
+    isBreak: /^(true|1)$/i.test(String(normalized.isBreak)) || /break|lunch|interval/i.test(normalized.periodName || ""),
+  };
+};
+
+export const getStudentWeeklyTimetable = async (student, { signal } = {}) => {
+  const profile = typeof student === "object" && student ? student : { studentId: student };
+  const studentId = timetableValue(profile, "studentId");
+  if (!Number.isInteger(Number(studentId)) || Number(studentId) <= 0) throw new Error("Student ID unavailable.");
+  const sectionId = timetableValue(profile, "sectionId");
+  const academicYearId = timetableValue(profile, "academicYearId");
+  if (!(Number(sectionId) > 0)) return [];
+  if (!(Number(academicYearId) > 0)) throw new Error("Your academic year is not assigned. Please contact the college office.");
+  // Use the same section lookup as the admin grid. The legacy student SQL
+  // incorrectly uses GroupId as SectionId and can return an empty timetable.
+  const response = await apiClient.get(apiEndpoints.timetable.getBySection(sectionId), {
+    params: { isPublished: true, ...(Number(academicYearId) > 0 ? { academicYearId: Number(academicYearId) } : {}),
+      ...(Number(timetableValue(profile, "campusId")) > 0 ? { campusId: Number(timetableValue(profile, "campusId")) } : {}) }, signal,
+  });
+  return timetableRows(response.data).filter((row) => {
+    const published = timetableValue(row, "isPublished");
+    const status = String(timetableValue(row, "status") ?? timetableValue(row, "approvalStatusName") ?? "").toLowerCase();
+    if (published != null ? !/^(true|1)$/i.test(String(published)) : status && status !== "published") return false;
+    return ["sectionId", "academicYearId", "campusId", "boardId", "academicLevelId", "groupId", "programId"].every((key) => {
+      const expected = timetableValue(profile, key), actual = timetableValue(row, key);
+      return !(Number(expected) > 0) || actual == null || String(actual) === String(expected);
+    });
+  }).map(normalizeTimetableSlot);
 };
 
 export const getStudentDailyTimetable = async (studentId, academicYearId, date = new Date().toISOString()) => {
