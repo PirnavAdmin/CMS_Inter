@@ -15,6 +15,8 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
+import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
+import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -518,12 +520,26 @@ export default function DashboardLayout({
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
   const activeMenu = useMemo(() => {
-    if (menuOverride) return menuOverride;
-    if (isWarden) return wardenMenu;
-    if (isParent) return parentMenu;
-    if (isPrincipal) return principalMenu;
-    return menu;
-  }, [isWarden, isParent, isPrincipal, menuOverride]);
+    let base = menuOverride;
+    if (!base) {
+      if (isWarden) base = wardenMenu;
+      else if (isParent) base = parentMenu;
+      else if (isPrincipal) base = principalMenu;
+      else base = menu;
+    }
+    if (user && !hasRole("SUPER_ADMIN", user) && !hasRole("ADMIN", user) && (user.permissions || user.rolePermissions)) {
+      return base
+        .map((group) => ({
+          ...group,
+          items: (group.items || []).filter((item) => {
+            if (!item.moduleKey || item.moduleKey === "dashboard") return true;
+            return can(item.moduleKey, ACTIONS.VIEW, undefined, user);
+          }),
+        }))
+        .filter((group) => group.items.length > 0);
+    }
+    return base;
+  }, [isWarden, isParent, isPrincipal, menuOverride, user]);
   const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : searchIndex);
   const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;

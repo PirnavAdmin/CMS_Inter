@@ -252,7 +252,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Saves or updates student attendance records in bulk for Admin (session-based).
         /// </summary>
         [HttpPost("admin/bulk-save")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -266,7 +266,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("defaulters")]
-        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher")]
+        [Authorize]
         [ProducesResponseType(typeof(IEnumerable<AttendanceDefaulterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -373,7 +373,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="sessionId">The session identifier.</param>
         /// <returns>A success indicator.</returns>
         [HttpPost("session/{sessionId}/unlock")]
-        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        [Authorize]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -508,7 +508,7 @@ namespace CollegeManagement.API.Controllers.V1
             return userName;
         }
         [HttpPost("audit")]
-        [Authorize(Roles = "Super Admin,Admin,HOD,Principal")]
+        [Authorize]
         public async Task<IActionResult> GetAuditHistory([FromBody] CollegeManagement.API.DTOs.Attendance.Requests.AuditHistorySearchRequest request)
         {
             var result = await _attendanceService.GetAuditHistoryAsync(request);
@@ -521,7 +521,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("student/{studentId}/yearly-overview")]
         [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetStudentYearlyOverview([FromRoute] int studentId, [FromQuery] int academicYearId)
@@ -630,7 +630,7 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(result);
         }
         [HttpGet("student/{studentId}/subjects")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize]
         [ParentStudentAuthorization]
         [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<SubjectWiseAttendanceResponse>), StatusCodes.Status200OK)]
@@ -661,7 +661,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("student/{studentId}/daily-logs")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize]
         [ParentStudentAuthorization]
         [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<DailyPunchLogResponse>), StatusCodes.Status200OK)]

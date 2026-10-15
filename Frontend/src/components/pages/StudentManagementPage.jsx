@@ -12,30 +12,80 @@ import "./StudentManagementPage.css";
 export const pageConfig = { title: "Student Management", rows: [], fields: [] };
 const STUDENT_PAGE_SIZE = 5;
 const list = (payload) => {
-  const data = payload?.data ?? payload?.Data ?? payload;
-  if (Array.isArray(data)) return data;
-  return data?.data ?? data?.Data ?? data?.items ?? data?.Items ?? data?.results ?? data?.Results ?? data?.$values ?? [];
+  let source = payload;
+  for (let depth = 0; depth < 5 && source; depth += 1) {
+    if (Array.isArray(source)) return source;
+    const next = source.data ?? source.Data ?? source.items ?? source.Items ?? source.results ?? source.Results ?? source.$values;
+    if (next == null || next === source) break;
+    source = next;
+  }
+  return [];
 };
 const value = (record, ...keys) => keys.map((key) => record?.[key]).find((item) => item != null && item !== "");
+const flagIsTrue = (flag) => flag === true || flag === 1 || ["true", "1"].includes(String(flag ?? "").trim().toLowerCase());
+const flagIsFalse = (flag) => flag === false || flag === 0 || ["false", "0"].includes(String(flag ?? "").trim().toLowerCase());
+const isEligibleAdmission = (admission) => {
+  const status = String(value(admission, "status", "Status", "admissionStatus", "AdmissionStatus") ?? "").trim().toLowerCase();
+  return flagIsTrue(value(admission, "isApproved", "IsApproved"))
+    && flagIsTrue(value(admission, "isVerified", "IsVerified"))
+    && !flagIsTrue(value(admission, "isRejected", "IsRejected"))
+    && !flagIsFalse(value(admission, "isActive", "IsActive"))
+    && (!status || status === "approved");
+};
+const admissionKey = (record) => String(value(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim().toLowerCase();
+const matchesStudentContext = (record, params) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => {
+  if (params[key] == null || params[key] === "") return true;
+  const actual = value(record, key, key[0].toUpperCase() + key.slice(1));
+  return actual == null || String(actual) === String(params[key]);
+});
+const hasCompletedPlacement = (record) => {
+  const sectionId = Number(value(record, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId"));
+  const roll = value(record, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll", "Roll");
+  if (!["string", "number"].includes(typeof roll)) return false;
+  const normalizedRoll = String(roll).trim().toLowerCase();
+  return Number.isInteger(sectionId) && sectionId > 0 && Boolean(normalizedRoll)
+    && !["-", "—", "–", "null", "undefined", "n/a", "not assigned", "unassigned", "unallocated", "pending"].includes(normalizedRoll)
+    && !/^0+$/.test(normalizedRoll);
+};
 const admissionSequence = (record) => {
-  const admission = String(value(record, "admissionNo", "admissionNumber") ?? "");
+  const admission = String(value(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "");
   const suffix = admission.match(/(\d+)\s*$/);
   return suffix ? Number(suffix[1]) : -1;
 };
 const loadStudentsForNumberOrder = async (url, { params }) => {
+  const { campusId, boardId, academicYearId, academicLevelId, groupId, programId } = params;
+  const admissionsResponse = await apiClient.get(apiEndpoints.admissions.getAll, {
+    params: { campusId, boardId, academicYearId, academicLevelId, groupId, programId },
+  });
+  const admissionContext = { campusId, boardId, academicYearId, academicLevelId, groupId, programId };
+  const admissionsByNumber = new Map();
+  list(admissionsResponse.data).filter((admission) => matchesStudentContext(admission, admissionContext)).forEach((admission) => {
+    const key = admissionKey(admission);
+    if (key) admissionsByNumber.set(key, admissionsByNumber.has(key) ? null : admission);
+  });
   const records = [];
   const fetchSize = 100;
+  let previousPage = "";
   for (let pageNumber = 1; ; pageNumber += 1) {
     const response = await apiClient.get(url, { params: { ...params, pageNumber, pageSize: fetchSize } });
     const payload = response.data?.data ?? response.data?.Data ?? response.data ?? {};
     const batch = list(payload);
+    const fingerprint = JSON.stringify(batch.map((record) => value(record, "studentId", "StudentId", "id", "Id") ?? admissionKey(record)));
+    if (batch.length && fingerprint === previousPage) throw new Error("The server repeated a student list page. Refresh and try again.");
+    previousPage = fingerprint;
     records.push(...batch);
-    const total = payload.totalCount ?? payload.TotalCount;
-    if (!batch.length || (total != null ? records.length >= Number(total) : batch.length < fetchSize)) break;
+    const total = payload.totalCount ?? payload.TotalCount ?? response.data?.totalCount ?? response.data?.TotalCount;
+    if (!batch.length || (total != null ? records.length >= Number(total) : Array.isArray(response.data) || batch.length < fetchSize)) break;
+    if (pageNumber >= 100) throw new Error("Unable to verify the complete student list. Narrow your filters and try again.");
   }
-  records.sort((a, b) => admissionSequence(b) - admissionSequence(a)
-    || Number(b.studentId ?? b.id ?? 0) - Number(a.studentId ?? a.id ?? 0));
-  return { data: { items: records, totalCount: records.length, totalPages: Math.max(1, Math.ceil(records.length / STUDENT_PAGE_SIZE)) } };
+  const eligibleRecords = records.filter((record) => {
+    const studentId = Number(value(record, "studentId", "StudentId", "id", "Id"));
+    return Number.isInteger(studentId) && studentId > 0 && matchesStudentContext(record, params)
+      && hasCompletedPlacement(record) && isEligibleAdmission(admissionsByNumber.get(admissionKey(record)));
+  });
+  eligibleRecords.sort((a, b) => admissionSequence(b) - admissionSequence(a)
+    || Number(value(b, "studentId", "StudentId", "id", "Id") ?? 0) - Number(value(a, "studentId", "StudentId", "id", "Id") ?? 0));
+  return { data: { items: eligibleRecords, totalCount: eligibleRecords.length, totalPages: Math.max(1, Math.ceil(eligibleRecords.length / STUDENT_PAGE_SIZE)) } };
 };
 const saveDownload = (data, filename) => {
   const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
@@ -132,19 +182,19 @@ export default function StudentManagementPage() {
           : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? [];
         const mapped = source.map((x, index) => ({
           ...x,
-          id: x.studentId ?? x.id ?? index,
-          studentId: x.studentId ?? x.id ?? "—",
-          name: x.studentName ?? x.fullName ?? x.name ?? "Unnamed Student",
-          admissionNo: x.admissionNo ?? x.admissionNumber ?? "—",
-          board: x.boardName ?? x.board ?? "",
-          academicYear: x.academicYearName ?? x.academicYear ?? "",
-          level: x.academicLevelName ?? x.academicLevel ?? x.levelName ?? "",
-          group: x.groupName ?? x.group ?? "",
-          programme: x.programmeName ?? x.programName ?? x.programme ?? x.program ?? "",
-          section: value(x, "sectionName", "SectionName", "section", "Section", "allocatedSectionName", "AllocatedSectionName", "assignedSectionName", "AssignedSectionName") ?? "",
-          roll: value(x, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll", "Roll") ?? "",
-          mobile: x.mobileNumber ?? x.MobileNumber ?? x.mobile ?? "",
-          status: x.status ?? x.studentStatus ?? "Pending assignment",
+          id: value(x, "studentId", "StudentId", "id", "Id") ?? index,
+          studentId: value(x, "studentId", "StudentId", "id", "Id") ?? "—",
+          name: value(x, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Unnamed Student",
+          admissionNo: value(x, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "—",
+          board: value(x, "boardName", "BoardName", "board", "Board") ?? "",
+          academicYear: value(x, "academicYearName", "AcademicYearName", "academicYear", "AcademicYear") ?? "",
+          level: value(x, "academicLevelName", "AcademicLevelName", "academicLevel", "AcademicLevel", "levelName", "LevelName") ?? "",
+          group: value(x, "groupName", "GroupName", "group", "Group") ?? "",
+          programme: value(x, "programmeName", "ProgrammeName", "programName", "ProgramName", "programme", "program") ?? "",
+          section: value(x, "sectionName", "SectionName", "section", "Section", "allocatedSectionName", "AllocatedSectionName", "assignedSectionName", "AssignedSectionName") ?? `Section ${value(x, "sectionId", "SectionId")}`,
+          roll: String(value(x, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll", "Roll") ?? "").trim(),
+          mobile: value(x, "mobileNumber", "MobileNumber", "mobile", "Mobile") ?? "",
+          status: value(x, "status", "Status", "studentStatus", "StudentStatus") ?? "Pending assignment",
         }));
         if (!active) return;
         setStudents(mapped);
@@ -290,23 +340,22 @@ export default function StudentManagementPage() {
         saveDownload(response.data, downloadName(response.headers?.["content-disposition"], `Student_${studentForPdf.id}_Profile.pdf`));
         return;
       }
-      const filterIds = {
-        level: ["academicLevelId", "AcademicLevelId"],
-        group: ["groupId", "GroupId"],
-        programme: ["programId", "ProgramId", "programmeId", "ProgrammeId"],
-        section: ["sectionId", "SectionId"],
-      };
-      const params = {};
-      const paramNames = { level: "AcademicLevelId", group: "GroupId", programme: "ProgramId", section: "SectionId" };
-      Object.entries(filterIds).forEach(([filterKey]) => {
-        if (!filters[filterKey]) return;
-        params[paramNames[filterKey]] = filters[filterKey];
-      });
-      if (filters.status) params.Status = filters.status;
-      if (selectedBoardId) params.BoardId = selectedBoardId;
-      if (selectedAcademicYearId) params.AcademicYearId = selectedAcademicYearId;
-      const response = await apiClient.get(apiEndpoints.students.exportExcel, { params, responseType: "blob" });
-      saveDownload(response.data, downloadName(response.headers?.["content-disposition"], "Students.xlsx"));
+      if (!matchingStudents.length) throw new Error("No students with approved, verified admissions and completed section and roll number allocation are available to export.");
+      const XLSX = await import("xlsx");
+      const sheet = XLSX.utils.json_to_sheet(matchingStudents.map((student) => ({
+        "Admission No": student.admissionNo,
+        "Student Name": student.name,
+        "Academic Year": student.academicYear,
+        "Academic Level": student.level,
+        Group: student.group,
+        Programme: student.programme,
+        Section: student.section,
+        "Roll No": student.roll,
+        Status: student.status,
+      })));
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, "Students");
+      XLSX.writeFile(workbook, "Students.xlsx");
     } catch (e) {
       setError(getApiErrorMessage(e));
     } finally {
@@ -535,7 +584,7 @@ export default function StudentManagementPage() {
               ) : (
                 <tr>
                   <td colSpan="10">
-                    <div className="cms-empty">{error || "No approved students match your search."}</div>
+                    <div className="cms-empty">{error || "No students with approved, verified admissions and completed section and roll number allocation match your search."}</div>
                   </td>
                 </tr>
               )}

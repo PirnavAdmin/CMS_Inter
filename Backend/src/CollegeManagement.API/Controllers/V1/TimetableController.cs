@@ -151,7 +151,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("student/{studentId:int}/daily")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetByStudent([FromRoute] int studentId)

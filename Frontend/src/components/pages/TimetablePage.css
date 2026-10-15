@@ -291,6 +291,10 @@
 .timetable-module .ttm-grid td.slot .ttm-empty-slot { display: grid; min-height: 58px; place-items: center; color: var(--cms-muted); font-size: 22px; line-height: 1; }
 .timetable-module .ttm-grid td.slot > button.ttm-published-slot { display: grid; place-items: center; min-height: 80px; border-left-width: 3px; text-align: center; }
 .timetable-module .ttm-grid td.slot > button.ttm-published-slot b { width: 100%; white-space: normal; }
+.timetable-module .ttm-grid td.slot > button.ttm-leisure-slot { border-color: var(--cms-violet); background: var(--cms-violet-soft); }
+.timetable-module .ttm-grid td.slot > button.ttm-leisure-slot:hover:not(:disabled) { border-color: var(--cms-violet); }
+.timetable-module .ttm-grid td.slot > button.ttm-leisure-slot b,
+.timetable-module .ttm-grid td.slot > button.ttm-leisure-slot .ttm-slot-edit { color: var(--cms-violet); }
 .ttm-published-slot-details { position: fixed; z-index: 1001; width: fit-content; max-width: min(190px, calc(100vw - 16px)); padding: 7px 9px; border: 1px solid var(--cms-border); border-radius: 7px; background: #fff; box-shadow: var(--cms-shadow); color: var(--cms-text); }
 :root[data-theme="dark"] .ttm-published-slot-details { background: #171a17; }
 .ttm-published-slot-details h3, .ttm-published-slot-details p { max-width: 170px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -685,23 +689,3 @@
     flex: 1;
   }
 }
-.ttm-slot-editor-modal .ttm-leisure-preview {
-  padding: 14px;
-  margin-top: 12px;
-  border: 1px solid var(--cms-border);
-  border-left: 3px solid var(--cms-violet);
-  border-radius: 8px;
-  background: var(--cms-violet-soft);
-  color: var(--cms-text);
-}
-.ttm-slot-editor-modal .ttm-leisure-badge {
-  display: inline-block;
-  padding: 5px 12px;
-  border-radius: 6px;
-  background: var(--cms-surface);
-  color: var(--cms-violet);
-  font-weight: 700;
-}
-.ttm-slot-editor-modal .ttm-leisure-preview p { margin: 10px 0; font-size: 13px; }
-.ttm-slot-editor-modal .ttm-leisure-preview small { color: var(--cms-muted); }
-.ttm-slot-editor-modal .ttm-leisure-preview .ttm-leisure-notice { margin-bottom: 0; font-size: 12px; line-height: 1.5; }

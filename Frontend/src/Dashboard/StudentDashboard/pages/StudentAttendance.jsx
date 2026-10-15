@@ -178,7 +178,7 @@ export default function StudentAttendance() {
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={4} rows={6}/></div>;
 
   return <div className="sp-page sp-my-attendance-page">
-    <StudentPageHeader title="My Attendance" subtitle="View your daily and monthly attendance."/>
+    <StudentPageHeader title="Student Attendance" subtitle="View your daily and monthly attendance."/>
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
     {!profileLoading && !loading && !profileError && !error ? <>
       {view === "monthly" ? <div className="sp-summary-grid four"><StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={`${totals.percentage}%`}/><StudentSummaryCard icon={UserCheck} label="Present Sessions" value={totals.present} tone="blue"/><StudentSummaryCard icon={UserX} label="Absent Sessions" value={totals.absent} tone="red"/><StudentSummaryCard icon={CalendarDays} label="Attendance Days" value={totals.days} tone="orange"/></div> : null}
