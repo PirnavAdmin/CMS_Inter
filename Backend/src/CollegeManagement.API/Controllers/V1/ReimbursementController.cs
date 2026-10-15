@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Asp.Versioning;
@@ -95,7 +96,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 1. Submit a new Reimbursement Claim
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "Faculty,Staff,Admin,Super Admin")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> CreateClaim([FromBody] CreateReimbursementClaimRequest request)
@@ -127,7 +128,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 2. Get All Claims (Finance & Admin Review table)
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllClaims(
             [FromQuery] int? campusId,
@@ -144,7 +145,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 3. Get My Claims (Self-service claims for faculty/staff)
         /// </summary>
         [HttpGet("my-claims")]
-        [Authorize(Roles = "Faculty,Staff,Admin,Super Admin")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetMyClaims([FromQuery] int? campusId)
         {
@@ -163,7 +164,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 4. Get Reimbursement Summary KPIs
         /// </summary>
         [HttpGet("summary")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetSummary([FromQuery] int? campusId)
         {
@@ -176,7 +177,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 5. Get Account Ledger Entries (For Account Ledger Modal)
         /// </summary>
         [HttpGet("account-entries")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAccountEntries([FromQuery] int? campusId)
         {
@@ -206,7 +207,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{id:int}/verify")]
         [HttpPut("{id:int}/approve")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> VerifyClaim(int id, [FromBody] VerifyClaimRequest request)
@@ -225,7 +226,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{id:int}/clarification")]
         [HttpPut("{id:int}/clarification")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> RequestClarification(int id, [FromBody] RequestClarificationRequest request)
@@ -244,7 +245,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{id:int}/reject")]
         [HttpPut("{id:int}/reject")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> RejectClaim(int id, [FromBody] RejectClaimRequest request)
@@ -263,7 +264,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{id:int}/mark-paid")]
         [HttpPost("{id:int}/pay")]
-        [Authorize(Roles = "Accountant,Admin,Super Admin")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> MarkPaid(int id, [FromBody] MarkPaidClaimRequest request)
@@ -281,7 +282,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 11. Upload Proof / Receipt Document
         /// </summary>
         [HttpPost("{id:int}/upload-proof")]
-        [Authorize(Roles = "Faculty,Staff,Admin,Super Admin")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> UploadProof(int id, IFormFile file)

@@ -178,7 +178,7 @@ export default function StudentAttendance() {
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={4} rows={6}/></div>;
 
   return <div className="sp-page sp-my-attendance-page">
-    <StudentPageHeader title="My Attendance" subtitle="View your daily and monthly attendance."/>
+    <StudentPageHeader title="Student Attendance" subtitle="View your daily and monthly attendance."/>
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
     {!profileLoading && !loading && !profileError && !error ? <>
       {view === "monthly" ? <div className="sp-summary-grid four"><StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={`${totals.percentage}%`}/><StudentSummaryCard icon={UserCheck} label="Present Sessions" value={totals.present} tone="blue"/><StudentSummaryCard icon={UserX} label="Absent Sessions" value={totals.absent} tone="red"/><StudentSummaryCard icon={CalendarDays} label="Attendance Days" value={totals.days} tone="orange"/></div> : null}
@@ -187,7 +187,7 @@ export default function StudentAttendance() {
         title={view === "daily" ? "Daily Attendance" : "Attendance Calendar"}
         className={view === "daily" ? "sp-selected-attendance" : ""}
         subtitle={view === "daily" ? "View your attendance for the selected date." : "Daily attendance for the selected month."}
-        action={view === "monthly" ? <label className="sp-attendance-month-filter"><span>Month</span><input type="month" value={selectedMonth} max={CURRENT_MONTH} onChange={(event) => { setSelectedMonth(event.target.value || CURRENT_MONTH); }}/></label> : <div className="sp-attendance-date-controls"><label><span>Select Date</span><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value || todayKey())}/></label><button type="button" className="sp-btn" onClick={() => setSelectedDate(todayKey())}>Today</button></div>}
+        action={view === "monthly" ? <label className="sp-attendance-month-filter"><span>Month</span><input type="month" value={selectedMonth} max={CURRENT_MONTH} onChange={(event) => { setSelectedMonth(event.target.value || CURRENT_MONTH); }}/></label> : <div className="sp-attendance-date-controls"><label><input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value || todayKey())}/></label><button type="button" className="sp-btn" onClick={() => setSelectedDate(todayKey())}>Today</button></div>}
       >
         {view === "daily" ? <>
           <div className="sp-selected-attendance-heading">

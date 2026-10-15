@@ -288,7 +288,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}")]
-        [Authorize(Roles = "Super Admin,Admin,Teacher,Student,Parent,Principal")]
+        [Authorize]
         [ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetById(int studentId)
@@ -576,7 +576,7 @@ namespace CollegeManagement.API.Controllers.V1
 
 
         [HttpGet("my-children")]
-        [Authorize(Roles = "Parent")]
+        [Authorize]
         [BypassPermission]
         public async Task<IActionResult> GetMyChildren()
         {
@@ -605,7 +605,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}/dashboard")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetDashboard(int studentId)

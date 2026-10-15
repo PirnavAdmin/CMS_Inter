@@ -1,4 +1,4 @@
-/* Faculty Salary & Payslips Styles */
+/* Faculty Salary & Payslips Styles - Theme-based via cms.css */
 .payslip-container {
   display: flex;
   flex-direction: column;
@@ -33,13 +33,28 @@
   font-weight: 700;
   font-size: 12.5px;
 }
+.header-badge select {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cms-primary-dark, #566900);
+  cursor: pointer;
+  padding-left: 4px;
+}
+.header-badge select option {
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #10203c);
+}
 
 .payslip-card {
-  background: #fff;
+  background: var(--cms-surface, #ffffff);
   border: 1px solid var(--cms-border, #e4e8f0);
-  border-radius: 14px;
+  border-radius: var(--cms-radius, 14px);
   padding: 22px;
-  box-shadow: 0 4px 16px rgba(16, 32, 60, 0.04);
+  box-shadow: var(--cms-shadow, 0 4px 16px rgba(16, 32, 60, 0.04));
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .payslip-card.current-card {
   border-left: 5px solid var(--cms-primary, #6F8400);
@@ -58,6 +73,7 @@
 .section-title-wrap h2 {
   font-size: 16px;
   font-weight: 700;
+  color: var(--cms-text, #10203c);
   margin: 0;
 }
 .month-badge {
@@ -99,7 +115,7 @@
   color: var(--cms-text, #10203c);
 }
 .salary-box.gross-box h3 { color: #2563eb; }
-.salary-box.deduction-box h3 { color: #dc2626; }
+.salary-box.deduction-box h3 { color: var(--cms-red, #dc2626); }
 .salary-box.net-box h3 { color: var(--cms-primary, #6F8400); }
 
 .action-buttons {
@@ -136,7 +152,8 @@
   gap: 8px;
   transition: all 0.15s;
 }
-.download-btn:hover { border-color: var(--cms-primary, #6F8400); color: var(--cms-primary, #6F8400); }
+.download-btn:hover:not(:disabled) { border-color: var(--cms-primary, #6F8400); color: var(--cms-primary, #6F8400); }
+.download-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .past-header {
   margin-bottom: 16px;
@@ -150,7 +167,7 @@
   border: 1px solid var(--cms-border, #e4e8f0);
   margin-bottom: 10px;
   background: var(--cms-surface, #fff);
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 .past-item:hover { background: var(--cms-bg, #f4f6fb); }
 .past-left {
@@ -162,6 +179,7 @@
   margin: 0;
   font-size: 14px;
   font-weight: 700;
+  color: var(--cms-text, #10203c);
 }
 .past-left p {
   margin: 2px 0 0 0;
@@ -185,10 +203,11 @@
   color: var(--cms-text, #10203c);
   transition: all 0.15s;
 }
-.icon-btn:hover {
+.icon-btn:hover:not(:disabled) {
   border-color: var(--cms-primary, #6F8400);
   color: var(--cms-primary, #6F8400);
 }
+.icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .sp-payslip-table {
   width: 100%;
@@ -197,7 +216,124 @@
 }
 .sp-payslip-table th, .sp-payslip-table td {
   padding: 8px 12px;
-  border: 1px solid var(--cms-border);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  font-size: 13px;
+  color: var(--cms-text, #10203c);
+}
+.sp-payslip-table th { background: var(--cms-bg, #f4f6fb); font-weight: 700; }
+
+/* Empty past payslips valuable message card */
+.empty-past-payslips {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 34px 20px;
+  background: var(--cms-bg, #f4f6fb);
+  border: 1px dashed var(--cms-border, #e4e8f0);
+  border-radius: 12px;
+  gap: 8px;
+  margin-top: 4px;
+}
+.empty-past-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--cms-primary-soft, #F1F4E2);
+  color: var(--cms-primary, #6F8400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+.empty-past-payslips h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+}
+.empty-past-payslips p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--cms-muted, #7B8275);
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+/* Error banner */
+.payslip-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  background: var(--cms-red-soft, #fdecec);
+  border: 1px solid rgba(217, 54, 54, 0.25);
+  border-radius: 10px;
+  color: var(--cms-red, #d93636);
   font-size: 13px;
 }
-.sp-payslip-table th { background: var(--cms-bg); font-weight: 700; }
+
+/* Toast */
+.sp-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--cms-text, #10203c);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 1000;
+  animation: cms-pop 0.2s ease;
+}
+.sp-toast.error {
+  background: var(--cms-red, #d93636);
+}
+
+/* Dark mode theme variables based on cms.css */
+[data-theme="dark"] .payslip-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+}
+[data-theme="dark"] .salary-box {
+  background: var(--cms-bg);
+  border-color: var(--cms-border);
+}
+[data-theme="dark"] .past-item {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+}
+[data-theme="dark"] .past-item:hover {
+  background: var(--cms-bg);
+}
+[data-theme="dark"] .icon-btn,
+[data-theme="dark"] .download-btn {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+[data-theme="dark"] .sp-payslip-table th {
+  background: var(--cms-bg);
+}
+[data-theme="dark"] .sp-payslip-table td,
+[data-theme="dark"] .sp-payslip-table th {
+  border-color: var(--cms-border);
+}
+[data-theme="dark"] .salary-box.gross-box h3 {
+  color: #60a5fa;
+}
+[data-theme="dark"] .empty-past-payslips {
+  background: var(--cms-bg);
+  border-color: var(--cms-border);
+}
+[data-theme="dark"] .empty-past-icon {
+  background: rgba(111, 132, 0, 0.2);
+  color: var(--cms-primary);
+}

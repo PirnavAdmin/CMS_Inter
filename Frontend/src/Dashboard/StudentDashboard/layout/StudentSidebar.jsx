@@ -13,8 +13,9 @@ import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
 
-const groups = [
-  ["STUDENT PORTAL", [["Dashboard", "", dashboardIcon]]],
+// Shared by the Student sidebar and its navbar search.
+export const studentMenuGroups = [
+  ["OVERVIEW", [["Dashboard", "", dashboardIcon]]],
   ["ACADEMICS", [
     ["My Profile", "profile", profileIcon],
     ["My Timetable", "timetable", timetableIcon],
@@ -33,14 +34,14 @@ const groups = [
   ]],
 ];
 
-export default function StudentSidebar({ open, onClose }) {
+export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
   return (
-    <aside className={`sp-sidebar ${open ? "is-open" : ""}`}>
+    <aside id="sp-student-sidebar" className={`sp-sidebar ${open ? "is-open" : ""}`} inert={mobile && !open ? true : undefined}>
       <div className="sp-brand">
         <CampusBrandImage src={logo} alt="Pirnav Colleges"  />
       </div>
-      <nav>
-        {groups.map(([heading, links]) => (
+      <nav aria-label="Student Portal pages">
+        {studentMenuGroups.map(([heading, links]) => (
           <section key={heading}>
             <h2>{heading}</h2>
             {links.map(([label, path, icon]) => (
@@ -49,6 +50,8 @@ export default function StudentSidebar({ open, onClose }) {
                 end={!path}
                 to={`/student-dashboard${path ? `/${path}` : ""}`}
                 onClick={onClose}
+                aria-label={label}
+                title={collapsed && !mobile ? label : undefined}
                 className={({ isActive }) => isActive ? "is-active" : ""}
               >
                 <img className="sp-nav-3d-icon" src={icon} alt="" aria-hidden="true" />
