@@ -559,52 +559,92 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const reimbursementCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
-  const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(String(user?.role || "").trim().toLowerCase());
+  const userRoleStr = String(user?.role || "").trim().toLowerCase();
+  const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
+  const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
   useEffect(() => {
     let disposed = false;
-    if (canReviewReimbursements) {
+    if (canReviewReimbursements || canReviewCertificates) {
       const fetchLiveNotifications = async () => {
+        const notifs = [];
         try {
-          const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
-          if (!fetchFn) return;
-          const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
-          if (disposed) return;
-          const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
-          const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
-          if (claims.length > 0) {
-            setLiveNotifications([{
-              id: "admin-notif-1",
-              title: "New Staff Reimbursement Request",
-              count: claims.length,
-              to: "/dashboard/reimbursements",
-              label: "reimbursements"
-            }]);
-          } else {
-            setLiveNotifications([]);
+          if (canReviewReimbursements) {
+            const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
+            if (fetchFn) {
+              const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
+              if (!disposed) {
+                const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
+                const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
+                if (claims.length > 0) {
+                  notifs.push({
+                    id: "admin-notif-reimbursement",
+                    title: "New Staff Reimbursement Request",
+                    count: claims.length,
+                    to: "/dashboard/reimbursements",
+                    label: "reimbursements"
+                  });
+                }
+              }
+            }
           }
         } catch {
           // Gracefully handle offline or pending notification counter without console noise
         }
-      };
-      
-      fetchLiveNotifications();
 
-      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim)
-      const channel = new BroadcastChannel("cms_notifications");
-      channel.onmessage = (event) => {
-        if (event.data?.type === "NEW_REIMBURSEMENT") {
-          setHasViewedNotifications(false);
-          fetchLiveNotifications();
+        try {
+          if (canReviewCertificates) {
+            const certRes = await apiClient.get("/api/v1/certificates/workflow-stats", { skipGlobalLoader: true });
+            if (!disposed) {
+              const data = certRes?.data?.data ?? certRes?.data?.Data ?? certRes?.data ?? {};
+              const reqCount = Number(data.requestedCount ?? data.RequestedCount) || 0;
+              if (reqCount > 0) {
+                notifs.push({
+                  id: "admin-notif-certificate",
+                  title: "Student Certificate Requests",
+                  count: reqCount,
+                  to: "/dashboard/certificates?status=Requested",
+                  label: "certificates"
+                });
+              }
+            }
+          }
+        } catch {
+          // Gracefully handle offline or pending notification counter without console noise
+        }
+
+        if (!disposed) {
+          setLiveNotifications(notifs);
         }
       };
 
+      fetchLiveNotifications();
+
+      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
+      let channel = null;
+      try {
+        channel = new BroadcastChannel("cms_notifications");
+        channel.onmessage = (event) => {
+          if (event.data?.type === "NEW_REIMBURSEMENT" || event.data?.type === "NEW_CERTIFICATE_REQUEST") {
+            setHasViewedNotifications(false);
+            fetchLiveNotifications();
+          }
+        };
+      } catch {
+        // Fallback
+      }
+
+      const timer = setInterval(() => {
+        fetchLiveNotifications();
+      }, 60000);
+
       return () => {
         disposed = true;
-        channel.close();
+        clearInterval(timer);
+        if (channel) channel.close();
       };
     }
     setLiveNotifications([]);
-  }, [canReviewReimbursements, reimbursementCampusId]);
+  }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
 
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 

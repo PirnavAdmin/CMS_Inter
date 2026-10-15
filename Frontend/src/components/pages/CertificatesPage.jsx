@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { FaArrowsRotate, FaAward, FaBan, FaCheck, FaChevronDown, FaClipboardCheck, FaDownload, FaEraser, FaEye, FaFileCirclePlus, FaFileLines, FaFilter, FaPaperPlane, FaPlus, FaPrint, FaRotateLeft, FaTrash, FaUsers, FaXmark } from "react-icons/fa6";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -1686,7 +1687,10 @@ export default function CertificatesPage() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("generate");
   const [page, setPage] = useState(1);
-  const [workflowStatusFilter, setWorkflowStatusFilter] = useState("All");
+  const [searchParams] = useSearchParams();
+  const urlStatus = searchParams?.get("status");
+  const [workflowStatusFilter, setWorkflowStatusFilter] = useState(urlStatus === "Requested" ? "Requested" : "All");
+  const [liveAlert, setLiveAlert] = useState(null);
   const [workflowQuery, setWorkflowQuery] = useState("");
   const [actionPage, setActionPage] = useState(1);
   const [printPreview, setPrintPreview] = useState(null);
@@ -2001,6 +2005,45 @@ export default function CertificatesPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Real-time listener for incoming student certificate requests
+  useEffect(() => {
+    let channel = null;
+    try {
+      channel = new BroadcastChannel("cms_notifications");
+      channel.onmessage = (event) => {
+        if (event.data?.type === "NEW_CERTIFICATE_REQUEST") {
+          setLiveAlert({
+            admissionNo: event.data.admissionNo || "Student",
+            studentName: event.data.studentName || event.data.admissionNo || "Student",
+            certificateType: event.data.certificateType || "Certificate",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          });
+          loadWorkflowStats();
+          loadCertificates({ showLoader: false });
+        }
+      };
+    } catch {
+      // Fallback if BroadcastChannel unavailable
+    }
+
+    const polling = setInterval(() => {
+      loadWorkflowStats();
+    }, 30000);
+
+    return () => {
+      if (channel) channel.close();
+      clearInterval(polling);
+    };
+  }, []);
+
+  useEffect(() => {
+    const statusParam = searchParams?.get("status");
+    if (statusParam && ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(statusParam)) {
+      setWorkflowStatusFilter(statusParam);
+      setActionPage(1);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!filtersReadyRef.current) return undefined;
@@ -3784,6 +3827,64 @@ export default function CertificatesPage() {
                 </button>
               </div>
             </div>
+            {liveAlert && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 18px",
+                  marginBottom: "16px",
+                  borderRadius: "10px",
+                  background: "linear-gradient(135deg, rgba(234, 88, 12, 0.12) 0%, rgba(249, 115, 22, 0.06) 100%)",
+                  border: "1px solid rgba(234, 88, 12, 0.35)",
+                  boxShadow: "0 4px 12px rgba(234, 88, 12, 0.08)"
+                }}
+                role="alert"
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ fontSize: "22px" }}>🔔</span>
+                  <div>
+                    <strong style={{ color: "#c2410c", fontSize: "14px" }}>
+                      New Student Certificate Request Received ({liveAlert.time})
+                    </strong>
+                    <p style={{ margin: "2px 0 0", fontSize: "13px", color: "var(--color-text, #374151)" }}>
+                      Student <strong>{liveAlert.studentName}</strong> ({liveAlert.admissionNo}) requested a <strong>{liveAlert.certificateType}</strong>.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="cms-btn primary"
+                    style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
+                    onClick={() => {
+                      setWorkflowStatusFilter("Requested");
+                      setActionPage(1);
+                      setLiveAlert(null);
+                    }}
+                  >
+                    View Requested ({workflowStats.requestedCount})
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "6px 8px",
+                      color: "#6b7280",
+                      fontSize: "14px",
+                      fontWeight: "bold"
+                    }}
+                    onClick={() => setLiveAlert(null)}
+                    title="Dismiss alert"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="cert-workflow-summary" aria-label="Certificate workflow summary">
               {[
                 ["Requested", `${workflowStats.requestedCount} Request${workflowStats.requestedCount === 1 ? "" : "s"}`],
