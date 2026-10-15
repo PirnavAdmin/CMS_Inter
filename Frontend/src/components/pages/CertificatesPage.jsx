@@ -65,10 +65,6 @@ const CERTIFICATE_API = {
   download: (id) => `${CERTIFICATE_BASE}/download/${encodeURIComponent(id)}`,
   exportExcel: `${CERTIFICATE_BASE}/export/excel`,
   exportPdf: `${CERTIFICATE_BASE}/export/pdf`,
-  base: CERTIFICATE_BASE,
-  generateFromRequest: (id) => `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/generate`,
-  updateFeeClearance: (id) => `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/fee-clearance`,
-  grantFeeExemption: (id) => `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/fee-exemption`,
 };
 
 const getIssuedBy = () => {
@@ -485,11 +481,6 @@ const normalizeCertificate = (raw) => {
     issuedBy: pick(raw, ["issuedBy", "IssuedBy"]) || "",
     isActive: pick(raw, ["isActive", "IsActive"]),
     signature: getSignatureValue(raw) || getBackendPrincipalSignatureUrl(),
-    feeClearanceStatus: pick(raw, ["feeClearanceStatus", "FeeClearanceStatus"]) || "Cleared",
-    feeDueAmount: Number(pick(raw, ["feeDueAmount", "FeeDueAmount"])) || 0,
-    feeClearedBy: pick(raw, ["feeClearedBy", "FeeClearedBy"]) || "",
-    feeClearedAt: maybeIsoDate(pick(raw, ["feeClearedAt", "FeeClearedAt"])) || "",
-    feeExemptionReason: pick(raw, ["feeExemptionReason", "FeeExemptionReason"]) || "",
   };
 };
 
@@ -1691,9 +1682,6 @@ export default function CertificatesPage() {
   const [actionPage, setActionPage] = useState(1);
   const [printPreview, setPrintPreview] = useState(null);
   const [toast, setToast] = useState("");
-  const [inspectingFeeRow, setInspectingFeeRow] = useState(null);
-  const [feeExemptionNote, setFeeExemptionNote] = useState("");
-  const [savingFeeClearance, setSavingFeeClearance] = useState(false);
   const admissionLookupRef = useRef(0);
   const listRequestRef = useRef(0);
   const studentRequestRef = useRef(0);
@@ -2423,126 +2411,16 @@ export default function CertificatesPage() {
     }
   };
 
-  const openFeeInspector = (row) => {
-    setInspectingFeeRow(row);
-    setFeeExemptionNote(row?.feeExemptionReason || "");
-  };
-
-  const handleGrantPrincipalPermission = async () => {
-    if (!inspectingFeeRow) return;
-    try {
-      setSavingFeeClearance(true);
-      const actionId = await resolveServerCertificateId(inspectingFeeRow);
-      const targetId = actionId || inspectingFeeRow.id;
-      const note = feeExemptionNote.trim() || "Principal verbal / management permission granted";
-      await apiClient.patch(CERTIFICATE_API.grantFeeExemption(targetId), {
-        status: "Principal Permitted",
-        dueAmount: inspectingFeeRow.feeDueAmount || 0,
-        exemptionReason: note,
-        clearedBy: getIssuedBy() || "Principal / Admin",
-      });
-      setToast(`Principal permission recorded for ${inspectingFeeRow.student}. Certificate clearance updated.`);
-      setInspectingFeeRow(null);
-      await refreshCertificateData({ showLoader: false });
-    } catch (err) {
-      setToast(getFriendlyErrorMessage(err, "Failed to record Principal permission."));
-    } finally {
-      setSavingFeeClearance(false);
-    }
-  };
-
-  const handleMarkFeeCleared = async () => {
-    if (!inspectingFeeRow) return;
-    try {
-      setSavingFeeClearance(true);
-      const actionId = await resolveServerCertificateId(inspectingFeeRow);
-      const targetId = actionId || inspectingFeeRow.id;
-      await apiClient.patch(CERTIFICATE_API.updateFeeClearance(targetId), {
-        status: "Cleared",
-        dueAmount: 0,
-        clearedBy: getIssuedBy() || "Accounts Desk / Admin",
-        exemptionReason: "Cleared / No Dues Verified",
-      });
-      setToast(`Fee status for ${inspectingFeeRow.student} marked as Cleared (No Dues).`);
-      setInspectingFeeRow(null);
-      await refreshCertificateData({ showLoader: false });
-    } catch (err) {
-      setToast(getFriendlyErrorMessage(err, "Failed to update fee clearance status."));
-    } finally {
-      setSavingFeeClearance(false);
-    }
-  };
-
-  const renderFeeClearanceBadge = (row) => {
-    const status = row.feeClearanceStatus || "Cleared";
-    const due = Number(row.feeDueAmount) || 0;
-
-    if (status === "Principal Permitted" || status === "Exempted") {
-      return (
-        <button
-          type="button"
-          className="cert-fee-badge cert-fee-permitted"
-          onClick={() => openFeeInspector(row)}
-          title={row.feeExemptionReason ? `Principal Permitted: ${row.feeExemptionReason}` : "Permitted by Principal"}
-        >
-          <span className="cert-fee-dot"></span>
-          <span>Principal Permitted</span>
-          {due > 0 ? <small className="cert-fee-subamt">₹{due.toLocaleString("en-IN")}</small> : null}
-        </button>
-      );
-    }
-
-    if (status === "Dues Pending" || due > 0) {
-      return (
-        <button
-          type="button"
-          className="cert-fee-badge cert-fee-pending"
-          onClick={() => openFeeInspector(row)}
-          title={`Fee Dues Pending: ₹${due.toLocaleString("en-IN")}. Click to inspect or grant Principal Permission.`}
-        >
-          <span className="cert-fee-dot"></span>
-          <span>Dues: ₹{due.toLocaleString("en-IN")}</span>
-        </button>
-      );
-    }
-
-    return (
-      <button
-        type="button"
-        className="cert-fee-badge cert-fee-cleared"
-        onClick={() => openFeeInspector(row)}
-        title="Fee Cleared / No Dues Pending"
-      >
-        <span className="cert-fee-dot"></span>
-        <span>Cleared (₹0 Dues)</span>
-      </button>
-    );
-  };
-
+  
   const handleGenerateFromRequest = async (row) => {
     if (!row || !row.id) return;
-
-    if (row.feeClearanceStatus === "Dues Pending" && Number(row.feeDueAmount) > 0) {
-      const proceed = await confirm({
-        title: "Fee Due Clearance Notice",
-        message: `Student "${row.student || row.admissionNo}" has pending fee dues of ₹${Number(row.feeDueAmount).toLocaleString('en-IN')}.\n\nDo you want to generate certificate from request under Principal Permission?`,
-        confirmLabel: "Proceed & Generate",
-        cancelLabel: "Cancel & Inspect Dues",
-      });
-      if (!proceed) {
-        openFeeInspector(row);
-        return;
-      }
-    }
-
     try {
       setBusyAction({ id: row.id, action: "generate" });
-      const actionId = await resolveServerCertificateId(row);
-      await apiClient.patch(CERTIFICATE_API.generateFromRequest(actionId || row.id));
+      await apiClient.patch(CERTIFICATE_API.base + `/${row.id}/generate`);
       setToast(`Certificate ${row.number || row.type} successfully generated from request.`);
-      await refreshCertificateData({ showLoader: false });
+      await fetchCertificates();
     } catch (err) {
-      setToast(getFriendlyErrorMessage(err, "Failed to generate certificate from request."));
+      alert(`Error generating certificate: ${err.message || "Unknown error"}`);
     } finally {
       setBusyAction({ id: null, action: null });
     }
@@ -2558,19 +2436,6 @@ export default function CertificatesPage() {
     const selected = actionMap[action];
     if (!selected) return;
     if (!canMoveTo(row.status, selected.nextStatus)) return;
-
-    if ((action === "approve" || action === "issue") && row.feeClearanceStatus === "Dues Pending" && Number(row.feeDueAmount) > 0) {
-      const proceed = await confirm({
-        title: "Fee Due Clearance Notice",
-        message: `Student "${row.student || row.admissionNo}" has pending fee dues of ₹${Number(row.feeDueAmount).toLocaleString('en-IN')}.\n\nDo you want to proceed with certificate ${action.toUpperCase()} under Principal Permission / Administrative Override?`,
-        confirmLabel: `Proceed & ${action.charAt(0).toUpperCase() + action.slice(1)}`,
-        cancelLabel: "Cancel & Inspect Dues",
-      });
-      if (!proceed) {
-        openFeeInspector(row);
-        return;
-      }
-    }
 
     setBusyAction({ id: row.id, type: action });
 
@@ -3688,7 +3553,6 @@ export default function CertificatesPage() {
                 <th>Admission Number</th>
                 <th>Student</th>
                 <th>Type</th>
-                <th>Fee Clearance</th>
                 <th>Request Date</th>
                 <th>Issue Date</th>
                 <th>Status</th>
@@ -3697,10 +3561,10 @@ export default function CertificatesPage() {
             </thead>
             <tbody>
               {loadingList ? (
-                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />)
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
               ) : !pageRows.length ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={8}>
                     <div className="cert-empty-state">
                       <div className="cert-empty-icon"><FaAward size={24} aria-hidden="true" /></div>
                       <h4>No certificates found</h4>
@@ -3714,7 +3578,6 @@ export default function CertificatesPage() {
                   <td title={row.admissionNo || "-"}>{row.admissionNo || "-"}</td>
                   <td title={[row.student, row.level].filter(Boolean).join(" · ")}><strong>{row.student}</strong>{row.level ? <small className="cert-student-meta">{row.level}</small> : null}</td>
                   <td title={row.type}>{row.type}</td>
-                  <td>{renderFeeClearanceBadge(row)}</td>
                   <td>{formatDateDdMmYyyy(row.requestDate)}</td>
                   <td>{formatDateDdMmYyyy(row.issue)}</td>
                   <td><span className={`cert-status-pill ${certStatusClass(row.status)}`}>{row.status}</span></td>
@@ -3832,7 +3695,6 @@ export default function CertificatesPage() {
                     <th>Admission Number</th>
                     <th>Student</th>
                     <th>Type</th>
-                    <th>Fee Due Clearance</th>
                     <th>Status</th>
                     <th>Request Date</th>
                     <th className="cert-actions-header">Actions</th>
@@ -3840,16 +3702,15 @@ export default function CertificatesPage() {
                 </thead>
                 <tbody>
                   {loadingList ? (
-                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                   ) : !actionPageRows.length ? (
-                    <tr><td colSpan={8}><div className="cert-empty-state"><div className="cert-empty-icon"><FaAward size={24} aria-hidden="true" /></div><h4>No matching certificates found</h4><p>{workflowQuery.trim() ? "Try a different certificate number, admission number, student, type, status, or date." : workflowStatusFilter === "All" ? "Certificate requests will appear here as they move through the workflow." : `There are no certificates with ${workflowStatusFilter.toLowerCase()} status.`}</p></div></td></tr>
+                    <tr><td colSpan={7}><div className="cert-empty-state"><div className="cert-empty-icon"><FaAward size={24} aria-hidden="true" /></div><h4>No matching certificates found</h4><p>{workflowQuery.trim() ? "Try a different certificate number, admission number, student, type, status, or date." : workflowStatusFilter === "All" ? "Certificate requests will appear here as they move through the workflow." : `There are no certificates with ${workflowStatusFilter.toLowerCase()} status.`}</p></div></td></tr>
                   ) : actionPageRows.map((row, index) => (
                     <tr key={row.backendId ? `action-row-${row.backendId}-${index}` : `action-row-${row.id || "c"}-${row.number || index}-${index}`}>
                       <td className="cms-strong" title={row.number}>{row.number}</td>
                       <td title={row.admissionNo || "-"}>{row.admissionNo || "-"}</td>
                       <td title={row.student}>{row.student}</td>
                       <td title={row.type}>{row.type}</td>
-                      <td>{renderFeeClearanceBadge(row)}</td>
                       <td><span className={`cert-status-pill ${certStatusClass(row.status)}`}>{row.status}</span></td>
                       <td>{formatDateDdMmYyyy(row.requestDate)}</td>
                       <td>
@@ -4029,136 +3890,6 @@ export default function CertificatesPage() {
                   </footer>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {inspectingFeeRow ? (
-        <div
-          className="cert-fee-modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !savingFeeClearance) setInspectingFeeRow(null);
-          }}
-        >
-          <div className="cert-fee-modal-card">
-            <div className="cert-fee-modal-header">
-              <div>
-                <span className="cert-fee-modal-eyebrow">Collegiate Accounts Clearance Desk</span>
-                <h3 className="cert-fee-modal-title">Fee Due Clearance (No-Dues Verification)</h3>
-              </div>
-              <button
-                type="button"
-                className="cert-fee-modal-close"
-                onClick={() => setInspectingFeeRow(null)}
-                disabled={savingFeeClearance}
-                aria-label="Close modal"
-              >
-                <FaXmark size={18} />
-              </button>
-            </div>
-
-            <div className="cert-fee-modal-body">
-              {/* Student Summary */}
-              <div className="cert-fee-student-summary">
-                <div className="cert-fee-summary-item">
-                  <span className="cert-fee-summary-label">Student Name</span>
-                  <strong className="cert-fee-summary-val">{inspectingFeeRow.student}</strong>
-                </div>
-                <div className="cert-fee-summary-item">
-                  <span className="cert-fee-summary-label">Admission No</span>
-                  <span className="cert-fee-summary-val">{inspectingFeeRow.admissionNo || "—"}</span>
-                </div>
-                <div className="cert-fee-summary-item">
-                  <span className="cert-fee-summary-label">Certificate Type</span>
-                  <span className="cert-fee-summary-val">{inspectingFeeRow.type}</span>
-                </div>
-                <div className="cert-fee-summary-item">
-                  <span className="cert-fee-summary-label">Certificate No</span>
-                  <span className="cert-fee-summary-val cms-strong">{inspectingFeeRow.number}</span>
-                </div>
-              </div>
-
-              {/* Status Grid */}
-              <div className="cert-fee-status-grid">
-                <div className="cert-fee-status-box">
-                  <span className="cert-fee-box-title">Clearance Status</span>
-                  <div className="cert-fee-status-chip-wrap">
-                    {renderFeeClearanceBadge(inspectingFeeRow)}
-                  </div>
-                </div>
-
-                <div className="cert-fee-status-box">
-                  <span className="cert-fee-box-title">Total Outstanding Dues</span>
-                  <div className={`cert-fee-amount-display ${Number(inspectingFeeRow.feeDueAmount) > 0 ? "has-dues" : "no-dues"}`}>
-                    ₹{Number(inspectingFeeRow.feeDueAmount || 0).toLocaleString("en-IN")}
-                  </div>
-                </div>
-
-                <div className="cert-fee-status-box">
-                  <span className="cert-fee-box-title">Verified Authority</span>
-                  <div className="cert-fee-authority">
-                    {inspectingFeeRow.feeClearedBy || "Collegiate Accounts Section"}
-                  </div>
-                </div>
-              </div>
-
-              {/* Principal Exemption Note */}
-              <div className="cert-fee-exemption-panel">
-                <div className="cert-fee-panel-title">
-                  <div className="cert-fee-panel-badge">
-                    <FaAward size={13} /> Principal Permission / Zero Hard-Locking
-                  </div>
-                  <p className="cert-fee-panel-desc">
-                    If this student has pending fee dues but received verbal or written approval from the Principal or Management (e.g. Govt fee reimbursement pending, concession approved, or emergency issuance), record the permission note below to issue without blocking.
-                  </p>
-                </div>
-
-                <label className="cert-fee-note-label">
-                  <span>Principal Permission Reason / Audit Note</span>
-                  <textarea
-                    className="cms-textarea cert-fee-note-input"
-                    rows={3}
-                    value={feeExemptionNote}
-                    onChange={(e) => setFeeExemptionNote(e.target.value)}
-                    placeholder="e.g. Principal verbally approved - Govt scholarship fee reimbursement pending."
-                    disabled={savingFeeClearance}
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="cert-fee-modal-footer">
-              <button
-                type="button"
-                className="cms-btn cms-btn-ghost"
-                onClick={() => setInspectingFeeRow(null)}
-                disabled={savingFeeClearance}
-              >
-                Close
-              </button>
-
-              <button
-                type="button"
-                className="cms-btn cms-btn-secondary"
-                onClick={handleMarkFeeCleared}
-                disabled={savingFeeClearance}
-                title="Mark student fee as fully cleared (No Dues)"
-              >
-                <FaCheck size={13} /> Mark Cleared (No Dues)
-              </button>
-
-              <button
-                type="button"
-                className="cms-btn cms-btn-primary cert-btn-grant-permission"
-                onClick={handleGrantPrincipalPermission}
-                disabled={savingFeeClearance}
-                title="Grant Principal Permission with Audit Note"
-              >
-                <FaAward size={13} /> {savingFeeClearance ? "Saving..." : "Grant Principal Permission"}
-              </button>
             </div>
           </div>
         </div>

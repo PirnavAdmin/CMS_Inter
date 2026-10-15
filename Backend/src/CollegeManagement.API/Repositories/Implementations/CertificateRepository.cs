@@ -1114,43 +1114,6 @@ public class CertificateRepository : ICertificateRepository
     }
 
     // =========================================================
-    // UPDATE FEE CLEARANCE STATUS & EXEMPTION
-    // =========================================================
-    public async Task<bool> UpdateFeeClearanceAsync(
-        int certificateId,
-        string status,
-        decimal dueAmount,
-        string? clearedBy,
-        string? exemptionReason,
-        CancellationToken ct = default)
-    {
-        if (certificateId <= 0 || ct.IsCancellationRequested) return false;
-
-        using var connection = _database.CreateConnection();
-        var parameters = new DynamicParameters();
-        parameters.Add("p_CertificateId", certificateId, DbType.Int32);
-        parameters.Add("p_FeeClearanceStatus", status, DbType.String);
-        parameters.Add("p_FeeDueAmount", dueAmount, DbType.Decimal);
-        parameters.Add("p_FeeClearedBy", clearedBy, DbType.String);
-        parameters.Add("p_FeeExemptionReason", exemptionReason, DbType.String);
-
-        try
-        {
-            var rows = await connection.ExecuteAsync(new CommandDefinition(
-                "sp_UpdateCertificateFeeClearance",
-                parameters,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
-            return rows > 0;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[CertificateRepository.UpdateFeeClearanceAsync] Error: {ex.Message}");
-            return false;
-        }
-    }
-
-    // =========================================================
     // BULK GENERATE CERTIFICATES
     // =========================================================
     public async Task<IReadOnlyList<CertificateResponseDto>> BulkGenerateAsync(
@@ -1349,18 +1312,6 @@ public class CertificateRepository : ICertificateRepository
         else if (dict.ContainsKey("S_CampusName") && dict["S_CampusName"] != null)
             campusName = dict["S_CampusName"].ToString()!.Trim();
 
-        string feeStatus = "Cleared";
-        if (dict.ContainsKey("FeeClearanceStatus") && dict["FeeClearanceStatus"] != null)
-            feeStatus = dict["FeeClearanceStatus"].ToString()!;
-
-        decimal feeDue = 0.00m;
-        if (dict.ContainsKey("FeeDueAmount") && dict["FeeDueAmount"] != null)
-            decimal.TryParse(dict["FeeDueAmount"].ToString(), out feeDue);
-
-        string? feeClearedBy = dict.ContainsKey("FeeClearedBy") && dict["FeeClearedBy"] != null ? dict["FeeClearedBy"].ToString() : null;
-        DateTime? feeClearedAt = dict.ContainsKey("FeeClearedAt") && dict["FeeClearedAt"] is DateTime fcd ? fcd : null;
-        string? feeReason = dict.ContainsKey("FeeExemptionReason") && dict["FeeExemptionReason"] != null ? dict["FeeExemptionReason"].ToString() : null;
-
         return new CertificateResponseDto
         {
             CertificateId = id,
@@ -1386,11 +1337,6 @@ public class CertificateRepository : ICertificateRepository
             DateOfBirth = dob,
             CampusId = campusId,
             CampusName = campusName,
-            FeeClearanceStatus = feeStatus,
-            FeeDueAmount = feeDue,
-            FeeClearedBy = feeClearedBy,
-            FeeClearedAt = feeClearedAt,
-            FeeExemptionReason = feeReason,
             IsActive = !status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) && !status.Equals("Deleted", StringComparison.OrdinalIgnoreCase)
         };
     }
