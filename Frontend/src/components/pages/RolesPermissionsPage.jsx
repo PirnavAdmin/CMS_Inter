@@ -3,9 +3,11 @@ import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Eye,
+  Layers,
   MoreVertical,
   RotateCcw,
   Save,
@@ -77,9 +79,23 @@ const getUniqueMembers = (members = []) => {
 
 function getEditablePermissionTargets(modules = [], selectedRole, busy = false) {
   if (!selectedRole || selectedRole.isProtected || busy) return [];
-  return modules.flatMap((module) => (
-    MATRIX_ACTION_KEYS.map((action) => ({ moduleId: module.id, action }))
-  ));
+  return modules.flatMap((module) => {
+    const screens = module.screens || [];
+    if (screens.length > 0) {
+      return screens.flatMap((screen) =>
+        (screen.availableActions || MATRIX_ACTION_KEYS).map((action) => ({
+          moduleId: module.id,
+          screenId: screen.id,
+          action,
+        })),
+      );
+    }
+    return (module.availableActions || MATRIX_ACTION_KEYS).map((action) => ({
+      moduleId: module.id,
+      screenId: null,
+      action,
+    }));
+  });
 }
 
 function getPermissionRestriction({ selectedRole, saving }) {
@@ -121,23 +137,24 @@ function RoleIcon({ role, selected = false }) {
   );
 }
 
-function PermissionToggle({ checked, disabled, disabledReason, onChange, label }) {
+function PermissionToggle({ checked, indeterminate = false, disabled, disabledReason, onChange, label }) {
   const isChecked = Boolean(checked);
+  const isPartial = Boolean(indeterminate && !isChecked);
   const isDisabled = Boolean(disabled);
 
   return (
     <button
       type="button"
-      className={`rbac-switch ${isChecked ? "is-on" : ""}`}
+      className={`rbac-switch ${isChecked ? "is-on" : isPartial ? "is-partial" : ""}`}
       role="switch"
-      aria-checked={isChecked}
+      aria-checked={isChecked ? "true" : isPartial ? "mixed" : "false"}
       aria-label={label}
       disabled={isDisabled}
       onClick={(event) => {
         event.stopPropagation();
         if (!isDisabled) onChange(!isChecked);
       }}
-      title={isDisabled ? disabledReason : label}
+      title={isDisabled ? disabledReason : isPartial ? `${label} (Partially Enabled)` : label}
     >
       <span />
     </button>
@@ -353,21 +370,91 @@ function RoleMembersDialog({ role, members, loading, error, onRetry, onSelectMem
 }
 
 function PermissionMatrix({ modules, permissionRows, selectedRole, saving, query, onQuery, onToggle, markAllState, onMarkAll }) {
-  const permissionMap = useMemo(() => new Map(permissionRows.map((row) => [row.module, row.actions || []])), [permissionRows]);
+  const permissionStructure = useMemo(() => {
+    const map = new Map();
+    (permissionRows || []).forEach((row) => {
+      const modKey = String(row.module || "").trim().toLowerCase();
+      if (!modKey) return;
+      const modActions = new Set(row.actions || []);
+      const screenMap = new Map();
+
+      if (Array.isArray(row.screens)) {
+        row.screens.forEach((s) => {
+          const sId = String(s.screenId || s.id || "").trim().toLowerCase();
+          if (sId) {
+            screenMap.set(sId, new Set(s.actions || []));
+          }
+        });
+      }
+
+      map.set(modKey, { actions: modActions, screens: screenMap });
+    });
+    return map;
+  }, [permissionRows]);
+
+  const [expandedModules, setExpandedModules] = useState(() => new Set());
+
+  // Auto-expand if search query matches a module or screen
+  useEffect(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return;
+    const matching = new Set();
+    modules.forEach((mod) => {
+      const matchMod = [mod.name, mod.id, mod.section].some((val) => String(val || "").toLowerCase().includes(q));
+      const matchScr = (mod.screens || []).some((s) => [s.name, s.id, s.description].some((val) => String(val || "").toLowerCase().includes(q)));
+      if (matchMod || matchScr) matching.add(mod.id);
+    });
+    if (matching.size > 0) {
+      setExpandedModules(matching);
+    }
+  }, [modules, query]);
+
+  const toggleExpand = (modId) => {
+    setExpandedModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(modId)) next.delete(modId);
+      else next.add(modId);
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setExpandedModules(new Set(modules.map((m) => m.id)));
+  };
+
+  const collapseAll = () => {
+    setExpandedModules(new Set());
+  };
+
   const filteredModules = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return modules;
-    return modules.filter((module) =>
-      [module.name, module.id, module.section, ...MATRIX_ACTION_COLUMNS.map((action) => action.label), ...(module.availableActions || []).map((action) => ACTION_LABELS[action] || action)]
-        .some((value) => String(value || "").toLowerCase().includes(q)),
-    );
+    return modules.filter((module) => {
+      const matchesMod = [module.name, module.id, module.section, ...MATRIX_ACTION_COLUMNS.map((action) => action.label)]
+        .some((value) => String(value || "").toLowerCase().includes(q));
+      const matchesScr = (module.screens || []).some((screen) =>
+        [screen.name, screen.id, screen.description].some((value) => String(value || "").toLowerCase().includes(q)),
+      );
+      return matchesMod || matchesScr;
+    });
   }, [modules, query]);
+
+  const allAreExpanded = filteredModules.length > 0 && filteredModules.every((m) => expandedModules.has(m.id));
 
   return (
     <div className="rbac-permission-wrap">
       <div className="rbac-permission-toolbar">
         <h3>Permissions</h3>
-        <SearchBox value={query} onChange={onQuery} placeholder="Search permissions..." label="Search permissions" />
+        <button
+          type="button"
+          className="rbac-expand-toggle-all"
+          onClick={allAreExpanded ? collapseAll : expandAll}
+          title={allAreExpanded ? "Collapse all modules" : "Expand all modules"}
+        >
+          <Layers size={14} aria-hidden="true" />
+          <span>{allAreExpanded ? "Collapse All" : "Expand All"}</span>
+        </button>
+        <SearchBox value={query} onChange={onQuery} placeholder="Search modules & screens..." label="Search permissions" />
         <MarkAllControl
           checked={markAllState.checked}
           indeterminate={markAllState.indeterminate}
@@ -379,44 +466,153 @@ function PermissionMatrix({ modules, permissionRows, selectedRole, saving, query
       {filteredModules.length ? (
         <div className="rbac-matrix" role="table" aria-label={`${selectedRole?.name || "Role"} permissions`}>
           <div className="rbac-matrix-row rbac-matrix-head" role="row">
-            <span role="columnheader">Module</span>
+            <span role="columnheader">Module &amp; Screens</span>
             {MATRIX_ACTION_COLUMNS.map((action) => (
               <span role="columnheader" key={action.key}>{action.label}</span>
             ))}
           </div>
           {filteredModules.map((module) => {
             const Icon = module.icon || ShieldCheck;
-            const selectedActions = permissionMap.get(module.id) || [];
+            const screens = module.screens || [];
+            const isExpanded = expandedModules.has(module.id);
+            const modData = permissionStructure.get(module.id);
+            const restriction = getPermissionRestriction({ selectedRole, saving });
+
             return (
-              <div className="rbac-matrix-row" role="row" key={module.id}>
-                <div className="rbac-module-cell" role="cell">
-                  <span className="rbac-module-icon"><Icon size={19} aria-hidden="true" /></span>
-                  <span>
-                    <strong>{module.name}</strong>
-                    <small>{module.section}</small>
-                  </span>
-                </div>
-                {MATRIX_ACTION_COLUMNS.map((action) => {
-                  const restriction = getPermissionRestriction({ selectedRole, saving });
-                  const checked = restriction.supported && (selectedRole?.isProtected || selectedActions.includes(action.key));
-                  return (
-                    <div className="rbac-matrix-action-cell" role="cell" key={`${module.id}-${action.key}`}>
-                      <PermissionToggle
-                        checked={checked}
-                        disabled={restriction.disabled}
-                        disabledReason={restriction.reason}
-                        label={`${action.label} ${module.name}`}
-                        onChange={(next) => {
-                          if (!restriction.disabled) {
-                            onToggle({
-                              roleId: selectedRole?.id,
-                              moduleId: module.id,
-                              action: action.key,
-                              checked: next,
-                            });
-                          }
+              <div key={module.id} className="rbac-matrix-module-group">
+                {/* Module Master Row */}
+                <div className={`rbac-matrix-row rbac-matrix-module-row ${isExpanded ? "is-expanded" : ""}`} role="row">
+                  <div
+                    className="rbac-module-cell"
+                    role="cell"
+                    onClick={() => screens.length > 0 && toggleExpand(module.id)}
+                  >
+                    {screens.length > 0 ? (
+                      <button
+                        type="button"
+                        className={`rbac-expand-btn ${isExpanded ? "is-expanded" : ""}`}
+                        aria-label={isExpanded ? `Collapse ${module.name}` : `Expand ${module.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpand(module.id);
                         }}
-                      />
+                      >
+                        <ChevronRight size={14} aria-hidden="true" />
+                      </button>
+                    ) : (
+                      <span style={{ width: 26, flex: "0 0 26px" }} />
+                    )}
+                    <span className="rbac-module-icon"><Icon size={19} aria-hidden="true" /></span>
+                    <div>
+                      <strong>{module.name}</strong>
+                      <small>
+                        {module.section}
+                        {screens.length > 0 ? (
+                          <span className="rbac-screen-badge">
+                            {screens.length} {screens.length === 1 ? "screen" : "screens"}
+                          </span>
+                        ) : null}
+                      </small>
+                    </div>
+                  </div>
+
+                  {MATRIX_ACTION_COLUMNS.map((action) => {
+                    const supportedScreens = screens.filter((s) => (s.availableActions || MATRIX_ACTION_KEYS).includes(action.key));
+                    const isSupported = screens.length === 0
+                      ? (module.availableActions || MATRIX_ACTION_KEYS).includes(action.key)
+                      : supportedScreens.length > 0;
+
+                    let isChecked = false;
+                    let isIndeterminate = false;
+
+                    if (selectedRole?.isProtected) {
+                      isChecked = true;
+                    } else if (screens.length === 0) {
+                      isChecked = Boolean(modData?.actions?.has(action.key));
+                    } else if (supportedScreens.length > 0) {
+                      const enabledCount = supportedScreens.filter((s) => {
+                        const sActions = modData?.screens?.get(s.id);
+                        if (sActions) return sActions.has(action.key);
+                        return Boolean(modData?.actions?.has(action.key));
+                      }).length;
+                      isChecked = enabledCount === supportedScreens.length;
+                      isIndeterminate = enabledCount > 0 && enabledCount < supportedScreens.length;
+                    }
+
+                    return (
+                      <div className="rbac-matrix-action-cell" role="cell" key={`${module.id}-${action.key}`}>
+                        <PermissionToggle
+                          checked={isChecked}
+                          indeterminate={isIndeterminate}
+                          disabled={restriction.disabled || !isSupported}
+                          disabledReason={!isSupported ? "Action not applicable for this module" : restriction.reason}
+                          label={`${action.label} ${module.name} (All Screens)`}
+                          onChange={(next) => {
+                            if (!restriction.disabled && isSupported) {
+                              onToggle({
+                                roleId: selectedRole?.id,
+                                moduleId: module.id,
+                                screenId: null, // Master toggle
+                                action: action.key,
+                                checked: next,
+                              });
+                            }
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Screen Sub-Rows (When Expanded) */}
+                {isExpanded && screens.map((screen) => {
+                  return (
+                    <div className="rbac-matrix-row rbac-matrix-screen-row" role="row" key={`${module.id}-${screen.id}`}>
+                      <div className="rbac-screen-cell" role="cell">
+                        <span className="rbac-screen-bullet" aria-hidden="true" />
+                        <div className="rbac-screen-info">
+                          <strong>{screen.name}</strong>
+                          <small>{screen.description || screen.id}</small>
+                        </div>
+                      </div>
+
+                      {MATRIX_ACTION_COLUMNS.map((action) => {
+                        const isActionSupported = (screen.availableActions || MATRIX_ACTION_KEYS).includes(action.key);
+                        let isChecked = false;
+
+                        if (selectedRole?.isProtected) {
+                          isChecked = true;
+                        } else {
+                          const sActions = modData?.screens?.get(screen.id);
+                          if (sActions) {
+                            isChecked = sActions.has(action.key);
+                          } else {
+                            isChecked = Boolean(modData?.actions?.has(action.key));
+                          }
+                        }
+
+                        return (
+                          <div className="rbac-matrix-action-cell" role="cell" key={`${module.id}-${screen.id}-${action.key}`}>
+                            <PermissionToggle
+                              checked={isChecked}
+                              disabled={restriction.disabled || !isActionSupported}
+                              disabledReason={!isActionSupported ? "Action not supported for this screen" : restriction.reason}
+                              label={`${action.label} ${screen.name}`}
+                              onChange={(next) => {
+                                if (!restriction.disabled && isActionSupported) {
+                                  onToggle({
+                                    roleId: selectedRole?.id,
+                                    moduleId: module.id,
+                                    screenId: screen.id,
+                                    action: action.key,
+                                    checked: next,
+                                  });
+                                }
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -425,7 +621,7 @@ function PermissionMatrix({ modules, permissionRows, selectedRole, saving, query
           })}
         </div>
       ) : (
-        <EmptyState title="No permissions found" message="Try searching by module, section or action." />
+        <EmptyState title="No permissions found" message="Try searching by module, screen, section or action." />
       )}
     </div>
   );
@@ -500,25 +696,47 @@ function UserRoleDetailsPanel({ user, permissions, roles, modules, loading, erro
           </div>
 
           <section className="rbac-user-detail-card rbac-user-permission-card">
-            <h4>Permission Information</h4>
+            <h4>Permission Information (Modules &amp; Screens)</h4>
             <div className="rbac-detail-permission-table">
               <div className="rbac-detail-permission-row rbac-detail-permission-head">
-                <span>Module Name</span>
+                <span>Module / Screen</span>
                 {MATRIX_ACTION_COLUMNS.map((action) => <span key={action.key}>{action.label}</span>)}
               </div>
               {modules.map((module) => {
-                const actions = permissionMap.get(module.id) || [];
+                const modActions = permissionMap.get(module.id) || [];
+                const modScreens = module.screens || [];
+                const moduleRow = (permissions || []).find((p) => p.module === module.id);
+                const screenMap = new Map((moduleRow?.screens || []).map((s) => [s.screenId, s.actions || []]));
+
                 return (
-                  <div className="rbac-detail-permission-row" key={module.id}>
-                    <span className="rbac-detail-module-name">
-                      <strong>{module.name}</strong>
-                      <small>{module.section}</small>
-                    </span>
-                    {MATRIX_ACTION_COLUMNS.map((action) => (
-                      <span key={action.key}>
-                        <PermissionStateMark enabled={actions.includes(action.key)} label={`${module.name} ${action.label}`} />
+                  <div key={module.id} className="rbac-detail-module-group">
+                    <div className="rbac-detail-permission-row" style={{ background: "color-mix(in srgb, var(--cms-primary-soft) 40%, var(--cms-surface))" }}>
+                      <span className="rbac-detail-module-name">
+                        <strong>{module.name}</strong>
+                        <small>{module.section} • {modScreens.length} screens</small>
                       </span>
-                    ))}
+                      {MATRIX_ACTION_COLUMNS.map((action) => (
+                        <span key={action.key}>
+                          <PermissionStateMark enabled={modActions.includes(action.key)} label={`${module.name} ${action.label}`} />
+                        </span>
+                      ))}
+                    </div>
+                    {modScreens.map((screen) => {
+                      const scrActions = screenMap.get(screen.id) || modActions;
+                      return (
+                        <div className="rbac-detail-permission-row" key={screen.id} style={{ paddingLeft: "32px", borderBottom: "1px solid var(--cms-border)" }}>
+                          <span className="rbac-detail-module-name">
+                            <span style={{ fontSize: "12px", color: "var(--cms-text)" }}>• {screen.name}</span>
+                            <small>{screen.description || screen.id}</small>
+                          </span>
+                          {MATRIX_ACTION_COLUMNS.map((action) => (
+                            <span key={action.key}>
+                              <PermissionStateMark enabled={scrActions.includes(action.key)} label={`${screen.name} ${action.label}`} />
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -545,16 +763,71 @@ function RoleDetails({
   onSave,
   onReset,
 }) {
-  const updateAction = useCallback(({ roleId, moduleId, action, checked }) => {
+  const updateAction = useCallback(({ roleId, moduleId, screenId, action, checked }) => {
     if (!selectedRole || String(roleId) !== String(selectedRole.id) || selectedRole.isProtected || loading || saving) return;
-    if (!modules.some((module) => module.id === moduleId) || !MATRIX_ACTION_KEYS.includes(action)) return;
+    const modConfig = modules.find((m) => m.id === moduleId);
+    if (!modConfig || !MATRIX_ACTION_KEYS.includes(action)) return;
 
-    const previousPermissions = permissions;
-    const existing = previousPermissions.find((row) => row.module === moduleId);
-    const nextActions = togglePermissionAction(existing?.actions || [], action, Boolean(checked));
-    const withoutModule = previousPermissions.filter((row) => row.module !== moduleId);
-    const nextPermissions = normalizePermissionPayload([...withoutModule, { module: moduleId, actions: nextActions }]);
-    setPermissions(nextPermissions);
+    const previousPermissions = [...permissions];
+    const moduleIndex = previousPermissions.findIndex((row) => row.module === moduleId);
+    const moduleEntry = moduleIndex !== -1
+      ? { ...previousPermissions[moduleIndex] }
+      : { module: moduleId, actions: [], screens: [] };
+
+    const modScreens = modConfig.screens || [];
+    const screenMap = new Map((moduleEntry.screens || []).map((s) => [s.screenId, [...(s.actions || [])]]));
+
+    if (modScreens.length > 0) {
+      modScreens.forEach((s) => {
+        if (!screenMap.has(s.id)) {
+          screenMap.set(s.id, [...(moduleEntry.actions || [])]);
+        }
+      });
+    }
+
+    if (screenId) {
+      // Toggle for specific screen
+      const currentActions = screenMap.get(screenId) || [];
+      const nextActions = togglePermissionAction(currentActions, action, Boolean(checked));
+      screenMap.set(screenId, nextActions);
+    } else {
+      // Master toggle across all screens
+      modScreens.forEach((s) => {
+        if ((s.availableActions || MATRIX_ACTION_KEYS).includes(action)) {
+          const currentActions = screenMap.get(s.id) || [];
+          const nextActions = togglePermissionAction(currentActions, action, Boolean(checked));
+          screenMap.set(s.id, nextActions);
+        }
+      });
+    }
+
+    // Recompute module actions: an action is granted at module level if any screen has it
+    const updatedScreens = [...screenMap.entries()].map(([sId, sActions]) => ({
+      screenId: sId,
+      actions: sActions,
+    }));
+
+    const aggregateActions = new Set();
+    if (updatedScreens.length > 0) {
+      updatedScreens.forEach((s) => s.actions.forEach((a) => aggregateActions.add(a)));
+    } else {
+      togglePermissionAction(moduleEntry.actions || [], action, Boolean(checked)).forEach((a) => aggregateActions.add(a));
+    }
+
+    const updatedModule = {
+      ...moduleEntry,
+      module: moduleId,
+      actions: [...aggregateActions],
+      screens: updatedScreens,
+    };
+
+    if (moduleIndex !== -1) {
+      previousPermissions[moduleIndex] = updatedModule;
+    } else {
+      previousPermissions.push(updatedModule);
+    }
+
+    setPermissions(normalizePermissionPayload(previousPermissions));
   }, [loading, modules, permissions, saving, selectedRole, setPermissions]);
 
   const editablePermissionTargets = useMemo(
@@ -566,10 +839,29 @@ function RoleDetails({
     if (!selectedRole || loading || saving || !editablePermissionTargets.length) {
       return { checked: false, indeterminate: false, disabled: true };
     }
-    const permissionMap = new Map(permissions.map((row) => [row.module, row.actions || []]));
-    const selectedCount = editablePermissionTargets.filter(({ moduleId, action }) =>
-      (permissionMap.get(moduleId) || []).includes(action),
-    ).length;
+
+    const permissionMap = new Map();
+    (permissions || []).forEach((row) => {
+      const modKey = row.module;
+      const modActions = new Set(row.actions || []);
+      const screenMap = new Map((row.screens || []).map((s) => [s.screenId, new Set(s.actions || [])]));
+      permissionMap.set(modKey, { actions: modActions, screens: screenMap });
+    });
+
+    let selectedCount = 0;
+    editablePermissionTargets.forEach(({ moduleId, screenId, action }) => {
+      const mod = permissionMap.get(moduleId);
+      if (!mod) return;
+      if (screenId) {
+        const scr = mod.screens.get(screenId);
+        if (scr ? scr.has(action) : mod.actions.has(action)) {
+          selectedCount++;
+        }
+      } else if (mod.actions.has(action)) {
+        selectedCount++;
+      }
+    });
+
     return {
       checked: selectedCount === editablePermissionTargets.length,
       indeterminate: selectedCount > 0 && selectedCount < editablePermissionTargets.length,
@@ -580,22 +872,25 @@ function RoleDetails({
   const toggleMarkAll = () => {
     if (markAllState.disabled) return;
     const shouldEnable = !markAllState.checked;
-    const previousPermissions = permissions;
-    const byModule = new Map(previousPermissions.map((row) => [row.module, row.actions || []]));
-    modules.forEach((module) => {
-      const editableActions = MATRIX_ACTION_KEYS;
-      let nextActions = byModule.get(module.id) || [];
-      if (shouldEnable) {
-        nextActions = [...new Set([...nextActions, ...editableActions])];
-      } else {
-        editableActions.forEach((action) => {
-          nextActions = togglePermissionAction(nextActions, action, false);
-        });
-      }
-      byModule.set(module.id, nextActions);
+
+    const nextPermissions = modules.map((module) => {
+      const modScreens = module.screens || [];
+      const screens = modScreens.map((screen) => {
+        const available = screen.availableActions || MATRIX_ACTION_KEYS;
+        return {
+          screenId: screen.id,
+          actions: shouldEnable ? MATRIX_ACTION_KEYS.filter((a) => available.includes(a)) : [],
+        };
+      });
+      const actions = shouldEnable ? MATRIX_ACTION_KEYS : [];
+      return {
+        module: module.id,
+        actions,
+        screens,
+      };
     });
-    const nextPermissions = normalizePermissionPayload([...byModule.entries()].map(([module, actions]) => ({ module, actions })));
-    setPermissions(nextPermissions);
+
+    setPermissions(normalizePermissionPayload(nextPermissions));
   };
 
   if (!selectedRole) {
@@ -1381,12 +1676,12 @@ export default function RolesPermissionsPage() {
     return modules.filter((module) => permissionModuleIds.has(module.id));
   }, [modules, permissions]);
 
-  const routeNote = "Mock preview mode";
+  const routeNote = "Connected (Live API)";
 
   return (
     <DashboardLayout
       title="Roles & Permissions"
-      subtitle="Preview system roles and module-level permissions with mock data."
+      subtitle="Configure system roles, module and screen-wise permissions, and user role assignments."
       breadcrumb={["Home", "Administration", "Roles & Permissions"]}
     >
       <main className="rbac-page">
@@ -1400,7 +1695,7 @@ export default function RolesPermissionsPage() {
           <span className="rbac-route-note"><Check size={14} /> {routeNote}</span>
         </div>
 
-        {loading ? <div className="rbac-loading-card"><Loader label="Loading mock permissions..." /></div> : null}
+        {loading ? <div className="rbac-loading-card"><Loader label="Loading roles and permissions..." /></div> : null}
         {error && !loading ? (
           <EmptyState
             title="Unable to load Roles & Permissions"

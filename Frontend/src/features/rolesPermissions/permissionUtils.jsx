@@ -28,6 +28,15 @@ const getPermissionModuleKey = (item = {}) =>
   ?? item?.Module
   ?? "";
 
+const getPermissionScreenKey = (item = {}) =>
+  item?.screenId
+  ?? item?.ScreenId
+  ?? item?.screenKey
+  ?? item?.ScreenKey
+  ?? item?.screen
+  ?? item?.Screen
+  ?? "";
+
 const getPermissionActions = (item = {}) => {
   if (Array.isArray(item)) return item;
   if (Array.isArray(item?.actions)) return item.actions;
@@ -41,19 +50,53 @@ const getPermissionActions = (item = {}) => {
   ].filter(Boolean);
 };
 
-const toPermissionMap = (permissions = []) => {
-  if (permissions && typeof permissions === "object" && !Array.isArray(permissions)) {
-    return Object.entries(permissions).reduce((acc, [moduleKey, actions]) => {
-      acc[normalizeModuleKey(moduleKey)] = getPermissionActions(actions).map(normalizeActionKey);
-      return acc;
-    }, {});
+export const toPermissionMap = (permissions = []) => {
+  const map = {};
+
+  if (!permissions) return map;
+
+  if (typeof permissions === "object" && !Array.isArray(permissions)) {
+    Object.entries(permissions).forEach(([key, actions]) => {
+      map[normalizeModuleKey(key)] = getPermissionActions(actions).map(normalizeActionKey);
+    });
+    return map;
   }
-  return permissions.reduce((acc, item) => {
-    const moduleKey = normalizeModuleKey(getPermissionModuleKey(item));
-    if (!moduleKey) return acc;
-    acc[moduleKey] = getPermissionActions(item).map(normalizeActionKey);
-    return acc;
-  }, {});
+
+  permissions.forEach((item) => {
+    const modKey = normalizeModuleKey(getPermissionModuleKey(item));
+    if (!modKey) return;
+
+    // Module-level actions
+    const modActions = getPermissionActions(item).map(normalizeActionKey);
+    if (!map[modKey]) {
+      map[modKey] = modActions;
+    } else {
+      map[modKey] = [...new Set([...map[modKey], ...modActions])];
+    }
+
+    // Direct screenId on item (flat format from backend)
+    const scrKey = normalizeModuleKey(getPermissionScreenKey(item));
+    if (scrKey) {
+      map[`${modKey}:${scrKey}`] = modActions;
+    }
+
+    // Nested screens array on item
+    if (Array.isArray(item.screens)) {
+      item.screens.forEach((screen) => {
+        const sKey = normalizeModuleKey(screen?.id ?? screen?.screenId ?? screen?.name);
+        if (sKey) {
+          const screenActions = getPermissionActions(screen).map(normalizeActionKey);
+          map[`${modKey}:${sKey}`] = screenActions;
+          // Also merge into module-level map so module-level canView knows if any screen is viewable
+          if (screenActions.includes(ACTIONS.VIEW) && !map[modKey].includes(ACTIONS.VIEW)) {
+            map[modKey].push(ACTIONS.VIEW);
+          }
+        }
+      });
+    }
+  });
+
+  return map;
 };
 
 export function normalizeRoleCode(value = "") {
@@ -73,18 +116,30 @@ export function hasRole(roleCode, user = getAuthUser()) {
   return roles.some((role) => normalizeRoleCode(typeof role === "object" ? role.code || role.name : role) === expected);
 }
 
-export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = getAuthUser()) {
+export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = getAuthUser(), screenKey = null) {
   if (hasRole("SUPER_ADMIN", user) || hasRole("ADMIN", user)) return true;
   const source = permissions ?? user?.permissions ?? user?.rolePermissions;
   if (!source) return true;
+
   const permissionMap = toPermissionMap(source);
-  const actions = permissionMap[normalizeModuleKey(moduleKey)];
-  if (!Array.isArray(actions)) return false;
-  return actions.includes(normalizeActionKey(actionKey));
+  const normMod = normalizeModuleKey(moduleKey);
+  const normAct = normalizeActionKey(actionKey);
+
+  if (screenKey) {
+    const normScr = normalizeModuleKey(screenKey);
+    const screenLookupKey = `${normMod}:${normScr}`;
+    if (Array.isArray(permissionMap[screenLookupKey])) {
+      return permissionMap[screenLookupKey].includes(normAct);
+    }
+  }
+
+  const moduleActions = permissionMap[normMod];
+  if (!Array.isArray(moduleActions)) return false;
+  return moduleActions.includes(normAct);
 }
 
-export function PermissionGuard({ moduleKey, actionKey = ACTIONS.VIEW, permissions, fallback = null, children }) {
-  return can(moduleKey, actionKey, permissions) ? children : fallback;
+export function PermissionGuard({ moduleKey, screenKey = null, actionKey = ACTIONS.VIEW, permissions, fallback = null, children }) {
+  return can(moduleKey, actionKey, permissions, getAuthUser(), screenKey) ? children : fallback;
 }
 
 export function enforcePermissionDependencies(actions = []) {
@@ -104,25 +159,70 @@ export function togglePermissionAction(currentActions = [], actionKey, enabled) 
   const next = new Set(currentActions);
   if (enabled) {
     next.add(actionKey);
+    // If enabling create, edit, or delete, auto-enable view
+    if (actionKey !== ACTIONS.VIEW) {
+      next.add(ACTIONS.VIEW);
+    }
   } else {
     next.delete(actionKey);
+    // If disabling view, auto-disable create, edit, delete
+    if (actionKey === ACTIONS.VIEW) {
+      next.delete(ACTIONS.CREATE);
+      next.delete(ACTIONS.EDIT);
+      next.delete(ACTIONS.DELETE);
+    }
   }
   return [...next];
 }
 
 export function normalizePermissionPayload(permissions = []) {
+  if (!Array.isArray(permissions)) return [];
+
   const byModule = new Map();
 
   permissions.forEach((item) => {
-    const module = normalizeModuleKey(getPermissionModuleKey(item));
-    if (!module) return;
+    const mod = normalizeModuleKey(getPermissionModuleKey(item));
+    if (!mod) return;
 
-    const actions = byModule.get(module) || [];
-    getPermissionActions(item).map(normalizeActionKey).forEach((action) => {
-      if (action && !actions.includes(action)) actions.push(action);
+    const existing = byModule.get(mod) || { module: mod, actions: [], screens: new Map() };
+    const itemActions = getPermissionActions(item).map(normalizeActionKey);
+
+    itemActions.forEach((act) => {
+      if (act && !existing.actions.includes(act)) existing.actions.push(act);
     });
-    byModule.set(module, actions);
+
+    // Check direct screen
+    const scrId = normalizeModuleKey(getPermissionScreenKey(item));
+    if (scrId) {
+      const scrActions = existing.screens.get(scrId) || [];
+      itemActions.forEach((act) => {
+        if (act && !scrActions.includes(act)) scrActions.push(act);
+      });
+      existing.screens.set(scrId, scrActions);
+    }
+
+    // Check nested screens
+    if (Array.isArray(item.screens)) {
+      item.screens.forEach((s) => {
+        const sId = normalizeModuleKey(s.id || s.screenId);
+        if (!sId) return;
+        const scrActions = existing.screens.get(sId) || [];
+        getPermissionActions(s).map(normalizeActionKey).forEach((act) => {
+          if (act && !scrActions.includes(act)) scrActions.push(act);
+        });
+        existing.screens.set(sId, scrActions);
+      });
+    }
+
+    byModule.set(mod, existing);
   });
 
-  return [...byModule.entries()].map(([module, actions]) => ({ module, actions }));
+  return [...byModule.values()].map((entry) => ({
+    module: entry.module,
+    actions: entry.actions,
+    screens: [...entry.screens.entries()].map(([screenId, actions]) => ({
+      screenId,
+      actions,
+    })),
+  }));
 }
