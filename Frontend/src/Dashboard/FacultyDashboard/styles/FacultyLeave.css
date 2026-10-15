@@ -1,16 +1,402 @@
-/* Faculty Leave Management Styles */
-.sp-leave-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-  margin-bottom: 20px;
+/* ============================================================
+   Faculty Leave Management Styles
+   Theme-based design system adhering strictly to cms.css
+   ============================================================ */
+
+.faculty-leave-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  animation: cms-fade 0.2s ease;
 }
-.sp-leave-card {
-  background: var(--cms-surface, #fff);
+
+/* ---------- Stat Cards Strip ---------- */
+.faculty-leave-container .sp-stat-grid,
+.faculty-leave-container .cms-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 1100px) {
+  .faculty-leave-container .sp-stat-grid,
+  .faculty-leave-container .cms-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .faculty-leave-container .sp-stat-grid,
+  .faculty-leave-container .cms-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.faculty-leave-container .cms-stat {
+  background: var(--cms-surface, #ffffff);
   border: 1px solid var(--cms-border, #e4e8f0);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: var(--cms-radius, 14px);
+  box-shadow: var(--cms-shadow, 0 1px 2px rgba(16, 32, 60, 0.04), 0 8px 24px rgba(16, 32, 60, 0.06));
+  padding: 16px 20px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.faculty-leave-container .cms-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(16, 32, 60, 0.09);
+  border-color: var(--cms-primary-border, #c7d7fe);
+}
+
+.faculty-leave-container .cms-stat-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 46px;
+}
+
+.faculty-leave-container .cms-stat-icon.tone-green {
+  background: var(--cms-green-soft, #e6f6ee);
+  color: var(--cms-green, #0f9d58);
+}
+
+.faculty-leave-container .cms-stat-icon.tone-blue {
+  background: var(--cms-primary-soft, #F1F4E2);
+  color: var(--cms-primary, #6F8400);
+}
+
+.faculty-leave-container .cms-stat-icon.tone-amber {
+  background: var(--cms-amber-soft, #fdf3e0);
+  color: var(--cms-amber, #b7791f);
+}
+
+.faculty-leave-container .cms-stat-icon.tone-violet {
+  background: var(--cms-violet-soft, #f1ebfd);
+  color: var(--cms-violet, #6d28d9);
+}
+
+.faculty-leave-container .cms-stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cms-muted, #7B8275);
+  margin-bottom: 4px;
+}
+
+.faculty-leave-container .cms-stat-value {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--cms-text, #10203c);
+  line-height: 1.2;
+}
+
+/* ---------- Error Banner ---------- */
+.leave-error-banner {
+  background: var(--cms-red-soft, #fdecec);
+  border: 1px solid var(--cms-red, #d93636);
+  color: var(--cms-red, #d93636);
+  border-radius: var(--cms-radius, 14px);
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+  animation: cms-fade 0.2s ease;
+}
+
+/* ---------- Table Card ---------- */
+.faculty-leave-container .cms-card {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.faculty-leave-container .cms-card-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--cms-border, #e4e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--cms-surface, #ffffff);
+}
+
+.faculty-leave-container .cms-card-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+}
+
+.faculty-leave-container .cms-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.faculty-leave-container .cms-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.faculty-leave-container .cms-table th {
+  background: var(--cms-subtle, #f8fafc);
+  color: var(--cms-muted, #7B8275);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cms-border, #e4e8f0);
+  white-space: nowrap;
+}
+
+.faculty-leave-container .cms-table td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--cms-border, #e4e8f0);
+  font-size: 13px;
+  color: var(--cms-text, #10203c);
+  vertical-align: middle;
+}
+
+.faculty-leave-container .cms-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.faculty-leave-container .cms-table tbody tr:hover {
+  background: var(--cms-hover, rgba(111, 132, 0, 0.03));
+}
+
+.faculty-leave-container .cms-table td.cms-strong {
+  font-weight: 600;
+  color: var(--cms-text, #10203c);
+}
+
+/* ---------- Status Badges ---------- */
+.faculty-leave-container .cms-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.faculty-leave-container .cms-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.faculty-leave-container .cms-badge-active {
+  background: var(--cms-green-soft, #e6f6ee);
+  color: var(--cms-green, #0f9d58);
+}
+
+.faculty-leave-container .cms-badge-warn {
+  background: var(--cms-amber-soft, #fdf3e0);
+  color: var(--cms-amber, #b7791f);
+}
+
+.faculty-leave-container .cms-badge-danger {
+  background: var(--cms-red-soft, #fdecec);
+  color: var(--cms-red, #d93636);
+}
+
+.faculty-leave-container .cms-badge-inactive {
+  background: var(--cms-subtle, #f1f5f9);
+  color: var(--cms-muted, #7B8275);
+}
+
+/* ---------- Empty State ---------- */
+.empty-leave-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 44px 20px;
+  text-align: center;
+}
+
+.empty-leave-state h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+}
+
+.empty-leave-state p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cms-muted, #7B8275);
+  max-width: 460px;
+  line-height: 1.5;
+}
+
+/* ---------- Spin Animation ---------- */
+.leave-spin {
+  animation: leave-spin-anim 0.85s linear infinite;
+}
+
+@keyframes leave-spin-anim {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Toast Notification ---------- */
+.sp-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #10203c);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  box-shadow: var(--cms-shadow-lg, 0 20px 50px rgba(16, 32, 60, 0.18));
+  border-radius: 12px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  animation: cms-pop 0.2s ease;
+}
+
+.sp-toast.error {
+  background: var(--cms-red-soft, #fdecec);
+  border-color: var(--cms-red, #d93636);
+  color: var(--cms-red, #d93636);
+}
+
+/* ---------- Custom Leave Type Field ---------- */
+.leave-custom-field-group {
+  margin-top: 2px;
+  animation: cms-fade 0.2s ease;
+}
+
+.leave-custom-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.leave-custom-input-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+
+.leave-add-custom-btn {
+  flex: 0 0 auto;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  gap: 6px;
+  background: var(--cms-primary-soft, #F1F4E2);
+  border: 1px solid var(--cms-primary-border, #c7d7fe);
+  color: var(--cms-primary-dark, #566900);
+  border-radius: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s ease;
+}
+
+.leave-add-custom-btn:hover:not(:disabled) {
+  background: var(--cms-primary, #6F8400);
+  color: #ffffff;
+  border-color: var(--cms-primary, #6F8400);
+}
+
+.leave-add-custom-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.leave-custom-hint {
+  display: block;
+  font-size: 11.5px;
+  color: var(--cms-muted, #7B8275);
+  margin-top: 3px;
+}
+
+/* ---------- Dark Mode Overrides ---------- */
+[data-theme="dark"] .faculty-leave-container .cms-stat {
+  background: var(--cms-surface, #1e241b);
+  border-color: var(--cms-border, #2a3326);
+}
+
+[data-theme="dark"] .faculty-leave-container .cms-card {
+  background: var(--cms-surface, #1e241b);
+  border-color: var(--cms-border, #2a3326);
+}
+
+[data-theme="dark"] .faculty-leave-container .cms-card-head {
+  background: var(--cms-surface, #1e241b);
+  border-bottom-color: var(--cms-border, #2a3326);
+}
+
+[data-theme="dark"] .faculty-leave-container .cms-table th {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom-color: var(--cms-border, #2a3326);
+  color: var(--cms-muted, #959e8f);
+}
+
+[data-theme="dark"] .faculty-leave-container .cms-table td {
+  border-bottom-color: var(--cms-border, #2a3326);
+  color: var(--cms-text, #e6e8e3);
+}
+
+[data-theme="dark"] .faculty-leave-container .cms-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .sp-toast {
+  background: var(--cms-surface, #1e241b);
+  border-color: var(--cms-border, #2a3326);
+  color: var(--cms-text, #e6e8e3);
+}
+
+[data-theme="dark"] .leave-error-banner {
+  background: rgba(217, 54, 54, 0.15);
+  border-color: var(--cms-red, #d93636);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .leave-add-custom-btn {
+  background: rgba(111, 132, 0, 0.22);
+  border-color: rgba(111, 132, 0, 0.4);
+  color: #d4e157;
+}
+
+[data-theme="dark"] .leave-add-custom-btn:hover:not(:disabled) {
+  background: var(--cms-primary, #6F8400);
+  color: #ffffff;
+  border-color: var(--cms-primary, #6F8400);
+}
+
+[data-theme="dark"] .leave-custom-hint {
+  color: var(--cms-muted, #959e8f);
 }
