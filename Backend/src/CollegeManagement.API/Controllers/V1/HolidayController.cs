@@ -29,6 +29,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         // GET: api/v1/holidays
         [HttpGet]
+        [BypassPermission]
         public async Task<IActionResult> GetHolidays([FromQuery] HolidayFilterRequest filter)
         {
             try
@@ -58,6 +59,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         // GET: api/v1/holidays/summary
         [HttpGet("summary")]
+        [BypassPermission]
         public async Task<IActionResult> GetSummary([FromQuery] int? campusId, [FromQuery] int? academicYearId, [FromQuery] int? boardId)
         {
             try

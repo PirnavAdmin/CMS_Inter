@@ -357,6 +357,17 @@ namespace CollegeManagement.API.Services
             };
         }
 
+        public async Task<bool> DeletePhotoAsync(int studentId, System.Threading.CancellationToken ct = default)
+        {
+            var student = await _repository.GetByIdAsync(studentId);
+            if (student == null)
+            {
+                throw new KeyNotFoundException($"Student with ID {studentId} not found.");
+            }
+
+            return await _repository.UpdatePhotoPathAsync(studentId, null);
+        }
+
         public async Task<StudentDocumentUploadResultDto> UploadDocumentAsync(
             int studentId,
             string documentType,

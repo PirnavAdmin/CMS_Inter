@@ -19,6 +19,7 @@ namespace CollegeManagement.API.Controllers.V1;
 [Produces("application/json")]
 [Authorize]
 [RequirePermission("dashboard")]
+[BypassPermission]
 public class DashboardController : ControllerBase
 {
     private readonly IDashboardService _dashboardService;
