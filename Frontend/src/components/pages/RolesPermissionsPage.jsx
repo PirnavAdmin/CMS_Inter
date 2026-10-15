@@ -3,29 +3,39 @@ import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
+  Download,
   Eye,
+  Filter,
   Layers,
   MoreVertical,
   RotateCcw,
   Save,
   Search,
   ShieldCheck,
+  Sliders,
   UserMinus,
   UserPlus,
   Users,
   X,
+  XCircle,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, Loader, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import {
   ACTION_LABELS,
   ACTIONS,
+  PERMISSION_PRESETS,
+  PRESET_LABELS,
 } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import {
   assignRoleToUser,
+  cloneRole,
+  exportPermissionsToCsv,
   getModulesAndPermissions,
   getRolePermissions,
   getRoles,
@@ -37,7 +47,12 @@ import {
   updateRolePermissions,
   updateUserPermissions,
 } from "@/features/rolesPermissions/rolesPermissions.service.js";
-import { normalizePermissionPayload, normalizeRoleCode, togglePermissionAction } from "@/features/rolesPermissions/permissionUtils.jsx";
+import {
+  getPresetActions,
+  normalizePermissionPayload,
+  normalizeRoleCode,
+  togglePermissionAction,
+} from "@/features/rolesPermissions/permissionUtils.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./RolesPermissionsPage.css";
@@ -199,7 +214,93 @@ function initials(name = "User") {
     .toUpperCase();
 }
 
-function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, query, onQuery }) {
+function CloneRoleModal({ role, onClose, onCloneSuccess }) {
+  const [name, setName] = useState(role ? `${role.name} (Copy)` : "");
+  const [description, setDescription] = useState(role ? `Cloned permissions from ${role.name}` : "");
+  const [cloning, setCloning] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setCloning(true);
+    setError(null);
+    try {
+      const res = await cloneRole(role.id, {
+        newName: name.trim(),
+        description: description.trim(),
+      });
+      onCloneSuccess(res?.data || { name: name.trim() });
+    } catch (err) {
+      setError(err?.message || "Failed to clone role.");
+      setCloning(false);
+    }
+  };
+
+  return createPortal(
+    <div className="rbac-dialog-backdrop" onClick={onClose}>
+      <section
+        className="rbac-dialog rbac-clone-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="clone-role-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="rbac-dialog-head">
+          <div>
+            <h3 id="clone-role-title">Clone Role</h3>
+            <p>Create a new role with permissions cloned from <strong>{role?.name}</strong>.</p>
+          </div>
+          <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="rbac-clone-form">
+          {error ? <div className="rbac-alert-error">{error}</div> : null}
+          <div className="rbac-form-field">
+            <label htmlFor="clone-role-source">Source Role</label>
+            <input id="clone-role-source" type="text" value={role?.name || ""} disabled />
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="clone-role-name">New Role Name *</label>
+            <input
+              id="clone-role-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Finance Assistant"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="clone-role-desc">Description</label>
+            <textarea
+              id="clone-role-desc"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of the cloned role's responsibilities"
+            />
+          </div>
+
+          <div className="rbac-dialog-actions">
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={cloning}>
+              Cancel
+            </button>
+            <button type="submit" className="cms-btn cms-btn-primary" disabled={cloning || !name.trim()}>
+              {cloning ? "Cloning..." : "Create Cloned Role"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole, query, onQuery }) {
   const filteredRoles = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return roles;
@@ -237,15 +338,29 @@ function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, query, onQue
                   </span>
                 </span>
               </button>
-              <button
-                type="button"
-                className="rbac-user-count"
-                title={`View ${role.name} members`}
-                aria-label={`View ${role.assignedUserCount == null ? "loading" : role.assignedUserCount} members assigned to ${role.name}`}
-                onClick={() => onOpenMembers(role)}
-              >
-                {role.assignedUserCount == null ? "—" : role.assignedUserCount}
-              </button>
+              <div className="rbac-role-item-actions">
+                <button
+                  type="button"
+                  className="rbac-role-action-btn"
+                  title={`Clone ${role.name}`}
+                  aria-label={`Clone ${role.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onCloneRole) onCloneRole(role);
+                  }}
+                >
+                  <Copy size={13} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="rbac-user-count"
+                  title={`View ${role.name} members`}
+                  aria-label={`View ${role.assignedUserCount == null ? "loading" : role.assignedUserCount} members assigned to ${role.name}`}
+                  onClick={() => onOpenMembers(role)}
+                >
+                  {role.assignedUserCount == null ? "—" : role.assignedUserCount}
+                </button>
+              </div>
             </div>
           );
         }) : (
@@ -369,7 +484,21 @@ function RoleMembersDialog({ role, members, loading, error, onRetry, onSelectMem
   );
 }
 
-function PermissionMatrix({ modules, permissionRows, selectedRole, saving, query, onQuery, onToggle, markAllState, onMarkAll }) {
+function PermissionMatrix({
+  modules,
+  permissionRows,
+  selectedRole,
+  saving,
+  query,
+  onQuery,
+  onToggle,
+  markAllState,
+  onMarkAll,
+  onApplyPreset,
+  onExportCsv,
+  statusFilter = "all",
+  onStatusFilterChange,
+}) {
   const permissionStructure = useMemo(() => {
     const map = new Map();
     (permissionRows || []).forEach((row) => {
@@ -428,40 +557,145 @@ function PermissionMatrix({ modules, permissionRows, selectedRole, saving, query
 
   const filteredModules = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return modules;
-    return modules.filter((module) => {
-      const matchesMod = [module.name, module.id, module.section, ...MATRIX_ACTION_COLUMNS.map((action) => action.label)]
-        .some((value) => String(value || "").toLowerCase().includes(q));
-      const matchesScr = (module.screens || []).some((screen) =>
-        [screen.name, screen.id, screen.description].some((value) => String(value || "").toLowerCase().includes(q)),
-      );
-      return matchesMod || matchesScr;
-    });
-  }, [modules, query]);
+    return modules
+      .map((module) => {
+        const modData = permissionStructure.get(module.id);
+        const modActions = modData?.actions || new Set();
+        const screens = module.screens || [];
+
+        const matchingScreens = screens.filter((screen) => {
+          if (q) {
+            const matchesScr = [screen.name, screen.id, screen.description].some((value) =>
+              String(value || "").toLowerCase().includes(q),
+            );
+            if (!matchesScr && !module.name.toLowerCase().includes(q)) return false;
+          }
+          if (statusFilter && statusFilter !== "all") {
+            const scrActions = modData?.screens?.get(screen.id) || modActions;
+            const count = scrActions.size;
+            const total = (screen.availableActions || MATRIX_ACTION_KEYS).length;
+            if (statusFilter === "granted" && count === 0) return false;
+            if (statusFilter === "denied" && count > 0) return false;
+            if (statusFilter === "partial" && (count === 0 || count === total)) return false;
+          }
+          return true;
+        });
+
+        const matchesModName = !q || [module.name, module.id, module.section].some((val) =>
+          String(val || "").toLowerCase().includes(q),
+        );
+
+        if (statusFilter && statusFilter !== "all") {
+          const modCount = modActions.size;
+          const modTotal = MATRIX_ACTION_KEYS.length;
+          const modMatchesStatus =
+            (statusFilter === "granted" && modCount > 0) ||
+            (statusFilter === "denied" && modCount === 0) ||
+            (statusFilter === "partial" && modCount > 0 && modCount < modTotal);
+
+          if (!modMatchesStatus && matchingScreens.length === 0) return null;
+        } else if (!matchesModName && matchingScreens.length === 0) {
+          return null;
+        }
+
+        return {
+          ...module,
+          screens: screens.length > 0 ? (q || statusFilter !== "all" ? matchingScreens : screens) : [],
+        };
+      })
+      .filter(Boolean);
+  }, [modules, query, statusFilter, permissionStructure]);
 
   const allAreExpanded = filteredModules.length > 0 && filteredModules.every((m) => expandedModules.has(m.id));
+  const restriction = getPermissionRestriction({ selectedRole, saving });
 
   return (
     <div className="rbac-permission-wrap">
-      <div className="rbac-permission-toolbar">
-        <h3>Permissions</h3>
+      {/* Quick Presets Bar */}
+      <div className="rbac-presets-bar">
+        <span className="rbac-presets-label">Quick Presets:</span>
         <button
           type="button"
-          className="rbac-expand-toggle-all"
-          onClick={allAreExpanded ? collapseAll : expandAll}
-          title={allAreExpanded ? "Collapse all modules" : "Expand all modules"}
+          className="rbac-preset-pill is-full"
+          disabled={restriction.disabled}
+          onClick={() => onApplyPreset && onApplyPreset(PERMISSION_PRESETS.FULL_ACCESS)}
+          title="Grant all actions across all modules and screens"
         >
-          <Layers size={14} aria-hidden="true" />
-          <span>{allAreExpanded ? "Collapse All" : "Expand All"}</span>
+          <CheckCircle2 size={13} aria-hidden="true" /> {PRESET_LABELS[PERMISSION_PRESETS.FULL_ACCESS]}
         </button>
-        <SearchBox value={query} onChange={onQuery} placeholder="Search modules & screens..." label="Search permissions" />
-        <MarkAllControl
-          checked={markAllState.checked}
-          indeterminate={markAllState.indeterminate}
-          disabled={markAllState.disabled}
-          roleName={selectedRole?.name}
-          onChange={onMarkAll}
-        />
+        <button
+          type="button"
+          className="rbac-preset-pill is-view"
+          disabled={restriction.disabled}
+          onClick={() => onApplyPreset && onApplyPreset(PERMISSION_PRESETS.VIEW_ONLY)}
+          title="Grant View-only access across all modules and screens"
+        >
+          <Eye size={13} aria-hidden="true" /> {PRESET_LABELS[PERMISSION_PRESETS.VIEW_ONLY]}
+        </button>
+        <button
+          type="button"
+          className="rbac-preset-pill is-operational"
+          disabled={restriction.disabled}
+          onClick={() => onApplyPreset && onApplyPreset(PERMISSION_PRESETS.OPERATIONAL)}
+          title="Grant View, Add, and Edit (exclude Delete) across all modules"
+        >
+          <Sliders size={13} aria-hidden="true" /> {PRESET_LABELS[PERMISSION_PRESETS.OPERATIONAL]}
+        </button>
+        <button
+          type="button"
+          className="rbac-preset-pill is-revoke"
+          disabled={restriction.disabled}
+          onClick={() => onApplyPreset && onApplyPreset(PERMISSION_PRESETS.REVOKE_ALL)}
+          title="Clear all permissions across all modules and screens"
+        >
+          <XCircle size={13} aria-hidden="true" /> {PRESET_LABELS[PERMISSION_PRESETS.REVOKE_ALL]}
+        </button>
+      </div>
+
+      <div className="rbac-permission-toolbar">
+        <h3>Permissions</h3>
+        <div className="rbac-toolbar-tools">
+          <button
+            type="button"
+            className="rbac-expand-toggle-all"
+            onClick={allAreExpanded ? collapseAll : expandAll}
+            title={allAreExpanded ? "Collapse all modules" : "Expand all modules"}
+          >
+            <Layers size={14} aria-hidden="true" />
+            <span>{allAreExpanded ? "Collapse All" : "Expand All"}</span>
+          </button>
+          <button
+            type="button"
+            className="rbac-export-btn"
+            onClick={onExportCsv}
+            title="Export permission matrix to CSV"
+          >
+            <Download size={14} aria-hidden="true" />
+            <span>Export CSV</span>
+          </button>
+        </div>
+        <div className="rbac-toolbar-filters">
+          <SearchBox value={query} onChange={onQuery} placeholder="Search modules & screens..." label="Search permissions" />
+          <select
+            className="rbac-status-filter"
+            value={statusFilter}
+            onChange={(e) => onStatusFilterChange && onStatusFilterChange(e.target.value)}
+            title="Filter by permission grant status"
+            aria-label="Filter permissions by status"
+          >
+            <option value="all">All Screens</option>
+            <option value="granted">Granted Only</option>
+            <option value="denied">Denied Only</option>
+            <option value="partial">Partial Only</option>
+          </select>
+          <MarkAllControl
+            checked={markAllState.checked}
+            indeterminate={markAllState.indeterminate}
+            disabled={markAllState.disabled}
+            roleName={selectedRole?.name}
+            onChange={onMarkAll}
+          />
+        </div>
       </div>
       {filteredModules.length ? (
         <div className="rbac-matrix" role="table" aria-label={`${selectedRole?.name || "Role"} permissions`}>
@@ -893,6 +1127,35 @@ function RoleDetails({
     setPermissions(normalizePermissionPayload(nextPermissions));
   };
 
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const applyPreset = useCallback((presetKey) => {
+    if (!selectedRole || selectedRole.isProtected || loading || saving) return;
+    const nextPermissions = modules.map((module) => {
+      const modScreens = module.screens || [];
+      const screens = modScreens.map((screen) => {
+        const available = screen.availableActions || MATRIX_ACTION_KEYS;
+        return {
+          screenId: screen.id,
+          actions: getPresetActions(presetKey, available),
+        };
+      });
+      const moduleAvailable = module.availableActions || MATRIX_ACTION_KEYS;
+      const actions = getPresetActions(presetKey, moduleAvailable);
+      return {
+        module: module.id,
+        actions,
+        screens,
+      };
+    });
+    setPermissions(normalizePermissionPayload(nextPermissions));
+  }, [loading, modules, saving, selectedRole, setPermissions]);
+
+  const handleExportCsv = useCallback(() => {
+    if (!selectedRole) return;
+    exportPermissionsToCsv(selectedRole, permissions, modules);
+  }, [modules, permissions, selectedRole]);
+
   if (!selectedRole) {
     return (
       <section className="rbac-panel rbac-detail-panel">
@@ -945,6 +1208,10 @@ function RoleDetails({
             onToggle={updateAction}
             markAllState={markAllState}
             onMarkAll={toggleMarkAll}
+            onApplyPreset={applyPreset}
+            onExportCsv={handleExportCsv}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
           />
           <div className="rbac-savebar">
             <span>{dirty ? "You have unsaved permission changes." : "Permissions are up to date."}</span>
@@ -1428,6 +1695,7 @@ export default function RolesPermissionsPage() {
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cloningRole, setCloningRole] = useState(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const permissionSaveInFlightRef = useRef(false);
@@ -1711,6 +1979,7 @@ export default function RolesPermissionsPage() {
               selectedRoleId={selectedRole?.id}
               onSelect={selectRole}
               onOpenMembers={openRoleMembers}
+              onCloneRole={(role) => setCloningRole(role)}
               query={roleQuery}
               onQuery={setRoleQuery}
             />
@@ -1742,6 +2011,17 @@ export default function RolesPermissionsPage() {
             onRetry={() => membersRole && loadRoleMembers(membersRole, true)}
             onSelectMember={selectMember}
             onClose={closeMembersDialog}
+          />
+        ) : null}
+        {cloningRole ? (
+          <CloneRoleModal
+            role={cloningRole}
+            onClose={() => setCloningRole(null)}
+            onCloneSuccess={async (newRole) => {
+              setCloningRole(null);
+              setToast({ type: "success", message: `Role "${newRole.name || 'Cloned Role'}" created successfully!` });
+              await loadPage();
+            }}
           />
         ) : null}
       </main>

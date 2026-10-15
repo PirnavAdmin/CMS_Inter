@@ -465,7 +465,62 @@ export async function getCurrentUserPermissions() {
   return apiResult([], "fallback");
 }
 
+export async function cloneRole(sourceRoleId, { newName, description = "" }) {
+  const sourcePermsRes = await getRolePermissions(sourceRoleId);
+  const sourcePermissions = sourcePermsRes?.data || [];
+
+  const newRoleRes = await createRole({ name: newName, description });
+  const newRole = newRoleRes?.data;
+  if (!newRole) throw new Error("Failed to create new role during clone operation.");
+
+  if (sourcePermissions.length > 0) {
+    await updateRolePermissions(newRole.id || newRole.roleId, sourcePermissions);
+  }
+
+  notifyRolesUpdated();
+  return apiResult(newRole, "api");
+}
+
+export function exportPermissionsToCsv(role, matrix = []) {
+  if (!role || !Array.isArray(matrix)) return;
+
+  const rows = [
+    ["Module ID", "Module Name", "Screen ID", "Screen Name", "View", "Add/Create", "Edit/Update", "Delete"],
+  ];
+
+  matrix.forEach((mod) => {
+    const screens = mod.screens && mod.screens.length > 0
+      ? mod.screens
+      : [{ screenId: "", screenName: "(Whole Module)", actions: mod.actions }];
+
+    screens.forEach((scr) => {
+      const actions = scr.actions || [];
+      rows.push([
+        `"${mod.module || mod.id || ""}"`,
+        `"${mod.name || mod.module || ""}"`,
+        `"${scr.screenId || ""}"`,
+        `"${scr.screenName || scr.name || ""}"`,
+        actions.includes("view") ? "YES" : "NO",
+        actions.includes("create") ? "YES" : "NO",
+        actions.includes("edit") ? "YES" : "NO",
+        actions.includes("delete") ? "YES" : "NO",
+      ]);
+    });
+  });
+
+  const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.join(",")).join("\n");
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  const fileName = `${(role.name || role.code || "role").toLowerCase().replace(/[^a-z0-9]/g, "_")}_permissions.csv`;
+  link.setAttribute("download", fileName);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 export const rolesPermissionsApiConfig = Object.freeze({
   mode: "connected",
   apiIntegrationEnabled: true,
 });
+

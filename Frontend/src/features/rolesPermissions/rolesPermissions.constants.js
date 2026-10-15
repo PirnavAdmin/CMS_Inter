@@ -115,6 +115,20 @@ export const PERMISSION_DEPENDENCIES = Object.freeze({
   [ACTIONS.MANAGE_APPLICATIONS]: [ACTIONS.VIEW],
 });
 
+export const PERMISSION_PRESETS = Object.freeze({
+  FULL_ACCESS: "full_access",
+  VIEW_ONLY: "view_only",
+  OPERATIONAL: "operational",
+  REVOKE_ALL: "revoke_all",
+});
+
+export const PRESET_LABELS = Object.freeze({
+  [PERMISSION_PRESETS.FULL_ACCESS]: "Full Access",
+  [PERMISSION_PRESETS.VIEW_ONLY]: "View Only",
+  [PERMISSION_PRESETS.OPERATIONAL]: "Operational (Add/Edit)",
+  [PERMISSION_PRESETS.REVOKE_ALL]: "Revoke All",
+});
+
 export const ROLE_SEEDS = Object.freeze([
   {
     id: "super-admin",
@@ -296,6 +310,18 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     ],
   },
   {
+    id: "board-academic-year",
+    name: "Board & Academic Year",
+    route: "/dashboard/board-academic-year",
+    section: "Academic",
+    icon: Landmark,
+    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
+    screens: [
+      { id: "boards-master", name: "Boards & Universities", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Education boards, affiliation codes, and recognized authorities" },
+      { id: "academic-years", name: "Academic Years & Sessions", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Academic year calendars, terms, and active session configurations" },
+    ],
+  },
+  {
     id: "group-management",
     name: "Group Management",
     route: "/dashboard/courses",
@@ -339,9 +365,11 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     icon: CalendarDays,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.SCHEDULE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [
-      { id: "view-timetable", name: "View Timetable", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Class and batch weekly timetable schedule" },
-      { id: "setup-timetable", name: "Timetable Setup", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.SCHEDULE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Configure period slots, bell schedule, and generators" },
-      { id: "faculty-timetable", name: "Faculty Substitutions", availableActions: [ACTIONS.VIEW, ACTIONS.SCHEDULE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Faculty individual timetable and substitute allocations" },
+      { id: "view-timetable", name: "Weekly Timetable View", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Class and batch weekly timetable schedule" },
+      { id: "setup-timetable", name: "Period Slots & Timetable Setup", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.SCHEDULE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Configure period slots, bell schedule, and generators" },
+      { id: "draft-timetable", name: "Draft Schedules & Revisions", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Review and modify unapproved timetable drafts" },
+      { id: "generate-timetable", name: "Auto Schedule Generator", availableActions: [ACTIONS.VIEW, ACTIONS.SCHEDULE, ACTIONS.CREATE], description: "Run automated timetable conflict-resolution engine" },
+      { id: "faculty-timetable", name: "Faculty Timetable & Substitutions", availableActions: [ACTIONS.VIEW, ACTIONS.SCHEDULE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Faculty individual timetable and substitute allocations" },
     ],
   },
   {
@@ -353,6 +381,19 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [
       { id: "academic-holidays", name: "Holidays Calendar", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Academic holidays, vacations, and institutional calendar" },
+    ],
+  },
+  {
+    id: "inventory-management",
+    name: "Inventory Management",
+    route: "/dashboard/inventory-management",
+    section: "Academic",
+    icon: Building2,
+    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
+    screens: [
+      { id: "inventory-items", name: "Items Catalog & Stocks", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Lab apparatus, stationery, and physical asset catalogue" },
+      { id: "stock-movements", name: "Stock Movements & Issues", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Inward purchases, department disbursements, and returns" },
+      { id: "purchase-orders", name: "Vendors & Purchase Orders", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Vendor directory, quotation approvals, and purchase orders" },
     ],
   },
   {
@@ -376,7 +417,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [
       { id: "student-directory", name: "Student Directory", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Comprehensive student roster with search and filters" },
-      { id: "student-profile", name: "Student Profile", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Detailed student profile, guardian, and academic history" },
+      { id: "student-profile", name: "Student Profile & Bio", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Detailed student profile, guardian, and academic history" },
       { id: "student-enrollment", name: "Enrollment & Documents", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Upload KYC, certificates, and enrollment paperwork" },
     ],
   },
@@ -389,6 +430,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.EXPORT],
     screens: [
       { id: "student-allocation", name: "Allocate Sections", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Assign admitted students to class sections" },
+      { id: "allocated-list", name: "Allocated Students Register", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT, ACTIONS.EXPORT], description: "View and filter currently allocated student sections" },
       { id: "roll-numbers", name: "Roll Numbers", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Generate sequential student roll numbers by batch" },
     ],
   },
@@ -401,6 +443,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     availableActions: [ACTIONS.VIEW, ACTIONS.MARK_ATTENDANCE, ACTIONS.EDIT_ATTENDANCE, ACTIONS.EXPORT],
     screens: [
       { id: "student-attendance", name: "Daily Attendance Entry", availableActions: [ACTIONS.VIEW, ACTIONS.MARK_ATTENDANCE, ACTIONS.EDIT_ATTENDANCE], description: "Take daily period and subject attendance for classes" },
+      { id: "attendance-overview", name: "Student Attendance Overview", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Student-wise detailed attendance overview and history" },
       { id: "attendance-reports", name: "Attendance Reports & Defaulters", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Aggregate student percentage reports and defaulter lists" },
     ],
   },
@@ -412,8 +455,11 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     icon: Medal,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.APPROVE_REJECT, ACTIONS.EXPORT],
     screens: [
-      { id: "batch-promotion", name: "Execute Batch Promotion", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.APPROVE_REJECT], description: "Promote eligible students to next academic semester/year" },
-      { id: "promotion-history", name: "Promotion History", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "View past year promotion audits and rollback logs" },
+      { id: "eligible", name: "Promotion Eligibility", availableActions: [ACTIONS.VIEW, ACTIONS.APPROVE_REJECT, ACTIONS.EXPORT], description: "Review students eligible for promotion based on academic thresholds" },
+      { id: "single", name: "Single Student Promotion", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT], description: "Promote or detain individual students with custom notes" },
+      { id: "allocation", name: "Section Allocation on Promotion", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT], description: "Assign newly promoted students into next term sections" },
+      { id: "history", name: "Promotion History & Audits", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Historical log of past academic batch promotions" },
+      { id: "report", name: "Promotion Analytics Report", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Pass rates, retention counts, and statistical promotion charts" },
     ],
   },
   {
@@ -426,7 +472,9 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     screens: [
       { id: "routes", name: "Bus Routes & Stops", availableActions: [ACTIONS.VIEW, ACTIONS.MANAGE_ROUTES, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Define transit routes, pick-up stages, and timings" },
       { id: "vehicles", name: "Fleet & Vehicles", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Manage buses, registration numbers, and maintenance" },
-      { id: "driver-assignment", name: "Driver & Passenger Allocations", availableActions: [ACTIONS.VIEW, ACTIONS.ASSIGN_DRIVER_VEHICLE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Assign drivers to vehicles and passengers to stages" },
+      { id: "driver-assignment", name: "Driver & Bus Allocations", availableActions: [ACTIONS.VIEW, ACTIONS.ASSIGN_DRIVER_VEHICLE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Assign drivers to vehicles and routes" },
+      { id: "student-transport", name: "Student Transport Passes", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Allocate student seats, pickup points, and issue bus passes" },
+      { id: "live-tracking", name: "Live GPS Tracking", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Real-time bus tracking, speed alerts, and telemetry logs" },
     ],
   },
   {
@@ -440,6 +488,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
       { id: "teaching-staff", name: "Teaching Faculty Directory", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Directory of professors, lecturers, and teaching staff" },
       { id: "non-teaching-staff", name: "Non-Teaching Staff Directory", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Directory of administrative, finance, and technical staff" },
       { id: "staff-onboarding", name: "Staff Onboarding & Review", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.APPROVE_REJECT], description: "Onboarding links, document upload and verification" },
+      { id: "staff-profile", name: "Staff Profile & KYC Details", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Comprehensive employee records, qualifications, and history" },
     ],
   },
   {
@@ -463,6 +512,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     availableActions: [ACTIONS.VIEW, ACTIONS.MARK_ATTENDANCE, ACTIONS.EDIT_ATTENDANCE, ACTIONS.EXPORT],
     screens: [
       { id: "mark-staff-attendance", name: "Mark Staff Attendance", availableActions: [ACTIONS.VIEW, ACTIONS.MARK_ATTENDANCE, ACTIONS.EDIT_ATTENDANCE], description: "Daily check-in, check-out and attendance register" },
+      { id: "staff-attendance-overview", name: "Staff Attendance Overview", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Detailed monthly attendance log for individual staff" },
       { id: "staff-attendance-logs", name: "Biometric Logs & Reports", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Monthly staff biometric logs and leave impact summary" },
     ],
   },
@@ -476,6 +526,20 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     screens: [
       { id: "leave-applications", name: "Leave Applications", availableActions: [ACTIONS.VIEW, ACTIONS.APPLY, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Submit and track personal staff leave requests" },
       { id: "leave-approvals", name: "Leave Approvals", availableActions: [ACTIONS.VIEW, ACTIONS.APPROVE_REJECT, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Department HOD and Principal review of pending leaves" },
+      { id: "leave-balances", name: "Leave Balance & History", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Annual leave ledger, quotas, and utilization summary" },
+    ],
+  },
+  {
+    id: "reimbursement",
+    name: "Staff Reimbursements",
+    route: "/dashboard/reimbursements",
+    section: "Staff",
+    icon: ReceiptIndianRupee,
+    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.APPROVE_REJECT, ACTIONS.EXPORT],
+    screens: [
+      { id: "submit-claim", name: "Submit Reimbursement Claim", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EXPORT], description: "Submit expense, travel, and supply reimbursement claims" },
+      { id: "claim-approvals", name: "Claim Approvals Desk", availableActions: [ACTIONS.VIEW, ACTIONS.APPROVE_REJECT, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Review and approve faculty expense claims" },
+      { id: "disbursement-history", name: "Disbursement History", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Paid claim records and accounts settlement register" },
     ],
   },
   {
@@ -487,7 +551,9 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.SCHEDULE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [
       { id: "exam-schedules", name: "Exam Schedules & Datesheets", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.SCHEDULE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Configure internal, mid-term, and semester exam timetables" },
+      { id: "hall-allocation", name: "Exam Hall Allocation", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Assign exam halls, rooms, and student desk numbers" },
       { id: "hall-tickets", name: "Hall Tickets", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EXPORT], description: "Generate and download student examination admit cards" },
+      { id: "exam-reports", name: "Exam Cell Reports", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Exam attendance sheets and duty allocation summaries" },
     ],
   },
   {
@@ -538,10 +604,11 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.APPROVE_REJECT, ACTIONS.EXPORT],
     screens: [
       { id: "salary-structures", name: "Salary Structures", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Basic pay, HRA, DA, PF, and deduction structures" },
+      { id: "payroll-assignments", name: "Staff Salary Mapping", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Assign salary structures to individual teaching and non-teaching staff" },
       { id: "payroll-generation", name: "Monthly Payroll Processing", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.APPROVE_REJECT, ACTIONS.EXPORT], description: "Run monthly salary calculations with attendance impacts" },
       { id: "payslips", name: "Staff Payslips", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT, ACTIONS.DOWNLOAD], description: "Generate, review and distribute digital monthly payslips" },
-      { id: "salary-revisions", name: "Revisions, Bonuses & Advances", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Salary increments, festival bonuses, and advance loans" },
-      { id: "reimbursements", name: "Staff Reimbursements", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.APPROVE_REJECT, ACTIONS.EXPORT], description: "Review and approve faculty travel and expense claims" },
+      { id: "salary-revisions", name: "Revisions, Bonuses & Overtime", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Salary increments, festival bonuses, and advance loans" },
+      { id: "payroll-approvals", name: "Payroll Approvals & Bank Files", availableActions: [ACTIONS.VIEW, ACTIONS.APPROVE_REJECT, ACTIONS.EXPORT], description: "Final payroll sign-off and bank disbursement export" },
     ],
   },
   {
@@ -577,10 +644,30 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     icon: Home,
     availableActions: [ACTIONS.VIEW, ACTIONS.MANAGE_ROOMS, ACTIONS.ALLOCATE_STUDENTS, ACTIONS.EDIT, ACTIONS.EXPORT],
     screens: [
-      { id: "hostel-rooms", name: "Hostel Blocks & Rooms", availableActions: [ACTIONS.VIEW, ACTIONS.MANAGE_ROOMS, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Hostel buildings, floors, rooms, and bed counts" },
-      { id: "bed-allocation", name: "Student Bed Allocation", availableActions: [ACTIONS.VIEW, ACTIONS.ALLOCATE_STUDENTS, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Allocate boarders to rooms and track vacancies" },
+      { id: "hostel-rooms", name: "Hostel Blocks, Rooms & Beds", availableActions: [ACTIONS.VIEW, ACTIONS.MANAGE_ROOMS, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Hostel buildings, floors, rooms, and bed counts" },
+      { id: "bed-allocation", name: "Resident Student Allocation", availableActions: [ACTIONS.VIEW, ACTIONS.ALLOCATE_STUDENTS, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Allocate boarders to rooms and track vacancies" },
       { id: "hostel-attendance", name: "Hostel Night Attendance", availableActions: [ACTIONS.VIEW, ACTIONS.MARK_ATTENDANCE, ACTIONS.EDIT_ATTENDANCE], description: "Night roll-call and boarder presence logs" },
-      { id: "hostel-complaints", name: "Complaints & Leaves", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.APPROVE_REJECT, ACTIONS.EDIT], description: "Student maintenance complaints and night out passes" },
+      { id: "hostel-complaints", name: "Outpass, Leaves & Complaints", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.APPROVE_REJECT, ACTIONS.EDIT], description: "Student maintenance complaints and night out passes" },
+      { id: "hostel-reports", name: "Hostel Occupancy & Mess Dues", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "Room occupancy rates, mess billing, and resident reports" },
+    ],
+  },
+  {
+    id: "settings",
+    name: "Settings",
+    route: "/dashboard/settings",
+    section: "Administration",
+    icon: Settings,
+    availableActions: [ACTIONS.VIEW, ACTIONS.EDIT],
+    screens: [
+      { id: "landing-configuration", name: "Landing Page Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT], description: "Campus branding, headline, hero slider, and portal links" },
+      { id: "login-configuration", name: "Login Page Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT], description: "Login page branding, background images, and notices" },
+      { id: "campus-configuration", name: "Campus Configuration & Branches", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT], description: "Multi-campus branch locations and board affiliations" },
+      { id: "number-series", name: "Auto Number Series", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT], description: "Prefixes and sequences for admissions, invoices, and roll nos" },
+      { id: "templates", name: "Templates & Bulk Uploaders", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DOWNLOAD], description: "Certificate templates, letterheads, and Excel upload templates" },
+      { id: "leave-types", name: "Leave Types & Quotas", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Casual, sick, maternity, and earned leave quotas" },
+      { id: "attendance-timing", name: "Attendance Timings & Shifts", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT], description: "Grace periods, late marks, and biometric sync rules" },
+      { id: "credentials", name: "Credentials Generator", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EXPORT], description: "Generate login credentials for new faculty and student batches" },
+      { id: "audit-logs", name: "Audit & Security Logs", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "System audit logs, user login history, and security events" },
     ],
   },
   {
@@ -593,35 +680,6 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     screens: [
       { id: "role-management", name: "Role & Permission Matrix", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.ASSIGN_PERMISSIONS], description: "Configure module and screen-wise permissions per role" },
       { id: "user-role-assignment", name: "User Role Assignment", availableActions: [ACTIONS.VIEW, ACTIONS.ASSIGN_USERS, ACTIONS.EDIT, ACTIONS.DELETE], description: "Assign staff and students to roles with member overrides" },
-    ],
-  },
-  {
-    id: "settings",
-    name: "Settings",
-    route: "/dashboard/settings",
-    section: "Administration",
-    icon: Settings,
-    availableActions: [ACTIONS.VIEW, ACTIONS.EDIT],
-    screens: [
-      { id: "general-settings", name: "College Profile & General", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT], description: "College name, logo, contact information, and affiliation" },
-      { id: "campus-configuration", name: "Campuses & Academic Boards", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT], description: "Multi-campus branch locations and board affiliations" },
-      { id: "number-series", name: "Auto Number Series", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT], description: "Prefixes and sequences for admissions, invoices, and roll nos" },
-      { id: "leave-types", name: "Leave Types Setup", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Casual, sick, maternity, and earned leave quotas" },
-      { id: "attendance-timings", name: "Attendance Timings Setup", availableActions: [ACTIONS.VIEW, ACTIONS.EDIT], description: "Grace periods, late marks, and biometric sync rules" },
-      { id: "audit-logs", name: "Audit & Security Logs", availableActions: [ACTIONS.VIEW, ACTIONS.EXPORT], description: "System audit logs, user login history, and security events" },
-    ],
-  },
-  {
-    id: "inventory-management",
-    name: "Inventory Management",
-    route: "/dashboard/inventory-management",
-    section: "Operations",
-    icon: Building2,
-    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
-    screens: [
-      { id: "inventory-items", name: "Inventory Items & Stocks", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Lab apparatus, stationery, and physical asset catalogue" },
-      { id: "stock-movements", name: "Stock Movements & Issues", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.EXPORT], description: "Inward purchases, department disbursements, and returns" },
-      { id: "purchase-orders", name: "Vendors & Purchase Orders", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Vendor directory, quotation approvals, and purchase orders" },
     ],
   },
 ]);

@@ -1,4 +1,4 @@
-﻿-- ====================================================================================
+-- ====================================================================================
 -- 03_Screen_Wise_Permissions_Migration.sql
 -- Module and Screen-Wise Permissions Schema, Canonical Seeds, and Stored Procedures
 -- ====================================================================================
@@ -161,7 +161,80 @@ INSERT IGNORE INTO `Permissions` (`Module`, `SubModule`, `Screen`, `ScreenCode`,
 ('Administration', 'Roles & Permissions', 'User Role Assignment', 'user-role-assignment', 'View', 'administration.roles.assignment.view', 'View User Role Assignments', 'Administration', 274),
 ('Administration', 'Roles & Permissions', 'User Role Assignment', 'user-role-assignment', 'Add', 'administration.roles.assignment.add', 'Assign Role to User', 'Administration', 275),
 ('Administration', 'Roles & Permissions', 'User Role Assignment', 'user-role-assignment', 'Edit', 'administration.roles.assignment.edit', 'Configure User Permission Overrides', 'Administration', 276),
-('Administration', 'Roles & Permissions', 'User Role Assignment', 'user-role-assignment', 'Delete', 'administration.roles.assignment.delete', 'Remove Role from User', 'Administration', 277);
+('Administration', 'Roles & Permissions', 'User Role Assignment', 'user-role-assignment', 'Delete', 'administration.roles.assignment.delete', 'Remove Role from User', 'Administration', 277),
+
+-- Academic -> Board & Academic Year Management
+('Academic', 'Board & Academic Year', 'Boards & Universities', 'boards-master', 'View', 'academic.boards.master.view', 'View Boards & Universities', 'Academic', 280),
+('Academic', 'Board & Academic Year', 'Boards & Universities', 'boards-master', 'Add', 'academic.boards.master.add', 'Add Board Affiliation', 'Academic', 281),
+('Academic', 'Board & Academic Year', 'Boards & Universities', 'boards-master', 'Edit', 'academic.boards.master.edit', 'Edit Board Details', 'Academic', 282),
+('Academic', 'Board & Academic Year', 'Boards & Universities', 'boards-master', 'Delete', 'academic.boards.master.delete', 'Delete Board Affiliation', 'Academic', 283),
+
+('Academic', 'Board & Academic Year', 'Academic Years & Sessions', 'academic-years', 'View', 'academic.boards.years.view', 'View Academic Years & Sessions', 'Academic', 284),
+('Academic', 'Board & Academic Year', 'Academic Years & Sessions', 'academic-years', 'Add', 'academic.boards.years.add', 'Create Academic Year', 'Academic', 285),
+('Academic', 'Board & Academic Year', 'Academic Years & Sessions', 'academic-years', 'Edit', 'academic.boards.years.edit', 'Edit Academic Year / Active Status', 'Academic', 286),
+('Academic', 'Board & Academic Year', 'Academic Years & Sessions', 'academic-years', 'Delete', 'academic.boards.years.delete', 'Delete Academic Year', 'Academic', 287),
+
+-- Staff -> Staff Reimbursements
+('Staff', 'Staff Reimbursements', 'Submit Reimbursement Claim', 'submit-claim', 'View', 'staff.reimbursement.submit.view', 'View Reimbursement Claims', 'Staff', 290),
+('Staff', 'Staff Reimbursements', 'Submit Reimbursement Claim', 'submit-claim', 'Add', 'staff.reimbursement.submit.add', 'Submit Reimbursement Claim', 'Staff', 291),
+('Staff', 'Staff Reimbursements', 'Submit Reimbursement Claim', 'submit-claim', 'Edit', 'staff.reimbursement.submit.edit', 'Edit Reimbursement Claim', 'Staff', 292),
+('Staff', 'Staff Reimbursements', 'Submit Reimbursement Claim', 'submit-claim', 'Delete', 'staff.reimbursement.submit.delete', 'Cancel Reimbursement Claim', 'Staff', 293),
+
+('Staff', 'Staff Reimbursements', 'Claim Approvals Desk', 'claim-approvals', 'View', 'staff.reimbursement.approvals.view', 'View Pending Claims to Approve', 'Staff', 294),
+('Staff', 'Staff Reimbursements', 'Claim Approvals Desk', 'claim-approvals', 'Add', 'staff.reimbursement.approvals.add', 'Approve / Reject Claim', 'Staff', 295),
+('Staff', 'Staff Reimbursements', 'Claim Approvals Desk', 'claim-approvals', 'Edit', 'staff.reimbursement.approvals.edit', 'Adjust Approved Claim Amount', 'Staff', 296),
+('Staff', 'Staff Reimbursements', 'Claim Approvals Desk', 'claim-approvals', 'Delete', 'staff.reimbursement.approvals.delete', 'Reject / Void Claim', 'Staff', 297),
+
+('Staff', 'Staff Reimbursements', 'Disbursement History', 'disbursement-history', 'View', 'staff.reimbursement.history.view', 'View Disbursement History', 'Staff', 298),
+('Staff', 'Staff Reimbursements', 'Disbursement History', 'disbursement-history', 'Add', 'staff.reimbursement.history.add', 'Export Disbursement Register', 'Staff', 299),
+('Staff', 'Staff Reimbursements', 'Disbursement History', 'disbursement-history', 'Edit', 'staff.reimbursement.history.edit', 'Update Settlement Ref', 'Staff', 300),
+('Staff', 'Staff Reimbursements', 'Disbursement History', 'disbursement-history', 'Delete', 'staff.reimbursement.history.delete', 'Void Settlement', 'Staff', 301),
+
+-- Administration -> Settings (All 9 Concrete Screens)
+('Administration', 'Settings', 'Landing Page Configuration', 'landing-configuration', 'View', 'administration.settings.landing.view', 'View Landing Page Settings', 'Administration', 310),
+('Administration', 'Settings', 'Landing Page Configuration', 'landing-configuration', 'Add', 'administration.settings.landing.add', 'Upload Landing Images', 'Administration', 311),
+('Administration', 'Settings', 'Landing Page Configuration', 'landing-configuration', 'Edit', 'administration.settings.landing.edit', 'Update Landing Content & Branding', 'Administration', 312),
+('Administration', 'Settings', 'Landing Page Configuration', 'landing-configuration', 'Delete', 'administration.settings.landing.delete', 'Remove Landing Image', 'Administration', 313),
+
+('Administration', 'Settings', 'Login Page Configuration', 'login-configuration', 'View', 'administration.settings.login.view', 'View Login Page Settings', 'Administration', 314),
+('Administration', 'Settings', 'Login Page Configuration', 'login-configuration', 'Add', 'administration.settings.login.add', 'Upload Login Image', 'Administration', 315),
+('Administration', 'Settings', 'Login Page Configuration', 'login-configuration', 'Edit', 'administration.settings.login.edit', 'Update Login Branding & Form Text', 'Administration', 316),
+('Administration', 'Settings', 'Login Page Configuration', 'login-configuration', 'Delete', 'administration.settings.login.delete', 'Reset Login Background', 'Administration', 317),
+
+('Administration', 'Settings', 'Campus Configuration & Branches', 'campus-configuration', 'View', 'administration.settings.campus.view', 'View Campus Branches', 'Administration', 318),
+('Administration', 'Settings', 'Campus Configuration & Branches', 'campus-configuration', 'Add', 'administration.settings.campus.add', 'Create Campus Branch', 'Administration', 319),
+('Administration', 'Settings', 'Campus Configuration & Branches', 'campus-configuration', 'Edit', 'administration.settings.campus.edit', 'Edit Campus Details & Address', 'Administration', 320),
+('Administration', 'Settings', 'Campus Configuration & Branches', 'campus-configuration', 'Delete', 'administration.settings.campus.delete', 'Deactivate Campus Branch', 'Administration', 321),
+
+('Administration', 'Settings', 'Auto Number Series', 'number-series', 'View', 'administration.settings.numberseries.view', 'View Auto Number Series', 'Administration', 322),
+('Administration', 'Settings', 'Auto Number Series', 'number-series', 'Add', 'administration.settings.numberseries.add', 'Create Number Series Format', 'Administration', 323),
+('Administration', 'Settings', 'Auto Number Series', 'number-series', 'Edit', 'administration.settings.numberseries.edit', 'Modify Number Prefix & Sequence', 'Administration', 324),
+('Administration', 'Settings', 'Auto Number Series', 'number-series', 'Delete', 'administration.settings.numberseries.delete', 'Reset Number Counter', 'Administration', 325),
+
+('Administration', 'Settings', 'Templates & Bulk Uploaders', 'templates', 'View', 'administration.settings.templates.view', 'View Document Templates', 'Administration', 326),
+('Administration', 'Settings', 'Templates & Bulk Uploaders', 'templates', 'Add', 'administration.settings.templates.add', 'Upload Document / Certificate Template', 'Administration', 327),
+('Administration', 'Settings', 'Templates & Bulk Uploaders', 'templates', 'Edit', 'administration.settings.templates.edit', 'Modify Template Configuration', 'Administration', 328),
+('Administration', 'Settings', 'Templates & Bulk Uploaders', 'templates', 'Delete', 'administration.settings.templates.delete', 'Delete Document Template', 'Administration', 329),
+
+('Administration', 'Settings', 'Leave Types & Quotas', 'leave-types', 'View', 'administration.settings.leavetypes.view', 'View Leave Types Setup', 'Administration', 330),
+('Administration', 'Settings', 'Leave Types & Quotas', 'leave-types', 'Add', 'administration.settings.leavetypes.add', 'Add Leave Type Category', 'Administration', 331),
+('Administration', 'Settings', 'Leave Types & Quotas', 'leave-types', 'Edit', 'administration.settings.leavetypes.edit', 'Update Quota & Carry-Forward Rules', 'Administration', 332),
+('Administration', 'Settings', 'Leave Types & Quotas', 'leave-types', 'Delete', 'administration.settings.leavetypes.delete', 'Deactivate Leave Category', 'Administration', 333),
+
+('Administration', 'Settings', 'Attendance Timings & Shifts', 'attendance-timing', 'View', 'administration.settings.timings.view', 'View Shift Timings', 'Administration', 334),
+('Administration', 'Settings', 'Attendance Timings & Shifts', 'attendance-timing', 'Add', 'administration.settings.timings.add', 'Add Campus Shift Time', 'Administration', 335),
+('Administration', 'Settings', 'Attendance Timings & Shifts', 'attendance-timing', 'Edit', 'administration.settings.timings.edit', 'Modify Grace Periods & Late Rules', 'Administration', 336),
+('Administration', 'Settings', 'Attendance Timings & Shifts', 'attendance-timing', 'Delete', 'administration.settings.timings.delete', 'Remove Shift Timing', 'Administration', 337),
+
+('Administration', 'Settings', 'Credentials Generator', 'credentials', 'View', 'administration.settings.credentials.view', 'View Credentials Generator Desk', 'Administration', 338),
+('Administration', 'Settings', 'Credentials Generator', 'credentials', 'Add', 'administration.settings.credentials.add', 'Generate Batch Credentials', 'Administration', 339),
+('Administration', 'Settings', 'Credentials Generator', 'credentials', 'Edit', 'administration.settings.credentials.edit', 'Reset / Regenerate Password', 'Administration', 340),
+('Administration', 'Settings', 'Credentials Generator', 'credentials', 'Delete', 'administration.settings.credentials.delete', 'Revoke Access Credentials', 'Administration', 341),
+
+('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'View', 'administration.settings.audit.view', 'View Audit & Security Logs', 'Administration', 342),
+('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'Add', 'administration.settings.audit.add', 'Export Audit Trail to CSV', 'Administration', 343),
+('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'Edit', 'administration.settings.audit.edit', 'Filter Audit Event Types', 'Administration', 344),
+('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'Delete', 'administration.settings.audit.delete', 'Archive Audit Logs', 'Administration', 345);
 
 -- 3. Automatically Grant Super Admin (Role 1) and Admin (Role 2) All Screen Permissions
 INSERT IGNORE INTO `RolePermissions` (`RoleId`, `PermissionId`, `AssignedAt`)

@@ -327,6 +327,12 @@ namespace CollegeManagement.API.Services.Implementations
                         new { id = "analytics", name = "Analytics & BI", availableActions = new[] { "view", "export" } }
                     }
                 },
+                new { id = "board-academic-year", name = "Board & Academic Year", route = "/dashboard/board-academic-year", section = "Academic", availableActions = actions,
+                    screens = new[] {
+                        new { id = "boards-master", name = "Boards & Universities", availableActions = actions },
+                        new { id = "academic-years", name = "Academic Years & Sessions", availableActions = actions }
+                    }
+                },
                 new { id = "group-management", name = "Group Management", route = "/dashboard/courses", section = "Academic", availableActions = actions,
                     screens = new[] {
                         new { id = "courses", name = "Courses & Groups", availableActions = actions },
@@ -347,14 +353,23 @@ namespace CollegeManagement.API.Services.Implementations
                 },
                 new { id = "timetable", name = "Timetable", route = "/dashboard/timetable", section = "Academic", availableActions = actions,
                     screens = new[] {
-                        new { id = "view-timetable", name = "View Timetable", availableActions = new[] { "view", "export" } },
-                        new { id = "setup-timetable", name = "Timetable Setup", availableActions = actions },
-                        new { id = "faculty-timetable", name = "Faculty Substitutions", availableActions = new[] { "view", "edit", "export" } }
+                        new { id = "view-timetable", name = "Weekly Timetable View", availableActions = new[] { "view", "export" } },
+                        new { id = "setup-timetable", name = "Period Slots & Timetable Setup", availableActions = actions },
+                        new { id = "draft-timetable", name = "Draft Schedules & Revisions", availableActions = actions },
+                        new { id = "generate-timetable", name = "Auto Schedule Generator", availableActions = actions },
+                        new { id = "faculty-timetable", name = "Faculty Timetable & Substitutions", availableActions = new[] { "view", "edit", "export" } }
                     }
                 },
                 new { id = "holiday-management", name = "Holiday Management", route = "/dashboard/holidays", section = "Academic", availableActions = actions,
                     screens = new[] {
                         new { id = "academic-holidays", name = "Holidays Calendar", availableActions = actions }
+                    }
+                },
+                new { id = "inventory-management", name = "Inventory Management", route = "/dashboard/inventory-management", section = "Academic", availableActions = actions,
+                    screens = new[] {
+                        new { id = "inventory-items", name = "Items Catalog & Stocks", availableActions = actions },
+                        new { id = "stock-movements", name = "Stock Movements & Issues", availableActions = actions },
+                        new { id = "purchase-orders", name = "Vendors & Purchase Orders", availableActions = actions }
                     }
                 },
                 new { id = "student-admission", name = "Student Admission", route = "/dashboard/admission", section = "Student", availableActions = actions,
@@ -366,40 +381,48 @@ namespace CollegeManagement.API.Services.Implementations
                 new { id = "student-management", name = "Student Management", route = "/dashboard/students", section = "Student", availableActions = actions,
                     screens = new[] {
                         new { id = "student-directory", name = "Student Directory", availableActions = actions },
-                        new { id = "student-profile", name = "Student Profile", availableActions = new[] { "view", "edit", "export" } },
+                        new { id = "student-profile", name = "Student Profile & Bio", availableActions = new[] { "view", "edit", "export" } },
                         new { id = "student-enrollment", name = "Enrollment & Documents", availableActions = actions }
                     }
                 },
                 new { id = "section-allocation", name = "Section Allocation", route = "/dashboard/section-allocation", section = "Student", availableActions = actions,
                     screens = new[] {
                         new { id = "student-allocation", name = "Allocate Sections", availableActions = actions },
+                        new { id = "allocated-list", name = "Allocated Students Register", availableActions = actions },
                         new { id = "roll-numbers", name = "Roll Numbers", availableActions = actions }
                     }
                 },
                 new { id = "attendance", name = "Attendance", route = "/dashboard/attendance/student", section = "Student", availableActions = actions,
                     screens = new[] {
                         new { id = "student-attendance", name = "Daily Attendance Entry", availableActions = new[] { "view", "create", "edit" } },
+                        new { id = "attendance-overview", name = "Student Attendance Overview", availableActions = new[] { "view", "export" } },
                         new { id = "attendance-reports", name = "Attendance Reports & Defaulters", availableActions = new[] { "view", "export" } }
                     }
                 },
                 new { id = "promotion", name = "Promotion", route = "/dashboard/promotion", section = "Student", availableActions = actions,
                     screens = new[] {
-                        new { id = "batch-promotion", name = "Execute Batch Promotion", availableActions = actions },
-                        new { id = "promotion-history", name = "Promotion History", availableActions = new[] { "view", "export" } }
+                        new { id = "eligible", name = "Promotion Eligibility", availableActions = actions },
+                        new { id = "single", name = "Single Student Promotion", availableActions = actions },
+                        new { id = "allocation", name = "Section Allocation on Promotion", availableActions = actions },
+                        new { id = "history", name = "Promotion History & Audits", availableActions = new[] { "view", "export" } },
+                        new { id = "report", name = "Promotion Analytics Report", availableActions = new[] { "view", "export" } }
                     }
                 },
                 new { id = "transport", name = "Transport", route = "/dashboard/transport", section = "Student", availableActions = actions,
                     screens = new[] {
                         new { id = "routes", name = "Bus Routes & Stops", availableActions = actions },
                         new { id = "vehicles", name = "Fleet & Vehicles", availableActions = actions },
-                        new { id = "driver-assignment", name = "Driver & Passenger Allocations", availableActions = actions }
+                        new { id = "driver-assignment", name = "Driver & Bus Allocations", availableActions = actions },
+                        new { id = "student-transport", name = "Student Transport Passes", availableActions = actions },
+                        new { id = "live-tracking", name = "Live GPS Tracking", availableActions = new[] { "view", "export" } }
                     }
                 },
                 new { id = "staff-management", name = "Staff Management", route = "/dashboard/staff", section = "Staff", availableActions = actions,
                     screens = new[] {
                         new { id = "teaching-staff", name = "Teaching Faculty Directory", availableActions = actions },
                         new { id = "non-teaching-staff", name = "Non-Teaching Staff Directory", availableActions = actions },
-                        new { id = "staff-onboarding", name = "Staff Onboarding & Review", availableActions = actions }
+                        new { id = "staff-onboarding", name = "Staff Onboarding & Review", availableActions = actions },
+                        new { id = "staff-profile", name = "Staff Profile & KYC Details", availableActions = actions }
                     }
                 },
                 new { id = "department-designation", name = "Department & Designation", route = "/dashboard/departments", section = "Staff", availableActions = actions,
@@ -411,22 +434,33 @@ namespace CollegeManagement.API.Services.Implementations
                 new { id = "staff-attendance", name = "Staff Attendance", route = "/dashboard/attendance/staff", section = "Staff", availableActions = actions,
                     screens = new[] {
                         new { id = "mark-staff-attendance", name = "Mark Staff Attendance", availableActions = new[] { "view", "create", "edit" } },
+                        new { id = "staff-attendance-overview", name = "Staff Attendance Overview", availableActions = new[] { "view", "export" } },
                         new { id = "staff-attendance-logs", name = "Biometric Logs & Reports", availableActions = new[] { "view", "export" } }
                     }
                 },
-                new { id = "staff-leave-management", name = "Staff Leave Management", route = "/dashboard/staff/leaves", section = "Staff", availableActions = actions,
+                new { id = "staff-leave-management", name = "Staff Leave Management", route = "/dashboard/leave-management?tab=staff", section = "Staff", availableActions = actions,
                     screens = new[] {
                         new { id = "leave-applications", name = "Leave Applications", availableActions = actions },
-                        new { id = "leave-approvals", name = "Leave Approvals", availableActions = actions }
+                        new { id = "leave-approvals", name = "Leave Approvals", availableActions = actions },
+                        new { id = "leave-balances", name = "Leave Balance & History", availableActions = new[] { "view", "export" } }
+                    }
+                },
+                new { id = "reimbursement", name = "Staff Reimbursements", route = "/dashboard/reimbursements", section = "Staff", availableActions = actions,
+                    screens = new[] {
+                        new { id = "submit-claim", name = "Submit Reimbursement Claim", availableActions = actions },
+                        new { id = "claim-approvals", name = "Claim Approvals Desk", availableActions = actions },
+                        new { id = "disbursement-history", name = "Disbursement History", availableActions = new[] { "view", "export" } }
                     }
                 },
                 new { id = "examination", name = "Examination", route = "/dashboard/examinations", section = "Examinations", availableActions = actions,
                     screens = new[] {
                         new { id = "exam-schedules", name = "Exam Schedules & Datesheets", availableActions = actions },
-                        new { id = "hall-tickets", name = "Hall Tickets", availableActions = new[] { "view", "create", "export" } }
+                        new { id = "hall-allocation", name = "Exam Hall Allocation", availableActions = actions },
+                        new { id = "hall-tickets", name = "Hall Tickets", availableActions = new[] { "view", "create", "export" } },
+                        new { id = "exam-reports", name = "Exam Cell Reports", availableActions = new[] { "view", "export" } }
                     }
                 },
-                new { id = "marks-evaluation", name = "Marks Evaluation", route = "/dashboard/marks", section = "Examinations", availableActions = actions,
+                new { id = "marks-evaluation", name = "Marks Evaluation", route = "/dashboard/marks-entry", section = "Examinations", availableActions = actions,
                     screens = new[] {
                         new { id = "marks-entry", name = "Enter Subject Marks", availableActions = actions },
                         new { id = "marks-verification", name = "Marks Verification & Lock", availableActions = actions }
@@ -438,7 +472,7 @@ namespace CollegeManagement.API.Services.Implementations
                         new { id = "publish-results", name = "Publish Results & Memos", availableActions = actions }
                     }
                 },
-                new { id = "fee-management", name = "Fee Management", route = "/dashboard/fees", section = "Finance", availableActions = actions,
+                new { id = "fee-management", name = "Fee Management", route = "/dashboard/fee-structure", section = "Finance", availableActions = actions,
                     screens = new[] {
                         new { id = "fee-structure", name = "Fee Structure", availableActions = actions },
                         new { id = "student-fees", name = "Student Fee Ledger", availableActions = new[] { "view", "edit", "export" } },
@@ -450,10 +484,11 @@ namespace CollegeManagement.API.Services.Implementations
                 new { id = "payroll", name = "Payroll", route = "/dashboard/payroll", section = "Finance", availableActions = actions,
                     screens = new[] {
                         new { id = "salary-structures", name = "Salary Structures", availableActions = actions },
+                        new { id = "payroll-assignments", name = "Staff Salary Mapping", availableActions = actions },
                         new { id = "payroll-generation", name = "Monthly Payroll Processing", availableActions = actions },
                         new { id = "payslips", name = "Staff Payslips", availableActions = new[] { "view", "export" } },
-                        new { id = "salary-revisions", name = "Revisions, Bonuses & Advances", availableActions = actions },
-                        new { id = "reimbursements", name = "Staff Reimbursements", availableActions = actions }
+                        new { id = "salary-revisions", name = "Revisions, Bonuses & Overtime", availableActions = actions },
+                        new { id = "payroll-approvals", name = "Payroll Approvals & Bank Files", availableActions = actions }
                     }
                 },
                 new { id = "certificates", name = "Certificates", route = "/dashboard/certificates", section = "Documents & Reports", availableActions = actions,
@@ -471,10 +506,30 @@ namespace CollegeManagement.API.Services.Implementations
                 },
                 new { id = "hostel-management", name = "Hostel Management", route = "/dashboard/hostel", section = "Hostel Management", availableActions = actions,
                     screens = new[] {
-                        new { id = "hostel-rooms", name = "Hostel Blocks & Rooms", availableActions = actions },
-                        new { id = "bed-allocation", name = "Student Bed Allocation", availableActions = actions },
+                        new { id = "hostel-rooms", name = "Hostel Blocks, Rooms & Beds", availableActions = actions },
+                        new { id = "bed-allocation", name = "Resident Student Allocation", availableActions = actions },
                         new { id = "hostel-attendance", name = "Hostel Night Attendance", availableActions = new[] { "view", "create", "edit" } },
-                        new { id = "hostel-complaints", name = "Complaints & Leaves", availableActions = actions }
+                        new { id = "hostel-complaints", name = "Outpass, Leaves & Complaints", availableActions = actions },
+                        new { id = "hostel-reports", name = "Hostel Occupancy & Mess Dues", availableActions = new[] { "view", "export" } }
+                    }
+                },
+                new { id = "settings", name = "Settings", route = "/dashboard/settings", section = "Administration", availableActions = actions,
+                    screens = new[] {
+                        new { id = "landing-configuration", name = "Landing Page Configuration", availableActions = new[] { "view", "edit" } },
+                        new { id = "login-configuration", name = "Login Page Configuration", availableActions = new[] { "view", "edit" } },
+                        new { id = "campus-configuration", name = "Campus Configuration & Branches", availableActions = actions },
+                        new { id = "number-series", name = "Auto Number Series", availableActions = actions },
+                        new { id = "templates", name = "Templates & Bulk Uploaders", availableActions = actions },
+                        new { id = "leave-types", name = "Leave Types & Quotas", availableActions = actions },
+                        new { id = "attendance-timing", name = "Attendance Timings & Shifts", availableActions = new[] { "view", "edit" } },
+                        new { id = "credentials", name = "Credentials Generator", availableActions = actions },
+                        new { id = "audit-logs", name = "Audit & Security Logs", availableActions = new[] { "view", "export" } }
+                    }
+                },
+                new { id = "roles-permissions", name = "Roles & Permissions", route = "/dashboard/settings/roles-permissions", section = "Administration", availableActions = actions,
+                    screens = new[] {
+                        new { id = "role-management", name = "Role & Permission Matrix", availableActions = actions },
+                        new { id = "user-role-assignment", name = "User Role Assignment", availableActions = actions }
                     }
                 },
                 new { id = "library", name = "Library", route = "/dashboard/library", section = "Operations", availableActions = actions,
@@ -488,29 +543,6 @@ namespace CollegeManagement.API.Services.Implementations
                     screens = new[] {
                         new { id = "placement-drives", name = "Recruitment Drives", availableActions = actions },
                         new { id = "student-applications", name = "Applications & Offers", availableActions = actions }
-                    }
-                },
-                new { id = "settings", name = "Settings", route = "/dashboard/settings", section = "Administration", availableActions = actions,
-                    screens = new[] {
-                        new { id = "general-settings", name = "College Profile & General", availableActions = new[] { "view", "edit" } },
-                        new { id = "campus-configuration", name = "Campuses & Academic Boards", availableActions = actions },
-                        new { id = "number-series", name = "Auto Number Series", availableActions = actions },
-                        new { id = "leave-types", name = "Leave Types Setup", availableActions = actions },
-                        new { id = "attendance-timings", name = "Attendance Timings Setup", availableActions = new[] { "view", "edit" } },
-                        new { id = "audit-logs", name = "Audit & Security Logs", availableActions = new[] { "view", "export" } }
-                    }
-                },
-                new { id = "roles-permissions", name = "Roles & Permissions", route = "/dashboard/roles", section = "Administration", availableActions = actions,
-                    screens = new[] {
-                        new { id = "role-management", name = "Role & Permission Matrix", availableActions = actions },
-                        new { id = "user-role-assignment", name = "User Role Assignment", availableActions = actions }
-                    }
-                },
-                new { id = "inventory-management", name = "Inventory Management", route = "/dashboard/inventory-management", section = "Academic", availableActions = actions,
-                    screens = new[] {
-                        new { id = "inventory-items", name = "Inventory Items & Stocks", availableActions = actions },
-                        new { id = "stock-movements", name = "Stock Movements & Issues", availableActions = actions },
-                        new { id = "purchase-orders", name = "Vendors & Purchase Orders", availableActions = actions }
                     }
                 }
             };

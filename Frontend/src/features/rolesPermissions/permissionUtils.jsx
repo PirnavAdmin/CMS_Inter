@@ -226,3 +226,41 @@ export function normalizePermissionPayload(permissions = []) {
     })),
   }));
 }
+
+export function getPresetActions(preset, availableActions = [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE]) {
+  switch (preset) {
+    case "full_access":
+      return [...availableActions];
+    case "view_only":
+      return availableActions.includes(ACTIONS.VIEW) ? [ACTIONS.VIEW] : [];
+    case "operational":
+      return availableActions.filter((a) => a !== ACTIONS.DELETE);
+    case "revoke_all":
+    default:
+      return [];
+  }
+}
+
+export function usePermissions() {
+  const user = getAuthUser();
+  const permissions = user?.permissions ?? user?.rolePermissions ?? null;
+  const isSuperOrAdmin = hasRole("SUPER_ADMIN", user) || hasRole("ADMIN", user);
+
+  return {
+    user,
+    permissions,
+    isSuperOrAdmin,
+    can: (moduleKey, actionKey = ACTIONS.VIEW, screenKey = null) =>
+      can(moduleKey, actionKey, permissions, user, screenKey),
+    canView: (moduleKey, screenKey = null) =>
+      can(moduleKey, ACTIONS.VIEW, permissions, user, screenKey),
+    canCreate: (moduleKey, screenKey = null) =>
+      can(moduleKey, ACTIONS.CREATE, permissions, user, screenKey),
+    canEdit: (moduleKey, screenKey = null) =>
+      can(moduleKey, ACTIONS.EDIT, permissions, user, screenKey),
+    canDelete: (moduleKey, screenKey = null) =>
+      can(moduleKey, ACTIONS.DELETE, permissions, user, screenKey),
+  };
+}
+
+
