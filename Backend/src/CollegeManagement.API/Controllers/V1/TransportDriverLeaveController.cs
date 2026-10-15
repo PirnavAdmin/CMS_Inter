@@ -13,7 +13,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/transport/drivers/leaves")]
-    [Authorize(Roles = "Driver,Bus Driver,Admin,Super Admin")]
+    [Authorize]
     public class TransportDriverLeaveController : ControllerBase
     {
         private readonly AppDbContext _context;

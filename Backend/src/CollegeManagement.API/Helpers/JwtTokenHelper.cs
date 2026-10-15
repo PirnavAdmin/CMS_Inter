@@ -90,6 +90,16 @@ namespace CollegeManagement.API.Helpers
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
+            // Support both Faculty and Teacher role synonyms for seamless endpoint authorization
+            if (string.Equals(canonicalRoleName, "Faculty", StringComparison.OrdinalIgnoreCase))
+            {
+                claims.Add(new Claim(ClaimTypes.Role, "Teacher"));
+            }
+            else if (string.Equals(canonicalRoleName, "Teacher", StringComparison.OrdinalIgnoreCase))
+            {
+                claims.Add(new Claim(ClaimTypes.Role, "Faculty"));
+            }
+
             // Dedicated domain claims (only emitted when present and positive)
             if (user.StudentId.HasValue && user.StudentId.Value > 0)
             {

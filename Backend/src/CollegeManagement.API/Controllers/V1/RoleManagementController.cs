@@ -29,7 +29,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves all roles with optional card statistics (user count, active status).
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> GetAllRoles([FromQuery] bool includeCards = false, [FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null)
         {
             try
@@ -53,7 +53,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves role cards for the split-pane left navigation (includes user count and permissions count).
         /// </summary>
         [HttpGet("cards")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> GetRoleCards([FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null)
         {
             try
@@ -71,7 +71,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves system permission modules and their available action definitions.
         /// </summary>
         [HttpGet("modules")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public IActionResult GetModules()
         {
             var modules = _roleManagementService.GetModulesMetadata();
@@ -124,7 +124,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves a single role by ID.
         /// </summary>
         [HttpGet("{id:int}")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> GetRoleById(int id)
         {
             var role = await _roleManagementService.GetRoleByIdAsync(id);
@@ -137,7 +137,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Creates a new role.
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request)
         {
             try
@@ -155,7 +155,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates an existing role name and description.
         /// </summary>
         [HttpPut("{id:int}")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> UpdateRole(int id, [FromBody] UpdateRoleRequest request)
         {
             try
@@ -175,7 +175,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Deletes a role (prohibits deleting system roles).
         /// </summary>
         [HttpDelete("{id:int}")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> DeleteRole(int id)
         {
             try
@@ -204,7 +204,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// If userId is supplied, member-specific overrides are applied.
         /// </summary>
         [HttpGet("{roleId:int}/permissions")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> GetRolePermissionMatrix(int roleId, [FromQuery] int? userId = null)
         {
             try
@@ -227,7 +227,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Accepts both { modules: [...] } and frontend-native { permissions: [...] }.
         /// </summary>
         [HttpPut("{roleId:int}/permissions")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
         {
             try
@@ -249,7 +249,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves members assigned to a specific role (for the [Members] dialog).
         /// </summary>
         [HttpGet("{roleId:int}/members")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> GetRoleMembers(int roleId, [FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null)
         {
             try
@@ -271,7 +271,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves paginated user role assignments with filters (search, roleId, userType).
         /// </summary>
         [HttpGet("user-assignments")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> GetUserRoleAssignments([FromQuery] GetUserRoleAssignmentsRequestDto request)
         {
             try
@@ -291,7 +291,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Assigns a role to a specific user by roleId or roleCode.
         /// </summary>
         [HttpPost("user-assignments/{userId:int}/assign")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> AssignUserRole(int userId, [FromBody] AssignUserRoleRequest request)
         {
             try
@@ -314,7 +314,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpDelete("user-assignments/{userId:int}/remove")]
         [HttpPost("user-assignments/{userId:int}/remove")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> RemoveUserRole(int userId, [FromQuery] string? roleCode = null)
         {
             try
@@ -340,7 +340,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves complete inspector details for a user: User info card, Role info card, and permission pill table.
         /// </summary>
         [HttpGet("users/{userId:int}/details")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> GetUserRoleDetails(int userId)
         {
             try
@@ -363,7 +363,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves user-specific permissions (effective permissions taking overrides into account).
         /// </summary>
         [HttpGet("users/{userId:int}/permissions")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> GetUserPermissions(int userId)
         {
             try
@@ -383,7 +383,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPut("users/{userId:int}/overrides")]
         [HttpPut("users/{userId:int}/permissions")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> SaveUserPermissionOverrides(int userId, [FromBody] SaveUserPermissionOverridesRequest request)
         {
             try
@@ -406,7 +406,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Resets all member overrides for a user, reverting to role defaults.
         /// </summary>
         [HttpDelete("users/{userId:int}/overrides/reset")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize]
         public async Task<IActionResult> ResetUserPermissionOverrides(int userId)
         {
             try
