@@ -53,9 +53,16 @@ namespace CollegeManagement.API.Filters
 
         public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
-            // AllowAnonymous or BypassPermission check
+            // AllowAnonymous, BypassPermission, or ParentStudentAuthorization check
             if (context.ActionDescriptor.EndpointMetadata.OfType<Microsoft.AspNetCore.Authorization.IAllowAnonymous>().Any()
-                || context.ActionDescriptor.EndpointMetadata.OfType<BypassPermissionAttribute>().Any())
+                || context.ActionDescriptor.EndpointMetadata.OfType<BypassPermissionAttribute>().Any()
+                || context.ActionDescriptor.EndpointMetadata.OfType<ParentStudentAuthorizationAttribute>().Any())
+            {
+                return;
+            }
+
+            var requestPath = context.HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "";
+            if (requestPath.Contains("/students/me") || requestPath.Contains("/my-children") || requestPath.Contains("/faculty/me") || requestPath.Contains("/staff/me"))
             {
                 return;
             }
@@ -75,8 +82,10 @@ namespace CollegeManagement.API.Filters
                 return;
             }
 
-            // 2. Unrestricted bypass for platform Super Admin and Admin
-            if (context.HttpContext.User.IsInRole("Super Admin") || context.HttpContext.User.IsInRole("Admin"))
+            // 2. Unrestricted bypass for platform Super Admin, Admin, and Principal
+            if (context.HttpContext.User.IsInRole("Super Admin") 
+                || context.HttpContext.User.IsInRole("Admin") 
+                || context.HttpContext.User.IsInRole("Principal"))
             {
                 return;
             }

@@ -51,6 +51,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 p.`ProgramName`,
                 t.`SectionId`,
                 s.`SectionName`,
+                COALESCE(t.`SlotType`, 'Teaching') AS SlotType,
                 t.`DayOfWeek`,
                 CASE t.`DayOfWeek`
                     WHEN 1 THEN 'Monday'
@@ -69,14 +70,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                 prd.`EndTime`,
                 COALESCE(prd.`IsBreak`, 0) AS IsBreak,
                 t.`SubjectId`,
-                sub.`SubjectName`,
-                sub.`SubjectCode`,
+                CASE WHEN COALESCE(t.`SlotType`, 'Teaching') = 'Leisure' THEN 'Leisure' ELSE sub.`SubjectName` END AS SubjectName,
+                CASE WHEN COALESCE(t.`SlotType`, 'Teaching') = 'Leisure' THEN 'LEISURE' ELSE sub.`SubjectCode` END AS SubjectCode,
                 t.`StaffId`,
                 t.`StaffId` AS FacultyId,
                 st.`EmployeeId` AS StaffEmployeeId,
                 st.`EmployeeId` AS FacultyEmployeeId,
-                CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, '')) AS StaffName,
-                CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, '')) AS FacultyName,
+                CASE WHEN COALESCE(t.`SlotType`, 'Teaching') = 'Leisure' THEN '' ELSE CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, '')) END AS StaffName,
+                CASE WHEN COALESCE(t.`SlotType`, 'Teaching') = 'Leisure' THEN '' ELSE CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, '')) END AS FacultyName,
                 t.`RoomId`,
                 rm.`RoomCode`,
                 rm.`RoomName`,
@@ -267,15 +268,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 SELECT 
                     CASE 
                         WHEN `SectionId` = @sectionId THEN 'SECTION'
-                        WHEN `StaffId` = @staffId THEN 'STAFF'
-                        WHEN `RoomId` > 0 AND `RoomId` = @roomId THEN 'ROOM'
+                        WHEN @staffId > 0 AND `StaffId` = @staffId THEN 'STAFF'
+                        WHEN @roomId > 0 AND `RoomId` = @roomId THEN 'ROOM'
                     END AS ConflictType
                 FROM `Timetables`
                 WHERE `AcademicYearId` = @academicYearId 
                   AND `DayOfWeek` = @dayOfWeek 
                   AND `PeriodId` = @periodId 
                   AND (@excludeId IS NULL OR `Id` != @excludeId)
-                  AND (`SectionId` = @sectionId OR `StaffId` = @staffId OR (@roomId > 0 AND `RoomId` = @roomId))
+                  AND (`SectionId` = @sectionId OR (@staffId > 0 AND `StaffId` = @staffId) OR (@roomId > 0 AND `RoomId` = @roomId))
                 LIMIT 1;
             ";
             return await conn.QueryFirstOrDefaultAsync<string?>(sql, new { academicYearId, sectionId, staffId, roomId, dayOfWeek, periodId, excludeId });
@@ -284,9 +285,14 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<int> AddAsync(CreateTimetableDto dto)
         {
             var conn = await GetOpenConnectionAsync();
+            string slotType = string.IsNullOrWhiteSpace(dto.SlotType) ? "Teaching" : dto.SlotType;
+            int? subjectId = dto.SubjectId.HasValue && dto.SubjectId.Value > 0 ? dto.SubjectId.Value : (int?)null;
+            int? staffId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null;
+            int? roomId = dto.RoomId.HasValue && dto.RoomId.Value > 0 ? dto.RoomId.Value : (int?)null;
+
             string sql = @"
-                INSERT INTO `Timetables` (`CampusId`, `BoardId`, `AcademicLevelId`, `AcademicYearId`, `GroupId`, `ProgramId`, `SectionId`, `DayOfWeek`, `PeriodId`, `SubjectId`, `StaffId`, `RoomId`, `IsPublished`, `ApprovalStatus`, `Remarks`, `CreatedAt`)
-                VALUES (@CampusId, @BoardId, @AcademicLevelId, @AcademicYearId, @GroupId, @ProgramId, @SectionId, @DayOfWeek, @PeriodId, @SubjectId, @StaffId, @RoomId, @IsPublished, @ApprovalStatus, @Remarks, UTC_TIMESTAMP());
+                INSERT INTO `Timetables` (`CampusId`, `BoardId`, `AcademicLevelId`, `AcademicYearId`, `GroupId`, `ProgramId`, `SectionId`, `SlotType`, `DayOfWeek`, `PeriodId`, `SubjectId`, `StaffId`, `FacultyId`, `RoomId`, `IsPublished`, `ApprovalStatus`, `Remarks`, `CreatedAt`)
+                VALUES (@CampusId, @BoardId, @AcademicLevelId, @AcademicYearId, @GroupId, @ProgramId, @SectionId, @SlotType, @DayOfWeek, @PeriodId, @SubjectId, @StaffId, @StaffId, @RoomId, @IsPublished, @ApprovalStatus, @Remarks, UTC_TIMESTAMP());
                 SELECT LAST_INSERT_ID();
             ";
             return await conn.ExecuteScalarAsync<int>(sql, new
@@ -298,11 +304,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 dto.GroupId,
                 dto.ProgramId,
                 dto.SectionId,
+                SlotType = slotType,
                 dto.DayOfWeek,
                 dto.PeriodId,
-                dto.SubjectId,
-                dto.StaffId,
-                dto.RoomId,
+                SubjectId = subjectId,
+                StaffId = staffId,
+                RoomId = roomId,
                 IsPublished = dto.IsPublished ? 1 : 0,
                 ApprovalStatus = dto.IsPublished ? (int)TimetableApprovalStatus.Published : (int)TimetableApprovalStatus.Draft,
                 dto.Remarks
@@ -312,6 +319,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task UpdateAsync(int id, UpdateTimetableDto dto)
         {
             var conn = await GetOpenConnectionAsync();
+            string slotType = string.IsNullOrWhiteSpace(dto.SlotType) ? "Teaching" : dto.SlotType;
+            int? subjectId = dto.SubjectId.HasValue && dto.SubjectId.Value > 0 ? dto.SubjectId.Value : (int?)null;
+            int? staffId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null;
+            int? roomId = dto.RoomId.HasValue && dto.RoomId.Value > 0 ? dto.RoomId.Value : (int?)null;
+
             string sql = @"
                 UPDATE `Timetables` SET 
                     `CampusId` = @CampusId,
@@ -321,10 +333,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     `GroupId` = @GroupId,
                     `ProgramId` = @ProgramId,
                     `SectionId` = @SectionId,
+                    `SlotType` = @SlotType,
                     `DayOfWeek` = @DayOfWeek,
                     `PeriodId` = @PeriodId,
                     `SubjectId` = @SubjectId,
                     `StaffId` = @StaffId,
+                    `FacultyId` = @StaffId,
                     `RoomId` = @RoomId,
                     `IsPublished` = @IsPublished,
                     `Remarks` = @Remarks,
@@ -341,11 +355,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 dto.GroupId,
                 dto.ProgramId,
                 dto.SectionId,
+                SlotType = slotType,
                 dto.DayOfWeek,
                 dto.PeriodId,
-                dto.SubjectId,
-                dto.StaffId,
-                dto.RoomId,
+                SubjectId = subjectId,
+                StaffId = staffId,
+                RoomId = roomId,
                 IsPublished = dto.IsPublished ? 1 : 0,
                 dto.Remarks
             });
@@ -483,7 +498,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = await GetOpenConnectionAsync();
             string sql = @"
                 DELETE FROM `Timetables` WHERE `SectionId` = @TargetSectionId AND `AcademicYearId` = @TargetAcademicYearId;
-                INSERT INTO `Timetables` (`CampusId`, `BoardId`, `AcademicLevelId`, `AcademicYearId`, `GroupId`, `ProgramId`, `SectionId`, `DayOfWeek`, `PeriodId`, `SubjectId`, `StaffId`, `RoomId`, `IsPublished`, `ApprovalStatus`, `Remarks`, `CreatedAt`)
+                INSERT INTO `Timetables` (`CampusId`, `BoardId`, `AcademicLevelId`, `AcademicYearId`, `GroupId`, `ProgramId`, `SectionId`, `SlotType`, `DayOfWeek`, `PeriodId`, `SubjectId`, `StaffId`, `FacultyId`, `RoomId`, `IsPublished`, `ApprovalStatus`, `Remarks`, `CreatedAt`)
                 SELECT 
                     COALESCE(sec.`CampusId`, t.`CampusId`),
                     t.`BoardId`,
@@ -492,9 +507,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                     t.`GroupId`,
                     t.`ProgramId`,
                     @TargetSectionId,
+                    COALESCE(t.`SlotType`, 'Teaching'),
                     t.`DayOfWeek`,
                     t.`PeriodId`,
                     t.`SubjectId`,
+                    t.`StaffId`,
                     t.`StaffId`,
                     t.`RoomId`,
                     0,
