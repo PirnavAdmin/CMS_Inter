@@ -75,6 +75,27 @@ export default function StudentCertificates() {
     };
   }, [load, profileLoading]);
 
+  useEffect(() => {
+    let channel;
+    try {
+      channel = new BroadcastChannel("cms_notifications");
+      channel.onmessage = (event) => {
+        const data = event.data;
+        if (data?.type === "CERTIFICATE_STATUS_UPDATED") {
+          const studentAdm = String(student?.admissionNo || "").trim().toLowerCase();
+          const msgAdm = String(data?.admissionNo || "").trim().toLowerCase();
+          if (studentAdm && msgAdm && studentAdm === msgAdm) {
+            setSuccess(`Your ${data.certificateType} certificate has been ${String(data.status).toLowerCase()} by administration.`);
+            load(false);
+          }
+        }
+      };
+    } catch {}
+    return () => {
+      try { channel?.close(); } catch {}
+    };
+  }, [student?.admissionNo, load]);
+
   const submit = async (event) => {
     event.preventDefault();
     if (saving) return;

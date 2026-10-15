@@ -287,6 +287,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   const [photoFailed, setPhotoFailed] = useState(false);
   const [academicLookupState, setAcademicLookupState] = useState({});
   const [placementChanged, setPlacementChanged] = useState(false);
+  const [initialAllocation, setInitialAllocation] = useState(null);
   const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] }), [allocationLookups, setAllocationLookups] = useState({ routes: [], pickupPoints: [], vehicles: [], vehicleAssignments: [], hostelBlocks: [], hostelRoomTypes: [], hostelRooms: [], hostelFees: [] }), [allocationLookupError, setAllocationLookupError] = useState("");
   const loadStudent = useCallback(async () => {
     setLoading(true); setLoadError("");
@@ -310,6 +311,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       const source = { ...enrichedRecord, ...admission, ...academic, ...nested };
       setStudent({ name: stringValue(valueOf(source, "studentName", "StudentName", "fullName", "name")) || "Student", rollNo: stringValue(valueOf(source, "rollNo", "RollNo", "rollNumber", "RollNumber")) || "—", admissionNo: stringValue(valueOf(source, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")) || "-" });
       const nextForm = formFromStudent(enrichedRecord);
+      setInitialAllocation({ studentType: nextForm.studentType, transportRequired: nextForm.transportRequired });
       ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].forEach((key) => {
         if (!Number.isInteger(Number(nextForm[key])) || Number(nextForm[key]) <= 0) nextForm[key] = "";
       });

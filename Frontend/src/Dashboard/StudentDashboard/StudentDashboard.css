@@ -272,3 +272,284 @@
   .sp-navbar-search { flex-basis:30px; width:30px; min-width:30px; }
   .sp-shell .sp-menu-btn { flex-basis:30px; width:30px; }
 }
+
+/* ==========================================================================
+   Student Portal Notifications & Certificate Alerts
+   ========================================================================== */
+
+.sp-notification-menu {
+  position: relative;
+}
+
+.sp-notifications-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  max-height: 440px;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid var(--sp-border);
+  border-radius: 12px;
+  background: var(--sp-surface);
+  box-shadow: 0 14px 35px rgba(28, 38, 20, 0.16);
+  z-index: 50;
+  overflow: hidden;
+  animation: sp-fade-in 0.15s ease-out;
+}
+
+.sp-notif-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--sp-border);
+  background: color-mix(in srgb, var(--sp-surface) 92%, var(--sp-soft));
+}
+
+.sp-notif-header strong {
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--sp-text);
+}
+
+.sp-notif-unread-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #d94841;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sp-notif-mark-all {
+  border: 0;
+  background: transparent;
+  color: var(--sp-primary-dark);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.sp-notif-mark-all:hover {
+  text-decoration: underline;
+}
+
+.sp-notif-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: 320px;
+}
+
+.sp-notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--sp-border);
+  background: var(--sp-surface);
+  color: var(--sp-text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  text-align: left;
+}
+
+.sp-notif-item:hover {
+  background: var(--sp-primary-soft);
+}
+
+.sp-notif-item.is-unread {
+  background: color-mix(in srgb, var(--sp-primary-soft) 40%, var(--sp-surface));
+  border-left: 3px solid var(--sp-primary);
+}
+
+.sp-notif-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 2px;
+}
+
+.sp-notif-status-badge.is-issued {
+  background: #e6f6ee;
+  color: #0f766e;
+  border: 1px solid #a7f3d0;
+}
+
+.sp-notif-status-badge.is-approved {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.sp-notif-item-body {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-notif-item-body strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sp-text);
+}
+
+.sp-notif-item-body p {
+  margin: 0;
+  color: var(--sp-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.sp-notif-item-body time {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--sp-muted);
+}
+
+.sp-notif-empty {
+  padding: 28px 14px;
+  text-align: center;
+  color: var(--sp-muted);
+  font-size: 12px;
+}
+
+.sp-notif-footer {
+  padding: 9px 14px;
+  border-top: 1px solid var(--sp-border);
+  background: color-mix(in srgb, var(--sp-surface) 95%, var(--sp-soft));
+  text-align: center;
+}
+
+.sp-notif-footer a {
+  color: var(--sp-primary-dark);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sp-notif-footer a:hover {
+  text-decoration: underline;
+}
+
+/* Certificate Alert Banner in Student Dashboard Home */
+.sp-cert-alert-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--sp-border);
+  background: var(--sp-surface);
+  box-shadow: 0 3px 12px rgba(41, 55, 30, 0.06);
+  margin-bottom: 4px;
+  transition: all 0.2s ease;
+}
+
+.sp-cert-alert-card.is-issued {
+  border-left: 4px solid #0f766e;
+  background: linear-gradient(90deg, rgba(15, 118, 110, 0.08), var(--sp-surface) 55%);
+}
+
+.sp-cert-alert-card.is-approved {
+  border-left: 4px solid #2563eb;
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.08), var(--sp-surface) 55%);
+}
+
+.sp-cert-alert-icon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  background: #edf6df;
+  color: var(--sp-primary-dark);
+}
+
+.sp-cert-alert-card.is-issued .sp-cert-alert-icon {
+  background: #e6f6ee;
+  color: #0f766e;
+}
+
+.sp-cert-alert-card.is-approved .sp-cert-alert-icon {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.sp-cert-alert-body {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-cert-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-cert-alert-title strong {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: var(--sp-text);
+}
+
+.sp-cert-alert-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--sp-soft);
+  color: var(--sp-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.sp-cert-alert-body p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--sp-muted);
+}
+
+.sp-cert-alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.sp-alert-close-btn {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+
+@keyframes sp-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
