@@ -1132,3 +1132,253 @@
     opacity: 1;
   }
 }
+
+/* ==========================================================================
+   Regularization Button, Badge & Modal Styles
+   ========================================================================== */
+.sp-btn-regularize {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sp-btn-regularize:hover {
+  background: #059669;
+  color: #ffffff;
+}
+[data-theme="dark"] .sp-btn-regularize {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+[data-theme="dark"] .sp-btn-regularize:hover {
+  background: #059669;
+  color: #ffffff;
+}
+
+.sp-reg-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: capitalize;
+  display: inline-block;
+}
+.sp-reg-badge.pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.sp-reg-badge.approved {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.sp-reg-badge.rejected {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+/* Modal Backdrop */
+.sp-reg-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 16px;
+  animation: spModalFadeIn 0.2s ease;
+}
+
+.sp-reg-modal {
+  background: var(--cms-card-bg, #ffffff);
+  border: 1px solid var(--cms-border, #e5e7eb);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  animation: spModalSlideUp 0.25s ease;
+}
+[data-theme="dark"] .sp-reg-modal {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.sp-reg-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--cms-border, #e5e7eb);
+}
+[data-theme="dark"] .sp-reg-modal-header {
+  border-bottom-color: #334155;
+}
+
+.sp-reg-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--cms-text, #171d15);
+}
+[data-theme="dark"] .sp-reg-modal-title {
+  color: #f8fafc;
+}
+
+.sp-reg-modal-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--cms-muted, #64748b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+}
+.sp-reg-modal-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--cms-text, #171d15);
+}
+
+.sp-reg-modal-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sp-reg-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sp-reg-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cms-text, #374151);
+}
+[data-theme="dark"] .sp-reg-label {
+  color: #cbd5e1;
+}
+
+.sp-reg-input,
+.sp-reg-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--cms-border, #d1d5db);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--cms-input-bg, #ffffff);
+  color: var(--cms-text, #111827);
+  box-sizing: border-box;
+  font-family: inherit;
+}
+[data-theme="dark"] .sp-reg-input,
+[data-theme="dark"] .sp-reg-textarea {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.sp-reg-quick-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.sp-reg-quick-pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #4f46e5;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.sp-reg-quick-pill:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+[data-theme="dark"] .sp-reg-quick-pill {
+  background: rgba(99, 102, 241, 0.16);
+  color: #818cf8;
+}
+
+.sp-reg-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--cms-border, #e5e7eb);
+  background: rgba(0, 0, 0, 0.015);
+}
+[data-theme="dark"] .sp-reg-modal-footer {
+  border-top-color: #334155;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.sp-reg-cancel-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--cms-border, #d1d5db);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cms-text, #374151);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+[data-theme="dark"] .sp-reg-cancel-btn {
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.sp-reg-submit-btn {
+  padding: 7px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #059669;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease;
+}
+.sp-reg-submit-btn:hover {
+  background: #047857;
+}
+.sp-reg-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes spModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes spModalSlideUp {
+  from { transform: translateY(14px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+

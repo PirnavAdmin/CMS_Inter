@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Edit3, Trash2, Search } from "lucide-react";
-import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
+import { Eye, Search } from "lucide-react";
+import { SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
@@ -15,17 +15,6 @@ import "../styles/FacultyHolidays.css";
 
 const PAGE_SIZE = 5;
 const TYPES = ["National Holiday", "Festival Holiday", "Special Holiday", "Other"];
-const APPLIES_TO = ["All Students & Staff", "Students Only", "Staff Only"];
-const EMPTY_HOLIDAY = {
-  holidayName: "",
-  holidayType: "Festival Holiday",
-  dateType: "Single Day",
-  startDate: "",
-  endDate: "",
-  appliesTo: "All Students & Staff",
-  description: "",
-  status: "Active",
-};
 
 function formatDate(value) {
   if (!value) return "-";
@@ -73,179 +62,7 @@ function HolidayStatus({ holiday }) {
   );
 }
 
-function HolidayForm({ holiday, onClose, onSave, saving }) {
-  const [values, setValues] = useState(holiday || EMPTY_HOLIDAY);
-  const [errors, setErrors] = useState({});
 
-  const setValue = (name, value) => {
-    setValues((current) => ({
-      ...current,
-      [name]: value,
-      ...(name === "dateType" && value === "Single Day" ? { endDate: "" } : {}),
-    }));
-    setErrors((current) => ({ ...current, [name]: undefined }));
-  };
-
-  const submit = () => {
-    const nextErrors = {};
-    if (!values.holidayName.trim()) nextErrors.holidayName = "Holiday name is required.";
-    if (!values.startDate) nextErrors.startDate = "Date is required.";
-    if (values.dateType === "Date Range" && !values.endDate) nextErrors.endDate = "End date is required.";
-    if (values.dateType === "Date Range" && values.startDate && values.endDate && values.endDate < values.startDate) {
-      nextErrors.endDate = "End date must be on or after the start date.";
-    }
-    if (Object.keys(nextErrors).length) {
-      setErrors(nextErrors);
-      return;
-    }
-    onSave({
-      ...values,
-      holidayName: values.holidayName.trim(),
-      description: (values.description || "").trim(),
-    });
-  };
-
-  const fieldClass = (name) => `cms-field ${errors[name] ? "has-error" : ""}`;
-
-  return (
-    <Modal
-      title={holiday ? "Edit Holiday" : "Add Holiday"}
-      onClose={onClose}
-      className="holiday-modal"
-      footer={
-        <>
-          <button type="button" className="cms-btn cms-btn-ghost" disabled={saving} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="cms-btn cms-btn-primary" disabled={saving} onClick={submit}>
-            {saving ? "Saving..." : holiday ? "Save Changes" : "Add Holiday"}
-          </button>
-        </>
-      }
-    >
-      <div className="holiday-form-grid">
-        <div className={`${fieldClass("holidayName")} full`}>
-          <label htmlFor="holiday-name">
-            Holiday Name <span className="req">*</span>
-          </label>
-          <input
-            id="holiday-name"
-            value={values.holidayName}
-            onChange={(event) => setValue("holidayName", event.target.value)}
-            placeholder="Enter holiday name"
-          />
-          {errors.holidayName ? <span className="cms-error">{errors.holidayName}</span> : null}
-        </div>
-        <div className={fieldClass("holidayType")}>
-          <label htmlFor="holiday-type">Holiday Type</label>
-          <select
-            id="holiday-type"
-            value={values.holidayType}
-            onChange={(event) => setValue("holidayType", event.target.value)}
-          >
-            {TYPES.map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-        </div>
-        <div className={fieldClass("appliesTo")}>
-          <label htmlFor="holiday-applies">Applies To</label>
-          <select
-            id="holiday-applies"
-            value={values.appliesTo}
-            onChange={(event) => setValue("appliesTo", event.target.value)}
-          >
-            {APPLIES_TO.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-        </div>
-        <fieldset className="holiday-date-type full">
-          <legend>Date Type</legend>
-          <label>
-            <input
-              type="radio"
-              name="dateType"
-              checked={values.dateType === "Single Day"}
-              onChange={() => setValue("dateType", "Single Day")}
-            />{" "}
-            Single Day
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="dateType"
-              checked={values.dateType === "Date Range"}
-              onChange={() => setValue("dateType", "Date Range")}
-            />{" "}
-            Date Range
-          </label>
-        </fieldset>
-        <div className={fieldClass("startDate")}>
-          <label htmlFor="holiday-start">
-            {values.dateType === "Date Range" ? "Start Date" : "Date"} <span className="req">*</span>
-          </label>
-          <input
-            id="holiday-start"
-            type="date"
-            value={values.startDate}
-            onChange={(event) => setValue("startDate", event.target.value)}
-          />
-          {errors.startDate ? <span className="cms-error">{errors.startDate}</span> : null}
-        </div>
-        {values.dateType === "Date Range" ? (
-          <div className={fieldClass("endDate")}>
-            <label htmlFor="holiday-end">
-              End Date <span className="req">*</span>
-            </label>
-            <input
-              id="holiday-end"
-              type="date"
-              value={values.endDate}
-              min={values.startDate}
-              onChange={(event) => setValue("endDate", event.target.value)}
-            />
-            {errors.endDate ? <span className="cms-error">{errors.endDate}</span> : null}
-          </div>
-        ) : (
-          <div className={fieldClass("status")}>
-            <label htmlFor="holiday-status">Status</label>
-            <select
-              id="holiday-status"
-              value={values.status}
-              onChange={(event) => setValue("status", event.target.value)}
-            >
-              <option>Active</option>
-              <option>Inactive</option>
-            </select>
-          </div>
-        )}
-        {values.dateType === "Date Range" ? (
-          <div className={fieldClass("status")}>
-            <label htmlFor="holiday-status">Status</label>
-            <select
-              id="holiday-status"
-              value={values.status}
-              onChange={(event) => setValue("status", event.target.value)}
-            >
-              <option>Active</option>
-              <option>Inactive</option>
-            </select>
-          </div>
-        ) : null}
-        <div className={`${fieldClass("description")} full`}>
-          <label htmlFor="holiday-description">Description</label>
-          <textarea
-            id="holiday-description"
-            value={values.description}
-            onChange={(event) => setValue("description", event.target.value)}
-            placeholder="Optional holiday details"
-          />
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 export default function FacultyHolidays() {
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext?.() || {};
@@ -254,7 +71,6 @@ export default function FacultyHolidays() {
   const [holidays, setHolidays] = useState(holidayRecords);
   const [apiSummary, setApiSummary] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   const [month, setMonth] = useState("All");
   const [customRange, setCustomRange] = useState({ from: "", to: "" });
@@ -262,9 +78,7 @@ export default function FacultyHolidays() {
   const [type, setType] = useState("All");
   const [status, setStatus] = useState("All");
   const [page, setPage] = useState(1);
-  const [formHoliday, setFormHoliday] = useState(undefined);
   const [viewHoliday, setViewHoliday] = useState(null);
-  const [deleteHoliday, setDeleteHoliday] = useState(null);
   const [toast, setToast] = useState({ message: "", type: "success" });
 
   const months = useMemo(
@@ -432,53 +246,6 @@ export default function FacultyHolidays() {
     setPage(1);
   };
 
-  const saveHoliday = async (values) => {
-    try {
-      setSaving(true);
-      const payload = {
-        ...values,
-        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : null,
-        boardId: selectedBoardId ? Number(selectedBoardId) : null,
-      };
-
-      try {
-        if (formHoliday?.id) {
-          await holidayApi.updateHoliday(formHoliday.id, payload);
-        }
-      } catch (apiErr) {
-        console.warn("Holiday update API failed, updating local state:", apiErr);
-      }
-
-      setHolidays((prev) =>
-        prev.map((h) => (h.id === formHoliday.id ? { ...h, ...values } : h))
-      );
-      setToast({ message: "Holiday updated successfully.", type: "success" });
-      setFormHoliday(undefined);
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Failed to save holiday.";
-      setToast({ message: msg, type: "error" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deleteHoliday) return;
-    try {
-      try {
-        await holidayApi.deleteHoliday(deleteHoliday.id);
-      } catch (apiErr) {
-        console.warn("Holiday delete API failed, updating local state:", apiErr);
-      }
-      setHolidays((prev) => prev.filter((h) => h.id !== deleteHoliday.id));
-      setToast({ message: "Holiday deleted successfully.", type: "success" });
-      setDeleteHoliday(null);
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || "Failed to delete holiday.";
-      setToast({ message: msg, type: "error" });
-    }
-  };
-
   return (
     <div className="holiday-page">
       {/* Page Header: Rename Holiday Management -> My Holidays, 3D icon, NO add holiday button */}
@@ -487,7 +254,7 @@ export default function FacultyHolidays() {
           <img className="cms-page-title-icon" src={holidayManagementIcon} alt="" aria-hidden="true" />
           <div className="cms-page-title-copy">
             <h1>My Holidays</h1>
-            <p>Manage holidays for the selected academic year.</p>
+            <p>Review academic holidays and scheduled college closures.</p>
           </div>
         </div>
       </div>
@@ -647,29 +414,11 @@ export default function FacultyHolidays() {
                         <button
                           type="button"
                           className="cms-action-btn"
-                          title="View holiday"
-                          aria-label="View holiday"
+                          title="View holiday details"
+                          aria-label="View holiday details"
                           onClick={() => setViewHoliday(holiday)}
                         >
                           <Eye size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          className="cms-action-btn"
-                          title="Edit holiday"
-                          aria-label="Edit holiday"
-                          onClick={() => setFormHoliday(holiday)}
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          className="cms-action-btn danger"
-                          title="Delete holiday"
-                          aria-label="Delete holiday"
-                          onClick={() => setDeleteHoliday(holiday)}
-                        >
-                          <Trash2 size={15} />
                         </button>
                       </div>
                     </td>
@@ -713,16 +462,6 @@ export default function FacultyHolidays() {
         </div>
       </section>
 
-      {/* Edit Modal */}
-      {formHoliday !== undefined ? (
-        <HolidayForm
-          holiday={formHoliday}
-          saving={saving}
-          onClose={() => setFormHoliday(undefined)}
-          onSave={saveHoliday}
-        />
-      ) : null}
-
       {/* View Details Modal */}
       {viewHoliday ? (
         <Modal
@@ -762,18 +501,6 @@ export default function FacultyHolidays() {
             </div>
           </div>
         </Modal>
-      ) : null}
-
-      {/* Delete Confirmation Dialog */}
-      {deleteHoliday ? (
-        <ConfirmDialog
-          danger
-          title="Delete holiday"
-          message={`Delete ${deleteHoliday.holidayName}?`}
-          confirmLabel="Delete"
-          onCancel={() => setDeleteHoliday(null)}
-          onConfirm={handleDelete}
-        />
       ) : null}
 
       {/* Toast Feedback */}

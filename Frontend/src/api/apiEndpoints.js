@@ -354,6 +354,14 @@ export const apiEndpoints = {
     leaveAction: (id) => `/api/v1/staff-attendance/leave/${id}/action`,
     importTemplate: "/api/v1/staff-attendance/import/template",
     importExcel: "/api/v1/staff-attendance/import/excel",
+    // Self-Service My Attendance
+    myToday: "/api/v1/staff-attendance/my-today",
+    punchIn: "/api/v1/staff-attendance/punch-in",
+    punchOut: "/api/v1/staff-attendance/punch-out",
+    myHistory: (period) => `/api/v1/staff-attendance/my-history?period=${encodeURIComponent(period || "week")}`,
+    regularize: "/api/v1/staff-attendance/regularize",
+    regularizations: "/api/v1/staff-attendance/regularizations",
+    reviewRegularization: (id) => `/api/v1/staff-attendance/regularizations/${id}/review`,
   },
   attendanceTimingConfig: {
     list: "/api/v1/attendance-timing-config",
