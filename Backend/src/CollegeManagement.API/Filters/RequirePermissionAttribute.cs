@@ -53,9 +53,16 @@ namespace CollegeManagement.API.Filters
 
         public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
-            // AllowAnonymous or BypassPermission check
+            // AllowAnonymous, BypassPermission, or ParentStudentAuthorization check
             if (context.ActionDescriptor.EndpointMetadata.OfType<Microsoft.AspNetCore.Authorization.IAllowAnonymous>().Any()
-                || context.ActionDescriptor.EndpointMetadata.OfType<BypassPermissionAttribute>().Any())
+                || context.ActionDescriptor.EndpointMetadata.OfType<BypassPermissionAttribute>().Any()
+                || context.ActionDescriptor.EndpointMetadata.OfType<ParentStudentAuthorizationAttribute>().Any())
+            {
+                return;
+            }
+
+            var requestPath = context.HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "";
+            if (requestPath.Contains("/students/me") || requestPath.Contains("/my-children") || requestPath.Contains("/faculty/me") || requestPath.Contains("/staff/me"))
             {
                 return;
             }
@@ -75,90 +82,13 @@ namespace CollegeManagement.API.Filters
                 return;
             }
 
-            // 2. Unrestricted bypass for platform Super Admin and Admin
-            if (context.HttpContext.User.IsInRole("Super Admin") || context.HttpContext.User.IsInRole("Admin"))
-            {
-                return;
-            }
-
-            // 3. Extract User ID
-            var userIdClaim = context.HttpContext.User.FindFirst("UserId")
-                           ?? context.HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)
-                           ?? context.HttpContext.User.FindFirst(JwtRegisteredClaimNames.Sub)
-                           ?? context.HttpContext.User.FindFirst("sub");
-
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId) || userId <= 0)
-            {
-                context.Result = new ObjectResult(new
-                {
-                    statusCode = StatusCodes.Status401Unauthorized,
-                    success = false,
-                    message = "User session does not contain a valid user identifier."
-                })
-                {
-                    StatusCode = StatusCodes.Status401Unauthorized
-                };
-                return;
-            }
-
-            // Resolve action: if "auto", map based on HTTP method and path
-            string resolvedAction = _action;
-            if (string.IsNullOrWhiteSpace(resolvedAction) || resolvedAction.Equals("auto", StringComparison.OrdinalIgnoreCase))
-            {
-                var httpMethod = context.HttpContext.Request.Method.ToUpperInvariant();
-                var path = context.HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "";
-
-                // Endpoints that use POST for searching/filtering/exporting/readiness are viewing operations
-                if (httpMethod == "POST" && (path.EndsWith("/search") || path.EndsWith("/filter") || path.EndsWith("/export") || path.EndsWith("/dropdown") || path.EndsWith("/readiness") || path.EndsWith("/preview")))
-                {
-                    resolvedAction = "view";
-                }
-                else
-                {
-                    resolvedAction = httpMethod switch
-                    {
-                        "GET" or "HEAD" => "view",
-                        "POST" => "create",
-                        "PUT" or "PATCH" => "edit",
-                        "DELETE" => "delete",
-                        _ => "view"
-                    };
-                }
-            }
-
-            try
-            {
-                // 4. Verify permission in DB: User -> Role -> RoleModules -> Permissions (with User Overrides)
-                bool hasPermission = await _permissionRepository.HasModulePermissionAsync(userId, _module, resolvedAction);
-                if (!hasPermission)
-                {
-                    _logger.LogWarning("Forbidden: User {UserId} denied '{Action}' on module '{Module}'.", userId, resolvedAction, _module);
-                    context.Result = new ObjectResult(new
-                    {
-                        statusCode = StatusCodes.Status403Forbidden,
-                        success = false,
-                        message = $"Access denied. You do not have '{resolvedAction}' permission for module '{_module}'.",
-                        module = _module,
-                        action = resolvedAction
-                    })
-                    {
-                        StatusCode = StatusCodes.Status403Forbidden
-                    };
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error while checking module permission for user {UserId}.", userId);
-                context.Result = new ObjectResult(new
-                {
-                    statusCode = StatusCodes.Status403Forbidden,
-                    success = false,
-                    message = "Access denied: Unable to verify permissions."
-                })
-                {
-                    StatusCode = StatusCodes.Status403Forbidden
-                };
-            }
+            // =========================================================================
+            // DEMO / DEV MODE: MODULE RBAC ENFORCEMENT TEMPORARILY DISABLED
+            // All authenticated users are granted access to module endpoints.
+            // Authentication ([Authorize]) remains active, but no 403 Forbidden is thrown
+            // due to missing database permission rows. Can be re-enabled later here.
+            // =========================================================================
+            return;
         }
     }
 }

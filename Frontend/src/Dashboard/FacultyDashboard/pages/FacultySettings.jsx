@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { ArrowRight, User, Lock, Bell, CheckCircle2, AlertCircle, X, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Lock, Bell, CheckCircle2, AlertCircle, X, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
-import { useFaculty, persistStaffProfile } from "../FacultyContext.jsx";
+import { useFaculty } from "../FacultyContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import "../styles/FacultySettings.css";
@@ -9,16 +9,7 @@ import "../styles/FacultySettings.css";
 export default function FacultySettings() {
   const { profileData, setProfileData, notify } = useFaculty();
   const [modalOpen, setModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("profile"); // "profile" | "password" | "preferences"
-
-  // Profile Form State
-  const [profileForm, setProfileForm] = useState(() => ({
-    fullName: profileData?.fullName || "",
-    mobile: profileData?.mobile || "",
-    personalEmail: profileData?.personalEmail || profileData?.email || "",
-    address: profileData?.address || "",
-    emergencyContact: profileData?.altMobile || "",
-  }));
+  const [activeTab, setActiveTab] = useState("password"); // "password" | "preferences"
 
   // Password Form State
   const [passwordForm, setPasswordForm] = useState({
@@ -70,7 +61,6 @@ export default function FacultySettings() {
 
   // Action / Loading States
   const [loadingSettings, setLoadingSettings] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
 
@@ -81,16 +71,7 @@ export default function FacultySettings() {
       const res = await apiClient.get(apiEndpoints.faculty.settings);
       const data = res?.data?.data || res?.data;
       if (data) {
-        if (data.profile) {
-          setProfileForm((prev) => ({
-            ...prev,
-            fullName: data.profile.fullName || prev.fullName || "",
-            mobile: data.profile.mobile || prev.mobile || "",
-            personalEmail: data.profile.personalEmail || prev.personalEmail || "",
-            address: data.profile.address || prev.address || "",
-            emergencyContact: data.profile.emergencyContact || prev.emergencyContact || "",
-          }));
-
+        if (data.profile && setProfileData) {
           setProfileData((current) => ({
             ...current,
             id: data.profile.id || current.id,
@@ -127,15 +108,20 @@ export default function FacultySettings() {
     loadSettings();
   }, [loadSettings]);
 
-  const handleOpenModal = (tab = "profile") => {
+  // Escape key listener to close modal
+  useEffect(() => {
+    if (!modalOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && !savingPassword && !savingPreferences) {
+        setModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [modalOpen, savingPassword, savingPreferences]);
+
+  const handleOpenModal = (tab = "password") => {
     setActiveTab(tab);
-    setProfileForm({
-      fullName: profileData?.fullName || "",
-      mobile: profileData?.mobile || "",
-      personalEmail: profileData?.personalEmail || profileData?.email || "",
-      address: profileData?.address || "",
-      emergencyContact: profileData?.altMobile || "",
-    });
     setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
     setShowCurrentPassword(false);
     setShowNewPassword(false);
@@ -144,40 +130,6 @@ export default function FacultySettings() {
     setPasswordSuccess(false);
     setModalOpen(true);
     loadSettings();
-  };
-
-  const handleSaveProfile = async (e) => {
-    e.preventDefault();
-    setSavingProfile(true);
-    try {
-      const payload = {
-        fullName: profileForm.fullName.trim(),
-        mobile: profileForm.mobile.trim(),
-        personalEmail: profileForm.personalEmail.trim(),
-        address: profileForm.address?.trim() || "",
-        emergencyContact: profileForm.emergencyContact?.trim() || "",
-      };
-
-      const res = await apiClient.put(apiEndpoints.faculty.updateProfileSettings, payload);
-
-      const updated = {
-        ...profileData,
-        fullName: payload.fullName,
-        mobile: payload.mobile,
-        email: payload.personalEmail,
-        personalEmail: payload.personalEmail,
-        address: payload.address,
-        altMobile: payload.emergencyContact,
-      };
-      setProfileData(updated);
-      persistStaffProfile(updated);
-      notify(res?.data?.message || "Profile settings updated successfully!", "success");
-      setModalOpen(false);
-    } catch (err) {
-      notify(getApiErrorMessage(err) || "Failed to update profile settings.", "error");
-    } finally {
-      setSavingProfile(false);
-    }
   };
 
   const handleUpdatePassword = async (e) => {
@@ -299,7 +251,7 @@ export default function FacultySettings() {
             <button
               type="button"
               className="cms-btn cms-btn-primary"
-              onClick={() => handleOpenModal("profile")}
+              onClick={() => handleOpenModal("password")}
             >
               Manage General Settings <ArrowRight size={14} />
             </button>
@@ -327,21 +279,11 @@ export default function FacultySettings() {
             </div>
 
             {/* Navigation Tabs inside modal */}
-            <div className="faculty-settings-tabs">
+            <div className="faculty-settings-tabs" role="tablist" aria-label="General settings">
               <button
                 type="button"
-                className={`faculty-settings-tab-btn ${activeTab === "profile" ? "is-active" : ""}`}
-                onClick={() => {
-                  setActiveTab("profile");
-                  setShowCurrentPassword(false);
-                  setShowNewPassword(false);
-                  setShowConfirmPassword(false);
-                }}
-              >
-                <User size={15} /> Profile Settings
-              </button>
-              <button
-                type="button"
+                role="tab"
+                aria-selected={activeTab === "password"}
                 className={`faculty-settings-tab-btn ${activeTab === "password" ? "is-active" : ""}`}
                 onClick={() => {
                   setActiveTab("password");
@@ -353,6 +295,8 @@ export default function FacultySettings() {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={activeTab === "preferences"}
                 className={`faculty-settings-tab-btn ${activeTab === "preferences" ? "is-active" : ""}`}
                 onClick={() => {
                   setActiveTab("preferences");
@@ -364,99 +308,6 @@ export default function FacultySettings() {
                 <Bell size={15} /> General Preferences
               </button>
             </div>
-
-            {/* Tab 1: Profile Settings */}
-            {activeTab === "profile" && (
-              <form onSubmit={handleSaveProfile}>
-                <div className="faculty-settings-modal-body">
-                  <div className="faculty-settings-form-grid">
-                    <div className="faculty-settings-field">
-                      <label>Full Name</label>
-                      <input
-                        type="text"
-                        value={profileForm.fullName}
-                        onChange={(e) => setProfileForm({ ...profileForm, fullName: e.target.value })}
-                        required
-                        disabled={savingProfile}
-                      />
-                    </div>
-                    <div className="faculty-settings-field">
-                      <label>Employee ID</label>
-                      <input
-                        type="text"
-                        value={profileData?.employeeId || "EMP-1042"}
-                        disabled
-                        readOnly
-                      />
-                      <span className="faculty-settings-hint">Assigned by college administrator</span>
-                    </div>
-                    <div className="faculty-settings-field">
-                      <label>Department</label>
-                      <input
-                        type="text"
-                        value={profileData?.department || "Mathematics"}
-                        disabled
-                        readOnly
-                      />
-                    </div>
-                    <div className="faculty-settings-field">
-                      <label>Designation</label>
-                      <input
-                        type="text"
-                        value={profileData?.designation || "Assistant Professor"}
-                        disabled
-                        readOnly
-                      />
-                    </div>
-                    <div className="faculty-settings-field">
-                      <label>Mobile Number</label>
-                      <input
-                        type="tel"
-                        value={profileForm.mobile}
-                        onChange={(e) => setProfileForm({ ...profileForm, mobile: e.target.value })}
-                        placeholder="10-digit mobile number"
-                        required
-                        disabled={savingProfile}
-                      />
-                    </div>
-                    <div className="faculty-settings-field">
-                      <label>Personal Email</label>
-                      <input
-                        type="email"
-                        value={profileForm.personalEmail}
-                        onChange={(e) => setProfileForm({ ...profileForm, personalEmail: e.target.value })}
-                        placeholder="Personal communication email"
-                        required
-                        disabled={savingProfile}
-                      />
-                    </div>
-                    <div className="faculty-settings-field" style={{ gridColumn: "span 2" }}>
-                      <label>Residential Address</label>
-                      <input
-                        type="text"
-                        value={profileForm.address}
-                        onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
-                        placeholder="Street, City, State, PIN"
-                        disabled={savingProfile}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="faculty-settings-modal-foot">
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    onClick={() => setModalOpen(false)}
-                    disabled={savingProfile}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="cms-btn cms-btn-primary" disabled={savingProfile}>
-                    {savingProfile ? "Saving Changes..." : "Save Profile Changes"}
-                  </button>
-                </div>
-              </form>
-            )}
 
             {/* Tab 2: Reset / Change Password */}
             {activeTab === "password" && (

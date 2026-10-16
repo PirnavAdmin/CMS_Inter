@@ -1,8 +1,23 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Clock, LogOut, Calendar, CheckCircle2, Briefcase, UserX, X, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  Clock,
+  LogIn,
+  LogOut,
+  Calendar,
+  CheckCircle2,
+  Briefcase,
+  UserX,
+  AlertCircle,
+  Fingerprint,
+  RotateCw,
+  Send,
+  X,
+  FileText,
+  Loader2,
+} from "lucide-react";
 import "../styles/FacultyMyAttendance.css";
-
 import { useFacultySafe } from "../FacultyContext.jsx";
+import { attendanceService } from "../../../api/attendanceService.js";
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr || timeStr === "--") return null;
@@ -42,437 +57,249 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
 
 export default function FacultyMyAttendance() {
   const context = useFacultySafe();
-  const [liveClock, setLiveClock] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
-  );
+  const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
 
+  // Periodic ticker to recalculate active shift timer every minute
   useEffect(() => {
     const timer = setInterval(() => {
-      setLiveClock(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
-    }, 1000);
+      setShiftUpdateTick((prev) => prev + 1);
+    }, 60000);
     return () => clearInterval(timer);
   }, []);
 
-  // Daily Punch State: resets every day, no localStorage used
-  // Status lifecycle: "not_punched" -> "punched_in" -> "punched_out" (locked for the rest of today)
-  const [dailyPunch, setDailyPunch] = useState({
+  // Filter State: "week" | "last_week" | "month" | "last_month"
+  const [activeFilter, setActiveFilter] = useState("week");
+
+  // Loading States
+  const [loadingToday, setLoadingToday] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Live Today Status
+  const [todayData, setTodayData] = useState({
     status: "not_punched",
     inTime: null,
     outTime: null,
+    shiftDuration: "--",
+    shiftName: "Morning (09:00 AM – 04:30 PM)",
+    shiftStartTime: "09:00 AM",
+    shiftEndTime: "04:30 PM",
+    isLate: false,
+    todayStatus: "Absent",
+    canRegularize: false,
+    dateFormatted: new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
+    regularizationState: null,
   });
 
-  // Regularization state for today: null | "pending" | "approved"
-  const [todayRegularization, setTodayRegularization] = useState(null);
+  // Live History & Analytics Metrics
+  const [historyData, setHistoryData] = useState({
+    logs: [],
+    metrics: {
+      workingDays: "6 Days",
+      workingDaysSub: "Current Week (Mon–Sat)",
+      presentDays: "0 Days",
+      presentDaysSub: "Biometric verified",
+      leaves: "0 Days",
+      leavesSub: "No leaves applied",
+      absentDays: "0 Days",
+      absentDaysSub: "No absences",
+    },
+  });
 
-  // AM Shift start time is 09:00 AM (540 minutes from midnight)
-  const SHIFT_START_MINUTES = 9 * 60; // 09:00 AM
-  const isLateLogin = useMemo(() => {
-    if (!dailyPunch.inTime) return false;
-    const inMins = parseTimeToMinutes(dailyPunch.inTime);
-    return inMins !== null && inMins > SHIFT_START_MINUTES;
-  }, [dailyPunch.inTime]);
-
-  // Today's attendance status in the table:
-  // - "Absent" if not punched in yet
-  // - "Present" if approved by admin through regularization OR punched in on/before 09:00 AM
-  // - "Late" if punched in after 09:00 AM
-  const todayStatus = useMemo(() => {
-    if (dailyPunch.status === "not_punched") return "Absent";
-    if (todayRegularization === "approved") return "Present";
-    if (isLateLogin) return "Late";
-    return "Present";
-  }, [dailyPunch.status, todayRegularization, isLateLogin]);
-
-  // Can regularize if logged in late and not yet approved
-  const canTodayRegularize = dailyPunch.status !== "not_punched" && isLateLogin && todayRegularization !== "approved";
-
-  // Shift duration for the Biometric Clock:
-  // - Actively calculated live while punched in (recalculates every second with liveClock)
-  // - Finalized between inTime and outTime when punched out
-  // - "--" when not punched in
-  const clockShiftDuration = useMemo(() => {
-    if (dailyPunch.status === "punched_out" && dailyPunch.inTime && dailyPunch.outTime) {
-      return calculateDurationStr(dailyPunch.inTime, dailyPunch.outTime, false);
-    }
-    if (dailyPunch.status === "punched_in" && dailyPunch.inTime) {
-      return calculateDurationStr(dailyPunch.inTime, null, true);
-    }
-    return "--";
-  }, [dailyPunch, liveClock]);
-
-  // Finalized shift duration for attendance logs (table):
-  // Shown only after punch out is clicked; "--" while active, "0h 0m" before punch in
-  const finalizedShiftDuration = useMemo(() => {
-    if (dailyPunch.status === "punched_out" && dailyPunch.inTime && dailyPunch.outTime) {
-      return calculateDurationStr(dailyPunch.inTime, dailyPunch.outTime, false);
-    }
-    return "--";
-  }, [dailyPunch]);
+  // Regularization Modal State
+  const [regModalOpen, setRegModalOpen] = useState(false);
+  const [regSubmitting, setRegSubmitting] = useState(false);
+  const [regForm, setRegForm] = useState({
+    rawDate: "",
+    displayDate: "",
+    requestedInTime: "09:00",
+    requestedOutTime: "16:30",
+    reason: "",
+  });
 
   const [toast, setToast] = useState(null);
 
-  const notify = (text, type = "success") => {
-    if (context?.notify) {
-      context.notify(text, type);
-    } else {
-      setToast({ text, type });
-      setTimeout(() => setToast(null), 3500);
+  const notify = useCallback(
+    (text, type = "success") => {
+      if (context?.notify) {
+        context.notify(text, type);
+      } else {
+        setToast({ text, type });
+        setTimeout(() => setToast(null), 3500);
+      }
+    },
+    [context]
+  );
+
+  // Sync punch status with global Faculty context
+  const syncGlobalPunchState = useCallback(
+    (status, inTime, outTime) => {
+      if (context?.setPunchState) {
+        context.setPunchState({
+          isPunchedIn: status === "punched_in",
+          inTime: inTime,
+          outTime: outTime,
+          hoursWorked: inTime ? calculateDurationStr(inTime, outTime, status === "punched_in") : "--",
+        });
+      }
+    },
+    [context]
+  );
+
+  // Fetch Today's Attendance Status
+  const fetchTodayStatus = useCallback(async () => {
+    try {
+      setLoadingToday(true);
+      const res = await attendanceService.getMyTodayStatus();
+      if (res?.Data) {
+        setTodayData(res.Data);
+        syncGlobalPunchState(res.Data.Status || res.Data.status, res.Data.InTime || res.Data.inTime, res.Data.OutTime || res.Data.outTime);
+      }
+    } catch (err) {
+      console.warn("Could not load today status from backend, keeping defaults", err);
+    } finally {
+      setLoadingToday(false);
+    }
+  }, [syncGlobalPunchState]);
+
+  // Fetch Attendance History for selected filter
+  const fetchHistory = useCallback(async (period) => {
+    try {
+      setLoadingHistory(true);
+      const res = await attendanceService.getMyAttendanceHistory(period);
+      if (res?.Data) {
+        setHistoryData({
+          logs: res.Data.Logs || res.Data.logs || [],
+          metrics: res.Data.Metrics || res.Data.metrics || {},
+        });
+      }
+    } catch (err) {
+      console.warn("Could not load attendance history from backend", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    fetchTodayStatus();
+  }, [fetchTodayStatus]);
+
+  // When filter tab changes, load corresponding history
+  useEffect(() => {
+    fetchHistory(activeFilter);
+  }, [activeFilter, fetchHistory]);
+
+  // Punch In Handler
+  const handlePunchIn = async () => {
+    if (todayData.status !== "not_punched" || actionLoading) return;
+    setActionLoading(true);
+    try {
+      const res = await attendanceService.punchIn({
+        verificationMethod: 3, // WebCheckIn
+        deviceId: "Web Portal",
+        remarks: "Faculty Self Check-In via Web Portal",
+      });
+
+      if (res?.Status && res?.Data) {
+        setTodayData(res.Data);
+        syncGlobalPunchState(res.Data.Status, res.Data.InTime, res.Data.OutTime);
+        notify(res.Message || `Checked In Successfully at ${res.Data.InTime}`, "success");
+        fetchHistory(activeFilter);
+      } else {
+        notify(res?.Message || "Failed to check in.", "error");
+      }
+    } catch (err) {
+      const errMsg = err?.response?.data?.Message || err?.message || "Failed to check in.";
+      notify(errMsg, "error");
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handlePunchIn = () => {
-    if (dailyPunch.status !== "not_punched") return;
-    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
-    setDailyPunch({
-      status: "punched_in",
-      inTime: timeStr,
-      outTime: null,
+  // Punch Out Handler
+  const handlePunchOut = async () => {
+    if (todayData.status !== "punched_in" || actionLoading) return;
+    setActionLoading(true);
+    try {
+      const res = await attendanceService.punchOut({
+        verificationMethod: 3,
+        deviceId: "Web Portal",
+        remarks: "Faculty Self Check-Out via Web Portal",
+      });
+
+      if (res?.Status && res?.Data) {
+        setTodayData(res.Data);
+        syncGlobalPunchState(res.Data.Status, res.Data.InTime, res.Data.OutTime);
+        notify(res.Message || `Punched Out Successfully at ${res.Data.OutTime}`, "success");
+        fetchHistory(activeFilter);
+      } else {
+        notify(res?.Message || "Failed to punch out.", "error");
+      }
+    } catch (err) {
+      const errMsg = err?.response?.data?.Message || err?.message || "Failed to punch out.";
+      notify(errMsg, "error");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Open Regularization Modal for a specific date
+  const openRegularizeModal = (log) => {
+    setRegForm({
+      rawDate: log.rawDate || log.RawDate || new Date().toISOString().split("T")[0],
+      displayDate: log.date || log.Date || log.day || "Selected Date",
+      requestedInTime: "09:00",
+      requestedOutTime: "16:30",
+      reason: "",
     });
-    if (context?.setPunchState) {
-      context.setPunchState({ isPunchedIn: true, inTime: timeStr, outTime: null, hoursWorked: "Just punched in" });
+    setRegModalOpen(true);
+  };
+
+  // Submit Regularization Form
+  const handleSubmitRegularization = async (e) => {
+    e.preventDefault();
+    if (!regForm.reason.trim()) {
+      notify("Please provide a reason for attendance regularization.", "error");
+      return;
     }
-    const inMins = parseTimeToMinutes(timeStr);
-    const isLate = inMins !== null && inMins > SHIFT_START_MINUTES;
-    if (isLate) {
-      notify(`Checked In at ${timeStr} (Late punch logged after 09:00 AM shift)`, "success");
-    } else {
-      notify(`Checked In Successfully at ${timeStr}`, "success");
+
+    setRegSubmitting(true);
+    try {
+      const payload = {
+        attendanceDate: regForm.rawDate,
+        requestedInTime: regForm.requestedInTime ? `${regForm.requestedInTime}:00` : null,
+        requestedOutTime: regForm.requestedOutTime ? `${regForm.requestedOutTime}:00` : null,
+        reason: regForm.reason.trim(),
+      };
+
+      const res = await attendanceService.submitRegularization(payload);
+      if (res?.Status) {
+        notify("Attendance regularization request submitted successfully. Pending Principal/Admin approval.", "success");
+        setRegModalOpen(false);
+        fetchTodayStatus();
+        fetchHistory(activeFilter);
+      } else {
+        notify(res?.Message || "Failed to submit regularization.", "error");
+      }
+    } catch (err) {
+      const errMsg = err?.response?.data?.Message || err?.message || "Failed to submit regularization.";
+      notify(errMsg, "error");
+    } finally {
+      setRegSubmitting(false);
     }
   };
 
-  const handlePunchOut = () => {
-    if (dailyPunch.status !== "punched_in") return;
-    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
-    setDailyPunch((prev) => ({
-      ...prev,
-      status: "punched_out",
-      outTime: timeStr,
-    }));
-    if (context?.setPunchState) {
-      context.setPunchState({ isPunchedIn: false, inTime: dailyPunch.inTime, outTime: timeStr });
+  // Real-time dynamic shift duration display
+  const clockShiftDuration = useMemo(() => {
+    if (todayData.status === "punched_out" && todayData.inTime && todayData.outTime) {
+      return calculateDurationStr(todayData.inTime, todayData.outTime, false);
     }
-    notify(`Punched Out Successfully at ${timeStr}`, "success");
-  };
-
-  // Attendance Filter: "week" | "last_week" | "month" | "last_month"
-  // Attendance Filter: "week" | "last_week" | "month" | "last_month"
-  const [activeFilter, setActiveFilter] = useState("week");
-
-  // Dynamic datasets for Week, Last Week, Month, Last Month
-  // Intermediate school operates 6 days a week (Mon–Sat)
-  const thisWeekLogs = useMemo(() => [
-    {
-      id: "w-1",
-      day: "Mon",
-      date: "05/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:55 AM",
-      outTime: "06:02 PM",
-      hours: "9h 7m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "w-2",
-      day: "Tue",
-      date: "06/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:42 AM",
-      outTime: "04:36 PM",
-      hours: "7h 54m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "w-3",
-      day: "Wed",
-      date: "07/10/2026",
-      rawDate: "2026-10-07",
-      shift: "Morning (09:00–16:30)",
-      inTime: dailyPunch.inTime || "--",
-      outTime: dailyPunch.outTime || "--",
-      hours: dailyPunch.status === "punched_out" ? finalizedShiftDuration : (dailyPunch.status === "punched_in" ? "--" : "0h 0m"),
-      device: dailyPunch.status !== "not_punched" ? "Bio-Station 01 (Main Gate)" : "--",
-      status: todayStatus,
-      canRegularize: canTodayRegularize,
-      isToday: true,
-      regularizationState: todayRegularization,
-    },
-    {
-      id: "w-4",
-      day: "Thu",
-      date: "08/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "--",
-      outTime: "--",
-      hours: "0h 0m",
-      device: "--",
-      status: "--",
-      canRegularize: false,
-    },
-    {
-      id: "w-5",
-      day: "Fri",
-      date: "09/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "--",
-      outTime: "--",
-      hours: "0h 0m",
-      device: "--",
-      status: "--",
-      canRegularize: false,
-    },
-    {
-      id: "w-6",
-      day: "Sat",
-      date: "10/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "--",
-      outTime: "--",
-      hours: "0h 0m",
-      device: "--",
-      status: "--",
-      canRegularize: false,
-    },
-  ], [dailyPunch, finalizedShiftDuration, todayStatus, canTodayRegularize, todayRegularization]);
-
-  const lastWeekLogs = useMemo(() => [
-    {
-      id: "lw-1",
-      day: "Mon",
-      date: "28/09/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:30 AM",
-      outTime: "04:35 PM",
-      hours: "8h 05m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "lw-2",
-      day: "Tue",
-      date: "29/09/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:28 AM",
-      outTime: "04:31 PM",
-      hours: "8h 03m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "lw-3",
-      day: "Wed",
-      date: "30/09/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:50 AM",
-      outTime: "04:30 PM",
-      hours: "7h 40m",
-      device: "Bio-Station 02 (Academic Block)",
-      status: "Late",
-      canRegularize: true,
-    },
-    {
-      id: "lw-4",
-      day: "Thu",
-      date: "01/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:32 AM",
-      outTime: "04:30 PM",
-      hours: "7h 58m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "lw-5",
-      day: "Fri",
-      date: "02/10/2026",
-      shift: "General",
-      inTime: "--",
-      outTime: "--",
-      hours: "0h 0m",
-      device: "--",
-      status: "Holiday",
-      canRegularize: false,
-    },
-    {
-      id: "lw-6",
-      day: "Sat",
-      date: "03/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:35 AM",
-      outTime: "04:30 PM",
-      hours: "7h 55m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-  ], []);
-
-  // Full Month - October 2026 (Oct 1 to Oct 31, with Oct 2 & Oct 20 & Sundays as Holiday, Mon-Sat as school days)
-  const monthLogs = useMemo(() => [
-    { id: "m-01", day: "Thu", date: "01/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:32 AM", outTime: "04:30 PM", hours: "7h 58m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "m-02", day: "Fri", date: "02/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-03", day: "Sat", date: "03/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:35 AM", outTime: "04:30 PM", hours: "7h 55m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "m-04", day: "Sun", date: "04/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-05", day: "Mon", date: "05/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:55 AM", outTime: "06:02 PM", hours: "9h 7m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "m-06", day: "Tue", date: "06/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:42 AM", outTime: "04:36 PM", hours: "7h 54m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    {
-      id: "m-07",
-      day: "Wed",
-      date: "07/10/2026",
-      rawDate: "2026-10-07",
-      shift: "Morning (09:00–16:30)",
-      inTime: dailyPunch.inTime || "--",
-      outTime: dailyPunch.outTime || "--",
-      hours: dailyPunch.status === "punched_out" ? finalizedShiftDuration : (dailyPunch.status === "punched_in" ? "--" : "0h 0m"),
-      device: dailyPunch.status !== "not_punched" ? "Bio-Station 01 (Main Gate)" : "--",
-      status: todayStatus,
-      canRegularize: canTodayRegularize,
-      isToday: true,
-      regularizationState: todayRegularization,
-    },
-    { id: "m-08", day: "Thu", date: "08/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-09", day: "Fri", date: "09/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-10", day: "Sat", date: "10/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-11", day: "Sun", date: "11/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-12", day: "Mon", date: "12/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-13", day: "Tue", date: "13/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-14", day: "Wed", date: "14/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-15", day: "Thu", date: "15/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-16", day: "Fri", date: "16/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-17", day: "Sat", date: "17/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-18", day: "Sun", date: "18/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-19", day: "Mon", date: "19/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-20", day: "Tue", date: "20/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-21", day: "Wed", date: "21/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-22", day: "Thu", date: "22/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-23", day: "Fri", date: "23/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-24", day: "Sat", date: "24/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-25", day: "Sun", date: "25/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-26", day: "Mon", date: "26/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-27", day: "Tue", date: "27/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-28", day: "Wed", date: "28/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-29", day: "Thu", date: "29/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-30", day: "Fri", date: "30/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-31", day: "Sat", date: "31/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-  ], [dailyPunch, finalizedShiftDuration, todayStatus, canTodayRegularize, todayRegularization]);
-
-  // Full Month - September 2026 (All 30 days: Sundays as Holiday, Mon-Sat intermediate school working days with Present, Absent, Late, Half Day)
-  const lastMonthLogs = useMemo(() => [
-    { id: "lm-01", day: "Tue", date: "01/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:30 PM", hours: "8h 02m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-02", day: "Wed", date: "02/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:32 PM", hours: "8h 02m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-03", day: "Thu", date: "03/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:25 AM", outTime: "04:30 PM", hours: "8h 05m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-04", day: "Fri", date: "04/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:31 AM", outTime: "04:31 PM", hours: "8h 00m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-05", day: "Sat", date: "05/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:35 AM", outTime: "04:29 PM", hours: "7h 54m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-06", day: "Sun", date: "06/09/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "lm-07", day: "Mon", date: "07/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:29 AM", outTime: "04:30 PM", hours: "8h 01m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-08", day: "Tue", date: "08/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:30 PM", hours: "8h 00m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-09", day: "Wed", date: "09/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:27 AM", outTime: "04:32 PM", hours: "8h 05m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-10", day: "Thu", date: "10/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:33 AM", outTime: "04:35 PM", hours: "8h 02m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-11", day: "Fri", date: "11/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:54 AM", outTime: "04:30 PM", hours: "7h 36m", device: "Bio-Station 02 (Academic Block)", status: "Late", canRegularize: true },
-    { id: "lm-12", day: "Sat", date: "12/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:32 AM", outTime: "04:30 PM", hours: "7h 58m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-13", day: "Sun", date: "13/09/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "lm-14", day: "Mon", date: "14/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:31 PM", hours: "8h 03m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-15", day: "Tue", date: "15/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:31 AM", outTime: "01:00 PM", hours: "4h 29m", device: "Bio-Station 01 (Main Gate)", status: "Half Day", canRegularize: true },
-    { id: "lm-16", day: "Wed", date: "16/09/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Leave", canRegularize: false },
-    { id: "lm-17", day: "Thu", date: "17/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:35 PM", hours: "8h 05m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-18", day: "Fri", date: "18/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:55 AM", outTime: "04:30 PM", hours: "7h 35m", device: "Bio-Station 02 (Academic Block)", status: "Late", canRegularize: true },
-    { id: "lm-19", day: "Sat", date: "19/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:35 AM", outTime: "04:32 PM", hours: "7h 57m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-20", day: "Sun", date: "20/09/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "lm-21", day: "Mon", date: "21/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:26 AM", outTime: "04:33 PM", hours: "8h 07m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-22", day: "Tue", date: "22/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:29 AM", outTime: "04:30 PM", hours: "8h 01m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-23", day: "Wed", date: "23/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:32 AM", outTime: "04:30 PM", hours: "7h 58m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-24", day: "Thu", date: "24/09/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Absent", canRegularize: true },
-    { id: "lm-25", day: "Fri", date: "25/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:31 PM", hours: "8h 03m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-26", day: "Sat", date: "26/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:34 AM", outTime: "04:30 PM", hours: "7h 56m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-27", day: "Sun", date: "27/09/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "lm-28", day: "Mon", date: "28/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:35 PM", hours: "8h 05m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-29", day: "Tue", date: "29/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:31 PM", hours: "8h 03m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-30", day: "Wed", date: "30/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:50 AM", outTime: "04:30 PM", hours: "7h 40m", device: "Bio-Station 02 (Academic Block)", status: "Present", canRegularize: false },
-  ], []);
-
-  const activeLogs = useMemo(() => {
-    switch (activeFilter) {
-      case "week":
-        return thisWeekLogs;
-      case "last_week":
-        return lastWeekLogs;
-      case "month":
-        return monthLogs;
-      case "last_month":
-        return lastMonthLogs;
-      default:
-        return thisWeekLogs;
+    if (todayData.status === "punched_in" && todayData.inTime) {
+      return calculateDurationStr(todayData.inTime, null, true);
     }
-  }, [activeFilter, thisWeekLogs, lastWeekLogs, monthLogs, lastMonthLogs]);
-
-  // Dynamic analytics cards depending on selected tab (Week / Last Week / Month / Last Month)
-  const analyticsMetrics = useMemo(() => {
-    const isTodayPresent = dailyPunch.status !== "not_punched";
-    const isLateToday = isLateLogin && todayRegularization !== "approved";
-    switch (activeFilter) {
-      case "week":
-        return {
-          workingDays: "6 Days",
-          workingDaysSub: "Current Week (Mon–Sat)",
-          presentDays: isTodayPresent ? "3 Days" : "2 Days",
-          presentDaysSub: "Biometric verified to date",
-          leaves: "0 Days",
-          leavesSub: isLateToday ? "1 Late punch logged" : "No leaves applied",
-          absentDays: isTodayPresent ? "0 Days" : "1 Day",
-          absentDaysSub: isTodayPresent ? "No absences this week" : "Current day unpunched",
-        };
-      case "last_week":
-        return {
-          workingDays: "5 Days",
-          workingDaysSub: "Mon–Sat (1 Holiday)",
-          presentDays: "4 Days",
-          presentDaysSub: "Biometric verified",
-          leaves: "0 Days",
-          leavesSub: "1 Late punch logged",
-          absentDays: "0 Days",
-          absentDaysSub: "No unexcused absences",
-        };
-      case "month":
-        return {
-          workingDays: "25 Days",
-          workingDaysSub: "Current Month (Oct 2026)",
-          presentDays: isTodayPresent ? "5 Days" : "4 Days",
-          presentDaysSub: "Biometric verified to date",
-          leaves: "0 Days",
-          leavesSub: isLateToday ? "1 Late punch logged" : "0 CL applied",
-          absentDays: isTodayPresent ? "0 Days" : "1 Day",
-          absentDaysSub: isTodayPresent ? "No unexcused absences" : "1 Unexcused absence",
-        };
-      case "last_month":
-        return {
-          workingDays: "26 Days",
-          workingDaysSub: "September 2026 (30 Days)",
-          presentDays: "22 Days",
-          presentDaysSub: "Biometric verified",
-          leaves: "2 Days",
-          leavesSub: "1 CL, 1 OD approved",
-          absentDays: "1 Day",
-          absentDaysSub: "1 Unexcused absence (24 Sep)",
-        };
-      default:
-        return {
-          workingDays: "6 Days",
-          workingDaysSub: "Current Week (Mon–Sat)",
-          presentDays: isTodayPresent ? "3 Days" : "2 Days",
-          presentDaysSub: "Biometric verified",
-          leaves: "0 Days",
-          leavesSub: isLateToday ? "1 Late punch logged" : "No leaves applied",
-          absentDays: isTodayPresent ? "0 Days" : "1 Day",
-          absentDaysSub: isTodayPresent ? "No absences this week" : "Current day unpunched",
-        };
-    }
-  }, [activeFilter, dailyPunch.status, isLateLogin, todayRegularization]);
+    return todayData.shiftDuration && todayData.shiftDuration !== "--" ? todayData.shiftDuration : "--:--";
+  }, [todayData, shiftUpdateTick]);
 
   const getStatusBadgeClass = (status) => {
     switch (status) {
@@ -496,219 +323,255 @@ export default function FacultyMyAttendance() {
     }
   };
 
-  const [showRegularizeModal, setShowRegularizeModal] = useState(false);
-  const [regularizeForm, setRegularizeForm] = useState({ date: "", reason: "Forgot Biometric Punch", inTime: "08:30 AM", outTime: "04:30 PM", notes: "" });
-
   return (
-    <div>
-      <div className="cms-page-head">
-        <div>
-          <h1>My Attendance & Biometric Punch</h1>
-          <p>Daily biometric check-in, punch times, shift logs & monthly attendance calendar.</p>
-        </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setShowRegularizeModal(true)}>
-          <Clock size={14} /> Request Attendance Regularization
-        </button>
-      </div>
-
-      {/* Punch In / Out Grid */}
-      <div className="sp-attendance-punch-grid">
-        {/* Live Digital Clock Card (Professional Theme-Based) */}
-        <div className="sp-live-clock-card">
-          <div>
-            <span className="sp-live-badge">
-              CAMPUS BIOMETRIC CLOCK
-            </span>
-            <div className="sp-live-clock-time">
-              {liveClock}
-            </div>
-            <div className="sp-live-clock-date">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-            </div>
+    <div className="sp-faculty-attendance-page">
+      {/* Top Punch & Shift Grid */}
+      <div className="sp-attendance-top-grid">
+        {/* Left Card: Attendance & Shift Summary */}
+        <div className="cms-card sp-shift-summary-card">
+          <div className="sp-card-header">
+            <h3 className="sp-card-title">Attendance & Shift Summary</h3>
+            <p className="sp-card-desc">
+              Campus shift schedule, check-in status & calculated shift duration.
+            </p>
           </div>
 
-          <div className="sp-clock-status-box">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="sp-clock-sublabel">Punch Status:</span>
+          <div className="sp-summary-inner-box">
+            {/* Check Status Row - Centered in middle */}
+            <div className="sp-summary-status-row">
+              <span className="sp-summary-label">Check Status:</span>
               <span
-                className={`sp-punch-status-badge ${dailyPunch.status === "punched_in"
-                  ? "in"
-                  : dailyPunch.status === "punched_out"
+                className={`sp-check-status-badge ${
+                  todayData.status === "punched_in"
+                    ? "in"
+                    : todayData.status === "punched_out"
                     ? "completed"
-                    : "pending"
-                  }`}
+                    : "not-checked"
+                }`}
               >
-                ● {dailyPunch.status === "punched_in"
-                  ? `Checked In (${dailyPunch.inTime})`
-                  : dailyPunch.status === "punched_out"
-                    ? `Completed (${dailyPunch.outTime})`
-                    : "Not Checked In"}
+                <span className="sp-status-bullet">•</span>
+                {todayData.status === "punched_in"
+                  ? `Checked In (${todayData.inTime || "--"})`
+                  : todayData.status === "punched_out"
+                  ? `Completed (${todayData.outTime || "--"})`
+                  : "Not Checked In"}
               </span>
             </div>
 
-            {/* Timings row inside Time Tab */}
-            <div className="sp-clock-timings-grid">
-              <div className="sp-clock-timing-item">
-                <span className="label">Punch In</span>
-                <span className={`val ${dailyPunch.inTime ? "highlight" : ""}`}>
-                  {dailyPunch.inTime || "--"}
+            {/* 3 Metric Columns: CHECK IN, CHECK OUT, SHIFT DURATION */}
+            <div className="sp-summary-metric-cols">
+              <div className="sp-summary-col">
+                <span className="sp-metric-col-label">CHECK IN</span>
+                <span className={`sp-metric-col-val ${todayData.inTime ? "highlight" : ""}`}>
+                  {todayData.inTime || "--:-- --"}
                 </span>
               </div>
-              <div className="sp-clock-timing-item">
-                <span className="label">Punch Out</span>
-                <span className="val">
-                  {dailyPunch.outTime || "--"}
+              <div className="sp-summary-col">
+                <span className="sp-metric-col-label">CHECK OUT</span>
+                <span className="sp-metric-col-val">
+                  {todayData.outTime || "--:-- --"}
                 </span>
               </div>
-              <div className="sp-clock-timing-item">
-                <span className="label">Shift Duration</span>
-                <span className={`val ${dailyPunch.status === "punched_in" ? "highlight" : ""}`}>
-                  {clockShiftDuration}
+              <div className="sp-summary-col">
+                <span className="sp-metric-col-label">SHIFT DURATION</span>
+                <span className={`sp-metric-col-val ${todayData.status === "punched_in" ? "highlight" : ""}`}>
+                  {clockShiftDuration === "--" ? "--:--" : clockShiftDuration}
                 </span>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: "0.8rem", alignItems: "center" }}>
-              <span className="sp-clock-sublabel">Campus Shift:</span>
-              <span className="sp-shift-timings-val">09:00 AM – 04:30 PM</span>
+            {/* Bottom Shift & Date Info */}
+            <div className="sp-summary-foot-row">
+              <div className="sp-summary-foot-left">
+                <span className="sp-foot-label">Campus Shift:</span>
+                <Clock size={13} className="sp-foot-icon" />
+                <span className="sp-foot-val">{todayData.shiftStartTime} – {todayData.shiftEndTime}</span>
+              </div>
+              <div className="sp-summary-foot-right">
+                <Calendar size={13} className="sp-foot-icon" />
+                <span className="sp-foot-val">{todayData.dateFormatted}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Punch Actions Form Card */}
-        <div className="sp-punch-form-card">
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Punch Terminal Action</h3>
-            <p style={{ fontSize: 12.5, color: "var(--cms-muted)", marginBottom: 16 }}>
-              Click below to record your campus entry or exit timestamp. Instant biometric verification enabled.
+        {/* Right Card: Check-In / Check-Out Actions */}
+        <div className="cms-card sp-punch-action-card">
+          <div className="sp-card-header">
+            <h3 className="sp-card-title">Check-In / Check-Out</h3>
+            <p className="sp-card-desc">
+              Click below to record your campus entry or exit timestamp.<br />
+              Instant biometric verification enabled.
             </p>
-
-            <div style={{ padding: "14px 16px", borderRadius: 10, background: "var(--cms-surface)", border: "1px solid var(--cms-border)", marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>Current Punch Status</div>
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 800,
-                  color:
-                    dailyPunch.status === "punched_in"
-                      ? "var(--cms-green, #0f9d58)"
-                      : dailyPunch.status === "punched_out"
-                        ? "var(--cms-primary, #6f8400)"
-                        : "var(--cms-text, #10203c)",
-                  marginTop: 4,
-                }}
-              >
-                {dailyPunch.status === "punched_in"
-                  ? `Active — Punched In at ${dailyPunch.inTime}`
-                  : dailyPunch.status === "punched_out"
-                    ? `Completed — Punched Out at ${dailyPunch.outTime}`
-                    : "Inactive — Yet to Punch In Today"}
-              </div>
-              <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 4 }}>
-                Terminal: <strong>Main Campus Gate 01 Bio-Station</strong>
-              </div>
-            </div>
           </div>
 
-          <div>
-            <div className="sp-punch-actions-row">
+          <div className="sp-punch-twin-grid">
+            {/* Check In Panel */}
+            <div className="sp-twin-panel checkin-panel">
+              <div className="sp-twin-icon-box checkin">
+                <LogIn size={16} />
+              </div>
+              <div className="sp-twin-title checkin">CHECK IN</div>
+
+              {/* Dotted Arc Gauge */}
+              <div className="sp-arc-gauge-container">
+                <svg viewBox="0 0 160 82" className="sp-arc-svg checkin-arc" fill="none">
+                  <path
+                    d="M 22 72 A 58 58 0 0 1 138 72"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeDasharray="2 7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="sp-gauge-center">
+                  <span className="sp-gauge-time">{todayData.inTime || "--:-- --"}</span>
+                  <span className="sp-gauge-sub">{todayData.inTime ? "Checked In" : "Not Checked In"}</span>
+                </div>
+              </div>
+
+              {/* Check In Button */}
               <button
-                className="cms-btn cms-btn-primary"
-                style={{ flex: 1, justifyContent: "center", padding: "13px 18px", fontSize: 14 }}
-                disabled={dailyPunch.status !== "not_punched"}
+                type="button"
+                className={`sp-punch-pill-btn checkin ${
+                  todayData.status === "not_punched" && !actionLoading ? "active" : "disabled"
+                }`}
+                disabled={todayData.status !== "not_punched" || actionLoading}
                 onClick={handlePunchIn}
               >
-                <Clock size={16} /> Punch In (Check-In)
+                {actionLoading && todayData.status === "not_punched" ? (
+                  <Loader2 size={15} className="sp-spin" />
+                ) : (
+                  <Fingerprint size={15} />
+                )}
+                <span>Check In</span>
               </button>
+
+              <div className="sp-punch-foot-hint">Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}</div>
+            </div>
+
+            {/* Check Out Panel */}
+            <div className="sp-twin-panel checkout-panel">
+              <div className="sp-twin-icon-box checkout">
+                <LogOut size={16} />
+              </div>
+              <div className="sp-twin-title checkout">CHECK OUT</div>
+
+              {/* Dotted Arc Gauge */}
+              <div className="sp-arc-gauge-container">
+                <svg viewBox="0 0 160 82" className="sp-arc-svg checkout-arc" fill="none">
+                  <path
+                    d="M 22 72 A 58 58 0 0 1 138 72"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeDasharray="2 7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="sp-gauge-center">
+                  <span className="sp-gauge-time">{todayData.outTime || "--:-- --"}</span>
+                  <span className="sp-gauge-sub">{todayData.outTime ? "Checked Out" : "Not Checked Out"}</span>
+                </div>
+              </div>
+
+              {/* Check Out Button */}
               <button
-                className="cms-btn"
-                style={{
-                  flex: 1,
-                  justifyContent: "center",
-                  padding: "13px 18px",
-                  fontSize: 14,
-                  background: dailyPunch.status === "punched_in" ? "#dc2626" : "var(--cms-border, #e4e8f0)",
-                  color: dailyPunch.status === "punched_in" ? "#ffffff" : "var(--cms-muted, #7b8275)",
-                  cursor: dailyPunch.status === "punched_in" ? "pointer" : "not-allowed",
-                  border: "none",
-                }}
-                disabled={dailyPunch.status !== "punched_in"}
+                type="button"
+                className={`sp-punch-pill-btn checkout ${
+                  todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
+                }`}
+                disabled={todayData.status !== "punched_in" || actionLoading}
                 onClick={handlePunchOut}
               >
-                <LogOut size={16} /> Punch Out (Check-Out)
+                {actionLoading && todayData.status === "punched_in" ? (
+                  <Loader2 size={15} className="sp-spin" />
+                ) : (
+                  <LogOut size={15} />
+                )}
+                <span>Check Out</span>
               </button>
+
+              <div className="sp-punch-foot-hint">After check-in only</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 4 Attendance Metric Cards (Dynamically tied to selected tab) */}
-      <div className="sp-stat-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-blue"><Calendar size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Working Days</div>
-            <div className="cms-stat-value">{analyticsMetrics.workingDays}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.workingDaysSub}</div>
+      {/* Row 2: 4 Metric Cards */}
+      <div className="sp-metric-cards-grid">
+        {/* Card 1: Working Days */}
+        <div className="cms-card sp-metric-kpi-card">
+          <div className="sp-kpi-icon-box green">
+            <Calendar size={20} />
+          </div>
+          <div className="sp-kpi-content">
+            <div className="sp-kpi-label">Working Days</div>
+            <div className="sp-kpi-value">{historyData.metrics?.workingDays || historyData.metrics?.WorkingDays || "0 Days"}</div>
+            <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || historyData.metrics?.WorkingDaysSub || "--"}</div>
           </div>
         </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-green"><CheckCircle2 size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Present Days</div>
-            <div className="cms-stat-value" style={{ color: "var(--cms-green)" }}>{analyticsMetrics.presentDays}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.presentDaysSub}</div>
+
+        {/* Card 2: Present Days */}
+        <div className="cms-card sp-metric-kpi-card">
+          <div className="sp-kpi-icon-box green">
+            <CheckCircle2 size={20} />
+          </div>
+          <div className="sp-kpi-content">
+            <div className="sp-kpi-label">Present Days</div>
+            <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || historyData.metrics?.PresentDays || "0 Days"}</div>
+            <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || historyData.metrics?.PresentDaysSub || "--"}</div>
           </div>
         </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-violet"><Briefcase size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Approved Leaves</div>
-            <div className="cms-stat-value">{analyticsMetrics.leaves}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.leavesSub}</div>
+
+        {/* Card 3: Approved Leaves */}
+        <div className="cms-card sp-metric-kpi-card">
+          <div className="sp-kpi-icon-box purple">
+            <Briefcase size={20} />
+          </div>
+          <div className="sp-kpi-content">
+            <div className="sp-kpi-label">Approved Leaves</div>
+            <div className="sp-kpi-value">{historyData.metrics?.leaves || historyData.metrics?.Leaves || "0 Days"}</div>
+            <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || historyData.metrics?.LeavesSub || "--"}</div>
           </div>
         </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-red"><UserX size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Absent Days</div>
-            <div
-              className="cms-stat-value"
-              style={{
-                color: analyticsMetrics.absentDays !== "0 Days" ? "var(--cms-red, #dc2626)" : "var(--cms-text, #10203c)",
-              }}
-            >
-              {analyticsMetrics.absentDays}
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.absentDaysSub}</div>
+
+        {/* Card 4: Absent Days */}
+        <div className="cms-card sp-metric-kpi-card">
+          <div className="sp-kpi-icon-box red">
+            <UserX size={20} />
+          </div>
+          <div className="sp-kpi-content">
+            <div className="sp-kpi-label">Absent Days</div>
+            <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || historyData.metrics?.AbsentDays || "0 Days"}</div>
+            <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || historyData.metrics?.AbsentDaysSub || "--"}</div>
           </div>
         </div>
       </div>
 
-      {/* Daily Punch History Table (Matching Screenshot 2 layout and user-clarified 8 columns) */}
+      {/* Row 3: Daily Attendance History Table */}
       <div className="cms-card sp-attendance-history-card">
         <div className="sp-attendance-card-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="sp-table-head-left">
             <div className="sp-att-cal-icon">
               <Calendar size={18} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>
+              <h2 className="sp-table-title">
                 {activeFilter === "week"
                   ? "This Week"
                   : activeFilter === "last_week"
-                    ? "Last Week"
-                    : activeFilter === "month"
-                      ? "This Month"
-                      : "Last Month"}
+                  ? "Last Week"
+                  : activeFilter === "month"
+                  ? "This Month"
+                  : "Last Month"}
               </h2>
-              <span style={{ fontSize: 12, color: "var(--cms-muted)", display: "block", marginTop: 2 }}>
-                Biometric Punch History & Daily Attendance Logs
+              <span className="sp-table-subtitle">
+                Biometric Check-In History & Daily Attendance Logs
               </span>
             </div>
           </div>
 
-          {/* Filter Pills matching Screenshot 2: Week | Last Week | Month | Last Month */}
+          {/* Filter Pills: Week | Last Week | Month | Last Month */}
           <div className="sp-att-filter-tabs">
             <button
               type="button"
@@ -742,176 +605,211 @@ export default function FacultyMyAttendance() {
         </div>
 
         <div className="cms-table-wrap">
-          <table className="sp-attendance-table">
-            <thead>
-              <tr>
-                <th style={{ width: "13%" }}>DAY</th>
-                <th style={{ width: "18%" }}>SHIFT</th>
-                <th style={{ width: "12%" }}>PUNCH IN</th>
-                <th style={{ width: "12%" }}>PUNCH OUT</th>
-                <th style={{ width: "11%" }}>HOURS</th>
-                <th style={{ width: "16%" }}>BIOMETRIC DEVICE</th>
-                <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                <th style={{ width: "8%", textAlign: "center" }}>REGULARIZATION</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeLogs.map((log) => {
-                const isUpcoming = log.status === "-" || log.status === "--";
-                return (
-                  <tr key={log.id}>
-                    <td>
-                      <div className="sp-day-name">{log.day}</div>
-                      <div className="sp-day-date">{log.date}</div>
-                    </td>
-                    <td>
-                      <span className="sp-shift-text">{log.shift}</span>
-                    </td>
-                    <td>
-                      <span className={`sp-time-text ${log.inTime !== "--" && !isUpcoming ? "highlight" : ""}`}>
-                        {log.inTime}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="sp-time-text">
-                        {log.outTime}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="sp-hours-text">
-                        {log.hours}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="sp-device-text">
-                        {log.device}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {isUpcoming ? (
-                        <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
-                      ) : (
-                        <span className={`sp-status-badge ${getStatusBadgeClass(log.status)}`}>
-                          {log.status}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {log.isToday && log.regularizationState === "approved" ? (
-                        <span className="sp-regularize-badge approved">
-                          <span className="sp-badge-dot">●</span> Approved
-                        </span>
-                      ) : log.isToday && log.regularizationState === "pending" ? (
-                        <span className="sp-regularize-badge pending">
-                          <span className="sp-badge-dot">●</span> Pending
-                        </span>
-                      ) : log.canRegularize ? (
-                        <button
-                          type="button"
-                          className="sp-regularize-btn"
-                          onClick={() => {
-                            setRegularizeForm((p) => ({
-                              ...p,
-                              date: log.rawDate || "2026-10-07",
-                              inTime: "09:00 AM",
-                              outTime: "04:30 PM",
-                              reason: "Emergency Late Arrival",
-                              isToday: Boolean(log.isToday),
-                            }));
-                            setShowRegularizeModal(true);
-                          }}
-                        >
-                          Regularize
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>--</span>
-                      )}
+          {loadingHistory ? (
+            <div style={{ padding: "40px", textAlign: "center", color: "var(--cms-muted)" }}>
+              <RotateCw size={24} className="sp-spin" style={{ margin: "0 auto 10px" }} />
+              <div>Loading attendance records from biometric server...</div>
+            </div>
+          ) : (
+            <table className="sp-attendance-table">
+              <thead>
+                <tr>
+                  <th style={{ width: "16%" }}>DAY</th>
+                  <th style={{ width: "22%" }}>SHIFT</th>
+                  <th style={{ width: "15%" }}>CHECK IN</th>
+                  <th style={{ width: "15%" }}>CHECK OUT</th>
+                  <th style={{ width: "12%" }}>HOURS</th>
+                  <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
+                  <th style={{ width: "10%", textAlign: "center" }}>ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyData.logs && historyData.logs.length > 0 ? (
+                  historyData.logs.map((log) => {
+                    const id = log.id || log.Id;
+                    const day = log.day || log.Day;
+                    const date = log.date || log.Date;
+                    const shift = log.shift || log.Shift;
+                    const inTime = log.inTime || log.InTime || "--";
+                    const outTime = log.outTime || log.OutTime || "--";
+                    const hours = log.hours || log.Hours || "--";
+                    const status = log.status || log.Status || "--";
+                    const canReg = log.canRegularize ?? log.CanRegularize;
+                    const regState = log.regularizationState || log.RegularizationState;
+                    const isUpcoming = status === "-" || status === "--";
+
+                    return (
+                      <tr key={id}>
+                        <td>
+                          <div className="sp-day-name">{day}</div>
+                          <div className="sp-day-date">{date}</div>
+                        </td>
+                        <td>
+                          <span className="sp-shift-text">{shift}</span>
+                        </td>
+                        <td>
+                          <span className={`sp-time-text ${inTime !== "--" && !isUpcoming ? "highlight" : ""}`}>
+                            {inTime}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="sp-time-text">{outTime}</span>
+                        </td>
+                        <td>
+                          <span className="sp-hours-text">{hours}</span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          {isUpcoming ? (
+                            <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
+                          ) : (
+                            <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
+                              {status}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          {regState === "pending" ? (
+                            <span className="sp-reg-badge pending">Pending</span>
+                          ) : regState === "approved" ? (
+                            <span className="sp-reg-badge approved">Approved</span>
+                          ) : regState === "rejected" ? (
+                            <span className="sp-reg-badge rejected">Rejected</span>
+                          ) : canReg ? (
+                            <button
+                              type="button"
+                              className="sp-btn-regularize"
+                              onClick={() => openRegularizeModal(log)}
+                            >
+                              <FileText size={12} />
+                              <span>Regularize</span>
+                            </button>
+                          ) : (
+                            <span style={{ color: "var(--cms-muted)", fontSize: 12 }}>--</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
+                      No attendance logs recorded for this period.
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
       {/* Attendance Regularization Modal */}
-      {showRegularizeModal && (
-        <div className="cms-overlay" onClick={(e) => e.target === e.currentTarget && setShowRegularizeModal(false)}>
-          <div className="cms-modal sm faculty-regularization-modal">
-            <div className="cms-modal-head">
-              <div>
-                <h3 style={{ margin: 0, fontSize: 16 }}>Request Attendance Regularization</h3>
-                <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Submit adjustment for missed or late punch to Admin</span>
-              </div>
-              <button className="cms-icon-btn" onClick={() => setShowRegularizeModal(false)}><X size={16} /></button>
-            </div>
-            <div className="cms-modal-body">
-              <div className="cms-form-grid">
-                <div className="cms-field full">
-                  <label>Date of Incident <span className="req">*</span></label>
-                  <input
-                    type="date"
-                    value={regularizeForm.date || new Date().toISOString().split("T")[0]}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, date: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field full">
-                  <label>Reason for Regularization <span className="req">*</span></label>
-                  <select
-                    value={regularizeForm.reason}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, reason: e.target.value })}
-                  >
-                    <option>Forgot Biometric Punch</option>
-                    <option>Biometric Scanner / Power Outage</option>
-                    <option>On-Duty / Board Examination Duty</option>
-                    <option>Official Campus Assignment</option>
-                    <option>Emergency Late Arrival</option>
-                  </select>
-                </div>
-                <div className="cms-field">
-                  <label>Proposed Punch In</label>
-                  <input
-                    type="text"
-                    value={regularizeForm.inTime}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, inTime: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field">
-                  <label>Proposed Punch Out</label>
-                  <input
-                    type="text"
-                    value={regularizeForm.outTime}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, outTime: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field full">
-                  <label>Explanation & Notes <span className="req">*</span></label>
-                  <textarea
-                    rows={2}
-                    placeholder="Briefly state reason for attendance adjustment..."
-                    value={regularizeForm.notes}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="cms-modal-foot">
-              <button className="cms-btn cms-btn-ghost" onClick={() => setShowRegularizeModal(false)}>Cancel</button>
+      {regModalOpen && (
+        <div className="sp-reg-modal-backdrop" onClick={() => !regSubmitting && setRegModalOpen(false)}>
+          <div className="sp-reg-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sp-reg-modal-header">
+              <h3 className="sp-reg-modal-title">Attendance Regularization Request</h3>
               <button
-                className="cms-btn cms-btn-primary"
-                onClick={() => {
-                  if (regularizeForm.isToday || regularizeForm.date === "2026-10-07" || regularizeForm.date === "07/10/2026") {
-                    setTodayRegularization("pending");
-                  }
-                  notify("Attendance Regularization request submitted to Principal / Admin office!");
-                  setShowRegularizeModal(false);
-                }}
+                type="button"
+                className="sp-reg-modal-close"
+                disabled={regSubmitting}
+                onClick={() => setRegModalOpen(false)}
               >
-                Submit Request to Admin
+                <X size={18} />
               </button>
-
             </div>
+
+            <form onSubmit={handleSubmitRegularization}>
+              <div className="sp-reg-modal-body">
+                <div className="sp-reg-form-group">
+                  <label className="sp-reg-label">Attendance Date</label>
+                  <input
+                    type="text"
+                    className="sp-reg-input"
+                    value={regForm.displayDate}
+                    disabled
+                  />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div className="sp-reg-form-group">
+                    <label className="sp-reg-label">Requested In-Time</label>
+                    <input
+                      type="time"
+                      className="sp-reg-input"
+                      value={regForm.requestedInTime}
+                      onChange={(e) => setRegForm({ ...regForm, requestedInTime: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="sp-reg-form-group">
+                    <label className="sp-reg-label">Requested Out-Time</label>
+                    <input
+                      type="time"
+                      className="sp-reg-input"
+                      value={regForm.requestedOutTime}
+                      onChange={(e) => setRegForm({ ...regForm, requestedOutTime: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="sp-reg-form-group">
+                  <label className="sp-reg-label">Reason / Justification *</label>
+                  <textarea
+                    rows={3}
+                    className="sp-reg-textarea"
+                    placeholder="Explain why punch was missed or late (e.g., On official duty, scanner glitch)..."
+                    value={regForm.reason}
+                    onChange={(e) => setRegForm({ ...regForm, reason: e.target.value })}
+                    required
+                  />
+
+                  {/* Quick Reason Pills */}
+                  <div className="sp-reg-quick-pills">
+                    {[
+                      "Biometric Machine Failure",
+                      "Official Exam Duty (OD)",
+                      "Campus Network / Power Issue",
+                      "Permitted Late Arrival",
+                    ].map((pill) => (
+                      <button
+                        key={pill}
+                        type="button"
+                        className="sp-reg-quick-pill"
+                        onClick={() => setRegForm((prev) => ({ ...prev, reason: pill }))}
+                      >
+                        + {pill}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="sp-reg-modal-footer">
+                <button
+                  type="button"
+                  className="sp-reg-cancel-btn"
+                  disabled={regSubmitting}
+                  onClick={() => setRegModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="sp-reg-submit-btn"
+                  disabled={regSubmitting || !regForm.reason.trim()}
+                >
+                  {regSubmitting ? (
+                    <Loader2 size={14} className="sp-spin" />
+                  ) : (
+                    <Send size={14} />
+                  )}
+                  <span>{regSubmitting ? "Submitting..." : "Submit Request"}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -926,4 +824,3 @@ export default function FacultyMyAttendance() {
     </div>
   );
 }
-

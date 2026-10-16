@@ -4435,12 +4435,14 @@ CREATE PROCEDURE `sp_GetCertificateWorkflowStats`(IN p_CampusId INT)
 BEGIN
     SELECT
         COUNT(*) AS TotalCount,
+        COALESCE(SUM(CASE WHEN Status = 'Requested' AND (IsActive = 1 OR IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS RequestedCount,
         COALESCE(SUM(CASE WHEN (Status = 'Generated' OR Status = 'Active') AND (IsActive = 1 OR IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS GeneratedCount,
         COALESCE(SUM(CASE WHEN Status = 'Reviewed' AND (IsActive = 1 OR IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS ReviewedCount,
         COALESCE(SUM(CASE WHEN Status = 'Approved' AND (IsActive = 1 OR IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS ApprovedCount,
         COALESCE(SUM(CASE WHEN Status = 'Issued' AND (IsActive = 1 OR IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS IssuedCount,
         COALESCE(SUM(CASE WHEN Status = 'Cancelled' OR Status = 'Deleted' OR IsActive = 0 THEN 1 ELSE 0 END), 0) AS CancelledCount
-    FROM `certificates`;
+    FROM `certificates`
+    WHERE (p_CampusId IS NULL OR CampusId = p_CampusId);
 END //
 DELIMITER ;
 

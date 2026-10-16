@@ -15,7 +15,8 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
-import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
+import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
+import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -336,19 +337,6 @@ const createSearchIndex = (items) => items.flatMap((g) =>
   ]),
 );
 
-const filterMenuByViewPermission = (sourceMenu, canViewModule) =>
-  sourceMenu.flatMap((group) => {
-    const items = group.items.flatMap((item) => {
-      const children = item.children?.filter((child) => canViewModule(child.moduleKey));
-      const hasViewAccess = canViewModule(item.moduleKey);
-      if (!hasViewAccess && !children?.length) return [];
-      return [{ ...item, ...(children ? { children } : {}) }];
-    });
-    return items.length ? [{ ...group, items }] : [];
-  });
-
-const principalSearchIndex = createSearchIndex(principalMenu);
-
 const searchIndex = createSearchIndex(menu);
 
 const parentSearchIndex = [
@@ -531,19 +519,31 @@ export default function DashboardLayout({
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
-  const principalPermissions = useEffectivePermissions({ enabled: isPrincipal && !isParent && !isWarden && !menuOverride });
   const activeMenu = useMemo(() => {
-    if (menuOverride) return menuOverride;
-    if (isWarden) return wardenMenu;
-    if (isParent) return parentMenu;
-    if (!isPrincipal) return menu;
-    if (principalPermissions.loading || principalPermissions.error) return [];
-    return filterMenuByViewPermission(principalMenu, principalPermissions.canView);
-  }, [isWarden, isParent, isPrincipal, menuOverride, principalPermissions.canView, principalPermissions.error, principalPermissions.loading]);
+    let base = menuOverride;
+    if (!base) {
+      if (isWarden) base = wardenMenu;
+      else if (isParent) base = parentMenu;
+      else if (isPrincipal) base = principalMenu;
+      else base = menu;
+    }
+    if (user && !hasRole("SUPER_ADMIN", user) && !hasRole("ADMIN", user) && (user.permissions || user.rolePermissions)) {
+      return base
+        .map((group) => ({
+          ...group,
+          items: (group.items || []).filter((item) => {
+            if (!item.moduleKey || item.moduleKey === "dashboard") return true;
+            return can(item.moduleKey, ACTIONS.VIEW, undefined, user);
+          }),
+        }))
+        .filter((group) => group.items.length > 0);
+    }
+    return base;
+  }, [isWarden, isParent, isPrincipal, menuOverride, user]);
   const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : searchIndex);
   const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
-  const canManageAcademicContext = !isParent && !isWarden && !menuOverride && (!isPrincipal || principalPermissions.canView("settings"));
+  const canManageAcademicContext = !isParent && !isWarden && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
   const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
@@ -559,52 +559,92 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const reimbursementCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
-  const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(String(user?.role || "").trim().toLowerCase());
+  const userRoleStr = String(user?.role || "").trim().toLowerCase();
+  const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
+  const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
   useEffect(() => {
     let disposed = false;
-    if (canReviewReimbursements) {
+    if (canReviewReimbursements || canReviewCertificates) {
       const fetchLiveNotifications = async () => {
+        const notifs = [];
         try {
-          const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
-          if (!fetchFn) return;
-          const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
-          if (disposed) return;
-          const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
-          const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
-          if (claims.length > 0) {
-            setLiveNotifications([{
-              id: "admin-notif-1",
-              title: "New Staff Reimbursement Request",
-              count: claims.length,
-              to: "/dashboard/reimbursements",
-              label: "reimbursements"
-            }]);
-          } else {
-            setLiveNotifications([]);
+          if (canReviewReimbursements) {
+            const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
+            if (fetchFn) {
+              const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
+              if (!disposed) {
+                const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
+                const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
+                if (claims.length > 0) {
+                  notifs.push({
+                    id: "admin-notif-reimbursement",
+                    title: "New Staff Reimbursement Request",
+                    count: claims.length,
+                    to: "/dashboard/reimbursements",
+                    label: "reimbursements"
+                  });
+                }
+              }
+            }
           }
         } catch {
           // Gracefully handle offline or pending notification counter without console noise
         }
-      };
-      
-      fetchLiveNotifications();
 
-      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim)
-      const channel = new BroadcastChannel("cms_notifications");
-      channel.onmessage = (event) => {
-        if (event.data?.type === "NEW_REIMBURSEMENT") {
-          setHasViewedNotifications(false);
-          fetchLiveNotifications();
+        try {
+          if (canReviewCertificates) {
+            const certRes = await apiClient.get("/api/v1/certificates/workflow-stats", { skipGlobalLoader: true });
+            if (!disposed) {
+              const data = certRes?.data?.data ?? certRes?.data?.Data ?? certRes?.data ?? {};
+              const reqCount = Number(data.requestedCount ?? data.RequestedCount) || 0;
+              if (reqCount > 0) {
+                notifs.push({
+                  id: "admin-notif-certificate",
+                  title: "Student Certificate Requests",
+                  count: reqCount,
+                  to: "/dashboard/certificates?status=Requested",
+                  label: "certificates"
+                });
+              }
+            }
+          }
+        } catch {
+          // Gracefully handle offline or pending notification counter without console noise
+        }
+
+        if (!disposed) {
+          setLiveNotifications(notifs);
         }
       };
 
+      fetchLiveNotifications();
+
+      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
+      let channel = null;
+      try {
+        channel = new BroadcastChannel("cms_notifications");
+        channel.onmessage = (event) => {
+          if (event.data?.type === "NEW_REIMBURSEMENT" || event.data?.type === "NEW_CERTIFICATE_REQUEST") {
+            setHasViewedNotifications(false);
+            fetchLiveNotifications();
+          }
+        };
+      } catch {
+        // Fallback
+      }
+
+      const timer = setInterval(() => {
+        fetchLiveNotifications();
+      }, 60000);
+
       return () => {
         disposed = true;
-        channel.close();
+        clearInterval(timer);
+        if (channel) channel.close();
       };
     }
     setLiveNotifications([]);
-  }, [canReviewReimbursements, reimbursementCampusId]);
+  }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
 
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 
@@ -747,14 +787,6 @@ export default function DashboardLayout({
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges"  />
         </div>
         <nav className="cms-nav" ref={sidebarNavRef} onScroll={rememberSidebarScroll}>
-          {isPrincipal && principalPermissions.loading ? (
-            <div className="cms-nav-group">Loading permissions...</div>
-          ) : null}
-          {isPrincipal && principalPermissions.error ? (
-            <div className="cms-nav-group" title={principalPermissions.error}>
-              Permissions unavailable
-            </div>
-          ) : null}
           {activeMenu.map((group) => (
             <div key={group.section}>
               <div className="cms-nav-group">{group.section}</div>

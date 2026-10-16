@@ -109,7 +109,7 @@
 .timetable-module .ttm-card:has(.ttm-period-structures-table) {
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
   border-radius: 16px;
   background: var(--cms-surface);
   box-shadow: 0 8px 24px rgb(15 23 42 / 7%);
@@ -291,6 +291,10 @@
 .timetable-module .ttm-grid td.slot .ttm-empty-slot { display: grid; min-height: 58px; place-items: center; color: var(--cms-muted); font-size: 22px; line-height: 1; }
 .timetable-module .ttm-grid td.slot > button.ttm-published-slot { display: grid; place-items: center; min-height: 80px; border-left-width: 3px; text-align: center; }
 .timetable-module .ttm-grid td.slot > button.ttm-published-slot b { width: 100%; white-space: normal; }
+.timetable-module .ttm-grid td.slot > button.ttm-leisure-slot { border-color: var(--cms-violet); background: var(--cms-violet-soft); }
+.timetable-module .ttm-grid td.slot > button.ttm-leisure-slot:hover:not(:disabled) { border-color: var(--cms-violet); }
+.timetable-module .ttm-grid td.slot > button.ttm-leisure-slot b,
+.timetable-module .ttm-grid td.slot > button.ttm-leisure-slot .ttm-slot-edit { color: var(--cms-violet); }
 .ttm-published-slot-details { position: fixed; z-index: 1001; width: fit-content; max-width: min(190px, calc(100vw - 16px)); padding: 7px 9px; border: 1px solid var(--cms-border); border-radius: 7px; background: #fff; box-shadow: var(--cms-shadow); color: var(--cms-text); }
 :root[data-theme="dark"] .ttm-published-slot-details { background: #171a17; }
 .ttm-published-slot-details h3, .ttm-published-slot-details p { max-width: 170px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -335,6 +339,24 @@
 .timetable-module .ttm-modal-body { display: grid; min-height: 0; gap: 16px; overflow: auto; padding: 18px; }
 .timetable-module .ttm-modal-body > footer { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--cms-border); }
 .timetable-module .ttm-modal-body > p { margin: 0; color: var(--cms-muted); line-height: 1.55; }
+/* Assign is portalled to body so dashboard stacking/clipping cannot cover it. */
+.timetable-module.timetable-assign-modal-overlay { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: auto; box-sizing: border-box; background: rgb(16 32 60 / 46%); }
+.timetable-module .ttm-modal.ttm-assign-structure-modal { width: min(620px, calc(100vw - 40px)); max-width: 100%; min-width: 0; max-height: calc(100dvh - 40px); margin: 0; box-sizing: border-box; }
+.timetable-module .ttm-assign-structure-modal > header { min-width: 0; }
+.timetable-module .ttm-assign-structure-modal > header h2 { min-width: 0; overflow-wrap: anywhere; }
+.timetable-module .ttm-assign-structure-modal > header button { flex: 0 0 32px; }
+.timetable-module .ttm-assign-structure-modal > .ttm-modal-body { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; }
+.timetable-module .ttm-assign-structure-modal .ttm-form-grid { min-width: 0; box-sizing: border-box; }
+.timetable-module .ttm-assign-modal-footer { display: flex; flex: 0 0 auto; justify-content: flex-end; flex-wrap: wrap; gap: 10px; padding: 16px 18px 18px; border-top: 1px solid var(--cms-border); box-sizing: border-box; }
+.timetable-module .ttm-assign-modal-footer > .cms-btn { min-width: 0; white-space: normal; }
+@media (max-width: 600px) {
+  .timetable-module.timetable-assign-modal-overlay { padding: 12px; }
+  .timetable-module .ttm-modal.ttm-assign-structure-modal { width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
+  .timetable-module .ttm-assign-modal-footer { padding: 12px 16px; }
+}
+@media (max-width: 420px) {
+  .timetable-module .ttm-assign-modal-footer > .cms-btn { flex: 1 1 auto; }
+}
 .timetable-module .ttm-modal.ttm-period-structure-modal { width: min(900px, calc(100vw - 40px)); max-height: calc(100dvh - 40px); }
 .timetable-module .ttm-period-structure-modal > header { position: sticky; top: 0; z-index: 2; flex-shrink: 0; background: #fff; }
 :root[data-theme="dark"] .timetable-module .ttm-period-structure-modal > header { background: #171a17; }
@@ -685,23 +707,3 @@
     flex: 1;
   }
 }
-.ttm-slot-editor-modal .ttm-leisure-preview {
-  padding: 14px;
-  margin-top: 12px;
-  border: 1px solid var(--cms-border);
-  border-left: 3px solid var(--cms-violet);
-  border-radius: 8px;
-  background: var(--cms-violet-soft);
-  color: var(--cms-text);
-}
-.ttm-slot-editor-modal .ttm-leisure-badge {
-  display: inline-block;
-  padding: 5px 12px;
-  border-radius: 6px;
-  background: var(--cms-surface);
-  color: var(--cms-violet);
-  font-weight: 700;
-}
-.ttm-slot-editor-modal .ttm-leisure-preview p { margin: 10px 0; font-size: 13px; }
-.ttm-slot-editor-modal .ttm-leisure-preview small { color: var(--cms-muted); }
-.ttm-slot-editor-modal .ttm-leisure-preview .ttm-leisure-notice { margin-bottom: 0; font-size: 12px; line-height: 1.5; }

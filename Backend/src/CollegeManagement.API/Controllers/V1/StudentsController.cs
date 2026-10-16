@@ -68,6 +68,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves the profile of the current authenticated student.
         /// </summary>
         [HttpGet("me")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StudentSelfProfileResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -89,6 +90,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Protected academic, financial, and system fields cannot be modified through this endpoint.
         /// </summary>
         [HttpPut("me/profile")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -119,6 +121,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Uploads or replaces the current authenticated student's profile photograph.
         /// </summary>
         [HttpPost("me/photo")]
+        [BypassPermission]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StudentPhotoUploadResultDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -138,11 +141,48 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// Removes the current authenticated student's profile photograph.
+        /// </summary>
+        [HttpDelete("me/photo")]
+        [BypassPermission]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> DeleteSelfPhoto(CancellationToken ct = default)
+        {
+            var studentId = GetCurrentStudentId();
+            try
+            {
+                var success = await _service.DeletePhotoAsync(studentId, ct);
+                if (!success)
+                {
+                    return NotFound(new { message = "Student not found or photo could not be deleted." });
+                }
+
+                return Ok(new
+                {
+                    status = true,
+                    message = "Student photo removed successfully."
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Uploads or replaces a document/certificate for the current authenticated student.
         /// Supported types: BirthCertificate, TransferCertificate, StudyCertificate, AadhaarDocument,
         /// CommunityCertificate, IncomeCertificate, CasteCertificate, TenthCertificate, MarksMemo.
         /// </summary>
         [HttpPost("me/documents")]
+        [BypassPermission]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StudentDocumentUploadResultDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -168,6 +208,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Changes the current authenticated student's password after first login.
         /// </summary>
         [HttpPost("me/change-password")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -206,6 +247,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet]
+        [BypassPermission]
         [ProducesResponseType(typeof(PagedResult<StudentListItemDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
             [FromQuery] string? search = null,
@@ -246,6 +288,9 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}")]
+        [Authorize]
+        [ParentStudentAuthorization]
+        [BypassPermission]
         public async Task<IActionResult> GetById(int studentId)
         {
             var student = await _service.GetByIdAsync(studentId);
@@ -531,7 +576,7 @@ namespace CollegeManagement.API.Controllers.V1
 
 
         [HttpGet("my-children")]
-        [Authorize(Roles = "Parent")]
+        [Authorize]
         [BypassPermission]
         public async Task<IActionResult> GetMyChildren()
         {
@@ -560,7 +605,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}/dashboard")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetDashboard(int studentId)

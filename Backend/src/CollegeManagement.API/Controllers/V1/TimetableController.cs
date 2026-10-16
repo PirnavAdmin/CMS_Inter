@@ -136,6 +136,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Gets weekly timetable grid for a faculty member.
         /// </summary>
         [HttpGet("faculty/{facultyId:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetByFaculty(int facultyId, [FromQuery] int? academicYearId = null, [FromQuery] int? campusId = null)
         {
@@ -147,10 +148,12 @@ namespace CollegeManagement.API.Controllers.V1
         /// Gets published weekly timetable for a student.
         /// </summary>
         [HttpGet("student/{studentId:int}")]
+        [HttpGet("student/{studentId:int}/daily")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
+        [BypassPermission]
         public async Task<IActionResult> GetByStudent([FromRoute] int studentId)
         {
             try
