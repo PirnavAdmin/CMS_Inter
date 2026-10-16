@@ -4,6 +4,7 @@ using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Dapper;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -165,7 +166,30 @@ namespace CollegeManagement.API.Services.Implementations
             }
             if (priorAssignments.Any()) await _context.SaveChangesAsync();
 
-            return await _repository.CreateAsync(dto, userId);
+            var assignmentId = await _repository.CreateAsync(dto, userId);
+
+            // Synchronize Student Master Record: Set Day Scholar + Transport Required, clear any residual hostel data
+            var studentToSync = await _context.Students.FirstOrDefaultAsync(s => s.AdmissionNo == dto.AdmissionNo);
+            if (studentToSync != null)
+            {
+                studentToSync.StudentType = "Day Scholar";
+                studentToSync.TransportRequired = true;
+                studentToSync.RouteId = (int)dto.RouteId;
+                studentToSync.PickupPointId = (int)dto.PickupPointId;
+                studentToSync.BusType = "Bus";
+
+                studentToSync.HostelId = null;
+                studentToSync.HostelBlock = null;
+                studentToSync.RoomId = null;
+                studentToSync.HostelRoom = null;
+                studentToSync.BedId = null;
+                studentToSync.HostelBed = null;
+                studentToSync.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+            }
+
+            return assignmentId;
         }
 
         // ---------------------------------------------------------
@@ -290,10 +314,49 @@ namespace CollegeManagement.API.Services.Implementations
                     "The selected student/admission already has another active transport assignment during the specified date range.");
             }
 
-            return await _repository.UpdateAsync(
+            var updated = await _repository.UpdateAsync(
                 studentTransportAssignmentId,
                 dto,
                 userId);
+
+            if (updated && !string.IsNullOrWhiteSpace(dto.AdmissionNo))
+            {
+                var remainingActive = await _context.StudentTransportAssignments
+                    .AnyAsync(x => x.AdmissionNo == dto.AdmissionNo && x.StudentTransportAssignmentId != studentTransportAssignmentId && x.Status && !x.IsDeleted);
+
+                var studentToSync = await _context.Students.FirstOrDefaultAsync(s => s.AdmissionNo == dto.AdmissionNo);
+                if (studentToSync != null)
+                {
+                    if (dto.Status)
+                    {
+                        studentToSync.StudentType = "Day Scholar";
+                        studentToSync.TransportRequired = true;
+                        studentToSync.RouteId = (int)dto.RouteId;
+                        studentToSync.PickupPointId = (int)dto.PickupPointId;
+                        studentToSync.BusType = "Bus";
+
+                        studentToSync.HostelId = null;
+                        studentToSync.HostelBlock = null;
+                        studentToSync.RoomId = null;
+                        studentToSync.HostelRoom = null;
+                        studentToSync.BedId = null;
+                        studentToSync.HostelBed = null;
+                    }
+                    else if (!remainingActive)
+                    {
+                        studentToSync.TransportRequired = false;
+                        studentToSync.RouteId = null;
+                        studentToSync.BusRoute = null;
+                        studentToSync.PickupPointId = null;
+                        studentToSync.PickupPoint = null;
+                        studentToSync.BusType = null;
+                    }
+                    studentToSync.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            return updated;
         }
 
         // ---------------------------------------------------------
@@ -306,9 +369,34 @@ namespace CollegeManagement.API.Services.Implementations
             if (studentTransportAssignmentId <= 0)
                 return false;
 
-            return await _repository.DeleteAsync(
+            var existing = await _repository.GetByIdAsync(studentTransportAssignmentId);
+            var result = await _repository.DeleteAsync(
                 studentTransportAssignmentId,
                 userId);
+
+            if (result && existing != null && !string.IsNullOrWhiteSpace(existing.AdmissionNo))
+            {
+                var remainingActive = await _context.StudentTransportAssignments
+                    .AnyAsync(x => x.AdmissionNo == existing.AdmissionNo && x.StudentTransportAssignmentId != studentTransportAssignmentId && x.Status && !x.IsDeleted);
+
+                if (!remainingActive)
+                {
+                    var studentToSync = await _context.Students.FirstOrDefaultAsync(s => s.AdmissionNo == existing.AdmissionNo);
+                    if (studentToSync != null)
+                    {
+                        studentToSync.TransportRequired = false;
+                        studentToSync.RouteId = null;
+                        studentToSync.BusRoute = null;
+                        studentToSync.PickupPointId = null;
+                        studentToSync.PickupPoint = null;
+                        studentToSync.BusType = null;
+                        studentToSync.UpdatedAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                    }
+                }
+            }
+
+            return result;
         }
 
         // ---------------------------------------------------------
@@ -344,6 +432,39 @@ namespace CollegeManagement.API.Services.Implementations
             if (student == null)
             {
                 throw new InvalidOperationException($"Student with admission number '{admissionNo}' is not registered or active in the CMS.");
+            }
+
+            // -----------------------------------------------------
+            // Mutual Exclusion: Student must not reside in Hostel
+            // -----------------------------------------------------
+            var activeHostel = await _context.Database.GetDbConnection().QueryFirstOrDefaultAsync<dynamic>(@"
+                SELECT hsa.AllocationId, hb.HostelName, hr.RoomNumber
+                FROM hostel_student_allocations hsa
+                INNER JOIN Students s ON hsa.StudentId = s.StudentId
+                LEFT JOIN hostel_blocks hb ON hsa.HostelId = hb.HostelId
+                LEFT JOIN hostel_rooms hr ON hsa.RoomId = hr.RoomId
+                WHERE (s.AdmissionNo = @admNo OR hsa.StudentId = @sId)
+                  AND hsa.Status = 'Active'
+                LIMIT 1", new { admNo = student.AdmissionNo.Trim(), sId = student.StudentId });
+
+            if (activeHostel != null)
+            {
+                string hostelName = activeHostel.HostelName ?? "the college hostel";
+                string roomNo = activeHostel.RoomNumber != null ? $", Room {activeHostel.RoomNumber}" : "";
+                throw new InvalidOperationException(
+                    $"Student '{student.AdmissionNo}' is currently allocated to Hostel ({hostelName}{roomNo}). " +
+                    "Students residing in the hostel cannot be assigned to college bus transport. " +
+                    "Please vacate the hostel bed first before assigning bus transport.");
+            }
+
+            if (string.Equals(student.StudentType, "Hosteller", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(student.StudentType, "Residential", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(student.StudentType, "Hostel", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Student '{student.AdmissionNo}' is registered as a Hosteller. " +
+                    "Hostel residents cannot be assigned to college bus transport. " +
+                    "Please update student category to Day Scholar before assigning bus transport.");
             }
 
             // -----------------------------------------------------

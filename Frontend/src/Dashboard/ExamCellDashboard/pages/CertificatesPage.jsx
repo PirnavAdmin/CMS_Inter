@@ -2480,6 +2480,24 @@ export default function CertificatesPage({ initialTab = "generate" }) {
         setActiveTab("actions");
         setActionPage(1);
       }
+      if (action === "approve" || action === "issue") {
+        try {
+          const channel = new BroadcastChannel("cms_notifications");
+          channel.postMessage({
+            type: "CERTIFICATE_STATUS_UPDATED",
+            action,
+            status: selected.nextStatus,
+            certificateId: actionId || row.id || row.backendId,
+            certificateNumber: row.number,
+            admissionNo: row.admissionNo,
+            studentName: row.student,
+            certificateType: row.type,
+            issuedBy: action === "issue" ? getIssuedBy() : undefined,
+            timestamp: new Date().toISOString(),
+          });
+          channel.close();
+        } catch {}
+      }
       setToast(`Certificate ${row.number || ""} ${selected.success}`);
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, `Failed to ${action} certificate. Please try again.`));
@@ -2546,6 +2564,26 @@ export default function CertificatesPage({ initialTab = "generate" }) {
 
       const completedCount = eligibleRows.length;
       await refreshCertificateData({ showLoader: false });
+      if (action === "approve" || action === "issue") {
+        try {
+          const channel = new BroadcastChannel("cms_notifications");
+          eligibleRows.forEach((r) => {
+            channel.postMessage({
+              type: "CERTIFICATE_STATUS_UPDATED",
+              action,
+              status: selected.nextStatus,
+              certificateId: r.id || r.backendId,
+              certificateNumber: r.number,
+              admissionNo: r.admissionNo,
+              studentName: r.student,
+              certificateType: r.type,
+              issuedBy: action === "issue" ? getIssuedBy() : undefined,
+              timestamp: new Date().toISOString(),
+            });
+          });
+          channel.close();
+        } catch {}
+      }
       setToast(`${completedCount} eligible certificate${completedCount === 1 ? "" : "s"} ${selected.label}.`);
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, `Failed to bulk ${action} certificates.`));

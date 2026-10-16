@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, GraduationCap, Users, FileText } from "lucide-react";
+import { Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -132,7 +132,7 @@ export default function StudentDashboard() {
       window.removeEventListener("focus", updateGreeting);
     };
   }, []);
-  const { profile, loading, error } = useStudentProfile();
+  const { profile, loading, error, activeAlerts = [], markAsRead, dismissNotification } = useStudentProfile() || {};
   const [examinations, setExaminations] = useState([]);
   const [examsLoading, setExamsLoading] = useState(true);
   const [examsError, setExamsError] = useState("");
@@ -226,6 +226,38 @@ export default function StudentDashboard() {
         <h1 className="sp-dashboard-greeting-title"><span className="sp-dashboard-greeting-emoji" aria-hidden="true">{greeting === "Good Morning" ? "🌅" : greeting === "Good Afternoon" ? "☀️" : "🌙"}</span> {greeting}, {studentName.split(" ")[0]}!</h1>
         <p className="sp-dashboard-greeting-sub">Welcome back! Here's what's happening with your academics today.</p>
       </div>
+      {activeAlerts?.length > 0 && (
+        <div className={`sp-cert-alert-card is-${String(activeAlerts[0].status).toLowerCase()}`} role="alert">
+          <div className="sp-cert-alert-icon">
+            <Award size={22} />
+          </div>
+          <div className="sp-cert-alert-body">
+            <div className="sp-cert-alert-title">
+              <strong>Certificate ${activeAlerts[0].status}!</strong>
+              <span className="sp-cert-alert-tag">${activeAlerts[0].certificateType}</span>
+            </div>
+            <p>${activeAlerts[0].message}</p>
+          </div>
+          <div className="sp-cert-alert-actions">
+            <Link
+              to={activeAlerts[0].to || "/student-dashboard/certificates"}
+              className="sp-btn primary"
+              onClick={() => markAsRead?.(activeAlerts[0].id)}
+            >
+              {activeAlerts[0].status === "Issued" ? "Download Certificate" : "View Status"}
+            </Link>
+            <button
+              type="button"
+              className="sp-icon-btn sp-alert-close-btn"
+              title="Dismiss notification"
+              aria-label="Dismiss notification"
+              onClick={() => dismissNotification?.(activeAlerts[0].id)}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+      )}
       <section className="sp-student-strip">
         <span className="sp-avatar is-large">{initials}</span>
         <div className="sp-student-name"><strong>{studentName}</strong><small>Admission No: <b>{profile?.admissionNo || "Not Assigned"}</b></small></div>

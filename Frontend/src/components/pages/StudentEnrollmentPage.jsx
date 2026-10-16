@@ -287,6 +287,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   const [photoFailed, setPhotoFailed] = useState(false);
   const [academicLookupState, setAcademicLookupState] = useState({});
   const [placementChanged, setPlacementChanged] = useState(false);
+  const [initialAllocation, setInitialAllocation] = useState(null);
   const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] }), [allocationLookups, setAllocationLookups] = useState({ routes: [], pickupPoints: [], vehicles: [], vehicleAssignments: [], hostelBlocks: [], hostelRoomTypes: [], hostelRooms: [], hostelFees: [] }), [allocationLookupError, setAllocationLookupError] = useState("");
   const loadStudent = useCallback(async () => {
     setLoading(true); setLoadError("");
@@ -310,6 +311,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       const source = { ...enrichedRecord, ...admission, ...academic, ...nested };
       setStudent({ name: stringValue(valueOf(source, "studentName", "StudentName", "fullName", "name")) || "Student", rollNo: stringValue(valueOf(source, "rollNo", "RollNo", "rollNumber", "RollNumber")) || "—", admissionNo: stringValue(valueOf(source, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")) || "-" });
       const nextForm = formFromStudent(enrichedRecord);
+      setInitialAllocation({ studentType: nextForm.studentType, transportRequired: nextForm.transportRequired });
       ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].forEach((key) => {
         if (!Number.isInteger(Number(nextForm[key])) || Number(nextForm[key]) <= 0) nextForm[key] = "";
       });
@@ -629,6 +631,16 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       {placementChanged && !form.rollNo && !form.rollNumber ? <small className="student-profile-full">After saving the new placement, assign a roll number in Section Allocation.</small> : null}
     </ProfileSection>
     <ProfileSection title="Student Type & Residential Allocation">
+      {initialAllocation?.studentType === "Residential" && form.studentType === "Non-Residential" ? (
+        <small className="student-profile-full" style={{ color: "#b45309", background: "rgba(245, 158, 11, 0.1)", padding: "8px 12px", borderRadius: "6px", border: "1px solid rgba(245, 158, 11, 0.3)" }}>
+          ℹ️ Note: If this student currently holds an active hostel bed, please vacate the bed in Hostel Management before assigning bus transport.
+        </small>
+      ) : null}
+      {initialAllocation?.studentType === "Non-Residential" && initialAllocation?.transportRequired === "Yes" && form.studentType === "Residential" ? (
+        <small className="student-profile-full" style={{ color: "#b45309", background: "rgba(245, 158, 11, 0.1)", padding: "8px 12px", borderRadius: "6px", border: "1px solid rgba(245, 158, 11, 0.3)" }}>
+          ℹ️ Note: If this student currently has an active bus transport allotment, please unassign bus transport in Transport Management before allocating a hostel bed.
+        </small>
+      ) : null}
       <AllocationSelectField label="Student Type" value={form.studentType} onChange={changeAllocation("studentType")} onBlur={blur("studentType")} error={errors.studentType} options={["Non-Residential", "Residential"]} placeholder="Select Type" />
       {form.studentType === "Non-Residential" ? <AllocationSelectField label="School Transport Facility Required?" value={form.transportRequired} onChange={changeAllocation("transportRequired")} onBlur={blur("transportRequired")} error={errors.transportRequired} options={["Yes", "No"]} placeholder="Select option" /> : null}
       {form.studentType === "Non-Residential" && form.transportRequired === "Yes" ? <><AllocationSelectField label="Bus Type" value={form.busType} onChange={changeAllocation("busType")} onBlur={blur("busType")} error={errors.busType} options={["AC", "Non-AC"]} placeholder="Select Bus Type" /><AllocationSelectField label="Route" value={form.busRoute} onChange={changeAllocation("busRoute")} onBlur={blur("busRoute")} error={errors.busRoute} options={routeOptions} placeholder={form.busType ? "Select Route" : "Select Bus Type first"} /><AllocationSelectField label="Pickup Point" value={form.pickupPoint} onChange={changeAllocation("pickupPoint")} onBlur={blur("pickupPoint")} error={errors.pickupPoint} options={pickupOptions} placeholder={form.busRoute ? "Select Pickup Point" : "Select Route first"} /></> : null}
