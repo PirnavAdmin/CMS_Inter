@@ -611,7 +611,7 @@ export default function DashboardLayout({
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
   const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : "CMS Admin"));
-  const profileRole = isWarden ? (user?.designation || "Hostel Warden") : (user?.role || "admin");
+  const profileRole = isWarden ? (user?.designation || "Hostel Warden") : (user?.designation || user?.role || "admin");
   
   const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
   const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
@@ -710,6 +710,7 @@ export default function DashboardLayout({
     if (basePath === "/dashboard") return pathname === "/dashboard";
     if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
+    if (basePath === "/non-teaching-dashboard") return pathname === "/non-teaching-dashboard" || pathname === "/non-teaching-dashboard/";
     if (basePath === "/dashboard/settings") {
       return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
     }

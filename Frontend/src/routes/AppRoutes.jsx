@@ -53,6 +53,7 @@ import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
 import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx";
 import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
+import NonTeachingPortalRoutes from "@/Dashboard/NonTeachingDashboard/NonTeachingPortalRoutes.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
 import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
 import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
@@ -399,6 +400,12 @@ export default function AppRoutes() {
 
       <Route element={<ProtectedRoute requireFaculty />}>
         <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
+      </Route>
+
+      <Route element={<ProtectedRoute requireNonTeaching />}>
+        <Route path="/non-teaching-dashboard/*" element={<NonTeachingPortalRoutes />} />
+        <Route path="/non-teaching/*" element={<Navigate to="/non-teaching-dashboard" replace />} />
+        <Route path="/non-teaching" element={<Navigate to="/non-teaching-dashboard" replace />} />
       </Route>
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />
