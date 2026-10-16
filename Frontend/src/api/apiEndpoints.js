@@ -1,4 +1,12 @@
 export const apiEndpoints = {
+  dashboard: {
+    summary: "/api/v1/dashboard/summary",
+    studentAttendance: "/api/v1/dashboard/students-attendance-today",
+    staffAttendance: "/api/v1/dashboard/staff-attendance-today",
+    upcomingExaminations: "/api/v1/dashboard/upcoming-examinations",
+    highlights: "/api/v1/dashboard/todays-highlights",
+    recentActivity: "/api/v1/dashboard/recent-activity",
+  },
   auth: {
     login: "/api/Auth/login",
     register: "/api/Auth/register",
