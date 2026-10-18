@@ -137,10 +137,19 @@ apiClient.interceptors.request.use(
         }
         window.localStorage?.setItem("cms_backend_online", "true");
       }
-    } catch {}
+    } catch (_e) {
+      // ignore storage errors
+    }
 
-    // Only route through mock adapter if explicitly configured or using a synthetic mock token (mock- or demo-)
-    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
+    // Only route through mock adapter if explicitly configured or using a synthetic mock token
+    const isExplicitMockToken = Boolean(
+      token &&
+        (token.startsWith("mock-") ||
+          token.startsWith("demo-") ||
+          token.startsWith("non-teaching-") ||
+          token.startsWith("warden-") ||
+          token.startsWith("parent-"))
+    );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
     if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
@@ -203,7 +212,9 @@ apiClient.interceptors.response.use(
       try {
         const mockRes = await handleMockApiRequest(originalRequest);
         if (mockRes) return mockRes;
-      } catch (_) {}
+      } catch (_e) {
+        // ignore mock adapter fallback errors
+      }
     }
 
     const is404 = error.response?.status === 404;
@@ -248,7 +259,14 @@ apiClient.interceptors.response.use(
     // Handle 401 Unauthorized with automatic token refresh
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
       const currentToken = getStoredAccessToken();
-      const isMockToken = currentToken.startsWith("mock-") || currentToken.startsWith("demo-") || currentToken.startsWith("parent-auth-token-");
+      const isMockToken = Boolean(
+        currentToken &&
+          (currentToken.startsWith("mock-") ||
+            currentToken.startsWith("demo-") ||
+            currentToken.startsWith("non-teaching-") ||
+            currentToken.startsWith("warden-") ||
+            currentToken.startsWith("parent-"))
+      );
       if (isMockToken) {
         // Mock token sessions must NEVER be logged out or redirected by backend 401 errors
         return Promise.reject(error);

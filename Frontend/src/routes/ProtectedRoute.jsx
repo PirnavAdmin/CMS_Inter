@@ -55,15 +55,45 @@ export function isWardenRole(role, user) {
   return false;
 }
 
+export function isNonTeachingRole(role, user) {
+  const normalized = String(role || "").trim().toLowerCase();
+  if (
+    normalized === "non_teaching_staff" ||
+    normalized === "non-teaching" ||
+    normalized === "non-teaching-staff" ||
+    normalized === "nonteaching" ||
+    normalized === "non_teaching"
+  ) {
+    return true;
+  }
+  if (user && typeof user === "object") {
+    const userRole = String(user.role || "").trim().toLowerCase();
+    if (
+      userRole === "non_teaching_staff" ||
+      userRole === "non-teaching" ||
+      userRole === "non-teaching-staff" ||
+      userRole === "nonteaching" ||
+      userRole === "non_teaching"
+    ) {
+      return true;
+    }
+    const staffType = String(user.staffType || user.type || "").trim().toLowerCase();
+    if (staffType === "non-teaching" || staffType === "nonteaching") {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isFacultyOrStaffRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   if (normalized.includes("warden")) return false;
+  if (normalized === "non-teaching" || normalized === "nonteaching" || normalized === "non_teaching_staff") return false;
   return (
     normalized === "faculty" ||
     normalized === "staff" ||
     normalized === "teacher" ||
     normalized === "teaching" ||
-    normalized === "non-teaching" ||
     normalized === "lecturer" ||
     normalized === "hod" ||
     normalized.includes("faculty") ||
@@ -168,6 +198,7 @@ export default function ProtectedRoute({
   requireFaculty = false,
   requireExamCell = false,
   requireWarden = false,
+  requireNonTeaching = false,
   requiredModule = null,
   requiredScreen = null,
   requiredAction = ACTIONS.VIEW,
@@ -187,13 +218,37 @@ export default function ProtectedRoute({
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
   const isWarden = isWardenRole(role, user);
-  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden;
-  const isFaculty = !isWarden && isFacultyOrStaffRole(role);
+  const isNonTeaching = !isWarden && isNonTeachingRole(role, user);
+  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden && !isNonTeaching;
+  const isFaculty = !isWarden && !isNonTeaching && isFacultyOrStaffRole(role);
   const isPrincipal = !isWarden && isPrincipalRole(role);
   const isParent = !isWarden && isParentRole(role);
   const isAccountant = !isWarden && isAccountantRole(role);
 
   const isExamCell = !isWarden && isExamCellRole(role);
+
+  // Non-Teaching check
+  if (requireNonTeaching && !isNonTeaching && !isAdmin) {
+    const destination = isWarden
+      ? "/warden-dashboard"
+      : isPrincipal
+      ? "/principal-dashboard"
+      : isAccountant
+      ? "/accountant-dashboard"
+      : isParent
+      ? "/parent-dashboard"
+      : isFaculty
+      ? "/faculty-dashboard"
+      : isExamCell
+      ? "/exam-cell-dashboard"
+      : "/student-dashboard";
+    return <Navigate to={destination} replace />;
+  }
+
+  // If a Non-Teaching Staff attempts to access other restricted dashboards, redirect to non-teaching dashboard
+  if (isNonTeaching && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell || requireWarden)) {
+    return <Navigate to="/non-teaching-dashboard" replace />;
+  }
 
   // Warden check
   if (requireWarden && !isWarden && !isAdmin) {
@@ -299,14 +354,16 @@ export function PublicOnlyRoute({ children }) {
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
   const isWarden = isWardenRole(role, user);
-  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden;
-  const isFaculty = !isWarden && isFacultyOrStaffRole(role);
+  const isNonTeaching = !isWarden && isNonTeachingRole(role, user);
+  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden && !isNonTeaching;
+  const isFaculty = !isWarden && !isNonTeaching && isFacultyOrStaffRole(role);
   const isPrincipal = !isWarden && isPrincipalRole(role);
   const isParent = !isWarden && isParentRole(role);
   const isAccountant = !isWarden && isAccountantRole(role);
 
   if (isTokenValid) {
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;
+    if (isNonTeaching) return <Navigate to="/non-teaching-dashboard" replace />;
     if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;
