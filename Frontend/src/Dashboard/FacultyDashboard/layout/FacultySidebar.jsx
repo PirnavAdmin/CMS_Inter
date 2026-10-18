@@ -66,7 +66,9 @@ export const permissionByModule = {
   salary: "VIEW_PAYSLIPS",
   holidays: "VIEW_HOLIDAYS",
   classes: "VIEW_CLASSES",
+  reimbursements: "VIEW_REIMBURSEMENTS",
 };
+
 
 export default function FacultySidebar() {
   const { activeModule, setActiveModule, sidebarOpen, setSidebarOpen, profileData, initials } = useFaculty();
