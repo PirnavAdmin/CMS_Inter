@@ -15,6 +15,7 @@ const accountantMenu = [
     items: [
       { to: "/accountant-dashboard/fees", label: "Fee Management", icon: adminIconAssets.feeManagement },
       { to: "/accountant-dashboard/payments", label: "Payment History", icon: adminIconAssets.paymentHistory },
+      { to: "/accountant-dashboard/reimbursements", label: "Staff Reimbursements", icon: adminIconAssets.financialReports },
       { to: "/accountant-dashboard/payroll", label: "Payroll", icon: adminIconAssets.payroll },
       { to: "/accountant-dashboard/payroll/attendance-impact", label: "Attendance Impact", icon: adminIconAssets.attendanceImpact },
       { to: "/accountant-dashboard/reports", label: "Financial Reports", icon: adminIconAssets.financialReports },
@@ -23,6 +24,7 @@ const accountantMenu = [
   {
     section: "ACCOUNT",
     items: [
+      { to: "/accountant-dashboard/my-attendance", label: "My Attendance", icon: adminIconAssets.attendanceImpact },
       { to: "/accountant-dashboard/profile", label: "My Profile", icon: adminIconAssets.profile },
     ],
   },

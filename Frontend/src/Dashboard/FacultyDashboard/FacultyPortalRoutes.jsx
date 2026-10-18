@@ -4,6 +4,7 @@ import FacultyDashboard from "./FacultyDashboard.jsx";
 import { PermissionProvider, useFacultyPermissions } from "./PermissionContext.jsx";
 import { FacultyProvider } from "./FacultyContext.jsx";
 import ProtectedRoute from "@/routes/ProtectedRoute.jsx";
+import ErrorBoundary from "@/components/common/ErrorBoundary.jsx";
 
 import FacultyDashboardHome from "./pages/FacultyDashboardHome.jsx";
 import FacultyProfile from "./pages/FacultyProfile.jsx";
@@ -15,9 +16,9 @@ import FacultyExamDuties from "./pages/FacultyExamDuties.jsx";
 import FacultyMyAttendance from "./pages/FacultyMyAttendance.jsx";
 import FacultyLeave from "./pages/FacultyLeave.jsx";
 import FacultyPayslips from "./pages/FacultyPayslips.jsx";
-import FacultyReimbursements from "./pages/FacultyReimbursements.jsx";
 import FacultyHolidays from "./pages/FacultyHolidays.jsx";
 import FacultySettings from "./pages/FacultySettings.jsx";
+import FacultyReimbursement from "./pages/FacultyReimbursement.jsx";
 
 const routePermissions = {
   "": "VIEW_DASHBOARD",
@@ -30,8 +31,8 @@ const routePermissions = {
   "my-attendance": "VIEW_SELF_ATTENDANCE",
   leave: "APPLY_LEAVE",
   payslips: "VIEW_PAYSLIPS",
-  reimbursements: "VIEW_PAYSLIPS",
   holidays: "VIEW_HOLIDAYS",
+  reimbursements: "VIEW_REIMBURSEMENTS",
 };
 
 function PermissionRoute({ permission, children }) {
@@ -41,25 +42,27 @@ function PermissionRoute({ permission, children }) {
 
 export function FacultyPortalContent() {
   return (
-    <Routes>
-      <Route path="/" element={<FacultyDashboard />}>
-        <Route index element={<PermissionRoute permission={routePermissions[""]}><FacultyDashboardHome /></PermissionRoute>} />
-        <Route path="profile" element={<PermissionRoute permission={routePermissions["profile"]}><FacultyProfile /></PermissionRoute>} />
-        <Route path="timetable" element={<PermissionRoute permission={routePermissions["timetable"]}><FacultyTimetable /></PermissionRoute>} />
-        <Route path="classes" element={<PermissionRoute permission={routePermissions["classes"]}><FacultyClasses /></PermissionRoute>} />
-        <Route path="attendance" element={<FacultyStudentAttendance />} />
-        <Route path="monthly-report" element={<FacultyStudentAttendance initialView="monthly" />} />
-        <Route path="marks" element={<PermissionRoute permission={routePermissions["marks"]}><FacultyMarks /></PermissionRoute>} />
-        <Route path="exam-duties" element={<PermissionRoute permission={routePermissions["exam-duties"]}><FacultyExamDuties /></PermissionRoute>} />
-        <Route path="my-attendance" element={<PermissionRoute permission={routePermissions["my-attendance"]}><FacultyMyAttendance /></PermissionRoute>} />
-        <Route path="leave" element={<PermissionRoute permission={routePermissions["leave"]}><FacultyLeave /></PermissionRoute>} />
-        <Route path="payslips" element={<PermissionRoute permission={routePermissions["payslips"]}><FacultyPayslips /></PermissionRoute>} />
-        <Route path="reimbursements" element={<PermissionRoute permission={routePermissions["reimbursements"]}><FacultyReimbursements /></PermissionRoute>} />
-        <Route path="holidays" element={<PermissionRoute permission={routePermissions["holidays"]}><FacultyHolidays /></PermissionRoute>} />
-        <Route path="settings" element={<FacultySettings />} />
-        <Route path="*" element={<Navigate to="/faculty-dashboard" replace />} />
-      </Route>
-    </Routes>
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/" element={<FacultyDashboard />}>
+          <Route index element={<PermissionRoute permission={routePermissions[""]}><FacultyDashboardHome /></PermissionRoute>} />
+          <Route path="profile" element={<PermissionRoute permission={routePermissions["profile"]}><FacultyProfile /></PermissionRoute>} />
+          <Route path="timetable" element={<PermissionRoute permission={routePermissions["timetable"]}><FacultyTimetable /></PermissionRoute>} />
+          <Route path="classes" element={<PermissionRoute permission={routePermissions["classes"]}><FacultyClasses /></PermissionRoute>} />
+          <Route path="attendance" element={<FacultyStudentAttendance />} />
+          <Route path="monthly-report" element={<FacultyStudentAttendance initialView="monthly" />} />
+          <Route path="marks" element={<PermissionRoute permission={routePermissions["marks"]}><FacultyMarks /></PermissionRoute>} />
+          <Route path="exam-duties" element={<PermissionRoute permission={routePermissions["exam-duties"]}><FacultyExamDuties /></PermissionRoute>} />
+          <Route path="my-attendance" element={<PermissionRoute permission={routePermissions["my-attendance"]}><FacultyMyAttendance /></PermissionRoute>} />
+          <Route path="leave" element={<PermissionRoute permission={routePermissions["leave"]}><FacultyLeave /></PermissionRoute>} />
+          <Route path="payslips" element={<PermissionRoute permission={routePermissions["payslips"]}><FacultyPayslips /></PermissionRoute>} />
+          <Route path="holidays" element={<PermissionRoute permission={routePermissions["holidays"]}><FacultyHolidays /></PermissionRoute>} />
+          <Route path="settings" element={<FacultySettings />} />
+          <Route path="reimbursements" element={<FacultyReimbursement />} />
+          <Route path="*" element={<Navigate to="/faculty-dashboard" replace />} />
+        </Route>
+      </Routes>
+    </ErrorBoundary>
   );
 }
 

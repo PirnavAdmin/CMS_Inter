@@ -21,6 +21,46 @@ const optionsFrom = (response, idKeys, labelKeys) => asList(response).map((item)
   value: String(valueOf(item, ...idKeys)),
   label: String(valueOf(item, ...labelKeys)),
 })).filter((item) => item.value && item.label);
+const academicLookupFields = {
+  boards: [["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "name", "Name"]],
+  years: [["academicYearId", "AcademicYearId", "id", "Id"], ["academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name"]],
+  levels: [["academicLevelId", "AcademicLevelId", "id", "Id"], ["academicLevelName", "AcademicLevelName", "levelName", "LevelName", "name", "Name"]],
+  groups: [["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]],
+  programs: [["programId", "ProgramId", "programmeId", "ProgrammeId", "id", "Id"], ["programName", "ProgramName", "programmeName", "ProgrammeName", "name", "Name"]],
+  sections: [["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]],
+};
+const academicDependencies = {
+  campusId: ["boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"],
+  boardId: ["academicYearId", "academicLevelId", "groupId", "programId", "sectionId"],
+  academicYearId: ["academicLevelId", "groupId", "programId", "sectionId"],
+  academicLevelId: ["groupId", "programId", "sectionId"],
+  groupId: ["programId", "sectionId"],
+  programId: ["sectionId"],
+};
+function useAcademicLookup(key, endpoint, params, enabled, setLookups, setLookupState) {
+  const requestKey = JSON.stringify(params);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLookups((current) => ({ ...current, [key]: [] }));
+    setLookupState((current) => ({ ...current, [key]: { loading: Boolean(enabled), error: "" } }));
+    if (!enabled) return () => controller.abort();
+    const scope = JSON.parse(requestKey);
+    apiClient.get(endpoint, { params: scope, signal: controller.signal }).then((response) => {
+      if (controller.signal.aborted) return;
+      const scoped = asList(response.data).filter((record) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((field) => {
+        const expected = scope[field] ?? scope[field[0].toUpperCase() + field.slice(1)];
+        const actual = valueOf(record, field, field[0].toUpperCase() + field.slice(1));
+        return !expected || actual === "" || String(actual) === String(expected);
+      }));
+      setLookups((current) => ({ ...current, [key]: optionsFrom(scoped, ...academicLookupFields[key]) }));
+    }).catch((error) => {
+      if (!controller.signal.aborted) setLookupState((current) => ({ ...current, [key]: { loading: false, error: getApiErrorMessage(error) } }));
+    }).finally(() => {
+      if (!controller.signal.aborted) setLookupState((current) => ({ ...current, [key]: { ...current[key], loading: false } }));
+    });
+    return () => controller.abort();
+  }, [key, endpoint, requestKey, enabled, setLookups, setLookupState]);
+}
 const asDateInput = (value) => value ? String(value).slice(0, 10) : "";
 const stringValue = (value) => String(value ?? "");
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -176,6 +216,12 @@ const formFromStudent = (record) => {
   const admission = record?.admission ?? record?.Admission ?? {};
   const academic = record?.academicDetails ?? record?.AcademicDetails ?? record?.academic ?? record?.Academic ?? {};
   const source = { ...record, ...admission, ...academic, ...nested };
+  // Placement comes from the current student, not the historical admission.
+  ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId", "rollNo", "rollNumber"].forEach((key) => {
+    const keys = [key, key[0].toUpperCase() + key.slice(1)];
+    const current = [nested, academic, record].find((entry) => keys.some((alias) => entry?.[alias] != null));
+    if (current) keys.forEach((alias) => { source[alias] = valueOf(current, ...keys); });
+  });
   const text = (...keys) => stringValue(valueOf(source, ...keys));
   // Prefer current student allocation over the historical admission snapshot.
   // Keep facility fields together, including empty values after a type change.
@@ -239,6 +285,9 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   const photoInputRef = useRef(null);
   const [savedPhotoUrl, setSavedPhotoUrl] = useState("");
   const [photoFailed, setPhotoFailed] = useState(false);
+  const [academicLookupState, setAcademicLookupState] = useState({});
+  const [placementChanged, setPlacementChanged] = useState(false);
+  const [initialAllocation, setInitialAllocation] = useState(null);
   const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] }), [allocationLookups, setAllocationLookups] = useState({ routes: [], pickupPoints: [], vehicles: [], vehicleAssignments: [], hostelBlocks: [], hostelRoomTypes: [], hostelRooms: [], hostelFees: [] }), [allocationLookupError, setAllocationLookupError] = useState("");
   const loadStudent = useCallback(async () => {
     setLoading(true); setLoadError("");
@@ -261,7 +310,12 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       const academic = enrichedRecord.academicDetails ?? enrichedRecord.AcademicDetails ?? enrichedRecord.academic ?? enrichedRecord.Academic ?? {};
       const source = { ...enrichedRecord, ...admission, ...academic, ...nested };
       setStudent({ name: stringValue(valueOf(source, "studentName", "StudentName", "fullName", "name")) || "Student", rollNo: stringValue(valueOf(source, "rollNo", "RollNo", "rollNumber", "RollNumber")) || "—", admissionNo: stringValue(valueOf(source, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")) || "-" });
-      setForm(formFromStudent(enrichedRecord)); setErrors({}); setTouched({}); setPhotoFile(null); setPhotoPreview(""); setPhotoError("");
+      const nextForm = formFromStudent(enrichedRecord);
+      setInitialAllocation({ studentType: nextForm.studentType, transportRequired: nextForm.transportRequired });
+      ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].forEach((key) => {
+        if (!Number.isInteger(Number(nextForm[key])) || Number(nextForm[key]) <= 0) nextForm[key] = "";
+      });
+      setForm(nextForm); setPlacementChanged(false); setErrors({}); setTouched({}); setPhotoFile(null); setPhotoPreview(""); setPhotoError("");
     } catch (error) { setLoadError(getApiErrorMessage(error) || "Unable to load the student profile."); }
     finally { setLoading(false); }
   }, [id]);
@@ -302,27 +356,12 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       return value == null || value === "" ? null : { value: String(value), label: code ? `${name || code} (${code})` : name || String(value) };
     })
     .filter(Boolean), [campuses]);
-  useEffect(() => {
-    let active = true;
-    const loadLookups = async () => {
-      const results = await Promise.allSettled([
-        apiClient.get(apiEndpoints.boards.list), apiClient.get(apiEndpoints.academicYears.list), apiClient.get(apiEndpoints.academicLevels.list),
-        apiClient.get(apiEndpoints.groups.list), apiClient.get(apiEndpoints.programs.list), apiClient.get(apiEndpoints.sections.list),
-      ]);
-      if (!active) return;
-      const data = results.map((result) => result.status === "fulfilled" ? result.value.data : []);
-      setLookups({
-        boards: optionsFrom(data[0], ["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "name", "Name"]),
-        years: optionsFrom(data[1], ["academicYearId", "AcademicYearId", "id", "Id"], ["academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name"]),
-        levels: optionsFrom(data[2], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]),
-        groups: optionsFrom(data[3], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]),
-        programs: optionsFrom(data[4], ["programId", "ProgramId", "programmeId", "ProgrammeId", "id", "Id"], ["programName", "ProgramName", "programmeName", "ProgrammeName", "name", "Name"]),
-        sections: optionsFrom(data[5], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]),
-      });
-    };
-    loadLookups();
-    return () => { active = false; };
-  }, []);
+  useAcademicLookup("boards", apiEndpoints.boards.list, { Status: true, PageSize: 1000 }, true, setLookups, setAcademicLookupState);
+  useAcademicLookup("years", apiEndpoints.academicYears.list, { CampusId: form.campusId, BoardId: form.boardId, Status: true, PageSize: 1000 }, Boolean(form.campusId && form.boardId), setLookups, setAcademicLookupState);
+  useAcademicLookup("levels", apiEndpoints.boards.academicLevels, { boardId: form.boardId }, Boolean(form.boardId), setLookups, setAcademicLookupState);
+  useAcademicLookup("groups", apiEndpoints.groups.getByBoard(form.boardId || 0), { boardId: form.boardId, academicYearId: form.academicYearId, academicLevelId: form.academicLevelId, isActive: true, PageSize: 1000 }, Boolean(form.boardId && form.academicYearId && form.academicLevelId), setLookups, setAcademicLookupState);
+  useAcademicLookup("programs", apiEndpoints.groups.programs(form.groupId || 0), {}, Boolean(form.groupId), setLookups, setAcademicLookupState);
+  useAcademicLookup("sections", apiEndpoints.sections.search, { CampusId: form.campusId, BoardId: form.boardId, AcademicYearId: form.academicYearId, AcademicLevelId: form.academicLevelId, GroupId: form.groupId, ProgramId: form.programId, IsActive: true, PageSize: 1000 }, Boolean(form.campusId && form.boardId && form.academicYearId && form.academicLevelId && form.groupId && form.programId), setLookups, setAcademicLookupState);
   useEffect(() => {
     let active = true;
     const loadAllocationLookups = async () => {
@@ -429,6 +468,12 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   useEffect(() => () => { if (photoPreview) URL.revokeObjectURL(photoPreview); }, [photoPreview]);
   const updateField = (key, value) => setForm((current) => {
     const next = { ...current, [key]: value };
+    if (current[key] !== value && academicDependencies[key]) {
+      academicDependencies[key].forEach((dependent) => { next[dependent] = ""; });
+      setPlacementChanged(true);
+      setErrors((currentErrors) => Object.fromEntries(Object.entries(currentErrors).filter(([field]) => field !== key && !academicDependencies[key].includes(field))));
+    }
+    if (key === "sectionId" && current[key] !== value) setPlacementChanged(true);
     if (touched[key]) setErrors((currentErrors) => ({ ...currentErrors, [key]: validate(next)[key] || "" }));
     return next;
   });
@@ -518,8 +563,16 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   const submit = async (event) => {
     event.preventDefault();
     const nextErrors = validate(form);
+    if (placementChanged) {
+      Object.entries({ boardId: "Board", academicYearId: "Academic Year", academicLevelId: "Academic Level", groupId: "Group", programId: "Program", sectionId: "Section" }).forEach(([key, label]) => {
+        const lookupKey = { boardId: "boards", academicYearId: "years", academicLevelId: "levels", groupId: "groups", programId: "programs", sectionId: "sections" }[key];
+        if (!form[key]) nextErrors[key] = `Select ${label}.`;
+        else if (academicLookupState[lookupKey]?.loading) nextErrors[key] = `Wait for ${label} options to load.`;
+        else if (academicLookupState[lookupKey]?.error || !lookups[lookupKey].some((option) => option.value === form[key])) nextErrors[key] = `Select an available ${label}.`;
+      });
+    }
     setTouched(Object.fromEntries(fieldKeys.map((key) => [key, true]))); setErrors(nextErrors);
-    const firstInvalid = fieldKeys.find((key) => nextErrors[key]);
+    const firstInvalid = [...fieldKeys, "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].find((key) => nextErrors[key]);
     if (firstInvalid) {
       onValidationError?.();
       window.requestAnimationFrame(() => document.querySelector(".student-profile-edit .cms-field.is-invalid input, .student-profile-edit .cms-field.is-invalid select, .student-profile-edit .cms-field.is-invalid textarea")?.focus());
@@ -573,9 +626,21 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     </ProfileSection>
     <ProfileSection title="Contact Information"><Field label="Email" {...field("email")}><input type="email" value={form.email} onChange={change("email")} maxLength="254" /></Field><Field label="Mobile Number" {...field("mobileNumber")}><input type="tel" inputMode="numeric" maxLength="10" value={form.mobileNumber} onChange={numericChange("mobileNumber", 10)} /></Field><Field label="Aadhaar Number" {...field("aadhaarNumber")}><input type="text" inputMode="numeric" maxLength="12" value={form.aadhaarNumber} onChange={numericChange("aadhaarNumber", 12)} /></Field></ProfileSection>
     <ProfileSection title="Academic Placement">
-      <SelectField label="Board" value={form.boardId} options={lookups.boards} placeholder="Select board" disabled /><SelectField label="Academic Year" value={form.academicYearId} options={lookups.years} placeholder="Select academic year" disabled /><SelectField label="Academic Level" value={form.academicLevelId} options={lookups.levels} placeholder="Select academic level" disabled /><SelectField label="Group" value={form.groupId} options={lookups.groups} placeholder="Select group" disabled /><SelectField label="Program" value={form.programId} options={lookups.programs} placeholder="Select program" disabled /><SelectField label="Section" value={form.sectionId} options={lookups.sections} placeholder="Select section" disabled /><Field label="Roll No."><input value={form.rollNo || form.rollNumber} disabled /></Field>
+      {[["Board", "boardId", "boards", true], ["Academic Year", "academicYearId", "years", Boolean(form.campusId && form.boardId)], ["Academic Level", "academicLevelId", "levels", Boolean(form.academicYearId)], ["Group", "groupId", "groups", Boolean(form.academicLevelId && form.academicYearId)], ["Program", "programId", "programs", Boolean(form.groupId)], ["Section", "sectionId", "sections", Boolean(form.programId)]].map(([label, key, lookupKey, enabled]) => <SelectField key={key} label={label} value={form[key]} onChange={change(key)} options={lookups[lookupKey]} placeholder={`Select ${label.toLowerCase()}`} loading={academicLookupState[lookupKey]?.loading} disabled={saving || !enabled} error={errors[key] || academicLookupState[lookupKey]?.error} onBlur={blur(key)} />)}
+      <Field label="Roll No."><input value={form.rollNo || form.rollNumber} readOnly /><small>Roll numbers are assigned in Section Allocation.</small></Field>
+      {placementChanged && !form.rollNo && !form.rollNumber ? <small className="student-profile-full">After saving the new placement, assign a roll number in Section Allocation.</small> : null}
     </ProfileSection>
     <ProfileSection title="Student Type & Residential Allocation">
+      {initialAllocation?.studentType === "Residential" && form.studentType === "Non-Residential" ? (
+        <small className="student-profile-full" style={{ color: "#b45309", background: "rgba(245, 158, 11, 0.1)", padding: "8px 12px", borderRadius: "6px", border: "1px solid rgba(245, 158, 11, 0.3)" }}>
+          ℹ️ Note: If this student currently holds an active hostel bed, please vacate the bed in Hostel Management before assigning bus transport.
+        </small>
+      ) : null}
+      {initialAllocation?.studentType === "Non-Residential" && initialAllocation?.transportRequired === "Yes" && form.studentType === "Residential" ? (
+        <small className="student-profile-full" style={{ color: "#b45309", background: "rgba(245, 158, 11, 0.1)", padding: "8px 12px", borderRadius: "6px", border: "1px solid rgba(245, 158, 11, 0.3)" }}>
+          ℹ️ Note: If this student currently has an active bus transport allotment, please unassign bus transport in Transport Management before allocating a hostel bed.
+        </small>
+      ) : null}
       <AllocationSelectField label="Student Type" value={form.studentType} onChange={changeAllocation("studentType")} onBlur={blur("studentType")} error={errors.studentType} options={["Non-Residential", "Residential"]} placeholder="Select Type" />
       {form.studentType === "Non-Residential" ? <AllocationSelectField label="School Transport Facility Required?" value={form.transportRequired} onChange={changeAllocation("transportRequired")} onBlur={blur("transportRequired")} error={errors.transportRequired} options={["Yes", "No"]} placeholder="Select option" /> : null}
       {form.studentType === "Non-Residential" && form.transportRequired === "Yes" ? <><AllocationSelectField label="Bus Type" value={form.busType} onChange={changeAllocation("busType")} onBlur={blur("busType")} error={errors.busType} options={["AC", "Non-AC"]} placeholder="Select Bus Type" /><AllocationSelectField label="Route" value={form.busRoute} onChange={changeAllocation("busRoute")} onBlur={blur("busRoute")} error={errors.busRoute} options={routeOptions} placeholder={form.busType ? "Select Route" : "Select Bus Type first"} /><AllocationSelectField label="Pickup Point" value={form.pickupPoint} onChange={changeAllocation("pickupPoint")} onBlur={blur("pickupPoint")} error={errors.pickupPoint} options={pickupOptions} placeholder={form.busRoute ? "Select Pickup Point" : "Select Route first"} /></> : null}
@@ -596,10 +661,10 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
 const profileSectionIcons = { "Admission Details": ClipboardList, "Personal Information": User, "Contact Information": Mail, "Academic Placement": GraduationCap, "Student Type & Residential Allocation": Bus, "Previous Education": School, Address: MapPin, "Parent Details": Users };
 function ProfileSection({ title, children }) { const Icon = profileSectionIcons[title]; return <section data-profile-section={({ "Admission Details": "academic", "Personal Information": "personal", "Contact Information": "contact", "Academic Placement": "academic", "Student Type & Residential Allocation": "transport", "Previous Education": "academic", Address: "contact", "Parent Details": "parent" })[title]} className="student-profile-section"><header className="student-profile-section-head">{Icon ? <span className="student-profile-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
 function Field({ label, required = false, error, className = "", children, onBlur }) { return <label className={`cms-field ${className}${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span>{children}{error ? <small className="cms-field-error">{error}</small> : null}</label>; }
-function SelectField({ label, value, onChange, options, placeholder, disabled = false, required = false, error, onBlur }) {
+function SelectField({ label, value, onChange, options, placeholder, disabled = false, required = false, error, onBlur, loading = false }) {
   const selected = String(value ?? "");
   const hasSelectedOption = options.some((option) => option.value === selected);
-  return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span><select value={selected} onChange={onChange} disabled={disabled}><option value="">{placeholder}</option>{selected && !hasSelectedOption ? <option value={selected}>Loading {label.toLowerCase()}…</option> : null}{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
+  return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span><select value={selected} onChange={onChange} disabled={disabled} aria-busy={loading}><option value="">{loading ? `Loading ${label.toLowerCase()}…` : placeholder}</option>{selected && !hasSelectedOption ? <option value={selected}>{loading ? `Loading ${label.toLowerCase()}…` : `${label} ${selected} (unavailable)`}</option> : null}{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
 }
 function AllocationSelectField({ label, value, onChange, onBlur, error, options, placeholder }) {
   const selected = String(value ?? "");

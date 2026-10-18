@@ -3,7 +3,6 @@ import { Field, Modal } from "@/components/common/Ui.jsx";
 import { formInitial, formSections } from "../inventoryFields.js";
 import { money, validateRecord } from "../inventoryModel.js";
 import { useDialogFocus } from "./InventoryUi.jsx";
-import { getApiErrorMessage } from "@/api/apiClient.js";
 
 export default function InventoryForm({ kind, record, itemId, state, user, onClose, onSave }) {
   const initial = useMemo(
@@ -13,7 +12,6 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
   const [values, setValues] = useState(initial);
   const [touched, setTouched] = useState({});
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
   const lock = useRef(false);
   const receiptInput = useRef(null);
   const receiptVersion = useRef(0);
@@ -34,7 +32,6 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
       : "Record Stock Out"
     : `${record ? "Edit" : "Add"} ${kind === "items" ? "Item" : kind === "suppliers" ? "Supplier" : "Category"}`;
   const change = (name, value) => {
-    setSaveError("");
     setTouched((t) => ({ ...t, [name]: true }));
     setValues((current) => {
       if (name === "paymentMethod") {
@@ -63,14 +60,8 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
     if (lock.current || Object.keys(errors).length) return;
     lock.current = true;
     setSaving(true);
-    setSaveError("");
     try {
       await onSave(values);
-    } catch (error) {
-      setSaveError(
-        getApiErrorMessage(error) ||
-          "The inventory server returned an empty error response. Check the failed save request in the browser Network tab.",
-      );
     } finally {
       lock.current = false;
       setSaving(false);
@@ -209,11 +200,6 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
                 ))}
             </div>
           </fieldset>
-        )}
-        {saveError && (
-          <p className="inventory-note" role="alert">
-            {saveError}
-          </p>
         )}
         {!!Object.keys(errors).length && (
           <p className="inventory-note" role="status">

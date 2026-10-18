@@ -31,6 +31,208 @@
   overflow: hidden;
 }
 
+/* ==========================================================================
+   Header Card & Stat Chips (Matching CMS Design System)
+   ========================================================================== */
+.faculty-tt-head-card {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.faculty-tt-head-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.faculty-tt-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.faculty-tt-icon-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary, #6F8400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.faculty-tt-title {
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  color: var(--cms-text-primary, #0f172a) !important;
+  margin: 0 !important;
+  line-height: 1.2;
+}
+
+.faculty-tt-subtitle {
+  font-size: 0.85rem !important;
+  color: var(--cms-text-secondary, #64748b) !important;
+  margin: 4px 0 0 0 !important;
+}
+
+.faculty-tt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.faculty-tt-stat-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.faculty-tt-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.faculty-tt-stat-chip:hover {
+  transform: translateY(-1px);
+}
+
+.faculty-tt-stat-chip.chip-periods {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #dbeafe;
+}
+
+.faculty-tt-stat-chip.chip-sections {
+  background: #fdf4ff;
+  color: #a21caf;
+  border-color: #fae8ff;
+}
+
+.faculty-tt-stat-chip.chip-subjects {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #d1fae5;
+}
+
+.faculty-tt-stat-chip .stat-number {
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.faculty-tt-stat-chip .stat-label {
+  font-size: 0.75rem;
+  opacity: 0.9;
+}
+
+.faculty-tt-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border, #cbd5e1);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text-primary, #1e293b);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.faculty-tt-refresh-btn:hover {
+  border-color: var(--cms-primary, #6F8400);
+  color: var(--cms-primary, #6F8400);
+  background: var(--cms-primary-soft, #f8faf2);
+}
+
+.faculty-tt-alloc-banner {
+  background: #f8fafc;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.faculty-tt-alloc-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.faculty-tt-alloc-icon {
+  color: #4f46e5;
+  display: flex;
+}
+
+.faculty-tt-alloc-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.faculty-tt-alloc-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #e0e7ff;
+  color: #3730a3;
+  font-weight: 500;
+}
+
+.faculty-tt-alloc-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.faculty-tt-alloc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+.faculty-tt-alloc-pill.is-scheduled {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
 .faculty-tt-wrap {
   width: 100%;
   overflow-x: auto;
@@ -455,6 +657,447 @@
 .faculty-tt-badge-chip {
   display: inline-flex;
   align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  background: var(--cms-subtle, #f8fafc);
+  color: var(--cms-text, #10203c);
+  transition: all 0.15s ease;
+}
+
+.faculty-tt-stat-chip .stat-number {
+  font-weight: 800;
+  color: var(--cms-primary, #6f8400);
+}
+
+.faculty-tt-stat-chip .stat-label {
+  color: var(--cms-muted, #64748b);
+  font-size: 11.5px;
+}
+
+.faculty-tt-stat-chip.chip-periods {
+  border-color: color-mix(in srgb, var(--cms-primary, #6f8400) 30%, var(--cms-border, #e2e8f0));
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary-dark, #566900);
+}
+
+.faculty-tt-stat-chip.chip-periods .stat-number {
+  color: var(--cms-primary-dark, #566900);
+}
+
+.faculty-tt-stat-chip.chip-sections {
+  border-color: #cbd5e1;
+}
+
+.faculty-tt-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #10203c);
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.faculty-tt-refresh-btn:hover:not(:disabled) {
+  border-color: var(--cms-primary, #6f8400);
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary, #6f8400);
+  transform: translateY(-1px);
+}
+
+.faculty-tt-refresh-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   Allocated Subjects Banner
+   -------------------------------------------------------------------------- */
+.faculty-tt-alloc-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: var(--cms-radius, 14px);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.03);
+}
+
+.faculty-tt-alloc-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.faculty-tt-alloc-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary, #6f8400);
+  flex-shrink: 0;
+}
+
+.faculty-tt-alloc-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+}
+
+.faculty-tt-alloc-badge {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary-dark, #566900);
+}
+
+.faculty-tt-alloc-desc {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--cms-muted, #64748b);
+}
+
+.faculty-tt-alloc-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.faculty-tt-alloc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  background: var(--cms-subtle, #f8fafc);
+  color: var(--cms-text, #10203c);
+  transition: all 0.15s ease;
+}
+
+.faculty-tt-alloc-pill.pill-scheduled {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.faculty-tt-alloc-pill.pill-scheduled .alloc-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.faculty-tt-alloc-pill.pill-scheduled .alloc-pill-meta {
+  color: #15803d;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.faculty-tt-alloc-pill.pill-pending {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.faculty-tt-alloc-pill.pill-pending .alloc-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.faculty-tt-alloc-pill.pill-pending .alloc-pill-meta {
+  color: #b45309;
+  font-weight: 650;
+  font-size: 11px;
+}
+
+/* --------------------------------------------------------------------------
+   Main Schedule Card
+   -------------------------------------------------------------------------- */
+.faculty-tt-main-card {
+  position: relative;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: var(--cms-radius, 14px);
+  box-shadow: 0 4px 18px rgba(16, 24, 40, 0.04);
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Skeleton Grid State (Matching Admin Dashboard Aesthetics)
+   -------------------------------------------------------------------------- */
+.faculty-slot-skeleton {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 72px;
+  border-radius: 9px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  box-sizing: border-box;
+}
+
+.faculty-slot-skeleton .skeleton-sub {
+  width: 70%;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.faculty-slot-skeleton-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.faculty-slot-skeleton .skeleton-badge {
+  width: 42%;
+  height: 12px;
+  border-radius: 4px;
+}
+
+[data-theme="dark"] .faculty-slot-skeleton {
+  background: var(--cms-surface, #1e221e) !important;
+  border-color: var(--cms-border, #2d3629) !important;
+}
+
+.faculty-tt-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* High-specificity table layout */
+#root .cms-content table.faculty-tt-grid-table,
+.faculty-tt-grid-table {
+  width: 100% !important;
+  min-width: 960px;
+  table-layout: fixed !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  background: var(--cms-surface, #ffffff);
+  margin: 0 !important;
+}
+
+/* Header Cells */
+#root .cms-content table.faculty-tt-grid-table thead th,
+.faculty-tt-grid-table thead th {
+  padding: 12px 10px !important;
+  background: var(--cms-subtle, #f8fafc) !important;
+  color: var(--cms-text, #10203c) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0) !important;
+  border-right: 1px solid var(--cms-border, #e2e8f0) !important;
+  text-align: center !important;
+  font-weight: 700 !important;
+  vertical-align: middle !important;
+}
+
+.faculty-tt-grid-table thead th:last-child {
+  border-right: 0 !important;
+}
+
+.th-time-col {
+  width: 135px !important;
+  text-align: center !important;
+}
+
+.th-time-header {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--cms-muted, #64748b);
+}
+
+.th-day-col {
+  width: calc((100% - 135px) / 6) !important;
+}
+
+.th-day-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.th-day-code {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--cms-text, #10203c);
+}
+
+.th-day-name {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--cms-muted, #64748b);
+  text-transform: capitalize;
+}
+
+.th-day-col.is-today {
+  background: color-mix(in srgb, var(--cms-primary-soft, #f1f4e2) 65%, transparent) !important;
+  border-bottom-color: var(--cms-primary, #6f8400) !important;
+}
+
+.th-day-col.is-today .th-day-code {
+  color: var(--cms-primary, #6f8400);
+}
+
+.today-badge {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--cms-primary, #6f8400);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  line-height: 1.3;
+}
+
+/* Body Rows & Cells */
+#root .cms-content table.faculty-tt-grid-table tbody td,
+.faculty-tt-grid-table tbody td {
+  padding: 6px 8px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0) !important;
+  border-right: 1px solid var(--cms-border, #e2e8f0) !important;
+  background: var(--cms-surface, #ffffff) !important;
+  vertical-align: middle !important;
+  height: 84px !important;
+  min-height: 84px !important;
+  box-sizing: border-box !important;
+}
+
+.faculty-tt-grid-table tbody tr:last-child td {
+  border-bottom: 0 !important;
+}
+
+.faculty-tt-grid-table tbody td:last-child {
+  border-right: 0 !important;
+}
+
+/* Left Time Column Cell */
+.td-time-col {
+  background: var(--cms-subtle, #f8fafc) !important;
+  text-align: center !important;
+}
+
+.period-time-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.period-badge-name {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary-dark, #566900);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+}
+
+.period-badge-time {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+}
+
+.td-day-cell.is-today-col {
+  background: color-mix(in srgb, var(--cms-primary-soft, #f1f4e2) 18%, transparent) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Modern Slot Card (Tile)
+   -------------------------------------------------------------------------- */
+.faculty-slot-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 72px;
+  padding: 8px 10px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-left: 3.5px solid var(--cms-primary, #6f8400);
+  border-radius: 9px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+
+.faculty-slot-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--cms-primary, #6f8400);
+  border-left-color: var(--cms-primary-dark, #566900);
+  box-shadow: 0 6px 16px rgba(111, 132, 0, 0.14), 0 2px 4px rgba(0, 0, 0, 0.04);
+  background: color-mix(in srgb, var(--cms-primary-soft, #f1f4e2) 25%, #ffffff);
+}
+
+.slot-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.slot-subject-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+  color: var(--cms-text, #10203c);
+  letter-spacing: -0.15px;
+}
+
+.slot-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 5px;
   background: var(--cms-primary-soft, #F1F4E2);
   border: 1px solid rgba(111, 132, 0, 0.22);
@@ -530,6 +1173,162 @@
   margin: 0 0 16px;
 }
 
+.modal-close-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--cms-muted, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-close-btn:hover {
+  background: var(--cms-subtle, #f1f5f9);
+  color: var(--cms-text, #10203c);
+}
+
+.faculty-tt-modal-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-subject-banner {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  border: 1px solid color-mix(in srgb, var(--cms-primary, #6f8400) 25%, transparent);
+}
+
+.modal-badges-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.modal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.modal-badge.badge-code {
+  background: #ffffff;
+  color: var(--cms-primary-dark, #566900);
+  border: 1px solid rgba(111, 132, 0, 0.25);
+}
+
+.modal-badge.badge-section {
+  background: #ffffff;
+  color: var(--cms-text, #10203c);
+  border: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.modal-badge.badge-status {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.modal-subject-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--cms-primary-dark, #566900);
+  letter-spacing: -0.2px;
+}
+
+.modal-academic-path {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--cms-muted, #64748b);
+}
+
+.modal-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.modal-detail-item {
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  background: var(--cms-surface, #ffffff);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.modal-detail-item .detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.modal-detail-item .detail-value {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+  line-height: 1.35;
+}
+
+.modal-detail-item .detail-icon {
+  color: var(--cms-primary, #6f8400);
+  flex-shrink: 0;
+}
+
+.faculty-tt-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 20px;
+  border-top: 1px solid var(--cms-border, #e2e8f0);
+  background: var(--cms-subtle, #f8fafc);
+}
+
+/* --------------------------------------------------------------------------
+   Dark Mode Overrides
+   -------------------------------------------------------------------------- */
+[data-theme="dark"] .faculty-tt-head-card,
+.dark-theme .faculty-tt-head-card {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #282f25) !important;
+}
+
+[data-theme="dark"] .faculty-tt-title,
+.dark-theme .faculty-tt-title {
+  color: var(--cms-text, #f1f5eb) !important;
+}
+
+[data-theme="dark"] .faculty-tt-subtitle,
+.dark-theme .faculty-tt-subtitle {
+  color: var(--cms-muted, #8a9685) !important;
+}
+
+[data-theme="dark"] .faculty-tt-icon-badge,
+.dark-theme .faculty-tt-icon-badge,
 [data-theme="dark"] .faculty-tt-badge-chip,
 .dark-theme .faculty-tt-badge-chip {
   background: rgba(135, 157, 25, 0.16) !important;

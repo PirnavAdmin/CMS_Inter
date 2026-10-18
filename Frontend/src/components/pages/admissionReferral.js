@@ -11,7 +11,7 @@ export const mapAdmissionReferral = (values, currentCampusId, isReferral, target
   if (!targetId || targetId === sourceId || !campusOptions.some((option) => campusId(option.value) === targetId)) {
     throw new Error("Select an available target campus different from the current campus.");
   }
-  return { ...values, isReferral: true, campus: targetId, sourceCampusId: sourceId, admissionNo: null };
+  return { ...values, isReferral: true, campus: targetId, sourceCampusId: sourceId, admissionNo: "" };
 };
 
 export const appendReferralFields = (formData, values) => {

@@ -79,8 +79,9 @@ namespace CollegeManagement.API.DTOs.Inventory
         [StringLength(150)]
         public string Name { get; set; } = string.Empty;
 
+        [Required(ErrorMessage = "Item Code is required.")]
         [StringLength(50)]
-        public string? Code { get; set; }
+        public string Code { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Category is required.")]
         [Range(1, int.MaxValue, ErrorMessage = "Choose an active category.")]

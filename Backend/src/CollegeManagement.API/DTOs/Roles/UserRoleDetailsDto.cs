@@ -36,6 +36,9 @@ namespace CollegeManagement.API.DTOs.Roles
     {
         public string Module { get; set; } = string.Empty;
         public string SubModule { get; set; } = string.Empty;
+        public string ScreenId { get; set; } = string.Empty;
+        public string ScreenName { get; set; } = string.Empty;
+        public string ScreenCode => ScreenId;
         public string CategoryLabel { get; set; } = string.Empty;
         public int DisplayOrder { get; set; }
         public bool ViewEnabled { get; set; }

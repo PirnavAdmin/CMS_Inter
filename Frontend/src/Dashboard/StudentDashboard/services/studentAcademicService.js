@@ -202,15 +202,49 @@ export const getCurrentStudentDocumentFile = async (path) => {
 
 export const changeCurrentStudentPassword = (data) => apiClient.post(studentApiEndpoints.profile.changePassword, data);
 
+const examScopeValue = (record, key) => record?.[key] ?? record?.[key[0].toUpperCase() + key.slice(1)];
+const examScopeIds = (value) => {
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); } catch { value = value.split(","); }
+  }
+  return (Array.isArray(value) ? value : value?.$values ?? [value])
+    .map(Number).filter((id) => Number.isInteger(id) && id > 0).map(String);
+};
+const examMatchesStudent = (record, student) => {
+  if (!["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => {
+    const plural = examScopeIds(examScopeValue(record, `${key}s`));
+    const ids = plural.length ? plural : examScopeIds(examScopeValue(record, key));
+    return !ids.length || ids.includes(String(Number(examScopeValue(student, key))));
+  })) return false;
+  // A combined exam can map different programs to each group. Check the pair,
+  // rather than accepting any program anywhere in the exam's flattened list.
+  const selections = examScopeValue(record, "groupProgramSelections");
+  const group = String(Number(examScopeValue(student, "groupId")));
+  if (Array.isArray(selections) && selections.length) {
+    const entry = selections.find((item) => String(Number(examScopeValue(item, "groupId"))) === group);
+    if (!entry) return false;
+    const ids = examScopeIds(examScopeValue(entry, "programIds") ?? examScopeValue(entry, "programId"));
+    return !ids.length || ids.includes(String(Number(examScopeValue(student, "programId"))));
+  }
+  if (selections && typeof selections === "object" && Object.keys(selections).length) {
+    if (!Object.prototype.hasOwnProperty.call(selections, group)) return false;
+    const ids = examScopeIds(selections[group]);
+    return !ids.length || ids.includes(String(Number(examScopeValue(student, "programId"))));
+  }
+  return true;
+};
+
 export const getStudentExaminations = async (student) => {
+  if (!["boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((key) => Number(examScopeValue(student, key)) > 0)) return [];
   const params = {
     CampusId: student.campusId,
     BoardId: student.boardId,
     AcademicYearId: student.academicYearId,
     AcademicLevelId: student.academicLevelId,
     GroupId: student.groupId,
-    ProgramId: student.programId,
   };
+  // The server's exact ProgramId predicate excludes NULL (All Programs) exams.
+  // Keep those candidates and apply the student's program/group mapping below.
   Object.keys(params).forEach((key) => {
     if (!params[key]) delete params[key];
   });
@@ -219,14 +253,11 @@ export const getStudentExaminations = async (student) => {
   const response = await apiClient.get(examinationEndpoint, { params });
   const payload = getPayload(response.data);
   const rows = (value) => Array.isArray(value) ? value : value?.items ?? value?.Items ?? [];
-  const inStudentScope = (record) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => {
-    const actual = record[key] ?? record[key[0].toUpperCase() + key.slice(1)];
-    return actual == null || !student[key] || String(actual) === String(student[key]);
-  });
+  const inStudentScope = (record) => examMatchesStudent(record, student);
   const examinations = rows(payload).filter(inStudentScope);
   const visible = examinations.filter((exam) => ["SCHEDULED", "PUBLISHED", "COMPLETED"].includes(String(exam.status || "").trim().toUpperCase()));
 
-  return Promise.all(visible.map(async (exam) => {
+  const results = await Promise.all(visible.map(async (exam) => {
     const examinationId = exam.examinationId ?? exam.examId ?? exam.id;
     if (!examinationId) return { ...exam, schedules: [] };
     const [detailResponse, scheduleResponse] = await Promise.all([
@@ -237,6 +268,7 @@ export const getStudentExaminations = async (student) => {
     const schedules = getPayload(scheduleResponse.data);
     return { ...exam, ...detail, schedules: rows(schedules).filter(inStudentScope) };
   }));
+  return results.filter(inStudentScope);
 };
 
 export const getStudentAttendance = async (studentId, fromDate, toDate) => {
@@ -280,10 +312,51 @@ export const getStudentResult = async (student, examId) => {
   return getPayload(response.data);
 };
 
-export const getStudentWeeklyTimetable = async (studentId) => {
-  const response = await apiClient.get(studentApiEndpoints.timetable.weekly(studentId));
-  const payload = getPayload(response.data);
-  return Array.isArray(payload) ? payload : [];
+const timetableValue = (row, key) => row?.[key] ?? row?.[key[0].toUpperCase() + key.slice(1)];
+const timetableRows = (payload) => {
+  let value = payload;
+  for (let depth = 0; depth < 6 && value && !Array.isArray(value); depth += 1) {
+    value = value.$values ?? value.data ?? value.Data ?? value.items ?? value.Items ?? value.result ?? value.Result ?? value.timetableSlots ?? value.slots;
+  }
+  return Array.isArray(value) ? value : [];
+};
+const timetableDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const normalizeTimetableSlot = (row) => {
+  const normalized = Object.fromEntries(Object.keys(row).map((key) => [key[0].toLowerCase() + key.slice(1), row[key]]));
+  const day = Number(normalized.dayOfWeek);
+  const namedDay = timetableDays.find((name) => name.toLowerCase() === String(normalized.dayName || normalized.day || "").toLowerCase());
+  const period = Number(normalized.periodNumber) || Number(String(normalized.periodName || "").match(/\d+/)?.[0]);
+  return { ...normalized,
+    dayName: namedDay || (Number.isInteger(day) ? timetableDays[day === 7 ? 0 : day] : ""),
+    periodNumber: period || null,
+    periodName: normalized.periodName || (period ? `Period ${period}` : "Period"),
+    isBreak: /^(true|1)$/i.test(String(normalized.isBreak)) || /break|lunch|interval/i.test(normalized.periodName || ""),
+  };
+};
+
+export const getStudentWeeklyTimetable = async (student, { signal } = {}) => {
+  const profile = typeof student === "object" && student ? student : { studentId: student };
+  const studentId = timetableValue(profile, "studentId");
+  if (!Number.isInteger(Number(studentId)) || Number(studentId) <= 0) throw new Error("Student ID unavailable.");
+  const sectionId = timetableValue(profile, "sectionId");
+  const academicYearId = timetableValue(profile, "academicYearId");
+  if (!(Number(sectionId) > 0)) return [];
+  if (!(Number(academicYearId) > 0)) throw new Error("Your academic year is not assigned. Please contact the college office.");
+  // Use the same section lookup as the admin grid. The legacy student SQL
+  // incorrectly uses GroupId as SectionId and can return an empty timetable.
+  const response = await apiClient.get(apiEndpoints.timetable.getBySection(sectionId), {
+    params: { isPublished: true, ...(Number(academicYearId) > 0 ? { academicYearId: Number(academicYearId) } : {}),
+      ...(Number(timetableValue(profile, "campusId")) > 0 ? { campusId: Number(timetableValue(profile, "campusId")) } : {}) }, signal,
+  });
+  return timetableRows(response.data).filter((row) => {
+    const published = timetableValue(row, "isPublished");
+    const status = String(timetableValue(row, "status") ?? timetableValue(row, "approvalStatusName") ?? "").toLowerCase();
+    if (published != null ? !/^(true|1)$/i.test(String(published)) : status && status !== "published") return false;
+    return ["sectionId", "academicYearId", "campusId", "boardId", "academicLevelId", "groupId", "programId"].every((key) => {
+      const expected = timetableValue(profile, key), actual = timetableValue(row, key);
+      return !(Number(expected) > 0) || actual == null || String(actual) === String(expected);
+    });
+  }).map(normalizeTimetableSlot);
 };
 
 export const getStudentDailyTimetable = async (studentId, academicYearId, date = new Date().toISOString()) => {

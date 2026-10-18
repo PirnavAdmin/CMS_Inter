@@ -1081,7 +1081,7 @@ public class ReportRepository : IReportRepository
                 .Include(t => t.Period)
                 .Include(t => t.Subject)
                 .Include(t => t.Section)
-                .Where(t => t.IsPublished && t.Period != null && !t.Period.IsBreak);
+                .Where(t => t.IsPublished && t.Period != null && !t.Period.IsBreak && t.StaffId.HasValue && t.StaffId.Value > 0);
 
             if (f.CampusId.HasValue && f.CampusId.Value > 0) query = query.Where(t => t.Section != null && t.Section.CampusId == f.CampusId.Value);
             if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(t => t.BoardId == f.BoardId.Value);
@@ -1094,7 +1094,7 @@ public class ReportRepository : IReportRepository
             if (!list.Any()) return Array.Empty<FacultyWorkloadReportDto>();
 
             return list
-                .GroupBy(t => t.StaffId)
+                .GroupBy(t => t.StaffId!.Value)
                 .Select(g =>
                 {
                     var first = g.FirstOrDefault()?.Staff;

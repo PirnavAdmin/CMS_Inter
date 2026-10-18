@@ -12,6 +12,18 @@
   border-radius: 14px;
 }
 
+.principal-data-status, .principal-empty-row {
+  margin: 0 0 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--principal-border);
+  border-radius: 8px;
+  color: var(--principal-muted);
+  background: #fff;
+  font-size: 11px;
+}
+.principal-data-status.is-error { border-color: #efb4bc; color: #b42336; background: #fff5f6; }
+.principal-empty-row { margin: 12px 0; text-align: center; }
+
 .principal-page-head, .principal-welcome, .principal-section-head, .principal-welcome-meta, .principal-head-actions, .principal-date-picker, .principal-kpi, .principal-attendance-main, .principal-legend > div, .principal-performance-stat, .principal-chart-key, .principal-staff-overview, .principal-mini-stats span, .principal-soft-button, .principal-table-footer, .principal-exam-row, .principal-activity-row, .principal-notice-row, .principal-fee-footer, .principal-action, .principal-report-row, .principal-footer { display: flex; align-items: center; }
 .principal-page-head { justify-content: space-between; gap: 18px; margin-bottom: 14px; }
 .principal-eyebrow { margin: 0 0 4px; color: var(--principal-green); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
@@ -32,13 +44,6 @@
 .principal-custom-period { width: 290px; padding: 14px; }.principal-custom-period-head { display: flex; justify-content: space-between; gap: 12px; }.principal-custom-period-head strong { display: block; color: var(--principal-deep); font-size: 13px; }.principal-custom-period-head small { display: block; margin-top: 3px; color: var(--principal-muted); font-size: 10px; line-height: 1.4; }.principal-custom-period-head > button { display: grid; place-items: center; width: 25px; height: 25px; border: 0; border-radius: 6px; background: #f3f8f3; color: var(--principal-muted); cursor: pointer; }.principal-custom-period-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }.principal-custom-period-fields label { display: grid; gap: 5px; color: var(--principal-muted); font-size: 10px; font-weight: 700; }.principal-custom-period-fields input { width: 100%; min-width: 0; box-sizing: border-box; padding: 8px 7px; border: 1px solid var(--principal-border); border-radius: 7px; color: var(--principal-deep); background: #fbfdfb; font: inherit; font-size: 10px; }.principal-custom-period-fields input:focus { border-color: #8fc5a0; outline: 0; box-shadow: 0 0 0 3px rgba(22, 138, 82, .1); }.principal-custom-period-actions { display: flex; justify-content: flex-end; gap: 7px; }.principal-custom-period-actions button { padding: 8px 10px; border-radius: 7px; font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }.principal-custom-cancel { border: 1px solid var(--principal-border); background: #fff; color: var(--principal-muted); }.principal-custom-apply { border: 1px solid var(--principal-green); background: var(--principal-green); color: #fff; }.principal-period-status { min-width: 52px; color: var(--principal-green); font-size: 10px; font-weight: 800; }
 .principal-date-picker select, .principal-filter select { appearance: none; border: 0; outline: 0; background: transparent; color: var(--principal-deep); font: inherit; cursor: pointer; }
 .principal-date-picker select { padding-right: 15px; }
-.principal-api-state { display: flex; align-items: center; gap: 8px; margin: 0 0 13px; padding: 10px 12px; border: 1px solid #cfe4d2; border-radius: 9px; color: #23714b; background: #f5fbf2; font-size: 11px; font-weight: 800; }
-.principal-api-state.is-warning { border-color: #f0d895; color: #9a6b10; background: #fff9e9; }
-.principal-api-state.is-error { border-color: #f0b8b8; color: #b84d4d; background: #fff0f0; }
-.principal-api-state span { flex: 1; min-width: 0; }
-.principal-api-state button { border: 1px solid currentColor; border-radius: 7px; padding: 5px 9px; color: inherit; background: transparent; font: inherit; font-size: 10px; cursor: pointer; }
-.principal-spin { animation: principal-spin .8s linear infinite; }
-@keyframes principal-spin { to { transform: rotate(360deg); } }
 .principal-icon-button { position: relative; display: grid; place-items: center; width: 37px; height: 37px; border: 1px solid var(--principal-border); border-radius: 9px; background: #fff; color: var(--principal-deep); cursor: pointer; }
 .principal-icon-button:hover { border-color: #9bc6a9; color: var(--principal-green); }
 .principal-icon-button span { position: absolute; top: -5px; right: -5px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: #e45d55; color: #fff; font-size: 9px; font-weight: 800; }

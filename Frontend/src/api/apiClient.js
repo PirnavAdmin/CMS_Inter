@@ -3,6 +3,8 @@ import { env } from "@/config/env.js";
 import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
 
 let activeApiRequests = 0;
+import { handleMockApiRequest } from "./mockApiAdapter.js";
+
 const apiLoadingListeners = new Set();
 
 const notifyApiLoading = () => {
@@ -123,8 +125,37 @@ apiClient.interceptors.request.use(
       config.headers.delete("Content-Type");
     }
     beginApiLoading(config);
+
     const token = getStoredAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
+
+    // Clean up any stale offline flags so real APIs are never blocked
+    try {
+      if (typeof window !== "undefined") {
+        if (window.localStorage?.getItem("cms_backend_offline")) {
+          window.localStorage.removeItem("cms_backend_offline");
+        }
+        window.localStorage?.setItem("cms_backend_online", "true");
+      }
+    } catch (_e) {
+      // ignore storage errors
+    }
+
+    // Only route through mock adapter if explicitly configured or using a synthetic mock token
+    const isExplicitMockToken = Boolean(
+      token &&
+        (token.startsWith("mock-") ||
+          token.startsWith("demo-") ||
+          token.startsWith("non-teaching-") ||
+          token.startsWith("warden-") ||
+          token.startsWith("parent-"))
+    );
+    const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
+
+    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+      config.adapter = handleMockApiRequest;
+    }
+
     try {
       const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
@@ -133,7 +164,8 @@ apiClient.interceptors.request.use(
     } catch {
       // Storage may be unavailable in restricted browser contexts.
     }
-    if (import.meta.env.DEV) {
+    // In development, avoid flooding console on every request unless verbose debug is enabled
+    if (import.meta.env.DEV && typeof window !== "undefined" && window.__CMS_VERBOSE_API__) {
       const expiry = token ? getJwtExpiryState(token) : {};
       console.log("API request:", {
         url: config.url,
@@ -167,13 +199,35 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    const errText = `${error?.message || ""} ${typeof error?.response?.data === "string" ? error.response.data : JSON.stringify(error?.response?.data || "")}`;
+    const isNgrokOffline = /ERR_NGROK|is offline/i.test(errText);
+
+    const token = getStoredAccessToken();
+    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
+    const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
+
+    // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
+    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
+      originalRequest._isMockFallback = true;
+      try {
+        const mockRes = await handleMockApiRequest(originalRequest);
+        if (mockRes) return mockRes;
+      } catch (_e) {
+        // ignore mock adapter fallback errors
+      }
+    }
+
+    const is404 = error.response?.status === 404;
     const shouldLogDevError =
       import.meta.env.DEV &&
+      !isNgrokOffline &&
+      !is404 &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&
       !originalRequest?.silentAuth &&
-      !originalRequest?.optionalAuth;
+      !originalRequest?.optionalAuth &&
+      !originalRequest?.url?.includes("/api/v1/hostel");
 
     if (shouldLogDevError) {
       if (!error.response) {
@@ -204,13 +258,26 @@ apiClient.interceptors.response.use(
 
     // Handle 401 Unauthorized with automatic token refresh
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
+      const currentToken = getStoredAccessToken();
+      const isMockToken = Boolean(
+        currentToken &&
+          (currentToken.startsWith("mock-") ||
+            currentToken.startsWith("demo-") ||
+            currentToken.startsWith("non-teaching-") ||
+            currentToken.startsWith("warden-") ||
+            currentToken.startsWith("parent-"))
+      );
+      if (isMockToken) {
+        // Mock token sessions must NEVER be logged out or redirected by backend 401 errors
+        return Promise.reject(error);
+      }
+
       if (originalRequest._retry) {
         clearAuthSession();
         if (window.location.pathname !== "/login") window.location.assign("/login");
         return Promise.reject(error);
       }
 
-      const currentToken = getStoredAccessToken();
       if (!currentToken) {
         clearAuthSession();
         if (window.location.pathname !== "/login") window.location.assign("/login");

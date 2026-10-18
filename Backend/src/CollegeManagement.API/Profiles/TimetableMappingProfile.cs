@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using CollegeManagement.API.DTOs.Timetable;
 using CollegeManagement.API.Models.Timetable;
 
@@ -30,6 +30,10 @@ namespace CollegeManagement.API.Profiles
             CreateMap<PeriodStructure, PeriodStructureListItemDto>();
             CreateMap<PeriodStructureItem, PeriodStructureItemDto>();
             CreateMap<PeriodStructureAssignment, PeriodStructureAssignmentResponseDto>();
+
+            // TimetableBackup mappings
+            CreateMap<TimetableBackup, TimetableBackupResponseDto>();
+            CreateMap<TimetableBackupSlot, TimetableResponseDto>();
         }
     }
 }

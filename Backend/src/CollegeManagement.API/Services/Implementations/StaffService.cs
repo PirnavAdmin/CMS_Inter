@@ -1920,6 +1920,29 @@ namespace CollegeManagement.API.Services.Implementations
                     .ToList();
             }
 
+            // Multi-Campus & Multi-Board assignments for Principal
+            if (staff.StaffCampusAssignments != null && staff.StaffCampusAssignments.Any())
+            {
+                dto.AssignedCampusIds = staff.StaffCampusAssignments.Select(a => a.CampusId).ToList();
+                dto.AssignedCampuses = staff.StaffCampusAssignments.Select(a => (object)new
+                {
+                    id = a.CampusId,
+                    name = a.Campus != null ? a.Campus.CampusName : "",
+                    code = a.Campus != null ? a.Campus.CampusCode : ""
+                }).ToList();
+            }
+
+            if (staff.StaffBoardAssignments != null && staff.StaffBoardAssignments.Any())
+            {
+                dto.AssignedBoardIds = staff.StaffBoardAssignments.Select(a => a.BoardId).ToList();
+                dto.AssignedBoards = staff.StaffBoardAssignments.Select(a => (object)new
+                {
+                    id = a.BoardId,
+                    name = a.Board != null ? a.Board.BoardName : "",
+                    code = a.Board != null ? a.Board.BoardCode : ""
+                }).ToList();
+            }
+
             // Educational Qualifications
             var eduList = dto.EducationList != null && dto.EducationList.Any() ? dto.EducationList : DeserializeList<StaffEducationItem>(staff.EducationJson);
             dto.EducationList = eduList;

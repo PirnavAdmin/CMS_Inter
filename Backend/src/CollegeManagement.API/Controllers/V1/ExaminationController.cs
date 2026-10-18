@@ -126,6 +126,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves all examinations with comprehensive academic and status filtering.
         /// </summary>
         [HttpGet]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<ExaminationResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<ExaminationResponse>>> GetExaminations([FromQuery] ExaminationSearchRequestDto filter)
@@ -145,6 +146,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves examination details by unique identifier.
         /// </summary>
         [HttpGet("{examinationId:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(ExaminationResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -503,6 +505,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves exam schedules for an examination.
         /// </summary>
         [HttpGet("{examinationId:int}/schedules")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<ExamScheduleResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<ExamScheduleResponse>>> GetExamSchedules(
@@ -510,6 +513,22 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Fetching exam schedules for Examination ID: {ExaminationId}", examinationId);
             var result = await _examinationService.GetExamSchedulesAsync(examinationId);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Retrieves invigilation exam duties for a faculty/staff member.
+        /// </summary>
+        [HttpGet("duties")]
+        [Authorize]
+        [ProducesResponseType(typeof(IEnumerable<FacultyExamDutyDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<FacultyExamDutyDto>>> GetFacultyExamDuties(
+            [FromQuery] int? staffId = null,
+            [FromQuery] string? status = null)
+        {
+            _logger.LogInformation("Fetching exam duties for Staff ID: {StaffId}, Status: {Status}", staffId, status);
+            var result = await _examinationService.GetFacultyExamDutiesAsync(staffId, status);
             return Ok(result);
         }
 

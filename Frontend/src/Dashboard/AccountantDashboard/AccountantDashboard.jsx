@@ -73,7 +73,7 @@ export default function AccountantDashboard() {
 
   return (
     <>
-      <StudentPageHeader title="Accountant Dashboard" subtitle="A focused view of collections, dues, payroll, and financial activity." action={<Link className="sp-btn primary" to="reports"><img className="accountant-btn-icon" src={adminIconAssets.financialReports} alt="" aria-hidden="true" /> Financial reports</Link>} />
+      <StudentPageHeader title="Accountant Dashboard" subtitle="A focused view of collections, dues, payroll, and financial activity." action={<Link className="sp-btn primary" to="/accountant-dashboard/reports"><img className="accountant-btn-icon" src={adminIconAssets.financialReports} alt="" aria-hidden="true" /> Financial reports</Link>} />
       {data?.partial ? <div className="sp-api-state accountant-error"><AlertCircle size={15} /> Some finance data could not be loaded. Showing available results.</div> : null}
       <section className="sp-summary-grid four">
         <StudentSummaryCard icon={adminIconAssets.feeManagement} label="Fee Collected" value={formatMoney(collected)} note="From available collection data" />
@@ -82,16 +82,16 @@ export default function AccountantDashboard() {
         <StudentSummaryCard icon={adminIconAssets.payroll} label="Payroll Summary" value={formatMoney(payrollTotal)} note="Current payroll data" tone="purple" />
       </section>
       <div className="sp-dashboard-grid">
-        <StudentCard title="Recent Payments" subtitle="Latest fee collection activity" className="sp-span-2" action={<Link className="sp-text-link" to="payments">View history <ArrowRight size={13} /></Link>}>
+        <StudentCard title="Recent Payments" subtitle="Latest fee collection activity" className="sp-span-2" action={<Link className="sp-text-link" to="/accountant-dashboard/payments">View history <ArrowRight size={13} /></Link>}>
           <StudentDataTable columns={["Student", "Admission No", "Type", "Amount", "Date", "Status"]} statusColumns={[5]} rows={payments.slice(0, 6).map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Type: row.type, Amount: formatMoney(row.amount), Date: formatDate(row.date), Status: row.status }))} empty="No payment transactions available." />
         </StudentCard>
-        <StudentCard title="Pending Dues" subtitle="Outstanding student fee balances" action={<Link className="sp-text-link" to="fees">Open ledger <ArrowRight size={13} /></Link>}>
+        <StudentCard title="Pending Dues" subtitle="Outstanding student fee balances" action={<Link className="sp-text-link" to="/accountant-dashboard/fees?tab=ledger">Open ledger <ArrowRight size={13} /></Link>}>
           <StudentDataTable columns={["Student", "Admission No", "Amount", "Due Date"]} rows={dues.slice(0, 5).map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": formatDate(row.dueDate) }))} empty="No outstanding dues available." />
         </StudentCard>
         <StudentCard title="Financial Snapshot" subtitle="Relative values from loaded records">
           <div className="accountant-chart">{amountChart.map((row) => <div className="accountant-chart-row" key={row.label}><span>{row.label}</span><div className="accountant-bar"><i style={{ width: row.width }} /></div><strong>{formatMoney(row.value)}</strong></div>)}</div>
         </StudentCard>
-        <StudentCard title="Payroll Summary" subtitle="Current payroll information" action={<Link className="sp-text-link" to="payroll">Open payroll <ArrowRight size={13} /></Link>}>
+        <StudentCard title="Payroll Summary" subtitle="Current payroll information" action={<Link className="sp-text-link" to="/accountant-dashboard/payroll">Open payroll <ArrowRight size={13} /></Link>}>
           <div className="sp-metric-list">
             <div><span>Total payroll</span><strong>{formatMoney(payrollTotal)}</strong></div>
             <div><span>Records</span><strong>{data?.payrollRows?.length || 0}</strong></div>

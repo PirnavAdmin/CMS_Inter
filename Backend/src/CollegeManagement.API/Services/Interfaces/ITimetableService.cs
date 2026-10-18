@@ -21,5 +21,8 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<GenerateTimetableResultDto> GenerateTheoryTimetableAsync(GenerateTimetableRequestDto dto);
         Task<ValidateTimetableResultDto> ValidateSectionTimetableAsync(int sectionId, int academicYearId);
         Task<ApproveTimetableResultDto> ApproveSectionTimetableAsync(int sectionId, int academicYearId);
+        Task<TimetableBackupResponseDto?> GetPreviousTimetableAsync(int sectionId, int? academicYearId = null);
+        Task<TimetableBackupResponseDto> ArchiveSectionTimetableAsync(int sectionId, int academicYearId, string? reason = null, string? user = null);
+        Task<RestoreTimetableResultDto> RestorePreviousTimetableAsync(int sectionId, int academicYearId, string? user = null);
     }
 }
