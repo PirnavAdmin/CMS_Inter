@@ -1533,6 +1533,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </>
+                  )}
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">

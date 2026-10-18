@@ -16,7 +16,6 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, Toast } from "@/components/common/Ui.jsx";
 import { getAuthUser } from "@/features/authStorage.js";
-import { createDemoState } from "./data/inventoryMockData.js";
 import {
   deactivateRecord,
   deleteItem,
@@ -97,10 +96,7 @@ export default function InventoryManagementPage() {
     const canonical = record && stateRef.current[kind]?.find((value) => value.id === record.id);
     setModal({ kind, record: canonical || record, itemId });
   };
-  const go = (slug, scope) =>
-    navigate(`${BASE}${slug ? `/${slug}` : ""}${scope ? `?scope=${scope}` : ""}`);
-  const refresh = useCallback(async () => {
-    const version = ++requestVersion.current;
+  const commit = (operation, message) => {
     try {
       const next = operation(stateRef.current);
       // Persist before applying the local mutation. Failed storage does not silently lose demo edits.
@@ -190,9 +186,9 @@ export default function InventoryManagementPage() {
         "A compensating stock movement will be added to the ledger. Only the latest unreturned movement for this item can be reversed, to preserve later quantities and costs.",
       confirmLabel: "Reverse Transaction",
       danger: true,
-      onConfirm: async () => {
-        const succeeded = await commit(
-          () => inventoryAction(`movements/${encodeURIComponent(movement.id)}/reverse`),
+      onConfirm: () => {
+        commit(
+          (current) => reverseMovement(current, movement.id, userName),
           "Transaction reversed. Correction recorded in the ledger.",
         );
         closeConfirmation();
@@ -212,8 +208,10 @@ export default function InventoryManagementPage() {
       },
     });
   const resetDemo = () => {
-    setRevision((value) => value + 1);
-    refresh();
+    const loaded = loadInventory();
+    stateRef.current = loaded.state;
+    setState(loaded.state);
+    notify(loaded.warning || "Inventory reloaded from local storage.", loaded.warning ? "warning" : "success");
   };
   if (!active) return <Navigate to={BASE} replace />;
   const shared = { state, open, refresh };
@@ -240,7 +238,7 @@ export default function InventoryManagementPage() {
       <div className="inventory-module">
         <div className="inventory-demo-banner">
           <span>
-            <Boxes size={18} /> Server inventory · Changes saved to the backend · Weighted-average
+            <Boxes size={18} /> Demo inventory · Changes saved locally · Weighted-average
             valuation
           </span>
           <button className="cms-btn cms-btn-ghost" onClick={resetDemo}>
