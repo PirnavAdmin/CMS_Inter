@@ -115,17 +115,44 @@ export default function FacultyClasses() {
       return derived;
     }
 
+    // Map each allocated subject with its assigned sections from timetable schedule
+    const allAssignedSectionNames = Array.from(
+      new Set(timetableSlots.map((tt) => tt.sectionName || tt.section).filter(Boolean))
+    );
+
     return allocations.map((alloc) => {
-      // Find matching timetable room if any
-      const matchingSlot = timetableSlots.find(
+      // Find all sections and rooms where this faculty teaches this subject
+      const matchingSlots = timetableSlots.filter(
         (tt) =>
           tt.subjectId === alloc.subjectId ||
-          tt.subjectCode === alloc.subjectCode ||
-          (tt.sectionName && alloc.sectionName && tt.sectionName.toLowerCase() === alloc.sectionName.toLowerCase())
+          (tt.subjectCode && alloc.subjectCode && tt.subjectCode.toLowerCase() === alloc.subjectCode.toLowerCase()) ||
+          (tt.subjectName && alloc.subjectName && tt.subjectName.toLowerCase() === alloc.subjectName.toLowerCase())
       );
+
+      const sectionList = Array.from(
+        new Set(matchingSlots.map((s) => s.sectionName || s.section).filter(Boolean))
+      );
+      const roomList = Array.from(
+        new Set(matchingSlots.map((s) => s.roomNumber || s.roomName).filter(Boolean))
+      );
+
+      const resolvedSections =
+        sectionList.length > 0
+          ? sectionList.join(", ")
+          : alloc.sectionName || (allAssignedSectionNames.length > 0 ? allAssignedSectionNames.join(", ") : "Assigned via Timetable");
+
+      const resolvedRooms =
+        roomList.length > 0
+          ? roomList.map((r) => `Room ${r}`).join(", ")
+          : matchingSlots[0]?.roomNumber
+          ? `Room ${matchingSlots[0].roomNumber}`
+          : "Assigned by Timetable";
+
       return {
         ...alloc,
-        roomName: matchingSlot?.roomName || matchingSlot?.roomNumber || "Assigned by Timetable",
+        sectionName: resolvedSections,
+        roomName: resolvedRooms,
+        maxWeeklyHours: matchingSlots.length > 0 ? matchingSlots.length : (alloc.maxWeeklyHours || 4),
       };
     });
   }, [allocations, timetableSlots]);

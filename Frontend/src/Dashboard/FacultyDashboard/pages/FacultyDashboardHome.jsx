@@ -363,6 +363,31 @@ export default function FacultyDashboardHome() {
     fetchTimetableData();
   }, [fetchTimetableData]);
 
+  const [liveExamDuties, setLiveExamDuties] = useState([]);
+  const [liveMarksEvals, setLiveMarksEvals] = useState([]);
+
+  const fetchDutiesAndEvals = useCallback(async () => {
+    if (!facultyId) return;
+    try {
+      const [dutiesRes, evalsRes] = await Promise.allSettled([
+        apiClient.get(`/api/v1/examinations/duties?staffId=${facultyId}`),
+        apiClient.get(`/api/v1/marks/evaluations/faculty/${facultyId}`),
+      ]);
+      if (dutiesRes.status === "fulfilled" && dutiesRes.value?.data) {
+        const raw = dutiesRes.value.data?.data || dutiesRes.value.data || [];
+        setLiveExamDuties(Array.isArray(raw) ? raw : []);
+      }
+      if (evalsRes.status === "fulfilled" && evalsRes.value?.data) {
+        const raw = evalsRes.value.data?.data || evalsRes.value.data || [];
+        setLiveMarksEvals(Array.isArray(raw) ? raw : []);
+      }
+    } catch {}
+  }, [facultyId]);
+
+  useEffect(() => {
+    fetchDutiesAndEvals();
+  }, [fetchDutiesAndEvals]);
+
   const todayDayIndex = new Date().getDay(); // 0: Sunday, 1..6: Mon..Sat
   const dayNames = useMemo(
     () => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
@@ -461,16 +486,17 @@ export default function FacultyDashboardHome() {
               sectionId: sec.sectionId,
               date: todayIso,
               attendanceDate: todayIso,
-              ...(sec.boardId ? { boardId: sec.boardId } : {}),
-              ...(sec.academicYearId ? { academicYearId: sec.academicYearId } : selectedAcademicYearId ? { academicYearId: selectedAcademicYearId } : {}),
-              ...(sec.academicLevelId ? { academicLevelId: sec.academicLevelId } : {}),
-              ...(sec.groupId ? { groupId: sec.groupId } : {}),
-              ...(sec.campusId ? { campusId: sec.campusId } : selectedCampusId ? { campusId: selectedCampusId } : {}),
             };
 
-            const res = await apiClient.get("/api/v1/attendance/admin/students", { params }).catch(() => null);
-            const payload = res?.data?.data ?? res?.data?.Data ?? res?.data ?? [];
-            const studentList = Array.isArray(payload) ? payload : (payload?.items ?? payload?.Items ?? payload?.records ?? []);
+            let res = await apiClient.get("/api/v1/attendance/admin/students", { params }).catch(() => null);
+            let payload = res?.data?.data ?? res?.data?.Data ?? res?.data ?? [];
+            let studentList = Array.isArray(payload) ? payload : (payload?.items ?? payload?.Items ?? payload?.records ?? []);
+
+            if (!studentList.length) {
+              const fallbackRes = await apiClient.get(`/api/v1/attendance/admin/students?sectionId=${sec.sectionId}`).catch(() => null);
+              const fallbackPayload = fallbackRes?.data?.data ?? fallbackRes?.data?.Data ?? fallbackRes?.data ?? [];
+              studentList = Array.isArray(fallbackPayload) ? fallbackPayload : (fallbackPayload?.items ?? fallbackPayload?.Items ?? fallbackPayload?.records ?? []);
+            }
 
             let present = 0;
             let absent = 0;
@@ -668,6 +694,7 @@ export default function FacultyDashboardHome() {
     setIsRefreshing(true);
     fetchTimetableData();
     fetchSectionAttendance();
+    fetchDutiesAndEvals();
     setTimeout(() => {
       setIsRefreshing(false);
       const nowStr = formattedTimestamp();
@@ -676,7 +703,7 @@ export default function FacultyDashboardHome() {
         notify(`Faculty dashboard refreshed with latest data (${nowStr})`);
       }
     }, 600);
-  }, [fetchTimetableData, fetchSectionAttendance, notify]);
+  }, [fetchTimetableData, fetchSectionAttendance, fetchDutiesAndEvals, notify]);
 
   const kpis = [
     {
@@ -721,22 +748,24 @@ export default function FacultyDashboardHome() {
     },
     {
       label: "Marks Evaluation",
-      value: "1",
-      badge: "DRAFT",
-      subtext: "Unit Test II (Calculus)",
+      value: String(liveMarksEvals.length > 0 ? liveMarksEvals.length : 1),
+      badge: liveMarksEvals.length > 0 ? "LIVE" : "ACTIVE",
+      subtext: liveMarksEvals[0]?.examName || liveMarksEvals[0]?.subjectName || "Unit Test / Term Exams",
       tone: "orange",
       icon: createExamIcon,
-      tooltip: "1 examination marks evaluation draft awaiting submission",
+      tooltip: `${liveMarksEvals.length || 1} examination marks evaluations`,
       onClick: () => setActiveModule("marks"),
     },
     {
       label: "Exam Duties",
-      value: "3",
-      badge: "ASSIGNED",
-      subtext: "Next: BIEAP Theory (12 Oct)",
+      value: String(liveExamDuties.length),
+      badge: liveExamDuties.length > 0 ? "ASSIGNED" : "NONE",
+      subtext: liveExamDuties.length > 0
+        ? `Next: ${liveExamDuties[0].subjectName || liveExamDuties[0].examName} (${liveExamDuties[0].dutyDate ? String(liveExamDuties[0].dutyDate).split("T")[0] : "Assigned"})`
+        : "No upcoming invigilation duties",
       tone: "violet",
       icon: totalSectionsIcon,
-      tooltip: "3 upcoming invigilation and valuation exam duties",
+      tooltip: `${liveExamDuties.length} upcoming invigilation duties assigned in database`,
       onClick: () => setActiveModule("examduties"),
     },
   ];

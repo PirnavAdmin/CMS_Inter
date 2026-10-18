@@ -584,7 +584,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return list;
   }, [monthlyDateValue]);
 
-  // Merge live sections with allocated timetable sections
+  // Strictly constrain sections to Faculty's allocated timetable sections
   const displaySections = useMemo(() => {
     const map = new Map();
     // First prioritize allocated sections for this level (or all if no level selected)
@@ -593,7 +593,10 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         map.set(String(s.sectionId), { ...s, isAssigned: true });
       }
     });
-    // Then add other sections returned by API
+    if (map.size > 0) {
+      return Array.from(map.values());
+    }
+    // Fallback only if no allocated sections found
     attSections.forEach((s) => {
       const id = String(s.sectionId || s.id);
       if (!map.has(id)) {

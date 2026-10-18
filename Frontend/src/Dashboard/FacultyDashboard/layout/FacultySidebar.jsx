@@ -77,7 +77,18 @@ export default function FacultySidebar() {
 
   const navGroups = ["MAIN", "ACADEMICS", "HR & FINANCE", "ADMINISTRATION"];
 
+  const [photoOverride, setPhotoOverride] = React.useState(null);
+
+  React.useEffect(() => {
+    const handler = (e) => {
+      setPhotoOverride(e.detail?.photoUrl !== undefined ? e.detail.photoUrl : null);
+    };
+    window.addEventListener("cms-staff-photo-updated", handler);
+    return () => window.removeEventListener("cms-staff-photo-updated", handler);
+  }, []);
+
   const activePhoto = useMemo(() => {
+    if (photoOverride !== null) return photoOverride;
     return (
       profileData?.photoUrl ||
       (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
@@ -85,7 +96,7 @@ export default function FacultySidebar() {
         ? `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}`
         : null)
     );
-  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
+  }, [photoOverride, profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
 
   return (
     <aside className={`cms-sidebar ${sidebarOpen ? "open is-open" : ""}`}>

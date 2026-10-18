@@ -386,7 +386,7 @@ export default function FacultyMarks() {
     return () => { isMounted = false; };
   }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, selectedProgram]);
 
-  // Merge live sections with allocated timetable sections
+  // Strictly constrain sections to Faculty's allocated timetable sections
   const displaySections = useMemo(() => {
     const map = new Map();
     allocatedSections.forEach((s) => {
@@ -394,6 +394,10 @@ export default function FacultyMarks() {
         map.set(String(s.sectionId), { ...s, isAssigned: true });
       }
     });
+    if (map.size > 0) {
+      return Array.from(map.values());
+    }
+    // Fallback only if no allocations found for this faculty
     sectionsList.forEach((s) => {
       const id = String(s.sectionId || s.id);
       if (!map.has(id)) {
