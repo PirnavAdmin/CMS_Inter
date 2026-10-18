@@ -9,8 +9,24 @@ import { useCampusImages } from "../../campusImages.js";
 import { getCampusContent } from "../../campusContent.js";
 
 const fields = [
-  { name: "email", label: "Email or Mobile", type: "text", required: true, placeholder: "Admin@CMS.com", autoComplete: "username", full: true },
-  { name: "password", label: "Password", type: "password", required: true, placeholder: "Password", autoComplete: "current-password", full: true },
+  {
+    name: "email",
+    label: "Email or Mobile",
+    type: "text",
+    required: true,
+    placeholder: "Admin@CMS.com",
+    autoComplete: "username",
+    full: true,
+  },
+  {
+    name: "password",
+    label: "Password",
+    type: "password",
+    required: true,
+    placeholder: "Password",
+    autoComplete: "current-password",
+    full: true,
+  },
 ];
 
 const REMEMBER_KEY = "pirnav-remember-credentials";
@@ -95,13 +111,21 @@ export default function Login() {
         userRole.includes("staff") ||
         userRole.includes("lecturer");
       const isParent =
-        userRole === "parent" ||
-        userRole.includes("parent") ||
-        result.roleType === "parent";
-      const isAccountant = userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier";
+        userRole === "parent" || userRole.includes("parent") || result.roleType === "parent";
+      const isAccountant =
+        userRole.includes("accountant") ||
+        userRole.includes("accounting") ||
+        userRole === "finance" ||
+        userRole === "cashier";
 
       if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
+      } else if (
+        userRole.includes("inventory") ||
+        userRole === "store manager" ||
+        userRole === "storekeeper"
+      ) {
+        navigate("/inventory-dashboard", { replace: true });
       } else if (isPrincipal) {
         navigate("/principal-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
@@ -130,20 +154,42 @@ export default function Login() {
 
   return (
     <AuthLayout title={content.loginHeading} subtitle={content.loginDescription}>
-      <form className={busy ? "auth-login-form is-busy" : "auth-login-form"} onSubmit={submit} noValidate autoComplete="on" aria-busy={busy}>
-        {error ? <div className="cms-alert-error" role="alert">{error}</div> : null}
+      <form
+        className={busy ? "auth-login-form is-busy" : "auth-login-form"}
+        onSubmit={submit}
+        noValidate
+        autoComplete="on"
+        aria-busy={busy}
+      >
+        {error ? (
+          <div className="cms-alert-error" role="alert">
+            {error}
+          </div>
+        ) : null}
         <fieldset className="auth-login-fieldset" disabled={busy}>
           <div className="cms-form-grid">
             {fields.map((f) => (
-              <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
+              <Field
+                key={f.name}
+                field={f}
+                value={values[f.name]}
+                error={errors[f.name]}
+                onChange={setValue}
+              />
             ))}
           </div>
           <div className="cms-auth-row">
             <label className="cms-check" htmlFor="remember-me">
-              <input id="remember-me" name="remember" type="checkbox" checked={remember} onChange={(e) => {
-                setRemember(e.target.checked);
-                if (!e.target.checked) saveRememberedCredentials(null);
-              }} />
+              <input
+                id="remember-me"
+                name="remember"
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => {
+                  setRemember(e.target.checked);
+                  if (!e.target.checked) saveRememberedCredentials(null);
+                }}
+              />
               <span>Remember me</span>
             </label>
             <Link
@@ -153,10 +199,15 @@ export default function Login() {
               aria-disabled={busy}
               tabIndex={busy ? -1 : undefined}
               onClick={(event) => {
-                if (busy) { event.preventDefault(); return; }
+                if (busy) {
+                  event.preventDefault();
+                  return;
+                }
                 clearPasswordResetContext();
               }}
-            >Forgot password?</Link>
+            >
+              Forgot password?
+            </Link>
           </div>
           <button type="submit" className="cms-btn cms-btn-primary auth-submit-btn" disabled={busy}>
             {busy ? "Signing in..." : content.loginButton}
@@ -166,8 +217,3 @@ export default function Login() {
     </AuthLayout>
   );
 }
-
-
-
-
-

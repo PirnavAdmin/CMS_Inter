@@ -4,6 +4,65 @@
   gap: 18px;
   color: var(--cms-text);
 }
+.inventory-cash-receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 0;
+  min-width: 0;
+  font-size: 12px;
+}
+.inventory-cash-receipt > label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.inventory-cash-receipt input[type="file"] {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+}
+.inventory-cash-receipt img {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+}
+.inventory-receipt-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.inventory-receipt-preview > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inventory-receipt-preview > button {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.inventory-table-receipt {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border: 1px solid var(--cms-border);
+  border-radius: 6px;
+  vertical-align: middle;
+}
 .inventory-module .cms-card:has(> .cms-toolbar),
 .inventory-dialog .cms-card:has(> .cms-toolbar) {
   overflow: visible;
@@ -132,33 +191,33 @@
 .inventory-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 .inventory-kpi {
-  padding: 14px 16px;
+  padding: 10px 12px;
   position: relative;
-  min-height: 115px;
+  min-height: 90px;
 }
 .inventory-kpi-icon {
   display: inline-flex;
-  padding: 7px;
+  padding: 5px;
   border-radius: 9px;
   color: var(--cms-primary);
   background: var(--cms-primary-soft);
   float: right;
 }
 .inventory-kpi-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 .inventory-kpi p {
   color: var(--cms-muted);
   font-size: 12px;
-  margin: 2px 0 8px;
+  margin: 0 0 5px;
 }
 .inventory-kpi strong {
-  font-size: clamp(20px, 1.6vw, 24px);
+  font-size: clamp(18px, 1.4vw, 22px);
   display: block;
   letter-spacing: -0.03em;
   overflow-wrap: anywhere;
@@ -166,7 +225,7 @@
 .inventory-kpi small {
   color: var(--cms-muted);
   display: block;
-  margin-top: 8px;
+  margin-top: 5px;
   font-size: 11px;
 }
 .inventory-panel-head {

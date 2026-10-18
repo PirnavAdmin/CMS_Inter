@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, useLocation } from "react-router-dom";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -24,7 +24,7 @@ import {
   normalizeInventory,
 } from "./inventoryApi.js";
 import { getApiErrorMessage } from "@/api/apiClient.js";
-import { validateRecord } from "./inventoryModel.js";
+import { validateRecord, canReverseMovement } from "./inventoryModel.js";
 import { formSections } from "./inventoryFields.js";
 import InventoryForm from "./components/InventoryForm.jsx";
 import InventoryDetails from "./components/InventoryDetails.jsx";
@@ -88,8 +88,6 @@ export default function InventoryManagementPage() {
   const mutationLock = useRef(false);
   const [modal, setModal] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
-  const [revision, setRevision] = useState(0);
-  const navigate = useNavigate();
   const location = useLocation();
   const tab = location.pathname.slice(BASE.length).replace(/^\/+|\/+$/g, "");
   const active = TABS.find(([slug]) => slug === tab);
@@ -122,8 +120,6 @@ export default function InventoryManagementPage() {
       notify(getApiErrorMessage(error), "error");
     }
   };
-  const go = (slug, scope) =>
-    navigate(`${BASE}${slug ? `/${slug}` : ""}${scope ? `?scope=${scope}` : ""}`);
   const refresh = useCallback(async () => {
     const version = ++requestVersion.current;
     try {
@@ -238,7 +234,11 @@ export default function InventoryManagementPage() {
       danger: true,
       onConfirm: async () => {
         const succeeded = await commit(
-          () => inventoryAction(`movements/${encodeURIComponent(movement.id)}/reverse`),
+          () => {
+            const current = stateRef.current.movements.find((m) => m.id === movement.id);
+            if (!canReverseMovement(stateRef.current, current)) throw new Error("Only the latest unreturned movement for an item can be reversed. Refresh inventory to see eligible movements.");
+            return inventoryAction(`movements/${encodeURIComponent(movement.id)}/reverse`);
+          },
           "Transaction reversed. Correction recorded in the ledger.",
         );
         if (succeeded) closeConfirmation();
@@ -257,10 +257,6 @@ export default function InventoryManagementPage() {
         if (succeeded) closeConfirmation();
       },
     });
-  const resetDemo = () => {
-    setRevision((value) => value + 1);
-    refresh();
-  };
   if (!active) return <Navigate to={BASE} replace />;
   const shared = { state, open, refresh };
   return (
@@ -273,26 +269,17 @@ export default function InventoryManagementPage() {
         ...(tab ? [{ label: active[1] }] : []),
       ]}
       actions={
-        <>
+        !tab ? <>
           <button className="cms-btn cms-btn-ghost" onClick={refresh}>
             <RefreshCw size={15} /> Refresh Dashboard
           </button>
           <button className="cms-btn cms-btn-primary" onClick={() => open("items")}>
             <Plus size={16} /> Add Item
           </button>
-        </>
+        </> : null
       }
     >
       <div className="inventory-module">
-        <div className="inventory-demo-banner">
-          <span>
-            <Boxes size={18} /> Server inventory · Changes saved to the backend · Weighted-average
-            valuation
-          </span>
-          <button className="cms-btn cms-btn-ghost" onClick={resetDemo}>
-            <RotateCcw size={15} /> Reload Inventory
-          </button>
-        </div>
         <nav className="inventory-tabs" aria-label="Inventory sections">
           {TABS.map(([slug, label, Icon]) => (
             <NavLink
@@ -306,8 +293,8 @@ export default function InventoryManagementPage() {
             </NavLink>
           ))}
         </nav>
-        <div key={`${tab}-${revision}`}>
-          {!tab && <InventoryDashboard {...shared} navigate={go} />}
+        <div key={tab}>
+          {!tab && <InventoryDashboard {...shared} />}
           {tab === "items" && <InventoryItems {...shared} remove={remove} />}
           {(tab === "stock-in" || tab === "stock-out") && (
             <InventoryMovements

@@ -32,6 +32,7 @@ import InventoryManagementPage from "@/components/pages/InventoryManagement/Inve
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
+import LOPConfigurationPage from "@/components/pages/LOPConfiguration/LOPConfigurationPage.jsx";
 import CampusImagesConfigurationPage from "@/components/pages/CampusImagesConfigurationPage.jsx";
 import RolesPermissionsPage from "@/components/pages/RolesPermissionsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
@@ -54,6 +55,7 @@ import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoute
 import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx";
 import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
+import InventoryDashboard from "@/Dashboard/InventoryDashboard/InventoryDashboard.jsx";
 import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
 import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
 import ParentAttendancePage from "@/Dashboard/Parent Dashboard/pages/ParentAttendancePage.jsx";
@@ -235,6 +237,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/certificates" element={<CertificatesPage />} />
         <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
         <Route path="/dashboard/settings" element={<SettingsPage />} />
+        <Route path="/dashboard/settings/lop-configuration" element={<LOPConfigurationPage />} />
         <Route path="/dashboard/settings/campus-images" element={<CampusImagesConfigurationPage />} />
         <Route path="/dashboard/settings/landing-page" element={<CampusImagesConfigurationPage page="landing" />} />
         <Route path="/dashboard/settings/login-page" element={<CampusImagesConfigurationPage page="login" />} />
@@ -395,6 +398,7 @@ export default function AppRoutes() {
         <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
       </Route>
       <Route path="/driver" element={<DriverDashboard />} />
+      <Route path="/inventory-dashboard/*" element={<InventoryDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />
       <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
       <Route path="/driver-dashboard/*" element={<DriverDashboard />} />

@@ -1335,10 +1335,7 @@ export default function DashboardPage() {
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
-                {studentAttData.total === 0 ? (
-                    <EmptyState message="No marked student attendance available for today." />
-                  ) : (
-                    <>
+                <>
                       {/* Donut Chart & Side Status Legend (Centered Together) */}
                       <div className="dashboard-attendance-donut-row">
                         <div className="dashboard-donut-chart-wrap">
@@ -1348,7 +1345,7 @@ export default function DashboardPage() {
                                 data={
                                   studentAttData.chartData.some((d) => d.value > 0)
                                     ? studentAttData.chartData.filter((d) => d.value > 0)
-                                    : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                    : [{ name: "Not marked", value: 1, color: "#ef4444" }]
                                 }
                                 dataKey="value"
                                 nameKey="name"
@@ -1360,13 +1357,13 @@ export default function DashboardPage() {
                               >
                                 {(studentAttData.chartData.some((d) => d.value > 0)
                                   ? studentAttData.chartData.filter((d) => d.value > 0)
-                                  : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                  : [{ name: "Not marked", value: 1, color: "#ef4444" }]
                                 ).map((entry) => (
                                   <Cell key={entry.name} fill={entry.color} />
                                 ))}
                               </Pie>
                               <Tooltip
-                                content={<CustomDonutTooltip />}
+                                content={studentAttData.total > 0 ? <CustomDonutTooltip /> : () => null}
                                 wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
                                 allowEscapeViewBox={{ x: true, y: true }}
                               />
@@ -1400,8 +1397,8 @@ export default function DashboardPage() {
                       {/* 5 Summary KPI Chips */}
                       <div className="dashboard-attendance-kpi-row">
                         <div className="att-kpi-chip">
-                          <small>Marked Students</small>
-                          <strong>{formatNumber(studentAttData.total)}</strong>
+                          <small>Total Students</small>
+                          <strong>{formatNumber(metric(overviewState.data, ["totalStudents", "totalCount"]) ?? studentsKpi.value)}</strong>
                         </div>
                         <div className="att-kpi-chip text-present">
                           <small>Present</small>
@@ -1421,8 +1418,6 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </>
-                  )
-                }
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">

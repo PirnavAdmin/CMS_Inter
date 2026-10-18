@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { inventoryReport } from "../inventoryApi.js";
 import { getApiErrorMessage } from "@/api/apiClient.js";
-import { Boxes, CircleAlert, IndianRupee, ShoppingCart } from "lucide-react";
+import { Boxes, CircleAlert, IndianRupee, ShoppingCart, Eye, Pencil, Trash2 } from "lucide-react";
 import {
   actionColumn,
   Action,
@@ -12,6 +12,7 @@ import {
 } from "./InventoryUi.jsx";
 import {
   chronological,
+  canReverseMovement,
   enrichItem,
   enrichMovement,
   filterItems,
@@ -52,7 +53,7 @@ function useFilters() {
   return { filters, change, reset };
 }
 
-export function InventoryDashboard({ state, open, navigate, refresh }) {
+export function InventoryDashboard({ state, open, refresh }) {
   const items = state.items.map((i) => enrichItem(state, i));
   const alerts = items.filter(lowStock);
   const recent = chronological(state.movements)
@@ -105,7 +106,6 @@ export function InventoryDashboard({ state, open, navigate, refresh }) {
       </div>
       <div className="inventory-panel-head">
         <h2>Recent Stock Movements</h2>
-        <Action onClick={() => navigate("stock-in", "all")}>View All</Action>
       </div>
       <InventoryTable
         title="Recent Stock Movements"
@@ -182,12 +182,47 @@ export function InventoryMovements({ state, type, all, open, correct, returnItem
   const scope = { ...filters, type: filters.type || (all ? "" : type) };
   const rows = filterMovements(state, scope).reverse();
   const columns = [
-    ...movementColumns,
+    ...movementColumns.filter((c) => ["item", "code"].includes(c.key)),
+    {
+      ...movementColumns[0],
+      render: (movement) => movement.paymentTransactionNumber || movement.number || "—",
+    },
+    column("paymentMethod", "Payment Method", (value) => value || "—"),
+    {
+      key: "cashReceipt",
+      label: "Cash Receipt",
+      exportable: false,
+      printable: false,
+      render: (movement) => {
+        const receipt = movement.cashReceipt;
+        const url =
+          movement.cashReceiptUrl ||
+          receipt?.dataUrl ||
+          receipt?.DataUrl ||
+          receipt?.url ||
+          receipt?.Url;
+        const name = receipt?.name || receipt?.Name || "Cash receipt";
+        if (!url || !/^(https?:\/\/|\/(?!\/)|data:image\/(png|jpeg|webp);base64,)/i.test(url))
+          return "—";
+        return (
+          <a href={url} target="_blank" rel="noopener noreferrer" title="View cash receipt">
+            <img className="inventory-table-receipt" src={url} alt={name} />
+          </a>
+        );
+      },
+    },
+    ...movementColumns.slice(1).filter((c) => !["item", "code"].includes(c.key)),
+    ...(type === "Stock In" || all
+      ? [column("purchaseOrder", "Purchase Order Number"), column("invoice", "Invoice Number")]
+      : [column("approvedBy", "Approved By")]),
+    column("remarks", "Remarks"),
     actionColumn((m) => (
       <div className="inventory-row-actions">
         <Action onClick={() => open("movement-detail", m)}>View Details</Action>
         {m.status === "Posted" && !m.correctionOf && !m.returnOf && (
-          <Action onClick={() => correct(m)}>Reverse</Action>
+          <Action disabled={!canReverseMovement(state, m)} onClick={() => correct(m)}>
+            Reverse
+          </Action>
         )}
         {m.type === "Stock Out" &&
           m.returnable &&
@@ -333,21 +368,53 @@ export function InventoryMasters({ kind, state, open, remove, refresh }) {
         column("status", "Status"),
       ];
   columns.push(
-    actionColumn((r) => (
-      <div className="inventory-row-actions">
-        <Action onClick={() => open(isSupplier ? "supplier-detail" : "category-detail", r)}>
-          View
-        </Action>
-        <Action onClick={() => open(kind, r)}>Edit</Action>
-        <Action onClick={() => remove(kind, r)} disabled={r.status === "Inactive"}>
-          Deactivate
-        </Action>
-      </div>
-    )),
+    actionColumn((r) =>
+      isSupplier ? (
+        <div className="cms-actions">
+          <button
+            type="button"
+            className="cms-action-btn view"
+            title="View Supplier"
+            aria-label={`View ${r.name}`}
+            onClick={() => open("supplier-detail", r)}
+          >
+            <Eye size={15} />
+          </button>
+          <button
+            type="button"
+            className="cms-action-btn edit"
+            title="Edit Supplier"
+            aria-label={`Edit ${r.name}`}
+            onClick={() => open(kind, r)}
+          >
+            <Pencil size={15} />
+          </button>
+          <button
+            type="button"
+            className="cms-action-btn danger"
+            title="Deactivate Supplier"
+            aria-label={`Deactivate ${r.name}`}
+            disabled={r.status === "Inactive"}
+            onClick={() => remove(kind, r)}
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      ) : (
+        <div className="inventory-row-actions">
+          <Action onClick={() => open(isSupplier ? "supplier-detail" : "category-detail", r)}>
+            View
+          </Action>
+          <Action onClick={() => open(kind, r)}>Edit</Action>
+          <Action onClick={() => remove(kind, r)} disabled={r.status === "Inactive"}>
+            Deactivate
+          </Action>
+        </div>
+      ),
+    ),
   );
   return (
     <>
-      <InventoryFilters state={state} values={filters} onChange={change} mode="masters" />
       <InventoryTable
         key={reset}
         title={isSupplier ? "Suppliers" : "Inventory Categories"}
@@ -356,6 +423,33 @@ export function InventoryMasters({ kind, state, open, remove, refresh }) {
         onAdd={() => open(kind)}
         addLabel={`Add ${isSupplier ? "Supplier" : "Category"}`}
         onRefresh={refresh}
+        toolbarExtra={
+          <div className="inventory-items-toolbar-filters">
+            <select
+              className="cms-btn cms-btn-ghost"
+              aria-label="Filter by category"
+              value={filters.categoryId || ""}
+              onChange={(event) => change("categoryId", event.target.value)}
+            >
+              <option value="">Category: All</option>
+              {state.categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="cms-btn cms-btn-ghost"
+              aria-label="Filter by status"
+              value={filters.status || ""}
+              onChange={(event) => change("status", event.target.value)}
+            >
+              <option value="">Status: All</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+        }
       />
     </>
   );
@@ -393,19 +487,11 @@ export function InventoryReports({ state, open, returnItem }) {
   const columns = fieldsToColumns(result.columns);
   if (report === "Low Stock Report")
     columns.push(
-      actionColumn((i) => {
-        const matches = state.items.filter(
-          (item) =>
-            item.name === i.name &&
-            state.categories.find((c) => c.id === item.categoryId)?.name === i.category,
-        );
-        const item = matches.length === 1 ? matches[0] : null;
-        return (
-          <Action disabled={!item} onClick={() => open("stock-in", null, item.id)}>
-            Restock
-          </Action>
-        );
-      }),
+      actionColumn((i) => (
+        <Action disabled={!i.id} onClick={() => open("stock-in", null, i.id)}>
+          Restock
+        </Action>
+      )),
     );
   if (report === "Returnable Items Report")
     columns.push(

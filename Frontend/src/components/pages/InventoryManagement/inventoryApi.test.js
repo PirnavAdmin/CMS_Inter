@@ -58,6 +58,7 @@ test("inventory API contracts preserve UI fields and use documented endpoints", 
     assert.equal(call.method, "post");
     assert.equal(call.url, "/api/v1/inventory/items");
     assert.equal(body.categoryId, 4);
+    assert.equal(body.code, null);
     assert.equal(body.supplierId, null);
     assert.equal(body.openingQuantity, 0);
     assert.equal(body.purchaseDate, null);
@@ -91,8 +92,20 @@ test("inventory API contracts preserve UI fields and use documented endpoints", 
       assert.equal(body.expiryDate, null);
       assert.equal(body.expectedReturnDate, null);
     }
-    response = { categoryId: 14, name: "Chemistry Lab items", code: "CHE-LAB-ITEMS", department: "Chemistry", status: "Active" };
-    const category = await api.saveInventoryApi("categories", { name: "Chemistry Lab items", code: "CHE-LAB-ITEMS", department: "Chemistry", status: "Active", description: "" });
+    response = {
+      categoryId: 14,
+      name: "Chemistry Lab items",
+      code: "CHE-LAB-ITEMS",
+      department: "Chemistry",
+      status: "Active",
+    };
+    const category = await api.saveInventoryApi("categories", {
+      name: "Chemistry Lab items",
+      code: "CHE-LAB-ITEMS",
+      department: "Chemistry",
+      status: "Active",
+      description: "",
+    });
     assert.equal(calls.at(-1).url, "/api/v1/inventory/categories");
     assert.equal(calls.at(-1).method, "post");
     assert.equal(JSON.parse(calls.at(-1).data).department, "Chemistry");
@@ -150,6 +163,95 @@ test("inventory API contracts preserve UI fields and use documented endpoints", 
     assert.equal(report.rows[0].quantity, 5);
     assert.equal(calls.at(-1).params.Department, "Library");
     assert.equal(calls.at(-1).params.ReportType, "Stock Summary");
+    response = {
+      columns: [["name", "Item"]],
+      rows: [
+        { ItemId: 12, Item: "Printer", Category: "IT" },
+        { itemId: 13, item: "Printer", category: "IT" },
+        { item: "Missing ID", category: "IT" },
+        { itemId: 0, item: "Invalid ID", category: "IT" },
+      ],
+    };
+    const lowStock = await api.inventoryReport("Low Stock Report", {});
+    assert.deepEqual(
+      lowStock.rows.map((row) => row.id),
+      ["12", "13", "", ""],
+    );
+    assert.equal(lowStock.rows[0].name, "Printer");
+    const beforeUpload = calls.length;
+    client.defaults.adapter = async (config) => {
+      calls.push(config);
+      return {
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+        data: {
+          success: true,
+          data: config.url.endsWith("upload-receipt")
+            ? { receiptPath: "/uploads/inventory/receipt.png" }
+            : { transactionId: 20 },
+        },
+      };
+    };
+    const cash = {
+      itemId: "12",
+      quantity: "2",
+      unitCost: "25",
+      date: "2026-10-14",
+      paymentMethod: "Cash",
+      number: "stale",
+      cashReceipt: { name: "receipt.png", dataUrl: "data:image/png;base64,aGVsbG8=" },
+    };
+    await api.saveInventoryApi("stock-in", cash);
+    const uploadCall = calls[beforeUpload];
+    assert.equal(uploadCall.url, "/api/v1/inventory/movements/upload-receipt");
+    assert.ok(uploadCall.data instanceof FormData);
+    assert.equal(uploadCall.data.get("file").name, "receipt.png");
+    const cashBody = JSON.parse(calls.at(-1).data);
+    assert.equal(cashBody.cashReceiptPath, "/uploads/inventory/receipt.png");
+    assert.equal(cashBody.paymentMethod, "Cash");
+    assert.equal(cashBody.transactionNumber, null);
+    assert.equal("cashReceipt" in cashBody, false);
+    const uploadCount = calls.filter((c) => c.url.endsWith("upload-receipt")).length;
+    await api.saveInventoryApi("stock-in", cash);
+    assert.equal(calls.filter((c) => c.url.endsWith("upload-receipt")).length, uploadCount);
+    const online = api.inventoryPayload("stock-out", {
+      ...cash,
+      paymentMethod: "Online Transaction",
+      number: " PAY-001 ",
+    });
+    assert.equal(online.paymentTransactionNumber, "PAY-001");
+    assert.equal(online.cashReceiptPath, null);
+    assert.equal(
+      api.inventoryPayload("stock-out", { itemId: "12" }).paymentTransactionNumber,
+      null,
+    );
+    const returned = api.normalizeInventory(
+      {
+        TransactionId: 20,
+        PaymentTransactionNumber: "PAY-001",
+        CashReceiptPath: "/uploads/inventory/receipt.png",
+      },
+      "movements",
+    );
+    assert.equal(returned.paymentTransactionNumber, "PAY-001");
+    assert.ok(returned.cashReceiptUrl.startsWith("http"));
+    assert.equal(api.inventoryReceiptUrl("javascript:alert(1)"), "");
+    client.defaults.adapter = async (config) => ({
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+      data: { success: true, data: {} },
+    });
+    await assert.rejects(
+      api.saveInventoryApi("stock-out", {
+        ...cash,
+        cashReceipt: { name: "new.png", dataUrl: "data:image/png;base64,aGVsbG8=" },
+      }),
+      /no valid receipt path/,
+    );
     assert.throws(
       () => api.unwrapInventory({ data: { success: false, message: "Rejected" } }),
       /Rejected/,
@@ -165,7 +267,11 @@ test("inventory API contracts preserve UI fields and use documented endpoints", 
       /backend returned HTTP 500/,
     );
     assert.deepEqual(api.inventoryPayload("categories", { name: " Chemistry ", code: " CHE " }), {
-      name: "Chemistry", code: "CHE", description: "", department: "Administration", status: "Active",
+      name: "Chemistry",
+      code: "CHE",
+      description: "",
+      department: "Administration",
+      status: "Active",
     });
     const fixtures = {
       dashboard: {
