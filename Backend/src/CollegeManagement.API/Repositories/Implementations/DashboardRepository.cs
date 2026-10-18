@@ -677,15 +677,15 @@ public class DashboardRepository : IDashboardRepository
 
             var admissionDates = await (from s in placedStudentsQuery
                                        join a in eligibleAdmissionsQuery on s.AdmissionNo equals a.AdmissionNo
-                                       select (DateTime?)(s.AdmissionDate.HasValue && s.AdmissionDate.Value != default 
-                                           ? s.AdmissionDate.Value 
+                                       select (DateTime?)(s.AdmissionDate != default 
+                                           ? s.AdmissionDate 
                                            : (a.AdmissionDate != default ? a.AdmissionDate : a.CreatedAt)))
                                        .ToListAsync(ct);
 
             if (!admissionDates.Any())
             {
                 admissionDates = await placedStudentsQuery
-                    .Select(s => (DateTime?)(s.AdmissionDate.HasValue && s.AdmissionDate.Value != default ? s.AdmissionDate.Value : s.CreatedAt))
+                    .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
                     .ToListAsync(ct);
             }
 
