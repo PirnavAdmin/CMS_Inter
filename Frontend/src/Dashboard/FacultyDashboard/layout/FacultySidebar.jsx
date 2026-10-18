@@ -43,6 +43,7 @@ export const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: dashboardIcon, group: "MAIN" },
   { id: "profile", label: "My Profile", icon: staffIcon, group: "MAIN" },
   { id: "timetable", label: "My Timetable", icon: timetableIcon, group: "ACADEMICS" },
+  { id: "classes", label: "My Classes", icon: staffIcon, group: "ACADEMICS" },
   { id: "attendance", label: "Student Attendance", icon: attendanceIcon, group: "ACADEMICS" },
   { id: "marks", label: "Marks Entry", icon: marksEvaluationIcon, group: "ACADEMICS" },
   { id: "examduties", label: "Exam Duties", icon: examinationIcon, group: "ACADEMICS" },
