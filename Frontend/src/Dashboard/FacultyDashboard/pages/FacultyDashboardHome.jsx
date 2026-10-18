@@ -112,99 +112,36 @@ function formattedTimestamp(date = new Date()) {
   return `${dateStr}, ${timeStr}`;
 }
 
-const SECTION_ATTENDANCE_DATA = {
-  all: {
-    label: "Overall",
-    total: 115,
-    present: 105,
-    absent: 7,
-    halfDay: 3,
-    percentage: 91.3,
-    chartData: [
-      { name: "Present", value: 105, color: "#22a447" },
-      { name: "Absent", value: 7, color: "#ef4444" },
-      { name: "Half-day", value: 3, color: "#f59e0b" },
-    ],
-  },
-  "MPC-1A": {
-    label: "MPC 1A",
-    total: 45,
-    present: 42,
-    absent: 2,
-    halfDay: 1,
-    percentage: 93.3,
-    chartData: [
-      { name: "Present", value: 42, color: "#22a447" },
-      { name: "Absent", value: 2, color: "#ef4444" },
-      { name: "Half-day", value: 1, color: "#f59e0b" },
-    ],
-  },
-  "MPC-2B": {
-    label: "MPC 2B",
-    total: 40,
-    present: 36,
-    absent: 3,
-    halfDay: 1,
-    percentage: 90.0,
-    chartData: [
-      { name: "Present", value: 36, color: "#22a447" },
-      { name: "Absent", value: 3, color: "#ef4444" },
-      { name: "Half-day", value: 1, color: "#f59e0b" },
-    ],
-  },
-  "MEC-1A": {
-    label: "MEC 1A",
-    total: 30,
-    present: 27,
-    absent: 2,
-    halfDay: 1,
-    percentage: 90.0,
-    chartData: [
-      { name: "Present", value: 27, color: "#22a447" },
-      { name: "Absent", value: 2, color: "#ef4444" },
-      { name: "Half-day", value: 1, color: "#f59e0b" },
-    ],
-  },
-};
+function evaluateStudentAttendance(student) {
+  const m = student.morningStatus ?? student.morningAttendanceStatus ?? student.morningSessionStatus ?? student.morning;
+  const a = student.afternoonStatus ?? student.afternoonAttendanceStatus ?? student.afternoonSessionStatus ?? student.afternoon;
+  const st = student.status ?? student.attendanceStatus ?? student.studentStatus;
 
-const SECTION_BREAKDOWN_LIST = [
-  {
-    name: "MPC 1st Year — Section A",
-    subject: "Mathematics I-A",
-    total: 45,
-    present: 42,
-    absent: 2,
-    halfDay: 1,
-    percentage: 93.3,
-    color: "#22a447",
-  },
-  {
-    name: "MPC 2nd Year — Section B",
-    subject: "Mathematics II-A",
-    total: 40,
-    present: 36,
-    absent: 3,
-    halfDay: 1,
-    percentage: 90.0,
-    color: "#2563eb",
-  },
-  {
-    name: "MEC 1st Year — Section A",
-    subject: "Commercial Maths",
-    total: 30,
-    present: 27,
-    absent: 2,
-    halfDay: 1,
-    percentage: 90.0,
-    color: "#7c3aed",
-  },
-];
+  const normalize = (v) => {
+    if (v == null || v === "") return null;
+    if (v === 1 || v === "1" || String(v).toLowerCase() === "present") return "Present";
+    if (v === 2 || v === "2" || String(v).toLowerCase() === "absent" || student.isAbsent === true) return "Absent";
+    if (v === 4 || v === "4" || String(v).toLowerCase().includes("half")) return "Half-day";
+    if (v === 5 || v === "5" || String(v).toLowerCase() === "holiday") return "Holiday";
+    return null;
+  };
 
-const SECTION_STUDENTS_DATA = [
-  { name: "MPC 1A", students: 45, boys: 28, girls: 17, fill: "#2563eb" },
-  { name: "MPC 2B", students: 40, boys: 22, girls: 18, fill: "#7c3aed" },
-  { name: "MEC 1A", students: 30, boys: 16, girls: 14, fill: "#16a34a" },
-];
+  const morning = normalize(m);
+  const afternoon = normalize(a);
+  const general = normalize(st);
+
+  if (morning === "Half-day" || afternoon === "Half-day") return "Half-day";
+  if ((morning === "Present" && afternoon === "Absent") || (morning === "Absent" && afternoon === "Present")) return "Half-day";
+  if (morning === "Present" && afternoon === "Present") return "Present";
+  if (morning === "Present" && !afternoon) return "Present";
+  if (!morning && afternoon === "Present") return "Present";
+  if (morning === "Absent" && afternoon === "Absent") return "Absent";
+  if (morning === "Absent" && !afternoon) return "Absent";
+  if (!morning && afternoon === "Absent") return "Absent";
+  if (general) return general;
+
+  return "Unmarked";
+}
 
 
 const FACULTY_ATTENDANCE_DONUT = [
@@ -464,13 +401,273 @@ export default function FacultyDashboardHome() {
   const currentHour = new Date().getHours();
   const greeting = greetingForHour(currentHour);
 
+  const facultySections = useMemo(() => {
+    const sectionMap = new Map();
+    (timetableSlots || []).forEach((slot) => {
+      const secId = slot.sectionId ?? slot.section_id;
+      const secName = slot.sectionName ?? slot.section_name ?? slot.section;
+      if (secId && !sectionMap.has(Number(secId))) {
+        sectionMap.set(Number(secId), {
+          sectionId: Number(secId),
+          sectionName: String(secName || `Section ${secId}`).trim(),
+          boardId: slot.boardId,
+          academicYearId: slot.academicYearId,
+          academicLevelId: slot.academicLevelId,
+          groupId: slot.groupId,
+          programId: slot.programId,
+          campusId: slot.campusId,
+        });
+      }
+    });
+
+    if (sectionMap.size === 0 && Array.isArray(profileData?.assignedSections)) {
+      profileData.assignedSections.forEach((sec) => {
+        const secId = sec.sectionId ?? sec.id;
+        const secName = sec.sectionName ?? sec.name;
+        if (secId && !sectionMap.has(Number(secId))) {
+          sectionMap.set(Number(secId), {
+            sectionId: Number(secId),
+            sectionName: String(secName || `Section ${secId}`).trim(),
+            boardId: sec.boardId,
+            academicYearId: sec.academicYearId,
+            academicLevelId: sec.academicLevelId,
+            groupId: sec.groupId,
+            programId: sec.programId,
+            campusId: sec.campusId,
+          });
+        }
+      });
+    }
+
+    return Array.from(sectionMap.values());
+  }, [timetableSlots, profileData]);
+
+  const [sectionAttendanceMap, setSectionAttendanceMap] = useState({});
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+
+  const fetchSectionAttendance = useCallback(async () => {
+    if (!facultySections.length) {
+      setSectionAttendanceMap({});
+      return;
+    }
+    setAttendanceLoading(true);
+    const todayIso = new Date().toISOString().split("T")[0];
+
+    try {
+      const results = await Promise.all(
+        facultySections.map(async (sec) => {
+          try {
+            const params = {
+              sectionId: sec.sectionId,
+              date: todayIso,
+              attendanceDate: todayIso,
+              ...(sec.boardId ? { boardId: sec.boardId } : {}),
+              ...(sec.academicYearId ? { academicYearId: sec.academicYearId } : selectedAcademicYearId ? { academicYearId: selectedAcademicYearId } : {}),
+              ...(sec.academicLevelId ? { academicLevelId: sec.academicLevelId } : {}),
+              ...(sec.groupId ? { groupId: sec.groupId } : {}),
+              ...(sec.campusId ? { campusId: sec.campusId } : selectedCampusId ? { campusId: selectedCampusId } : {}),
+            };
+
+            const res = await apiClient.get("/api/v1/attendance/admin/students", { params }).catch(() => null);
+            const payload = res?.data?.data ?? res?.data?.Data ?? res?.data ?? [];
+            const studentList = Array.isArray(payload) ? payload : (payload?.items ?? payload?.Items ?? payload?.records ?? []);
+
+            let present = 0;
+            let absent = 0;
+            let halfDay = 0;
+            let boys = 0;
+            let girls = 0;
+
+            studentList.forEach((s) => {
+              const g = String(s.gender || s.sex || "").toLowerCase();
+              if (g.startsWith("m")) boys++;
+              else if (g.startsWith("f")) girls++;
+
+              const status = evaluateStudentAttendance(s);
+              if (status === "Half-day") {
+                halfDay++;
+              } else if (status === "Present") {
+                present++;
+              } else if (status === "Absent") {
+                absent++;
+              }
+            });
+
+            const total = studentList.length;
+            const percentage = total > 0 ? Number(((present / total) * 100).toFixed(1)) : 0;
+
+            return {
+              sectionId: sec.sectionId,
+              sectionName: sec.sectionName,
+              total,
+              present,
+              absent,
+              halfDay,
+              boys: boys || Math.round(total * 0.55),
+              girls: girls || (total - Math.round(total * 0.55)),
+              percentage,
+            };
+          } catch (secErr) {
+            console.warn(`Could not load attendance for section ${sec.sectionId}:`, secErr);
+            return {
+              sectionId: sec.sectionId,
+              sectionName: sec.sectionName,
+              total: 0,
+              present: 0,
+              absent: 0,
+              halfDay: 0,
+              boys: 0,
+              girls: 0,
+              percentage: 0,
+            };
+          }
+        })
+      );
+
+      const map = {};
+      results.forEach((r) => {
+        if (r) {
+          map[r.sectionId] = r;
+        }
+      });
+      setSectionAttendanceMap(map);
+    } catch (err) {
+      console.warn("Failed to fetch section attendance in faculty dashboard:", err);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }, [facultySections, selectedAcademicYearId, selectedCampusId]);
+
+  useEffect(() => {
+    fetchSectionAttendance();
+  }, [fetchSectionAttendance]);
+
+  const overallAttendance = useMemo(() => {
+    const sections = Object.values(sectionAttendanceMap);
+    if (!sections.length) {
+      return {
+        label: "Overall",
+        total: 0,
+        present: 0,
+        absent: 0,
+        halfDay: 0,
+        percentage: 0,
+        chartData: [
+          { name: "Present", value: 0, color: "#22a447" },
+          { name: "Absent", value: 0, color: "#ef4444" },
+          { name: "Not Recorded", value: 1, color: "#e2e8f0" },
+        ],
+      };
+    }
+
+    const total = sections.reduce((sum, s) => sum + (s.total || 0), 0);
+    const present = sections.reduce((sum, s) => sum + (s.present || 0), 0);
+    const absent = sections.reduce((sum, s) => sum + (s.absent || 0), 0);
+    const halfDay = sections.reduce((sum, s) => sum + (s.halfDay || 0), 0);
+    const percentage = total > 0 ? Number(((present / total) * 100).toFixed(1)) : 0;
+
+    const chartData = (present > 0 || absent > 0 || halfDay > 0)
+      ? [
+          { name: "Present", value: present, color: "#22a447" },
+          ...(halfDay > 0 ? [{ name: "Half-day", value: halfDay, color: "#f59e0b" }] : []),
+          { name: "Absent", value: absent, color: "#ef4444" },
+        ]
+      : [
+          { name: "Present", value: 0, color: "#22a447" },
+          { name: "Absent", value: 0, color: "#ef4444" },
+          { name: "Not Recorded", value: total > 0 ? total : 1, color: "#e2e8f0" },
+        ];
+
+    return {
+      label: "Overall",
+      total,
+      present,
+      absent,
+      halfDay,
+      percentage,
+      chartData,
+    };
+  }, [sectionAttendanceMap]);
+
   const currentAttData = useMemo(() => {
-    return SECTION_ATTENDANCE_DATA[studentAttView] || SECTION_ATTENDANCE_DATA.all;
-  }, [studentAttView]);
+    if (studentAttView === "all" || !studentAttView) {
+      return overallAttendance;
+    }
+
+    const secData = sectionAttendanceMap[studentAttView] || sectionAttendanceMap[Number(studentAttView)];
+    if (!secData) {
+      return overallAttendance;
+    }
+
+    const chartData = (secData.present > 0 || secData.absent > 0 || secData.halfDay > 0)
+      ? [
+          { name: "Present", value: secData.present, color: "#22a447" },
+          ...(secData.halfDay > 0 ? [{ name: "Half-day", value: secData.halfDay, color: "#f59e0b" }] : []),
+          { name: "Absent", value: secData.absent, color: "#ef4444" },
+        ]
+      : [
+          { name: "Present", value: 0, color: "#22a447" },
+          { name: "Absent", value: 0, color: "#ef4444" },
+          { name: "Not Recorded", value: secData.total > 0 ? secData.total : 1, color: "#e2e8f0" },
+        ];
+
+    return {
+      label: secData.sectionName,
+      total: secData.total,
+      present: secData.present,
+      absent: secData.absent,
+      halfDay: secData.halfDay,
+      percentage: secData.percentage,
+      chartData,
+    };
+  }, [studentAttView, overallAttendance, sectionAttendanceMap]);
+
+  const sectionBreakdownList = useMemo(() => {
+    const colors = ["#22a447", "#2563eb", "#7c3aed", "#f59e0b", "#06b6d4"];
+    return facultySections.map((sec, idx) => {
+      const data = sectionAttendanceMap[sec.sectionId] || { total: 0, present: 0, absent: 0, halfDay: 0, percentage: 0 };
+      return {
+        id: sec.sectionId,
+        name: sec.sectionName,
+        total: data.total,
+        present: data.present,
+        absent: data.absent,
+        halfDay: data.halfDay,
+        percentage: data.percentage,
+        color: colors[idx % colors.length],
+      };
+    });
+  }, [facultySections, sectionAttendanceMap]);
+
+  const sectionStudentsData = useMemo(() => {
+    const colors = ["#2563eb", "#7c3aed", "#16a34a", "#ea580c", "#0284c7"];
+    if (!facultySections.length) {
+      return [{ name: "No Sections", students: 0, boys: 0, girls: 0, fill: "#94a3b8" }];
+    }
+    return facultySections.map((sec, idx) => {
+      const data = sectionAttendanceMap[sec.sectionId] || { total: 0, boys: 0, girls: 0 };
+      return {
+        name: sec.sectionName,
+        students: data.total,
+        boys: data.boys,
+        girls: data.girls,
+        fill: colors[idx % colors.length],
+      };
+    });
+  }, [facultySections, sectionAttendanceMap]);
+
+  const totalBoys = useMemo(() => {
+    return Object.values(sectionAttendanceMap).reduce((sum, s) => sum + (s.boys || 0), 0);
+  }, [sectionAttendanceMap]);
+
+  const totalGirls = useMemo(() => {
+    return Object.values(sectionAttendanceMap).reduce((sum, s) => sum + (s.girls || 0), 0);
+  }, [sectionAttendanceMap]);
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     fetchTimetableData();
+    fetchSectionAttendance();
     setTimeout(() => {
       setIsRefreshing(false);
       const nowStr = formattedTimestamp();
@@ -479,17 +676,17 @@ export default function FacultyDashboardHome() {
         notify(`Faculty dashboard refreshed with latest data (${nowStr})`);
       }
     }, 600);
-  }, [fetchTimetableData, notify]);
+  }, [fetchTimetableData, fetchSectionAttendance, notify]);
 
   const kpis = [
     {
       label: "Total Students",
-      value: "115",
-      badge: "3 SECTIONS",
-      subtext: "MPC 1A, MPC 2B, MEC 1A",
+      value: String(overallAttendance.total || 0),
+      badge: `${facultySections.length} SECTION${facultySections.length === 1 ? "" : "S"}`,
+      subtext: facultySections.map((s) => s.sectionName).join(", ") || "No assigned sections",
       tone: "green",
       icon: totalStudentsIcon,
-      tooltip: "115 enrolled students across 3 assigned sections",
+      tooltip: `${overallAttendance.total || 0} enrolled students across ${facultySections.length} assigned sections`,
       onClick: () => setActiveModule("classes"),
     },
     {
@@ -514,9 +711,9 @@ export default function FacultyDashboardHome() {
     },
     {
       label: "Student Attendance",
-      value: "91.3%",
+      value: `${overallAttendance.percentage || 0}%`,
       badge: "TODAY",
-      subtext: "105 / 115 students present",
+      subtext: `${overallAttendance.present || 0} / ${overallAttendance.total || 0} students present`,
       tone: "green",
       icon: markAttendanceIcon,
       tooltip: "Overall attendance rate across your taught sections today",
@@ -628,18 +825,20 @@ export default function FacultyDashboardHome() {
                 aria-label="Select Attendance Section View"
               >
                 <option value="all">Overall</option>
-                <option value="breakdown">Breakdown</option>
-                <option value="MPC-1A">MPC 1A</option>
-                <option value="MPC-2B">MPC 2B</option>
-                <option value="MEC-1A">MEC 1A</option>
+                {facultySections.length > 0 && <option value="breakdown">Breakdown</option>}
+                {facultySections.map((sec) => (
+                  <option key={sec.sectionId} value={String(sec.sectionId)}>
+                    {sec.sectionName}
+                  </option>
+                ))}
               </select>
             </div>
           </CardHeader>
           <div className="dashboard-card-body dashboard-attendance-body">
             {studentAttView === "breakdown" ? (
               <div className="dashboard-attendance-breakdown-list">
-                {SECTION_BREAKDOWN_LIST.map((sec) => (
-                  <div key={sec.name} className="att-breakdown-item">
+                {sectionBreakdownList.map((sec) => (
+                  <div key={sec.id || sec.name} className="att-breakdown-item">
                     <div className="att-breakdown-head">
                       <span className="att-breakdown-name">{sec.name}</span>
                       <span className="att-breakdown-pct">{sec.percentage}%</span>
@@ -671,7 +870,9 @@ export default function FacultyDashboardHome() {
                           nameKey="name"
                           innerRadius="65%"
                           outerRadius="90%"
-                          paddingAngle={3}
+                          startAngle={90}
+                          endAngle={-270}
+                          paddingAngle={currentAttData.chartData.length > 1 ? 3 : 0}
                           stroke="var(--cms-surface, #ffffff)"
                           strokeWidth={2}
                         >
@@ -684,7 +885,7 @@ export default function FacultyDashboardHome() {
                     </ResponsiveContainer>
                     <div className="dashboard-donut-center">
                       <strong>{currentAttData.percentage}%</strong>
-                      <span>Attendance</span>
+                      <span>ATTENDANCE</span>
                     </div>
                   </div>
 
@@ -763,13 +964,13 @@ export default function FacultyDashboardHome() {
           <div className="dashboard-card-body">
             <div className="dashboard-chart dashboard-bar-chart-wrap" style={{ height: 138 }}>
               <ResponsiveContainer width="100%" height={138}>
-                <BarChart data={SECTION_STUDENTS_DATA} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
+                <BarChart data={sectionStudentsData} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
                   <XAxis dataKey="name" tickLine={false} axisLine={false} height={18} tick={{ fontSize: 10, fontWeight: 700 }} />
-                  <YAxis domain={[0, 50]} allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, (dataMax) => Math.max(50, Math.ceil(dataMax * 1.15))]} allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
                   <Tooltip content={<CustomBarTooltip />} />
                   <Bar dataKey="students" radius={[4, 4, 0, 0]}>
-                    {SECTION_STUDENTS_DATA.map((entry) => (
+                    {sectionStudentsData.map((entry) => (
                       <Cell key={entry.name} fill={entry.fill} />
                     ))}
                   </Bar>
@@ -780,21 +981,21 @@ export default function FacultyDashboardHome() {
               <div className="dashboard-student-chip chip-total">
                 <span className="chip-icon"><Users size={14} /></span>
                 <div>
-                  <strong>115</strong>
+                  <strong>{overallAttendance.total || 0}</strong>
                   <small>Total Students</small>
                 </div>
               </div>
               <div className="dashboard-student-chip chip-boys">
                 <span className="chip-icon"><Users size={14} /></span>
                 <div>
-                  <strong>66</strong>
+                  <strong>{totalBoys}</strong>
                   <small>Boys</small>
                 </div>
               </div>
               <div className="dashboard-student-chip chip-girls">
                 <span className="chip-icon"><Users size={14} /></span>
                 <div>
-                  <strong>49</strong>
+                  <strong>{totalGirls}</strong>
                   <small>Girls</small>
                 </div>
               </div>

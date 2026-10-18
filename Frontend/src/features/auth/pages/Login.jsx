@@ -93,8 +93,18 @@ export default function Login() {
       const userRole = String(result.user?.role || "").toLowerCase();
       const isExamCell = !isWarden && isExamCellRole(userRole);
       const isPrincipal = !isWarden && (userRole === "principal" || userRole.includes("principal"));
+      const isNonTeaching =
+        !isWarden &&
+        !isExamCell &&
+        (userRole === "non_teaching_staff" ||
+          userRole === "non-teaching" ||
+          userRole === "non-teaching-staff" ||
+          userRole === "nonteaching" ||
+          result.roleType === "non_teaching" ||
+          String(result.user?.staffType || "").toLowerCase() === "non-teaching");
       const isFacultyOrStaff =
         !isWarden &&
+        !isNonTeaching &&
         (userRole === "faculty" ||
         userRole === "teacher" ||
         userRole === "staff" ||
@@ -114,6 +124,8 @@ export default function Login() {
 
       if (isWarden) {
         navigate("/warden-dashboard", { replace: true });
+      } else if (isNonTeaching) {
+        navigate("/non-teaching-dashboard", { replace: true });
       } else if (isExamCell) {
         navigate("/exam-cell-dashboard", { replace: true });
       } else if (result.user.isAdmin || userRole.includes("admin")) {
