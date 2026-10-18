@@ -37,6 +37,7 @@ import {
   YAxis,
 } from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { getStudentOverviewMetrics } from "@/api/studentApi.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -391,7 +392,7 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 1. GET /api/v1/dashboard/summary & GET /api/v1/staff
+  // 1. GET /api/v1/dashboard/summary & GET /api/v1/staff & getStudentOverviewMetrics (Student Management Parity)
   const fetchSummary = useCallback(async () => {
     const seq = ++summarySeq.current;
     setSummaryState((prev) => ({ ...prev, loading: true, error: null }));
@@ -409,10 +410,20 @@ export default function DashboardPage() {
         PageNumber: 1,
         PageSize: 10000
       };
+
+      const studentMetricsPromise = getStudentOverviewMetrics({
+        campusId,
+        boardId,
+        academicYearId,
+      }).catch((e) => {
+        console.warn("Failed to load placed student metrics for dashboard summary:", e);
+        return null;
+      });
       
-      const [res, staffRes] = await Promise.all([
+      const [res, staffRes, studentMetrics] = await Promise.all([
         apiClient.get(DASHBOARD_API.summary, { params }),
-        apiClient.get("/api/v1/staff", { params: staffParams }).catch(() => ({ data: { items: [] } }))
+        apiClient.get("/api/v1/staff", { params: staffParams }).catch(() => ({ data: { items: [] } })),
+        studentMetricsPromise,
       ]);
 
       if (summarySeq.current === seq) {
@@ -436,13 +447,19 @@ export default function DashboardPage() {
         }).length;
         const nonTeachingCount = Math.max(0, totalCount - teachingCount);
 
-        // Merge teaching/non-teaching staff counts from staff endpoint to override dashboard summary
+        // Merge teaching/non-teaching staff counts and placed student management counts to override dashboard summary
         const mergedData = {
           ...summaryData,
           teachingStaff: teachingCount,
           teachingStaffCount: teachingCount,
           nonTeachingStaff: nonTeachingCount,
           nonTeachingStaffCount: nonTeachingCount,
+          ...(studentMetrics ? {
+            totalStudents: studentMetrics.totalStudents,
+            totalStudentCount: studentMetrics.totalStudents,
+            studentCount: studentMetrics.totalStudents,
+            admissions: studentMetrics.totalStudents,
+          } : {}),
         };
 
         setSummaryState({ loading: false, error: null, data: mergedData });
@@ -454,7 +471,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 2. GET /api/v1/dashboard/students-overview & GET /api/v1/dashboard/admission-trend
+  // 2. GET /api/v1/dashboard/students-overview & GET /api/v1/dashboard/admission-trend & getStudentOverviewMetrics
   const fetchStudentsOverview = useCallback(async () => {
     const seq = ++overviewSeq.current;
     setOverviewState((prev) => ({ ...prev, loading: true, error: null }));
@@ -471,16 +488,27 @@ export default function DashboardPage() {
         ...(campusId ? { campusId } : {}),
       };
 
-      const [overviewRes, trendRes] = await Promise.allSettled([
+      const studentMetricsPromise = getStudentOverviewMetrics({
+        campusId,
+        boardId,
+        academicYearId,
+      }).catch((e) => {
+        console.warn("Failed to load placed student metrics for overview:", e);
+        return null;
+      });
+
+      const [overviewRes, trendRes, studentMetricsRes] = await Promise.allSettled([
         apiClient.get(DASHBOARD_API.studentsOverview, { params }),
         apiClient.get(DASHBOARD_API.admissionTrend, { params: trendParams }),
+        studentMetricsPromise,
       ]);
 
       if (overviewSeq.current === seq) {
         const overviewData = overviewRes.status === "fulfilled" ? unwrap(overviewRes.value?.data) : null;
         const trendData = trendRes.status === "fulfilled" ? unwrap(trendRes.value?.data) : null;
+        const studentMetrics = studentMetricsRes.status === "fulfilled" ? studentMetricsRes.value : null;
 
-        if (overviewRes.status === "rejected" && trendRes.status === "rejected") {
+        if (overviewRes.status === "rejected" && trendRes.status === "rejected" && !studentMetrics) {
           setOverviewState({ loading: false, error: getApiErrorMessage(overviewRes.reason, "Failed to load students overview"), data: null });
           return;
         }
@@ -488,6 +516,22 @@ export default function DashboardPage() {
         const mergedData = {
           ...(overviewData && typeof overviewData === "object" ? overviewData : {}),
           trend: overviewData?.monthlyTrend || trendData?.monthlyTrend || trendData?.trend || trendData?.items || trendData?.admissionTrend || overviewData?.trend || overviewData?.items || [],
+          ...(studentMetrics ? {
+            totalStudents: studentMetrics.totalStudents,
+            totalCount: studentMetrics.totalStudents,
+            activeStudents: studentMetrics.totalStudents,
+            boys: studentMetrics.boys,
+            boysCount: studentMetrics.boysCount,
+            maleStudents: studentMetrics.maleStudents,
+            maleCount: studentMetrics.maleStudents,
+            girls: studentMetrics.girls,
+            girlsCount: studentMetrics.girlsCount,
+            femaleStudents: studentMetrics.femaleStudents,
+            femaleCount: studentMetrics.femaleStudents,
+            malePercentage: studentMetrics.malePercentage,
+            femalePercentage: studentMetrics.femalePercentage,
+            genderDistribution: studentMetrics.genderDistribution,
+          } : {}),
         };
         setOverviewState({ loading: false, error: null, data: mergedData });
       }
@@ -498,7 +542,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 3. GET /api/v1/dashboard/group-distribution
+  // 3. GET /api/v1/dashboard/group-distribution & getStudentOverviewMetrics
   const fetchGroupDistribution = useCallback(async () => {
     const seq = ++groupSeq.current;
     setGroupState((prev) => ({ ...prev, loading: true, error: null }));
@@ -508,9 +552,37 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
       };
-      const res = await apiClient.get(DASHBOARD_API.groupDistribution, { params });
+      const [res, studentMetrics] = await Promise.all([
+        apiClient.get(DASHBOARD_API.groupDistribution, { params }).catch(() => ({ data: null })),
+        getStudentOverviewMetrics({ campusId, boardId, academicYearId }).catch(() => null),
+      ]);
       if (groupSeq.current === seq) {
-        setGroupState({ loading: false, error: null, data: unwrap(res.data) });
+        let groupData = unwrap(res.data) || {};
+        if (studentMetrics?.groupCounts && Object.keys(studentMetrics.groupCounts).length > 0) {
+          const rawItems = groupData?.items || groupData?.groups || (Array.isArray(groupData) ? groupData : []);
+          if (Array.isArray(rawItems) && rawItems.length > 0) {
+            const updatedItems = rawItems.map((item) => {
+              const name = String(item.name || item.groupName || item.code || "").toUpperCase();
+              let matchedCount = null;
+              for (const [gName, count] of Object.entries(studentMetrics.groupCounts)) {
+                if (name === gName.toUpperCase() || name.includes(gName.toUpperCase()) || gName.toUpperCase().includes(name)) {
+                  matchedCount = count;
+                  break;
+                }
+              }
+              return {
+                ...item,
+                value: matchedCount !== null ? matchedCount : Number(item.value ?? item.studentCount ?? item.count ?? 0),
+                studentCount: matchedCount !== null ? matchedCount : Number(item.studentCount ?? item.value ?? item.count ?? 0),
+                count: matchedCount !== null ? matchedCount : Number(item.count ?? item.value ?? item.studentCount ?? 0),
+              };
+            });
+            if (groupData?.items) groupData.items = updatedItems;
+            else if (groupData?.groups) groupData.groups = updatedItems;
+            else if (Array.isArray(groupData)) groupData = updatedItems;
+          }
+        }
+        setGroupState({ loading: false, error: null, data: groupData });
       }
     } catch (err) {
       if (groupSeq.current === seq) {
@@ -518,6 +590,7 @@ export default function DashboardPage() {
       }
     }
   }, [campusId, boardId, academicYearId]);
+
 
   // 4. GET /api/v1/attendance/admin/students
   const fetchStudentAttendance = useCallback(async () => {

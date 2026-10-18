@@ -55,6 +55,24 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
   return `${hours}h ${mins}m`;
 };
 
+const normalizeTodayData = (raw) => {
+  if (!raw) return null;
+  return {
+    status: raw.status || raw.Status || "not_punched",
+    inTime: raw.inTime || raw.InTime || null,
+    outTime: raw.outTime || raw.OutTime || null,
+    shiftDuration: raw.shiftDuration || raw.ShiftDuration || "--",
+    shiftName: raw.shiftName || raw.ShiftName || "Morning (09:00 AM – 04:30 PM)",
+    shiftStartTime: raw.shiftStartTime || raw.ShiftStartTime || "09:00 AM",
+    shiftEndTime: raw.shiftEndTime || raw.ShiftEndTime || "04:30 PM",
+    isLate: Boolean(raw.isLate ?? raw.IsLate),
+    todayStatus: raw.todayStatus || raw.TodayStatus || "Absent",
+    canRegularize: Boolean(raw.canRegularize ?? raw.CanRegularize),
+    dateFormatted: raw.dateFormatted || raw.DateFormatted || new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
+    regularizationState: raw.regularizationState || raw.RegularizationState || null,
+  };
+};
+
 export default function FacultyMyAttendance() {
   const context = useFacultySafe();
   const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
@@ -151,9 +169,13 @@ export default function FacultyMyAttendance() {
     try {
       setLoadingToday(true);
       const res = await attendanceService.getMyTodayStatus();
-      if (res?.Data) {
-        setTodayData(res.Data);
-        syncGlobalPunchState(res.Data.Status || res.Data.status, res.Data.InTime || res.Data.inTime, res.Data.OutTime || res.Data.outTime);
+      const payload = res?.data || res?.Data || (res?.status ? res : null);
+      if (payload) {
+        const normalized = normalizeTodayData(payload);
+        if (normalized) {
+          setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
+        }
       }
     } catch (err) {
       console.warn("Could not load today status from backend, keeping defaults", err);
@@ -167,10 +189,36 @@ export default function FacultyMyAttendance() {
     try {
       setLoadingHistory(true);
       const res = await attendanceService.getMyAttendanceHistory(period);
-      if (res?.Data) {
+      const payload = res?.data || res?.Data || (res?.status ? res : null);
+      if (payload) {
+        const rawLogs = payload.logs || payload.Logs || [];
+        const rawMetrics = payload.metrics || payload.Metrics || {};
         setHistoryData({
-          logs: res.Data.Logs || res.Data.logs || [],
-          metrics: res.Data.Metrics || res.Data.metrics || {},
+          logs: rawLogs.map((l) => ({
+            id: l.id || l.Id,
+            day: l.day || l.Day,
+            date: l.date || l.Date,
+            rawDate: l.rawDate || l.RawDate,
+            shift: l.shift || l.Shift,
+            inTime: l.inTime || l.InTime,
+            outTime: l.outTime || l.OutTime,
+            hours: l.hours || l.Hours,
+            device: l.device || l.Device,
+            status: l.status || l.Status,
+            canRegularize: Boolean(l.canRegularize ?? l.CanRegularize),
+            isToday: Boolean(l.isToday ?? l.IsToday),
+            regularizationState: l.regularizationState || l.RegularizationState,
+          })),
+          metrics: {
+            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "6 Days",
+            workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "--",
+            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || "0 Days",
+            presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "--",
+            leaves: rawMetrics.leaves || rawMetrics.Leaves || "0 Days",
+            leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "--",
+            absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "0 Days",
+            absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "--",
+          },
         });
       }
     } catch (err) {
@@ -201,16 +249,21 @@ export default function FacultyMyAttendance() {
         remarks: "Faculty Self Check-In via Web Portal",
       });
 
-      if (res?.Status && res?.Data) {
-        setTodayData(res.Data);
-        syncGlobalPunchState(res.Data.Status, res.Data.InTime, res.Data.OutTime);
-        notify(res.Message || `Checked In Successfully at ${res.Data.InTime}`, "success");
+      const isSuccess = Boolean(res?.status ?? res?.Status);
+      const payload = res?.data || res?.Data;
+      if (isSuccess && payload) {
+        const normalized = normalizeTodayData(payload);
+        if (normalized) {
+          setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
+        }
+        notify(res?.message || res?.Message || `Checked In Successfully at ${payload.inTime || payload.InTime}`, "success");
         fetchHistory(activeFilter);
       } else {
-        notify(res?.Message || "Failed to check in.", "error");
+        notify(res?.message || res?.Message || "Failed to check in.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.Message || err?.message || "Failed to check in.";
+      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to check in.";
       notify(errMsg, "error");
     } finally {
       setActionLoading(false);
@@ -228,16 +281,21 @@ export default function FacultyMyAttendance() {
         remarks: "Faculty Self Check-Out via Web Portal",
       });
 
-      if (res?.Status && res?.Data) {
-        setTodayData(res.Data);
-        syncGlobalPunchState(res.Data.Status, res.Data.InTime, res.Data.OutTime);
-        notify(res.Message || `Punched Out Successfully at ${res.Data.OutTime}`, "success");
+      const isSuccess = Boolean(res?.status ?? res?.Status);
+      const payload = res?.data || res?.Data;
+      if (isSuccess && payload) {
+        const normalized = normalizeTodayData(payload);
+        if (normalized) {
+          setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
+        }
+        notify(res?.message || res?.Message || `Punched Out Successfully at ${payload.outTime || payload.OutTime}`, "success");
         fetchHistory(activeFilter);
       } else {
-        notify(res?.Message || "Failed to punch out.", "error");
+        notify(res?.message || res?.Message || "Failed to punch out.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.Message || err?.message || "Failed to punch out.";
+      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to punch out.";
       notify(errMsg, "error");
     } finally {
       setActionLoading(false);
@@ -274,16 +332,17 @@ export default function FacultyMyAttendance() {
       };
 
       const res = await attendanceService.submitRegularization(payload);
-      if (res?.Status) {
+      const isSuccess = Boolean(res?.status ?? res?.Status);
+      if (isSuccess) {
         notify("Attendance regularization request submitted successfully. Pending Principal/Admin approval.", "success");
         setRegModalOpen(false);
         fetchTodayStatus();
         fetchHistory(activeFilter);
       } else {
-        notify(res?.Message || "Failed to submit regularization.", "error");
+        notify(res?.message || res?.Message || "Failed to submit regularization.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.Message || err?.message || "Failed to submit regularization.";
+      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to submit regularization.";
       notify(errMsg, "error");
     } finally {
       setRegSubmitting(false);

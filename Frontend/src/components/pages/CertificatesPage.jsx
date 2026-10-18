@@ -187,7 +187,8 @@ const toDisplayStatus = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "Generated";
   const key = raw.toLowerCase();
-  if (["generated", "draft", "pending", "requested"].includes(key)) return "Generated";
+  if (["requested"].includes(key)) return "Requested";
+  if (["generated", "draft", "pending"].includes(key)) return "Generated";
   if (["reviewed", "inreview", "in-review", "review"].includes(key)) return "Reviewed";
   if (["approved", "authorize", "authorized"].includes(key)) return "Approved";
   if (["issued", "completed", "active"].includes(key)) return "Issued";
@@ -1685,11 +1686,33 @@ export default function CertificatesPage() {
   const [toDate, setToDate] = useState("");
   const [showRecordFilters, setShowRecordFilters] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("generate");
-  const [page, setPage] = useState(1);
   const [searchParams] = useSearchParams();
   const urlStatus = searchParams?.get("status");
-  const [workflowStatusFilter, setWorkflowStatusFilter] = useState(urlStatus === "Requested" ? "Requested" : "All");
+  const urlTab = searchParams?.get("tab");
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const s = sp.get("status");
+      const t = sp.get("tab");
+      if (t === "actions" || t === "review" || s === "Requested") return "actions";
+      if (t === "certificates" || t === "records") return "certificates";
+    } catch {
+      /* ignore */
+    }
+    return "generate";
+  });
+  const [page, setPage] = useState(1);
+  const [workflowStatusFilter, setWorkflowStatusFilter] = useState(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const s = sp.get("status");
+      if (s && ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(s)) return s;
+    } catch {
+      /* ignore */
+    }
+    return "All";
+  });
+  const [fromRequestMeta, setFromRequestMeta] = useState(null);
   const [liveAlert, setLiveAlert] = useState(null);
   const [workflowQuery, setWorkflowQuery] = useState("");
   const [actionPage, setActionPage] = useState(1);
@@ -2039,6 +2062,15 @@ export default function CertificatesPage() {
 
   useEffect(() => {
     const statusParam = searchParams?.get("status");
+    const tabParam = searchParams?.get("tab");
+    if (tabParam === "actions" || tabParam === "review" || statusParam === "Requested") {
+      setActiveTab("actions");
+    } else if (tabParam === "certificates" || tabParam === "records") {
+      setActiveTab("certificates");
+    } else if (tabParam === "generate") {
+      setActiveTab("generate");
+    }
+
     if (statusParam && ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(statusParam)) {
       setWorkflowStatusFilter(statusParam);
       setActionPage(1);
@@ -2284,6 +2316,7 @@ export default function CertificatesPage() {
       group: "",
       section: "",
     });
+    setFromRequestMeta(null);
     setErrors({});
   };
 
@@ -2299,7 +2332,6 @@ export default function CertificatesPage() {
     if (creating) return;
 
     const admissionNo = String(form.admissionNo || "").trim();
-    const selectedType = String(form.type || "").trim();
     const purpose = normalizeText(form.purpose);
     const requestDate = String(form.requestDate || "").trim();
     const remarks = normalizeText(form.remarks);
@@ -2309,15 +2341,57 @@ export default function CertificatesPage() {
       return;
     }
     const matchedStudent = findStudentByAdmission(admissionNo);
-    if (!matchedStudent) {
+    if (!matchedStudent && !fromRequestMeta) {
       setErrors((prev) => ({ ...prev, admissionNo: "Select a valid student from the admissions list." }));
       return;
     }
 
-    const canonicalAdmissionNo = matchedStudent.admissionNo || admissionNo;
+    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo;
+
+    if (fromRequestMeta?.feeClearanceStatus === "Dues Pending" && Number(fromRequestMeta.feeDueAmount) > 0) {
+      const proceed = await confirm({
+        title: "Fee Due Clearance Notice",
+        message: `Student "${fromRequestMeta.student || canonicalAdmissionNo}" has pending fee dues of ₹${Number(fromRequestMeta.feeDueAmount).toLocaleString('en-IN')}.\n\nDo you want to generate certificate under Principal Permission?`,
+        confirmLabel: "Proceed & Generate",
+        cancelLabel: "Cancel & Inspect Dues",
+      });
+      if (!proceed) {
+        if (fromRequestMeta.rawRow) openFeeInspector(fromRequestMeta.rawRow);
+        return;
+      }
+    }
 
     setCreating(true);
     try {
+      if (fromRequestMeta?.id) {
+        try {
+          const actionId = await resolveServerCertificateId({ backendId: fromRequestMeta.id, id: fromRequestMeta.id });
+          await apiClient.patch(CERTIFICATE_API.generateFromRequest(actionId || fromRequestMeta.id));
+          try {
+            const channel = new BroadcastChannel("cms_notifications");
+            channel.postMessage({
+              type: "CERTIFICATE_STATUS_UPDATED",
+              admissionNo: canonicalAdmissionNo,
+              certificateType: certificateRequest.type,
+              status: "Generated",
+            });
+            channel.close();
+          } catch {
+            // Ignore channel error
+          }
+          setToast(`Certificate for ${fromRequestMeta.student || canonicalAdmissionNo} (${certificateRequest.type}) generated successfully.`);
+          setFromRequestMeta(null);
+          resetForm();
+          await refreshCertificateData({ showLoader: false });
+          setActiveTab("actions");
+          setWorkflowStatusFilter("Generated");
+          setActionPage(1);
+          return;
+        } catch (patchErr) {
+          console.warn("generateFromRequest failed, falling back to standard generate", patchErr);
+        }
+      }
+
       const normalizedRequestDate = toApiDateTime(requestDate) || `${todayIso()}T00:00:00.000Z`;
       const specializedPayload = {
         admissionNo: canonicalAdmissionNo,
@@ -2354,6 +2428,19 @@ export default function CertificatesPage() {
           return next;
         });
       }
+      try {
+        const channel = new BroadcastChannel("cms_notifications");
+        channel.postMessage({
+          type: "CERTIFICATE_STATUS_UPDATED",
+          admissionNo: canonicalAdmissionNo,
+          certificateType: certificateRequest.type,
+          status: "Generated",
+        });
+        channel.close();
+      } catch {
+        // Ignore channel error
+      }
+      setFromRequestMeta(null);
       await refreshCertificateData({ showLoader: false });
       resetForm();
       setActiveTab("certificates");
@@ -2560,6 +2647,45 @@ export default function CertificatesPage() {
         <span>Cleared (₹0 Dues)</span>
       </button>
     );
+  };
+
+  const handleCreateFromRequest = (row) => {
+    if (!row) return;
+
+    const admissionNo = String(row.admissionNo || "").trim();
+    const matchedStudent = findStudentByAdmission(admissionNo);
+
+    setForm({
+      admissionNo: matchedStudent?.admissionNo || admissionNo,
+      student: matchedStudent?.name || row.student || "",
+      group: matchedStudent?.group || row.group || "",
+      level: matchedStudent?.level || row.level || "",
+      academicYear: matchedStudent?.academicYear || row.academicYear || "",
+      rollNo: matchedStudent?.rollNo || row.rollNo || "",
+      section: matchedStudent?.section || row.section || "",
+      type: row.type || "Bonafide Certificate",
+      customType: "",
+      orientation: "portrait",
+      purpose: row.purpose || "Official Purpose",
+      requestDate: row.requestDate ? String(row.requestDate).slice(0, 10) : todayIso(),
+      remarks: row.remarks || "",
+    });
+
+    setErrors({});
+    setFromRequestMeta({
+      id: row.backendId || row.id,
+      number: row.number,
+      student: row.student || matchedStudent?.name || admissionNo,
+      admissionNo,
+      type: row.type,
+      purpose: row.purpose,
+      feeClearanceStatus: row.feeClearanceStatus,
+      feeDueAmount: row.feeDueAmount,
+      rawRow: row,
+    });
+    setGenerationMode("single");
+    setActiveTab("generate");
+    setToast(`Loaded request for ${row.student || admissionNo} (${row.type}). Review details and click Generate.`);
   };
 
   const handleGenerateFromRequest = async (row) => {
@@ -3402,6 +3528,60 @@ export default function CertificatesPage() {
               </div>
             </div>
             <div className="cms-card-body">
+              {fromRequestMeta ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    marginBottom: "16px",
+                    background: "rgba(124, 58, 237, 0.08)",
+                    border: "1px solid rgba(124, 58, 237, 0.25)",
+                    borderRadius: "8px",
+                    color: "var(--color-text, #1e293b)",
+                    fontSize: "13px"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <FaAward size={20} color="#7c3aed" />
+                    <div>
+                      <div>
+                        <strong>Fulfilling Student Request:</strong>{" "}
+                        <span style={{ color: "#7c3aed", fontWeight: "700" }}>{fromRequestMeta.student}</span>{" "}
+                        <span>({fromRequestMeta.admissionNo})</span> —{" "}
+                        <span className="cert-status-pill cert-status-requested" style={{ fontSize: "11px", padding: "2px 8px" }}>{fromRequestMeta.type}</span>
+                      </div>
+                      {fromRequestMeta.purpose ? (
+                        <div style={{ fontSize: "12px", color: "#64748b", marginTop: "3px" }}>
+                          <strong>Requested Purpose:</strong> {fromRequestMeta.purpose}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFromRequestMeta(null);
+                      resetForm();
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#64748b",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "12px",
+                      padding: "4px 8px"
+                    }}
+                    title="Clear request mode and reset form"
+                  >
+                    <FaXmark size={14} /> Clear Request
+                  </button>
+                </div>
+              ) : null}
               {generationMode === "bulk" ? (
                 <section className={`cert-bulk-students ${errors.bulkStudents ? "has-error" : ""}`}>
                   <div className="cert-bulk-students-head">
@@ -3897,6 +4077,7 @@ export default function CertificatesPage() {
                     className="cms-btn primary"
                     style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
                     onClick={() => {
+                      setActiveTab("actions");
                       setWorkflowStatusFilter("Requested");
                       setActionPage(1);
                       setLiveAlert(null);
@@ -3993,17 +4174,43 @@ export default function CertificatesPage() {
                       <td>{formatDateDdMmYyyy(row.requestDate)}</td>
                       <td>
                         <div className="cms-actions cert-actions-right cert-action-buttons">
-                          <button
-                            type="button"
-                            className="cms-action-btn cert-workflow-step"
-                            style={workflowButtonStyle("approve", ["Generated", "Reviewed"].includes(row.status) && hasServerCertificateId(row) && !isRowBusy(row.id))}
-                            onClick={() => row.status === "Requested" ? handleGenerateFromRequest(row) : handleWorkflowChange(row, row.status === "Generated" ? "review" : "approve")}
-                            disabled={!(["Generated", "Reviewed"].includes(row.status)) || !hasServerCertificateId(row) || isRowBusy(row.id)}
-                            title={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
-                            aria-label={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
-                          >
-                            <FaCheck size={12} aria-hidden="true" />
-                          </button>
+                          {row.status === "Requested" ? (
+                            <button
+                              type="button"
+                              className="cms-action-btn cert-workflow-step cert-create-action"
+                              style={{
+                                background: "#7c3aed",
+                                color: "#ffffff",
+                                borderColor: "#6d28d9",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                padding: "4px 10px",
+                                fontSize: "12px",
+                                fontWeight: "600",
+                                borderRadius: "6px",
+                                cursor: "pointer"
+                              }}
+                              onClick={() => handleCreateFromRequest(row)}
+                              title="Create certificate from this student request"
+                              aria-label={`Create certificate for ${row.student || row.admissionNo}`}
+                            >
+                              <FaFileCirclePlus size={13} aria-hidden="true" />
+                              <span>Create</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="cms-action-btn cert-workflow-step"
+                              style={workflowButtonStyle("approve", ["Generated", "Reviewed"].includes(row.status) && hasServerCertificateId(row) && !isRowBusy(row.id))}
+                              onClick={() => handleWorkflowChange(row, row.status === "Generated" ? "review" : "approve")}
+                              disabled={!(["Generated", "Reviewed"].includes(row.status)) || !hasServerCertificateId(row) || isRowBusy(row.id)}
+                              title={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
+                              aria-label={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
+                            >
+                              <FaCheck size={12} aria-hidden="true" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="cms-action-btn cert-workflow-step cert-workflow-issue"

@@ -408,6 +408,16 @@ export const normalizeStaffRecord = (raw) => {
     ? r.experience
     : (Array.isArray(personal.experience) ? personal.experience : []);
 
+  const isPrincipalRecord =
+    String(r.role || "").trim().toLowerCase() === "principal" ||
+    String(r.roleName || "").trim().toLowerCase() === "principal" ||
+    String(r.designation || personal.designation || "").trim().toLowerCase() === "principal" ||
+    (Array.isArray(r.assignedCampuses) && r.assignedCampuses.length > 0) ||
+    (Array.isArray(r.assignedCampusIds) && r.assignedCampusIds.length > 0);
+
+  const resolvedRole = r.role || r.roleName || personal.role || (isPrincipalRecord ? "Principal" : (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"));
+  const resolvedRoleName = r.roleName || r.role || personal.role || (isPrincipalRecord ? "Principal" : (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"));
+
   return {
     ...r,
     id: r.id || r.staffId,
@@ -419,11 +429,15 @@ export const normalizeStaffRecord = (raw) => {
     board: r.board || r.boardName || "State Board",
     boardCode: r.boardCode || r.board || "—",
     department: r.department || personal.department || "Teaching Department",
-    designation: r.designation || personal.designation || "Assistant Professor",
+    designation: r.designation || personal.designation || (isPrincipalRecord ? "Principal" : "Assistant Professor"),
     staffType: r.staffType || "Teaching",
-    role: r.role || r.roleName || personal.role || (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"),
-    roleName: r.roleName || r.role || personal.role || (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"),
-    roleId: r.roleId || personal.roleId || (r.role === "Faculty" ? 4 : r.role === "HOD" ? 3 : r.role === "Accounts" || r.role === "Accountant" ? 7 : r.role === "Examination Cell" ? 8 : r.role === "Library" ? 9 : r.role === "Placement Officer" ? 11 : r.role === "Cleaner" ? 13 : r.role === "Driver" ? 12 : r.role === "Hostel Warden" ? 10 : (r.staffType === "Non-Teaching" ? 13 : 4)),
+    role: resolvedRole,
+    roleName: resolvedRoleName,
+    roleId: r.roleId || personal.roleId || (isPrincipalRecord ? 2 : (resolvedRole === "Faculty" ? 4 : resolvedRole === "HOD" ? 3 : resolvedRole === "Accounts" || resolvedRole === "Accountant" ? 7 : resolvedRole === "Examination Cell" ? 8 : resolvedRole === "Library" ? 9 : resolvedRole === "Placement Officer" ? 11 : resolvedRole === "Cleaner" ? 13 : resolvedRole === "Driver" ? 12 : resolvedRole === "Hostel Warden" ? 10 : (r.staffType === "Non-Teaching" ? 13 : 4))),
+    assignedCampusIds: Array.isArray(r.assignedCampusIds) ? r.assignedCampusIds : [],
+    assignedCampuses: Array.isArray(r.assignedCampuses) ? r.assignedCampuses : [],
+    assignedBoardIds: Array.isArray(r.assignedBoardIds) ? r.assignedBoardIds : [],
+    assignedBoards: Array.isArray(r.assignedBoards) ? r.assignedBoards : [],
     status: r.status || "Active",
     employmentType: r.employmentType || "Full Time",
     dateOfJoining: r.dateOfJoining || r.joiningDate || "—",
@@ -6148,8 +6162,80 @@ function Review({ record, update, activity }) {
 // ----------------------------------------------------------------------
 function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
   const { boards } = useAcademicContext();
+  const { campuses } = useCampusContext();
   const [editingGroup, setEditingGroup] = useState(null);
   const [formData, setFormData] = useState({});
+
+  const isPrincipalRecord = useMemo(() => {
+    return (
+      String(record?.role || "").trim().toLowerCase() === "principal" ||
+      String(record?.roleName || "").trim().toLowerCase() === "principal" ||
+      String(record?.designation || "").trim().toLowerCase() === "principal" ||
+      (Array.isArray(record?.assignedCampuses) && record.assignedCampuses.length > 0) ||
+      (Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0)
+    );
+  }, [record]);
+
+  const resolvedCampusList = useMemo(() => {
+    if (Array.isArray(record?.assignedCampuses) && record.assignedCampuses.length > 0) {
+      return record.assignedCampuses.map((c) => {
+        if (typeof c === "object" && c !== null) {
+          return {
+            id: c.id ?? c.campusId,
+            name: c.name || c.campusName || "Campus",
+            code: c.code || c.campusCode || "",
+          };
+        }
+        const matched = (campuses || []).find((cp) => String(cp.id) === String(c) || String(cp.campusId) === String(c) || cp.name === c);
+        return {
+          id: matched ? (matched.id ?? matched.campusId) : c,
+          name: matched ? (matched.name || matched.campusName) : String(c),
+          code: matched ? (matched.code || matched.campusCode) : "",
+        };
+      });
+    }
+
+    if (Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0) {
+      return record.assignedCampusIds.map((cid) => {
+        const matched = (campuses || []).find((cp) => Number(cp.id ?? cp.campusId) === Number(cid));
+        return {
+          id: cid,
+          name: matched ? (matched.name || matched.campusName) : `Campus #${cid}`,
+          code: matched ? (matched.code || matched.campusCode) : "",
+        };
+      });
+    }
+
+    if (record?.campusName || record?.campusId) {
+      return [{
+        id: record.campusId || 1,
+        name: record.campusName || "Main Campus (HQ)",
+        code: record.campusCode || "MAIN",
+      }];
+    }
+
+    return [{
+      id: 1,
+      name: "Main Campus (HQ)",
+      code: "MAIN",
+    }];
+  }, [record, campuses]);
+
+  const resolvedBoardList = useMemo(() => {
+    if (Array.isArray(record?.assignedBoards) && record.assignedBoards.length > 0) {
+      return record.assignedBoards.map((b) => typeof b === "object" ? (b.name || b.boardName || b.code || String(b)) : String(b));
+    }
+    if (Array.isArray(record?.assignedBoardIds) && record.assignedBoardIds.length > 0) {
+      return record.assignedBoardIds.map((bid) => {
+        const matched = (boards || []).find((bp) => Number(bp.id ?? bp.boardId) === Number(bid));
+        return matched ? (matched.name || matched.boardName || matched.code || `Board #${bid}`) : `Board #${bid}`;
+      });
+    }
+    if (record?.boardName || record?.board) {
+      return [record.boardName || record.board];
+    }
+    return ["All Affiliated Boards"];
+  }, [record, boards]);
 
   const activeBoardNames = useMemo(() => {
     if (!Array.isArray(boards)) return [];
@@ -6176,6 +6262,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         ["fullName", "Full Name"],
         ["employeeId", "Employee ID"],
         ["board", "Board Name"],
+        ["campusName", "Assigned Campus"],
         ["dateOfBirth", "Date of Birth"],
         ["gender", "Gender"],
         ["status", "Status"],
@@ -6210,6 +6297,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         ["dateOfJoining", "Date of Joining"],
         ["employmentType", "Employment Type"],
         ["staffType", "Staff Type"],
+        ...(isPrincipalRecord ? [["assignedCampusesDisplay", "Assigned Campuses"]] : []),
       ],
     ],
     [
@@ -6390,81 +6478,143 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
 
   // Helper for masking sensitive values
   const formatDisplayValue = (key, rawVal) => {
+    if (key === "assignedCampusesDisplay") {
+      if (resolvedCampusList && resolvedCampusList.length > 0) {
+        return resolvedCampusList.map((c) => c.name + (c.code ? ` (${c.code})` : "")).join(", ");
+      }
+      return record.campusName || "Main Campus (HQ)";
+    }
+    if (key === "campusName") {
+      if (rawVal && rawVal !== "—") return rawVal;
+      if (resolvedCampusList && resolvedCampusList.length > 0) {
+        return resolvedCampusList.map((c) => c.name + (c.code ? ` (${c.code})` : "")).join(", ");
+      }
+      return "Main Campus (HQ)";
+    }
     if (rawVal === null || rawVal === undefined || String(rawVal).trim() === "") return "—";
     const str = String(rawVal).trim();
     if (key === "aadhaar" && str.length >= 12) {
       return `XXXX XXXX ${str.slice(-4)}`;
     }
     if (key === "accountNumber" && str.length >= 4) {
-      return `â€¢â€¢â€¢â€¢â€¢â€¢${str.slice(-4)}`;
+      return `••••••${str.slice(-4)}`;
     }
     return str;
   };
 
   return (
     <div className="staff-summary">
-      {/* Dedicated Principal Campus & Board Assignment Summary Card in Preview */}
-      {(record.role === "Principal" || record.roleName === "Principal" || (Array.isArray(record.assignedCampuses) && record.assignedCampuses.length > 0)) ? (
-        <article className="principal-summary-card" style={{ gridColumn: "1 / -1", background: "var(--cms-subtle, #f8fafc)", border: "1px solid var(--cms-primary-border, #cfe7b6)" }}>
-          <header>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <Building2 size={16} style={{ color: "var(--cms-primary, #355e3b)" }} />
-              <h3>Principal Campus & Board Allocations</h3>
+      {/* Dedicated Principal Campus & Board Assignment Summary Card in Profile */}
+      {isPrincipalRecord ? (
+        <article
+          className="principal-summary-card"
+          style={{
+            gridColumn: "1 / -1",
+            background: "linear-gradient(135deg, #f0fdf4 0%, #f8fafc 100%)",
+            border: "1.5px solid var(--cms-primary-border, #a7f3d0)",
+            borderRadius: "10px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+            overflow: "hidden",
+            marginBottom: "16px",
+          }}
+        >
+          <header
+            style={{
+              padding: "14px 18px",
+              borderBottom: "1px solid var(--cms-primary-border, #cfe7b6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "rgba(255,255,255,0.85)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div
+                style={{
+                  width: "34px",
+                  height: "34px",
+                  borderRadius: "8px",
+                  background: "var(--cms-primary-soft, #edf7e2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Building2 size={18} style={{ color: "var(--cms-primary, #355e3b)" }} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "var(--cms-text, #1f2937)" }}>
+                  Principal Campus & Board Allocations
+                </h3>
+                <span style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)" }}>
+                  Assigned campuses and affiliated educational boards under this Principal's purview
+                </span>
+              </div>
             </div>
+            <span
+              style={{
+                fontSize: "11px",
+                fontWeight: "700",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                background: "var(--cms-primary, #355e3b)",
+                color: "#ffffff",
+                boxShadow: "0 1px 3px rgba(53,94,59,0.2)",
+              }}
+            >
+              {resolvedCampusList.length} Assigned {resolvedCampusList.length === 1 ? "Campus" : "Campuses"}
+            </span>
           </header>
-          <div style={{ padding: "12px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "10px" }}>
-            {(Array.isArray(record.assignedCampuses) && record.assignedCampuses.length > 0
-              ? record.assignedCampuses
-              : [{ name: record.campusName || "Main Campus (HQ)", code: record.campusCode || "MAIN" }]).map((c, i) => {
-                const cName = typeof c === "object" ? c.name || c.campusName || c.label : String(c);
-                const cCode = typeof c === "object" ? c.code || c.campusCode : "";
-                const assignedBoards = Array.isArray(record.assignedBoards) && record.assignedBoards.length > 0
-                  ? record.assignedBoards
-                  : (Array.isArray(record.boards) && record.boards.length > 0 ? record.boards : [record.board || record.boardName || "All Affiliated Boards"]);
-
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                      padding: "10px 14px",
-                      background: "#ffffff",
-                      border: "1px solid var(--cms-border, #e5e7eb)",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span style={{ fontSize: "12px", fontWeight: "700", color: "var(--cms-text, #1f2937)" }}>
-                        ðŸ« {cName}{cCode && !cName.includes("(" + cCode + ")") ? " (" + cCode + ")" : ""}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
-                      <span style={{ fontSize: "10.5px", color: "var(--cms-muted)", fontWeight: "600" }}>Affiliated Boards:</span>
-                      {assignedBoards.map((bName, bi) => (
-                        <span
-                          key={bi}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "3px",
-                            padding: "2px 7px",
-                            borderRadius: "4px",
-                            background: "var(--cms-primary-soft, #edf7e2)",
-                            color: "var(--cms-primary, #355e3b)",
-                            fontSize: "10px",
-                            fontWeight: "600",
-                            border: "1px solid var(--cms-primary-border, #cfe7b6)",
-                          }}
-                        >
-                          📜 {bName}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-            })}
+          <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
+            {resolvedCampusList.map((c, i) => (
+              <div
+                key={c.id || i}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  padding: "14px 16px",
+                  background: "#ffffff",
+                  border: "1px solid var(--cms-border, #e5e7eb)",
+                  borderRadius: "8px",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--cms-text, #1f2937)", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Building2 size={15} style={{ color: "var(--cms-primary, #355e3b)" }} />
+                    {c.name}
+                  </span>
+                  {c.code && (
+                    <span style={{ fontSize: "10.5px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", background: "#f3f4f6", color: "#4b5563" }}>
+                      {c.code}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: "600" }}>Affiliated Boards:</span>
+                  {resolvedBoardList.map((bName, bi) => (
+                    <span
+                      key={bi}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "3px 8px",
+                        borderRadius: "4px",
+                        background: "var(--cms-primary-soft, #edf7e2)",
+                        color: "var(--cms-primary, #355e3b)",
+                        fontSize: "11px",
+                        fontWeight: "600",
+                        border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                      }}
+                    >
+                      <GraduationCap size={12} /> {bName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </article>
       ) : null}

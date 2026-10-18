@@ -602,7 +602,7 @@ export default function DashboardLayout({
                   id: "admin-notif-certificate",
                   title: "Student Certificate Requests",
                   count: reqCount,
-                  to: "/dashboard/certificates?status=Requested",
+                  to: "/dashboard/certificates?tab=actions&status=Requested",
                   label: "certificates"
                 });
               }

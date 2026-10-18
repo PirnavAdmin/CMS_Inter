@@ -432,6 +432,26 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
 
   const rawEmail = data.Email || data.email || payload.Email || payload.email || jwtClaims.email || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || enteredEmail;
   const userEmail = Array.isArray(rawEmail) ? String(rawEmail[0] || "").trim() : String(rawEmail || "").trim();
+
+  const rawAssignedCampusIds =
+    data.AssignedCampusIds ||
+    data.assignedCampusIds ||
+    payload.AssignedCampusIds ||
+    payload.assignedCampusIds ||
+    [];
+  const rawAssignedBoardIds =
+    data.AssignedBoardIds ||
+    data.assignedBoardIds ||
+    payload.AssignedBoardIds ||
+    payload.assignedBoardIds ||
+    [];
+  const assignedCampusIds = Array.isArray(rawAssignedCampusIds)
+    ? rawAssignedCampusIds.map(Number).filter(Boolean)
+    : [];
+  const assignedBoardIds = Array.isArray(rawAssignedBoardIds)
+    ? rawAssignedBoardIds.map(Number).filter(Boolean)
+    : [];
+
   const user = {
     id: data.AdminId || data.adminId || data.UserId || data.userId || data.id || data.Id || payload.AdminId || payload.adminId || payload.UserId || payload.userId || payload.id || payload.Id,
     staffId: staffId ? (Number(staffId) || staffId) : null,
@@ -442,6 +462,8 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     role: Array.isArray(role) ? role[0] : role,
     designation,
     isAdmin,
+    assignedCampusIds,
+    assignedBoardIds,
   };
 
   return {
