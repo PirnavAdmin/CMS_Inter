@@ -1058,6 +1058,22 @@ export function renderTemplateWithRecord(text, record = {}) {
     Religion: religion,
     caste: caste,
     Caste: caste,
+    caste_category: record.casteCategory || record.CasteCategory || caste || "General / OC",
+    CasteCategory: record.casteCategory || record.CasteCategory || caste || "General / OC",
+    mother_tongue: record.motherTongue || record.MotherTongue || "Telugu",
+    MotherTongue: record.motherTongue || record.MotherTongue || "Telugu",
+    dob_words: record.dobWords || record.DobWords || "Fourteenth August Two Thousand Eight",
+    DobWords: record.dobWords || record.DobWords || "Fourteenth August Two Thousand Eight",
+    second_language: record.secondLanguage || record.SecondLanguage || "Sanskrit",
+    SecondLanguage: record.secondLanguage || record.SecondLanguage || "Sanskrit",
+    class_leaving: record.classLeaving || record.ClassLeaving || (record.academicLevel ? `${record.academicLevel} (${record.groupName || "MPC"})` : "Senior Intermediate (2nd Year MPC)"),
+    ClassLeaving: record.classLeaving || record.ClassLeaving || (record.academicLevel ? `${record.academicLevel} (${record.groupName || "MPC"})` : "Senior Intermediate (2nd Year MPC)"),
+    qualified_for_promotion: record.qualifiedForPromotion || record.QualifiedForPromotion || "Yes, Qualified for University / Higher Studies Admission",
+    QualifiedForPromotion: record.qualifiedForPromotion || record.QualifiedForPromotion || "Yes, Qualified for University / Higher Studies Admission",
+    scholarship_concession: record.scholarshipConcession || record.ScholarshipConcession || "No (All Dues Cleared)",
+    ScholarshipConcession: record.scholarshipConcession || record.ScholarshipConcession || "No (All Dues Cleared)",
+    identification_marks: record.identificationMarks || record.IdentificationMarks || "1. A mole on the left cheek; 2. A scar on right index finger",
+    IdentificationMarks: record.identificationMarks || record.IdentificationMarks || "1. A mole on the left cheek; 2. A scar on right index finger",
     college_name: "Pirnav College",
     CollegeName: "Pirnav College",
     college_address: "D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh",
@@ -1195,6 +1211,21 @@ function getCertificateTemplate(type, record) {
   const academicYear = record?.academicYear || "2026-2027";
   const boardName = record?.boardName || record?.board || "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
 
+  const motherName = record?.motherName || record?.mother || "Parent";
+  const motherTongue = record?.motherTongue || record?.MotherTongue || "Telugu";
+  const casteCategory = record?.casteCategory || record?.CasteCategory || record?.caste || "General / OC";
+  const dobStr = record?.dob || record?.dateOfBirth || "14 August 2008";
+  const dobWords = record?.dobWords || record?.DobWords || "Fourteenth August Two Thousand Eight";
+  const secondLanguage = record?.secondLanguage || record?.SecondLanguage || "Sanskrit";
+  const medium = record?.medium || record?.Medium || "English";
+  const identificationMarks = record?.identificationMarks || record?.IdentificationMarks || "1. A mole on the left cheek; 2. A scar on right index finger";
+  const qualifiedForPromotion = record?.qualifiedForPromotion || record?.QualifiedForPromotion || "Yes, Qualified for Higher Studies";
+  const scholarshipConcession = record?.scholarshipConcession || record?.ScholarshipConcession || "No (All Dues Cleared)";
+  const reasonForLeaving = record?.reasonForLeaving || record?.ReasonForLeaving || "Completed Course";
+  const conductRating = record?.conductRating || record?.conduct || "Good";
+  const duesCleared = record?.duesCleared || record?.DuesCleared || "YES";
+  const leavingDate = record?.leavingDate || record?.LeavingDate || record?.issueDate || (record?.date ? String(record.date) : "Present Date");
+
   if (target.includes("bonafide") || presentation?.template === "bonafide") {
     return {
       heading: "Bonafide Certificate",
@@ -1224,7 +1255,7 @@ function getCertificateTemplate(type, record) {
   if (target.includes("transfer") || target.includes("tc") || presentation?.template === "transfer") {
     return {
       heading: "Transfer Certificate (TC)",
-      paragraphOne: `This is to certify that Mr./Ms. ${studentName} (S/o / D/o ${fatherName}) bearing Student ID ${studentIdStr} and Admission Number ${admissionNo} has studied in this college from June 2025 to May 2027 in ${group} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. All dues to the college have been cleared (YES).\nWe wish him/her all the best for his/her future endeavours.`,
+      paragraphOne: `This is to certify that Mr./Ms. ${studentName} (S/o / D/o ${fatherName}, Mother: ${motherName}) bearing Student ID ${studentIdStr}, Admission Number ${admissionNo} and Roll No ${record?.rollNo || record?.rollNumber || "-"} was a bonafide student of this college in ${group} Group (${medium} Medium, Second Language: ${secondLanguage}).\nDate of Birth as per admission register: ${dobStr} (in words: ${dobWords}).\nMother Tongue: ${motherTongue} | Social Category / Caste: ${casteCategory}.\nPersonal Marks of Identification: ${identificationMarks}.\nClass in which studying at the time of leaving: ${year} (${group}) on ${leavingDate}.\nQualified for promotion to Higher Education / Degree: ${qualifiedForPromotion}.\nAll college dues have been cleared (${duesCleared}). Receipt of scholarship / fee concession: ${scholarshipConcession}.\nReason for leaving: ${reasonForLeaving}. General conduct and character have been ${conductRating}.`,
       paragraphTwo: `This certificate is issued for the purpose of ${safePurpose}.`,
       borderColor: "#b45309",
       badgeBgColor: "#b45309",
@@ -1799,18 +1830,7 @@ export default function CertificatesPage() {
       return true;
     } catch (error) {
       if (requestId !== listRequestRef.current) return false;
-      let fallbackList = [];
-      try {
-        const cached = localStorage.getItem("cms_certificates");
-        if (cached) {
-          fallbackList = JSON.parse(cached);
-        }
-      } catch {
-        // Ignore cache parse error
-      }
-      if (!fallbackList.length) {
-        fallbackList = mockCertificates.map(normalizeCertificate);
-      }
+      const fallbackList = mockCertificates.map(normalizeCertificate);
       let filtered = fallbackList;
       if (query.trim()) {
         const q = query.trim().toLowerCase();
@@ -1853,15 +1873,7 @@ export default function CertificatesPage() {
         cancelledCount: Number(pick(data, ["cancelledCount", "CancelledCount"])) || 0,
       });
     } catch (error) {
-      let list = rowsForStats;
-      if (!list || !list.length) {
-        try {
-          const cached = localStorage.getItem("cms_certificates");
-          list = cached ? JSON.parse(cached) : mockCertificates.map(normalizeCertificate);
-        } catch {
-          list = mockCertificates.map(normalizeCertificate);
-        }
-      }
+      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : mockCertificates.map(normalizeCertificate);
       setWorkflowStats({
         totalCount: list.length,
         requestedCount: list.filter((r) => r.status === "Requested").length,
@@ -2412,21 +2424,13 @@ export default function CertificatesPage() {
         return;
       }
       if (createdCertificate) {
-        setRows((currentRows) => {
-          const next = [
-            createdCertificate,
-            ...currentRows.filter((row) => (
-              String(row.backendId || row.id) !== String(createdCertificate.backendId || createdCertificate.id)
-              && String(row.number) !== String(createdCertificate.number)
-            )),
-          ];
-          try {
-            localStorage.setItem("cms_certificates", JSON.stringify(next));
-          } catch {
-            // Ignore storage write error
-          }
-          return next;
-        });
+        setRows((currentRows) => [
+          createdCertificate,
+          ...currentRows.filter((row) => (
+            String(row.backendId || row.id) !== String(createdCertificate.backendId || createdCertificate.id)
+            && String(row.number) !== String(createdCertificate.number)
+          )),
+        ]);
       }
       try {
         const channel = new BroadcastChannel("cms_notifications");
@@ -2529,15 +2533,7 @@ export default function CertificatesPage() {
             signature: getBackendPrincipalSignatureUrl(),
           };
         });
-        setRows((currentRows) => {
-          const next = [...newRows, ...currentRows];
-          try {
-            localStorage.setItem("cms_certificates", JSON.stringify(next));
-          } catch {
-            // Ignore storage write error
-          }
-          return next;
-        });
+        setRows((currentRows) => [...newRows, ...currentRows]);
       }
 
       const generatedCount = selectedAdmissionNos.length;
@@ -2757,8 +2753,8 @@ export default function CertificatesPage() {
         }
       }
 
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (String(r.id) === String(row.id) || (row.backendId && String(r.backendId) === String(row.backendId)) || (row.number && r.number === row.number)) {
             return {
               ...r,
@@ -2767,14 +2763,8 @@ export default function CertificatesPage() {
             };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
 
       await refreshCertificateData({ showLoader: false });
       if (action === "review") {
@@ -2845,8 +2835,8 @@ export default function CertificatesPage() {
         }
       }
 
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (r.status === selected.currentStatus) {
             return {
               ...r,
@@ -2855,14 +2845,8 @@ export default function CertificatesPage() {
             };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
 
       const completedCount = eligibleRows.length;
       await refreshCertificateData({ showLoader: false });
@@ -2915,20 +2899,14 @@ export default function CertificatesPage() {
           // Graceful fallback to local update
         }
       }
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (String(r.id) === String(row.id) || (row.backendId && String(r.backendId) === String(row.backendId)) || (row.number && r.number === row.number)) {
             return { ...r, status: "Cancelled" };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
       await refreshCertificateData({ showLoader: false });
       setToast(`Certificate ${row.number || ""} cancelled`);
     } catch (error) {
@@ -2984,15 +2962,7 @@ export default function CertificatesPage() {
           // Graceful fallback to local deletion
         }
       }
-      setRows((prev) => {
-        const next = prev.filter((r) => r.id !== row.id && r.number !== row.number);
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+      setRows((prev) => prev.filter((r) => r.id !== row.id && r.number !== row.number));
       setPrintPreview(null);
       loadWorkflowStats();
       setToast(`Certificate ${row.number || ""} deleted successfully.`);

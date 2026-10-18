@@ -663,13 +663,42 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var admissionDates = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
-                .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
-                .ToListAsync(ct);
+            var placedStudentsQuery = _db.Students.AsNoTracking()
+                .Where(s => s.IsActive &&
+                            s.SectionId.HasValue && s.SectionId.Value > 0 &&
+                            !string.IsNullOrWhiteSpace(s.RollNo) && s.RollNo != "-" && s.RollNo != "pending" &&
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) &&
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) &&
+                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0));
+
+            var eligibleAdmissionsQuery = _db.StudentAdmissions.AsNoTracking()
+                .Where(a => a.IsApproved && a.IsVerified && !a.IsRejected && a.IsActive &&
+                            (a.Status == "Approved" || a.Status == null || a.Status == "approved"));
+
+            var admissionDates = await (from s in placedStudentsQuery
+                                       join a in eligibleAdmissionsQuery on s.AdmissionNo equals a.AdmissionNo
+                                       select (DateTime?)(s.AdmissionDate.HasValue && s.AdmissionDate.Value != default 
+                                           ? s.AdmissionDate.Value 
+                                           : (a.AdmissionDate != default ? a.AdmissionDate : a.CreatedAt)))
+                                       .ToListAsync(ct);
+
+            if (!admissionDates.Any())
+            {
+                admissionDates = await placedStudentsQuery
+                    .Select(s => (DateTime?)(s.AdmissionDate.HasValue && s.AdmissionDate.Value != default ? s.AdmissionDate.Value : s.CreatedAt))
+                    .ToListAsync(ct);
+            }
+
+            if (!admissionDates.Any())
+            {
+                admissionDates = await _db.StudentAdmissions.AsNoTracking()
+                    .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                                (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                                (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                                (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+                    .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
+                    .ToListAsync(ct);
+            }
 
             var grouped = admissionDates
                 .Where(d => d.HasValue && d.Value.Year > 2000)

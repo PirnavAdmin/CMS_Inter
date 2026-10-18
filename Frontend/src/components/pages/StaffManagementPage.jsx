@@ -364,17 +364,8 @@ const tuples = [];
 const seed = [];
 const initialActivities = [];
 
-const read = (key, fallback = []) => {
-  try {
-    sessionStorage.removeItem(STORE);
-    sessionStorage.removeItem(ACTIVITY_STORE);
-    return fallback;
-  } catch {
-    return fallback;
-  }
-};
-
-const write = (key, value) => sessionStorage.setItem(key, JSON.stringify(value));
+const read = (key, fallback = []) => fallback;
+const write = () => {};
 const boardOptions = [];
 
 export const normalizeStaffRecord = (raw) => {
@@ -412,8 +403,7 @@ export const normalizeStaffRecord = (raw) => {
     String(r.role || "").trim().toLowerCase() === "principal" ||
     String(r.roleName || "").trim().toLowerCase() === "principal" ||
     String(r.designation || personal.designation || "").trim().toLowerCase() === "principal" ||
-    (Array.isArray(r.assignedCampuses) && r.assignedCampuses.length > 0) ||
-    (Array.isArray(r.assignedCampusIds) && r.assignedCampusIds.length > 0);
+    Number(r.roleId || personal.roleId) === 2;
 
   const resolvedRole = r.role || r.roleName || personal.role || (isPrincipalRecord ? "Principal" : (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"));
   const resolvedRoleName = r.roleName || r.role || personal.role || (isPrincipalRecord ? "Principal" : (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"));
@@ -4035,13 +4025,7 @@ function StaffList({ records = [], setRecords, forced }) {
       }
 
       // Update state & trigger sync event
-      setRecords((prev) => {
-        const updated = [...newRecordsToAdd, ...(Array.isArray(prev) ? prev : [])];
-        try {
-          sessionStorage.setItem(STORE, JSON.stringify(updated));
-        } catch { }
-        return updated;
-      });
+      setRecords((prev) => [...newRecordsToAdd, ...(Array.isArray(prev) ? prev : [])]);
 
       try {
         window.dispatchEvent(new CustomEvent("staff-records-updated"));
@@ -5582,21 +5566,7 @@ function Pending({ records = [], setRecords, activity }) {
       if (norm.employeeId) map.set(String(norm.employeeId).trim().toLowerCase(), norm);
     });
 
-    // 2. Local storage submitted faculty list
-    try {
-      const localSubmitted = JSON.parse(localStorage.getItem("pjc_submitted_faculty_list") || "[]");
-      if (Array.isArray(localSubmitted)) {
-        localSubmitted.forEach((r) => {
-          if (!r) return;
-          const norm = normalizeStaffRecord(r);
-          const key = String(norm.id || norm.employeeId);
-          map.set(key, { ...(map.get(key) || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 });
-          if (norm.employeeId) map.set(String(norm.employeeId).trim().toLowerCase(), { ...(map.get(key) || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 });
-        });
-      }
-    } catch (e) { }
-
-    // 3. API items
+    // 2. API items
     if (Array.isArray(apiItems)) {
       apiItems.forEach((apiItem) => {
         if (!apiItem) return;
@@ -5915,6 +5885,7 @@ function Pending({ records = [], setRecords, activity }) {
 function Details({ record, records, setRecords, id }) {
   const n = useNavigate();
   const [toast, setToast] = useState(null);
+  const [photoError, setPhotoError] = useState(false);
   const [apiDetail, setApiDetail] = useState(record || null);
   const [loading, setLoading] = useState(!record);
 
@@ -6018,7 +5989,23 @@ function Details({ record, records, setRecords, id }) {
       <main className="staff-mock-page">
         <Back to="/dashboard/staff/list" />
         <section className="staff-detail-head">
-          <UserRound />
+          {(() => {
+            const rawPhoto = activeRecord.profilePhoto || activeRecord.photo || activeRecord.photoPath || activeRecord.photoUrl || activeRecord.avatar || activeRecord.profileImage;
+            const photoSrc = typeof rawPhoto === "string" && rawPhoto.trim()
+              ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:") || rawPhoto.startsWith("blob:") ? rawPhoto : `http://localhost:5167${rawPhoto.startsWith("/") ? "" : "/"}${rawPhoto}`)
+              : null;
+            return photoSrc && !photoError ? (
+              <img
+                src={photoSrc}
+                alt={activeRecord.fullName || activeRecord.employeeId}
+                className="staff-detail-avatar-img"
+                style={{ width: "42px", height: "42px", borderRadius: "50%", objectFit: "cover", border: "2px solid var(--cms-primary, #2b371a)", background: "var(--cms-surface)" }}
+                onError={() => setPhotoError(true)}
+              />
+            ) : (
+              <UserRound />
+            );
+          })()}
           <div>
             <h2>{activeRecord.fullName || `${activeRecord.firstName || ""} ${activeRecord.lastName || ""}`.trim() || activeRecord.employeeId}</h2>
             <p>{activeRecord.employeeId} · {activeRecord.designation} · {activeRecord.department}</p>
@@ -6171,8 +6158,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       String(record?.role || "").trim().toLowerCase() === "principal" ||
       String(record?.roleName || "").trim().toLowerCase() === "principal" ||
       String(record?.designation || "").trim().toLowerCase() === "principal" ||
-      (Array.isArray(record?.assignedCampuses) && record.assignedCampuses.length > 0) ||
-      (Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0)
+      Number(record?.roleId) === 2
     );
   }, [record]);
 
@@ -6865,15 +6851,8 @@ export default function StaffManagementPage() {
           console.warn("Failed to fetch staff record by id from API:", apiErr);
         }
 
-        let localSubmitted = null;
-        try {
-          const raw = localStorage.getItem(`pjc_submitted_faculty_${id}`) || (apiData?.employeeId ? localStorage.getItem(`pjc_submitted_faculty_${apiData.employeeId}`) : null);
-          if (raw) localSubmitted = JSON.parse(raw);
-        } catch (e) { }
-
-        const finalData = localSubmitted ? { ...(apiData || {}), ...localSubmitted } : apiData;
-        if (isMounted && finalData) {
-          setLoadedStaff(finalData);
+        if (isMounted && apiData) {
+          setLoadedStaff(apiData);
         }
       } finally {
         if (isMounted) setLoadingStaff(false);

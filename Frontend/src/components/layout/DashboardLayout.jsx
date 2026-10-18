@@ -597,7 +597,8 @@ export default function DashboardLayout({
             if (!disposed) {
               const data = certRes?.data?.data ?? certRes?.data?.Data ?? certRes?.data ?? {};
               const reqCount = Number(data.requestedCount ?? data.RequestedCount) || 0;
-              if (reqCount > 0) {
+              const isCurrentlyOnCertPage = window.location.pathname.startsWith("/dashboard/certificates");
+              if (reqCount > 0 && !isCurrentlyOnCertPage) {
                 notifs.push({
                   id: "admin-notif-certificate",
                   title: "Student Certificate Requests",
@@ -624,7 +625,12 @@ export default function DashboardLayout({
       try {
         channel = new BroadcastChannel("cms_notifications");
         channel.onmessage = (event) => {
-          if (event.data?.type === "NEW_REIMBURSEMENT" || event.data?.type === "NEW_CERTIFICATE_REQUEST") {
+          if (
+            event.data?.type === "NEW_REIMBURSEMENT" ||
+            event.data?.type === "NEW_CERTIFICATE_REQUEST" ||
+            event.data?.type === "CERTIFICATE_STATUS_UPDATED" ||
+            event.data?.type === "REIMBURSEMENT_STATUS_UPDATED"
+          ) {
             setHasViewedNotifications(false);
             fetchLiveNotifications();
           }
@@ -688,6 +694,14 @@ export default function DashboardLayout({
   }, [pathname]);
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
+  }, [pathname]);
+  useEffect(() => {
+    if (pathname.startsWith("/dashboard/certificates")) {
+      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-certificate"));
+    }
+    if (pathname.startsWith("/dashboard/reimbursements")) {
+      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-reimbursement"));
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -1195,7 +1209,16 @@ export default function DashboardLayout({
                   <div><strong>Notifications</strong><small>Sample activity</small></div>
                 </div>
                 {currentNotifications.map((notification) => (
-                  <button key={notification.id} type="button" className="cms-notif-item" onClick={() => { setNotifOpen(false); goTo(notification.to); }}>
+                  <button
+                    key={notification.id}
+                    type="button"
+                    className="cms-notif-item"
+                    onClick={() => {
+                      setNotifOpen(false);
+                      setLiveNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+                      goTo(notification.to);
+                    }}
+                  >
                     <span className="cms-notif-count">{notification.count}</span>
                     <span><p>{notification.title}</p><small>Open {notification.label}</small></span>
                     <ChevronRight size={15} aria-hidden="true" />
