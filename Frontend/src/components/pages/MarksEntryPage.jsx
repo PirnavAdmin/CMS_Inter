@@ -742,7 +742,7 @@ const isLegalStatusTransition = (from, to) =>
   }[from] || []).includes(to);
 
 // Reusable Hook for Independent Academic Cascading Filters
-function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => { }) {
+function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => { }, { embedded = false } = {}) {
   const {
     selectedCampus,
     selectedCampusId,
@@ -1136,35 +1136,20 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           }))
           .filter((s) => s.isActive);
 
-        // If faculty user, mark their assigned timetable sections and prioritize them
+        // If faculty user or embedded in faculty dashboard, strictly constrain sections to assigned timetable sections
         const authUser = typeof getAuthUser === "function" ? getAuthUser() : null;
-        const facultyId = authUser?.staffId || 1108;
-        if (authUser?.role?.toLowerCase() === "faculty" && facultyId) {
+        const isFaculty = embedded || authUser?.role?.toLowerCase() === "faculty";
+        const facultyId = authUser?.staffId || authUser?.id || (isFaculty ? 1108 : null);
+        if (isFaculty && facultyId) {
           try {
             const ttRes = await apiClient.get(`/api/v1/timetable/faculty/${facultyId}`).catch(() => null);
             const ttSlots = unwrapRecords(ttRes);
             const assignedSecIds = new Set(ttSlots.map((t) => normalizeId(t.sectionId)).filter(Boolean));
             if (assignedSecIds.size > 0) {
-              list = list.map((sec) => ({
-                ...sec,
-                isAssigned: assignedSecIds.has(normalizeId(sec.id)),
-                name: assignedSecIds.has(normalizeId(sec.id)) ? `${sec.name} (Assigned)` : sec.name,
-              }));
-              list.sort((a, b) => (b.isAssigned ? 1 : 0) - (a.isAssigned ? 1 : 0));
-              if (!filters.section && assignedSecIds.size > 0) {
-                const firstAssigned = list.find((s) => s.isAssigned);
-                if (firstAssigned) {
-                  setFilters((prev) => ({
-                    ...prev,
-                    section: firstAssigned.id,
-                    level: firstAssigned.academicLevelId || prev.level,
-                    group: firstAssigned.groupId || prev.group,
-                  }));
-                }
-              }
+              list = list.filter((sec) => assignedSecIds.has(normalizeId(sec.id)));
             }
           } catch (ttErr) {
-            console.warn("Could not fetch timetable for section prioritization:", ttErr);
+            console.warn("Could not fetch timetable for faculty sections:", ttErr);
           }
         }
 
@@ -1303,6 +1288,14 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           next.exam = "";
         } else if (key === "section") {
           next.exam = "";
+          if (value) {
+            const chosenSec = sections.find((s) => eq(s.id, value));
+            if (chosenSec) {
+              if (!next.level && chosenSec.academicLevelId) next.level = normalizeId(chosenSec.academicLevelId);
+              if (!next.group && chosenSec.groupId) next.group = normalizeId(chosenSec.groupId);
+              if (!next.program && chosenSec.programId) next.program = normalizeId(chosenSec.programId);
+            }
+          }
         }
         return next;
       });
@@ -1597,7 +1590,7 @@ export default function MarksEntryPage({ embedded = false, forcedTab = null, hid
   const [validationResult, setValidationResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false));
+  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false), { embedded });
 
   // Helper to load schedules & search evaluations for an examination in Marks Entry
   const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
@@ -1628,8 +1621,8 @@ export default function MarksEntryPage({ embedded = false, forcedTab = null, hid
 
     let finalConfigs = configs;
     const authUser = typeof getAuthUser === "function" ? getAuthUser() : null;
-    const isFacultyUser = authUser?.role?.toLowerCase() === "faculty";
-    const facultyId = authUser?.staffId || 1108;
+    const isFacultyUser = embedded || authUser?.role?.toLowerCase() === "faculty";
+    const facultyId = authUser?.staffId || authUser?.id || (isFacultyUser ? 1108 : null);
 
     if (isFacultyUser && facultyId) {
       try {

@@ -115,7 +115,14 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
 
   const [attView, setAttView] = useState(resolvedDefaultView); // "daily" | "monthly" | "defaulters"
   // Date auto-defaults to today
-  const [attDate, setAttDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const getLocalTodayDate = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+  const [attDate, setAttDate] = useState(getLocalTodayDate);
 
   // Hierarchical Filter States
   const [attBoard, setAttBoard] = useState("");
@@ -406,14 +413,10 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         const list = Array.from(secMap.values());
         if (isMounted) {
           setAllocatedSections(list);
-          if (slots.length > 0 && !attSection) {
+          if (slots.length > 0) {
             const first = slots[0];
-            if (first.boardId) setAttBoard(first.boardId);
-            if (first.academicYearId) setAttYear(first.academicYearId);
-            if (first.academicLevelId) setAttLevel(first.academicLevelId);
-            if (first.groupId) setAttGroup(first.groupId);
-            if (first.programId) setAttProgram(first.programId);
-            if (first.sectionId) setAttSection(first.sectionId);
+            if (first.boardId && !attBoard) setAttBoard(first.boardId);
+            if (first.academicYearId && !attYear) setAttYear(first.academicYearId);
           }
         }
       })
@@ -478,14 +481,13 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setAttLevels(list);
-          if (list.length > 0 && !attLevel) setAttLevel(list[0].academicLevelId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching academic levels:", err))
       .finally(() => { if (isMounted) setLoadingLevels(false); });
 
     return () => { isMounted = false; };
-  }, [attBoard, attLevel]);
+  }, [attBoard]);
 
   // 3. Load Groups when Board, Academic Year, or Academic Level changes
   useEffect(() => {
@@ -504,14 +506,13 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setAttGroups(list);
-          if (list.length > 0 && !attGroup) setAttGroup(list[0].groupId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching groups:", err))
       .finally(() => { if (isMounted) setLoadingGroups(false); });
 
     return () => { isMounted = false; };
-  }, [attBoard, attYear, attLevel, attGroup]);
+  }, [attBoard, attYear, attLevel]);
 
   // 4. Load Programs
   useEffect(() => {
@@ -524,14 +525,13 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setAttPrograms(list);
-          if (list.length > 0 && !attProgram) setAttProgram(list[0].programId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching programs:", err))
       .finally(() => { if (isMounted) setLoadingPrograms(false); });
 
     return () => { isMounted = false; };
-  }, [attGroup, attProgram]);
+  }, [attGroup]);
 
   // 5. Load Sections when Hierarchy changes
   useEffect(() => {
@@ -551,14 +551,13 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setAttSections(list);
-          if (list.length > 0 && !attSection) setAttSection(list[0].sectionId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching sections:", err))
       .finally(() => { if (isMounted) setLoadingSections(false); });
 
     return () => { isMounted = false; };
-  }, [attBoard, attYear, attLevel, attGroup, attProgram, attSection]);
+  }, [attBoard, attYear, attLevel, attGroup, attProgram]);
 
   // Format month label ("October, 2026")
   const monthlyMonthLabel = useMemo(() => {
@@ -730,61 +729,28 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
   // Handlers for Filter Changes auto-synchronized with Timetable
   const handleLevelChange = (levelVal) => {
     setAttLevel(levelVal);
+    setAttSection("");
+    setAttStudents([]);
     setDailyFetched(false);
-    setMonthlyFetched(false);
     setDailyPage(1);
     setMonthlyPage(1);
 
     if (!levelVal) return;
 
-    // Find slots in timetable matching this level
     const matchingSlots = timetableSlots.filter((s) => String(s.academicLevelId) === String(levelVal));
     if (matchingSlots.length > 0) {
       const first = matchingSlots[0];
-      if (first.boardId) setAttBoard(first.boardId);
-      if (first.academicYearId) setAttYear(first.academicYearId);
-      if (first.groupId) setAttGroup(first.groupId);
-      if (first.programId) setAttProgram(first.programId);
-      // Auto-select section if current section is not part of this level
-      const hasCurrentSec = matchingSlots.some((s) => String(s.sectionId) === String(attSection));
-      if (!hasCurrentSec && first.sectionId) {
-        setAttSection(first.sectionId);
-      }
-    }
-  };
-
-  const handleSectionChange = (val) => {
-    setAttSection(val);
-    setDailyFetched(false);
-    setMonthlyFetched(false);
-    setDailyPage(1);
-    setMonthlyPage(1);
-
-    if (!val) return;
-
-    // Auto sync from timetable slot
-    const slot = timetableSlots.find((s) => String(s.sectionId) === String(val));
-    if (slot) {
-      if (slot.academicLevelId) setAttLevel(slot.academicLevelId);
-      if (slot.groupId) setAttGroup(slot.groupId);
-      if (slot.programId) setAttProgram(slot.programId);
-      if (slot.boardId) setAttBoard(slot.boardId);
-      if (slot.academicYearId) setAttYear(slot.academicYearId);
-    } else {
-      const matched = allocatedSections.find((s) => String(s.sectionId) === String(val))
-        || attSections.find((s) => String(s.sectionId || s.id) === String(val));
-      if (matched) {
-        if (matched.academicLevelId && !attLevel) setAttLevel(matched.academicLevelId);
-        if (matched.groupId) setAttGroup(matched.groupId);
-        if (matched.programId) setAttProgram(matched.programId);
-      }
+      if (first.boardId && !attBoard) setAttBoard(first.boardId);
+      if (first.academicYearId && !attYear) setAttYear(first.academicYearId);
+      if (first.groupId && !attGroup) setAttGroup(first.groupId);
     }
   };
 
   const handleGroupChange = (groupVal) => {
     setAttGroup(groupVal);
+    setAttSection("");
+    setAttStudents([]);
     setDailyFetched(false);
-    setMonthlyFetched(false);
     setDailyPage(1);
     setMonthlyPage(1);
 
@@ -792,65 +758,67 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
 
     const slot = timetableSlots.find((s) => String(s.groupId) === String(groupVal));
     if (slot) {
-      if (slot.boardId) setAttBoard(slot.boardId);
-      if (slot.academicYearId) setAttYear(slot.academicYearId);
-      if (slot.programId) setAttProgram(slot.programId);
-      if (slot.academicLevelId && !attLevel) setAttLevel(slot.academicLevelId);
+      if (slot.boardId && !attBoard) setAttBoard(slot.boardId);
+      if (slot.academicYearId && !attYear) setAttYear(slot.academicYearId);
     }
   };
 
   const handleProgramChange = (progVal) => {
     setAttProgram(progVal);
-    setDailyFetched(false);
-    setMonthlyFetched(false);
     setDailyPage(1);
     setMonthlyPage(1);
 
-    if (!progVal) return;
-
-    const slot = timetableSlots.find((s) => String(s.programId) === String(progVal));
-    if (slot) {
-      if (slot.boardId) setAttBoard(slot.boardId);
-      if (slot.academicYearId) setAttYear(slot.academicYearId);
-      if (slot.groupId) setAttGroup(slot.groupId);
+    if (attSection) {
+      fetchStudentAttendanceRecords(attSection, attDate);
     }
   };
 
   const handleDateChange = (val) => {
     setAttDate(val);
-    setDailyFetched(false);
     setDailyPage(1);
+    if (attSection) {
+      fetchStudentAttendanceRecords(attSection, val);
+    }
   };
 
   const handleMonthChange = (val) => {
     setMonthlyDateValue(val);
-    setMonthlyFetched(false);
     setMonthlyPage(1);
+    if (attSection) {
+      fetchStudentAttendanceRecords(attSection, attDate);
+    }
   };
 
-  // Primary Action: GET RECORDS (Reveals the 3 tabs and populates Daily, Monthly & Defaulters data)
-  const handleGetRecords = async () => {
-    if (!attSection) {
-      notify("Please select a Section to retrieve student attendance records.", "error");
+  // Primary Action: Fetch Student Attendance Records (Auto-triggered upon section selection)
+  const fetchStudentAttendanceRecords = useCallback(async (targetSectionParam, targetDateParam) => {
+    const targetSection = targetSectionParam || attSection;
+    if (!targetSection) {
+      setAttStudents([]);
+      setDailyFetched(false);
       return;
     }
+
+    const targetDate = targetDateParam || attDate;
 
     setFetchingDaily(true);
     setMonthlyLoading(true);
     setDefaultersLoading(true);
 
     try {
-      // 1. Fetch Students for Daily Attendance
+      // 1. Fetch Students for Daily Attendance matching Admin Student Attendance endpoint
       const dailyParams = {
-        boardId: Number(attBoard || timetableInfo.boardId || 1),
-        academicYearId: Number(attYear || timetableInfo.academicYearId || 9),
-        academicLevelId: attLevel ? Number(attLevel) : undefined,
-        groupId: Number(attGroup || timetableInfo.groupId || 37),
-        programId: Number(attProgram || timetableInfo.programId || 1),
-        sectionId: Number(attSection),
-        attendanceDate: attDate,
-        date: attDate,
+        sectionId: Number(targetSection),
+        attendanceDate: targetDate,
+        date: targetDate,
       };
+      if (campusCtx?.selectedCampusId || context?.profileData?.campusId) {
+        dailyParams.campusId = Number(campusCtx.selectedCampusId || context?.profileData?.campusId);
+      }
+      if (attBoard) dailyParams.boardId = Number(attBoard);
+      if (attYear) dailyParams.academicYearId = Number(attYear);
+      if (attLevel) dailyParams.academicLevelId = Number(attLevel);
+      if (attGroup) dailyParams.groupId = Number(attGroup);
+      if (attProgram) dailyParams.programId = Number(attProgram);
 
       const dailyRes = await apiClient.get("/api/v1/attendance/admin/students", { params: dailyParams });
       const rawStudents = dailyRes.data?.data || dailyRes.data || [];
@@ -859,7 +827,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       if (Array.isArray(rawStudents) && rawStudents.length > 0) {
         mappedStudents = rawStudents.map((s, idx) => {
           const sid = s.studentId || s.id;
-          const ledgerRec = attendanceLedger[attDate]?.[sid];
+          const ledgerRec = attendanceLedger[targetDate]?.[sid];
 
           const mStatus = ledgerRec?.morningStatus ?? (
             s.morningStatus === 1 || s.morningStatus === "Present"
@@ -877,10 +845,10 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                 : null
           );
 
-          const sectionPrefix = currentSectionName ? currentSectionName.replace(/\s+/g, "") : "MPC";
           const resolvedRoll = (s.rollNumber && String(s.rollNumber).trim())
             || (s.rollNo && String(s.rollNo).trim())
-            || `${sectionPrefix}-${String(idx + 1).padStart(2, "0")}`;
+            || (s.admissionNumber && String(s.admissionNumber).trim())
+            || `Roll-${String(idx + 1).padStart(2, "0")}`;
 
           return {
             studentId: sid,
@@ -901,17 +869,17 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       setDailyPage(1);
 
       // 2. Fetch Monthly Calendar Matrix Report
-      const [yearStr, monthStr] = (monthlyDateValue || "2026-10").split("-");
+      const [yearStr, monthStr] = (monthlyDateValue || targetDate.slice(0, 7)).split("-");
       const monthParams = {
         year: Number(yearStr),
         month: Number(monthStr),
-        boardId: attBoard ? Number(attBoard) : undefined,
-        academicYearId: attYear ? Number(attYear) : undefined,
-        academicLevelId: attLevel ? Number(attLevel) : undefined,
-        groupId: attGroup ? Number(attGroup) : undefined,
-        programId: attProgram ? Number(attProgram) : undefined,
-        sectionId: Number(attSection),
+        sectionId: Number(targetSection),
       };
+      if (attBoard) monthParams.boardId = Number(attBoard);
+      if (attYear) monthParams.academicYearId = Number(attYear);
+      if (attLevel) monthParams.academicLevelId = Number(attLevel);
+      if (attGroup) monthParams.groupId = Number(attGroup);
+      if (attProgram) monthParams.programId = Number(attProgram);
 
       try {
         const monthRes = await apiClient.get("/api/v1/attendance/student-monthly-report", { params: monthParams });
@@ -937,8 +905,6 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       } catch (dErr) {
         console.warn("Defaulters endpoint fallback to calculated threshold:", dErr);
       }
-
-      notify(`Fetched ${mappedStudents.length} student records for ${currentSectionName}.`);
     } catch (err) {
       console.error("Error fetching attendance records:", err);
       notify("Failed to retrieve attendance records. Please check filters.", "error");
@@ -947,7 +913,43 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       setMonthlyLoading(false);
       setDefaultersLoading(false);
     }
+  }, [attSection, attDate, attBoard, attYear, attLevel, attGroup, attProgram, campusCtx?.selectedCampusId, context?.profileData?.campusId, attendanceLedger, monthlyDateValue, defaulterThreshold, notify]);
+
+  const handleSectionChange = (val) => {
+    setAttSection(val);
+    setDailyPage(1);
+    setMonthlyPage(1);
+
+    if (!val) {
+      setAttStudents([]);
+      setDailyFetched(false);
+      return;
+    }
+
+    // Auto sync from timetable slot
+    const slot = timetableSlots.find((s) => String(s.sectionId) === String(val));
+    if (slot) {
+      if (slot.academicLevelId && !attLevel) setAttLevel(slot.academicLevelId);
+      if (slot.groupId && !attGroup) setAttGroup(slot.groupId);
+      if (slot.programId && !attProgram) setAttProgram(slot.programId);
+      if (slot.boardId && !attBoard) setAttBoard(slot.boardId);
+      if (slot.academicYearId && !attYear) setAttYear(slot.academicYearId);
+    } else {
+      const matched = allocatedSections.find((s) => String(s.sectionId) === String(val))
+        || attSections.find((s) => String(s.sectionId || s.id) === String(val));
+      if (matched) {
+        if (matched.academicLevelId && !attLevel) setAttLevel(matched.academicLevelId);
+        if (matched.groupId && !attGroup) setAttGroup(matched.groupId);
+        if (matched.programId && !attProgram) setAttProgram(matched.programId);
+      }
+    }
+
+    // Auto-fetch students immediately!
+    fetchStudentAttendanceRecords(val, attDate);
   };
+
+  const handleGetRecords = fetchStudentAttendanceRecords;
+
 
   // Generation of monthly rows with Continuous Dynamic Sync to Daily Attendance Ledger
   const monthlyRows = useMemo(() => {
@@ -1449,18 +1451,6 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
               </select>
             </div>
 
-            {/* Fetch Action Button */}
-            <div className="att-filter-action att-field-compact">
-              <button
-                type="button"
-                className="cms-btn cms-btn-primary"
-                onClick={handleGetRecords}
-                disabled={fetchingDaily || monthlyLoading}
-              >
-                {fetchingDaily || monthlyLoading ? <Loader2 size={14} className="spin" /> : null}
-                {fetchingDaily || monthlyLoading ? "Fetching records…" : "Get Records"}
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -1489,30 +1479,24 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         </div>
       </div>
 
-      {/* 4. Valuable Prompt Card (Shown below the tabs before clicking Get Records) */}
-      {!dailyFetched ? (
+      {/* 4. Prompt Card (Shown below the tabs when no section selected or while loading) */}
+      {!attSection || !dailyFetched ? (
         <div className="sp-att-notice-card">
           <div className="sp-att-notice-content">
             <div className="sp-att-notice-icon">
-              <ClipboardCheck size={32} />
+              {fetchingDaily ? (
+                <Loader2 size={32} className="spin" style={{ color: "var(--cms-primary, #6F8400)" }} />
+              ) : (
+                <ClipboardCheck size={32} />
+              )}
             </div>
             <div className="sp-att-notice-text">
-              <h3>Select Details & Fetch Student Attendance</h3>
+              <h3>{fetchingDaily ? "Loading Student Attendance..." : "Select Details & Student Attendance"}</h3>
               <p>
-                Please verify your <strong>Group</strong>, <strong>Academic Level</strong>, <strong>Program</strong>, and <strong>Section</strong> from your timetable filters above, then click <strong>"Get Records"</strong> to load students and record session attendance.
+                {fetchingDaily
+                  ? `Retrieving attendance sheet for ${currentSectionName} on ${attDate}...`
+                  : "Please select your Group, Academic Level, Program, and Section from your assigned timetable above to load students and record attendance."}
               </p>
-            </div>
-            <div className="sp-att-notice-btn">
-              <button
-                type="button"
-                className="cms-btn cms-btn-primary"
-                onClick={handleGetRecords}
-                disabled={fetchingDaily || monthlyLoading}
-                style={{ height: 38, padding: "0 22px", borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
-              >
-                {fetchingDaily || monthlyLoading ? <Loader2 size={14} className="spin" /> : null}
-                {fetchingDaily || monthlyLoading ? "Fetching records…" : "Get Records"}
-              </button>
             </div>
           </div>
         </div>

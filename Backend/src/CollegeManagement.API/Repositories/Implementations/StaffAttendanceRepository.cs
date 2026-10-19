@@ -17,6 +17,7 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class StaffAttendanceRepository : IStaffAttendanceRepository
     {
         private readonly AppDbContext _context;
+        private static readonly System.Threading.SemaphoreSlim _sessionLock = new System.Threading.SemaphoreSlim(1, 1);
 
         public StaffAttendanceRepository(AppDbContext context)
         {
@@ -764,10 +765,20 @@ namespace CollegeManagement.API.Repositories.Implementations
             var targetDate = date.Date;
             var nextDate = targetDate.AddDays(1);
 
-            var timingConfig = await _context.AttendanceTimingConfigs
+            var staffMember = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == facultyId);
+            var staffTypeEnum = (staffMember != null && !string.Equals(staffMember.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) && !string.Equals(staffMember.StaffType, "NonTeaching", StringComparison.OrdinalIgnoreCase))
+                ? StaffType.Teaching
+                : StaffType.NonTeaching;
+
+            var timingConfigs = await _context.AttendanceTimingConfigs
+                .AsNoTracking()
                 .Where(c => c.IsActive)
-                .OrderBy(c => c.Id)
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+
+            var timingConfig = timingConfigs.FirstOrDefault(c => c.StaffType == staffTypeEnum && (c.DepartmentId == null || (staffMember != null && c.DepartmentId == staffMember.DepartmentId)))
+                ?? timingConfigs.FirstOrDefault(c => c.StaffType == staffTypeEnum)
+                ?? timingConfigs.FirstOrDefault(c => c.StaffType == null)
+                ?? timingConfigs.FirstOrDefault();
 
             var shiftStart = timingConfig?.WorkStartTime ?? new TimeSpan(9, 0, 0);
             var shiftEnd = timingConfig?.WorkEndTime ?? new TimeSpan(16, 30, 0);
@@ -848,7 +859,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             else
             {
-                if (isHoliday) todayStatus = "Holiday";
+                if (targetDate.DayOfWeek == DayOfWeek.Sunday) todayStatus = "Weekly Off";
+                else if (isHoliday) todayStatus = "Holiday";
                 else if (isLeave) todayStatus = "Leave";
                 else todayStatus = "Absent";
             }
@@ -862,7 +874,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 InTime = inTimeStr,
                 OutTime = outTimeStr,
                 ShiftDuration = durationStr ?? "--",
-                ShiftName = $"Morning ({DateTime.Today.Add(shiftStart):hh:mm tt} – {DateTime.Today.Add(shiftEnd):hh:mm tt})",
+                ShiftName = $"{DateTime.Today.Add(shiftStart):hh:mm tt} – {DateTime.Today.Add(shiftEnd):hh:mm tt}",
                 ShiftStartTime = DateTime.Today.Add(shiftStart).ToString("hh:mm tt"),
                 ShiftEndTime = DateTime.Today.Add(shiftEnd).ToString("hh:mm tt"),
                 IsLate = isLate,
@@ -886,27 +898,48 @@ namespace CollegeManagement.API.Repositories.Implementations
                 throw new KeyNotFoundException($"Staff/Faculty with ID {facultyId} was not found.");
             }
 
-            // Find or create session for today
+            var staffTypeEnum = (!string.Equals(staff.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) && !string.Equals(staff.StaffType, "NonTeaching", StringComparison.OrdinalIgnoreCase))
+                ? StaffType.Teaching
+                : StaffType.NonTeaching;
+
+            // Thread-safe session creation under high concurrency (100-200 concurrent punches)
             var session = await _context.StaffAttendanceSessions
                 .FirstOrDefaultAsync(s => s.AttendanceDate >= targetDate && s.AttendanceDate < nextDate
                                           && (staff.CampusId == null || s.CampusId == staff.CampusId)
-                                          && s.StaffType == StaffType.Teaching);
+                                          && s.StaffType == staffTypeEnum);
 
             if (session == null)
             {
-                session = new StaffAttendanceSession
+                await _sessionLock.WaitAsync();
+                try
                 {
-                    AttendanceDate = targetDate,
-                    CampusId = staff.CampusId,
-                    DepartmentId = staff.DepartmentId,
-                    StaffType = StaffType.Teaching,
-                    TotalStaffCount = 1,
-                    CreatedByUserId = userId,
-                    CreatedAt = DateTime.UtcNow,
-                    IsActive = true
-                };
-                await _context.StaffAttendanceSessions.AddAsync(session);
-                await _context.SaveChangesAsync();
+                    // Double check inside lock
+                    session = await _context.StaffAttendanceSessions
+                        .FirstOrDefaultAsync(s => s.AttendanceDate >= targetDate && s.AttendanceDate < nextDate
+                                                  && (staff.CampusId == null || s.CampusId == staff.CampusId)
+                                                  && s.StaffType == staffTypeEnum);
+
+                    if (session == null)
+                    {
+                        session = new StaffAttendanceSession
+                        {
+                            AttendanceDate = targetDate,
+                            CampusId = staff.CampusId,
+                            DepartmentId = staff.DepartmentId,
+                            StaffType = staffTypeEnum,
+                            TotalStaffCount = 1,
+                            CreatedByUserId = userId,
+                            CreatedAt = DateTime.UtcNow,
+                            IsActive = true
+                        };
+                        await _context.StaffAttendanceSessions.AddAsync(session);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+                finally
+                {
+                    _sessionLock.Release();
+                }
             }
 
             var attendance = await _context.StaffAttendances
@@ -924,10 +957,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 throw new InvalidOperationException($"You have already checked in for today at {timeStr}.");
             }
 
-            var timingConfig = await _context.AttendanceTimingConfigs
+            var timingConfigs = await _context.AttendanceTimingConfigs
+                .AsNoTracking()
                 .Where(c => c.IsActive)
-                .OrderBy(c => c.Id)
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+
+            var timingConfig = timingConfigs.FirstOrDefault(c => c.StaffType == staffTypeEnum && (c.DepartmentId == null || (staff.DepartmentId != null && c.DepartmentId == staff.DepartmentId)))
+                ?? timingConfigs.FirstOrDefault(c => c.StaffType == staffTypeEnum)
+                ?? timingConfigs.FirstOrDefault(c => c.StaffType == null)
+                ?? timingConfigs.FirstOrDefault();
 
             var lateThreshold = timingConfig != null
                 ? timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes))
@@ -997,12 +1035,37 @@ namespace CollegeManagement.API.Repositories.Implementations
                 throw new InvalidOperationException($"You have already punched out for today at {timeStr}.");
             }
 
-            attendance.OutTime = DateTime.Now.TimeOfDay;
+            var currentTime = DateTime.Now.TimeOfDay;
+            attendance.OutTime = currentTime;
             attendance.UpdatedAt = DateTime.UtcNow;
+
+            var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == facultyId);
+            var staffTypeEnum = (staff != null && !string.Equals(staff.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) && !string.Equals(staff.StaffType, "NonTeaching", StringComparison.OrdinalIgnoreCase))
+                ? StaffType.Teaching
+                : StaffType.NonTeaching;
+
+            var timingConfigs = await _context.AttendanceTimingConfigs
+                .AsNoTracking()
+                .Where(c => c.IsActive)
+                .ToListAsync();
+
+            var timingConfig = timingConfigs.FirstOrDefault(c => c.StaffType == staffTypeEnum && (c.DepartmentId == null || (staff != null && c.DepartmentId == staff.DepartmentId)))
+                ?? timingConfigs.FirstOrDefault(c => c.StaffType == staffTypeEnum)
+                ?? timingConfigs.FirstOrDefault(c => c.StaffType == null)
+                ?? timingConfigs.FirstOrDefault();
+
+            var earlyCheckoutThreshold = timingConfig?.EarlyCheckoutThreshold ?? new TimeSpan(16, 30, 0);
+            var isEarlyCheckout = currentTime < earlyCheckoutThreshold;
+
+            var outRemarks = isEarlyCheckout ? "Early checkout logged" : "Web Portal Check-Out";
             if (!string.IsNullOrWhiteSpace(request.Remarks))
             {
-                attendance.Remarks = (attendance.Remarks ?? "") + " | " + request.Remarks;
+                outRemarks += $" | {request.Remarks}";
             }
+
+            attendance.Remarks = string.IsNullOrWhiteSpace(attendance.Remarks)
+                ? outRemarks
+                : $"{attendance.Remarks} | {outRemarks}";
 
             await _context.SaveChangesAsync();
             return await GetMyTodayStatusAsync(facultyId, targetDate);
@@ -1019,7 +1082,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 case "last_week":
                     int diffLast = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7 + 7;
                     start = now.AddDays(-diffLast).Date;
-                    end = start.AddDays(5).Date; // Mon to Sat
+                    end = start.AddDays(6).Date; // Mon to Sun (all 7 days)
                     break;
                 case "month":
                     start = new DateTime(now.Year, now.Month, 1);
@@ -1035,11 +1098,16 @@ namespace CollegeManagement.API.Repositories.Implementations
                     periodKey = "week";
                     int diff = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
                     start = now.AddDays(-diff).Date;
-                    end = start.AddDays(5).Date; // Mon to Sat
+                    end = start.AddDays(6).Date; // Mon to Sun (all 7 days)
                     break;
             }
 
             var nextEnd = end.AddDays(1);
+
+            var staffMember = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == facultyId);
+            var staffTypeEnum = (staffMember != null && !string.Equals(staffMember.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) && !string.Equals(staffMember.StaffType, "NonTeaching", StringComparison.OrdinalIgnoreCase))
+                ? StaffType.Teaching
+                : StaffType.NonTeaching;
 
             var attendances = await _context.StaffAttendances
                 .AsNoTracking()
@@ -1065,15 +1133,19 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Where(r => (r.FacultyId == facultyId || r.StaffId == facultyId) && r.AttendanceDate >= start && r.AttendanceDate < nextEnd)
                 .ToListAsync();
 
-            var timingConfig = await _context.AttendanceTimingConfigs
+            var timingConfigs = await _context.AttendanceTimingConfigs
                 .AsNoTracking()
                 .Where(c => c.IsActive)
-                .OrderBy(c => c.Id)
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+
+            var timingConfig = timingConfigs.FirstOrDefault(c => c.StaffType == staffTypeEnum && (c.DepartmentId == null || (staffMember != null && c.DepartmentId == staffMember.DepartmentId)))
+                ?? timingConfigs.FirstOrDefault(c => c.StaffType == staffTypeEnum)
+                ?? timingConfigs.FirstOrDefault(c => c.StaffType == null)
+                ?? timingConfigs.FirstOrDefault();
 
             var shiftStart = timingConfig?.WorkStartTime ?? new TimeSpan(9, 0, 0);
             var shiftEnd = timingConfig?.WorkEndTime ?? new TimeSpan(16, 30, 0);
-            string shiftLabel = $"Morning ({DateTime.Today.Add(shiftStart):HH:mm}–{DateTime.Today.Add(shiftEnd):HH:mm})";
+            string shiftLabel = $"{DateTime.Today.Add(shiftStart):hh:mm tt} – {DateTime.Today.Add(shiftEnd):hh:mm tt}";
 
             var logs = new List<MyAttendanceLogItemDto>();
             int workingDaysCount = 0;
@@ -1088,7 +1160,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 bool isPastOrToday = d <= now;
 
                 var att = attendances.FirstOrDefault(a => a.StaffAttendanceSession.AttendanceDate.Date == d);
-                var isHoliday = holidays.Any(h => d >= h.StartDate.Date && d <= h.EndDate.Date);
+                var matchingHoliday = holidays.FirstOrDefault(h => d >= h.StartDate.Date && d <= h.EndDate.Date);
+                var isHoliday = matchingHoliday != null;
                 var isLeaveDay = leaves.Any(l => d >= l.StartDate.Date && d <= l.EndDate.Date);
                 var reg = regularizations.FirstOrDefault(r => r.AttendanceDate.Date == d);
 
@@ -1097,60 +1170,63 @@ namespace CollegeManagement.API.Repositories.Implementations
                 string outTimeStr = "--";
                 string hoursStr = "0h 0m";
                 string device = "--";
+                string? holidayName = matchingHoliday?.HolidayName;
 
-                if (isSunday)
+                // Prioritize actual punch if staff attended
+                if (att != null && att.InTime.HasValue)
                 {
-                    status = "Holiday";
+                    workingDaysCount++;
+                    inTimeStr = DateTime.Today.Add(att.InTime.Value).ToString("hh:mm tt");
+                    device = string.IsNullOrWhiteSpace(att.DeviceId) ? "Web Portal" : att.DeviceId;
+
+                    if (att.OutTime.HasValue)
+                    {
+                        outTimeStr = DateTime.Today.Add(att.OutTime.Value).ToString("hh:mm tt");
+                        var diff = att.OutTime.Value - att.InTime.Value;
+                        if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                        hoursStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                    }
+
+                    if (reg?.Status == "Approved")
+                    {
+                        status = "Present";
+                        presentCount++;
+                    }
+                    else if (att.Status == AttendanceStatus.Late)
+                    {
+                        status = "Late";
+                        presentCount++;
+                        lateCount++;
+                    }
+                    else if (att.Status == AttendanceStatus.HalfDay)
+                    {
+                        status = "Half Day";
+                        presentCount++;
+                    }
+                    else
+                    {
+                        status = "Present";
+                        presentCount++;
+                    }
+                }
+                else if (isLeaveDay)
+                {
+                    workingDaysCount++;
+                    status = "Leave";
+                    leaveCount++;
                 }
                 else if (isHoliday)
                 {
                     status = "Holiday";
                 }
+                else if (isSunday)
+                {
+                    status = "Weekly Off";
+                }
                 else
                 {
                     workingDaysCount++;
-
-                    if (att != null && att.InTime.HasValue)
-                    {
-                        inTimeStr = DateTime.Today.Add(att.InTime.Value).ToString("hh:mm tt");
-                        device = string.IsNullOrWhiteSpace(att.DeviceId) ? "Bio-Station 01 (Main Gate)" : att.DeviceId;
-
-                        if (att.OutTime.HasValue)
-                        {
-                            outTimeStr = DateTime.Today.Add(att.OutTime.Value).ToString("hh:mm tt");
-                            var diff = att.OutTime.Value - att.InTime.Value;
-                            if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
-                            hoursStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
-                        }
-
-                        if (reg?.Status == "Approved")
-                        {
-                            status = "Present";
-                            presentCount++;
-                        }
-                        else if (att.Status == AttendanceStatus.Late)
-                        {
-                            status = "Late";
-                            presentCount++;
-                            lateCount++;
-                        }
-                        else if (att.Status == AttendanceStatus.HalfDay)
-                        {
-                            status = "Half Day";
-                            presentCount++;
-                        }
-                        else
-                        {
-                            status = "Present";
-                            presentCount++;
-                        }
-                    }
-                    else if (isLeaveDay)
-                    {
-                        status = "Leave";
-                        leaveCount++;
-                    }
-                    else if (isPastOrToday)
+                    if (isPastOrToday)
                     {
                         status = "Absent";
                         absentCount++;
@@ -1170,7 +1246,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     Day = d.ToString("ddd"),
                     Date = d.ToString("dd/MM/yyyy"),
                     RawDate = d.ToString("yyyy-MM-dd"),
-                    Shift = isSunday || isHoliday ? "General" : shiftLabel,
+                    Shift = isSunday ? "Weekly Off" : shiftLabel,
                     InTime = inTimeStr,
                     OutTime = outTimeStr,
                     Hours = hoursStr,
@@ -1178,20 +1254,92 @@ namespace CollegeManagement.API.Repositories.Implementations
                     Status = status,
                     CanRegularize = canRegularize,
                     IsToday = d == now,
-                    RegularizationState = reg?.Status?.ToLowerInvariant()
+                    RegularizationState = reg?.Status?.ToLowerInvariant(),
+                    HolidayName = holidayName
                 });
+            }
+
+            // Compute Monthly Cumulative Metrics for the top KPI overview (Approach B)
+            var targetMonth = periodKey == "last_month" ? now.AddMonths(-1) : now;
+            var monthStart = new DateTime(targetMonth.Year, targetMonth.Month, 1);
+            var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+            var nextMonthEnd = monthEnd.AddDays(1);
+
+            var monthAttendances = (periodKey == "month" || periodKey == "last_month")
+                ? attendances
+                : await _context.StaffAttendances
+                    .AsNoTracking()
+                    .Include(a => a.StaffAttendanceSession)
+                    .Where(a => a.FacultyId == facultyId 
+                                && a.StaffAttendanceSession.AttendanceDate >= monthStart 
+                                && a.StaffAttendanceSession.AttendanceDate < nextMonthEnd 
+                                && a.IsActive)
+                    .ToListAsync();
+
+            var monthHolidays = (periodKey == "month" || periodKey == "last_month")
+                ? holidays
+                : await _context.Holidays
+                    .AsNoTracking()
+                    .Where(h => !h.IsDeleted && h.Status == "Active" && h.StartDate.Date <= monthEnd && h.EndDate.Date >= monthStart)
+                    .ToListAsync();
+
+            var monthLeaves = (periodKey == "month" || periodKey == "last_month")
+                ? leaves
+                : await _context.StaffLeaveRequests
+                    .AsNoTracking()
+                    .Where(l => l.IsActive && l.StaffId == facultyId && l.Status == LeaveStatus.Approved && l.StartDate.Date <= monthEnd && l.EndDate.Date >= monthStart)
+                    .ToListAsync();
+
+            int mWorkingDays = 0;
+            int mPresent = 0;
+            int mLeaves = 0;
+            int mAbsent = 0;
+            int mLate = 0;
+
+            for (var md = monthStart; md <= monthEnd; md = md.AddDays(1))
+            {
+                bool isSun = md.DayOfWeek == DayOfWeek.Sunday;
+                bool isPast = md <= now;
+
+                var mAtt = monthAttendances.FirstOrDefault(a => a.StaffAttendanceSession.AttendanceDate.Date == md);
+                var isHol = monthHolidays.Any(h => md >= h.StartDate.Date && md <= h.EndDate.Date);
+                var isLev = monthLeaves.Any(l => md >= l.StartDate.Date && md <= l.EndDate.Date);
+
+                if (mAtt != null && mAtt.InTime.HasValue)
+                {
+                    mWorkingDays++;
+                    mPresent++;
+                    if (mAtt.Status == AttendanceStatus.Late) mLate++;
+                }
+                else if (isLev)
+                {
+                    mWorkingDays++;
+                    mLeaves++;
+                }
+                else if (isHol || isSun)
+                {
+                    // Non-working day
+                }
+                else
+                {
+                    mWorkingDays++;
+                    if (isPast)
+                    {
+                        mAbsent++;
+                    }
+                }
             }
 
             var metrics = new MyAttendanceAnalyticsMetricsDto
             {
-                WorkingDays = $"{workingDaysCount} Days",
-                WorkingDaysSub = periodKey == "week" ? "Current Week (Mon–Sat)" : (periodKey == "last_week" ? "Previous Week (Mon–Sat)" : $"{now:MMMM yyyy}"),
-                PresentDays = $"{presentCount} Days",
-                PresentDaysSub = lateCount > 0 ? $"{lateCount} Late punch logged" : "Biometric / Portal verified",
-                Leaves = $"{leaveCount} Days",
-                LeavesSub = leaveCount > 0 ? $"{leaveCount} Approved leave(s)" : "No leaves applied",
-                AbsentDays = $"{absentCount} Days",
-                AbsentDaysSub = absentCount > 0 ? $"{absentCount} Unexcused absence" : "No absences"
+                WorkingDays = $"{mWorkingDays} Days",
+                WorkingDaysSub = $"{monthStart:MMMM yyyy} Total",
+                PresentDays = $"{mPresent} Days",
+                PresentDaysSub = mLate > 0 ? $"{mLate} Late punch logged" : "Biometric / Portal verified",
+                Leaves = $"{mLeaves} Days",
+                LeavesSub = mLeaves > 0 ? $"{mLeaves} Approved leave(s)" : "No leaves applied",
+                AbsentDays = $"{mAbsent} Days",
+                AbsentDaysSub = mAbsent > 0 ? $"{mAbsent} Unexcused absence" : "No absences"
             };
 
             return new MyAttendanceHistoryResponse
