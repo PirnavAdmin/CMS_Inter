@@ -1,4 +1,5 @@
-export const mockPermissions = ["VIEW_DASHBOARD","VIEW_PROFILE","VIEW_TIMETABLE","VIEW_CLASSES","MARK_ATTENDANCE","ENTER_MARKS","VIEW_EXAM_DUTIES","VIEW_SELF_ATTENDANCE","APPLY_LEAVE","VIEW_PAYSLIPS","VIEW_HOLIDAYS"];
+export const mockPermissions = ["VIEW_DASHBOARD","VIEW_PROFILE","VIEW_TIMETABLE","VIEW_CLASSES","MARK_ATTENDANCE","ENTER_MARKS","VIEW_EXAM_DUTIES","VIEW_SELF_ATTENDANCE","APPLY_LEAVE","VIEW_PAYSLIPS","VIEW_HOLIDAYS","VIEW_REIMBURSEMENTS"];
+
 export const mockStaff = {
   id: 1042, employeeId: "EMP-1042", firstName: "Ananya", middleName: "", lastName: "Rao",
   fullName: "Dr. Ananya Rao", role: "Faculty", staffType: "Teaching",

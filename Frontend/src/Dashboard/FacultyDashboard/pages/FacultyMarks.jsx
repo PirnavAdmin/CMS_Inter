@@ -71,18 +71,17 @@ export default function FacultyMarks() {
   // Rejection feedback note for current editing session
   const [currentRejectionRemarks, setCurrentRejectionRemarks] = useState("");
 
-  // Storage for evaluations (Tracks status: APPROVED, SUBMITTED, VERIFIED, REJECTED, DRAFT)
-  const [evaluationsLedger, setEvaluationsLedger] = useState(() => {
-    const saved = localStorage.getItem("cms_faculty_marks_evaluations");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.warn("Could not parse saved evaluations ledger:", e);
-      }
+  // Storage for evaluations (Tracks live status: APPROVED, SUBMITTED, VERIFIED, REJECTED, DRAFT)
+  const [evaluationsLedger, setEvaluationsLedger] = useState({});
+
+  // Purge any legacy stale mock evaluations from localStorage
+  useEffect(() => {
+    try {
+      localStorage.removeItem("cms_faculty_marks_evaluations");
+    } catch (e) {
+      // ignore
     }
-    return {};
-  });
+  }, []);
 
   // Current working student rows
   const [currentStudents, setCurrentStudents] = useState([]);
@@ -117,15 +116,6 @@ export default function FacultyMarks() {
     setReportPage(1);
   }, [reportStatusFilter, reportExamFilter, reportSearch]);
 
-  // Persist ledger changes to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem("cms_faculty_marks_evaluations", JSON.stringify(evaluationsLedger));
-    } catch (e) {
-      console.warn("Failed saving evaluations ledger:", e);
-    }
-  }, [evaluationsLedger]);
-
   // Load faculty evaluations from live API on mount / tab change
   useEffect(() => {
     let isMounted = true;
@@ -135,39 +125,55 @@ export default function FacultyMarks() {
 
     const fetchLiveEvaluations = async () => {
       try {
-        const res = await apiClient.get(`/api/v1/faculty/evaluations?facultyId=${staffId}`).catch(() => null);
-        const list = res?.data?.data || res?.data || [];
-        if (!isMounted || !Array.isArray(list)) return;
-        setEvaluationsLedger((prev) => {
-          const next = { ...prev };
-          list.forEach((ev) => {
-            const key = ev.sectionId + '_' + ev.examinationId + '_' + ev.subjectId;
-            if (!next[key]) {
-              next[key] = {
-                evaluationId: String(ev.evaluationId || key),
-                sectionId: ev.sectionId,
-                section: ev.sectionName || ('Section #' + ev.sectionId),
-                examId: ev.examinationId,
-                examName: ev.examinationName || ('Exam #' + ev.examinationId),
-                subjectId: ev.subjectId,
-                subjectName: ev.subjectName || ('Subject #' + ev.subjectId),
-                faculty: ev.facultyName || context?.profile?.name || authUser?.fullName || 'Tanjiro Kamado',
-                empId: 'EMP-' + staffId,
-                status: ev.status ? ev.status.toUpperCase() : 'DRAFT',
-                adminRemarks: ev.rejectionReason || ev.remarks || '',
-                rows: [],
-                submittedAt: ev.lastSubmittedAt ? String(ev.lastSubmittedAt).split('T')[0] : new Date().toISOString().split('T')[0],
-                updatedAt: ev.lastSubmittedAt ? String(ev.lastSubmittedAt).split('T')[0] : new Date().toISOString().split('T')[0],
-              };
-            } else {
-              next[key].status = ev.status ? ev.status.toUpperCase() : next[key].status;
-              if (ev.rejectionReason) next[key].adminRemarks = ev.rejectionReason;
-            }
+        let res = await apiClient.get(`/api/v1/faculty/evaluations?facultyId=${staffId}`).catch(() => null);
+        if (!res || !res.data) {
+          res = await apiClient.get("/api/v1/faculty/evaluations", { params: { facultyId: staffId } }).catch(() => null);
+        }
+        if (!res || !res.data) {
+          res = await apiClient.get("/api/v1/evaluations/search", { params: { facultyId: staffId } }).catch(() => null);
+        }
+
+        const rawList = res?.data?.data !== undefined ? res.data.data : res?.data;
+        if (!isMounted) return;
+
+        if (Array.isArray(rawList)) {
+          const next = {};
+          rawList.forEach((ev) => {
+            const key = String(ev.evaluationId || ev.id || `${ev.sectionId}_${ev.examinationId || ev.examId}_${ev.subjectId}`);
+            next[key] = {
+              evaluationId: String(ev.evaluationId || ev.id || key),
+              sectionId: ev.sectionId,
+              section: ev.sectionName || (ev.sectionId ? `Section #${ev.sectionId}` : "—"),
+              examId: ev.examinationId || ev.examId,
+              examName: ev.examinationName || ev.examName || (ev.examinationId ? `Exam #${ev.examinationId}` : "—"),
+              subjectId: ev.subjectId,
+              subjectName: ev.subjectName || (ev.subjectId ? `Subject #${ev.subjectId}` : "—"),
+              faculty: ev.facultyName || context?.profile?.name || authUser?.fullName || "Faculty Member",
+              empId: ev.empId || `EMP-${staffId}`,
+              status: ev.status ? String(ev.status).toUpperCase() : "DRAFT",
+              adminRemarks: ev.rejectionReason || ev.remarks || ev.adminRemarks || "",
+              rows: ev.rows || ev.students || [],
+              submittedAt: ev.lastSubmittedAt ? String(ev.lastSubmittedAt).split("T")[0] : (ev.submittedAt ? String(ev.submittedAt).split("T")[0] : ""),
+              updatedAt: ev.lastSubmittedAt ? String(ev.lastSubmittedAt).split("T")[0] : (ev.updatedAt ? String(ev.updatedAt).split("T")[0] : ""),
+            };
           });
-          return next;
-        });
+
+          setEvaluationsLedger((prev) => {
+            // Keep in-session draft submissions created locally in this session if not yet in backend
+            const merged = { ...next };
+            Object.entries(prev).forEach(([k, v]) => {
+              if (v?.isLocal && !merged[k]) {
+                merged[k] = v;
+              }
+            });
+            return merged;
+          });
+        } else {
+          setEvaluationsLedger({});
+        }
       } catch (err) {
-        console.warn('Could not load faculty evaluations from API:', err);
+        console.warn("Could not load faculty evaluations from API:", err);
+        if (isMounted) setEvaluationsLedger({});
       }
     };
 
@@ -380,7 +386,7 @@ export default function FacultyMarks() {
     return () => { isMounted = false; };
   }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, selectedProgram]);
 
-  // Merge live sections with allocated timetable sections
+  // Strictly constrain sections to Faculty's allocated timetable sections
   const displaySections = useMemo(() => {
     const map = new Map();
     allocatedSections.forEach((s) => {
@@ -388,6 +394,10 @@ export default function FacultyMarks() {
         map.set(String(s.sectionId), { ...s, isAssigned: true });
       }
     });
+    if (map.size > 0) {
+      return Array.from(map.values());
+    }
+    // Fallback only if no allocations found for this faculty
     sectionsList.forEach((s) => {
       const id = String(s.sectionId || s.id);
       if (!map.has(id)) {
@@ -723,7 +733,7 @@ export default function FacultyMarks() {
       console.warn("API bulk save endpoint warning, saving to local evaluations ledger:", err);
     }
 
-    setEvaluationsLedger((prev) => ({ ...prev, [key]: updatedEval }));
+    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true } }));
     setEvaluationStatus("DRAFT");
     setSavingMarks(false);
     notify("Marks draft saved successfully.");
@@ -783,7 +793,7 @@ export default function FacultyMarks() {
       console.warn("API bulk submit warning:", err);
     }
 
-    setEvaluationsLedger((prev) => ({ ...prev, [key]: updatedEval }));
+    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true } }));
     setEvaluationStatus("SUBMITTED");
     setCurrentRejectionRemarks("");
     setSavingMarks(false);
@@ -955,14 +965,15 @@ export default function FacultyMarks() {
   // Report Summary Statistics
   const reportStats = useMemo(() => {
     const all = Object.values(evaluationsLedger);
-    const approved = all.filter((e) => e.status === "APPROVED").length;
+    const approved = all.filter((e) => e.status === "APPROVED" || e.status === "PUBLISHED").length;
     const verified = all.filter((e) => e.status === "VERIFIED").length;
     const submitted = all.filter((e) => e.status === "SUBMITTED").length;
-    const rejected = all.filter((e) => e.status === "REJECTED").length;
+    const underReview = all.filter((e) => e.status === "UNDER_REVIEW" || e.status === "PENDING").length;
+    const rejected = all.filter((e) => e.status === "REJECTED" || e.status === "NEEDS_REVISION").length;
     return {
       total: all.length,
       approved,
-      underReview: verified + submitted,
+      underReview: verified + submitted + underReview,
       rejected,
     };
   }, [evaluationsLedger]);
@@ -1049,23 +1060,23 @@ export default function FacultyMarks() {
       {/* TAB 2: EVALUATION REPORT & RESULTS */}
       {activeTab === "report" && (
         <>
-          {/* Summary Metric Cards */}
-          <div className="cms-stats-grid" style={{ marginBottom: 14 }}>
-            <div className="cms-stat-card">
-              <div className="cms-stat-label">TOTAL EVALUATIONS</div>
-              <div className="cms-stat-val">{reportStats.total}</div>
+          {/* Summary Metric KPI Cards (Matching Reference 2) */}
+          <div className="cms-stats-grid" style={{ marginBottom: 16 }}>
+            <div className="cms-stat-card total-box">
+              <p className="cms-stat-label">Total Evaluations</p>
+              <h3 className="cms-stat-val">{reportStats.total}</h3>
             </div>
-            <div className="cms-stat-card approved">
-              <div className="cms-stat-label">APPROVED & PUBLISHED</div>
-              <div className="cms-stat-val">{reportStats.approved}</div>
+            <div className="cms-stat-card approved approved-box">
+              <p className="cms-stat-label">Approved &amp; Published</p>
+              <h3 className="cms-stat-val">{reportStats.approved}</h3>
             </div>
-            <div className="cms-stat-card under-review">
-              <div className="cms-stat-label">PENDING / UNDER REVIEW</div>
-              <div className="cms-stat-val">{reportStats.underReview}</div>
+            <div className="cms-stat-card under-review under-review-box pending-box">
+              <p className="cms-stat-label">Pending / Under Review</p>
+              <h3 className="cms-stat-val">{reportStats.underReview}</h3>
             </div>
-            <div className="cms-stat-card rejected">
-              <div className="cms-stat-label">NEEDS REVISION</div>
-              <div className="cms-stat-val">{reportStats.rejected}</div>
+            <div className="cms-stat-card rejected rejected-box">
+              <p className="cms-stat-label">Needs Revision</p>
+              <h3 className="cms-stat-val">{reportStats.rejected}</h3>
             </div>
           </div>
 
@@ -1156,8 +1167,12 @@ export default function FacultyMarks() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: "center", padding: 32 }}>
-                          <div className="cms-empty">No evaluation reports match the search criteria.</div>
+                        <td colSpan={6} style={{ textAlign: "center", padding: 36 }}>
+                          <div className="cms-empty" style={{ color: "var(--cms-muted)", fontSize: 13.5 }}>
+                            {reportSearch.trim() || reportStatusFilter !== "ALL"
+                              ? "No evaluation reports match the search criteria."
+                              : "No evaluations found."}
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -1176,17 +1191,17 @@ export default function FacultyMarks() {
                 <div className="att-pagination-controls">
                   <button
                     type="button"
-                    disabled={reportPage === 1}
+                    disabled={reportPage === 1 || evaluationsList.length === 0}
                     onClick={() => setReportPage((p) => Math.max(1, p - 1))}
                   >
                     Previous
                   </button>
                   <span className="att-page-number">
-                    {reportPage} / {reportTotalPages}
+                    {evaluationsList.length === 0 ? "0 / 0" : `${reportPage} / ${reportTotalPages}`}
                   </span>
                   <button
                     type="button"
-                    disabled={reportPage >= reportTotalPages || reportTotalPages === 0}
+                    disabled={reportPage >= reportTotalPages || reportTotalPages === 0 || evaluationsList.length === 0}
                     onClick={() => setReportPage((p) => Math.min(reportTotalPages, p + 1))}
                   >
                     Next

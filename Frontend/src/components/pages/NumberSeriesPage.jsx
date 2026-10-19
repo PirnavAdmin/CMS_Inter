@@ -142,7 +142,10 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         const uniqueMerged = [];
         const seenCodes = new Set();
         // Hide legacy/junk cards that bleed from the DB.
-        const hiddenCodes = ['EMPLOYEE_ID', 'STUDENT_ID', 'SECTION_NAME', 'LIBRARY_ID', 'HOSTEL_ID'];
+        const hiddenCodes = [
+          'EMPLOYEE_ID', 'STUDENT_ID', 'SECTION_NAME', 'LIBRARY_ID', 'HOSTEL_ID',
+          'CERTIFICATE', 'CERTIFICATE_NO', 'CERTIFICATE_NUMBER', 'CERTIFICATES'
+        ];
 
         for (const item of mergedValues) {
           const rawCode = item.seriesCode || item.slug || item.id || "";
@@ -154,8 +157,9 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           if (code.includes('STUDENT_ROLL_NO_')) continue;
           
           // Explicitly catch the exact buggy name left in local storage
-          const nameCheck = String(item.name || item.seriesName || "").trim();
-          if (nameCheck.includes("Student Roll")) continue;
+          const nameCheck = String(item.name || item.seriesName || "").trim().toLowerCase();
+          if (nameCheck.includes("student roll")) continue;
+          if (nameCheck.includes("certificate")) continue;
           
           if (hiddenCodes.includes(code)) continue;
 
@@ -478,40 +482,6 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
   const handleCreateCustom = async (data) => {
     setShowAddModal(false); // Close instantly for snappy UI
     setSavingCustom(true);
-    
-    // We can optimistically push to offline data here to make it instantly available
-    const tempConfig = {
-      ...data,
-      currentSequence: 0,
-      totalGenerated: 0
-    };
-    
-    // If the user previously deleted a card with this exact ID, we must un-delete it so it can be recreated!
-    try {
-      const key = String(data.seriesCode || data.id).toLowerCase().replace(/_/g, '-');
-      const existingRaw = localStorage.getItem('NumberSeries_Deleted');
-      if (existingRaw) {
-        let arr = JSON.parse(existingRaw);
-        if (Array.isArray(arr)) {
-          arr = arr.filter(k => k !== key);
-          localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
-        }
-      }
-    } catch {
-      // Continue with the API save when the local deleted-series cache is unavailable.
-    }
-    // Read, append, and save to local storage instantly
-    try {
-      const raw = localStorage.getItem('NumberSeries_Config') || sessionStorage.getItem('NumberSeries_Config');
-      let parsed = [];
-      if (raw) parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        parsed.push(tempConfig);
-        localStorage.setItem('NumberSeries_Config', JSON.stringify(parsed));
-      }
-    } catch {
-      // Local caching is optional; persist the configuration through the API below.
-    }
 
     try {
       await numberSeriesApi.updateNumberSeries(data.seriesCode, {

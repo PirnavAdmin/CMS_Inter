@@ -187,6 +187,71 @@
   font-size: 20px;
   font-weight: 800;
 }
+.accountant-shell .accountant-fee-card { min-width: 0; }
+.accountant-shell .accountant-fee-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sp-border);
+}
+.accountant-shell .accountant-fee-tabs button {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sp-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.accountant-shell .accountant-fee-tabs button.is-active {
+  background: var(--sp-primary);
+  color: #fff;
+}
+.accountant-shell .accountant-fee-tabs.secondary button.is-active {
+  background: var(--sp-primary-soft);
+  border-color: var(--sp-primary);
+  color: var(--sp-primary-dark);
+}
+.accountant-shell .accountant-fee-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.accountant-shell .accountant-fee-filters .sp-search { min-width: 0; flex-basis: 220px; }
+.accountant-shell .accountant-fee-filters select {
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--sp-border);
+  border-radius: 8px;
+  background: var(--sp-surface);
+  color: var(--sp-text);
+  font: inherit;
+  font-size: 12px;
+}
+.accountant-shell .accountant-fee-totals,
+.accountant-shell .accountant-attendance-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 16px;
+  margin: 0;
+}
+.accountant-shell .accountant-fee-totals { padding: 12px 0; }
+.accountant-shell .accountant-fee-totals div,
+.accountant-shell .accountant-attendance-facts div { display: grid; gap: 6px; min-width: 0; }
+.accountant-shell .accountant-fee-totals span,
+.accountant-shell .accountant-attendance-facts dt { font-size: 12px; color: var(--sp-muted); }
+.accountant-shell .accountant-fee-totals strong { font-size: 20px; overflow-wrap: anywhere; }
+.accountant-shell .accountant-attendance-facts dd { margin: 0; font-size: 14px; }
+.accountant-shell .accountant-attendance-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.accountant-shell .accountant-attendance-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.accountant-shell .accountant-structure-items { margin-top: 12px; }
+.accountant-shell .accountant-structure-items summary { cursor: pointer; font-size: 12px; padding: 8px 0; }
+.accountant-shell .accountant-section-label { font-size: 14px; margin: 16px 0 8px; }
+.accountant-shell .accountant-fee-tabs button:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 2px; }
 @media (max-width: 900px) {
   .accountant-shell .sp-summary-grid.four,
   .accountant-shell .sp-dashboard-grid,

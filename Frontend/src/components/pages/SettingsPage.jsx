@@ -116,6 +116,16 @@ export default function SettingsPage() {
       buttonText: "View Audit Logs",
       primary: false,
     },
+    {
+      id: "lop-configuration",
+      title: "LOP Configuration",
+      description: "Assign staff unpaid leave days and preview salary deductions for additional leave.",
+      icon: CalendarDays,
+      image: leaveTypesImage,
+      to: "/dashboard/settings/lop-configuration",
+      buttonText: "Configure LOP",
+      primary: true,
+    },
   ];
 
   return (

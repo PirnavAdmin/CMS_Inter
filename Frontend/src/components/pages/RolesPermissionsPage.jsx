@@ -29,12 +29,14 @@ import { ConfirmDialog, Loader, StatusBadge, Toast } from "@/components/common/U
 import {
   ACTION_LABELS,
   ACTIONS,
+  ALL_PERMISSION_MODULES,
   PERMISSION_PRESETS,
   PRESET_LABELS,
 } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import {
   assignRoleToUser,
   cloneRole,
+  createRole,
   exportPermissionsToCsv,
   getModulesAndPermissions,
   getRolePermissions,
@@ -49,6 +51,7 @@ import {
 } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import {
   getPresetActions,
+  normalizeActionKey,
   normalizePermissionPayload,
   normalizeRoleCode,
   togglePermissionAction,
@@ -205,13 +208,11 @@ function MarkAllControl({ checked, indeterminate, disabled, roleName, onChange }
 }
 
 function initials(name = "User") {
-  return String(name)
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const clean = String(name || "").trim();
+  if (!clean) return "U";
+  const parts = clean.split(" ").filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
 }
 
 function CloneRoleModal({ role, onClose, onCloneSuccess }) {
@@ -573,7 +574,9 @@ function PermissionMatrix({
           if (statusFilter && statusFilter !== "all") {
             const scrActions = modData?.screens?.get(screen.id) || modActions;
             const count = scrActions.size;
-            const total = (screen.availableActions || MATRIX_ACTION_KEYS).length;
+            const total = MATRIX_ACTION_KEYS.filter((act) =>
+              (screen.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey).includes(act)
+            ).length;
             if (statusFilter === "granted" && count === 0) return false;
             if (statusFilter === "denied" && count > 0) return false;
             if (statusFilter === "partial" && (count === 0 || count === total)) return false;
@@ -751,9 +754,9 @@ function PermissionMatrix({
                   </div>
 
                   {MATRIX_ACTION_COLUMNS.map((action) => {
-                    const supportedScreens = screens.filter((s) => (s.availableActions || MATRIX_ACTION_KEYS).includes(action.key));
+                    const supportedScreens = screens.filter((s) => (s.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey).includes(action.key));
                     const isSupported = screens.length === 0
-                      ? (module.availableActions || MATRIX_ACTION_KEYS).includes(action.key)
+                      ? (module.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey).includes(action.key)
                       : supportedScreens.length > 0;
 
                     let isChecked = false;
@@ -811,7 +814,7 @@ function PermissionMatrix({
                       </div>
 
                       {MATRIX_ACTION_COLUMNS.map((action) => {
-                        const isActionSupported = (screen.availableActions || MATRIX_ACTION_KEYS).includes(action.key);
+                        const isActionSupported = (screen.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey).includes(action.key);
                         let isChecked = false;
 
                         if (selectedRole?.isProtected) {
@@ -1954,10 +1957,22 @@ export default function RolesPermissionsPage() {
     >
       <main className="rbac-page">
         <div className="rbac-tabs" role="tablist" aria-label="Roles and permissions sections">
-          <button type="button" role="tab" aria-selected={activeTab === "permissions"} className={activeTab === "permissions" ? "is-active" : ""} onClick={() => selectTab("permissions")}>
-            <ShieldCheck size={16} /> Roles & Permissions
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "permissions"}
+            className={activeTab === "permissions" ? "is-active" : ""}
+            onClick={() => selectTab("permissions")}
+          >
+            <ShieldCheck size={16} /> Permission Matrix
           </button>
-          <button type="button" role="tab" aria-selected={activeTab === "assignments"} className={activeTab === "assignments" ? "is-active" : ""} onClick={() => selectTab("assignments")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "assignments"}
+            className={activeTab === "assignments" ? "is-active" : ""}
+            onClick={() => selectTab("assignments")}
+          >
             <UserPlus size={16} /> User Role Assignment
           </button>
           <span className="rbac-route-note"><Check size={14} /> {routeNote}</span>

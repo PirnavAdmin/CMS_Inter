@@ -219,7 +219,10 @@ public class CertificateRepository : ICertificateRepository
             string medium = dict.ContainsKey("Hydrated_Medium") && dict["Hydrated_Medium"] != null ? dict["Hydrated_Medium"].ToString()!.Trim() : "English";
             string nationality = dict.ContainsKey("Hydrated_Nationality") && dict["Hydrated_Nationality"] != null ? dict["Hydrated_Nationality"].ToString()!.Trim() : "Indian";
             string religion = dict.ContainsKey("Hydrated_Religion") && dict["Hydrated_Religion"] != null ? dict["Hydrated_Religion"].ToString()!.Trim() : "Hindu";
-            string caste = dict.ContainsKey("Hydrated_Caste") && dict["Hydrated_Caste"] != null ? dict["Hydrated_Caste"].ToString()!.Trim() : "General";
+            string caste = dict.ContainsKey("Hydrated_Caste") && dict["Hydrated_Caste"] != null ? dict["Hydrated_Caste"].ToString()!.Trim() : "General / OC";
+            string motherTongue = dict.ContainsKey("Hydrated_MotherTongue") && dict["Hydrated_MotherTongue"] != null ? dict["Hydrated_MotherTongue"].ToString()!.Trim() : "Telugu";
+            string secondLanguage = dict.ContainsKey("Hydrated_SecondLanguage") && dict["Hydrated_SecondLanguage"] != null ? dict["Hydrated_SecondLanguage"].ToString()!.Trim() : "Sanskrit";
+            string identificationMarks = dict.ContainsKey("Hydrated_IdentificationMarks") && dict["Hydrated_IdentificationMarks"] != null ? dict["Hydrated_IdentificationMarks"].ToString()!.Trim() : "1. A mole on the left cheek; 2. A scar on right index finger";
 
             string certType = dict.ContainsKey("CertificateType") && dict["CertificateType"] != null ? dict["CertificateType"].ToString()!.Trim() : "Bonafide Certificate";
             string rawPurpose = dict.ContainsKey("Purpose") && dict["Purpose"] != null ? dict["Purpose"].ToString()!.Trim() : "";
@@ -391,7 +394,7 @@ public class CertificateRepository : ICertificateRepository
                 }
                 else if (templateCode.Contains("TRANSFER", StringComparison.OrdinalIgnoreCase) || certType.Contains("Transfer", StringComparison.OrdinalIgnoreCase) || templateCode == "TC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} in {{group_name}} Group (Section {{section}}).\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. All dues to the college have been cleared ({{dues_cleared}}).\nWe wish him/her all the best for his/her future endeavours.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}, Mother: {{mother_name}}), bearing Admission No: {{admission_no}} and Roll No: {{roll_no}}, was a bonafide student of this college in {{group_name}} Group ({{medium}} Medium, Second Language: {{second_language}}).\nDate of Birth as per admission register: {{dob}} (in words: {{dob_words}}).\nMother Tongue: {{mother_tongue}} | Social Category / Caste: {{caste_category}}.\nPersonal Marks of Identification: {{identification_marks}}.\nClass in which studying at the time of leaving: {{class_leaving}} on {{leaving_date}}.\nQualified for promotion to Higher Education / University Admission: {{qualified_for_promotion}}.\nAll college dues have been cleared ({{dues_cleared}}). Fee concession / scholarship receipt: {{scholarship_concession}}.\nReason for leaving: {{reason_for_leaving}}. General conduct and character have been {{conduct_rating}}.";
                 }
                 else
                 {
@@ -556,6 +559,22 @@ public class CertificateRepository : ICertificateRepository
                 ["Religion"] = religion,
                 ["caste"] = caste,
                 ["Caste"] = caste,
+                ["caste_category"] = caste,
+                ["CasteCategory"] = caste,
+                ["mother_tongue"] = motherTongue,
+                ["MotherTongue"] = motherTongue,
+                ["dob_words"] = "Fourteenth August Two Thousand Eight",
+                ["DobWords"] = "Fourteenth August Two Thousand Eight",
+                ["second_language"] = secondLanguage,
+                ["SecondLanguage"] = secondLanguage,
+                ["class_leaving"] = $"{academicLevel} ({groupName})",
+                ["ClassLeaving"] = $"{academicLevel} ({groupName})",
+                ["qualified_for_promotion"] = "Yes, Qualified for University / Higher Studies Admission",
+                ["QualifiedForPromotion"] = "Yes, Qualified for University / Higher Studies Admission",
+                ["scholarship_concession"] = "No (All Dues Cleared)",
+                ["ScholarshipConcession"] = "No (All Dues Cleared)",
+                ["identification_marks"] = identificationMarks,
+                ["IdentificationMarks"] = identificationMarks,
                 ["admission_date"] = admissionDateStr,
                 ["AdmissionDate"] = admissionDateStr,
                 ["leaving_date"] = issDate.ToString("dd/MM/yyyy"),
