@@ -10,10 +10,48 @@ const normalizeCode = (value = "") =>
 
 const normalizeModuleKey = (value = "") => String(value).trim().toLowerCase();
 
-const normalizeActionKey = (value = "") => {
+export const normalizeActionKey = (value = "") => {
   const action = String(value).trim().toLowerCase();
-  if (action === "add") return ACTIONS.CREATE;
-  if (action === "update") return ACTIONS.EDIT;
+  if (
+    action === "add" ||
+    action === "create" ||
+    action === "mark-attendance" ||
+    action === "apply" ||
+    action === "schedule" ||
+    action === "enter-marks" ||
+    action === "collect-payment" ||
+    action === "generate-receipt" ||
+    action === "issue" ||
+    action === "issue-books" ||
+    action === "assign-permissions" ||
+    action === "assign-users" ||
+    action === "allocate-students" ||
+    action === "manage-routes" ||
+    action === "manage-drives" ||
+    action === "manage-applications" ||
+    action === "manage-rooms" ||
+    action === "manage-books" ||
+    action === "assign-driver-vehicle"
+  ) {
+    return ACTIONS.CREATE;
+  }
+  if (
+    action === "update" ||
+    action === "edit" ||
+    action === "edit-attendance" ||
+    action === "edit-marks" ||
+    action === "approve-reject" ||
+    action === "publish" ||
+    action === "return-books"
+  ) {
+    return ACTIONS.EDIT;
+  }
+  if (action === "delete" || action === "remove") {
+    return ACTIONS.DELETE;
+  }
+  if (action === "view" || action === "read") {
+    return ACTIONS.VIEW;
+  }
   return action;
 };
 
@@ -100,7 +138,11 @@ export const toPermissionMap = (permissions = []) => {
 };
 
 export function normalizeRoleCode(value = "") {
-  return normalizeCode(value);
+  const code = normalizeCode(value);
+  if (code === "ACCOUNTS" || code === "ACCOUNT" || code === "ACCOUNTING" || code === "FINANCE") return "ACCOUNTANT";
+  if (code.includes("LIBRAR")) return "LIBRARIAN";
+  if (code === "DRIVER") return "BUS_DRIVER";
+  return code;
 }
 
 export function hasRole(roleCode, user = getAuthUser()) {

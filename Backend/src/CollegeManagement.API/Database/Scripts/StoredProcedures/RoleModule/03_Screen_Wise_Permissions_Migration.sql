@@ -126,15 +126,40 @@ INSERT IGNORE INTO `Permissions` (`Module`, `SubModule`, `Screen`, `ScreenCode`,
 ('Finance', 'Fee Management', 'Hostel Fees', 'hostel-fees', 'Edit', 'finance.fees.hostel.edit', 'Modify Hostel Fee Rules', 'Finance', 190),
 ('Finance', 'Fee Management', 'Hostel Fees', 'hostel-fees', 'Delete', 'finance.fees.hostel.delete', 'Remove Hostel Fee Rule', 'Finance', 191),
 
-('Finance', 'Fee Management', 'Fee Collection & Receipts', 'fee-collection', 'View', 'finance.fees.collection.view', 'View Fee Collection Desk', 'Finance', 192),
-('Finance', 'Fee Management', 'Fee Collection & Receipts', 'fee-collection', 'Add', 'finance.fees.collection.add', 'Collect Payment & Issue Receipt', 'Finance', 193),
-('Finance', 'Fee Management', 'Fee Collection & Receipts', 'fee-collection', 'Edit', 'finance.fees.collection.edit', 'Reprint / Regenerate Receipt', 'Finance', 194),
-('Finance', 'Fee Management', 'Fee Collection & Receipts', 'fee-collection', 'Delete', 'finance.fees.collection.delete', 'Void / Cancel Fee Receipt', 'Finance', 195),
+('Finance', 'Fee Management', 'Transport Fees', 'transport-fees', 'View', 'finance.fees.transport.view', 'View Transport Fees & Slabs', 'Finance', 192),
+('Finance', 'Fee Management', 'Transport Fees', 'transport-fees', 'Add', 'finance.fees.transport.add', 'Configure Route & Stop Fares', 'Finance', 193),
+('Finance', 'Fee Management', 'Transport Fees', 'transport-fees', 'Edit', 'finance.fees.transport.edit', 'Modify Bus Fee Amounts', 'Finance', 194),
+('Finance', 'Fee Management', 'Transport Fees', 'transport-fees', 'Delete', 'finance.fees.transport.delete', 'Remove Transport Fee Rule', 'Finance', 195),
 
-('Finance', 'Fee Management', 'Fee Defaulters & Reports', 'fee-reports', 'View', 'finance.fees.reports.view', 'View Defaulters & Collection Logs', 'Finance', 196),
-('Finance', 'Fee Management', 'Fee Defaulters & Reports', 'fee-reports', 'Add', 'finance.fees.reports.add', 'Export Collection Spreadsheet', 'Finance', 197),
-('Finance', 'Fee Management', 'Fee Defaulters & Reports', 'fee-reports', 'Edit', 'finance.fees.reports.edit', 'Send Fee Reminder SMS/Email', 'Finance', 198),
-('Finance', 'Fee Management', 'Fee Defaulters & Reports', 'fee-reports', 'Delete', 'finance.fees.reports.delete', 'Clear Filter Previews', 'Finance', 199),
+('Finance', 'Fee Management', 'Fee Types & Categories', 'fee-types', 'View', 'finance.fees.types.view', 'View Fee Heads & Types', 'Finance', 196),
+('Finance', 'Fee Management', 'Fee Types & Categories', 'fee-types', 'Add', 'finance.fees.types.add', 'Create Fee Head / Category', 'Finance', 197),
+('Finance', 'Fee Management', 'Fee Types & Categories', 'fee-types', 'Edit', 'finance.fees.types.edit', 'Modify Fee Type Rules', 'Finance', 198),
+('Finance', 'Fee Management', 'Fee Types & Categories', 'fee-types', 'Delete', 'finance.fees.types.delete', 'Deactivate Fee Head', 'Finance', 199),
+
+('Finance', 'Fee Management', 'Scholarships & Concessions', 'scholarships', 'View', 'finance.fees.scholarships.view', 'View Scholarship Rules', 'Finance', 200),
+('Finance', 'Fee Management', 'Scholarships & Concessions', 'scholarships', 'Add', 'finance.fees.scholarships.add', 'Create Scholarship Scheme', 'Finance', 201),
+('Finance', 'Fee Management', 'Scholarships & Concessions', 'scholarships', 'Edit', 'finance.fees.scholarships.edit', 'Modify Concession Waivers', 'Finance', 202),
+('Finance', 'Fee Management', 'Scholarships & Concessions', 'scholarships', 'Delete', 'finance.fees.scholarships.delete', 'Delete Scholarship Scheme', 'Finance', 203),
+
+('Finance', 'Fee Management', 'Fine & Late Fee Rules', 'fine-rules', 'View', 'finance.fees.fine.view', 'View Fine & Penalty Rules', 'Finance', 204),
+('Finance', 'Fee Management', 'Fine & Late Fee Rules', 'fine-rules', 'Add', 'finance.fees.fine.add', 'Configure Overdue Penalty', 'Finance', 205),
+('Finance', 'Fee Management', 'Fine & Late Fee Rules', 'fine-rules', 'Edit', 'finance.fees.fine.edit', 'Adjust Grace Days & Amounts', 'Finance', 206),
+('Finance', 'Fee Management', 'Fine & Late Fee Rules', 'fine-rules', 'Delete', 'finance.fees.fine.delete', 'Remove Penalty Rule', 'Finance', 207),
+
+('Finance', 'Fee Management', 'Payment History & Receipts', 'payment-history', 'View', 'finance.fees.history.view', 'View Payment Transaction History', 'Finance', 208),
+('Finance', 'Fee Management', 'Payment History & Receipts', 'payment-history', 'Add', 'finance.fees.history.add', 'Export Payment Register', 'Finance', 209),
+('Finance', 'Fee Management', 'Payment History & Receipts', 'payment-history', 'Edit', 'finance.fees.history.edit', 'Reprint / Regenerate Receipt', 'Finance', 210),
+('Finance', 'Fee Management', 'Payment History & Receipts', 'payment-history', 'Delete', 'finance.fees.history.delete', 'Void Payment Record', 'Finance', 211),
+
+('Finance', 'Fee Management', 'Fee Collection & Receipts', 'fee-collection', 'View', 'finance.fees.collection.view', 'View Fee Collection Desk', 'Finance', 212),
+('Finance', 'Fee Management', 'Fee Collection & Receipts', 'fee-collection', 'Add', 'finance.fees.collection.add', 'Collect Payment & Issue Receipt', 'Finance', 213),
+('Finance', 'Fee Management', 'Fee Collection & Receipts', 'fee-collection', 'Edit', 'finance.fees.collection.edit', 'Reprint / Regenerate Receipt', 'Finance', 214),
+('Finance', 'Fee Management', 'Fee Collection & Receipts', 'fee-collection', 'Delete', 'finance.fees.collection.delete', 'Void / Cancel Fee Receipt', 'Finance', 215),
+
+('Finance', 'Fee Management', 'Fee Defaulters & Reports', 'fee-reports', 'View', 'finance.fees.reports.view', 'View Defaulters & Collection Logs', 'Finance', 216),
+('Finance', 'Fee Management', 'Fee Defaulters & Reports', 'fee-reports', 'Add', 'finance.fees.reports.add', 'Export Collection Spreadsheet', 'Finance', 217),
+('Finance', 'Fee Management', 'Fee Defaulters & Reports', 'fee-reports', 'Edit', 'finance.fees.reports.edit', 'Send Fee Reminder SMS/Email', 'Finance', 218),
+('Finance', 'Fee Management', 'Fee Defaulters & Reports', 'fee-reports', 'Delete', 'finance.fees.reports.delete', 'Clear Filter Previews', 'Finance', 219),
 
 -- Finance -> Payroll
 ('Finance', 'Payroll', 'Salary Structures', 'salary-structures', 'View', 'finance.payroll.structures.view', 'View Salary Structures', 'Finance', 200),
@@ -234,7 +259,278 @@ INSERT IGNORE INTO `Permissions` (`Module`, `SubModule`, `Screen`, `ScreenCode`,
 ('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'View', 'administration.settings.audit.view', 'View Audit & Security Logs', 'Administration', 342),
 ('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'Add', 'administration.settings.audit.add', 'Export Audit Trail to CSV', 'Administration', 343),
 ('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'Edit', 'administration.settings.audit.edit', 'Filter Audit Event Types', 'Administration', 344),
-('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'Delete', 'administration.settings.audit.delete', 'Archive Audit Logs', 'Administration', 345);
+('Administration', 'Settings', 'Audit & Security Logs', 'audit-logs', 'Delete', 'administration.settings.audit.delete', 'Archive Audit Logs', 'Administration', 345),
+
+-- Operations -> Transport
+('Operations', 'Transport', 'Bus Routes & Stops', 'routes', 'View', 'operations.transport.routes.view', 'View Bus Routes & Stops', 'Operations', 350),
+('Operations', 'Transport', 'Bus Routes & Stops', 'routes', 'Add', 'operations.transport.routes.add', 'Create Bus Route', 'Operations', 351),
+('Operations', 'Transport', 'Bus Routes & Stops', 'routes', 'Edit', 'operations.transport.routes.edit', 'Edit Route Stops & Distance', 'Operations', 352),
+('Operations', 'Transport', 'Bus Routes & Stops', 'routes', 'Delete', 'operations.transport.routes.delete', 'Delete Bus Route', 'Operations', 353),
+
+('Operations', 'Transport', 'Pickup Points Master', 'pickup-points', 'View', 'operations.transport.pickuppoints.view', 'View Pickup Points Master', 'Operations', 354),
+('Operations', 'Transport', 'Pickup Points Master', 'pickup-points', 'Add', 'operations.transport.pickuppoints.add', 'Add Bus Pickup Point', 'Operations', 355),
+('Operations', 'Transport', 'Pickup Points Master', 'pickup-points', 'Edit', 'operations.transport.pickuppoints.edit', 'Edit Pickup Timing & Sequence', 'Operations', 356),
+('Operations', 'Transport', 'Pickup Points Master', 'pickup-points', 'Delete', 'operations.transport.pickuppoints.delete', 'Remove Pickup Point', 'Operations', 357),
+
+('Operations', 'Transport', 'Fleet & Vehicles', 'vehicles', 'View', 'operations.transport.vehicles.view', 'View Fleet & Vehicles', 'Operations', 358),
+('Operations', 'Transport', 'Fleet & Vehicles', 'vehicles', 'Add', 'operations.transport.vehicles.add', 'Add Vehicle to Fleet', 'Operations', 359),
+('Operations', 'Transport', 'Fleet & Vehicles', 'vehicles', 'Edit', 'operations.transport.vehicles.edit', 'Update Registration & Insurance', 'Operations', 360),
+('Operations', 'Transport', 'Fleet & Vehicles', 'vehicles', 'Delete', 'operations.transport.vehicles.delete', 'Decommission Vehicle', 'Operations', 361),
+
+('Operations', 'Transport', 'Driver & Bus Allocations', 'driver-assignment', 'View', 'operations.transport.drivers.view', 'View Driver & Bus Allocations', 'Operations', 362),
+('Operations', 'Transport', 'Driver & Bus Allocations', 'driver-assignment', 'Add', 'operations.transport.drivers.add', 'Assign Driver to Bus Route', 'Operations', 363),
+('Operations', 'Transport', 'Driver & Bus Allocations', 'driver-assignment', 'Edit', 'operations.transport.drivers.edit', 'Modify Driver Assignment', 'Operations', 364),
+('Operations', 'Transport', 'Driver & Bus Allocations', 'driver-assignment', 'Delete', 'operations.transport.drivers.delete', 'Remove Driver Assignment', 'Operations', 365),
+
+('Operations', 'Transport', 'Student Transport Passes', 'student-transport', 'View', 'operations.transport.passes.view', 'View Student Transport Passes', 'Operations', 366),
+('Operations', 'Transport', 'Student Transport Passes', 'student-transport', 'Add', 'operations.transport.passes.add', 'Issue Student Bus Pass', 'Operations', 367),
+('Operations', 'Transport', 'Student Transport Passes', 'student-transport', 'Edit', 'operations.transport.passes.edit', 'Modify Student Bus Stage', 'Operations', 368),
+('Operations', 'Transport', 'Student Transport Passes', 'student-transport', 'Delete', 'operations.transport.passes.delete', 'Cancel Bus Pass', 'Operations', 369),
+
+('Operations', 'Transport', 'Live GPS Tracking', 'live-tracking', 'View', 'operations.transport.gps.view', 'View Real-Time Bus GPS', 'Operations', 370),
+('Operations', 'Transport', 'Live GPS Tracking', 'live-tracking', 'Add', 'operations.transport.gps.add', 'Broadcast Trip Delay Alert', 'Operations', 371),
+('Operations', 'Transport', 'Live GPS Tracking', 'live-tracking', 'Edit', 'operations.transport.gps.edit', 'Configure Geofence / Checkpoint', 'Operations', 372),
+('Operations', 'Transport', 'Live GPS Tracking', 'live-tracking', 'Delete', 'operations.transport.gps.delete', 'Reset GPS Cache', 'Operations', 373),
+
+('Operations', 'Transport', 'Fleet Maintenance & Service', 'maintenance', 'View', 'operations.transport.maintenance.view', 'View Fleet Maintenance Logs', 'Operations', 374),
+('Operations', 'Transport', 'Fleet Maintenance & Service', 'maintenance', 'Add', 'operations.transport.maintenance.add', 'Create Service Work Order', 'Operations', 375),
+('Operations', 'Transport', 'Fleet Maintenance & Service', 'maintenance', 'Edit', 'operations.transport.maintenance.edit', 'Update Maintenance / Fuel Log', 'Operations', 376),
+('Operations', 'Transport', 'Fleet Maintenance & Service', 'maintenance', 'Delete', 'operations.transport.maintenance.delete', 'Void Maintenance Record', 'Operations', 377),
+
+-- Hostel Management -> Hostel Management
+('Hostel Management', 'Hostel Management', 'Hostel Blocks, Rooms & Beds', 'hostel-rooms', 'View', 'hostel.management.rooms.view', 'View Hostel Rooms & Beds', 'Hostel Management', 380),
+('Hostel Management', 'Hostel Management', 'Hostel Blocks, Rooms & Beds', 'hostel-rooms', 'Add', 'hostel.management.rooms.add', 'Add Room / Bed Inventory', 'Hostel Management', 381),
+('Hostel Management', 'Hostel Management', 'Hostel Blocks, Rooms & Beds', 'hostel-rooms', 'Edit', 'hostel.management.rooms.edit', 'Edit Room Details & Rent', 'Hostel Management', 382),
+('Hostel Management', 'Hostel Management', 'Hostel Blocks, Rooms & Beds', 'hostel-rooms', 'Delete', 'hostel.management.rooms.delete', 'Decommission Room / Bed', 'Hostel Management', 383),
+
+('Hostel Management', 'Hostel Management', 'Resident Student Allocation', 'bed-allocation', 'View', 'hostel.management.allocation.view', 'View Resident Student Allocations', 'Hostel Management', 384),
+('Hostel Management', 'Hostel Management', 'Resident Student Allocation', 'bed-allocation', 'Add', 'hostel.management.allocation.add', 'Allocate Student to Bed', 'Hostel Management', 385),
+('Hostel Management', 'Hostel Management', 'Resident Student Allocation', 'bed-allocation', 'Edit', 'hostel.management.allocation.edit', 'Change Student Room / Bed', 'Hostel Management', 386),
+('Hostel Management', 'Hostel Management', 'Resident Student Allocation', 'bed-allocation', 'Delete', 'hostel.management.allocation.delete', 'Vacate / Check-out Student', 'Hostel Management', 387),
+
+('Hostel Management', 'Hostel Management', 'Hostel Night Attendance', 'hostel-attendance', 'View', 'hostel.management.attendance.view', 'View Hostel Night Attendance', 'Hostel Management', 388),
+('Hostel Management', 'Hostel Management', 'Hostel Night Attendance', 'hostel-attendance', 'Add', 'hostel.management.attendance.add', 'Mark Night Roll Call', 'Hostel Management', 389),
+('Hostel Management', 'Hostel Management', 'Hostel Night Attendance', 'hostel-attendance', 'Edit', 'hostel.management.attendance.edit', 'Modify Night Attendance', 'Hostel Management', 390),
+('Hostel Management', 'Hostel Management', 'Hostel Night Attendance', 'hostel-attendance', 'Delete', 'hostel.management.attendance.delete', 'Reset Night Roll Call', 'Hostel Management', 391),
+
+('Hostel Management', 'Hostel Management', 'Outpass, Leaves & Complaints', 'hostel-complaints', 'View', 'hostel.management.complaints.view', 'View Outpasses & Complaints', 'Hostel Management', 392),
+('Hostel Management', 'Hostel Management', 'Outpass, Leaves & Complaints', 'hostel-complaints', 'Add', 'hostel.management.complaints.add', 'Create Maintenance Ticket', 'Hostel Management', 393),
+('Hostel Management', 'Hostel Management', 'Outpass, Leaves & Complaints', 'hostel-complaints', 'Edit', 'hostel.management.complaints.edit', 'Approve Outpass / Resolve Ticket', 'Hostel Management', 394),
+('Hostel Management', 'Hostel Management', 'Outpass, Leaves & Complaints', 'hostel-complaints', 'Delete', 'hostel.management.complaints.delete', 'Reject / Void Request', 'Hostel Management', 395),
+
+('Hostel Management', 'Hostel Management', 'Hostel Occupancy & Mess Dues', 'hostel-reports', 'View', 'hostel.management.reports.view', 'View Occupancy & Mess Reports', 'Hostel Management', 396),
+('Hostel Management', 'Hostel Management', 'Hostel Occupancy & Mess Dues', 'hostel-reports', 'Add', 'hostel.management.reports.add', 'Export Occupancy Roster', 'Hostel Management', 397),
+('Hostel Management', 'Hostel Management', 'Hostel Occupancy & Mess Dues', 'hostel-reports', 'Edit', 'hostel.management.reports.edit', 'Send Mess Due Reminders', 'Hostel Management', 398),
+('Hostel Management', 'Hostel Management', 'Hostel Occupancy & Mess Dues', 'hostel-reports', 'Delete', 'hostel.management.reports.delete', 'Clear Report Caches', 'Hostel Management', 399),
+
+-- Staff -> Staff Management
+('Staff', 'Staff Management', 'Teaching Faculty Directory', 'teaching-staff', 'View', 'staff.records.teaching.view', 'View Teaching Faculty Directory', 'Staff', 410),
+('Staff', 'Staff Management', 'Teaching Faculty Directory', 'teaching-staff', 'Add', 'staff.records.teaching.add', 'Add Teaching Faculty', 'Staff', 411),
+('Staff', 'Staff Management', 'Teaching Faculty Directory', 'teaching-staff', 'Edit', 'staff.records.teaching.edit', 'Edit Teaching Faculty Info', 'Staff', 412),
+('Staff', 'Staff Management', 'Teaching Faculty Directory', 'teaching-staff', 'Delete', 'staff.records.teaching.delete', 'Deactivate Faculty Record', 'Staff', 413),
+
+('Staff', 'Staff Management', 'Non-Teaching Staff Directory', 'non-teaching-staff', 'View', 'staff.records.nonteaching.view', 'View Non-Teaching Staff', 'Staff', 414),
+('Staff', 'Staff Management', 'Non-Teaching Staff Directory', 'non-teaching-staff', 'Add', 'staff.records.nonteaching.add', 'Add Non-Teaching Staff', 'Staff', 415),
+('Staff', 'Staff Management', 'Non-Teaching Staff Directory', 'non-teaching-staff', 'Edit', 'staff.records.nonteaching.edit', 'Edit Non-Teaching Staff Info', 'Staff', 416),
+('Staff', 'Staff Management', 'Non-Teaching Staff Directory', 'non-teaching-staff', 'Delete', 'staff.records.nonteaching.delete', 'Deactivate Staff Record', 'Staff', 417),
+
+('Staff', 'Staff Management', 'Staff Onboarding & Review', 'staff-onboarding', 'View', 'staff.records.onboarding.view', 'View Staff Onboarding List', 'Staff', 418),
+('Staff', 'Staff Management', 'Staff Onboarding & Review', 'staff-onboarding', 'Add', 'staff.records.onboarding.add', 'Generate Onboarding Link', 'Staff', 419),
+('Staff', 'Staff Management', 'Staff Onboarding & Review', 'staff-onboarding', 'Edit', 'staff.records.onboarding.edit', 'Verify KYC Documents', 'Staff', 420),
+('Staff', 'Staff Management', 'Staff Onboarding & Review', 'staff-onboarding', 'Delete', 'staff.records.onboarding.delete', 'Reject / Revoke Onboarding', 'Staff', 421),
+
+('Staff', 'Staff Management', 'Staff Profile & KYC Details', 'staff-profile', 'View', 'staff.records.profile.view', 'View Comprehensive Staff Profile', 'Staff', 422),
+('Staff', 'Staff Management', 'Staff Profile & KYC Details', 'staff-profile', 'Add', 'staff.records.profile.add', 'Add Staff Qualification / Cert', 'Staff', 423),
+('Staff', 'Staff Management', 'Staff Profile & KYC Details', 'staff-profile', 'Edit', 'staff.records.profile.edit', 'Update Staff Profile Bio', 'Staff', 424),
+('Staff', 'Staff Management', 'Staff Profile & KYC Details', 'staff-profile', 'Delete', 'staff.records.profile.delete', 'Archive Profile Documents', 'Staff', 425),
+
+-- Staff -> Department & Designation
+('Staff', 'Department & Designation', 'Departments Directory', 'departments', 'View', 'staff.dept.list.view', 'View Departments Directory', 'Staff', 430),
+('Staff', 'Department & Designation', 'Departments Directory', 'departments', 'Add', 'staff.dept.list.add', 'Create Department', 'Staff', 431),
+('Staff', 'Department & Designation', 'Departments Directory', 'departments', 'Edit', 'staff.dept.list.edit', 'Edit Department Info', 'Staff', 432),
+('Staff', 'Department & Designation', 'Departments Directory', 'departments', 'Delete', 'staff.dept.list.delete', 'Delete Department', 'Staff', 433),
+
+('Staff', 'Department & Designation', 'Designations Directory', 'designations', 'View', 'staff.designation.list.view', 'View Designations Directory', 'Staff', 434),
+('Staff', 'Department & Designation', 'Designations Directory', 'designations', 'Add', 'staff.designation.list.add', 'Create Designation', 'Staff', 435),
+('Staff', 'Department & Designation', 'Designations Directory', 'designations', 'Edit', 'staff.designation.list.edit', 'Edit Designation Info', 'Staff', 436),
+('Staff', 'Department & Designation', 'Designations Directory', 'designations', 'Delete', 'staff.designation.list.delete', 'Delete Designation', 'Staff', 437),
+
+-- Staff -> Staff Attendance
+('Staff', 'Staff Attendance', 'Mark Staff Attendance', 'mark-staff-attendance', 'View', 'staff.attendance.mark.view', 'View Staff Attendance Entry', 'Staff', 440),
+('Staff', 'Staff Attendance', 'Mark Staff Attendance', 'mark-staff-attendance', 'Add', 'staff.attendance.mark.add', 'Mark Daily Staff Attendance', 'Staff', 441),
+('Staff', 'Staff Attendance', 'Mark Staff Attendance', 'mark-staff-attendance', 'Edit', 'staff.attendance.mark.edit', 'Modify Staff Attendance Records', 'Staff', 442),
+('Staff', 'Staff Attendance', 'Mark Staff Attendance', 'mark-staff-attendance', 'Delete', 'staff.attendance.mark.delete', 'Reset Staff Attendance', 'Staff', 443),
+
+('Staff', 'Staff Attendance', 'Staff Attendance Overview', 'staff-attendance-overview', 'View', 'staff.attendance.overview.view', 'View Monthly Attendance Overview', 'Staff', 444),
+('Staff', 'Staff Attendance', 'Staff Attendance Overview', 'staff-attendance-overview', 'Add', 'staff.attendance.overview.add', 'Export Monthly Summary', 'Staff', 445),
+('Staff', 'Staff Attendance', 'Staff Attendance Overview', 'staff-attendance-overview', 'Edit', 'staff.attendance.overview.edit', 'Adjust Duty Offs', 'Staff', 446),
+('Staff', 'Staff Attendance', 'Staff Attendance Overview', 'staff-attendance-overview', 'Delete', 'staff.attendance.overview.delete', 'Clear View Cache', 'Staff', 447),
+
+('Staff', 'Staff Attendance', 'Biometric Logs & Reports', 'staff-attendance-logs', 'View', 'staff.attendance.biometric.view', 'View Biometric In/Out Logs', 'Staff', 448),
+('Staff', 'Staff Attendance', 'Biometric Logs & Reports', 'staff-attendance-logs', 'Add', 'staff.attendance.biometric.add', 'Sync Biometric Terminal Logs', 'Staff', 449),
+('Staff', 'Staff Attendance', 'Biometric Logs & Reports', 'staff-attendance-logs', 'Edit', 'staff.attendance.biometric.edit', 'Manual Punch Regularization', 'Staff', 450),
+('Staff', 'Staff Attendance', 'Biometric Logs & Reports', 'staff-attendance-logs', 'Delete', 'staff.attendance.biometric.delete', 'Discard Raw Terminal Logs', 'Staff', 451),
+
+-- Staff -> Staff Leave Management
+('Staff', 'Staff Leave Management', 'Leave Applications', 'leave-applications', 'View', 'staff.leave.apply.view', 'View Staff Leave Applications', 'Staff', 460),
+('Staff', 'Staff Leave Management', 'Leave Applications', 'leave-applications', 'Add', 'staff.leave.apply.add', 'Submit Leave Application', 'Staff', 461),
+('Staff', 'Staff Leave Management', 'Leave Applications', 'leave-applications', 'Edit', 'staff.leave.apply.edit', 'Modify Leave Application', 'Staff', 462),
+('Staff', 'Staff Leave Management', 'Leave Applications', 'leave-applications', 'Delete', 'staff.leave.apply.delete', 'Withdraw / Cancel Leave', 'Staff', 463),
+
+('Staff', 'Staff Leave Management', 'Leave Approvals', 'leave-approvals', 'View', 'staff.leave.approve.view', 'View Pending Leave Approvals', 'Staff', 464),
+('Staff', 'Staff Leave Management', 'Leave Approvals', 'leave-approvals', 'Add', 'staff.leave.approve.add', 'Approve / Reject Leave', 'Staff', 465),
+('Staff', 'Staff Leave Management', 'Leave Approvals', 'leave-approvals', 'Edit', 'staff.leave.approve.edit', 'Adjust Leave Days / Type', 'Staff', 466),
+('Staff', 'Staff Leave Management', 'Leave Approvals', 'leave-approvals', 'Delete', 'staff.leave.approve.delete', 'Revoke Approved Leave', 'Staff', 467),
+
+('Staff', 'Staff Leave Management', 'Leave Balance & History', 'leave-balances', 'View', 'staff.leave.balance.view', 'View Staff Leave Ledgers', 'Staff', 468),
+('Staff', 'Staff Leave Management', 'Leave Balance & History', 'leave-balances', 'Add', 'staff.leave.balance.add', 'Credit Annual Leave Quota', 'Staff', 469),
+('Staff', 'Staff Leave Management', 'Leave Balance & History', 'leave-balances', 'Edit', 'staff.leave.balance.edit', 'Manual Quota Adjustment', 'Staff', 470),
+('Staff', 'Staff Leave Management', 'Leave Balance & History', 'leave-balances', 'Delete', 'staff.leave.balance.delete', 'Lapse Expired Quota', 'Staff', 471),
+
+-- Examinations -> Examination
+('Examinations', 'Examination', 'Exam Schedules & Datesheets', 'exam-schedules', 'View', 'exam.schedule.view', 'View Exam Datesheets', 'Examinations', 480),
+('Examinations', 'Examination', 'Exam Schedules & Datesheets', 'exam-schedules', 'Add', 'exam.schedule.add', 'Create Examination Schedule', 'Examinations', 481),
+('Examinations', 'Examination', 'Exam Schedules & Datesheets', 'exam-schedules', 'Edit', 'exam.schedule.edit', 'Reschedule Exam Timings', 'Examinations', 482),
+('Examinations', 'Examination', 'Exam Schedules & Datesheets', 'exam-schedules', 'Delete', 'exam.schedule.delete', 'Cancel Exam Session', 'Examinations', 483),
+
+('Examinations', 'Examination', 'Exam Hall Allocation', 'hall-allocation', 'View', 'exam.hall.view', 'View Exam Hall Allocations', 'Examinations', 484),
+('Examinations', 'Examination', 'Exam Hall Allocation', 'hall-allocation', 'Add', 'exam.hall.add', 'Generate Seating Plan', 'Examinations', 485),
+('Examinations', 'Examination', 'Exam Hall Allocation', 'hall-allocation', 'Edit', 'exam.hall.edit', 'Modify Seating Arrangements', 'Examinations', 486),
+('Examinations', 'Examination', 'Exam Hall Allocation', 'hall-allocation', 'Delete', 'exam.hall.delete', 'Reset Hall Allocation', 'Examinations', 487),
+
+('Examinations', 'Examination', 'Hall Tickets', 'hall-tickets', 'View', 'exam.tickets.view', 'View Student Hall Tickets', 'Examinations', 488),
+('Examinations', 'Examination', 'Hall Tickets', 'hall-tickets', 'Add', 'exam.tickets.add', 'Generate Hall Tickets Batch', 'Examinations', 489),
+('Examinations', 'Examination', 'Hall Tickets', 'hall-tickets', 'Edit', 'exam.tickets.edit', 'Print / Download Admit Cards', 'Examinations', 490),
+('Examinations', 'Examination', 'Hall Tickets', 'hall-tickets', 'Delete', 'exam.tickets.delete', 'Withhold Hall Ticket', 'Examinations', 491),
+
+('Examinations', 'Examination', 'Exam Cell Reports', 'exam-reports', 'View', 'exam.reports.view', 'View Exam Attendance & Rosters', 'Examinations', 492),
+('Examinations', 'Examination', 'Exam Cell Reports', 'exam-reports', 'Add', 'exam.reports.add', 'Export Exam Attendance Sheets', 'Examinations', 493),
+('Examinations', 'Examination', 'Exam Cell Reports', 'exam-reports', 'Edit', 'exam.reports.edit', 'Log Room Invigilator Duty', 'Examinations', 494),
+('Examinations', 'Examination', 'Exam Cell Reports', 'exam-reports', 'Delete', 'exam.reports.delete', 'Clear Report Caches', 'Examinations', 495),
+
+-- Examinations -> Marks Evaluation
+('Examinations', 'Marks Evaluation', 'Enter Subject Marks', 'marks-entry', 'View', 'exam.marks.entry.view', 'View Subject Marks Register', 'Examinations', 500),
+('Examinations', 'Marks Evaluation', 'Enter Subject Marks', 'marks-entry', 'Add', 'exam.marks.entry.add', 'Enter Student Marks', 'Examinations', 501),
+('Examinations', 'Marks Evaluation', 'Enter Subject Marks', 'marks-entry', 'Edit', 'exam.marks.entry.edit', 'Update Internal / External Marks', 'Examinations', 502),
+('Examinations', 'Marks Evaluation', 'Enter Subject Marks', 'marks-entry', 'Delete', 'exam.marks.entry.delete', 'Clear Marks Draft', 'Examinations', 503),
+
+('Examinations', 'Marks Evaluation', 'Marks Verification & Lock', 'marks-verification', 'View', 'exam.marks.verify.view', 'View Marks Moderation Desk', 'Examinations', 504),
+('Examinations', 'Marks Evaluation', 'Marks Verification & Lock', 'marks-verification', 'Add', 'exam.marks.verify.add', 'Freeze & Lock Subject Marks', 'Examinations', 505),
+('Examinations', 'Marks Evaluation', 'Marks Verification & Lock', 'marks-verification', 'Edit', 'exam.marks.verify.edit', 'Moderation Mark Adjustments', 'Examinations', 506),
+('Examinations', 'Marks Evaluation', 'Marks Verification & Lock', 'marks-verification', 'Delete', 'exam.marks.verify.delete', 'Unlock Marks for Re-evaluation', 'Examinations', 507),
+
+-- Examinations -> Results
+('Examinations', 'Results', 'Process & Calculate GPA', 'process-results', 'View', 'exam.results.calc.view', 'View GPA / Rank Processing', 'Examinations', 510),
+('Examinations', 'Results', 'Process & Calculate GPA', 'process-results', 'Add', 'exam.results.calc.add', 'Execute GPA / CGPA Batch Run', 'Examinations', 511),
+('Examinations', 'Results', 'Process & Calculate GPA', 'process-results', 'Edit', 'exam.results.calc.edit', 'Apply Grace Marks Rule', 'Examinations', 512),
+('Examinations', 'Results', 'Process & Calculate GPA', 'process-results', 'Delete', 'exam.results.calc.delete', 'Discard Result Calculations', 'Examinations', 513),
+
+('Examinations', 'Results', 'Publish Results & Memos', 'publish-results', 'View', 'exam.results.publish.view', 'View Result Publication Desk', 'Examinations', 514),
+('Examinations', 'Results', 'Publish Results & Memos', 'publish-results', 'Add', 'exam.results.publish.add', 'Publish Results to Student Portal', 'Examinations', 515),
+('Examinations', 'Results', 'Publish Results & Memos', 'publish-results', 'Edit', 'exam.results.publish.edit', 'Generate Marks Memos PDF', 'Examinations', 516),
+('Examinations', 'Results', 'Publish Results & Memos', 'publish-results', 'Delete', 'exam.results.publish.delete', 'Unpublish / Recall Results', 'Examinations', 517),
+
+-- Student -> Promotion
+('Student', 'Promotion', 'Promotion Eligibility', 'eligible', 'View', 'student.promotion.eligible.view', 'View Promotion Eligibility', 'Student', 520),
+('Student', 'Promotion', 'Promotion Eligibility', 'eligible', 'Add', 'student.promotion.eligible.add', 'Evaluate Batch Eligibility', 'Student', 521),
+('Student', 'Promotion', 'Promotion Eligibility', 'eligible', 'Edit', 'student.promotion.eligible.edit', 'Adjust Attendance/Marks Waiver', 'Student', 522),
+('Student', 'Promotion', 'Promotion Eligibility', 'eligible', 'Delete', 'student.promotion.eligible.delete', 'Reset Eligibility Calculations', 'Student', 523),
+
+('Student', 'Promotion', 'Single Student Promotion', 'single', 'View', 'student.promotion.single.view', 'View Single Student Status', 'Student', 524),
+('Student', 'Promotion', 'Single Student Promotion', 'single', 'Add', 'student.promotion.single.add', 'Promote / Detain Student', 'Student', 525),
+('Student', 'Promotion', 'Single Student Promotion', 'single', 'Edit', 'student.promotion.single.edit', 'Update Promotion Override Reason', 'Student', 526),
+('Student', 'Promotion', 'Single Student Promotion', 'single', 'Delete', 'student.promotion.single.delete', 'Revert Student Status', 'Student', 527),
+
+('Student', 'Promotion', 'Section Allocation on Promotion', 'allocation', 'View', 'student.promotion.alloc.view', 'View Promoted Section Intake', 'Student', 528),
+('Student', 'Promotion', 'Section Allocation on Promotion', 'allocation', 'Add', 'student.promotion.alloc.add', 'Assign Promoted Students to Section', 'Student', 529),
+('Student', 'Promotion', 'Section Allocation on Promotion', 'allocation', 'Edit', 'student.promotion.alloc.edit', 'Modify Section Split', 'Student', 530),
+('Student', 'Promotion', 'Section Allocation on Promotion', 'allocation', 'Delete', 'student.promotion.alloc.delete', 'Unassign Promoted Section', 'Student', 531),
+
+('Student', 'Promotion', 'Promotion History & Audits', 'history', 'View', 'student.promotion.history.view', 'View Promotion Audit Logs', 'Student', 532),
+('Student', 'Promotion', 'Promotion History & Audits', 'history', 'Add', 'student.promotion.history.add', 'Export Promotion Register', 'Student', 533),
+('Student', 'Promotion', 'Promotion History & Audits', 'history', 'Edit', 'student.promotion.history.edit', 'Add Audit Note', 'Student', 534),
+('Student', 'Promotion', 'Promotion History & Audits', 'history', 'Delete', 'student.promotion.history.delete', 'Archive Old History', 'Student', 535),
+
+('Student', 'Promotion', 'Promotion Analytics Report', 'report', 'View', 'student.promotion.report.view', 'View Promotion Analytics', 'Student', 536),
+('Student', 'Promotion', 'Promotion Analytics Report', 'report', 'Add', 'student.promotion.report.add', 'Export Promotion PDF Report', 'Student', 537),
+('Student', 'Promotion', 'Promotion Analytics Report', 'report', 'Edit', 'student.promotion.report.edit', 'Customize Retention Charts', 'Student', 538),
+('Student', 'Promotion', 'Promotion Analytics Report', 'report', 'Delete', 'student.promotion.report.delete', 'Clear Report Caches', 'Student', 539),
+
+-- Student -> Section Allocation
+('Student', 'Section Allocation', 'Allocate Sections', 'student-allocation', 'View', 'student.section.alloc.view', 'View Section Allocation Desk', 'Student', 540),
+('Student', 'Section Allocation', 'Allocate Sections', 'student-allocation', 'Add', 'student.section.alloc.add', 'Allocate Students to Section', 'Student', 541),
+('Student', 'Section Allocation', 'Allocate Sections', 'student-allocation', 'Edit', 'student.section.alloc.edit', 'Modify Student Section Assignment', 'Student', 542),
+('Student', 'Section Allocation', 'Allocate Sections', 'student-allocation', 'Delete', 'student.section.alloc.delete', 'Deallocate Student from Section', 'Student', 543),
+
+('Student', 'Section Allocation', 'Allocated Students Register', 'allocated-list', 'View', 'student.section.list.view', 'View Allocated Students Register', 'Student', 544),
+('Student', 'Section Allocation', 'Allocated Students Register', 'allocated-list', 'Add', 'student.section.list.add', 'Export Section Roster', 'Student', 545),
+('Student', 'Section Allocation', 'Allocated Students Register', 'allocated-list', 'Edit', 'student.section.list.edit', 'Transfer Student to Parallel Division', 'Student', 546),
+('Student', 'Section Allocation', 'Allocated Students Register', 'allocated-list', 'Delete', 'student.section.list.delete', 'Remove Student from Division', 'Student', 547),
+
+('Student', 'Section Allocation', 'Roll Numbers', 'roll-numbers', 'View', 'student.section.rollno.view', 'View Roll Numbers Directory', 'Student', 548),
+('Student', 'Section Allocation', 'Roll Numbers', 'roll-numbers', 'Add', 'student.section.rollno.add', 'Generate Sequential Roll Numbers', 'Student', 549),
+('Student', 'Section Allocation', 'Roll Numbers', 'roll-numbers', 'Edit', 'student.section.rollno.edit', 'Modify Individual Roll Number', 'Student', 550),
+('Student', 'Section Allocation', 'Roll Numbers', 'roll-numbers', 'Delete', 'student.section.rollno.delete', 'Reset Section Roll Numbers', 'Student', 551),
+
+-- Documents & Reports -> Certificates
+('Documents & Reports', 'Certificates', 'Generate & Issue Certificates', 'issue-certificates', 'View', 'docs.certificates.issue.view', 'View Issue Certificates Desk', 'Documents & Reports', 560),
+('Documents & Reports', 'Certificates', 'Generate & Issue Certificates', 'issue-certificates', 'Add', 'docs.certificates.issue.add', 'Issue Bonafide / Study Certificate', 'Documents & Reports', 561),
+('Documents & Reports', 'Certificates', 'Generate & Issue Certificates', 'issue-certificates', 'Edit', 'docs.certificates.issue.edit', 'Print / Download Certificate', 'Documents & Reports', 562),
+('Documents & Reports', 'Certificates', 'Generate & Issue Certificates', 'issue-certificates', 'Delete', 'docs.certificates.issue.delete', 'Revoke Issued Certificate', 'Documents & Reports', 563),
+
+('Documents & Reports', 'Certificates', 'Issued Certificates Register', 'certificate-history', 'View', 'docs.certificates.history.view', 'View Issued Certificates Register', 'Documents & Reports', 564),
+('Documents & Reports', 'Certificates', 'Issued Certificates Register', 'certificate-history', 'Add', 'docs.certificates.history.add', 'Export Certificates Log', 'Documents & Reports', 565),
+('Documents & Reports', 'Certificates', 'Issued Certificates Register', 'certificate-history', 'Edit', 'docs.certificates.history.edit', 'Verify QR Authenticity', 'Documents & Reports', 566),
+('Documents & Reports', 'Certificates', 'Issued Certificates Register', 'certificate-history', 'Delete', 'docs.certificates.history.delete', 'Archive Certificate Records', 'Documents & Reports', 567),
+
+-- Documents & Reports -> Reports & Analytics
+('Documents & Reports', 'Reports & Analytics', 'Academic & Performance Reports', 'academic-reports', 'View', 'docs.reports.academic.view', 'View Academic Performance Reports', 'Documents & Reports', 570),
+('Documents & Reports', 'Reports & Analytics', 'Academic & Performance Reports', 'academic-reports', 'Add', 'docs.reports.academic.add', 'Export Semester Performance CSV', 'Documents & Reports', 571),
+('Documents & Reports', 'Reports & Analytics', 'Academic & Performance Reports', 'academic-reports', 'Edit', 'docs.reports.academic.edit', 'Configure Academic Report Filters', 'Documents & Reports', 572),
+('Documents & Reports', 'Reports & Analytics', 'Academic & Performance Reports', 'academic-reports', 'Delete', 'docs.reports.academic.delete', 'Clear Report History', 'Documents & Reports', 573),
+
+('Documents & Reports', 'Reports & Analytics', 'Enrollment & Administrative', 'administrative-reports', 'View', 'docs.reports.admin.view', 'View Administrative Census Reports', 'Documents & Reports', 574),
+('Documents & Reports', 'Reports & Analytics', 'Enrollment & Administrative', 'administrative-reports', 'Add', 'docs.reports.admin.add', 'Export Gender/Caste Census', 'Documents & Reports', 575),
+('Documents & Reports', 'Reports & Analytics', 'Enrollment & Administrative', 'administrative-reports', 'Edit', 'docs.reports.admin.edit', 'Filter Admission Trends', 'Documents & Reports', 576),
+('Documents & Reports', 'Reports & Analytics', 'Enrollment & Administrative', 'administrative-reports', 'Delete', 'docs.reports.admin.delete', 'Reset Report Parameters', 'Documents & Reports', 577),
+
+('Documents & Reports', 'Reports & Analytics', 'Custom Exports & Data Dumps', 'custom-reports', 'View', 'docs.reports.custom.view', 'View Custom Reports Desk', 'Documents & Reports', 578),
+('Documents & Reports', 'Reports & Analytics', 'Custom Exports & Data Dumps', 'custom-reports', 'Add', 'docs.reports.custom.add', 'Generate Custom Database Dump', 'Documents & Reports', 579),
+('Documents & Reports', 'Reports & Analytics', 'Custom Exports & Data Dumps', 'custom-reports', 'Edit', 'docs.reports.custom.edit', 'Modify Query / Column Fields', 'Documents & Reports', 580),
+('Documents & Reports', 'Reports & Analytics', 'Custom Exports & Data Dumps', 'custom-reports', 'Delete', 'docs.reports.custom.delete', 'Delete Custom Query Template', 'Documents & Reports', 581),
+
+-- Academic -> Holiday Management
+('Academic', 'Holiday Management', 'Holidays Calendar', 'academic-holidays', 'View', 'academic.holidays.calendar.view', 'View Institutional Holidays', 'Academic', 590),
+('Academic', 'Holiday Management', 'Holidays Calendar', 'academic-holidays', 'Add', 'academic.holidays.calendar.add', 'Declare Campus Holiday', 'Academic', 591),
+('Academic', 'Holiday Management', 'Holidays Calendar', 'academic-holidays', 'Edit', 'academic.holidays.calendar.edit', 'Edit Holiday Date / Occasion', 'Academic', 592),
+('Academic', 'Holiday Management', 'Holidays Calendar', 'academic-holidays', 'Delete', 'academic.holidays.calendar.delete', 'Remove Declared Holiday', 'Academic', 593),
+
+-- Operations -> Library
+('Operations', 'Library', 'Book Catalog & Search', 'book-catalog', 'View', 'operations.library.catalog.view', 'View Library Book Catalog', 'Operations', 600),
+('Operations', 'Library', 'Book Catalog & Search', 'book-catalog', 'Add', 'operations.library.catalog.add', 'Add Books / ISBN to Catalog', 'Operations', 601),
+('Operations', 'Library', 'Book Catalog & Search', 'book-catalog', 'Edit', 'operations.library.catalog.edit', 'Edit Book Details & Shelf No', 'Operations', 602),
+('Operations', 'Library', 'Book Catalog & Search', 'book-catalog', 'Delete', 'operations.library.catalog.delete', 'Remove Book from Catalog', 'Operations', 603),
+
+('Operations', 'Library', 'Issue & Return Desk', 'circulation', 'View', 'operations.library.circulation.view', 'View Issue & Return Desk', 'Operations', 604),
+('Operations', 'Library', 'Issue & Return Desk', 'circulation', 'Add', 'operations.library.circulation.add', 'Issue Book to Student / Faculty', 'Operations', 605),
+('Operations', 'Library', 'Issue & Return Desk', 'circulation', 'Edit', 'operations.library.circulation.edit', 'Process Book Return & Late Fine', 'Operations', 606),
+('Operations', 'Library', 'Issue & Return Desk', 'circulation', 'Delete', 'operations.library.circulation.delete', 'Waive Book Fine', 'Operations', 607),
+
+('Operations', 'Library', 'Student & Staff Cards', 'library-members', 'View', 'operations.library.members.view', 'View Library Members', 'Operations', 608),
+('Operations', 'Library', 'Student & Staff Cards', 'library-members', 'Add', 'operations.library.members.add', 'Issue Library Membership Card', 'Operations', 609),
+('Operations', 'Library', 'Student & Staff Cards', 'library-members', 'Edit', 'operations.library.members.edit', 'Update Borrowing Quota', 'Operations', 610),
+('Operations', 'Library', 'Student & Staff Cards', 'library-members', 'Delete', 'operations.library.members.delete', 'Deactivate Library Card', 'Operations', 611),
+
+-- Operations -> Placement
+('Operations', 'Placement', 'Recruitment Drives', 'placement-drives', 'View', 'operations.placement.drives.view', 'View Placement Recruitment Drives', 'Operations', 620),
+('Operations', 'Placement', 'Recruitment Drives', 'placement-drives', 'Add', 'operations.placement.drives.add', 'Create Campus Drive', 'Operations', 621),
+('Operations', 'Placement', 'Recruitment Drives', 'placement-drives', 'Edit', 'operations.placement.drives.edit', 'Update Drive Dates & Package', 'Operations', 622),
+('Operations', 'Placement', 'Recruitment Drives', 'placement-drives', 'Delete', 'operations.placement.drives.delete', 'Cancel Recruitment Drive', 'Operations', 623),
+
+('Operations', 'Placement', 'Applications & Offers', 'student-applications', 'View', 'operations.placement.offers.view', 'View Student Applications & Offers', 'Operations', 624),
+('Operations', 'Placement', 'Applications & Offers', 'student-applications', 'Add', 'operations.placement.offers.add', 'Shortlist Candidate for Interview', 'Operations', 625),
+('Operations', 'Placement', 'Applications & Offers', 'student-applications', 'Edit', 'operations.placement.offers.edit', 'Log Offer Letter & CTC', 'Operations', 626),
+('Operations', 'Placement', 'Applications & Offers', 'student-applications', 'Delete', 'operations.placement.offers.delete', 'Reject Candidate Application', 'Operations', 627);
 
 -- 3. Automatically Grant Super Admin (Role 1) and Admin (Role 2) All Screen Permissions
 INSERT IGNORE INTO `RolePermissions` (`RoleId`, `PermissionId`, `AssignedAt`)

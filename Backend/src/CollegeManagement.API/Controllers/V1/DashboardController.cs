@@ -70,6 +70,28 @@ public class DashboardController : ControllerBase
     }
 
     // =========================================================================
+    // 2B. PRINCIPAL DASHBOARD AGGREGATED ENDPOINT
+    // =========================================================================
+    /// <summary>
+    /// GET /api/v1/dashboard/principal
+    /// High-performance aggregated endpoint for Principal Dashboard.
+    /// Combines KPIs, student attendance, staff attendance, examinations, highlights,
+    /// activities, notices (holidays & alerts), fees and academic performance in a single call.
+    /// </summary>
+    [HttpGet("principal")]
+    [ProducesResponseType(typeof(PrincipalDashboardResponseDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> PrincipalDashboard(
+        [FromQuery] int? academicYearId = null,
+        [FromQuery] int? boardId = null,
+        [FromQuery] DateTime? date = null,
+        [FromQuery] int? campusId = null,
+        CancellationToken ct = default)
+    {
+        var result = await _dashboardService.GetPrincipalDashboardAsync(academicYearId, boardId, date, campusId, ct);
+        return Ok(result);
+    }
+
+    // =========================================================================
     // 3. STUDENTS OVERVIEW (BREAKDOWN / GENDER / MONTHLY TREND)
     // =========================================================================
     /// <summary>
