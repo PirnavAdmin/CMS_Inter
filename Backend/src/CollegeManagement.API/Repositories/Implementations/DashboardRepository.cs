@@ -788,9 +788,24 @@ public class DashboardRepository : IDashboardRepository
             if (boardId.HasValue) studentsQuery = studentsQuery.Where(s => s.BoardId == boardId.Value);
             if (academicYearId.HasValue) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == academicYearId.Value);
             if (campusId.HasValue) studentsQuery = studentsQuery.Where(s => s.CampusId == campusId.Value);
-            
-            int total = await studentsQuery.CountAsync(ct);
+
+            var studentList = await studentsQuery
+                .Select(s => new
+                {
+                    s.StudentId,
+                    s.SectionId,
+                    SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                    s.GroupId,
+                    GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                    s.AcademicLevelId,
+                    LevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null
+                })
+                .ToListAsync(ct);
+
+            int total = studentList.Count;
             summary.TotalStudents = total;
+
+            var attendanceDict = groupedAttendances.ToDictionary(x => x.StudentId);
 
             int present = groupedAttendances.Count(x => 
                 (x.MStatus == 1 && x.AStatus == 1) || 
@@ -824,6 +839,63 @@ public class DashboardRepository : IDashboardRepository
                 summary.AbsentPercentage = Math.Round((decimal)absent * 100m / total, 1);
                 summary.HalfDayPercentage = Math.Round((decimal)halfDay * 100m / total, 1);
             }
+
+            // =========================================================================
+            // CLASS-WISE / SECTION-WISE BREAKDOWN
+            // =========================================================================
+            var classBreakdown = studentList
+                .GroupBy(s =>
+                {
+                    string level = !string.IsNullOrWhiteSpace(s.LevelName) ? s.LevelName.Trim() : "Intermediate";
+                    string group = !string.IsNullOrWhiteSpace(s.GroupName) ? s.GroupName.Trim() : "General";
+                    string section = !string.IsNullOrWhiteSpace(s.SectionName) ? s.SectionName.Trim() : "Section A";
+                    return $"{level} - {group} ({section})";
+                })
+                .OrderBy(g => g.Key)
+                .Select(g =>
+                {
+                    int classTotal = g.Count();
+                    int classPresent = g.Count(s =>
+                    {
+                        if (attendanceDict.TryGetValue(s.StudentId, out var att))
+                        {
+                            return (att.MStatus == 1 && att.AStatus == 1) ||
+                                   (att.MStatus == 1 && att.AStatus == null) ||
+                                   (att.MStatus == null && att.AStatus == 1);
+                        }
+                        return false;
+                    });
+
+                    int classHalfDay = g.Count(s =>
+                    {
+                        if (attendanceDict.TryGetValue(s.StudentId, out var att))
+                        {
+                            return (att.MStatus == 1 && att.AStatus == 2) ||
+                                   (att.MStatus == 2 && att.AStatus == 1) ||
+                                   (att.MStatus == 3 || att.MStatus == 4 || att.AStatus == 3 || att.AStatus == 4);
+                        }
+                        return false;
+                    });
+
+                    int classAbsent = Math.Max(0, classTotal - classPresent - classHalfDay);
+                    decimal classRate = classTotal > 0
+                        ? Math.Round(((decimal)classPresent + 0.5m * classHalfDay) * 100m / classTotal, 1)
+                        : 0m;
+
+                    return new AttendanceCategoryBreakdownDto
+                    {
+                        CategoryName = g.Key,
+                        TotalStudents = classTotal,
+                        Present = classPresent,
+                        HalfDay = classHalfDay,
+                        Absent = classAbsent,
+                        AttendancePercentage = classRate,
+                        Color = classRate >= 75 ? "#22a447" : classRate >= 50 ? "#f59e0b" : "#ef4444"
+                    };
+                })
+                .ToList();
+
+            summary.Breakdown = classBreakdown;
         }
         catch { }
 

@@ -184,6 +184,7 @@ export const apiEndpoints = {
     getStudentFee: (studentFeeId) => `/api/v1/fees/student-fees/${encodeURIComponent(studentFeeId)}`,
     studentFeeDetails: (studentFeeId) => `/api/v1/fees/student-fees/${encodeURIComponent(studentFeeId)}`,
     studentFeeDetailsByStudent: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-details`,
+    bulkStudentFeeDetails: "/api/v1/fees/students/bulk-fee-details",
     ledger: "/api/v1/fees/ledger",
     getStudentFees: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-ledger`,
     studentLedger: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-ledger`,

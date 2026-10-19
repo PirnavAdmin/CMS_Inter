@@ -4513,7 +4513,8 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         && (account.studentId || account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId)
       ));
       const detailRequests = new Map();
-      unresolvedAccounts.forEach((account) => {
+      // Cap initial pre-fetch to at most 6 accounts to prevent exhausting DB connections; full details load on demand when account is opened
+      unresolvedAccounts.slice(0, 6).forEach((account) => {
         const endpoint = account.studentId
           ? apiEndpoints.fee.studentFeeDetailsByStudent(account.studentId)
           : apiEndpoints.fee.studentFeeDetails(account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId);
