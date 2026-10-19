@@ -148,7 +148,7 @@ public class FeePaymentPlan
     public int NumberOfInstallments { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime? UpdatedAt { get; set; }
+    [NotMapped] public DateTime? UpdatedAt { get; set; }
     public StudentFee? StudentFee { get; set; }
     public ICollection<FeeInstallment> Installments { get; set; } = new List<FeeInstallment>();
 }

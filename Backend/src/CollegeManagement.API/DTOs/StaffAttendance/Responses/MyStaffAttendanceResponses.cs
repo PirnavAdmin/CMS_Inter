@@ -25,7 +25,7 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public string Day { get; set; } = string.Empty;
         public string Date { get; set; } = string.Empty;
         public string RawDate { get; set; } = string.Empty;
-        public string Shift { get; set; } = "Morning (09:00–16:30)";
+        public string Shift { get; set; } = "09:00 AM – 04:30 PM";
         public string InTime { get; set; } = "--";
         public string OutTime { get; set; } = "--";
         public string Hours { get; set; } = "0h 0m";
@@ -34,6 +34,7 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public bool CanRegularize { get; set; } = false;
         public bool IsToday { get; set; } = false;
         public string? RegularizationState { get; set; }
+        public string? HolidayName { get; set; }
     }
 
     public class MyAttendanceAnalyticsMetricsDto

@@ -389,30 +389,30 @@ namespace CollegeManagement.API.Services.Implementations
             staff.CampusId = dto.CampusId;
             
             // Multi-Campus / Multi-Board Assignments
-            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any(c => c > 0))
             {
-                foreach (var cId in dto.AssignedCampusIds.Distinct())
+                foreach (var cId in dto.AssignedCampusIds.Where(c => c > 0).Distinct())
                 {
                     staff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId });
                 }
                 // Also set the primary CampusId if it's not set
-                if (!staff.CampusId.HasValue) staff.CampusId = dto.AssignedCampusIds.First();
+                if (!staff.CampusId.HasValue || staff.CampusId <= 0) staff.CampusId = dto.AssignedCampusIds.First(c => c > 0);
             }
-            else if (dto.CampusId.HasValue)
+            else if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
             {
                 staff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = dto.CampusId.Value });
             }
 
-            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any(b => b > 0))
             {
-                foreach (var bId in dto.AssignedBoardIds.Distinct())
+                foreach (var bId in dto.AssignedBoardIds.Where(b => b > 0).Distinct())
                 {
                     staff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId });
                 }
                 // Also set primary BoardId if not set
-                if (!staff.BoardId.HasValue) staff.BoardId = dto.AssignedBoardIds.First();
+                if (!staff.BoardId.HasValue || staff.BoardId <= 0) staff.BoardId = dto.AssignedBoardIds.First(b => b > 0);
             }
-            else if (resolvedBoardId.HasValue)
+            else if (resolvedBoardId.HasValue && resolvedBoardId.Value > 0)
             {
                 staff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = resolvedBoardId.Value });
             }
@@ -696,36 +696,76 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             // Multi-Campus / Multi-Board Assignments Update
-            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any(c => c > 0))
             {
-                existingStaff.StaffCampusAssignments.Clear();
-                foreach (var cId in dto.AssignedCampusIds.Distinct())
+                var currentCampusIds = existingStaff.StaffCampusAssignments.Select(a => a.CampusId).ToList();
+                var desiredCampusIds = dto.AssignedCampusIds.Where(c => c > 0).Distinct().ToList();
+
+                var toRemove = existingStaff.StaffCampusAssignments.Where(a => !desiredCampusIds.Contains(a.CampusId)).ToList();
+                foreach (var rem in toRemove)
+                {
+                    existingStaff.StaffCampusAssignments.Remove(rem);
+                    _context.StaffCampusAssignments.Remove(rem);
+                }
+
+                foreach (var cId in desiredCampusIds.Where(id => !currentCampusIds.Contains(id)))
                 {
                     existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId, StaffId = existingStaff.Id });
                 }
-                if (!existingStaff.CampusId.HasValue || existingStaff.CampusId <= 0)
-                    existingStaff.CampusId = dto.AssignedCampusIds.First();
+
+                if (!existingStaff.CampusId.HasValue || existingStaff.CampusId <= 0 || !desiredCampusIds.Contains(existingStaff.CampusId.Value))
+                    existingStaff.CampusId = desiredCampusIds.First();
             }
-            else if (dto.CampusId.HasValue)
+            else if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
             {
-                existingStaff.StaffCampusAssignments.Clear();
-                existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = dto.CampusId.Value, StaffId = existingStaff.Id });
+                var desiredCampusId = dto.CampusId.Value;
+                var toRemove = existingStaff.StaffCampusAssignments.Where(a => a.CampusId != desiredCampusId).ToList();
+                foreach (var rem in toRemove)
+                {
+                    existingStaff.StaffCampusAssignments.Remove(rem);
+                    _context.StaffCampusAssignments.Remove(rem);
+                }
+                if (!existingStaff.StaffCampusAssignments.Any(a => a.CampusId == desiredCampusId))
+                {
+                    existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = desiredCampusId, StaffId = existingStaff.Id });
+                }
+                existingStaff.CampusId = desiredCampusId;
             }
 
-            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any(b => b > 0))
             {
-                existingStaff.StaffBoardAssignments.Clear();
-                foreach (var bId in dto.AssignedBoardIds.Distinct())
+                var currentBoardIds = existingStaff.StaffBoardAssignments.Select(b => b.BoardId).ToList();
+                var desiredBoardIds = dto.AssignedBoardIds.Where(b => b > 0).Distinct().ToList();
+
+                var boardsToRemove = existingStaff.StaffBoardAssignments.Where(b => !desiredBoardIds.Contains(b.BoardId)).ToList();
+                foreach (var rem in boardsToRemove)
+                {
+                    existingStaff.StaffBoardAssignments.Remove(rem);
+                    _context.StaffBoardAssignments.Remove(rem);
+                }
+
+                foreach (var bId in desiredBoardIds.Where(id => !currentBoardIds.Contains(id)))
                 {
                     existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId, StaffId = existingStaff.Id });
                 }
-                if (!existingStaff.BoardId.HasValue || existingStaff.BoardId <= 0)
-                    existingStaff.BoardId = dto.AssignedBoardIds.First();
+
+                if (!existingStaff.BoardId.HasValue || existingStaff.BoardId <= 0 || !desiredBoardIds.Contains(existingStaff.BoardId.Value))
+                    existingStaff.BoardId = desiredBoardIds.First();
             }
-            else if (resolvedBoardId.HasValue)
+            else if (resolvedBoardId.HasValue && resolvedBoardId.Value > 0)
             {
-                existingStaff.StaffBoardAssignments.Clear();
-                existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = resolvedBoardId.Value, StaffId = existingStaff.Id });
+                var desiredBoardId = resolvedBoardId.Value;
+                var boardsToRemove = existingStaff.StaffBoardAssignments.Where(b => b.BoardId != desiredBoardId).ToList();
+                foreach (var rem in boardsToRemove)
+                {
+                    existingStaff.StaffBoardAssignments.Remove(rem);
+                    _context.StaffBoardAssignments.Remove(rem);
+                }
+                if (!existingStaff.StaffBoardAssignments.Any(b => b.BoardId == desiredBoardId))
+                {
+                    existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = desiredBoardId, StaffId = existingStaff.Id });
+                }
+                existingStaff.BoardId = desiredBoardId;
             }
 
             if (dto.JoiningDate.HasValue || dto.DateOfJoining.HasValue)

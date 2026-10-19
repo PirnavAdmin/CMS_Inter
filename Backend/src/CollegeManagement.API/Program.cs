@@ -105,8 +105,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         mySqlOptions => mySqlOptions
             .CommandTimeout(120)
             .EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(3),
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(2),
                 errorNumbersToAdd: null)));
 
 builder.Services.AddSingleton<DatabaseContext>();
@@ -672,6 +672,16 @@ try
                 v_ExamsToday AS ExaminationsToday,
                 v_BirthdaysToday AS BirthdaysToday;
         END;");
+        try
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                ALTER TABLE `FeePaymentPlans` ADD COLUMN IF NOT EXISTS `UpdatedAt` datetime(6) NULL;
+            ");
+        }
+        catch (Exception fpEx)
+        {
+            app.Logger.LogWarning(fpEx, "Failed to align FeePaymentPlans schema.");
+        }
     }
     catch (Exception spEx)
     {
