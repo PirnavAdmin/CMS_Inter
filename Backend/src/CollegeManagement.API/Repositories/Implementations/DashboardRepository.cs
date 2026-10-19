@@ -589,11 +589,16 @@ public class DashboardRepository : IDashboardRepository
                 .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value))
                 .ToListAsync(ct);
 
-            summary.TeachingStaff = staffList.Count(st =>
-                st.StaffType == "Teaching");
+            var nonTeachingStaff = staffList.Count(st =>
+                string.Equals(
+                    (st.StaffType ?? string.Empty)
+                        .Replace("-", string.Empty)
+                        .Replace(" ", string.Empty),
+                    "NonTeaching",
+                    StringComparison.OrdinalIgnoreCase));
 
-            summary.NonTeachingStaff = staffList.Count(st =>
-                st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching");
+            summary.NonTeachingStaff = nonTeachingStaff;
+            summary.TeachingStaff = staffList.Count - nonTeachingStaff;
 
             // 3. Groups & Sections
             summary.TotalGroups = await _db.Groups.AsNoTracking()
