@@ -425,9 +425,21 @@ export default function FacultyLeave() {
         const selectedCat = categories.find(
           (c) => String(c.leaveCategoryId) === String(leaveForm.categoryId)
         );
-        targetLeaveType = selectedCat
-          ? (selectedCat.categoryName || "").replace(/\s*Leave\s*/i, "").trim() || "Casual"
-          : "Casual";
+        const catCode = (selectedCat?.categoryCode || "").trim().toUpperCase();
+        const catName = (selectedCat?.categoryName || "").trim().toLowerCase();
+        let canonicalEnum = "Casual";
+        if (catCode === "SL" || catName.includes("sick") || catName.includes("medical")) {
+          canonicalEnum = "Sick";
+        } else if (catCode === "EL" || catName.includes("earned") || catName.includes("privilege")) {
+          canonicalEnum = "Earned";
+        } else if (catCode === "ML" || catName.includes("maternity") || catName.includes("parental")) {
+          canonicalEnum = "Maternity";
+        } else if (catCode === "CL" || catName.includes("casual")) {
+          canonicalEnum = "Casual";
+        } else {
+          canonicalEnum = "Other";
+        }
+        targetLeaveType = canonicalEnum;
         targetCategoryId = selectedCat?.leaveCategoryId || leaveForm.categoryId;
       }
 

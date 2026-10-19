@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.DTOs.StaffAttendance.Responses;
+using CollegeManagement.API.Enums;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -121,6 +122,29 @@ namespace CollegeManagement.API.Services.Implementations
                     throw new CollegeManagement.API.Exceptions.ValidationException("Selected leave category does not exist or is inactive.");
                 }
                 validCategoryId = cat.LeaveCategoryId;
+
+                // Align LeaveType enum with category if default or Other or mismatched
+                if (request.LeaveType == LeaveType.Other || request.LeaveType == LeaveType.Casual)
+                {
+                    var catCode = (cat.CategoryCode ?? string.Empty).Trim().ToUpper();
+                    var catName = (cat.CategoryName ?? string.Empty).ToLowerInvariant();
+                    if (catCode == "SL" || catName.Contains("sick") || catName.Contains("medical"))
+                    {
+                        request.LeaveType = LeaveType.Sick;
+                    }
+                    else if (catCode == "CL" || catName.Contains("casual"))
+                    {
+                        request.LeaveType = LeaveType.Casual;
+                    }
+                    else if (catCode == "EL" || catName.Contains("earned") || catName.Contains("privilege"))
+                    {
+                        request.LeaveType = LeaveType.Earned;
+                    }
+                    else if (catCode == "ML" || catName.Contains("maternity"))
+                    {
+                        request.LeaveType = LeaveType.Maternity;
+                    }
+                }
             }
             else
             {

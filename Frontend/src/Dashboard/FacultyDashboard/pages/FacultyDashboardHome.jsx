@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
   RefreshCw,
@@ -150,78 +150,6 @@ const FACULTY_ATTENDANCE_DONUT = [
   { name: "Holidays / Sundays", value: 8, color: "#94a3b8" },
 ];
 
-const UPCOMING_HOLIDAYS = [
-  {
-    id: 1,
-    name: "Gandhi Jayanti",
-    type: "National Holiday",
-    dateText: "02 Oct 2026",
-    dayOfWeek: "Friday",
-    durationText: "1 Day",
-    badge: "In 2 Days",
-    tone: "green",
-  },
-  {
-    id: 2,
-    name: "Dasara Holidays",
-    type: "Festival Holiday",
-    dateText: "19 Oct – 24 Oct 2026",
-    dayOfWeek: "Mon – Sat",
-    durationText: "6 Days",
-    badge: "In 12 Days",
-    tone: "violet",
-  },
-  {
-    id: 3,
-    name: "Diwali",
-    type: "Festival Holiday",
-    dateText: "08 Nov 2026",
-    dayOfWeek: "Sunday",
-    durationText: "1 Day",
-    badge: "In 32 Days",
-    tone: "violet",
-  },
-];
-
-const UPCOMING_EXAMINATIONS = [
-  {
-    id: 1,
-    name: "BIEAP IPE Board Theory Exam 2026",
-    examCode: "BIEAP-IPE-2026",
-    role: "Invigilator (Hall Supt.)",
-    context: "Math I-A • Hall 204 • 09:00 AM – 12:00 PM",
-    badge: "In 12 Days",
-    tone: "blue",
-  },
-  {
-    id: 2,
-    name: "BIEAP Intermediate Practical Exam",
-    examCode: "PRAC-PHY-2026",
-    role: "External Examiner",
-    context: "Physics Lab 102 • Batch 01 • 09:00 AM",
-    badge: "In 15 Days",
-    tone: "violet",
-  },
-  {
-    id: 3,
-    name: "College Pre-Final Examination 2026",
-    examCode: "PRE-FINAL-2026",
-    role: "Chief Invigilator",
-    context: "Auditorium Hall A • MPC & BiPC • 02:00 PM",
-    badge: "In 19 Days",
-    tone: "orange",
-  },
-  {
-    id: 4,
-    name: "Unit Test II Evaluation Camp",
-    examCode: "UT-II-EVAL",
-    role: "Paper Evaluator",
-    context: "Evaluation Cell Room 305 • 90 Scripts",
-    badge: "In 25 Days",
-    tone: "green",
-  },
-];
-
 const QUICK_ACTIONS = [
   { label: "Mark Attendance", moduleId: "attendance", icon: markAttendanceIcon, tone: "green" },
   { label: "Enter Marks", moduleId: "marks", icon: createExamIcon, tone: "orange" },
@@ -303,8 +231,12 @@ function KpiCard({ label, value, subtext, badge, tone, icon, tooltip, onClick })
 export default function FacultyDashboardHome() {
   const { profileData, punchState, setActiveModule, notify } = useFaculty();
   const authUser = getAuthUser();
-  const { selectedCampusId } = useCampusContext?.() || {};
-  const { selectedAcademicYearId } = useAcademicContext?.() || {};
+  const { selectedCampus, selectedCampusId } = useCampusContext?.() || {};
+  const { selectedBoard, selectedAcademicYear, selectedAcademicYearId } = useAcademicContext?.() || {};
+
+  const campusId = selectedCampus?.id ?? selectedCampus?.campusId ?? selectedCampusId;
+  const boardId = selectedBoard?.id ?? selectedBoard?.boardId;
+  const academicYearId = selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? selectedAcademicYearId;
 
   const facultyId = useMemo(() => resolveFacultyId(profileData, authUser), [profileData, authUser]);
 
@@ -313,6 +245,136 @@ export default function FacultyDashboardHome() {
   const [lastUpdated, setLastUpdated] = useState(() => formattedTimestamp());
   const [timetableSlots, setTimetableSlots] = useState([]);
   const [timetableLoading, setTimetableLoading] = useState(true);
+
+  // Live Upcoming Holidays & Examinations States
+  const [holidayState, setHolidayState] = useState({ loading: false, error: null, data: null });
+  const [examState, setExamState] = useState({ loading: false, error: null, data: null });
+  const holidaySeq = useRef(0);
+  const examSeq = useRef(0);
+
+  const fetchUpcomingHolidays = useCallback(async () => {
+    const seq = ++holidaySeq.current;
+    setHolidayState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const params = {
+        ...(academicYearId ? { academicYearId } : {}),
+        ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
+        limit: 20,
+      };
+      let res;
+      try {
+        res = await apiClient.get("/api/v1/dashboard/upcoming-holidays", { params });
+      } catch {
+        res = await apiClient.get("/api/v1/holidays", { params: { ...params, pageSize: 20, status: "Active" } });
+      }
+      if (holidaySeq.current === seq) {
+        const payload = res?.data?.data !== undefined ? res.data.data : res?.data;
+        setHolidayState({ loading: false, error: null, data: payload });
+      }
+    } catch (err) {
+      if (holidaySeq.current === seq) {
+        setHolidayState({ loading: false, error: "Failed to load upcoming holidays", data: null });
+      }
+    }
+  }, [campusId, boardId, academicYearId]);
+
+  const fetchUpcomingExaminations = useCallback(async () => {
+    const seq = ++examSeq.current;
+    setExamState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const params = {
+        ...(academicYearId ? { academicYearId } : {}),
+        ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
+      };
+      const res = await apiClient.get("/api/v1/dashboard/upcoming-examinations", { params });
+      if (examSeq.current === seq) {
+        const payload = res?.data?.data !== undefined ? res.data.data : res?.data;
+        setExamState({ loading: false, error: null, data: payload });
+      }
+    } catch (err) {
+      if (examSeq.current === seq) {
+        setExamState({ loading: false, error: "Failed to load upcoming examinations", data: null });
+      }
+    }
+  }, [campusId, boardId, academicYearId]);
+
+  // Fetch upcoming holidays & examinations on mount and when filter context changes
+  useEffect(() => {
+    fetchUpcomingHolidays();
+    fetchUpcomingExaminations();
+  }, [fetchUpcomingHolidays, fetchUpcomingExaminations]);
+
+  // Normalized Upcoming Holidays List matching Admin Dashboard
+  const holidaysList = useMemo(() => {
+    const raw = holidayState.data?.items || holidayState.data?.holidays || (Array.isArray(holidayState.data) ? holidayState.data : []);
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => {
+      const name = item.holidayName || item.name || item.title || "College Holiday";
+      const type = item.holidayType || item.type || "Festival Holiday";
+      const dateRangeText = item.formattedDateRange || item.dateRange || item.startDate || "Scheduled";
+      const dayOfWeek = item.dayOfWeek || (item.startDate ? new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${String(item.startDate).split("T")[0]}T00:00:00`)) : "");
+      const durationText = item.durationText || (item.totalDays ? (item.totalDays > 1 ? `${item.totalDays} Days` : "1 Day") : "1 Day");
+      const badge = item.countdownText || item.badge || item.lifecycleStatus || "Upcoming";
+
+      let tone = "violet";
+      const lowerType = String(type).toLowerCase();
+      if (lowerType.includes("national") || lowerType.includes("public") || lowerType.includes("gazetted")) tone = "orange";
+      else if (lowerType.includes("festival") || lowerType.includes("religious") || lowerType.includes("cultural")) tone = "violet";
+      else if (lowerType.includes("special") || lowerType.includes("institutional") || lowerType.includes("state") || lowerType.includes("restricted")) tone = "cyan";
+      else if (lowerType.includes("vacation") || lowerType.includes("break") || lowerType.includes("term") || lowerType.includes("semester")) tone = "green";
+      else tone = "blue";
+
+      return {
+        id: item.id || item.holidayCode || idx,
+        name,
+        type,
+        dateRangeText,
+        dayOfWeek,
+        durationText,
+        badge,
+        tone,
+      };
+    });
+  }, [holidayState.data]);
+
+  // Normalized Upcoming Examinations List matching Admin Dashboard
+  const examsList = useMemo(() => {
+    const raw = examState.data?.items || examState.data?.examinations || (Array.isArray(examState.data) ? examState.data : []);
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => {
+      const name = item.examName || item.name || item.title || "Examination";
+      const examCode = item.examCode || item.code || "";
+      const groupName = item.groupName || item.academicLevelName || "";
+      const dateText = item.formattedDate || item.dateRange || item.date || item.startDate || "";
+      const badgeRaw = item.daysRemainingText || item.badge || item.daysLeft || item.status || "Upcoming";
+      
+      const badge = String(badgeRaw).replace(/(\d+)\s+days/i, "$1 Days");
+      const isOngoing = String(badge).toLowerCase().includes("ongoing");
+      const isToday = String(badge).toLowerCase().includes("today");
+
+      let tone = "blue";
+      if (isOngoing || isToday) tone = "green";
+      else if (idx % 2 === 1) tone = "violet";
+      else tone = "blue";
+
+      const typeTag = isOngoing ? "ONGOING EXAM" : (examCode ? examCode : "EXAM");
+      const context = item.context || (groupName && dateText ? `${groupName} • ${dateText}` : dateText || groupName || "Scheduled");
+
+      return {
+        id: item.id || item.examId || idx,
+        name,
+        examCode,
+        typeTag,
+        groupName,
+        dateText,
+        context,
+        badge,
+        tone,
+      };
+    });
+  }, [examState.data]);
 
   const fetchTimetableData = useCallback(async () => {
     if (!facultyId) return;
@@ -695,6 +757,8 @@ export default function FacultyDashboardHome() {
     fetchTimetableData();
     fetchSectionAttendance();
     fetchDutiesAndEvals();
+    fetchUpcomingHolidays();
+    fetchUpcomingExaminations();
     setTimeout(() => {
       setIsRefreshing(false);
       const nowStr = formattedTimestamp();
@@ -703,7 +767,7 @@ export default function FacultyDashboardHome() {
         notify(`Faculty dashboard refreshed with latest data (${nowStr})`);
       }
     }, 600);
-  }, [fetchTimetableData, fetchSectionAttendance, fetchDutiesAndEvals, notify]);
+  }, [fetchTimetableData, fetchSectionAttendance, fetchDutiesAndEvals, fetchUpcomingHolidays, fetchUpcomingExaminations, notify]);
 
   const kpis = [
     {
@@ -807,10 +871,10 @@ export default function FacultyDashboardHome() {
       <div className="dashboard-viewing-banner">
         <Info size={15} className="dashboard-banner-icon" />
         <span>
-          You are viewing data for <strong>Main Campus (HQ)</strong> •{" "}
-          <strong>Board of Intermediate Education, Andhra Pradesh</strong> •{" "}
-          <strong>Academic Year 2026-2027</strong> •{" "}
-          <strong>Department of {profileData?.department || "Mathematics"} ({profileData?.employeeId || "EMP-1042"})</strong>.
+          You are viewing data for <strong>{selectedCampus?.name || selectedCampus?.campusName || "Main Campus (HQ)"}</strong> •{" "}
+          <strong>{selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}</strong> •{" "}
+          <strong>Academic Year {selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || "2026-2027"}</strong> •{" "}
+          <strong>Department of {profileData?.department || "Chemistry"} ({profileData?.employeeId || "EMP-1042"})</strong>.
         </span>
       </div>
 
@@ -1286,10 +1350,10 @@ export default function FacultyDashboardHome() {
           </div>
         </article>
 
-        {/* Card 5: Upcoming Holidays (3) */}
+        {/* Card 5: Upcoming Holidays */}
         <article className="dashboard-card dashboard-holiday-card">
           <CardHeader
-            title={`Upcoming Holidays (${UPCOMING_HOLIDAYS.length})`}
+            title={`Upcoming Holidays (${holidaysList.length})`}
             action={
               <button
                 type="button"
@@ -1300,44 +1364,64 @@ export default function FacultyDashboardHome() {
               </button>
             }
           />
-          <div className="dashboard-card-body">
-            <div className="dashboard-info-list">
-              {UPCOMING_HOLIDAYS.map((item) => (
-                <div key={`holiday-${item.id}`} className="dashboard-info-item dashboard-holiday-item">
-                  <span className={`dashboard-list-icon tone-${item.tone}`}>
-                    <CalendarDays size={14} />
-                  </span>
-                  <div className="dashboard-info-content">
-                    <div className="dashboard-holiday-title-row">
-                      <strong>{item.name}</strong>
-                      <span className={`holiday-type-pill pill-${item.tone}`}>{item.type}</span>
-                    </div>
-                    <small className="dashboard-holiday-meta">
-                      <span>{item.dateText}</span>
-                      {item.dayOfWeek ? <span className="holiday-meta-dot">• {item.dayOfWeek}</span> : null}
-                      <span className="holiday-duration-badge">{item.durationText}</span>
-                    </small>
-                  </div>
-                  <span className={`dashboard-days-badge holiday-badge badge-${item.tone}`}>{item.badge}</span>
-                </div>
-              ))}
+          {holidayState.loading ? (
+            <div className="dashboard-card-loading">
+              <div className="dashboard-spinner" />
+              <span>Loading holidays...</span>
             </div>
-            <div className="dashboard-card-footer">
-              <button
-                type="button"
-                className="dashboard-footer-btn"
-                onClick={() => setActiveModule("holidays")}
-              >
-                View Holiday Calendar <ChevronRight size={13} />
+          ) : holidayState.error ? (
+            <div className="dashboard-card-error">
+              <AlertTriangle size={18} className="dashboard-error-icon" />
+              <span>{holidayState.error}</span>
+              <button type="button" className="dashboard-retry-btn" onClick={fetchUpcomingHolidays}>
+                <RefreshCw size={12} /> Retry
               </button>
             </div>
-          </div>
+          ) : holidaysList.length === 0 ? (
+            <div className="dashboard-card-empty">
+              <Info size={18} className="dashboard-empty-icon" />
+              <span>No upcoming holidays scheduled.</span>
+            </div>
+          ) : (
+            <div className="dashboard-card-body">
+              <div className="dashboard-info-list">
+                {holidaysList.map((item, index) => (
+                  <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
+                    <span className={`dashboard-list-icon tone-${item.tone}`}>
+                      <CalendarDays size={14} />
+                    </span>
+                    <div className="dashboard-info-content">
+                      <div className="dashboard-holiday-title-row">
+                        <strong>{item.name}</strong>
+                        <span className={`holiday-type-pill pill-${item.tone}`}>{item.type}</span>
+                      </div>
+                      <small className="dashboard-holiday-meta">
+                        <span>{item.dateRangeText}</span>
+                        {item.dayOfWeek ? <span className="holiday-meta-dot">• {item.dayOfWeek}</span> : null}
+                        <span className="holiday-duration-badge">{item.durationText}</span>
+                      </small>
+                    </div>
+                    <span className={`dashboard-days-badge holiday-badge badge-${item.tone}`}>{item.badge}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="dashboard-card-footer">
+                <button
+                  type="button"
+                  className="dashboard-footer-btn"
+                  onClick={() => setActiveModule("holidays")}
+                >
+                  View Holiday Calendar <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </article>
 
-        {/* Card 6: Upcoming Examinations & Duties (4) */}
+        {/* Card 6: Upcoming Examinations */}
         <article className="dashboard-card dashboard-exams-card">
           <CardHeader
-            title={`Upcoming Examinations (${UPCOMING_EXAMINATIONS.length})`}
+            title={`Upcoming Examinations (${examsList.length})`}
             action={
               <button
                 type="button"
@@ -1348,38 +1432,56 @@ export default function FacultyDashboardHome() {
               </button>
             }
           />
-          <div className="dashboard-card-body">
-            <div className="dashboard-info-list">
-              {UPCOMING_EXAMINATIONS.map((item) => (
-                <div key={`exam-${item.id}`} className="dashboard-info-item dashboard-exam-item">
-                  <span className={`dashboard-list-icon tone-${item.tone}`}>
-                    <CalendarDays size={14} />
-                  </span>
-                  <div className="dashboard-info-content">
-                    <div className="dashboard-exam-title-row">
-                      <strong>{item.name}</strong>
-                      <span className={`exam-type-pill pill-${item.tone}`}>{item.examCode}</span>
-                    </div>
-                    <small className="dashboard-exam-meta">
-                      <span className="exam-role-text">{item.role}</span>
-                      <span className="meta-sep">•</span>
-                      <span>{item.context}</span>
-                    </small>
-                  </div>
-                  <span className={`dashboard-days-badge exam-badge badge-${item.tone}`}>{item.badge}</span>
-                </div>
-              ))}
+          {examState.loading ? (
+            <div className="dashboard-card-loading">
+              <div className="dashboard-spinner" />
+              <span>Loading exams...</span>
             </div>
-            <div className="dashboard-card-footer">
-              <button
-                type="button"
-                className="dashboard-footer-btn"
-                onClick={() => setActiveModule("examduties")}
-              >
-                View Exam Duties <ChevronRight size={13} />
+          ) : examState.error ? (
+            <div className="dashboard-card-error">
+              <AlertTriangle size={18} className="dashboard-error-icon" />
+              <span>{examState.error}</span>
+              <button type="button" className="dashboard-retry-btn" onClick={fetchUpcomingExaminations}>
+                <RefreshCw size={12} /> Retry
               </button>
             </div>
-          </div>
+          ) : examsList.length === 0 ? (
+            <div className="dashboard-card-empty">
+              <Info size={18} className="dashboard-empty-icon" />
+              <span>No upcoming examinations scheduled.</span>
+            </div>
+          ) : (
+            <div className="dashboard-card-body">
+              <div className="dashboard-info-list">
+                {examsList.map((item, index) => (
+                  <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
+                    <span className={`dashboard-list-icon tone-${item.tone}`}>
+                      <CalendarDays size={14} />
+                    </span>
+                    <div className="dashboard-info-content">
+                      <div className="dashboard-exam-title-row">
+                        <strong>{item.name}</strong>
+                        <span className={`exam-type-pill pill-${item.tone}`}>{item.typeTag}</span>
+                      </div>
+                      <small className="dashboard-exam-meta">
+                        <span>{item.context}</span>
+                      </small>
+                    </div>
+                    <span className={`dashboard-days-badge exam-badge badge-${item.tone}`}>{item.badge}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="dashboard-card-footer">
+                <button
+                  type="button"
+                  className="dashboard-footer-btn"
+                  onClick={() => setActiveModule("examduties")}
+                >
+                  View Exam Duties <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </article>
       </section>
     </div>
