@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2, Plus, Calendar, AlertCircle, RefreshCw, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2, Plus, Calendar, AlertCircle, RefreshCw, X, ChevronLeft, ChevronRight } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -707,7 +707,7 @@ function LeaveHistory({ onSelect }) {
                 Array.from({ length: 6 }, (_, index) => (
                   <SkeletonRow key={index} columns={11} />
                 ))
-              ) : people.length ? people.map(person => {
+              ) : people.length ? paginatedPeople.map(person => {
                 const total = person.totalLeaves ?? person.total ?? 0;
                 const used = person.used || 0;
                 const remaining = person.remaining !== undefined ? person.remaining : Math.max(0, total - used);
@@ -754,6 +754,15 @@ function LeaveHistory({ onSelect }) {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalItems={people.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[5, 10, 20, 50]}
+          unit="staff"
+        />
       </section>
     </main>
   );
@@ -920,6 +929,8 @@ export default function LeaveManagementPage() {
   const [records, setRecords] = useState([]);
   const [remark, setRemark] = useState("");
   const [message, setMessage] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [staffHistory, setStaffHistory] = useState(null);
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState(tabParam === "today" ? "today" : tabParam === "all" ? "all" : "apply");
@@ -973,7 +984,9 @@ export default function LeaveManagementPage() {
           jwtStaffId = decoded?.StaffId || decoded?.staffId || decoded?.staff_id;
           jwtUserId = decoded?.UserId || decoded?.userId || decoded?.id || decoded?.sub;
         }
-      } catch { }
+      } catch {
+        /* ignore parse error */
+      }
     }
     const id = Number(
       a?.adminId ||
@@ -1038,7 +1051,9 @@ export default function LeaveManagementPage() {
         const holRes = await apiClient.get("/api/v1/holidays", { params: { pageSize: 100 } });
         const hList = holRes?.data?.data || holRes?.data || [];
         if (Array.isArray(hList)) setHolidays(hList);
-      } catch { }
+      } catch {
+        /* fallback to default working days calculation */
+      }
 
       // 2. Fetch admin's personal leave history & balance
       let leaves = [];
@@ -1237,7 +1252,9 @@ export default function LeaveManagementPage() {
             return found.leaveCategoryId;
           }
         }
-      } catch { }
+      } catch {
+        /* proceed to fallback create */
+      }
 
       if (createdId) {
         setCategories((prev) => [...prev, { ...newCatPayload, leaveCategoryId: createdId }]);
@@ -1426,7 +1443,7 @@ export default function LeaveManagementPage() {
   }, []);
   const todayFormatted = useMemo(() => todayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }), [todayDate]);
 
-  const isTodayMatch = (req) => {
+  const isTodayMatch = useCallback((req) => {
     const s = req.fromDate || (req.startDate ? String(req.startDate).split("T")[0] : "");
     const e = req.toDate || (req.endDate ? String(req.endDate).split("T")[0] : "");
     const applied = req.appliedDate || (req.createdAt ? String(req.createdAt).split("T")[0] : "") || (req.CreatedAt ? String(req.CreatedAt).split("T")[0] : "");
@@ -1438,15 +1455,15 @@ export default function LeaveManagementPage() {
     const isOnLeaveToday = Boolean(s && todayIso >= s && (!e || todayIso <= e));
 
     return isRequestedToday || isOnLeaveToday;
-  };
+  }, [todayIso]);
 
   const todayRequestsCount = useMemo(() => {
     return requests.filter(isTodayMatch).length;
-  }, [requests, todayIso]);
+  }, [requests, isTodayMatch]);
 
   const currentTabRequests = useMemo(() => {
     return activeTab === "today" ? requests.filter(isTodayMatch) : requests;
-  }, [requests, activeTab, todayIso]);
+  }, [requests, activeTab, isTodayMatch]);
 
   const filteredRequests = useMemo(() => {
     return currentTabRequests.filter(req => {
@@ -1517,18 +1534,18 @@ export default function LeaveManagementPage() {
   const startRecord = totalRequestsCount === 0 ? 0 : (safeRequestsPage - 1) * (requestsPageSize || 5) + 1;
   const endRecord = totalRequestsCount === 0 ? 0 : Math.min(safeRequestsPage * (requestsPageSize || 5), totalRequestsCount);
 
-  const loadRequests = () => {
+  const loadRequests = useCallback(() => {
     setLoading(true);
     getLeaveRequests(null, null, null, campusId).then(data => {
       if (Array.isArray(data)) setRequests(data);
     }).catch(console.error).finally(() => {
       setLoading(false);
     });
-  };
+  }, [campusId]);
 
   useEffect(() => {
     loadRequests();
-  }, [campusId]);
+  }, [loadRequests]);
 
   const openDetails = (req) => {
     setSelected(req); // Open immediately so the modal is never blocked
