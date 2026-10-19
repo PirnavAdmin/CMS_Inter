@@ -234,7 +234,7 @@ const examMatchesStudent = (record, student) => {
   return true;
 };
 
-export const getStudentExaminations = async (student) => {
+export const getStudentExaminations = async (student, { allPages = false } = {}) => {
   if (!["boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((key) => Number(examScopeValue(student, key)) > 0)) return [];
   const params = {
     CampusId: student.campusId,
@@ -250,11 +250,21 @@ export const getStudentExaminations = async (student) => {
   });
 
   const examinationEndpoint = apiEndpoints.examinations.getAll;
-  const response = await apiClient.get(examinationEndpoint, { params });
-  const payload = getPayload(response.data);
   const rows = (value) => Array.isArray(value) ? value : value?.items ?? value?.Items ?? [];
+  const candidates = [];
+  let previousPage = "";
+  for (let page = 1; page <= 100; page += 1) {
+    const response = await apiClient.get(examinationEndpoint, { params: { ...params, ...(allPages ? { PageNumber: page, PageSize: 100 } : {}) } });
+    const batch = rows(getPayload(response.data));
+    const fingerprint = JSON.stringify(batch);
+    if (batch.length && fingerprint === previousPage) throw new Error("Unable to load all examinations: the server repeated a page.");
+    candidates.push(...batch);
+    if (!allPages || batch.length < 100) break;
+    if (page === 100) throw new Error("Unable to load the complete examination history.");
+    previousPage = fingerprint;
+  }
   const inStudentScope = (record) => examMatchesStudent(record, student);
-  const examinations = rows(payload).filter(inStudentScope);
+  const examinations = candidates.filter(inStudentScope);
   const visible = examinations.filter((exam) => ["SCHEDULED", "PUBLISHED", "COMPLETED"].includes(String(exam.status || "").trim().toUpperCase()));
 
   const results = await Promise.all(visible.map(async (exam) => {
@@ -266,9 +276,11 @@ export const getStudentExaminations = async (student) => {
     ]);
     const detail = getPayload(detailResponse.data) || {};
     const schedules = getPayload(scheduleResponse.data);
-    return { ...exam, ...detail, schedules: rows(schedules).filter(inStudentScope) };
+    const applicableSchedules = rows(schedules).filter(inStudentScope);
+    if (allPages && rows(schedules).length && !applicableSchedules.length) return null;
+    return { ...exam, ...detail, schedules: applicableSchedules };
   }));
-  return results.filter(inStudentScope);
+  return results.filter((exam) => exam && inStudentScope(exam));
 };
 
 export const getStudentAttendance = async (studentId, fromDate, toDate) => {
