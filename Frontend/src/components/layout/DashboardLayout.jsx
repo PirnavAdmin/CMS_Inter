@@ -1216,7 +1216,7 @@ export default function DashboardLayout({
                     onClick={() => {
                       setNotifOpen(false);
                       setLiveNotifications((prev) => prev.filter((n) => n.id !== notification.id));
-                      goTo(notification.to);
+                      navigate(notification.to);
                     }}
                   >
                     <span className="cms-notif-count">{notification.count}</span>

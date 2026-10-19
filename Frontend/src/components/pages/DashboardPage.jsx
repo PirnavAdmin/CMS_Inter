@@ -1113,7 +1113,7 @@ export default function DashboardPage() {
 
     // If attendance is not marked today yet, use total enrolled student count so 0% donut renders consistently with staff
     if (total === 0) {
-      total = Number(summaryData?.totalStudents ?? overviewData?.totalStudents ?? 0);
+      total = Number(summaryState.data?.totalStudents ?? overviewState.data?.totalStudents ?? 0);
     }
 
     if ((absent === undefined || absent === null || (present === 0 && Number(absent) === 0 && halfDay === 0) || (present + Number(absent) + halfDay < total)) && total > 0) {
@@ -1135,7 +1135,7 @@ export default function DashboardPage() {
     const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
     return { total, present, absent, halfDay, late: halfDay, percentage, chartData, breakdownList };
-  }, [studentAttState.data, summaryData?.totalStudents, overviewData?.totalStudents]);
+  }, [studentAttState.data, summaryState.data?.totalStudents, overviewState.data?.totalStudents]);
 
   // Staff Attendance Normalized Values
   const staffAttData = useMemo(() => {
@@ -1447,7 +1447,7 @@ export default function DashboardPage() {
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
-                {studentAttData.total === 0 && !summaryData?.totalStudents ? (
+                {studentAttData.total === 0 && !summaryState.data?.totalStudents ? (
                     <EmptyState message="No student attendance data available for today." />
                   ) : (
                     <>
