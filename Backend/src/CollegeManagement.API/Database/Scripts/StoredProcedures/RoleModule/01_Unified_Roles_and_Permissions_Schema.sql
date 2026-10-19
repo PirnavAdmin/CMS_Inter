@@ -514,9 +514,9 @@ BEGIN
     LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
     LEFT JOIN `Designations` des ON des.Id = st.DesignationId
     WHERE (p_RoleId IS NULL OR p_RoleId = 0 OR u.RoleId = p_RoleId)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL)
-      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId OR (st.CampusId IS NULL AND stu.CampusId IS NULL))
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL OR (st.BoardId IS NULL AND stu.BoardId IS NULL))
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.StudentId IS NULL OR stu.AcademicYearId = p_AcademicYearId)
       AND (p_UserType IS NULL OR p_UserType = '' OR p_UserType = 'all' OR 
            CASE 
                WHEN stu.StudentId IS NOT NULL THEN 'Student'
@@ -536,6 +536,7 @@ BEGIN
     -- Result Set 2: Paginated User Assignment Rows
     SELECT 
         u.UserId,
+        u.FullName,
         u.FullName AS Name,
         COALESCE(st.EmployeeId, stu.AdmissionNo, CONCAT('ADM-', LPAD(u.UserId, 3, '0'))) AS UserCode,
         CASE 
@@ -558,9 +559,9 @@ BEGIN
     LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
     LEFT JOIN `Designations` des ON des.Id = st.DesignationId
     WHERE (p_RoleId IS NULL OR p_RoleId = 0 OR u.RoleId = p_RoleId)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL)
-      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId OR (st.CampusId IS NULL AND stu.CampusId IS NULL))
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL OR (st.BoardId IS NULL AND stu.BoardId IS NULL))
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.StudentId IS NULL OR stu.AcademicYearId = p_AcademicYearId)
       AND (p_UserType IS NULL OR p_UserType = '' OR p_UserType = 'all' OR 
            CASE 
                WHEN stu.StudentId IS NOT NULL THEN 'Student'
@@ -576,7 +577,7 @@ BEGIN
            r.RoleName LIKE CONCAT('%', p_Search, '%') OR
            COALESCE(d.DepartmentName, '') LIKE CONCAT('%', p_Search, '%') OR
            COALESCE(st.Designation, des.Name, '') LIKE CONCAT('%', p_Search, '%'))
-    ORDER BY u.UserId ASC
+    ORDER BY CASE WHEN u.StudentId IS NULL THEN 0 ELSE 1 END, u.UserId ASC
     LIMIT p_PageSize OFFSET v_Offset;
 END //
 DELIMITER ;
@@ -800,6 +801,7 @@ BEGIN
         -- Student Role
         SELECT 
             u.UserId,
+            stu.StudentName AS FullName,
             stu.StudentName AS Name,
             COALESCE(stu.AdmissionNo, CONCAT('STU-', LPAD(stu.StudentId, 4, '0'))) AS UserCode,
             'Student' AS UserType,
@@ -822,6 +824,7 @@ BEGIN
         -- Staff-based roles
         SELECT 
             u.UserId,
+            TRIM(CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, ''))) AS FullName,
             TRIM(CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, ''))) AS Name,
             COALESCE(st.EmployeeId, CONCAT('EMP-', LPAD(st.Id, 4, '0'))) AS UserCode,
             CASE 
@@ -843,6 +846,8 @@ BEGIN
           AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
           AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
           AND (
+              u.RoleId = p_RoleId OR
+              st.RoleId = p_RoleId OR
               (p_RoleId = 4 AND st.StaffType = 'Teaching') OR
               (p_RoleId = 3 AND st.StaffType = 'Teaching' AND (st.Designation LIKE '%HOD%' OR st.Designation LIKE '%Head of Department%')) OR
               (p_RoleId = 12 AND (st.IsDriver = 1 OR st.Designation LIKE '%Driver%')) OR
@@ -858,6 +863,7 @@ BEGIN
         -- Generic user-role lookup (Super Admin, Admin, Parent, or explicitly assigned users)
         SELECT 
             u.UserId,
+            u.FullName,
             u.FullName AS Name,
             COALESCE(st.EmployeeId, CONCAT('ADM-', LPAD(u.UserId, 3, '0'))) AS UserCode,
             CASE 

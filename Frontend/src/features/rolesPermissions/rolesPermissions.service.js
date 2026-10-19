@@ -27,17 +27,50 @@ const notifyRolesUpdated = () => {
   if (typeof window !== "undefined") window.dispatchEvent(new Event("roles-updated"));
 };
 
-const normalizeRole = (role = {}) => ({
-  ...role,
-  id: String(role.id ?? role.roleId ?? role.code ?? role.name),
-  roleId: Number(role.roleId ?? role.id) || undefined,
-  code: normalizeRoleCode(role.code || role.roleCode || role.roleName || role.name),
-  name: role.name || role.roleName || "",
-  description: role.description || "",
-  isSystemRole: role.isSystemRole ?? true,
-  isProtected: role.isProtected ?? (normalizeRoleCode(role.code || role.roleName || role.name) === "SUPER_ADMIN"),
-  assignedUserCount: Number(role.assignedUserCount ?? role.userCount ?? 0),
-});
+const ROLE_CODE_TO_ID = {
+  SUPER_ADMIN: 1,
+  ADMIN: 2,
+  HOD: 3,
+  FACULTY: 4,
+  STUDENT: 5,
+  PARENT: 6,
+  ACCOUNTANT: 7,
+  ACCOUNTS: 7,
+  EXAMINATION_CELL: 8,
+  LIBRARIAN: 9,
+  HOSTEL_WARDEN: 10,
+  TRAINING_PLACEMENT: 11,
+  BUS_DRIVER: 12,
+  DRIVER: 12,
+  RECEPTIONIST: 13,
+  LAB_ASSISTANT: 14,
+  SYSTEM_AUDITOR: 15,
+};
+
+const resolveRoleIdParam = (roleId, roleCode) => {
+  const parsed = Number(roleId);
+  if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  const norm = normalizeRoleCode(roleCode || roleId);
+  return ROLE_CODE_TO_ID[norm] || roleId;
+};
+
+const normalizeRole = (role = {}) => {
+  const count = Number(role.assignedUserCount ?? role.userCount ?? role.usersCount ?? 0);
+  const code = normalizeRoleCode(role.code || role.roleCode || role.roleName || role.name);
+  return {
+    ...role,
+    id: String(role.id ?? role.roleId ?? role.code ?? role.name),
+    roleId: Number(role.roleId ?? role.id) || undefined,
+    code,
+    name: role.name || role.roleName || (code === "ACCOUNTANT" ? "Accountant" : ""),
+    description: role.description || "",
+    isSystemRole: role.isSystemRole ?? true,
+    isProtected: role.isProtected ?? (code === "SUPER_ADMIN"),
+    assignedUserCount: count,
+    userCount: count,
+    usersCount: count,
+  };
+};
 
 const normalizeUserAssignment = (user = {}) => {
   const id = user.userId ?? user.id ?? "";
@@ -47,12 +80,15 @@ const normalizeUserAssignment = (user = {}) => {
       ? [user.roleCode || user.roleName]
       : [];
 
+  const resolvedName = (user.name || user.fullName || user.userName || "").trim();
+  const fallbackName = user.email ? user.email.split("@")[0] : (id ? `User #${id}` : "User");
+
   return {
     ...user,
     id: String(user.id ?? id),
     userId: String(user.userId ?? user.userCode ?? id),
     userCode: String(user.userCode ?? user.userId ?? id),
-    name: user.name || user.fullName || "",
+    name: resolvedName || fallbackName,
     userType: user.userType || "",
     department: user.department || "",
     designation: user.designation || "",
@@ -137,13 +173,15 @@ export async function getRoles(filters = {}) {
 }
 
 export async function getRoleById(roleId) {
+  const targetId = resolveRoleIdParam(roleId);
   try {
-    const response = await apiClient.get(apiEndpoints.roles.getById(roleId));
+    const response = await apiClient.get(apiEndpoints.roles.getById(targetId));
     if (response?.data?.data) return apiResult(normalizeRole(response.data.data), "api");
   } catch (err) {
     console.warn("Live getRoleById failed:", err?.message);
   }
-  const role = mockRoles.find((r) => String(r.id) === String(roleId) || String(r.roleId) === String(roleId));
+  const norm = normalizeRoleCode(roleId);
+  const role = mockRoles.find((r) => String(r.id) === String(roleId) || String(r.roleId) === String(targetId) || r.code === norm);
   return apiResult(role || null, "fallback");
 }
 
@@ -226,8 +264,9 @@ export async function getModulesAndPermissions() {
 }
 
 export async function getRolePermissions(roleId, roleCode) {
+  const targetId = resolveRoleIdParam(roleId, roleCode);
   try {
-    const response = await apiClient.get(apiEndpoints.roles.permissions(roleId));
+    const response = await apiClient.get(apiEndpoints.roles.permissions(targetId));
     const matrixData = response?.data?.data?.permissions || response?.data?.data || response?.data;
     if (Array.isArray(matrixData) && matrixData.length > 0) {
       return apiResult(transformBackendPermissionsToMatrix(matrixData), "api");
@@ -259,6 +298,7 @@ export async function getRolePermissions(roleId, roleCode) {
 }
 
 export async function updateRolePermissions(roleId, payload) {
+  const targetId = resolveRoleIdParam(roleId);
   const normalized = normalizePermissionPayload(payload?.permissions || payload || []);
 
   // Format flattened input items with screenId for backend DTO
@@ -284,8 +324,8 @@ export async function updateRolePermissions(roleId, payload) {
   });
 
   try {
-    await apiClient.put(apiEndpoints.roles.updatePermissions(roleId), {
-      roleId: Number(roleId) || undefined,
+    await apiClient.put(apiEndpoints.roles.updatePermissions(targetId), {
+      roleId: Number(targetId) || undefined,
       permissions: permissionsInput,
     });
     notifyRolesUpdated();
@@ -298,8 +338,9 @@ export async function updateRolePermissions(roleId, payload) {
 }
 
 export async function getRoleMembers(roleId, roleCode, filters = {}) {
+  const targetId = resolveRoleIdParam(roleId, roleCode);
   try {
-    const response = await apiClient.get(apiEndpoints.roles.members(roleId), { params: filters });
+    const response = await apiClient.get(apiEndpoints.roles.members(targetId), { params: filters });
     const members = response?.data?.data || response?.data;
     if (Array.isArray(members)) {
       return apiResult(members.map(normalizeUserAssignment), "api");

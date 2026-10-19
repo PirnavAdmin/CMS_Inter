@@ -1,6 +1,7 @@
 export const apiEndpoints = {
   dashboard: {
     summary: "/api/v1/dashboard/summary",
+    principal: "/api/v1/dashboard/principal",
     studentAttendance: "/api/v1/dashboard/students-attendance-today",
     staffAttendance: "/api/v1/dashboard/staff-attendance-today",
     upcomingExaminations: "/api/v1/dashboard/upcoming-examinations",
@@ -183,6 +184,7 @@ export const apiEndpoints = {
     getStudentFee: (studentFeeId) => `/api/v1/fees/student-fees/${encodeURIComponent(studentFeeId)}`,
     studentFeeDetails: (studentFeeId) => `/api/v1/fees/student-fees/${encodeURIComponent(studentFeeId)}`,
     studentFeeDetailsByStudent: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-details`,
+    bulkStudentFeeDetails: "/api/v1/fees/students/bulk-fee-details",
     ledger: "/api/v1/fees/ledger",
     getStudentFees: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-ledger`,
     studentLedger: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-ledger`,

@@ -33,13 +33,15 @@ const mapLeaveStatus = (status) => {
 
 const mapLeaveRequest = (req) => {
     if (!req) return req;
+    const rawCreatedAt = req.createdAt || req.CreatedAt;
     return {
         ...req,
         leaveType: req.leaveCategoryName || mapLeaveType(req.leaveType),
         status: mapLeaveStatus(req.status),
         fromDate: req.startDate ? req.startDate.split('T')[0] : null,
         toDate: req.endDate ? req.endDate.split('T')[0] : null,
-        days: req.totalDays
+        days: req.totalDays,
+        appliedDate: rawCreatedAt ? String(rawCreatedAt).split('T')[0] : null
     };
 };
 

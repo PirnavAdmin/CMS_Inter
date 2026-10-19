@@ -503,6 +503,126 @@ function Assignment({ item, records = [], close, save, toast }) {
   );
 }
 
+function TablePagination({
+  currentPage,
+  pageSize,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = [10, 20, 50],
+  unit = "records"
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const start = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const end = Math.min(safePage * pageSize, totalItems);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    if (safePage <= 4) {
+      for (let i = 1; i <= 5; i++) pages.push(i);
+      pages.push("...");
+      pages.push(totalPages);
+    } else if (safePage >= totalPages - 3) {
+      pages.push(1);
+      pages.push("...");
+      for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      pages.push("...");
+      pages.push(safePage - 1);
+      pages.push(safePage);
+      pages.push(safePage + 1);
+      pages.push("...");
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  if (totalItems === 0) return null;
+
+  return (
+    <div className="cms-pagination leave-pagination-bar">
+      <div className="leave-pagination-left">
+        <span className="cms-page-info">
+          Showing <strong>{start}–{end}</strong> of <strong>{totalItems}</strong> {unit}
+        </span>
+      </div>
+
+      <div className="leave-pagination-right">
+        {onPageSizeChange && (
+          <div className="leave-page-size-wrap">
+            <span className="leave-page-size-label">Rows per page:</span>
+            <select
+              className="leave-page-size-select"
+              value={pageSize}
+              onChange={(e) => {
+                onPageSizeChange(Number(e.target.value));
+                onPageChange(1);
+              }}
+              aria-label="Rows per page"
+            >
+              {pageSizeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="leave-pagination-nav">
+          <button
+            type="button"
+            className="cms-page-btn"
+            disabled={safePage <= 1}
+            onClick={() => onPageChange(Math.max(1, safePage - 1))}
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={16} />
+            <span className="leave-btn-text">Previous</span>
+          </button>
+
+          <div className="leave-page-numbers">
+            {getPageNumbers().map((p, idx) =>
+              p === "..." ? (
+                <span key={`dots-${idx}`} className="leave-pagination-dots">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  className={`cms-page-btn ${safePage === p ? "is-active" : ""}`}
+                  onClick={() => onPageChange(p)}
+                  aria-current={safePage === p ? "page" : undefined}
+                >
+                  {p}
+                </button>
+              )
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="cms-page-btn"
+            disabled={safePage >= totalPages}
+            onClick={() => onPageChange(Math.min(totalPages, safePage + 1))}
+            aria-label="Next page"
+          >
+            <span className="leave-btn-text">Next</span>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LeaveHistory({ onSelect }) {
   const campusCtx = useCampusContext();
   const campusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
@@ -523,14 +643,31 @@ function LeaveHistory({ onSelect }) {
   const [staffType, setStaffType] = useState("All Staff");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All Status");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const people = useMemo(() => {
     return historyData.filter(person => {
       const matchType = staffType === "All Staff" || person.staffType === staffType;
       const matchQuery = `${person.staffName || ""} ${person.staffId || ""} ${person.department || ""}`.toLowerCase().includes(query.toLowerCase());
-      return matchType && matchQuery;
+      let matchStatus = true;
+      if (status === "Approved") matchStatus = (person.approved || 0) > 0;
+      else if (status === "Pending") matchStatus = (person.pending || 0) > 0;
+      else if (status === "Rejected") matchStatus = (person.rejected || 0) > 0;
+      return matchType && matchQuery && matchStatus;
     });
-  }, [historyData, staffType, query]);
+  }, [historyData, staffType, query, status]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [staffType, query, status, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(people.length / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedPeople = useMemo(() => {
+    const startIndex = (safePage - 1) * pageSize;
+    return people.slice(startIndex, startIndex + pageSize);
+  }, [people, safePage, pageSize]);
 
   return (
     <main className="attendance-module leave-history-screen">
@@ -783,13 +920,22 @@ export default function LeaveManagementPage() {
   const [records, setRecords] = useState([]);
   const [remark, setRemark] = useState("");
   const [message, setMessage] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [staffHistory, setStaffHistory] = useState(null);
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState(tabParam === "today" ? "today" : tabParam === "all" ? "all" : "apply");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [requestPage, setRequestPage] = useState(1);
+  const [requestPageSize, setRequestPageSize] = useState(10);
+
+  useEffect(() => {
+    if (tabParam === "history") {
+      setHistoryOpen(true);
+    } else {
+      setHistoryOpen(false);
+      setActiveTab(tabParam === "all" ? "all" : "today");
+    }
+  }, [tabParam]);
 
   // Admin personal leave states (First Reference Screen)
   const [adminLeaveList, setAdminLeaveList] = useState([]);
@@ -1271,18 +1417,35 @@ export default function LeaveManagementPage() {
   };
 
   const todayDate = useMemo(() => new Date(), []);
-  const todayIso = useMemo(() => todayDate.toISOString().split("T")[0], [todayDate]);
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
   const todayFormatted = useMemo(() => todayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }), [todayDate]);
 
-  const currentTabRequests = useMemo(() => {
-    const isTodayActive = (req) => {
-      const s = req.fromDate || (req.startDate ? req.startDate.split("T")[0] : "");
-      const e = req.toDate || (req.endDate ? req.endDate.split("T")[0] : "");
-      if (!s) return false;
-      return todayIso >= s && (!e || todayIso <= e);
-    };
+  const isTodayMatch = (req) => {
+    const s = req.fromDate || (req.startDate ? String(req.startDate).split("T")[0] : "");
+    const e = req.toDate || (req.endDate ? String(req.endDate).split("T")[0] : "");
+    const applied = req.appliedDate || (req.createdAt ? String(req.createdAt).split("T")[0] : "") || (req.CreatedAt ? String(req.CreatedAt).split("T")[0] : "");
 
-    return activeTab === "today" ? requests.filter(isTodayActive) : requests;
+    // 1. Matches if application was requested today
+    const isRequestedToday = Boolean(applied && applied === todayIso);
+
+    // 2. Matches if leave is active today
+    const isOnLeaveToday = Boolean(s && todayIso >= s && (!e || todayIso <= e));
+
+    return isRequestedToday || isOnLeaveToday;
+  };
+
+  const todayRequestsCount = useMemo(() => {
+    return requests.filter(isTodayMatch).length;
+  }, [requests, todayIso]);
+
+  const currentTabRequests = useMemo(() => {
+    return activeTab === "today" ? requests.filter(isTodayMatch) : requests;
   }, [requests, activeTab, todayIso]);
 
   const filteredRequests = useMemo(() => {
@@ -1531,7 +1694,7 @@ export default function LeaveManagementPage() {
               className={`leave-tab-btn ${activeTab === "today" ? "active" : ""}`}
               onClick={() => setActiveTab("today")}
             >
-              <CalendarDays size={16} /> Today's Leaves <span className="tab-pill">TODAY</span>
+              <CalendarDays size={16} /> Today's Leaves <span className="tab-pill count">{todayRequestsCount}</span>
             </button>
             <button
               type="button"
