@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -503,6 +503,126 @@ function Assignment({ item, records = [], close, save, toast }) {
   );
 }
 
+function TablePagination({
+  currentPage,
+  pageSize,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = [10, 20, 50],
+  unit = "records"
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const start = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const end = Math.min(safePage * pageSize, totalItems);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    if (safePage <= 4) {
+      for (let i = 1; i <= 5; i++) pages.push(i);
+      pages.push("...");
+      pages.push(totalPages);
+    } else if (safePage >= totalPages - 3) {
+      pages.push(1);
+      pages.push("...");
+      for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      pages.push("...");
+      pages.push(safePage - 1);
+      pages.push(safePage);
+      pages.push(safePage + 1);
+      pages.push("...");
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  if (totalItems === 0) return null;
+
+  return (
+    <div className="cms-pagination leave-pagination-bar">
+      <div className="leave-pagination-left">
+        <span className="cms-page-info">
+          Showing <strong>{start}–{end}</strong> of <strong>{totalItems}</strong> {unit}
+        </span>
+      </div>
+
+      <div className="leave-pagination-right">
+        {onPageSizeChange && (
+          <div className="leave-page-size-wrap">
+            <span className="leave-page-size-label">Rows per page:</span>
+            <select
+              className="leave-page-size-select"
+              value={pageSize}
+              onChange={(e) => {
+                onPageSizeChange(Number(e.target.value));
+                onPageChange(1);
+              }}
+              aria-label="Rows per page"
+            >
+              {pageSizeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="leave-pagination-nav">
+          <button
+            type="button"
+            className="cms-page-btn"
+            disabled={safePage <= 1}
+            onClick={() => onPageChange(Math.max(1, safePage - 1))}
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={16} />
+            <span className="leave-btn-text">Previous</span>
+          </button>
+
+          <div className="leave-page-numbers">
+            {getPageNumbers().map((p, idx) =>
+              p === "..." ? (
+                <span key={`dots-${idx}`} className="leave-pagination-dots">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  className={`cms-page-btn ${safePage === p ? "is-active" : ""}`}
+                  onClick={() => onPageChange(p)}
+                  aria-current={safePage === p ? "page" : undefined}
+                >
+                  {p}
+                </button>
+              )
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="cms-page-btn"
+            disabled={safePage >= totalPages}
+            onClick={() => onPageChange(Math.min(totalPages, safePage + 1))}
+            aria-label="Next page"
+          >
+            <span className="leave-btn-text">Next</span>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LeaveHistory({ onSelect }) {
   const campusCtx = useCampusContext();
   const campusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
@@ -523,14 +643,31 @@ function LeaveHistory({ onSelect }) {
   const [staffType, setStaffType] = useState("All Staff");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All Status");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const people = useMemo(() => {
     return historyData.filter(person => {
       const matchType = staffType === "All Staff" || person.staffType === staffType;
       const matchQuery = `${person.staffName || ""} ${person.staffId || ""} ${person.department || ""}`.toLowerCase().includes(query.toLowerCase());
-      return matchType && matchQuery;
+      let matchStatus = true;
+      if (status === "Approved") matchStatus = (person.approved || 0) > 0;
+      else if (status === "Pending") matchStatus = (person.pending || 0) > 0;
+      else if (status === "Rejected") matchStatus = (person.rejected || 0) > 0;
+      return matchType && matchQuery && matchStatus;
     });
-  }, [historyData, staffType, query]);
+  }, [historyData, staffType, query, status]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [staffType, query, status, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(people.length / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedPeople = useMemo(() => {
+    const startIndex = (safePage - 1) * pageSize;
+    return people.slice(startIndex, startIndex + pageSize);
+  }, [people, safePage, pageSize]);
 
   return (
     <main className="attendance-module leave-history-screen">
@@ -556,66 +693,77 @@ function LeaveHistory({ onSelect }) {
           </div>
         </div>
 
-        <div className="leave-history-table-wrap">
-          <table className="cms-table leave-history-table">
-            <thead>
-              <tr>
-                {["Staff", "Department", "Staff Type", "Total Requests", "Total Leaves", "Used", "Remaining", "Approved", "Pending", "Rejected", "Action"].map(head => (
-                  <th key={head}>{head}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 6 }, (_, index) => (
-                  <SkeletonRow key={index} columns={11} />
-                ))
-              ) : people.length ? people.map(person => {
-                const total = person.totalLeaves || 12;
-                const used = person.used || 0;
-                const remaining = person.remaining !== undefined ? person.remaining : (total - used);
-                return (
-                  <tr key={person.staffId}>
-                    <td>
-                      <div className="history-staff">
-                        <b>{(person.staffName || "").split(" ").map(p => p[0]).join("").slice(0, 2)}</b>
-                        <div>
-                          <strong>{person.staffName}</strong>
-                          <span>{person.staffId}</span>
+        <div className="leave-history-table-box">
+          <div className="leave-history-table-wrap">
+            <table className="cms-table leave-history-table">
+              <thead>
+                <tr>
+                  {["Staff", "Department", "Staff Type", "Total Requests", "Total Leaves", "Used", "Remaining", "Approved", "Pending", "Rejected", "Action"].map(head => (
+                    <th key={head}>{head}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  Array.from({ length: 6 }, (_, index) => (
+                    <SkeletonRow key={index} columns={11} />
+                  ))
+                ) : paginatedPeople.length ? paginatedPeople.map(person => {
+                  const total = person.totalLeaves || 12;
+                  const used = person.used || 0;
+                  const remaining = person.remaining !== undefined ? person.remaining : (total - used);
+                  return (
+                    <tr key={person.staffId}>
+                      <td>
+                        <div className="history-staff">
+                          <b>{(person.staffName || "").split(" ").map(p => p[0]).join("").slice(0, 2)}</b>
+                          <div>
+                            <strong>{person.staffName}</strong>
+                            <span>{person.staffId}</span>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>{person.department}</td>
-                    <td>{person.staffType}</td>
-                    <td>{person.totalRequests || 0}</td>
-                    <td>{total} days</td>
-                    <td>{used} {used === 1 ? "day" : "days"}</td>
-                    <td>{remaining} days</td>
-                    <td><LeaveStatus status="Approved" /> <small>{person.approved || 0}</small></td>
-                    <td><LeaveStatus status="Pending" /> <small>{person.pending || 0}</small></td>
-                    <td><LeaveStatus status="Rejected" /> <small>{person.rejected || 0}</small></td>
-                    <td>
-                      <button 
-                        className="cms-btn cms-btn-ghost leave-view-history" 
-                        onClick={() => {
-                          setOpeningStaffId(person.staffId);
-                          onSelect(person);
-                        }}
-                        disabled={openingStaffId === person.staffId}
-                      >
-                        {openingStaffId === person.staffId ? (
-                          <Loader2 size={12} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "5px" }} />
-                        ) : null}
-                        {openingStaffId === person.staffId ? "Opening..." : "View History"}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              }) : (
-                <tr><td colSpan="11"><div className="cms-empty">No staff leave history matches these filters.</div></td></tr>
-              )}
-            </tbody>
-          </table>
+                      </td>
+                      <td>{person.department}</td>
+                      <td>{person.staffType}</td>
+                      <td>{person.totalRequests || 0}</td>
+                      <td>{total} days</td>
+                      <td>{used} {used === 1 ? "day" : "days"}</td>
+                      <td>{remaining} days</td>
+                      <td><LeaveStatus status="Approved" /> <small>{person.approved || 0}</small></td>
+                      <td><LeaveStatus status="Pending" /> <small>{person.pending || 0}</small></td>
+                      <td><LeaveStatus status="Rejected" /> <small>{person.rejected || 0}</small></td>
+                      <td>
+                        <button 
+                          className="cms-btn cms-btn-ghost leave-view-history" 
+                          onClick={() => {
+                            setOpeningStaffId(person.staffId);
+                            onSelect(person);
+                          }}
+                          disabled={openingStaffId === person.staffId}
+                        >
+                          {openingStaffId === person.staffId ? (
+                            <Loader2 size={12} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "5px" }} />
+                          ) : null}
+                          {openingStaffId === person.staffId ? "Opening..." : "View History"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <tr><td colSpan="11"><div className="cms-empty">No staff leave history matches these filters.</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <TablePagination
+            currentPage={safePage}
+            pageSize={pageSize}
+            totalItems={people.length}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[10, 20, 50]}
+            unit="staff members"
+          />
         </div>
       </section>
     </main>
@@ -777,27 +925,55 @@ export default function LeaveManagementPage() {
   const [records, setRecords] = useState([]);
   const [remark, setRemark] = useState("");
   const [message, setMessage] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [staffHistory, setStaffHistory] = useState(null);
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState(tabParam === "today" ? "today" : "all");
+  const [historyOpen, setHistoryOpen] = useState(tabParam === "history");
+  const [staffHistory, setStaffHistory] = useState(null);
+  const [activeTab, setActiveTab] = useState(tabParam === "all" ? "all" : "today");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [requestPage, setRequestPage] = useState(1);
+  const [requestPageSize, setRequestPageSize] = useState(10);
+
+  useEffect(() => {
+    if (tabParam === "history") {
+      setHistoryOpen(true);
+    } else {
+      setHistoryOpen(false);
+      setActiveTab(tabParam === "all" ? "all" : "today");
+    }
+  }, [tabParam]);
 
   const todayDate = useMemo(() => new Date(), []);
-  const todayIso = useMemo(() => todayDate.toISOString().split("T")[0], [todayDate]);
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
   const todayFormatted = useMemo(() => todayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }), [todayDate]);
 
-  const currentTabRequests = useMemo(() => {
-    const isTodayActive = (req) => {
-      const s = req.fromDate || (req.startDate ? req.startDate.split("T")[0] : "");
-      const e = req.toDate || (req.endDate ? req.endDate.split("T")[0] : "");
-      if (!s) return false;
-      return todayIso >= s && (!e || todayIso <= e);
-    };
+  const isTodayMatch = (req) => {
+    const s = req.fromDate || (req.startDate ? String(req.startDate).split("T")[0] : "");
+    const e = req.toDate || (req.endDate ? String(req.endDate).split("T")[0] : "");
+    const applied = req.appliedDate || (req.createdAt ? String(req.createdAt).split("T")[0] : "") || (req.CreatedAt ? String(req.CreatedAt).split("T")[0] : "");
 
-    return activeTab === "today" ? requests.filter(isTodayActive) : requests;
+    // 1. Matches if application was requested today
+    const isRequestedToday = Boolean(applied && applied === todayIso);
+
+    // 2. Matches if leave is active today
+    const isOnLeaveToday = Boolean(s && todayIso >= s && (!e || todayIso <= e));
+
+    return isRequestedToday || isOnLeaveToday;
+  };
+
+  const todayRequestsCount = useMemo(() => {
+    return requests.filter(isTodayMatch).length;
+  }, [requests, todayIso]);
+
+  const currentTabRequests = useMemo(() => {
+    return activeTab === "today" ? requests.filter(isTodayMatch) : requests;
   }, [requests, activeTab, todayIso]);
 
   const filteredRequests = useMemo(() => {
@@ -818,6 +994,17 @@ export default function LeaveManagementPage() {
       return true;
     });
   }, [currentTabRequests, statusFilter, searchQuery]);
+
+  useEffect(() => {
+    setRequestPage(1);
+  }, [activeTab, searchQuery, statusFilter, requestPageSize]);
+
+  const totalRequestPages = Math.max(1, Math.ceil(filteredRequests.length / requestPageSize));
+  const safeRequestPage = Math.min(Math.max(1, requestPage), totalRequestPages);
+  const paginatedRequests = useMemo(() => {
+    const startIndex = (safeRequestPage - 1) * requestPageSize;
+    return filteredRequests.slice(startIndex, startIndex + requestPageSize);
+  }, [filteredRequests, safeRequestPage, requestPageSize]);
 
   const loadRequests = () => {
     setLoading(true);
@@ -960,7 +1147,7 @@ export default function LeaveManagementPage() {
     <>
       <DashboardLayout 
         title="Leave Management" 
-        subtitle={activeTab === "today" ? `Showing leaves active on today (${todayFormatted})` : "Review and manage all staff leave requests across all dates"} 
+        subtitle={activeTab === "today" ? `Showing leave requests submitted today or active on today (${todayFormatted})` : "Review and manage all staff leave requests across all dates"} 
         breadcrumb={["Operations", "Leave Management"]} 
         actions={
           <button className="cms-btn cms-btn-ghost leave-history-button" onClick={() => setHistoryOpen(true)}>
@@ -976,7 +1163,7 @@ export default function LeaveManagementPage() {
               className={`leave-tab-btn ${activeTab === "today" ? "active" : ""}`}
               onClick={() => setActiveTab("today")}
             >
-              <CalendarDays size={16} /> Today's Leaves <span className="tab-pill">TODAY</span>
+              <CalendarDays size={16} /> Today's Leaves <span className="tab-pill count">{todayRequestsCount}</span>
             </button>
             <button 
               type="button" 
@@ -1046,17 +1233,29 @@ export default function LeaveManagementPage() {
                     <tr>
                       <td colSpan={11} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
                         {activeTab === "today" 
-                          ? "No active leaves for today." 
+                          ? "No leave requests requested today or active for today." 
                           : "No leave requests found matching these filters."}
                       </td>
                     </tr>
                   ) : (
-                    filteredRequests.map(request => {
+                    paginatedRequests.map(request => {
                       const rid = request.staffLeaveRequestId || request.id;
                       const initials = (request.staffName || "Staff").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                      const isRequestedToday = (request.appliedDate && request.appliedDate === todayIso) ||
+                        (request.createdAt && String(request.createdAt).split("T")[0] === todayIso) ||
+                        (request.CreatedAt && String(request.CreatedAt).split("T")[0] === todayIso);
                       return (
                         <tr key={rid}>
-                          <td><strong>LR-{String(rid).padStart(3, "0")}</strong></td>
+                          <td>
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                              <strong>LR-{String(rid).padStart(3, "0")}</strong>
+                              {isRequestedToday && (
+                                <span className="tab-pill" style={{ fontSize: 9, background: "#dbeafe", color: "#1e40af", fontWeight: 700 }}>
+                                  TODAY
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td>
                             <div className="staff-table-info">
                               <span className="staff-avatar-circle">{initials}</span>
@@ -1107,6 +1306,15 @@ export default function LeaveManagementPage() {
                 </tbody>
               </table>
             </div>
+            <TablePagination
+              currentPage={safeRequestPage}
+              pageSize={requestPageSize}
+              totalItems={filteredRequests.length}
+              onPageChange={setRequestPage}
+              onPageSizeChange={setRequestPageSize}
+              pageSizeOptions={[10, 20, 50]}
+              unit="requests"
+            />
           </section>
         </main>
       </DashboardLayout>
