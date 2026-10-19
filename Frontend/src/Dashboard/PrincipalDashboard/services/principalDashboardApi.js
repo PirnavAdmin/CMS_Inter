@@ -192,9 +192,21 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
     apiClient.get(apiEndpoints.fee.dashboard, { params: contextParams({ campusId, boardId, academicYearId }) }),
     apiClient.get(apiEndpoints.fee.collection, { params: contextParams({ campusId, boardId, academicYearId }) }),
     apiClient.get(apiEndpoints.results.statistics, { params: contextParams({ campusId, boardId, academicYearId }) }),
+    // Match Admin Dashboard and Staff Management: count active staff in this campus/board.
+    apiClient.get("/api/v1/staff", { params: {
+      BoardId: boardId || undefined,
+      CampusId: campusId || undefined,
+      PageNumber: 1,
+      PageSize: 10000,
+    } }),
   ]);
 
-  const [summaryResult, studentAttendanceResult, staffAttendanceResult, examsResult, highlightsResult, activitiesResult, feeResult, paymentsResult, resultStatsResult] = responses;
+  const [summaryResult, studentAttendanceResult, staffAttendanceResult, examsResult, highlightsResult, activitiesResult, feeResult, paymentsResult, resultStatsResult, staffResult] = responses;
+  const staffPayload = unwrap(settled(staffResult, null));
+  const staffRows = Array.isArray(staffPayload) ? staffPayload
+    : ["items", "Items", "records", "Records", "results", "Results", "rows", "Rows", "$values"]
+      .map((key) => staffPayload?.[key]).find(Array.isArray);
+  const staffCount = staffRows?.filter((row) => !row?.status || row.status === "Active").length;
   const summary = unwrap(settled(summaryResult, {})) || {};
   const studentAttendance = unwrap(settled(studentAttendanceResult, {})) || {};
   const staffAttendance = unwrap(settled(staffAttendanceResult, {})) || {};
