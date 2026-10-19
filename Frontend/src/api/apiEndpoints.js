@@ -1,6 +1,7 @@
 export const apiEndpoints = {
   dashboard: {
     summary: "/api/v1/dashboard/summary",
+    principal: "/api/v1/dashboard/principal",
     studentAttendance: "/api/v1/dashboard/students-attendance-today",
     staffAttendance: "/api/v1/dashboard/staff-attendance-today",
     upcomingExaminations: "/api/v1/dashboard/upcoming-examinations",

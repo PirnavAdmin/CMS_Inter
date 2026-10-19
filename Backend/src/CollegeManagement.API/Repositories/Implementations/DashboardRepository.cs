@@ -143,32 +143,6 @@ public class DashboardRepository : IDashboardRepository
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
-
-        try
-        {
-            var conn = await GetOpenConnectionAsync();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-            parameters.Add("p_TargetDate", dateVal, DbType.Date);
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-
-            var summary = await conn.QueryFirstOrDefaultAsync<DashboardSummaryResponseDto>(
-                "sp_GetDashboardKPIs",
-                parameters,
-                commandType: CommandType.StoredProcedure);
-
-            // Bypassing SP to rely on updated EF Core logic which uses StudentAdmissions
-            // if (summary != null && (summary.TotalStudents > 0 || summary.TeachingStaff > 0 || summary.TotalGroups > 0 || summary.TotalSections > 0))
-            // {
-            //     return summary;
-            // }
-        }
-        catch
-        {
-            // Fallback to EF Core below
-        }
-
         return await ComputeKPIsFallbackAsync(boardId, academicYearId, campusId, dateVal, ct);
     }
 
@@ -178,57 +152,6 @@ public class DashboardRepository : IDashboardRepository
         int? campusId = null,
         CancellationToken ct = default)
     {
-        try
-        {
-            var conn = await GetOpenConnectionAsync();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-
-            using var multi = await conn.QueryMultipleAsync(
-                "sp_GetDashboardStudentsOverview",
-                parameters,
-                commandType: CommandType.StoredProcedure);
-
-            var overview = await multi.ReadFirstOrDefaultAsync<StudentsOverviewResponseDto>() ?? new StudentsOverviewResponseDto();
-            
-            if (!multi.IsConsumed)
-            {
-                var trend = (await multi.ReadAsync<StudentMonthlyTrendDto>()).ToList();
-                overview.MonthlyTrend = trend;
-            }
-
-            if (overview.MonthlyTrend == null || !overview.MonthlyTrend.Any())
-            {
-                overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, campusId, ct);
-            }
-
-            if (overview.TotalStudents == 0 && overview.MonthlyTrend.Any())
-            {
-                overview.TotalStudents = overview.MonthlyTrend.Sum(x => x.StudentsJoined);
-            }
-
-            if ((overview.GenderDistribution == null || !overview.GenderDistribution.Any()) && overview.TotalStudents > 0)
-            {
-                overview.GenderDistribution = new List<StudentOverviewDistributionDto>
-                {
-                    new() { Category = "Gender", Label = "Boys", Count = overview.MaleStudents, Percentage = overview.MalePercentage, Color = "#3B82F6" },
-                    new() { Category = "Gender", Label = "Girls", Count = overview.FemaleStudents, Percentage = overview.FemalePercentage, Color = "#EC4899" }
-                };
-            }
-
-            // Bypassing SP to rely on updated EF Core logic
-            // if (overview.TotalStudents > 0)
-            // {
-            //     return overview;
-            // }
-        }
-        catch
-        {
-            // Fallback to EF Core below
-        }
-
         return await ComputeStudentsOverviewFallbackAsync(boardId, academicYearId, campusId, ct);
     }
 
@@ -289,40 +212,6 @@ public class DashboardRepository : IDashboardRepository
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
-
-        try
-        {
-            var conn = await GetOpenConnectionAsync();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-            parameters.Add("p_TargetDate", dateVal, DbType.Date);
-            parameters.Add("p_ViewBy", viewBy ?? "Overall", DbType.String);
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-
-            using var multi = await conn.QueryMultipleAsync(
-                "sp_GetDashboardStudentAttendance",
-                parameters,
-                commandType: CommandType.StoredProcedure);
-
-            var summary = await multi.ReadFirstOrDefaultAsync<StudentsAttendanceTodayResponseDto>() ?? new StudentsAttendanceTodayResponseDto();
-            if (!multi.IsConsumed)
-            {
-                var breakdown = (await multi.ReadAsync<AttendanceCategoryBreakdownDto>()).ToList();
-                summary.Breakdown = breakdown;
-            }
-
-            // Bypassing SP to rely on updated EF Core logic which only calculates overall attendance
-            // if (summary.TotalStudents > 0 || summary.Present > 0 || summary.Absent > 0)
-            // {
-            //     return summary;
-            // }
-        }
-        catch
-        {
-            // Fallback to EF Core below
-        }
-
         return await ComputeStudentAttendanceFallbackAsync(boardId, academicYearId, dateVal, viewBy, campusId, ct);
     }
 

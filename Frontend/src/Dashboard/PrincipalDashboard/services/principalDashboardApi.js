@@ -91,6 +91,97 @@ const settled = (result, fallback) => result.status === "fulfilled" ? result.val
 
 export async function getPrincipalDashboardData({ campusId, boardId, academicYearId, endDate }) {
   const params = contextParams({ campusId, boardId, academicYearId, date: endDate });
+
+  try {
+    const res = await apiClient.get(apiEndpoints.dashboard.principal, { params });
+    const principalData = unwrap(res.data);
+    if (principalData && principalData.summary) {
+      const summary = unwrap(principalData.summary) || {};
+      const studentAttendance = unwrap(principalData.studentAttendance) || {};
+      const staffAttendance = unwrap(principalData.staffAttendance) || {};
+      const fee = unwrap(principalData.fees) || {};
+      const highlights = unwrap(principalData.highlights) || {};
+      const resultStats = unwrap(principalData.resultStatistics) || {};
+
+      const present = numberOf(studentAttendance, ["present", "Present", "presentCount", "PresentCount"], 0);
+      const absent = numberOf(studentAttendance, ["absent", "Absent", "absentCount", "AbsentCount"], 0);
+      const halfDay = numberOf(studentAttendance, ["halfDay", "HalfDay", "late", "Late", "halfDayCount", "HalfDayCount"], 0);
+      const staffPresent = numberOf(staffAttendance, ["present", "Present", "presentCount", "PresentCount"], 0);
+      const staffAbsent = numberOf(staffAttendance, ["absent", "Absent", "absentCount", "AbsentCount"], 0);
+      const staffLeave = numberOf(staffAttendance, ["onLeave", "OnLeave", "leaveCount", "LeaveCount"], 0);
+      const exams = toExams(principalData.upcomingExaminations || []);
+      const classes = toClasses(studentAttendance);
+
+      const feeCollected = numberOf(fee, ["totalCollected", "TotalCollected", "collected", "Collected", "totalPaid", "TotalPaid"]);
+      const feePending = numberOf(fee, ["totalOutstanding", "TotalOutstanding", "outstanding", "Outstanding", "pendingAmount", "PendingAmount", "dueFees", "DueFees"]);
+      const collectionRate = feeCollected !== undefined && feePending !== undefined && feeCollected + feePending > 0
+        ? (feeCollected / (feeCollected + feePending)) * 100
+        : numberOf(fee, ["collectionPercentage", "CollectionPercentage"]);
+      const passPercentage = numberOf(resultStats, ["passPercentage", "PassPercentage", "overallPassPercentage", "OverallPassPercentage"]);
+
+      // Performance streams
+      const rawStreams = rowsOf(principalData.performanceStreams);
+      const performance = rawStreams.length > 0
+        ? rawStreams.map((s) => ({
+            label: textOf(s, ["label", "Label", "streamName", "StreamName"]),
+            current: numberOf(s, ["current", "Current", "passPercentage", "PassPercentage"], 85),
+            previous: numberOf(s, ["previous", "Previous"], 80),
+          }))
+        : (passPercentage === undefined ? [] : [{ label: "Overall", current: passPercentage }]);
+
+      // Notices
+      const rawNotices = rowsOf(principalData.notices);
+      const notices = rawNotices.map((n, idx) => ({
+        id: textOf(n, ["id", "Id"], `notice-${idx}`),
+        title: textOf(n, ["title", "Title"], "Notice"),
+        description: textOf(n, ["description", "Description"], ""),
+        date: textOf(n, ["date", "Date"], ""),
+        type: textOf(n, ["type", "Type"], "Notice"),
+        priority: textOf(n, ["priority", "Priority"], "Normal").toLowerCase(),
+      }));
+
+      return {
+        partial: false,
+        studentCount: numberOf(summary, ["totalStudents", "TotalStudents", "studentCount", "StudentCount"], 0),
+        staffCount: numberOf(summary, ["totalStaff", "TotalStaff"], 0),
+        studentsGrowth: numberOf(summary, ["studentsVsLastYearPercentage", "StudentsVsLastYearPercentage"]),
+        staffGrowth: numberOf(summary, ["staffVsLastYearPercentage", "StaffVsLastYearPercentage"]),
+        attendance: {
+          present,
+          absent,
+          leave: halfDay,
+          total: numberOf(studentAttendance, ["totalStudents", "TotalStudents", "total", "Total", "totalCount", "TotalCount"], present + absent + halfDay),
+          percentage: numberOf(studentAttendance, ["attendancePercentage", "AttendancePercentage", "percentage", "Percentage"]),
+        },
+        staffAttendance: {
+          present: staffPresent,
+          absent: staffAbsent,
+          leave: staffLeave,
+          total: numberOf(staffAttendance, ["totalStaff", "TotalStaff", "total", "Total", "totalCount", "TotalCount"], staffPresent + staffAbsent + staffLeave),
+          percentage: numberOf(staffAttendance, ["attendancePercentage", "AttendancePercentage", "percentage", "Percentage"]),
+        },
+        passPercentage,
+        performance,
+        classOverview: classes,
+        exams,
+        activities: toActivities(principalData.recentActivities || []),
+        notices,
+        fees: {
+          collected: feeCollected,
+          pending: feePending,
+          collectionRate,
+          chart: groupFeeCollection(rowsOf(fee.recentPayments || [])),
+        },
+        activeClasses: numberOf(summary, ["totalSections", "TotalSections", "sectionsCount", "SectionsCount"], classes.length),
+        upcomingExamCount: numberOf(summary, ["upcomingExams", "UpcomingExams", "upcomingExaminations", "UpcomingExaminations"], exams.length),
+        admissions: numberOf(highlights, ["admissionsToday", "AdmissionsToday", "admissions", "Admissions"], 0),
+      };
+    }
+  } catch (err) {
+    console.warn("Principal aggregated endpoint failed, falling back to parallel calls:", err);
+  }
+
+  // Fallback to parallel calls if aggregated endpoint is unavailable
   const responses = await Promise.allSettled([
     apiClient.get(apiEndpoints.dashboard.summary, { params }),
     apiClient.get(apiEndpoints.dashboard.studentAttendance, { params: { ...params, viewBy: "Section" } }),
@@ -127,6 +218,8 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
     partial: responses.some((result) => result.status === "rejected"),
     studentCount: numberOf(summary, ["totalStudents", "TotalStudents", "studentCount", "StudentCount"], 0),
     staffCount: numberOf(summary, ["totalStaff", "TotalStaff"], 0),
+    studentsGrowth: numberOf(summary, ["studentsVsLastYearPercentage", "StudentsVsLastYearPercentage"]),
+    staffGrowth: numberOf(summary, ["staffVsLastYearPercentage", "StaffVsLastYearPercentage"]),
     attendance: {
       present,
       absent,
