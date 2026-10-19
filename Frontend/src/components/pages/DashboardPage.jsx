@@ -375,6 +375,8 @@ export default function DashboardPage() {
   const [holidayState, setHolidayState] = useState({ loading: true, error: null, data: null });
   const [certState, setCertState] = useState({ loading: true, error: null, data: null });
   const [examState, setExamState] = useState({ loading: true, error: null, data: null });
+  const summaryData = summaryState.data;
+  const overviewData = overviewState.data;
   const initialLoading = summaryState.loading || overviewState.loading || groupState.loading || studentAttState.loading || staffAttState.loading || holidayState.loading || examState.loading;
   // Sequence ref counters for race condition protection
   const summarySeq = useRef(0);
