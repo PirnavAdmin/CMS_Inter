@@ -215,7 +215,18 @@ export default function FacultyNavbar() {
   const boardDisplayName = activeBoard?.name || activeBoard?.boardName || activeBoard?.code || (boardsLoading ? "Loading boards..." : "Board of Intermediate Education, Andhra Pradesh");
   const yearDisplayName = activeAcademicYear?.name || activeAcademicYear?.label || activeAcademicYear?.code || "2026-2027";
 
+  const [photoOverride, setPhotoOverride] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      setPhotoOverride(e.detail?.photoUrl !== undefined ? e.detail.photoUrl : null);
+    };
+    window.addEventListener("cms-staff-photo-updated", handler);
+    return () => window.removeEventListener("cms-staff-photo-updated", handler);
+  }, []);
+
   const activePhoto = useMemo(() => {
+    if (photoOverride !== null) return photoOverride;
     return (
       profileData?.photoUrl ||
       (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
@@ -223,7 +234,7 @@ export default function FacultyNavbar() {
         ? `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}`
         : null)
     );
-  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
+  }, [photoOverride, profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
 
   return (
     <header className="cms-topbar">

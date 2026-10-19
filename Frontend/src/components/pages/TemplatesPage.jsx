@@ -94,6 +94,15 @@ export const DEMO_STUDENT = {
   fee_type: "Tuition & Examination Fees",
   payment_date: getPresentDateFormatted(),
   receipt_number: "REC-2026-992",
+  mother_tongue: "Telugu",
+  caste_category: "General / OC",
+  dob_words: "Fourteenth August Two Thousand Eight",
+  second_language: "Sanskrit",
+  class_leaving: "Senior Intermediate (2nd Year MPC)",
+  qualified_for_promotion: "Yes, Qualified for University / Higher Studies Admission",
+  scholarship_concession: "No (All Dues Cleared)",
+  identification_marks: "1. A mole on the left cheek; 2. A scar on right index finger",
+  leaving_date: getPresentDateFormatted(),
   custom_body: "has actively participated in the College Annual Sports Meet 2026 and won First Place in the 100m Athletic Sprint",
 };
 
@@ -238,14 +247,16 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     signatureType: "Principal",
     builtIn: true,
     accent: "gold",
-    refPrefix: "TC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} in {{group_name}} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
-    purpose: "Institution Transfer",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}, Mother: {{mother_name}}), bearing Admission No: {{admission_no}} and Roll No: {{roll_no}}, was a bonafide student of this college in {{group_name}} Group ({{medium}} Medium, Second Language: {{second_language}}).\nDate of Birth as per admission register: {{dob}} (in words: {{dob_words}}).\nMother Tongue: {{mother_tongue}} | Social Category / Caste: {{caste_category}}.\nPersonal Marks of Identification: {{identification_marks}}.\nClass in which studying at the time of leaving: {{class_leaving}} on {{leaving_date}}.\nQualified for promotion to Higher Education / University Admission: {{qualified_for_promotion}}.\nAll college dues have been cleared ({{dues_cleared}}). Fee concession / scholarship receipt: {{scholarship_concession}}.\nReason for leaving: {{reason_for_leaving}}. General conduct and character have been {{conduct_rating}}.",
+    purpose: "Higher Education / Institution Transfer",
     dynamicFields: [
-      "{{student_name}}", "{{admission_no}}", "{{father_name}}",
-      "{{mother_name}}", "{{dob}}", "{{date_of_admission}}", "{{study_from}}",
-      "{{study_to}}", "{{reason_for_leaving}}", "{{dues_cleared}}",
-      "{{certificate_number}}", "{{issue_date}}", "{{place}}"
+      "{{student_name}}", "{{admission_no}}", "{{roll_no}}", "{{father_name}}",
+      "{{mother_name}}", "{{dob}}", "{{dob_words}}", "{{mother_tongue}}",
+      "{{caste_category}}", "{{second_language}}", "{{medium}}", "{{group_name}}",
+      "{{date_of_admission}}", "{{study_from}}", "{{study_to}}", "{{class_leaving}}",
+      "{{qualified_for_promotion}}", "{{leaving_date}}", "{{reason_for_leaving}}",
+      "{{dues_cleared}}", "{{scholarship_concession}}", "{{identification_marks}}",
+      "{{conduct_rating}}", "{{certificate_number}}", "{{issue_date}}", "{{place}}"
     ],
   },
   {
@@ -416,71 +427,12 @@ export function normalizeApiTemplate(apiItem, fallbackPresets = DEFAULT_CERTIFIC
 }
 
 export function getStoredCertificateTemplates() {
-  try {
-    // Purge old stale cache keys
-    localStorage.removeItem("cms_certificate_templates");
-    localStorage.removeItem("cms_certificate_templates_v1");
-    localStorage.removeItem("cms_certificate_templates_v2");
-    localStorage.removeItem("cms_certificate_templates_v3");
-    localStorage.removeItem("cms_certificate_templates_v4");
-    localStorage.removeItem("cms_certificate_templates_v5");
-
-    const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const canonicalMap = new Map();
-        DEFAULT_CERTIFICATE_TEMPLATES.forEach((def) => canonicalMap.set(def.id, { ...def }));
-
-        parsed.forEach((item) => {
-          const slot = getCanonicalSlot(item);
-          if (slot && canonicalMap.has(slot)) {
-            const base = canonicalMap.get(slot);
-            const cleanContent = cleanCertificateContent(item.content || item.contentBody, base.content);
-            canonicalMap.set(slot, {
-              ...base,
-              ...item,
-              id: base.id,
-              name: base.name,
-              content: cleanContent,
-              contentBody: cleanContent,
-              builtIn: true,
-            });
-          }
-        });
-
-        return Array.from(canonicalMap.values());
-      }
-    }
-  } catch {}
+  // Pure database mode: Load canonical defaults in memory; live records fetched via templateApi from MySQL
   return DEFAULT_CERTIFICATE_TEMPLATES.map((t) => ({ ...t }));
 }
 
 export function saveCertificateTemplates(templatesList) {
-  try {
-    const canonicalMap = new Map();
-    DEFAULT_CERTIFICATE_TEMPLATES.forEach((def) => canonicalMap.set(def.id, { ...def }));
-
-    (Array.isArray(templatesList) ? templatesList : []).forEach((item) => {
-      const slot = getCanonicalSlot(item);
-      if (slot && canonicalMap.has(slot)) {
-        const base = canonicalMap.get(slot);
-        const cleanContent = cleanCertificateContent(item.content || item.contentBody, base.content);
-        canonicalMap.set(slot, {
-          ...base,
-          ...item,
-          id: base.id,
-          name: base.name,
-          content: cleanContent,
-          contentBody: cleanContent,
-          builtIn: true,
-        });
-      }
-    });
-
-    const cleanList = Array.from(canonicalMap.values());
-    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(cleanList));
-  } catch {}
+  // Pure database mode: Templates persist directly to MySQL via templateApi endpoints
 }
 
 export function extractCleanCertificateBody(rawContent) {
@@ -602,6 +554,18 @@ const DYNAMIC_FIELD_TOKENS = [
   "{{study_to}}",
   "{{conduct_rating}}",
   "{{medium}}",
+  "{{mother_tongue}}",
+  "{{caste_category}}",
+  "{{dob}}",
+  "{{dob_words}}",
+  "{{second_language}}",
+  "{{class_leaving}}",
+  "{{qualified_for_promotion}}",
+  "{{leaving_date}}",
+  "{{reason_for_leaving}}",
+  "{{dues_cleared}}",
+  "{{scholarship_concession}}",
+  "{{identification_marks}}",
   "{{amount_paid}}",
   "{{amount_in_words}}",
   "{{fee_type}}",
@@ -618,11 +582,6 @@ export default function TemplatesPage() {
   const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-
-  // Sync templates to localStorage whenever modified
-  useEffect(() => {
-    saveCertificateTemplates(templates);
-  }, [templates]);
 
   // Load templates and categories from live API
   const loadTemplatesFromApi = useCallback(async () => {

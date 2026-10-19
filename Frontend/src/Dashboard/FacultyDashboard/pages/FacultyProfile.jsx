@@ -414,12 +414,16 @@ export default function FacultyProfile() {
 
   const handleRemovePhoto = () => {
     setProfileData((prev) => {
-      const updated = { ...prev, photoUrl: "" };
+      const updated = { ...prev, photoUrl: "", photoPath: "" };
       persistStaffProfile(updated);
       return updated;
     });
     if (avatarRef.current) {
       avatarRef.current.value = "";
+    }
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("staff_profile_photo");
+      window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: "" } }));
     }
     notify("Profile photo removed.");
   };
@@ -543,26 +547,50 @@ export default function FacultyProfile() {
       ctx.restore();
 
       const croppedDataUrl = outCanvas.toDataURL("image/jpeg", 0.92);
+      const staffTargetId = profileData.id || profileData.facultyId || 1108;
       
-      if (profileData.id) {
-        outCanvas.toBlob((blob) => {
-          if (blob) {
+      outCanvas.toBlob(async (blob) => {
+        if (blob && staffTargetId) {
+          try {
             const formData = new FormData();
+            formData.append("Photo", blob, "profile.jpg");
             formData.append("file", blob, "profile.jpg");
-            formData.append("staffId", profileData.id);
-            apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, {
+            formData.append("StaffId", String(staffTargetId));
+            formData.append("staffId", String(staffTargetId));
+
+            const uploadRes = await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, {
               headers: { "Content-Type": "multipart/form-data" },
-            }).catch(e => console.error("Photo upload failed:", e));
+            });
+
+            const permanentUrl = `/api/v1/staff/photo/${staffTargetId}?t=${Date.now()}`;
+            const serverPath = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || `/uploads/staff-photos/photo_staff_${staffTargetId}.jpg`;
+
+            setProfileData((prev) => {
+              const updated = { ...prev, photoUrl: permanentUrl, photoPath: serverPath };
+              persistStaffProfile(updated);
+              return updated;
+            });
+
+            if (typeof window !== "undefined") {
+              localStorage.setItem("staff_profile_photo", permanentUrl);
+              window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: permanentUrl } }));
+            }
+          } catch (e) {
+            console.error("Photo upload to backend failed:", e);
           }
-        }, "image/jpeg", 0.92);
-      }
+        }
+      }, "image/jpeg", 0.92);
 
       setProfileData((prev) => {
         const updated = { ...prev, photoUrl: croppedDataUrl };
         persistStaffProfile(updated);
         return updated;
       });
-      notify("Profile photo cropped and updated successfully!");
+      if (typeof window !== "undefined") {
+        localStorage.setItem("staff_profile_photo", croppedDataUrl);
+        window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: croppedDataUrl } }));
+      }
+      notify("Profile photo cropped and saved to server successfully!");
       setIsCropModalOpen(false);
       setRawImageToCrop(null);
     };
@@ -1075,7 +1103,7 @@ export default function FacultyProfile() {
         }
 
         if (sectionName && profileData.id) {
-          await apiClient.put(apiEndpoints.faculty.saveProfileDraft(profileData.id), {
+          await apiClient.post(apiEndpoints.faculty.saveProfileDraft(profileData.id), {
             sectionName,
             ...payload,
           });

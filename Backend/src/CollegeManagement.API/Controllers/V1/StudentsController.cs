@@ -247,6 +247,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet]
+        [BypassPermission]
         [ProducesResponseType(typeof(PagedResult<StudentListItemDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
             [FromQuery] string? search = null,

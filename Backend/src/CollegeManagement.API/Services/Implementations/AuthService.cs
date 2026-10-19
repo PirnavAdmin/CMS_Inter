@@ -231,26 +231,51 @@ namespace CollegeManagement.API.Services.Implementations
                 var assignedCampusIds = new List<int>();
                 var assignedBoardIds = new List<int>();
                 
+                if ((!user.StaffId.HasValue || user.StaffId.Value <= 0) && !string.IsNullOrWhiteSpace(user.Email))
+                {
+                    var staffByEmail = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        "SELECT Id, Designation, EmployeeId FROM Staffs WHERE Email = @Email AND IsDeleted = 0 ORDER BY Id DESC LIMIT 1", 
+                        new { Email = user.Email.Trim() });
+                    if (staffByEmail != null)
+                    {
+                        user.StaffId = (int)staffByEmail.Id;
+                        if (string.IsNullOrWhiteSpace(user.Designation)) user.Designation = staffByEmail.Designation;
+                        if (string.IsNullOrWhiteSpace(user.EmployeeId)) user.EmployeeId = staffByEmail.EmployeeId;
+                    }
+                }
+
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
                     var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Designation, EmployeeId FROM Staffs WHERE Id = @Id", 
+                        "SELECT Designation, EmployeeId, CampusId, BoardId FROM Staffs WHERE Id = @Id", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
-                        user.Designation = staffInfo.Designation;
-                        user.EmployeeId = staffInfo.EmployeeId;
+                        if (string.IsNullOrWhiteSpace(user.Designation)) user.Designation = staffInfo.Designation;
+                        if (string.IsNullOrWhiteSpace(user.EmployeeId)) user.EmployeeId = staffInfo.EmployeeId;
                     }
                     
                     var campuses = await connection.QueryAsync<int>(
                         "SELECT CampusId FROM StaffCampusAssignments WHERE StaffId = @Id",
                         new { Id = user.StaffId.Value });
-                    assignedCampusIds = campuses.ToList();
+                    assignedCampusIds = campuses.Distinct().ToList();
+
+                    if (!assignedCampusIds.Any() && staffInfo?.CampusId != null)
+                    {
+                        int pCId = Convert.ToInt32(staffInfo.CampusId);
+                        if (pCId > 0) assignedCampusIds.Add(pCId);
+                    }
                     
                     var boards = await connection.QueryAsync<int>(
                         "SELECT BoardId FROM StaffBoardAssignments WHERE StaffId = @Id",
                         new { Id = user.StaffId.Value });
-                    assignedBoardIds = boards.ToList();
+                    assignedBoardIds = boards.Distinct().ToList();
+
+                    if (!assignedBoardIds.Any() && staffInfo?.BoardId != null)
+                    {
+                        int pBId = Convert.ToInt32(staffInfo.BoardId);
+                        if (pBId > 0) assignedBoardIds.Add(pBId);
+                    }
                 }
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
 

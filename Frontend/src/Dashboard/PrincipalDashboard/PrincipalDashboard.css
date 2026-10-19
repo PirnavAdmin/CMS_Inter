@@ -12,6 +12,18 @@
   border-radius: 14px;
 }
 
+.principal-data-status, .principal-empty-row {
+  margin: 0 0 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--principal-border);
+  border-radius: 8px;
+  color: var(--principal-muted);
+  background: #fff;
+  font-size: 11px;
+}
+.principal-data-status.is-error { border-color: #efb4bc; color: #b42336; background: #fff5f6; }
+.principal-empty-row { margin: 12px 0; text-align: center; }
+
 .principal-page-head, .principal-welcome, .principal-section-head, .principal-welcome-meta, .principal-head-actions, .principal-date-picker, .principal-kpi, .principal-attendance-main, .principal-legend > div, .principal-performance-stat, .principal-chart-key, .principal-staff-overview, .principal-mini-stats span, .principal-soft-button, .principal-table-footer, .principal-exam-row, .principal-activity-row, .principal-notice-row, .principal-fee-footer, .principal-action, .principal-report-row, .principal-footer { display: flex; align-items: center; }
 .principal-page-head { justify-content: space-between; gap: 18px; margin-bottom: 14px; }
 .principal-eyebrow { margin: 0 0 4px; color: var(--principal-green); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }

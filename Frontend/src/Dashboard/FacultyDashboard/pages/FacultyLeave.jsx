@@ -37,6 +37,7 @@ export default function FacultyLeave() {
   });
   const [addingCategory, setAddingCategory] = useState(false);
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const [holidays, setHolidays] = useState([]);
   const [toast, setToast] = useState(null);
 
   const notify = (text, type = "success") => {
@@ -135,6 +136,13 @@ export default function FacultyLeave() {
         console.warn("Could not fetch leave categories:", catErr);
       }
 
+      // Fetch official holidays to exclude from working days
+      try {
+        const holRes = await apiClient.get("/api/v1/holidays", { params: { pageSize: 100 } });
+        const hList = holRes?.data?.data || holRes?.data || [];
+        if (Array.isArray(hList)) setHolidays(hList);
+      } catch {}
+
       // 2. Fetch staff leave history & balance
       let leaves = [];
       let balanceObj = null;
@@ -224,11 +232,28 @@ export default function FacultyLeave() {
   const earnedStats = useMemo(() => getCategoryStats("earned", 15), [categories, approvedLeaves, staffBalance]);
   const onDutyStats = useMemo(() => getCategoryStats("duty", 8), [categories, approvedLeaves, staffBalance]);
 
-  // Leave preview calculation for date inputs
-  const leavePreviewDays =
-    leaveForm.fromDate && leaveForm.toDate && new Date(leaveForm.toDate) >= new Date(leaveForm.fromDate)
-      ? Math.floor((new Date(leaveForm.toDate) - new Date(leaveForm.fromDate)) / 86400000) + 1
-      : 0;
+  // Leave preview calculation for date inputs (excludes Sundays and official holidays)
+  const leavePreviewDays = useMemo(() => {
+    if (!leaveForm.fromDate || !leaveForm.toDate || leaveForm.toDate < leaveForm.fromDate) return 0;
+    const start = new Date(`${leaveForm.fromDate}T00:00:00`);
+    const end = new Date(`${leaveForm.toDate}T00:00:00`);
+    let count = 0;
+    const cur = new Date(start);
+    while (cur <= end) {
+      const isSunday = cur.getDay() === 0;
+      const curIso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+      const isHoliday = holidays.some((h) => {
+        const hStart = (h.startDate || h.holidayDate || "").slice(0, 10);
+        const hEnd = (h.endDate || hStart).slice(0, 10);
+        return curIso >= hStart && curIso <= hEnd && (h.status === "Active" || !h.status);
+      });
+      if (!isSunday && !isHoliday) {
+        count++;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count;
+  }, [leaveForm.fromDate, leaveForm.toDate, holidays]);
 
   // Handle opening the Apply Leave modal
   const handleOpenModal = () => {
@@ -334,6 +359,9 @@ export default function FacultyLeave() {
     }
     if (new Date(leaveForm.toDate) < new Date(leaveForm.fromDate)) {
       return notify("To Date cannot be earlier than From Date.", "error");
+    }
+    if (leavePreviewDays <= 0) {
+      return notify("Selected leave range contains 0 working days (Sundays and official holidays are excluded).", "error");
     }
 
     setLeaveSubmitting(true);
@@ -748,11 +776,15 @@ export default function FacultyLeave() {
                 </div>
               </div>
 
-              {leavePreviewDays > 0 && (
-                <p style={{ fontSize: 12.5, color: "var(--cms-primary-dark)", fontWeight: 600, marginTop: 12 }}>
-                  Duration: {leavePreviewDays} day{leavePreviewDays > 1 ? "s" : ""}
-                </p>
-              )}
+              {leavePreviewDays > 0 ? (
+                <div style={{ fontSize: 12.5, color: "var(--cms-primary-dark)", fontWeight: 600, marginTop: 12, background: "var(--cms-primary-soft, #f4f6e8)", padding: "8px 12px", borderRadius: "6px" }}>
+                  Effective Duration: {leavePreviewDays} working day{leavePreviewDays > 1 ? "s" : ""} (Sundays &amp; official holidays excluded)
+                </div>
+              ) : leaveForm.fromDate && leaveForm.toDate ? (
+                <div style={{ fontSize: 12, color: "#DC2626", marginTop: 10, fontWeight: 500 }}>
+                  Selected range contains only non-working days (Sundays or holidays). Leave cannot be requested for 0 working days.
+                </div>
+              ) : null}
             </div>
 
             <div className="cms-modal-foot">

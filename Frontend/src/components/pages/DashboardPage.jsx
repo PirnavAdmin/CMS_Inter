@@ -37,6 +37,7 @@ import {
   YAxis,
 } from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { getStudentOverviewMetrics } from "@/api/studentApi.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -391,7 +392,7 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 1. GET /api/v1/dashboard/summary & GET /api/v1/staff
+  // 1. GET /api/v1/dashboard/summary & GET /api/v1/staff & getStudentOverviewMetrics (Student Management Parity)
   const fetchSummary = useCallback(async () => {
     const seq = ++summarySeq.current;
     setSummaryState((prev) => ({ ...prev, loading: true, error: null }));
@@ -409,10 +410,20 @@ export default function DashboardPage() {
         PageNumber: 1,
         PageSize: 10000
       };
+
+      const studentMetricsPromise = getStudentOverviewMetrics({
+        campusId,
+        boardId,
+        academicYearId,
+      }).catch((e) => {
+        console.warn("Failed to load placed student metrics for dashboard summary:", e);
+        return null;
+      });
       
-      const [res, staffRes] = await Promise.all([
+      const [res, staffRes, studentMetrics] = await Promise.all([
         apiClient.get(DASHBOARD_API.summary, { params }),
-        apiClient.get("/api/v1/staff", { params: staffParams }).catch(() => ({ data: { items: [] } }))
+        apiClient.get("/api/v1/staff", { params: staffParams }).catch(() => ({ data: { items: [] } })),
+        studentMetricsPromise,
       ]);
 
       if (summarySeq.current === seq) {
@@ -436,13 +447,19 @@ export default function DashboardPage() {
         }).length;
         const nonTeachingCount = Math.max(0, totalCount - teachingCount);
 
-        // Merge teaching/non-teaching staff counts from staff endpoint to override dashboard summary
+        // Merge teaching/non-teaching staff counts and placed student management counts to override dashboard summary
         const mergedData = {
           ...summaryData,
           teachingStaff: teachingCount,
           teachingStaffCount: teachingCount,
           nonTeachingStaff: nonTeachingCount,
           nonTeachingStaffCount: nonTeachingCount,
+          ...(studentMetrics ? {
+            totalStudents: studentMetrics.totalStudents,
+            totalStudentCount: studentMetrics.totalStudents,
+            studentCount: studentMetrics.totalStudents,
+            admissions: studentMetrics.totalStudents,
+          } : {}),
         };
 
         setSummaryState({ loading: false, error: null, data: mergedData });
@@ -454,7 +471,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 2. GET /api/v1/dashboard/students-overview & GET /api/v1/dashboard/admission-trend
+  // 2. GET /api/v1/dashboard/students-overview & GET /api/v1/dashboard/admission-trend & getStudentOverviewMetrics
   const fetchStudentsOverview = useCallback(async () => {
     const seq = ++overviewSeq.current;
     setOverviewState((prev) => ({ ...prev, loading: true, error: null }));
@@ -471,23 +488,84 @@ export default function DashboardPage() {
         ...(campusId ? { campusId } : {}),
       };
 
-      const [overviewRes, trendRes] = await Promise.allSettled([
+      const studentMetricsPromise = getStudentOverviewMetrics({
+        campusId,
+        boardId,
+        academicYearId,
+      }).catch((e) => {
+        console.warn("Failed to load placed student metrics for overview:", e);
+        return null;
+      });
+
+      const [overviewRes, trendRes, studentMetricsRes] = await Promise.allSettled([
         apiClient.get(DASHBOARD_API.studentsOverview, { params }),
         apiClient.get(DASHBOARD_API.admissionTrend, { params: trendParams }),
+        studentMetricsPromise,
       ]);
 
       if (overviewSeq.current === seq) {
         const overviewData = overviewRes.status === "fulfilled" ? unwrap(overviewRes.value?.data) : null;
         const trendData = trendRes.status === "fulfilled" ? unwrap(trendRes.value?.data) : null;
+        const studentMetrics = studentMetricsRes.status === "fulfilled" ? studentMetricsRes.value : null;
 
-        if (overviewRes.status === "rejected" && trendRes.status === "rejected") {
+        if (overviewRes.status === "rejected" && trendRes.status === "rejected" && !studentMetrics) {
           setOverviewState({ loading: false, error: getApiErrorMessage(overviewRes.reason, "Failed to load students overview"), data: null });
           return;
         }
 
+        let calculatedTrend = overviewData?.monthlyTrend || trendData?.monthlyTrend || trendData?.trend || trendData?.items || trendData?.admissionTrend || overviewData?.trend || overviewData?.items || [];
+
+        // Derive monthly admission trend directly from placed student records to maintain exact 1:1 parity with Total Students
+        if (studentMetrics?.records && Array.isArray(studentMetrics.records) && studentMetrics.records.length > 0) {
+          const monthMap = new Map();
+          studentMetrics.records.forEach((r) => {
+            const rawDate = r.admissionDate || r.AdmissionDate || r.createdAt || r.CreatedAt;
+            if (rawDate) {
+              const d = new Date(rawDate);
+              if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                monthMap.set(key, (monthMap.get(key) || 0) + 1);
+              }
+            }
+          });
+          if (monthMap.size > 0) {
+            calculatedTrend = Array.from(monthMap.entries())
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, count]) => {
+                const [y, m] = key.split("-");
+                const dt = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+                return {
+                  period: dt.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+                  month: dt.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+                  studentsJoined: count,
+                  count,
+                  value: count,
+                  sortDate: key,
+                };
+              });
+          }
+        }
+
         const mergedData = {
           ...(overviewData && typeof overviewData === "object" ? overviewData : {}),
-          trend: overviewData?.monthlyTrend || trendData?.monthlyTrend || trendData?.trend || trendData?.items || trendData?.admissionTrend || overviewData?.trend || overviewData?.items || [],
+          trend: calculatedTrend,
+          monthlyTrend: calculatedTrend,
+          ...(studentMetrics ? {
+            totalStudents: studentMetrics.totalStudents,
+            totalCount: studentMetrics.totalStudents,
+            activeStudents: studentMetrics.totalStudents,
+            boys: studentMetrics.boys,
+            boysCount: studentMetrics.boysCount,
+            maleStudents: studentMetrics.maleStudents,
+            maleCount: studentMetrics.maleStudents,
+            girls: studentMetrics.girls,
+            girlsCount: studentMetrics.girlsCount,
+            femaleStudents: studentMetrics.femaleStudents,
+            femaleCount: studentMetrics.femaleStudents,
+            malePercentage: studentMetrics.malePercentage,
+            femalePercentage: studentMetrics.femalePercentage,
+            genderDistribution: studentMetrics.genderDistribution,
+          } : {}),
         };
         setOverviewState({ loading: false, error: null, data: mergedData });
       }
@@ -498,7 +576,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 3. GET /api/v1/dashboard/group-distribution
+  // 3. GET /api/v1/dashboard/group-distribution & getStudentOverviewMetrics
   const fetchGroupDistribution = useCallback(async () => {
     const seq = ++groupSeq.current;
     setGroupState((prev) => ({ ...prev, loading: true, error: null }));
@@ -508,9 +586,37 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
       };
-      const res = await apiClient.get(DASHBOARD_API.groupDistribution, { params });
+      const [res, studentMetrics] = await Promise.all([
+        apiClient.get(DASHBOARD_API.groupDistribution, { params }).catch(() => ({ data: null })),
+        getStudentOverviewMetrics({ campusId, boardId, academicYearId }).catch(() => null),
+      ]);
       if (groupSeq.current === seq) {
-        setGroupState({ loading: false, error: null, data: unwrap(res.data) });
+        let groupData = unwrap(res.data) || {};
+        if (studentMetrics?.groupCounts && Object.keys(studentMetrics.groupCounts).length > 0) {
+          const rawItems = groupData?.items || groupData?.groups || (Array.isArray(groupData) ? groupData : []);
+          if (Array.isArray(rawItems) && rawItems.length > 0) {
+            const updatedItems = rawItems.map((item) => {
+              const name = String(item.name || item.groupName || item.code || "").toUpperCase();
+              let matchedCount = null;
+              for (const [gName, count] of Object.entries(studentMetrics.groupCounts)) {
+                if (name === gName.toUpperCase() || name.includes(gName.toUpperCase()) || gName.toUpperCase().includes(name)) {
+                  matchedCount = count;
+                  break;
+                }
+              }
+              return {
+                ...item,
+                value: matchedCount !== null ? matchedCount : Number(item.value ?? item.studentCount ?? item.count ?? 0),
+                studentCount: matchedCount !== null ? matchedCount : Number(item.studentCount ?? item.value ?? item.count ?? 0),
+                count: matchedCount !== null ? matchedCount : Number(item.count ?? item.value ?? item.studentCount ?? 0),
+              };
+            });
+            if (groupData?.items) groupData.items = updatedItems;
+            else if (groupData?.groups) groupData.groups = updatedItems;
+            else if (Array.isArray(groupData)) groupData = updatedItems;
+          }
+        }
+        setGroupState({ loading: false, error: null, data: groupData });
       }
     } catch (err) {
       if (groupSeq.current === seq) {
@@ -518,6 +624,7 @@ export default function DashboardPage() {
       }
     }
   }, [campusId, boardId, academicYearId]);
+
 
   // 4. GET /api/v1/attendance/admin/students
   const fetchStudentAttendance = useCallback(async () => {
@@ -998,11 +1105,16 @@ export default function DashboardPage() {
   // Student Attendance Normalized Values
   const studentAttData = useMemo(() => {
     const data = studentAttState.data || {};
-    const total = Number(metric(data, ["total", "totalStudents", "totalCount"]) ?? 0);
+    let total = Number(metric(data, ["total", "totalStudents", "totalCount"]) ?? 0);
     const present = Number(metric(data, ["present", "presentCount"]) ?? 0);
     let absent = metric(data, ["absent", "absentCount"]);
     const halfDay = Number(metric(data, ["halfDay", "halfDayCount", "halfDays", "late", "lateCount"]) ?? 0);
     let percentage = metric(data, ["percentage", "attendancePercentage"]);
+
+    // If attendance is not marked today yet, use total enrolled student count so 0% donut renders consistently with staff
+    if (total === 0) {
+      total = Number(summaryState.data?.totalStudents ?? overviewState.data?.totalStudents ?? 0);
+    }
 
     if ((absent === undefined || absent === null || (present === 0 && Number(absent) === 0 && halfDay === 0) || (present + Number(absent) + halfDay < total)) && total > 0) {
       absent = Math.max(0, total - present - halfDay);
@@ -1023,7 +1135,7 @@ export default function DashboardPage() {
     const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
     return { total, present, absent, halfDay, late: halfDay, percentage, chartData, breakdownList };
-  }, [studentAttState.data]);
+  }, [studentAttState.data, summaryState.data?.totalStudents, overviewState.data?.totalStudents]);
 
   // Staff Attendance Normalized Values
   const staffAttData = useMemo(() => {
@@ -1335,8 +1447,8 @@ export default function DashboardPage() {
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
-                {studentAttData.total === 0 ? (
-                    <EmptyState message="No marked student attendance available for today." />
+                {studentAttData.total === 0 && !summaryState.data?.totalStudents ? (
+                    <EmptyState message="No student attendance data available for today." />
                   ) : (
                     <>
                       {/* Donut Chart & Side Status Legend (Centered Together) */}
@@ -1348,7 +1460,7 @@ export default function DashboardPage() {
                                 data={
                                   studentAttData.chartData.some((d) => d.value > 0)
                                     ? studentAttData.chartData.filter((d) => d.value > 0)
-                                    : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                    : [{ name: "Not marked", value: 1, color: "#ef4444" }]
                                 }
                                 dataKey="value"
                                 nameKey="name"
@@ -1360,13 +1472,13 @@ export default function DashboardPage() {
                               >
                                 {(studentAttData.chartData.some((d) => d.value > 0)
                                   ? studentAttData.chartData.filter((d) => d.value > 0)
-                                  : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                  : [{ name: "Not marked", value: 1, color: "#ef4444" }]
                                 ).map((entry) => (
                                   <Cell key={entry.name} fill={entry.color} />
                                 ))}
                               </Pie>
                               <Tooltip
-                                content={<CustomDonutTooltip />}
+                                content={studentAttData.total > 0 ? <CustomDonutTooltip /> : () => null}
                                 wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
                                 allowEscapeViewBox={{ x: true, y: true }}
                               />
@@ -1421,8 +1533,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </>
-                  )
-                }
+                  )}
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">

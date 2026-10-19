@@ -99,7 +99,11 @@ namespace CollegeManagement.API.Controllers
                 StaffId = result.StaffId,
                 StudentId = result.StudentId,
                 AdminId = result.AdminId,
-                Role = result.Role
+                Role = result.Role,
+                Designation = result.Designation,
+                EmployeeId = result.EmployeeId,
+                AssignedCampusIds = result.AssignedCampusIds,
+                AssignedBoardIds = result.AssignedBoardIds
             });
         }
 

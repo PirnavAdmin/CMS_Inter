@@ -1,0 +1,68 @@
+/* Reuse Admin fee styles; only bridge its direct-content selectors here. */
+.accountant-shell .accountant-fee-page { min-width: 0; color: var(--cms-text); }
+.accountant-fee-page .cms-card,
+.accountant-fee-page .cms-card-body { min-width: 0; }
+.accountant-fee-page .cms-table-wrap { max-width: 100%; overflow-x: auto; }
+.accountant-fee-page .cms-table .num { text-align: right; white-space: nowrap; }
+.accountant-fee-page .cms-table th { letter-spacing: 0; font-size: 12.5px; }
+.accountant-fee-page .cms-table td { vertical-align: middle; font-size: 13px; }
+.accountant-fee-page .cms-card-head { gap: 12px; flex-wrap: wrap; }
+.accountant-fee-page .cms-card-head p { margin: 4px 0 0; font-size: 12px; color: var(--cms-muted); }
+.accountant-fee-page .cms-page-head { margin-bottom: 16px; gap: 12px; }
+.accountant-fee-page .cms-fee-stack { min-width: 0; }
+.accountant-fee-page .accountant-fee-ledger-body { padding: 0; }
+.accountant-fee-page .cms-fee-filter-row { flex-wrap: wrap; }
+.accountant-fee-page .cms-fee-filter-row .cms-fee-filter { flex-basis: 100px; }
+.accountant-fee-page .cms-fee-types-table th:nth-child(3),
+.accountant-fee-page .cms-fee-types-table td:nth-child(3) { width: 25%; }
+.accountant-fee-page .cms-fee-scholarship-table th:nth-child(3),
+.accountant-fee-page .cms-fee-scholarship-table td:nth-child(3) { width: 40%; }
+.accountant-fee-page .cms-fee-structure-table th:nth-child(1) { width: 19%; }
+.accountant-fee-page .cms-fee-structure-table th:nth-child(2) { width: 12%; }
+.accountant-fee-page .cms-fee-structure-table th:nth-child(3) { width: 16%; }
+.accountant-fee-page .cms-fee-structure-table th:nth-child(4) { width: auto; }
+.accountant-fee-page .cms-fee-structure-table th:nth-child(5) { width: 140px; }
+.accountant-fee-page .cms-fee-structure-table th:last-child,
+.accountant-fee-page .cms-fee-structure-table td:last-child { padding-right: 24px; }
+.accountant-fee-page .cms-hostel-fees-table th,
+.accountant-fee-page .cms-hostel-fees-table td { white-space: normal; overflow-wrap: anywhere; }
+.accountant-fee-page .cms-hostel-fees-table .num { white-space: nowrap; }
+.accountant-fee-page .cms-fee-stat-grid > * { min-width: 0; }
+.accountant-fee-page .cms-fee-stat-value { overflow-wrap: anywhere; }
+.accountant-fee-page .accountant-fee-page-count { color: var(--cms-muted); font-size: 12px; white-space: nowrap; }
+.accountant-fee-page .cms-fee-pagination-actions .cms-btn-primary { color: #fff; }
+.accountant-fee-page .accountant-fee-cell-note { display: block; margin-top: 3px; color: var(--cms-muted); font-size: 11px; }
+.accountant-fee-page .accountant-fee-structure-selector { max-width: 480px; }
+.accountant-fee-page .accountant-fee-level { display: inline-block; margin-left: 8px; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.accountant-fee-page .accountant-fee-level.level-first { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.accountant-fee-page .accountant-fee-level.level-second { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+.accountant-fee-page .accountant-fee-loading { display: flex; align-items: center; gap: 8px; padding: 16px; font-size: 13px; color: var(--cms-muted); }
+.accountant-fee-page .accountant-fee-skeleton { display: block; height: 14px; width: 80%; border-radius: 4px; background: var(--cms-subtle); }
+.accountant-fee-page .cms-alert { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.accountant-fee-page .cms-btn:disabled { opacity: .5; cursor: not-allowed; }
+.accountant-fee-editor .accountant-fee-form-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
+.cms-modal.accountant-fee-editor.is-structure { width: min(960px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
+.accountant-fee-editor .cms-table-wrap { max-width: 100%; overflow-x: auto; }
+.accountant-fee-editor .cms-table .num { text-align: right; }
+.accountant-fee-editor .cms-form-grid { margin-bottom: 16px; }
+.accountant-fee-editor .cms-mini-input { max-width: 100%; }
+.accountant-fee-editor .cms-alert { margin-top: 12px; }
+.accountant-fee-page .cms-fee-tab:focus-visible,
+.accountant-fee-page .cms-fee-overview-tab:focus-visible { outline: 2px solid var(--cms-primary); outline-offset: 2px; }
+@media (max-width: 1100px) {
+  .accountant-fee-page .cms-card-body.cms-fee-controls { grid-template-columns: 1fr; }
+  .accountant-fee-page .cms-fee-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .accountant-fee-page .cms-page-head { align-items: flex-start; flex-direction: column; }
+  .accountant-fee-page .cms-fee-tabs { flex-wrap: wrap; border-radius: 12px; }
+  .accountant-fee-page .cms-fee-tab { white-space: normal; text-align: left; }
+  .accountant-fee-page .cms-fee-subtabs { border-radius: 0; }
+  .accountant-fee-page .cms-fee-stat-grid { grid-template-columns: 1fr; }
+  .accountant-fee-page .cms-fee-donut { height: auto; grid-template-columns: minmax(0, 1fr); }
+  .accountant-fee-page .cms-fee-donut > .recharts-responsive-container { min-height: 180px; }
+  .accountant-fee-page .cms-fee-chart-filter { flex-wrap: wrap; max-width: 100%; }
+  .accountant-fee-page .cms-fee-chart-filter select { min-width: 0; max-width: 100%; }
+  .accountant-fee-page .cms-fee-pagination-actions { flex-wrap: wrap; }
+  .accountant-fee-page .cms-fee-search { max-width: 100%; }
+}

@@ -1,12 +1,17 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Asp.Versioning;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
+using CollegeManagement.API.DTOs.StaffAttendance.Responses;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -20,13 +25,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IStaffAttendanceService _service;
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
+        private readonly AppDbContext? _context;
 
         public StaffAttendanceController(
             IStaffAttendanceService service,
-            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
+            AppDbContext? context = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
+            _context = context;
         }
 
         /// <summary>
@@ -206,5 +214,172 @@ namespace CollegeManagement.API.Controllers.V1
         {
             return User?.IsInRole("Admin") == true || User?.IsInRole("Super Admin") == true || User?.IsInRole("College Admin") == true;
         }
+
+        private async Task<int> ResolveStaffIdAsync()
+        {
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId.HasValue && staffId.Value > 0)
+            {
+                return staffId.Value;
+            }
+
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (userId.HasValue && userId.Value > 0 && _context != null)
+            {
+                var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId.Value);
+                if (user?.StaffId.HasValue == true && user.StaffId.Value > 0)
+                {
+                    return user.StaffId.Value;
+                }
+
+                if (!string.IsNullOrEmpty(user?.Email))
+                {
+                    var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Email == user.Email && !s.IsDeleted);
+                    if (staff != null) return staff.Id;
+                }
+            }
+
+            throw new CollegeManagement.API.Exceptions.UnauthorizedException("Logged in user is not associated with an active staff or faculty record.");
+        }
+
+        #region Self-Service My Attendance Endpoints
+
+        /// <summary>
+        /// Retrieves today's punch status and shift information for the logged-in staff member.
+        /// </summary>
+        [HttpGet("my-today")]
+        [BypassPermission]
+        [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> GetMyTodayStatus()
+        {
+            var staffId = await ResolveStaffIdAsync();
+            var result = await _service.GetMyTodayStatusAsync(staffId, DateTime.Today);
+            return Ok(new { Status = true, Message = "Today attendance status retrieved successfully.", Data = result });
+        }
+
+        /// <summary>
+        /// Records check-in (punch in) timestamp for the logged-in staff member.
+        /// </summary>
+        [HttpPost("punch-in")]
+        [BypassPermission]
+        [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> PunchIn([FromBody] StaffPunchRequest request)
+        {
+            var staffId = await ResolveStaffIdAsync();
+            var userId = _jwtTokenHelper.GetUserId(User);
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+            try
+            {
+                var result = await _service.PunchInAsync(staffId, request, clientIp, userId);
+                return Ok(new { Status = true, Message = "Checked in successfully.", Data = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Status = false, Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Records check-out (punch out) timestamp for the logged-in staff member.
+        /// </summary>
+        [HttpPost("punch-out")]
+        [BypassPermission]
+        [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> PunchOut([FromBody] StaffPunchRequest request)
+        {
+            var staffId = await ResolveStaffIdAsync();
+            var userId = _jwtTokenHelper.GetUserId(User);
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+            try
+            {
+                var result = await _service.PunchOutAsync(staffId, request, clientIp, userId);
+                return Ok(new { Status = true, Message = "Punched out successfully.", Data = result });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Status = false, Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Retrieves personal attendance logs and analytics metrics for the requested period (week, last_week, month, last_month).
+        /// </summary>
+        [HttpGet("my-history")]
+        [BypassPermission]
+        [ProducesResponseType(typeof(MyAttendanceHistoryResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> GetMyAttendanceHistory([FromQuery] string period = "week")
+        {
+            var staffId = await ResolveStaffIdAsync();
+            var result = await _service.GetMyAttendanceHistoryAsync(staffId, period, DateTime.Today);
+            return Ok(new { Status = true, Message = "Attendance history retrieved successfully.", Data = result });
+        }
+
+        /// <summary>
+        /// Submits an attendance regularization request for missing punch, late arrival, or official on-duty.
+        /// </summary>
+        [HttpPost("regularize")]
+        [BypassPermission]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> SubmitRegularization([FromBody] SubmitRegularizationRequest request)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var staffId = await ResolveStaffIdAsync();
+            var userId = _jwtTokenHelper.GetUserId(User);
+
+            try
+            {
+                var success = await _service.SubmitRegularizationAsync(staffId, request, userId);
+                return Ok(new { Status = true, Message = "Attendance regularization submitted successfully and is pending approval.", Data = success });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Status = false, Message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Retrieves pending/all regularization requests for review by Admin/Principal.
+        /// </summary>
+        [HttpGet("regularizations")]
+        [ProducesResponseType(typeof(IEnumerable<RegularizationItemDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetRegularizations([FromQuery] string? status, [FromQuery] int? departmentId)
+        {
+            var list = await _service.GetRegularizationsAsync(status, departmentId);
+            return Ok(new { Status = true, Message = "Regularization requests loaded successfully.", Data = list });
+        }
+
+        /// <summary>
+        /// Approves or rejects a staff attendance regularization request.
+        /// </summary>
+        [HttpPut("regularizations/{id:int}/review")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> ReviewRegularization(int id, [FromBody] ReviewRegularizationRequest request)
+        {
+            var reviewerUserId = _jwtTokenHelper.GetUserId(User);
+            try
+            {
+                var success = await _service.ReviewRegularizationAsync(id, request, reviewerUserId);
+                return Ok(new { Status = true, Message = $"Regularization {request.Status.ToLowerInvariant()} successfully.", Data = success });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { Status = false, Message = ex.Message });
+            }
+        }
+
+        #endregion
     }
 }

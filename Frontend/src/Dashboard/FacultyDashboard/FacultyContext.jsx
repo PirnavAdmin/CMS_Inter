@@ -125,6 +125,7 @@ export const pathToModule = {
   payslips: "salary",
   holidays: "holidays",
   settings: "settings",
+  reimbursements: "reimbursements",
 };
 
 export const moduleToPath = {
@@ -140,6 +141,7 @@ export const moduleToPath = {
   salary: "payslips",
   holidays: "holidays",
   settings: "settings",
+  reimbursements: "reimbursements",
 };
 
 export function FacultyProvider({ children }) {

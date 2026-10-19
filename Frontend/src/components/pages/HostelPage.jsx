@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Home,
   LayoutDashboard,
@@ -323,10 +323,31 @@ function HostelPagination({
 // ── Component Definition ──────────────────────────────────────────────
 export default function HostelPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const user = getAuthUser();
-  const isWarden = isWardenRole(user?.role, user) || location.pathname.toLowerCase().includes("warden");
+  const isWardenRoute = location.pathname.toLowerCase().includes("warden");
+  const isWarden = isWardenRole(user?.role, user) || isWardenRoute;
   const isAdmin = Boolean(user?.isAdmin || String(user?.role || "").toLowerCase().includes("admin"));
   const canAccessAdminEndpoints = isAdmin && !isWarden;
+
+  // ── Isolated View for Sidebar Field Selection ───────────────────────
+  const activeSection = useMemo(() => {
+    const p = location.pathname.toLowerCase();
+    if (p.includes("attendance")) return "attendance";
+    if (p.includes("outpass") || p.includes("leave")) return "outpasses";
+    if (p.includes("transfer") || p.includes("vacat")) return "transfers";
+    if (p.includes("student-allocation") || p.includes("allocat")) return "allocations";
+    if (p.includes("students")) return "students";
+    if (p.includes("room") || p.includes("bed")) return "rooms";
+    if (p.includes("block")) return "blocks";
+    if (p.includes("warden") && !p.includes("warden-dashboard") && !p.includes("overview")) return "wardens";
+    if (p.includes("report")) return "reports";
+    if (p.includes("master")) return "setup";
+    if (p.includes("warden") || p.includes("overview")) return "dashboard";
+    return "default";
+  }, [location.pathname]);
+
+  const isDedicatedView = isWardenRoute || activeSection !== "default";
 
   // ── Navigation Tabs State ───────────────────────────────────────────
   const [activeMajorTab, setActiveMajorTab] = useState("dashboard");
@@ -3593,8 +3614,12 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              setActiveMajorTab("setup");
-              setActiveSetupSubtab("blocks");
+              if (isWardenRoute) {
+                navigate("/warden-dashboard/rooms");
+              } else {
+                setActiveMajorTab("setup");
+                setActiveSetupSubtab("blocks");
+              }
             }}
           >
             <Building2 size={14} style={{ color: "var(--cms-primary)" }} />
@@ -3604,8 +3629,12 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              setActiveMajorTab("students");
-              setActiveStudentSubtab("allocations");
+              if (isWardenRoute) {
+                navigate("/warden-dashboard/students");
+              } else {
+                setActiveMajorTab("students");
+                setActiveStudentSubtab("allocations");
+              }
             }}
           >
             <Users size={14} style={{ color: "var(--cms-primary)" }} />
@@ -3615,8 +3644,12 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              setActiveMajorTab("students");
-              setActiveStudentSubtab("allocations");
+              if (isWardenRoute) {
+                navigate("/warden-dashboard/allocations");
+              } else {
+                setActiveMajorTab("students");
+                setActiveStudentSubtab("allocations");
+              }
               setModal({ isOpen: true, type: "allocation", mode: "add", data: null });
             }}
           >
@@ -3627,8 +3660,12 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              setActiveMajorTab("students");
-              setActiveStudentSubtab("attendance");
+              if (isWardenRoute) {
+                navigate("/warden-dashboard/attendance");
+              } else {
+                setActiveMajorTab("students");
+                setActiveStudentSubtab("attendance");
+              }
             }}
           >
             <CheckCircle2 size={14} style={{ color: "var(--cms-primary)" }} />
@@ -3638,7 +3675,11 @@ export default function HostelPage() {
             type="button"
             className="cms-dash-quick-btn"
             onClick={() => {
-              setActiveMajorTab("reports");
+              if (isWardenRoute) {
+                navigate("/warden-dashboard/reports");
+              } else {
+                setActiveMajorTab("reports");
+              }
             }}
           >
             <BarChart3 size={14} style={{ color: "var(--cms-primary)" }} />
@@ -3930,8 +3971,12 @@ export default function HostelPage() {
                 type="button"
                 className="cms-dash-split-link"
                 onClick={() => {
-                  setActiveMajorTab("students");
-                  setActiveStudentSubtab("allocations");
+                  if (isWardenRoute) {
+                    navigate("/warden-dashboard/allocations");
+                  } else {
+                    setActiveMajorTab("students");
+                    setActiveStudentSubtab("allocations");
+                  }
                 }}
               >
                 View All &gt;
@@ -3990,8 +4035,12 @@ export default function HostelPage() {
                 type="button"
                 className="cms-dash-split-link"
                 onClick={() => {
-                  setActiveMajorTab("students");
-                  setActiveStudentSubtab("outpasses");
+                  if (isWardenRoute) {
+                    navigate("/warden-dashboard/leave-requests");
+                  } else {
+                    setActiveMajorTab("students");
+                    setActiveStudentSubtab("outpasses");
+                  }
                 }}
               >
                 View All &gt;
@@ -5752,7 +5801,11 @@ export default function HostelPage() {
         <div className="cms-alloc-header-row">
           <div className="cms-alloc-title-group">
             <UserPlus size={22} style={{ color: "var(--cms-primary)" }} />
-            <h2>Student Room Allocations</h2>
+            <h2>
+              {location.pathname.toLowerCase().includes("students") && !location.pathname.toLowerCase().includes("allocat")
+                ? "Resident Students"
+                : "Student Room Allocations"}
+            </h2>
           </div>
           <button
             type="button"
@@ -8437,8 +8490,6 @@ export default function HostelPage() {
   // ═════════════════════════════════════════════════════════════════════
   // MAIN RENDER WITH DASHBOARDLAYOUT
   // ═════════════════════════════════════════════════════════════════════
-  const isWardenRoute = location.pathname.toLowerCase().includes("warden");
-
   return (
     <DashboardLayout
       title={isWardenRoute ? "Hostel Warden Portal" : "Hostel Management"}
@@ -8447,7 +8498,7 @@ export default function HostelPage() {
           ? "Resident student oversight, room & bed allocations, daily attendance, outpass approvals, and hostel analytics."
           : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
       }
-      breadcrumb={[isWardenRoute ? "Warden Dashboard" : "Hostel Management"]}
+      breadcrumb={isWardenRoute ? undefined : ["Hostel Management"]}
     >
       <div className="cms-hostel-page">
         {/* Toast Notification */}
@@ -8459,41 +8510,60 @@ export default function HostelPage() {
           />
         )}
 
-        {/* 4 Major Horizontal Navigation Tabs */}
-        <div className="cms-hostel-tabs">
-          {majorTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeMajorTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
-                onClick={() => {
-                  setActiveMajorTab(tab.id);
-                  setSearchQuery("");
-                  setBlocksCurrentPage(1);
-                  setRoomsCurrentPage(1);
-                  setWardensCurrentPage(1);
-                  setCategoriesCurrentPage(1);
-                  setAllocCurrentPage(1);
-                  setAttendanceCurrentPage(1);
-                  setOutpassCurrentPage(1);
-                  setTransferCurrentPage(1);
-                }}
-              >
-                <Icon size={16} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {/* If viewing a dedicated sidebar field (like Warden portal routes), render ONLY that view */}
+        {isDedicatedView ? (
+          <div className="cms-hostel-stack">
+            {activeSection === "dashboard" && renderDashboard()}
+            {activeSection === "rooms" && renderRooms()}
+            {activeSection === "allocations" && renderAllocations()}
+            {activeSection === "students" && renderAllocations()}
+            {activeSection === "attendance" && renderAttendance()}
+            {activeSection === "outpasses" && renderOutpasses()}
+            {activeSection === "transfers" && renderTransfers()}
+            {activeSection === "blocks" && renderHostelBlocks()}
+            {activeSection === "wardens" && renderWardens()}
+            {activeSection === "reports" && renderReportsSection()}
+            {activeSection === "setup" && renderSetupMasters()}
+          </div>
+        ) : (
+          <>
+            {/* 4 Major Horizontal Navigation Tabs */}
+            <div className="cms-hostel-tabs">
+              {majorTabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeMajorTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
+                    onClick={() => {
+                      setActiveMajorTab(tab.id);
+                      setSearchQuery("");
+                      setBlocksCurrentPage(1);
+                      setRoomsCurrentPage(1);
+                      setWardensCurrentPage(1);
+                      setCategoriesCurrentPage(1);
+                      setAllocCurrentPage(1);
+                      setAttendanceCurrentPage(1);
+                      setOutpassCurrentPage(1);
+                      setTransferCurrentPage(1);
+                    }}
+                  >
+                    <Icon size={16} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-        {/* Active Tab Screen */}
-        {activeMajorTab === "dashboard" && renderDashboard()}
-        {activeMajorTab === "setup" && renderSetupMasters()}
-        {activeMajorTab === "students" && renderStudentManagement()}
-        {activeMajorTab === "reports" && renderReportsSection()}
+            {/* Active Tab Screen */}
+            {activeMajorTab === "dashboard" && renderDashboard()}
+            {activeMajorTab === "setup" && renderSetupMasters()}
+            {activeMajorTab === "students" && renderStudentManagement()}
+            {activeMajorTab === "reports" && renderReportsSection()}
+          </>
+        )}
 
         {/* Global Modals */}
         {modal.isOpen && modal.type === "block" && (
@@ -8505,6 +8575,8 @@ export default function HostelPage() {
             setActiveSetupSubtab={setActiveSetupSubtab}
             setFilterHostelRooms={setFilterHostelRooms}
             blocks={blocks}
+            isWardenRoute={isWardenRoute}
+            navigate={navigate}
           />
         )}
         {modal.isOpen && (modal.type === "category" || modal.type === "roomType") && (
@@ -9175,7 +9247,7 @@ function StudentAttendanceModal({
 }
 
 // Block Modal
-function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, setActiveSetupSubtab, setFilterHostelRooms, blocks = [] }) {
+function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, setActiveSetupSubtab, setFilterHostelRooms, blocks = [], isWardenRoute = false, navigate }) {
     const isView = modal.mode === "view";
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [form, setForm] = useState(
@@ -9319,13 +9391,17 @@ function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, set
             <button type="button" className="cms-btn cms-btn-ghost" onClick={closeModal} disabled={isSubmitting}>
               {isView ? "Close" : "Cancel"}
             </button>
-            {isView && setActiveMajorTab && setActiveSetupSubtab && (
+            {isView && (
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
                 onClick={() => {
-                  setActiveMajorTab("setup");
-                  setActiveSetupSubtab("rooms");
+                  if (isWardenRoute && navigate) {
+                    navigate("/warden-dashboard/rooms");
+                  } else if (setActiveMajorTab && setActiveSetupSubtab) {
+                    setActiveMajorTab("setup");
+                    setActiveSetupSubtab("rooms");
+                  }
                   if (setFilterHostelRooms) setFilterHostelRooms(String(form.id || form.code || ""));
                   closeModal();
                 }}

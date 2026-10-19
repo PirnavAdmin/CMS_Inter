@@ -756,5 +756,626 @@ namespace CollegeManagement.API.Repositories.Implementations
                 StaffRows = staffRows
             };
         }
+
+        #region Self-Service My Attendance & Regularization
+
+        public async Task<MyAttendanceTodayResponse> GetMyTodayStatusAsync(int facultyId, DateTime date)
+        {
+            var targetDate = date.Date;
+            var nextDate = targetDate.AddDays(1);
+
+            var timingConfig = await _context.AttendanceTimingConfigs
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.Id)
+                .FirstOrDefaultAsync();
+
+            var shiftStart = timingConfig?.WorkStartTime ?? new TimeSpan(9, 0, 0);
+            var shiftEnd = timingConfig?.WorkEndTime ?? new TimeSpan(16, 30, 0);
+            var lateThreshold = timingConfig != null
+                ? timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes))
+                : new TimeSpan(9, 15, 0);
+
+            var attendance = await _context.StaffAttendances
+                .Include(a => a.StaffAttendanceSession)
+                .Where(a => a.FacultyId == facultyId 
+                            && a.StaffAttendanceSession.AttendanceDate >= targetDate 
+                            && a.StaffAttendanceSession.AttendanceDate < nextDate 
+                            && a.IsActive)
+                .OrderByDescending(a => a.StaffAttendanceId)
+                .FirstOrDefaultAsync();
+
+            bool isHoliday = await _context.Holidays.AnyAsync(h =>
+                !h.IsDeleted && h.Status == "Active" &&
+                targetDate >= h.StartDate.Date && targetDate <= h.EndDate.Date &&
+                (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"));
+
+            bool isLeave = await _context.StaffLeaveRequests.AnyAsync(l =>
+                l.IsActive && l.StaffId == facultyId && l.Status == LeaveStatus.Approved &&
+                targetDate >= l.StartDate.Date && targetDate <= l.EndDate.Date);
+
+            var regularization = await _context.StaffAttendanceRegularizations
+                .Where(r => (r.FacultyId == facultyId || r.StaffId == facultyId)
+                            && r.AttendanceDate >= targetDate && r.AttendanceDate < nextDate)
+                .OrderByDescending(r => r.RegularizationId)
+                .FirstOrDefaultAsync();
+
+            string status = "not_punched";
+            string? inTimeStr = null;
+            string? outTimeStr = null;
+            string? durationStr = null;
+            bool isLate = false;
+            string todayStatus;
+
+            if (attendance != null && attendance.InTime.HasValue)
+            {
+                inTimeStr = DateTime.Today.Add(attendance.InTime.Value).ToString("hh:mm tt");
+                isLate = attendance.InTime.Value > lateThreshold;
+
+                if (attendance.OutTime.HasValue)
+                {
+                    status = "punched_out";
+                    outTimeStr = DateTime.Today.Add(attendance.OutTime.Value).ToString("hh:mm tt");
+
+                    var diff = attendance.OutTime.Value - attendance.InTime.Value;
+                    if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                    durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                }
+                else
+                {
+                    status = "punched_in";
+                    var nowTime = DateTime.Now.TimeOfDay;
+                    var diff = nowTime - attendance.InTime.Value;
+                    if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                    durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                }
+
+                if (regularization?.Status == "Approved")
+                {
+                    todayStatus = "Present";
+                }
+                else if (attendance.Status == AttendanceStatus.Late || isLate)
+                {
+                    todayStatus = "Late";
+                }
+                else if (attendance.Status == AttendanceStatus.HalfDay)
+                {
+                    todayStatus = "Half Day";
+                }
+                else
+                {
+                    todayStatus = "Present";
+                }
+            }
+            else
+            {
+                if (isHoliday) todayStatus = "Holiday";
+                else if (isLeave) todayStatus = "Leave";
+                else todayStatus = "Absent";
+            }
+
+            bool canRegularize = (todayStatus == "Late" || todayStatus == "Absent" || todayStatus == "Half Day")
+                                 && (regularization == null || regularization.Status != "Approved");
+
+            return new MyAttendanceTodayResponse
+            {
+                Status = status,
+                InTime = inTimeStr,
+                OutTime = outTimeStr,
+                ShiftDuration = durationStr ?? "--",
+                ShiftName = $"Morning ({DateTime.Today.Add(shiftStart):hh:mm tt} – {DateTime.Today.Add(shiftEnd):hh:mm tt})",
+                ShiftStartTime = DateTime.Today.Add(shiftStart).ToString("hh:mm tt"),
+                ShiftEndTime = DateTime.Today.Add(shiftEnd).ToString("hh:mm tt"),
+                IsLate = isLate,
+                TodayStatus = todayStatus,
+                CanRegularize = canRegularize,
+                DateFormatted = date.ToString("ddd, MMM dd, yyyy"),
+                RegularizationState = regularization?.Status?.ToLowerInvariant()
+            };
+        }
+
+        public async Task<MyAttendanceTodayResponse> PunchInAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId)
+        {
+            var targetDate = DateTime.Today;
+            var nextDate = targetDate.AddDays(1);
+
+            var staff = await _context.Staffs
+                .FirstOrDefaultAsync(s => s.Id == facultyId && !s.IsDeleted);
+
+            if (staff == null)
+            {
+                throw new KeyNotFoundException($"Staff/Faculty with ID {facultyId} was not found.");
+            }
+
+            // Find or create session for today
+            var session = await _context.StaffAttendanceSessions
+                .FirstOrDefaultAsync(s => s.AttendanceDate >= targetDate && s.AttendanceDate < nextDate
+                                          && (staff.CampusId == null || s.CampusId == staff.CampusId)
+                                          && s.StaffType == StaffType.Teaching);
+
+            if (session == null)
+            {
+                session = new StaffAttendanceSession
+                {
+                    AttendanceDate = targetDate,
+                    CampusId = staff.CampusId,
+                    DepartmentId = staff.DepartmentId,
+                    StaffType = StaffType.Teaching,
+                    TotalStaffCount = 1,
+                    CreatedByUserId = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+                await _context.StaffAttendanceSessions.AddAsync(session);
+                await _context.SaveChangesAsync();
+            }
+
+            var attendance = await _context.StaffAttendances
+                .Include(a => a.StaffAttendanceSession)
+                .Where(a => a.FacultyId == facultyId 
+                            && a.StaffAttendanceSession.AttendanceDate >= targetDate 
+                            && a.StaffAttendanceSession.AttendanceDate < nextDate 
+                            && a.IsActive)
+                .OrderByDescending(a => a.StaffAttendanceId)
+                .FirstOrDefaultAsync();
+
+            if (attendance != null && attendance.InTime.HasValue)
+            {
+                var timeStr = DateTime.Today.Add(attendance.InTime.Value).ToString("hh:mm tt");
+                throw new InvalidOperationException($"You have already checked in for today at {timeStr}.");
+            }
+
+            var timingConfig = await _context.AttendanceTimingConfigs
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.Id)
+                .FirstOrDefaultAsync();
+
+            var lateThreshold = timingConfig != null
+                ? timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes))
+                : new TimeSpan(9, 15, 0);
+
+            var currentTime = DateTime.Now.TimeOfDay;
+            var isLate = currentTime > lateThreshold;
+            var status = isLate ? AttendanceStatus.Late : AttendanceStatus.Present;
+
+            if (attendance == null)
+            {
+                attendance = new StaffAttendance
+                {
+                    StaffSessionId = session.StaffSessionId,
+                    FacultyId = facultyId,
+                    Status = status,
+                    InTime = currentTime,
+                    VerificationMethod = request.VerificationMethod,
+                    DeviceId = string.IsNullOrWhiteSpace(request.DeviceId) ? "Web Portal" : request.DeviceId,
+                    IpAddress = clientIp,
+                    Remarks = string.IsNullOrWhiteSpace(request.Remarks) 
+                        ? (isLate ? "Late punch logged via Web Portal" : "Web Portal Check-In") 
+                        : request.Remarks,
+                    CreatedByUserId = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+                await _context.StaffAttendances.AddAsync(attendance);
+            }
+            else
+            {
+                attendance.InTime = currentTime;
+                attendance.Status = status;
+                attendance.VerificationMethod = request.VerificationMethod;
+                attendance.IpAddress = clientIp;
+                attendance.DeviceId = string.IsNullOrWhiteSpace(request.DeviceId) ? attendance.DeviceId : request.DeviceId;
+                attendance.Remarks = string.IsNullOrWhiteSpace(request.Remarks) ? attendance.Remarks : request.Remarks;
+                attendance.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+            return await GetMyTodayStatusAsync(facultyId, targetDate);
+        }
+
+        public async Task<MyAttendanceTodayResponse> PunchOutAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId)
+        {
+            var targetDate = DateTime.Today;
+            var nextDate = targetDate.AddDays(1);
+
+            var attendance = await _context.StaffAttendances
+                .Include(a => a.StaffAttendanceSession)
+                .Where(a => a.FacultyId == facultyId 
+                            && a.StaffAttendanceSession.AttendanceDate >= targetDate 
+                            && a.StaffAttendanceSession.AttendanceDate < nextDate 
+                            && a.IsActive)
+                .OrderByDescending(a => a.StaffAttendanceId)
+                .FirstOrDefaultAsync();
+
+            if (attendance == null || !attendance.InTime.HasValue)
+            {
+                throw new InvalidOperationException("You must check in before checking out.");
+            }
+
+            if (attendance.OutTime.HasValue)
+            {
+                var timeStr = DateTime.Today.Add(attendance.OutTime.Value).ToString("hh:mm tt");
+                throw new InvalidOperationException($"You have already punched out for today at {timeStr}.");
+            }
+
+            attendance.OutTime = DateTime.Now.TimeOfDay;
+            attendance.UpdatedAt = DateTime.UtcNow;
+            if (!string.IsNullOrWhiteSpace(request.Remarks))
+            {
+                attendance.Remarks = (attendance.Remarks ?? "") + " | " + request.Remarks;
+            }
+
+            await _context.SaveChangesAsync();
+            return await GetMyTodayStatusAsync(facultyId, targetDate);
+        }
+
+        public async Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate)
+        {
+            var now = targetDate ?? DateTime.Today;
+            DateTime start, end;
+            string periodKey = (period ?? "week").ToLowerInvariant();
+
+            switch (periodKey)
+            {
+                case "last_week":
+                    int diffLast = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7 + 7;
+                    start = now.AddDays(-diffLast).Date;
+                    end = start.AddDays(5).Date; // Mon to Sat
+                    break;
+                case "month":
+                    start = new DateTime(now.Year, now.Month, 1);
+                    end = start.AddMonths(1).AddDays(-1);
+                    break;
+                case "last_month":
+                    var prevMonth = now.AddMonths(-1);
+                    start = new DateTime(prevMonth.Year, prevMonth.Month, 1);
+                    end = start.AddMonths(1).AddDays(-1);
+                    break;
+                case "week":
+                default:
+                    periodKey = "week";
+                    int diff = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+                    start = now.AddDays(-diff).Date;
+                    end = start.AddDays(5).Date; // Mon to Sat
+                    break;
+            }
+
+            var nextEnd = end.AddDays(1);
+
+            var attendances = await _context.StaffAttendances
+                .AsNoTracking()
+                .Include(a => a.StaffAttendanceSession)
+                .Where(a => a.FacultyId == facultyId 
+                            && a.StaffAttendanceSession.AttendanceDate >= start 
+                            && a.StaffAttendanceSession.AttendanceDate < nextEnd 
+                            && a.IsActive)
+                .ToListAsync();
+
+            var holidays = await _context.Holidays
+                .AsNoTracking()
+                .Where(h => !h.IsDeleted && h.Status == "Active" && h.StartDate.Date <= end && h.EndDate.Date >= start)
+                .ToListAsync();
+
+            var leaves = await _context.StaffLeaveRequests
+                .AsNoTracking()
+                .Where(l => l.IsActive && l.StaffId == facultyId && l.Status == LeaveStatus.Approved && l.StartDate.Date <= end && l.EndDate.Date >= start)
+                .ToListAsync();
+
+            var regularizations = await _context.StaffAttendanceRegularizations
+                .AsNoTracking()
+                .Where(r => (r.FacultyId == facultyId || r.StaffId == facultyId) && r.AttendanceDate >= start && r.AttendanceDate < nextEnd)
+                .ToListAsync();
+
+            var timingConfig = await _context.AttendanceTimingConfigs
+                .AsNoTracking()
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.Id)
+                .FirstOrDefaultAsync();
+
+            var shiftStart = timingConfig?.WorkStartTime ?? new TimeSpan(9, 0, 0);
+            var shiftEnd = timingConfig?.WorkEndTime ?? new TimeSpan(16, 30, 0);
+            string shiftLabel = $"Morning ({DateTime.Today.Add(shiftStart):HH:mm}–{DateTime.Today.Add(shiftEnd):HH:mm})";
+
+            var logs = new List<MyAttendanceLogItemDto>();
+            int workingDaysCount = 0;
+            int presentCount = 0;
+            int leaveCount = 0;
+            int absentCount = 0;
+            int lateCount = 0;
+
+            for (var d = start; d <= end; d = d.AddDays(1))
+            {
+                bool isSunday = d.DayOfWeek == DayOfWeek.Sunday;
+                bool isPastOrToday = d <= now;
+
+                var att = attendances.FirstOrDefault(a => a.StaffAttendanceSession.AttendanceDate.Date == d);
+                var isHoliday = holidays.Any(h => d >= h.StartDate.Date && d <= h.EndDate.Date);
+                var isLeaveDay = leaves.Any(l => d >= l.StartDate.Date && d <= l.EndDate.Date);
+                var reg = regularizations.FirstOrDefault(r => r.AttendanceDate.Date == d);
+
+                string status;
+                string inTimeStr = "--";
+                string outTimeStr = "--";
+                string hoursStr = "0h 0m";
+                string device = "--";
+
+                if (isSunday)
+                {
+                    status = "Holiday";
+                }
+                else if (isHoliday)
+                {
+                    status = "Holiday";
+                }
+                else
+                {
+                    workingDaysCount++;
+
+                    if (att != null && att.InTime.HasValue)
+                    {
+                        inTimeStr = DateTime.Today.Add(att.InTime.Value).ToString("hh:mm tt");
+                        device = string.IsNullOrWhiteSpace(att.DeviceId) ? "Bio-Station 01 (Main Gate)" : att.DeviceId;
+
+                        if (att.OutTime.HasValue)
+                        {
+                            outTimeStr = DateTime.Today.Add(att.OutTime.Value).ToString("hh:mm tt");
+                            var diff = att.OutTime.Value - att.InTime.Value;
+                            if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                            hoursStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                        }
+
+                        if (reg?.Status == "Approved")
+                        {
+                            status = "Present";
+                            presentCount++;
+                        }
+                        else if (att.Status == AttendanceStatus.Late)
+                        {
+                            status = "Late";
+                            presentCount++;
+                            lateCount++;
+                        }
+                        else if (att.Status == AttendanceStatus.HalfDay)
+                        {
+                            status = "Half Day";
+                            presentCount++;
+                        }
+                        else
+                        {
+                            status = "Present";
+                            presentCount++;
+                        }
+                    }
+                    else if (isLeaveDay)
+                    {
+                        status = "Leave";
+                        leaveCount++;
+                    }
+                    else if (isPastOrToday)
+                    {
+                        status = "Absent";
+                        absentCount++;
+                    }
+                    else
+                    {
+                        status = "--";
+                    }
+                }
+
+                bool canRegularize = isPastOrToday && (status == "Late" || status == "Absent" || status == "Half Day")
+                                     && (reg == null || reg.Status != "Approved");
+
+                logs.Add(new MyAttendanceLogItemDto
+                {
+                    Id = $"log-{d:yyyyMMdd}",
+                    Day = d.ToString("ddd"),
+                    Date = d.ToString("dd/MM/yyyy"),
+                    RawDate = d.ToString("yyyy-MM-dd"),
+                    Shift = isSunday || isHoliday ? "General" : shiftLabel,
+                    InTime = inTimeStr,
+                    OutTime = outTimeStr,
+                    Hours = hoursStr,
+                    Device = device,
+                    Status = status,
+                    CanRegularize = canRegularize,
+                    IsToday = d == now,
+                    RegularizationState = reg?.Status?.ToLowerInvariant()
+                });
+            }
+
+            var metrics = new MyAttendanceAnalyticsMetricsDto
+            {
+                WorkingDays = $"{workingDaysCount} Days",
+                WorkingDaysSub = periodKey == "week" ? "Current Week (Mon–Sat)" : (periodKey == "last_week" ? "Previous Week (Mon–Sat)" : $"{now:MMMM yyyy}"),
+                PresentDays = $"{presentCount} Days",
+                PresentDaysSub = lateCount > 0 ? $"{lateCount} Late punch logged" : "Biometric / Portal verified",
+                Leaves = $"{leaveCount} Days",
+                LeavesSub = leaveCount > 0 ? $"{leaveCount} Approved leave(s)" : "No leaves applied",
+                AbsentDays = $"{absentCount} Days",
+                AbsentDaysSub = absentCount > 0 ? $"{absentCount} Unexcused absence" : "No absences"
+            };
+
+            return new MyAttendanceHistoryResponse
+            {
+                Period = periodKey,
+                Logs = logs,
+                Metrics = metrics
+            };
+        }
+
+        public async Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId)
+        {
+            var targetDate = request.AttendanceDate.Date;
+            var nextDate = targetDate.AddDays(1);
+
+            var existing = await _context.StaffAttendanceRegularizations
+                .FirstOrDefaultAsync(r => (r.FacultyId == facultyId || r.StaffId == facultyId) 
+                                          && r.AttendanceDate >= targetDate && r.AttendanceDate < nextDate);
+
+            TimeSpan? requestedIn = null;
+            if (!string.IsNullOrWhiteSpace(request.RequestedInTime) && TimeSpan.TryParse(request.RequestedInTime, out var inParsed))
+            {
+                requestedIn = inParsed;
+            }
+
+            TimeSpan? requestedOut = null;
+            if (!string.IsNullOrWhiteSpace(request.RequestedOutTime) && TimeSpan.TryParse(request.RequestedOutTime, out var outParsed))
+            {
+                requestedOut = outParsed;
+            }
+
+            if (existing != null)
+            {
+                if (existing.Status == "Approved")
+                {
+                    throw new InvalidOperationException("Attendance for this date has already been regularized and approved.");
+                }
+                existing.RequestedInTime = requestedIn;
+                existing.RequestedOutTime = requestedOut;
+                existing.Reason = request.Reason;
+                existing.Status = "Pending";
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                var newReg = new StaffAttendanceRegularization
+                {
+                    FacultyId = facultyId,
+                    StaffId = facultyId,
+                    AttendanceDate = targetDate,
+                    RequestedInTime = requestedIn,
+                    RequestedOutTime = requestedOut,
+                    Reason = request.Reason,
+                    Status = "Pending",
+                    CreatedAt = DateTime.UtcNow
+                };
+                await _context.StaffAttendanceRegularizations.AddAsync(newReg);
+            }
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId)
+        {
+            var query = _context.StaffAttendanceRegularizations
+                .AsNoTracking()
+                .Include(r => r.Staff)
+                    .ThenInclude(s => s!.DepartmentRef)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query = query.Where(r => r.Status.ToLower() == status.ToLower());
+            }
+
+            if (departmentId.HasValue && departmentId.Value > 0)
+            {
+                query = query.Where(r => r.Staff != null && r.Staff.DepartmentId == departmentId.Value);
+            }
+
+            var list = await query
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync();
+
+            return list.Select(r => new RegularizationItemDto
+            {
+                RegularizationId = r.RegularizationId,
+                FacultyId = r.FacultyId,
+                StaffId = r.StaffId,
+                StaffName = r.Staff != null ? $"{r.Staff.FirstName} {r.Staff.LastName}".Trim() : "Staff Member",
+                EmployeeId = r.Staff?.EmployeeId ?? $"STF{r.StaffId:D3}",
+                DepartmentName = r.Staff?.DepartmentRef?.DepartmentName ?? "General",
+                AttendanceDate = r.AttendanceDate,
+                RequestedInTime = r.RequestedInTime.HasValue ? DateTime.Today.Add(r.RequestedInTime.Value).ToString("hh:mm tt") : null,
+                RequestedOutTime = r.RequestedOutTime.HasValue ? DateTime.Today.Add(r.RequestedOutTime.Value).ToString("hh:mm tt") : null,
+                Reason = r.Reason,
+                Status = r.Status,
+                AdminRemarks = r.AdminRemarks,
+                ReviewedAt = r.ReviewedAt,
+                CreatedAt = r.CreatedAt
+            });
+        }
+
+        public async Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId)
+        {
+            var reg = await _context.StaffAttendanceRegularizations
+                .FirstOrDefaultAsync(r => r.RegularizationId == regularizationId);
+
+            if (reg == null)
+            {
+                throw new KeyNotFoundException($"Regularization with ID {regularizationId} was not found.");
+            }
+
+            reg.Status = request.Status;
+            reg.AdminRemarks = request.AdminRemarks;
+            reg.ReviewedByUserId = reviewerUserId;
+            reg.ReviewedAt = DateTime.UtcNow;
+            reg.UpdatedAt = DateTime.UtcNow;
+
+            if (string.Equals(request.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+            {
+                var targetDate = reg.AttendanceDate.Date;
+                var nextDate = targetDate.AddDays(1);
+                var facultyId = reg.FacultyId ?? reg.StaffId ?? 0;
+
+                if (facultyId > 0)
+                {
+                    var attendance = await _context.StaffAttendances
+                        .Include(a => a.StaffAttendanceSession)
+                        .Where(a => a.FacultyId == facultyId 
+                                    && a.StaffAttendanceSession.AttendanceDate >= targetDate 
+                                    && a.StaffAttendanceSession.AttendanceDate < nextDate 
+                                    && a.IsActive)
+                        .FirstOrDefaultAsync();
+
+                    if (attendance == null)
+                    {
+                        var session = await _context.StaffAttendanceSessions
+                            .FirstOrDefaultAsync(s => s.AttendanceDate >= targetDate && s.AttendanceDate < nextDate);
+
+                        if (session == null)
+                        {
+                            session = new StaffAttendanceSession
+                            {
+                                AttendanceDate = targetDate,
+                                StaffType = StaffType.Teaching,
+                                TotalStaffCount = 1,
+                                CreatedAt = DateTime.UtcNow,
+                                IsActive = true
+                            };
+                            await _context.StaffAttendanceSessions.AddAsync(session);
+                            await _context.SaveChangesAsync();
+                        }
+
+                        attendance = new StaffAttendance
+                        {
+                            StaffSessionId = session.StaffSessionId,
+                            FacultyId = facultyId,
+                            Status = AttendanceStatus.Present,
+                            InTime = reg.RequestedInTime ?? new TimeSpan(9, 0, 0),
+                            OutTime = reg.RequestedOutTime ?? new TimeSpan(16, 30, 0),
+                            Remarks = $"Regularized: {reg.Reason}",
+                            VerificationMethod = VerificationMethod.Manual,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        await _context.StaffAttendances.AddAsync(attendance);
+                    }
+                    else
+                    {
+                        attendance.Status = AttendanceStatus.Present;
+                        if (reg.RequestedInTime.HasValue) attendance.InTime = reg.RequestedInTime.Value;
+                        if (reg.RequestedOutTime.HasValue) attendance.OutTime = reg.RequestedOutTime.Value;
+                        attendance.Remarks = $"Regularized: {reg.Reason}";
+                        attendance.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        #endregion
     }
 }

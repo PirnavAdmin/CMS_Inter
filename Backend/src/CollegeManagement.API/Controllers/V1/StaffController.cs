@@ -132,6 +132,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get list of staff for dropdown selection with optional staffType filter.
         /// </summary>
         [HttpGet("dropdown")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<StaffDropdownDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStaffDropdown([FromQuery] string? staffType = null, [FromQuery] string? facultyType = null, [FromQuery] int? campusId = null)
         {
@@ -158,10 +159,49 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// 4b. GET /api/v1/staff/me
+        /// Get complete staff profile details for current authenticated staff member.
+        /// </summary>
+        [HttpGet("me")]
+        [BypassPermission]
+        [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetCurrentStaffProfile()
+        {
+            var staffIdClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            if (int.TryParse(staffIdClaim, out int staffId) && staffId > 0)
+            {
+                var profile = await _staffService.GetStaffProfileFullAsync(staffId);
+                return Ok(profile);
+            }
+
+            var empIdClaim = User.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+            if (!string.IsNullOrWhiteSpace(empIdClaim))
+            {
+                var profile = await _staffService.GetStaffProfileByEmployeeIdAsync(empIdClaim);
+                if (profile != null) return Ok(profile);
+            }
+
+            var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+            if (!string.IsNullOrWhiteSpace(emailClaim))
+            {
+                var staff = await _db.Staffs.FirstOrDefaultAsync(s => s.Email == emailClaim);
+                if (staff != null)
+                {
+                    var profile = await _staffService.GetStaffProfileFullAsync(staff.Id);
+                    return Ok(profile);
+                }
+            }
+
+            return NotFound(new { message = "Staff profile not linked to current authenticated user." });
+        }
+
+        /// <summary>
         /// 5. GET /api/v1/staff/{id}
         /// Get complete staff profile details by ID.
         /// </summary>
         [HttpGet("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffById(int id)
@@ -175,6 +215,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get complete staff profile details by Employee ID string (e.g. PCTCH0001, PCNT0001).
         /// </summary>
         [HttpGet("by-employee-id/{employeeId}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffByEmployeeId(string employeeId)
@@ -188,6 +229,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Universal lookup accepting either integer database ID or string Employee ID.
         /// </summary>
         [HttpGet("profile/{identifier}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffProfileByIdentifier(string identifier)
@@ -323,6 +365,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Saves profile section draft by staff ID.
         /// </summary>
         [HttpPost("{id:int}/save-profile-draft")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraft(int id, [FromBody] UpdateStaffProfileSectionDto dto)
         {
@@ -348,6 +391,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Final submission of staff profile.
         /// </summary>
         [HttpPost("{id:int}/submit-profile")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SubmitProfile(int id)
         {
@@ -434,6 +478,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Uploads an individual document for a staff member.
         /// </summary>
         [HttpPost("{id:int}/documents/upload")]
+        [BypassPermission]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadDocument(int id, [FromForm] UploadStaffDocumentDto dto)
@@ -461,6 +506,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Removes an individual uploaded document.
         /// </summary>
         [HttpDelete("{id:int}/documents/{documentType}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> DeleteDocument(int id, string documentType)
         {
@@ -486,6 +532,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Upload or replace staff member photo.
         /// </summary>
         [HttpPost("upload-photo")]
+        [BypassPermission]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadPhoto([FromForm] UploadStaffPhotoDto dto)
@@ -499,6 +546,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Stream staff member profile photo.
         /// </summary>
         [HttpGet("photo/{id:int}")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetStaffPhoto(int id)
         {
             var (physicalPath, contentType) = await _staffService.GetPhotoAsync(id);

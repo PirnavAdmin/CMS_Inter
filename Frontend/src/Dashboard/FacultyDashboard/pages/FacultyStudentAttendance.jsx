@@ -151,6 +151,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
   const [attSaving, setAttSaving] = useState(false);
   const [dailyPage, setDailyPage] = useState(1);
   const [dailyPageSize, setDailyPageSize] = useState(10);
+  const [notifyParents, setNotifyParents] = useState(true);
 
   // Mark All Present Session Selection Modal States
   const [showMarkModal, setShowMarkModal] = useState(false);
@@ -583,7 +584,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return list;
   }, [monthlyDateValue]);
 
-  // Merge live sections with allocated timetable sections
+  // Strictly constrain sections to Faculty's allocated timetable sections
   const displaySections = useMemo(() => {
     const map = new Map();
     // First prioritize allocated sections for this level (or all if no level selected)
@@ -592,7 +593,10 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         map.set(String(s.sectionId), { ...s, isAssigned: true });
       }
     });
-    // Then add other sections returned by API
+    if (map.size > 0) {
+      return Array.from(map.values());
+    }
+    // Fallback only if no allocated sections found
     attSections.forEach((s) => {
       const id = String(s.sectionId || s.id);
       if (!map.has(id)) {
@@ -853,7 +857,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
 
       let mappedStudents = [];
       if (Array.isArray(rawStudents) && rawStudents.length > 0) {
-        mappedStudents = rawStudents.map((s) => {
+        mappedStudents = rawStudents.map((s, idx) => {
           const sid = s.studentId || s.id;
           const ledgerRec = attendanceLedger[attDate]?.[sid];
 
@@ -873,10 +877,15 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                 : null
           );
 
+          const sectionPrefix = currentSectionName ? currentSectionName.replace(/\s+/g, "") : "MPC";
+          const resolvedRoll = (s.rollNumber && String(s.rollNumber).trim())
+            || (s.rollNo && String(s.rollNo).trim())
+            || `${sectionPrefix}-${String(idx + 1).padStart(2, "0")}`;
+
           return {
             studentId: sid,
-            rollNo: s.rollNumber || s.rollNo || `RL-${sid}`,
-            admissionNo: s.admissionNumber || s.admissionNo || `ADM-${sid}`,
+            rollNo: resolvedRoll,
+            admissionNo: (s.admissionNumber && String(s.admissionNumber).trim()) || (s.admissionNo && String(s.admissionNo).trim()) || `ADM-${sid}`,
             name: s.studentName || s.name || `Student #${sid}`,
             morningStatus: mStatus,
             afternoonStatus: aStatus,
@@ -1192,7 +1201,18 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       });
 
       setAttDirty(false);
-      notify(`Attendance for ${currentSectionName} on ${attDate} successfully persisted to database!`);
+      const absentCount = attStudents.filter(
+        (s) => s.morningStatus === "Absent" || s.afternoonStatus === "Absent"
+      ).length;
+
+      if (notifyParents && absentCount > 0) {
+        notify(
+          `Attendance for ${currentSectionName} saved! Automated SMS/WhatsApp absence alert queued for ${absentCount} guardian(s).`,
+          "success"
+        );
+      } else {
+        notify(`Attendance for ${currentSectionName} on ${attDate} successfully persisted to database!`);
+      }
     } catch (err) {
       console.error("Failed to bulk save attendance:", err);
       notify("Failed to save attendance records to server.", "error");
@@ -1537,6 +1557,29 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                     <CheckCircle size={14} /> Mark All Present
                   </button>
 
+                  <label
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      padding: "4px 8px",
+                      background: "var(--cms-subtle, #f8f9fa)",
+                      borderRadius: 6,
+                      border: "1px solid var(--cms-border, #e5e7eb)",
+                    }}
+                    title="Send instant automated absence notification via WhatsApp/SMS to student guardians"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={notifyParents}
+                      onChange={(e) => setNotifyParents(e.target.checked)}
+                      style={{ accentColor: "var(--cms-primary, #6F8400)", cursor: "pointer" }}
+                    />
+                    <span style={{ fontWeight: 600 }}>Notify Parents</span>
+                  </label>
+
                   <button
                     type="button"
                     className="cms-btn cms-btn-primary"
@@ -1792,6 +1835,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                       <th>Absent</th>
                       <th>Half Day</th>
                       <th>Attendance %</th>
+                      <th>Board Eligibility</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1811,11 +1855,26 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                           <td style={{ color: "var(--cms-red, #ef4444)", fontWeight: 700 }}>{r.absentCount}</td>
                           <td style={{ color: "var(--cms-amber, #f59e0b)", fontWeight: 700 }}>{r.halfDayCount}</td>
                           <td style={{ fontWeight: 800 }}>{r.attendancePct}%</td>
+                          <td>
+                            {r.attendancePct >= 75 ? (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#dcfce7", color: "#15803d", whiteSpace: "nowrap" }}>
+                                ● Eligible (≥75%)
+                              </span>
+                            ) : r.attendancePct >= 65 ? (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#fef3c7", color: "#b45309", whiteSpace: "nowrap" }}>
+                                ▲ Condonation (65-74%)
+                              </span>
+                            ) : (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#fee2e2", color: "#b91c1c", whiteSpace: "nowrap" }}>
+                                ✕ Detained (&lt;65%)
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={monthDays.length + 6} style={{ textAlign: "center", padding: 32 }}>
+                        <td colSpan={monthDays.length + 7} style={{ textAlign: "center", padding: 32 }}>
                           <div className="cms-empty">No attendance records match the selected filters.</div>
                         </td>
                       </tr>

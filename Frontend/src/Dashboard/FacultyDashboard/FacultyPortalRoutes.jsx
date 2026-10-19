@@ -18,6 +18,7 @@ import FacultyLeave from "./pages/FacultyLeave.jsx";
 import FacultyPayslips from "./pages/FacultyPayslips.jsx";
 import FacultyHolidays from "./pages/FacultyHolidays.jsx";
 import FacultySettings from "./pages/FacultySettings.jsx";
+import FacultyReimbursement from "./pages/FacultyReimbursement.jsx";
 
 const routePermissions = {
   "": "VIEW_DASHBOARD",
@@ -31,6 +32,7 @@ const routePermissions = {
   leave: "APPLY_LEAVE",
   payslips: "VIEW_PAYSLIPS",
   holidays: "VIEW_HOLIDAYS",
+  reimbursements: "VIEW_REIMBURSEMENTS",
 };
 
 function PermissionRoute({ permission, children }) {
@@ -56,6 +58,7 @@ export function FacultyPortalContent() {
           <Route path="payslips" element={<PermissionRoute permission={routePermissions["payslips"]}><FacultyPayslips /></PermissionRoute>} />
           <Route path="holidays" element={<PermissionRoute permission={routePermissions["holidays"]}><FacultyHolidays /></PermissionRoute>} />
           <Route path="settings" element={<FacultySettings />} />
+          <Route path="reimbursements" element={<FacultyReimbursement />} />
           <Route path="*" element={<Navigate to="/faculty-dashboard" replace />} />
         </Route>
       </Routes>

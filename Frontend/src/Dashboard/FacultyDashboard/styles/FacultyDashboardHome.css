@@ -467,15 +467,18 @@
 
 .dashboard-header-dropdown {
   height: 22px;
-  padding: 0 4px;
+  padding: 0 6px;
   border: 1px solid var(--cms-border, #e2e8f0);
-  border-radius: 4px;
+  border-radius: 5px;
   background: var(--cms-surface, #ffffff);
   color: var(--cms-text, #1e293b);
   font-size: 10px;
   font-weight: 600;
   outline: none;
   cursor: pointer;
+  max-width: 130px;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .dashboard-header-dropdown:focus {
@@ -564,9 +567,9 @@
 
 .dashboard-donut-chart-wrap {
   position: relative;
-  width: 86px;
-  height: 86px;
-  flex: 0 0 86px;
+  width: 92px;
+  height: 92px;
+  flex: 0 0 92px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -584,11 +587,11 @@
   justify-content: center;
   text-align: center;
   pointer-events: none;
-  width: 56px;
+  width: 58px;
 }
 
 .dashboard-donut-center strong {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   color: var(--cms-text, #1e293b);
   line-height: 1.1;
@@ -596,11 +599,11 @@
 }
 
 .dashboard-donut-center span {
-  font-size: 7px;
-  font-weight: 700;
+  font-size: 7.5px;
+  font-weight: 750;
   color: var(--cms-muted, #64748b);
   text-transform: uppercase;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.3px;
   margin-top: 1px;
 }
 
@@ -692,8 +695,8 @@
 .dashboard-attendance-kpi-row {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 3px;
-  padding-top: 3px;
+  gap: 4px;
+  padding-top: 4px;
   border-top: 1px solid var(--cms-border, #e2e8f0);
 }
 
@@ -701,21 +704,24 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 2px 2px;
-  border-radius: 5px;
-  background: var(--cms-subtle, #f8fafc);
+  justify-content: center;
+  padding: 3px 2px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cms-primary, #6F8400) 5%, var(--cms-subtle, #f8fafc));
+  border: 1px solid color-mix(in srgb, var(--cms-primary, #6F8400) 8%, var(--cms-border, #e2e8f0));
   text-align: center;
 }
 
 .att-kpi-chip small {
-  font-size: 8px;
+  font-size: 8.5px;
+  font-weight: 600;
   color: var(--cms-muted, #64748b);
   white-space: nowrap;
 }
 
 .att-kpi-chip strong,
 .staff-chip strong {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 800;
   color: var(--cms-text, #1e293b);
   margin-top: 1px;
