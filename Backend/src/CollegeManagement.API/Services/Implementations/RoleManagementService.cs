@@ -433,6 +433,7 @@ namespace CollegeManagement.API.Services.Implementations
                 },
                 new { id = "staff-attendance", name = "Staff Attendance", route = "/dashboard/attendance/staff", section = "Staff", availableActions = actions,
                     screens = new[] {
+                        new { id = "my-attendance", name = "My Attendance", availableActions = actions },
                         new { id = "mark-staff-attendance", name = "Mark Staff Attendance", availableActions = actions },
                         new { id = "staff-attendance-overview", name = "Staff Attendance Overview", availableActions = actions },
                         new { id = "staff-attendance-logs", name = "Biometric Logs & Reports", availableActions = actions }
@@ -440,6 +441,7 @@ namespace CollegeManagement.API.Services.Implementations
                 },
                 new { id = "staff-leave-management", name = "Staff Leave Management", route = "/dashboard/leave-management?tab=staff", section = "Staff", availableActions = actions,
                     screens = new[] {
+                        new { id = "apply-leave", name = "Apply Leave", availableActions = actions },
                         new { id = "leave-applications", name = "Leave Applications", availableActions = actions },
                         new { id = "leave-approvals", name = "Leave Approvals", availableActions = actions },
                         new { id = "leave-balances", name = "Leave Balance & History", availableActions = actions }
@@ -517,10 +519,12 @@ namespace CollegeManagement.API.Services.Implementations
                     screens = new[] {
                         new { id = "landing-configuration", name = "Landing Page Configuration", availableActions = actions },
                         new { id = "login-configuration", name = "Login Page Configuration", availableActions = actions },
+                        new { id = "campus-images", name = "Campus Images & Sliders", availableActions = actions },
                         new { id = "campus-configuration", name = "Campus Configuration & Branches", availableActions = actions },
                         new { id = "number-series", name = "Auto Number Series", availableActions = actions },
                         new { id = "templates", name = "Templates & Bulk Uploaders", availableActions = actions },
                         new { id = "leave-types", name = "Leave Types & Quotas", availableActions = actions },
+                        new { id = "lop-configuration", name = "LOP (Loss of Pay) Configuration", availableActions = actions },
                         new { id = "attendance-timing", name = "Attendance Timings & Shifts", availableActions = actions },
                         new { id = "credentials", name = "Credentials Generator", availableActions = actions },
                         new { id = "audit-logs", name = "Audit & Security Logs", availableActions = actions }

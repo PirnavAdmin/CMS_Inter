@@ -18,6 +18,7 @@ import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
+import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -515,7 +516,28 @@ export default function DashboardLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
-  const user = readUser();
+  const [currentUser, setCurrentUser] = useState(() => readUser());
+  const user = currentUser;
+
+  useEffect(() => {
+    if (!currentUser || hasRole("SUPER_ADMIN", currentUser)) return;
+    if (currentUser.permissions || currentUser.rolePermissions) return;
+
+    getCurrentUserPermissions()
+      .then((res) => {
+        if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+          const updated = { ...currentUser, permissions: res.data };
+          try {
+            const raw = window.localStorage.getItem("user") ? window.localStorage : window.sessionStorage;
+            raw.setItem("user", JSON.stringify(updated));
+          } catch {}
+          setCurrentUser(updated);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not load current user permissions:", err?.message);
+      });
+  }, [currentUser]);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
@@ -527,7 +549,7 @@ export default function DashboardLayout({
       else if (isPrincipal) base = principalMenu;
       else base = menu;
     }
-    if (user && !hasRole("SUPER_ADMIN", user) && !hasRole("ADMIN", user) && (user.permissions || user.rolePermissions)) {
+    if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
       return base
         .map((group) => ({
           ...group,

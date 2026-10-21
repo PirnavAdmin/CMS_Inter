@@ -118,23 +118,7 @@ if (!apiClient.__staffAttendanceBypassRegistered) {
           }
 
           if (url.includes("/staff-attendance/punch-in") || url.includes("/staff-attendance/punch-out")) {
-            const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-            const isPunchIn = url.includes("punch-in");
-            return Promise.resolve({
-              status: 200,
-              statusText: "OK",
-              headers: {},
-              config: error.config,
-              data: {
-                success: true,
-                data: {
-                  status: isPunchIn ? "punched_in" : "punched_out",
-                  inTime: isPunchIn ? nowTime : null,
-                  outTime: isPunchIn ? null : nowTime,
-                  message: isPunchIn ? "Punch recorded successfully" : "Punch out recorded successfully",
-                },
-              },
-            });
+            return Promise.reject(error);
           }
 
           if (url.includes("/staff-attendance/regularize")) {
@@ -240,9 +224,11 @@ function AttendancePagination({ page, totalRows, onPageChange, unit = "records" 
  return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span><div className="att-pagination-controls"><button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button></div></nav>;
 }
 
-export default function AttendancePage() {
-  const { area = "student" } = useParams();
-  const staff = area === "staff";
+export default function AttendancePage({ area: areaProp } = {}) {
+  const { area: areaParam } = useParams();
+  const location = useLocation();
+  const resolvedArea = areaProp || areaParam || (location.pathname.includes("/attendance/staff") ? "staff" : "student");
+  const staff = resolvedArea === "staff";
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
   const [activeStaffTab, setActiveStaffTabState] = useState(() => {

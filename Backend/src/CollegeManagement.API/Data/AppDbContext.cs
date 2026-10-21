@@ -1945,7 +1945,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             modelBuilder.Entity<Permission>(entity =>
             {
                 entity.HasIndex(e => e.PermissionCode).IsUnique();
-                entity.HasIndex(e => new { e.SubModule, e.Action }).IsUnique();
+                entity.HasIndex(e => new { e.SubModule, e.ScreenCode, e.Action }).IsUnique();
             });
 
             // RolePermissions Configuration
