@@ -74,22 +74,24 @@ namespace CollegeManagement.API.Controllers.V1
         /// Uploads or replaces the screenshot image for a specific screenKey.
         /// </summary>
         [HttpPost("{screenKey}")]
-        public async Task<IActionResult> UploadScreenPreview(string screenKey, [FromForm] IFormFile? file)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadScreenPreview(string screenKey, IFormFile? file)
         {
             try
             {
-                if (file == null || file.Length == 0)
+                var uploadedFile = file ?? (Request.HasFormContentType && Request.Form.Files.Count > 0 ? Request.Form.Files[0] : null);
+                if (uploadedFile == null || uploadedFile.Length == 0)
                 {
                     return BadRequest(new { success = false, message = "No image file provided." });
                 }
 
-                if (file.Length > 15 * 1024 * 1024)
+                if (uploadedFile.Length > 15 * 1024 * 1024)
                 {
                     return BadRequest(new { success = false, message = "Image file exceeds maximum 15MB limit." });
                 }
 
                 var allowedExtensions = new[] { ".png", ".jpg", ".jpeg", ".webp" };
-                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                var ext = Path.GetExtension(uploadedFile.FileName).ToLowerInvariant();
                 if (!allowedExtensions.Contains(ext))
                 {
                     return BadRequest(new { success = false, message = "Unsupported image format. Please upload PNG, JPG, or WEBP." });
@@ -111,7 +113,7 @@ namespace CollegeManagement.API.Controllers.V1
 
                 using (var stream = new FileStream(targetPath, FileMode.Create, FileAccess.Write))
                 {
-                    await file.CopyToAsync(stream);
+                    await uploadedFile.CopyToAsync(stream);
                 }
 
                 var relativeUrl = $"/Uploads/screen-previews/{fileName}?t={DateTime.UtcNow.Ticks}";

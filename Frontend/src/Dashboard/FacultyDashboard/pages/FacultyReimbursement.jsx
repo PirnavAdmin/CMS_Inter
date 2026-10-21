@@ -31,6 +31,8 @@ import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import { getAuthUser } from "@/features/authStorage.js";
 import { useFacultySafe } from "../FacultyContext.jsx";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as reimbursementService from "@/services/reimbursementService.js";
 import {
   CLAIM_STATUSES,
@@ -46,6 +48,23 @@ import "./FacultyReimbursement.css";
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
 const PAGE_SIZE = 6;
+
+/**
+ * Helper: Converts base64 Data URL to Blob for FormData upload
+ */
+function dataUrlToBlob(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== "string") return null;
+  const parts = dataUrl.split(",");
+  if (parts.length < 2) return null;
+  const mime = parts[0].match(/:(.*?);/)?.[1] || "application/octet-stream";
+  const bstr = atob(parts[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
 
 export default function FacultyReimbursement() {
   // ── Authentication & Faculty Profile Context ──────────────────────────────
@@ -429,6 +448,10 @@ export default function FacultyReimbursement() {
       errors.purpose = "Please provide a detailed purpose / description (minimum 5 characters).";
     }
 
+    if (!formData.category || !formData.category.trim()) {
+      errors.category = "Expense category is required.";
+    }
+
     if (formData.category === "Other" && (!formData.otherCategory || !formData.otherCategory.trim())) {
       errors.otherCategory = "Please specify the expense category name.";
     }
@@ -483,42 +506,183 @@ export default function FacultyReimbursement() {
     try {
       const resolvedCategory =
         formData.category === "Other"
-          ? formData.otherCategory.trim()
-          : formData.category;
+          ? (formData.otherCategory?.trim() || "Other")
+          : (formData.category || "Teaching Materials");
 
       const resolvedPaymentMethod =
         formData.paymentMethod === "Other"
-          ? formData.otherPaymentMethod.trim()
-          : formData.paymentMethod;
+          ? (formData.otherPaymentMethod?.trim() || "Other")
+          : (formData.paymentMethod || "Bank Transfer");
 
-      const newClaim = await reimbursementService.submitClaim({
-        ...formData,
+      // Resolve staffId number if available
+      const rawStaffId =
+        profileData.staffId ||
+        profileData.employeeId ||
+        profileData.id ||
+        authUser.staffId ||
+        authUser.employeeId ||
+        authUser.id ||
+        0;
+      const parsedStaffId = Number.parseInt(String(rawStaffId).replace(/\D/g, ""), 10) || 0;
+
+      // Resolve campus ID
+      let resolvedCampusId = 1;
+      try {
+        const storedCampus = localStorage.getItem("cms_selected_campus_id");
+        if (storedCampus && Number(storedCampus)) resolvedCampusId = Number(storedCampus);
+      } catch {}
+
+      // Format ISO date (YYYY-MM-DD)
+      const formattedDate = formData.expenseDate
+        ? new Date(formData.expenseDate).toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0];
+
+      // Prepare payload matching backend CreateReimbursementClaimRequest DTO:
+      // ExpenseCategory is required by backend ReimbursementService.CreateClaimAsync
+      const requestPayload = {
+        // Backend DTO primary properties
+        ExpenseCategory: resolvedCategory,
+        expenseCategory: resolvedCategory,
+        Category: resolvedCategory,
         category: resolvedCategory,
-        paymentMethod: resolvedPaymentMethod,
+
+        ExpenseDate: formattedDate,
+        expenseDate: formattedDate,
+
+        Amount: numAmount,
         amount: numAmount,
-        proof: uploadedFile,
-      });
+
+        PreferredPaymentMethod: resolvedPaymentMethod,
+        preferredPaymentMethod: resolvedPaymentMethod,
+        PaymentMethod: resolvedPaymentMethod,
+        paymentMethod: resolvedPaymentMethod,
+
+        Purpose: formData.purpose.trim(),
+        purpose: formData.purpose.trim(),
+
+        AdditionalNotes: formData.notes?.trim() || "",
+        additionalNotes: formData.notes?.trim() || "",
+        Notes: formData.notes?.trim() || "",
+        notes: formData.notes?.trim() || "",
+
+        CampusId: resolvedCampusId,
+        campusId: resolvedCampusId,
+
+        AcademicYear: "2026-2027",
+        academicYear: "2026-2027",
+
+        // Provide staffId if valid integer > 0; otherwise backend resolves from user token
+        ...(parsedStaffId > 0 ? { StaffId: parsedStaffId, staffId: parsedStaffId } : {}),
+
+        // Verified faculty metadata
+        FacultyId: formData.facultyId || defaultFacultyId || "",
+        facultyId: formData.facultyId || defaultFacultyId || "",
+        FacultyName: formData.facultyName.trim(),
+        facultyName: formData.facultyName.trim(),
+        Department: formData.department.trim(),
+        department: formData.department.trim(),
+        Designation: formData.designation?.trim() || "",
+        designation: formData.designation?.trim() || "",
+        Email: formData.email?.trim() || "",
+        email: formData.email?.trim() || "",
+        Declaration: Boolean(formData.declaration),
+        declaration: Boolean(formData.declaration),
+      };
+
+      // 1. Post claim to backend API /api/v1/reimbursements
+      const submitEndpoint = apiEndpoints?.reimbursement?.submit || "/api/v1/reimbursements";
+      const res = await apiClient.post(submitEndpoint, requestPayload);
+
+      const resBody = res?.data?.data ?? res?.data ?? res;
+      const createdId = resBody?.id ?? resBody?.Id ?? resBody?.claimId ?? resBody?.ClaimId;
+      const createdClaimNumber =
+        resBody?.claimNumber ??
+        resBody?.ClaimNumber ??
+        resBody?.claimId ??
+        resBody?.ClaimId ??
+        (createdId ? `CLM-${createdId}` : "CLM-NEW");
+
+      // 2. Upload proof document if attached
+      if (uploadedFile && createdId) {
+        try {
+          const rawFile = uploadedFile.rawFile || uploadedFile.file;
+          let fileBlob = null;
+          const fileName = uploadedFile.name || "receipt.pdf";
+
+          if (rawFile instanceof File || rawFile instanceof Blob) {
+            fileBlob = rawFile;
+          } else if (uploadedFile.dataUrl) {
+            fileBlob = dataUrlToBlob(uploadedFile.dataUrl);
+          }
+
+          if (fileBlob) {
+            const uploadFormData = new FormData();
+            uploadFormData.append("file", fileBlob, fileName);
+
+            const uploadEndpoint = apiEndpoints?.reimbursement?.uploadProof
+              ? apiEndpoints.reimbursement.uploadProof(createdId)
+              : `/api/v1/reimbursements/${encodeURIComponent(createdId)}/upload-proof`;
+
+            await apiClient.post(uploadEndpoint, uploadFormData, {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+            });
+          }
+        } catch (uploadErr) {
+          console.warn("[FacultyReimbursement] Receipt upload warning:", uploadErr);
+        }
+      }
+
+      // 3. Notify application components across window
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("cms-reimbursements-updated"));
+        window.dispatchEvent(new Event("cms-account-updated"));
+      }
 
       setToast({
         type: "success",
-        message: `Claim ${newClaim.claimId || "submitted"} submitted successfully! Your claim is now pending review.`,
+        message: `Claim ${createdClaimNumber} submitted successfully! Your claim is now pending review.`,
       });
 
       // Optimistically add the new claim to live state
-      if (newClaim) {
-        setClaims((prev) => [
-          newClaim,
-          ...prev.filter((c) => (c.claimId || c.id) !== (newClaim.claimId || newClaim.id)),
-        ]);
-      }
+      const optimisticClaim = {
+        id: createdId || `LOCAL-${Date.now()}`,
+        claimId: createdClaimNumber,
+        facultyId: formData.facultyId || defaultFacultyId,
+        facultyName: formData.facultyName,
+        department: formData.department,
+        designation: formData.designation,
+        email: formData.email,
+        category: resolvedCategory,
+        expenseCategory: resolvedCategory,
+        expenseDate: formattedDate,
+        amount: numAmount,
+        purpose: formData.purpose,
+        paymentMethod: resolvedPaymentMethod,
+        notes: formData.notes,
+        status: CLAIM_STATUSES.PENDING,
+        submissionDate: new Date().toISOString(),
+        proof: uploadedFile,
+      };
+
+      setClaims((prev) => [
+        optimisticClaim,
+        ...prev.filter(
+          (c) =>
+            (c.claimId || c.id) !== createdClaimNumber &&
+            (c.claimId || c.id) !== createdId
+        ),
+      ]);
 
       setPreviewClaimModalOpen(false);
       resetForm();
       refreshData();
     } catch (err) {
+      const errMsg = getApiErrorMessage(err) || err?.message || "Failed to submit reimbursement claim.";
       setToast({
         type: "error",
-        message: err.message || "Failed to submit reimbursement claim.",
+        message: errMsg,
       });
     } finally {
       setIsSubmitting(false);
@@ -907,7 +1071,7 @@ export default function FacultyReimbursement() {
                   <select
                     value={formData.category}
                     onChange={(e) => handleChange("category", e.target.value)}
-                    className="reimb-select"
+                    className={`reimb-select ${formErrors.category ? "is-invalid" : ""}`}
                   >
                     {EXPENSE_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
@@ -915,6 +1079,9 @@ export default function FacultyReimbursement() {
                       </option>
                     ))}
                   </select>
+                  {formErrors.category && (
+                    <span className="reimb-field-error">{formErrors.category}</span>
+                  )}
                   {formData.category === "Other" && (
                     <div className="reimb-other-input-wrap">
                       <input

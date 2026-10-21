@@ -11,18 +11,24 @@ import "./StudentManagementPage.css";
 
 const emptyForm = () => ({ admissionId: "", admissionNo: "", admissionNumber: "", admissionDate: "", admissionType: "", admissionQuota: "", campusId: "", medium: "", secondLanguage: "", studentName: "", photo: "", gender: "", dateOfBirth: "", bloodGroup: "", email: "", mobileNumber: "", aadhaarNumber: "", nationality: "", religion: "", category: "", address: "", city: "", district: "", state: "", pincode: "", boardId: "", academicYearId: "", academicLevelId: "", groupId: "", programId: "", sectionId: "", rollNo: "", rollNumber: "", feeStructureId: "", paymentPlan: "", studentType: "", transportRequired: "", busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", hostelBlock: "", hostelBlockName: "", hostelRoom: "", hostelRoomName: "", previousSchool: "", previousHallTicketNumber: "", previousBoard: "", previousYearOfPassing: "", previousPercentage: "", studentCategory: "", scholarshipStatus: "", scholarshipAmount: "", fatherName: "", fatherOccupation: "", fatherMobile: "", fatherEmail: "", motherName: "", motherOccupation: "", motherMobile: "", motherEmail: "", guardianName: "", guardianMobile: "", parentGuardianEmail: "", annualIncome: "", remarks: "" });
 const valueOf = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value !== undefined && value !== null) ?? "";
-const asList = (value) => {
-  const data = value?.data ?? value?.Data ?? value;
-  if (Array.isArray(data)) return data;
-  const candidates = [data?.data?.$values, data?.Data?.$values, data?.result, data?.Result, data?.response, data?.Response, data?.data, data?.Data, data?.items, data?.Items, data?.records, data?.Records, data?.rows, data?.Rows, data?.results, data?.Results, data?.$values];
-  return candidates.find(Array.isArray) ?? [];
+const asList = (value, depth = 0) => {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object" || depth > 6) return [];
+  for (const key of ["items", "Items", "records", "Records", "rows", "Rows", "results", "Results", "$values"]) {
+    if (Array.isArray(value[key])) return value[key];
+  }
+  for (const key of ["data", "Data", "result", "Result", "response", "Response", "payload", "Payload"]) {
+    const rows = asList(value[key], depth + 1);
+    if (rows.length) return rows;
+  }
+  return [];
 };
 const optionsFrom = (response, idKeys, labelKeys) => asList(response).map((item) => ({
   value: String(valueOf(item, ...idKeys)),
   label: String(valueOf(item, ...labelKeys)),
 })).filter((item) => item.value && item.label);
 const academicLookupFields = {
-  boards: [["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "name", "Name"]],
+  boards: [["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "fullName", "FullName", "name", "Name"]],
   years: [["academicYearId", "AcademicYearId", "id", "Id"], ["academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name"]],
   levels: [["academicLevelId", "AcademicLevelId", "id", "Id"], ["academicLevelName", "AcademicLevelName", "levelName", "LevelName", "name", "Name"]],
   groups: [["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]],
@@ -37,6 +43,25 @@ const academicDependencies = {
   groupId: ["programId", "sectionId"],
   programId: ["sectionId"],
 };
+async function loadAcademicLookup(endpoint, scope, signal) {
+  if (scope.PageSize === undefined) {
+    return asList((await apiClient.get(endpoint, { params: scope, signal })).data);
+  }
+  const records = [];
+  let previousPage = "";
+  for (let pageNumber = 1; pageNumber <= 100; pageNumber += 1) {
+    const response = await apiClient.get(endpoint, {
+      params: { ...scope, PageSize: 100, PageNumber: pageNumber }, signal,
+    });
+    const rows = asList(response.data);
+    const fingerprint = JSON.stringify(rows);
+    if (rows.length && fingerprint === previousPage) throw new Error("Unable to load all academic options: the server repeated a page.");
+    records.push(...rows);
+    if (rows.length < 100) return records;
+    previousPage = fingerprint;
+  }
+  throw new Error("Unable to load all academic options. Please narrow the academic selection.");
+}
 function useAcademicLookup(key, endpoint, params, enabled, setLookups, setLookupState) {
   const requestKey = JSON.stringify(params);
   useEffect(() => {
@@ -45,9 +70,9 @@ function useAcademicLookup(key, endpoint, params, enabled, setLookups, setLookup
     setLookupState((current) => ({ ...current, [key]: { loading: Boolean(enabled), error: "" } }));
     if (!enabled) return () => controller.abort();
     const scope = JSON.parse(requestKey);
-    apiClient.get(endpoint, { params: scope, signal: controller.signal }).then((response) => {
+    loadAcademicLookup(endpoint, scope, controller.signal).then((records) => {
       if (controller.signal.aborted) return;
-      const scoped = asList(response.data).filter((record) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((field) => {
+      const scoped = records.filter((record) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((field) => {
         const expected = scope[field] ?? scope[field[0].toUpperCase() + field.slice(1)];
         const actual = valueOf(record, field, field[0].toUpperCase() + field.slice(1));
         return !expected || actual === "" || String(actual) === String(expected);
