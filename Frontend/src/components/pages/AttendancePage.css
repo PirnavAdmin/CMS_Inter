@@ -1924,3 +1924,68 @@
   padding: 8px 14px;
 }
 
+/* ============================================================
+   Staff Attendance Sub-Tabs (Modeled after Room & Section Management)
+   ============================================================ */
+.att-staff-tabs {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--cms-border, #E6E7DE);
+  border-radius: 16px;
+  background: var(--cms-surface, #fff);
+  margin-bottom: 4px;
+}
+
+.att-staff-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--cms-muted, #7B8275);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.att-staff-tab:hover:not(.att-staff-tab-active) {
+  color: var(--cms-text, #10203c);
+  background: var(--cms-hover, rgba(111, 132, 0, 0.08));
+}
+
+.att-staff-tab-active {
+  background: var(--cms-primary, #6F8400) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cms-primary, #6F8400) 35%, transparent);
+}
+
+.att-staff-tab-active svg {
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .att-staff-tabs {
+  background: var(--cms-surface, #171A17) !important;
+  border-color: var(--cms-border, #2B3028) !important;
+}
+
+[data-theme="dark"] .att-staff-tab {
+  color: var(--cms-muted, #8F9789) !important;
+}
+
+[data-theme="dark"] .att-staff-tab:hover:not(.att-staff-tab-active) {
+  color: var(--cms-text, #F2F3EE) !important;
+  background: var(--cms-hover, #21261F) !important;
+}
+
+[data-theme="dark"] .att-staff-tab-active {
+  background: var(--cms-primary, #879D19) !important;
+  color: #ffffff !important;
+}

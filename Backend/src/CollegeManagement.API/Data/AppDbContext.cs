@@ -858,6 +858,7 @@ namespace CollegeManagement.API.Data
                 entity.HasKey(x => x.FeePaymentPlanId);
                 entity.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
                 entity.Property(x => x.PlanName).IsRequired().HasMaxLength(100);
+                entity.Ignore(x => x.UpdatedAt);
                 entity.HasOne(x => x.StudentFee).WithMany(x => x.PaymentPlans).HasForeignKey(x => x.StudentFeeId).OnDelete(DeleteBehavior.Cascade);
             });
 

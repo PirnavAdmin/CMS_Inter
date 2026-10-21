@@ -834,8 +834,20 @@ public class FeeRepository : IFeeRepository
                 TotalPayable = sf.PayableAmount,
                 TotalPaid = sf.PaidAmount,
                 Balance = sf.BalanceAmount,
-                PaymentPlan = sf.PaymentPlan ?? "Standard",
-                Status = sf.Status
+                PaymentPlan = !string.IsNullOrWhiteSpace(sf.PaymentPlan) ? sf.PaymentPlan : (sf.PaymentPlans.FirstOrDefault()?.PlanName ?? "Standard"),
+                Status = sf.Status,
+                Installments = sf.PaymentPlans.SelectMany(p => p.Installments).OrderBy(i => i.InstallmentNumber).Select(i => new FeeScheduleResponse
+                {
+                    FeeInstallmentId = i.FeeInstallmentId,
+                    FeePaymentPlanId = i.FeePaymentPlanId,
+                    InstallmentNumber = i.InstallmentNumber,
+                    FeeSchedule = i.FeePaymentPlan?.PlanName ?? "Installment",
+                    Amount = i.Amount,
+                    PaidAmount = i.PaidAmount,
+                    BalanceAmount = i.BalanceAmount,
+                    DueDate = i.DueDate,
+                    Status = i.Status
+                }).ToList()
             }).ToList();
         }
         catch
@@ -1234,7 +1246,20 @@ public class FeeRepository : IFeeRepository
                 Paid = sf.PaidAmount,
                 Balance = sf.BalanceAmount,
                 NextDue = sf.PaymentPlans.SelectMany(p => p.Installments).Where(i => i.Status != "Paid" && i.DueDate != default).OrderBy(i => i.DueDate).Select(i => (DateTime?)i.DueDate).FirstOrDefault(),
-                Status = sf.Status
+                Status = sf.Status,
+                PaymentPlan = !string.IsNullOrWhiteSpace(sf.PaymentPlan) ? sf.PaymentPlan : (sf.PaymentPlans.FirstOrDefault()?.PlanName ?? "Full Payment"),
+                Installments = sf.PaymentPlans.SelectMany(p => p.Installments).OrderBy(i => i.InstallmentNumber).Select(i => new FeeScheduleResponse
+                {
+                    FeeInstallmentId = i.FeeInstallmentId,
+                    FeePaymentPlanId = i.FeePaymentPlanId,
+                    InstallmentNumber = i.InstallmentNumber,
+                    FeeSchedule = i.FeePaymentPlan?.PlanName ?? "Installment",
+                    Amount = i.Amount,
+                    PaidAmount = i.PaidAmount,
+                    BalanceAmount = i.BalanceAmount,
+                    DueDate = i.DueDate,
+                    Status = i.Status
+                }).ToList()
             }).ToList();
         }
         catch

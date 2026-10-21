@@ -316,9 +316,8 @@ export default function SectionAllocationPage() {
           ...scopeContext, sectionId: number(sectionValue(row)),
         });
       }
-      await assignRollNumbers(previewRows);
       assertCurrentScope(scopeToken);
-      setToast({ message: "Section allocation and roll number assignment completed successfully.", type: "success" });
+      setToast({ message: "Section allocation completed. Open the Roll Numbers tab to review and generate pending roll numbers.", type: "success" });
       setPreview(null); setConfirming(""); setRefresh((value) => value + 1); await loadStudents();
     } catch (error) {
       say(error); setPreview(null); setConfirming("");
@@ -336,6 +335,24 @@ export default function SectionAllocationPage() {
       const rows = eligible.map((student) => ({ studentId: student.id, admissionNo: student.admissionNo,
         studentName: student.name, sectionId: student.sectionId, sectionName: student.sectionName
           || get(selectedSection, "sectionName", "SectionName"), rollNo: student.rollNo }));
+      if (rows.length) {
+        const response = await apiClient.get(apiEndpoints.numberSeries.preview("ROLL_NO"), {
+          params: { ...Object.fromEntries(["campusId", "boardId", "academicYearId", "groupId", "programId"]
+            .map((key) => [key, number(scopeContext[key])])),
+          campusCode: get(selectedCampus, "campusCode", "code", "CampusCode", "Code") },
+        });
+        assertCurrentScope(scopeToken);
+        const result = body(response);
+        const nextRoll = typeof result === "string" ? result
+          : get(result, "preview", "Preview", "livePreview", "LivePreview", "nextNumber", "NextNumber", "generatedNumber", "GeneratedNumber");
+        if (!filled(nextRoll)) throw new Error("The number series API did not return a roll number preview.");
+        const sequence = String(nextRoll).match(/^(.*?)(\d+)$/);
+        if (rows.length > 1 && !sequence) throw new Error("The configured roll number format does not support a sequential preview.");
+        rows.forEach((row, index) => {
+          row.previewRollNo = index === 0 ? String(nextRoll)
+            : sequence[1] + String(BigInt(sequence[2]) + BigInt(index)).padStart(sequence[2].length, "0");
+        });
+      }
       setStudents(workflow.students);
       setRollPreview({ students: rows, studentsToAllocate: rows.length, totalStudents: eligible.length });
       setConfirming("roll");
@@ -382,9 +399,9 @@ export default function SectionAllocationPage() {
     <button className="cms-btn cms-btn-ghost" disabled={Boolean(busy)} onClick={() => setConfirming("")}>Cancel</button>
     <button className="cms-btn cms-btn-primary" disabled={Boolean(busy) || !readySection || !rollPreviewRows.length} onClick={confirmRolls}>{busy === "roll-confirm" ? "Saving..." : "Generate Roll Numbers"}</button>
   </>}>
-    <p>Roll numbers are assigned from the configured series when you confirm. Existing roll numbers are kept.</p>
+    <p>Review the proposed roll numbers below. Click Generate Roll Numbers to generate and save them. Preview numbers may change if another user generates numbers before you confirm. Existing roll numbers are kept.</p>
     <div className="cms-table-wrap"><table className="cms-table"><thead><tr><th>Admission No</th><th>Student Name</th><th>Section</th><th>Roll Number</th></tr></thead><tbody>
-      {rollPreviewRows.map((student) => <tr key={studentId(student)}><td>{get(student, "admissionNo", "AdmissionNo")}</td><td>{get(student, "studentName", "StudentName")}</td><td>{sectionName(student)}</td><td>{filled(get(student, "rollNo", "RollNo")) ? get(student, "rollNo", "RollNo") : "Assigned on confirmation"}</td></tr>)}
+      {rollPreviewRows.map((student) => <tr key={studentId(student)}><td>{get(student, "admissionNo", "AdmissionNo")}</td><td>{get(student, "studentName", "StudentName")}</td><td>{sectionName(student)}</td><td>{student.previewRollNo || get(student, "rollNo", "RollNo") || "—"}</td></tr>)}
       {!rollPreviewRows.length ? <tr><td colSpan={4}>No students returned for roll number generation.</td></tr> : null}
     </tbody></table></div>
   </Modal> : null;

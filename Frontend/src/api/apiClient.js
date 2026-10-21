@@ -77,6 +77,10 @@ export const getApiErrorMessage = (error) => {
     const messages = flattenMessages(data.Errors).filter(Boolean);
     if (messages.length) return messages.join(" ");
   }
+  if (data?.details && typeof data.details === "string" && (!data?.message || data.message === "An unexpected server error occurred.")) return data.details;
+  if (data?.Message && data.Message !== "An unexpected server error occurred.") return data.Message;
+  if (data?.message && data.message !== "An unexpected server error occurred.") return data.message;
+  if (data?.details && typeof data.details === "string") return data.details;
   if (data?.Message) return data.Message;
   if (data?.message) return data.message;
   if (data?.Error) return data.Error;
