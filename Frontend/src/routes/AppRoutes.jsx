@@ -332,45 +332,45 @@ export default function AppRoutes() {
         <Route path="/dashboard/my-profile" element={<AdminProfilePage />} />
 
         {/* Settings Sub-Modules */}
-        <Route element={<ProtectedRoute requiredModule="lop-configuration" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="lop-configuration" />}>
           <Route path="/dashboard/settings/lop-configuration" element={<LOPConfigurationPage />} />
         </Route>
 
-        <Route element={<ProtectedRoute requiredModule="campus-images" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="campus-images" />}>
           <Route path="/dashboard/settings/campus-images" element={<CampusImagesConfigurationPage />} />
           <Route path="/dashboard/settings/landing-page" element={<CampusImagesConfigurationPage page="landing" />} />
           <Route path="/dashboard/settings/login-page" element={<CampusImagesConfigurationPage page="login" />} />
         </Route>
 
-        <Route element={<ProtectedRoute requiredModule="campus-configuration" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="campus-configuration" />}>
           <Route path="/dashboard/settings/campus-configuration" element={<CampusConfigurationPage />} />
           <Route path="/dashboard/settings/campus" element={<CampusConfigurationPage />} />
         </Route>
 
-        <Route element={<ProtectedRoute requiredModule="audit-logs" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="audit-logs" />}>
           <Route path="/dashboard/settings/audit-logs" element={<AuditLogsPage />} />
         </Route>
 
-        <Route element={<ProtectedRoute requiredModule="roles-permissions" />}>
+        <Route element={<ProtectedRoute requiredModule="roles-permissions" requiredScreen="role-management" />}>
           <Route path="/dashboard/settings/roles-permissions" element={<RolesPermissionsPage />} />
         </Route>
 
-        <Route element={<ProtectedRoute requiredModule="leave-types" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="leave-types" />}>
           <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
         </Route>
 
-        <Route element={<ProtectedRoute requiredModule="attendance-timing" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="attendance-timing" />}>
           <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
         </Route>
 
-        <Route element={<ProtectedRoute requiredModule="number-series" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="number-series" />}>
           <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
           <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<NumberSeriesPage mode="edit" />} />
           <Route path="/dashboard/settings/number-series/:seriesId" element={<NumberSeriesPage mode="detail" />} />
         </Route>
 
         {/* Templates Management Module Routes */}
-        <Route element={<ProtectedRoute requiredModule="templates" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="templates" />}>
           <Route path="/dashboard/settings/templates" element={<TemplatesPage />} />
           <Route path="/dashboard/settings/templates/certificates/:id/edit" element={<TemplatesPage />} />
           <Route path="/dashboard/settings/templates/reports/:id/edit" element={<TemplatesPage />} />
@@ -381,7 +381,7 @@ export default function AppRoutes() {
         </Route>
 
         {/* Credentials Generator Module Routes */}
-        <Route element={<ProtectedRoute requiredModule="credentials-generator" />}>
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="credentials" />}>
           <Route path="/dashboard/settings/credentials" element={<CredentialsGeneratorPage />} />
           <Route path="/dashboard/settings/credentials/faculty" element={<CredentialsGeneratorPage />} />
           <Route path="/dashboard/settings/credentials/students" element={<CredentialsGeneratorPage />} />

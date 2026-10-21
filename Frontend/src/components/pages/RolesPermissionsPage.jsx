@@ -37,6 +37,8 @@ import {
   PRESET_LABELS,
 } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import {
+  addModule,
+  addScreen,
   assignRoleToUser,
   cloneRole,
   createRole,
@@ -993,6 +995,8 @@ function PermissionMatrix({
   onExportCsv,
   statusFilter = "all",
   onStatusFilterChange,
+  onAddModule,
+  onAddScreen,
 }) {
   const permissionStructure = useMemo(() => {
     const map = new Map();
@@ -1169,6 +1173,24 @@ function PermissionMatrix({
           >
             <Download size={14} aria-hidden="true" />
             <span>Export CSV</span>
+          </button>
+          <button
+            type="button"
+            className="rbac-export-btn"
+            onClick={onAddModule}
+            title="Add a new functional module to permissions"
+          >
+            <Plus size={14} aria-hidden="true" />
+            <span>Add Module</span>
+          </button>
+          <button
+            type="button"
+            className="rbac-export-btn"
+            onClick={() => onAddScreen && onAddScreen(null)}
+            title="Add a new screen under a module"
+          >
+            <Plus size={14} aria-hidden="true" />
+            <span>Add Screen</span>
           </button>
         </div>
         <div className="rbac-toolbar-filters">
@@ -1347,6 +1369,18 @@ function PermissionMatrix({
                     </div>
                   );
                 })}
+                {isExpanded && (
+                  <div className="rbac-matrix-add-screen-row">
+                    <button
+                      type="button"
+                      className="rbac-add-screen-btn"
+                      onClick={() => onAddScreen && onAddScreen(module)}
+                      title={`Add a new screen under ${module.name}`}
+                    >
+                      <Plus size={13} aria-hidden="true" /> Add screen to {module.name}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1493,6 +1527,8 @@ function RoleDetails({
   setQuery,
   onSave,
   onReset,
+  onAddModule,
+  onAddScreen,
 }) {
   const updateAction = useCallback(({ roleId, moduleId, screenId, action, checked }) => {
     if (!selectedRole || String(roleId) !== String(selectedRole.id) || selectedRole.isProtected || loading || saving) return;
@@ -1709,6 +1745,8 @@ function RoleDetails({
             onExportCsv={handleExportCsv}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
+            onAddModule={onAddModule}
+            onAddScreen={onAddScreen}
           />
           <div className="rbac-savebar">
             <span>{dirty ? "You have unsaved permission changes." : "Permissions are up to date."}</span>
@@ -2194,6 +2232,8 @@ export default function RolesPermissionsPage() {
   const [saving, setSaving] = useState(false);
   const [cloningRole, setCloningRole] = useState(null);
   const [creatingRole, setCreatingRole] = useState(false);
+  const [addingModule, setAddingModule] = useState(false);
+  const [addingScreen, setAddingScreen] = useState(null);
   const [editingRole, setEditingRole] = useState(null);
   const [deletingRole, setDeletingRole] = useState(null);
   const [error, setError] = useState("");
@@ -2510,6 +2550,8 @@ export default function RolesPermissionsPage() {
               setQuery={setPermissionQuery}
               onSave={savePermissions}
               onReset={() => setPermissions(lastSavedPermissions)}
+              onAddModule={() => setAddingModule(true)}
+              onAddScreen={(targetMod) => setAddingScreen(targetMod || true)}
             />
           </div>
         ) : null}
@@ -2575,6 +2617,28 @@ export default function RolesPermissionsPage() {
             onCloneSuccess={async (newRole) => {
               setCloningRole(null);
               setToast({ type: "success", message: `Role "${newRole.name || 'Cloned Role'}" created successfully!` });
+              await loadPage();
+            }}
+          />
+        ) : null}
+        {addingModule ? (
+          <AddModuleModal
+            onClose={() => setAddingModule(false)}
+            onAddSuccess={async (newModule) => {
+              setAddingModule(false);
+              setToast({ type: "success", message: `Module "${newModule.name}" added successfully!` });
+              await loadPage();
+            }}
+          />
+        ) : null}
+        {addingScreen ? (
+          <AddScreenModal
+            module={typeof addingScreen === "object" ? addingScreen : null}
+            modules={modules}
+            onClose={() => setAddingScreen(null)}
+            onAddSuccess={async (modId, newScreen) => {
+              setAddingScreen(null);
+              setToast({ type: "success", message: `Screen "${newScreen.name}" added successfully!` });
               await loadPage();
             }}
           />

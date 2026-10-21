@@ -679,10 +679,12 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     screens: [
       { id: "landing-configuration", name: "Landing Page Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Campus branding, headline, hero slider, and portal links" },
       { id: "login-configuration", name: "Login Page Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Login page branding, background images, and notices" },
+      { id: "campus-images", name: "Campus Images & Sliders", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Portal landing and login slider images" },
       { id: "campus-configuration", name: "Campus Configuration & Branches", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Multi-campus branch locations and board affiliations" },
       { id: "number-series", name: "Auto Number Series", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Prefixes and sequences for admissions, invoices, and roll nos" },
       { id: "templates", name: "Templates & Bulk Uploaders", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.DOWNLOAD], description: "Certificate templates, letterheads, and Excel upload templates" },
       { id: "leave-types", name: "Leave Types & Quotas", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Casual, sick, maternity, and earned leave quotas" },
+      { id: "lop-configuration", name: "LOP (Loss of Pay) Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Loss of Pay deduction rules and leave impact configuration" },
       { id: "attendance-timing", name: "Attendance Timings & Shifts", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Grace periods, late marks, and biometric sync rules" },
       { id: "credentials", name: "Credentials Generator", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Generate login credentials for new faculty and student batches" },
       { id: "audit-logs", name: "Audit & Security Logs", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "System audit logs, user login history, and security events" },

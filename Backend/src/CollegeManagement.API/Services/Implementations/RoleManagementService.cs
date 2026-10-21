@@ -519,10 +519,12 @@ namespace CollegeManagement.API.Services.Implementations
                     screens = new[] {
                         new { id = "landing-configuration", name = "Landing Page Configuration", availableActions = actions },
                         new { id = "login-configuration", name = "Login Page Configuration", availableActions = actions },
+                        new { id = "campus-images", name = "Campus Images & Sliders", availableActions = actions },
                         new { id = "campus-configuration", name = "Campus Configuration & Branches", availableActions = actions },
                         new { id = "number-series", name = "Auto Number Series", availableActions = actions },
                         new { id = "templates", name = "Templates & Bulk Uploaders", availableActions = actions },
                         new { id = "leave-types", name = "Leave Types & Quotas", availableActions = actions },
+                        new { id = "lop-configuration", name = "LOP (Loss of Pay) Configuration", availableActions = actions },
                         new { id = "attendance-timing", name = "Attendance Timings & Shifts", availableActions = actions },
                         new { id = "credentials", name = "Credentials Generator", availableActions = actions },
                         new { id = "audit-logs", name = "Audit & Security Logs", availableActions = actions }
