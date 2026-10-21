@@ -5,6 +5,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getHostelBlocks, getRoomTypes, getRooms } from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./StudentManagementPage.css";
@@ -203,7 +204,12 @@ const hostelRoomTypeFrom = (roomType = {}) => {
   const id = valueOf(roomType, "roomTypeId", "RoomTypeId", "hostelRoomTypeId", "HostelRoomTypeId", "id", "Id");
   const name = stringValue(valueOf(roomType, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification", "name", "Name")).trim();
   const value = id !== "" ? String(id) : name;
-  return value ? { value, roomTypeId: id === "" ? "" : String(id), label: name || value, name: name || value, active: isActiveMaster(roomType) } : null;
+  const rawBlocks = valueOf(roomType, "hostelIds", "HostelIds", "blockIds", "BlockIds", "hostelId", "HostelId", "blocks", "Blocks", "hostelBlocks", "HostelBlocks");
+  const blockRefs = (Array.isArray(rawBlocks) ? rawBlocks : String(rawBlocks || "").split(","))
+    .flatMap((block) => block && typeof block === "object"
+      ? [valueOf(block, "hostelId", "HostelId", "id", "Id"), valueOf(block, "hostelCode", "HostelCode", "code", "Code"), valueOf(block, "hostelName", "HostelName", "name", "Name")]
+      : [block]).map((block) => String(block).trim().toLowerCase()).filter(Boolean);
+  return value ? { value, roomTypeId: id === "" ? "" : String(id), label: name || value, name: name || value, blockRefs, active: isActiveMaster(roomType) } : null;
 };
 const hostelFeeFrom = (fee = {}) => {
   const hostelId = valueOf(fee, "hostelId", "HostelId");
@@ -399,14 +405,23 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
         }),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
-        apiClient.get(apiEndpoints.hostel.blocks),
-        apiClient.get(apiEndpoints.hostel.roomTypes),
-        apiClient.get(apiEndpoints.hostel.rooms),
+        getHostelBlocks(),
+        getRoomTypes(),
+        getRooms(),
         apiClient.get(apiEndpoints.hostel.fees),
       ]);
       if (!active) return;
       const normalizers = [transportRouteFrom, pickupPointFrom, vehicleFrom, vehicleAssignmentFrom, hostelBlockFrom, hostelRoomTypeFrom, hostelRoomFrom, hostelFeeFrom];
       const data = results.map((result, index) => result.status === "fulfilled" ? asList(result.value.data).map(normalizers[index]).filter(Boolean) : []);
+      // Match Hostel Management's identifiers even when the shared service
+      // returns room associations as block codes and room-type names.
+      data[6] = data[6].map((room) => {
+        const block = data[4].find((item) => [item.value, item.hostelId, item.code, item.name].some((value) => value && String(value) === String(room.hostelId || room.blockValue)));
+        const type = data[5].find((item) => (room.roomTypeId && item.roomTypeId === room.roomTypeId)
+          || (room.roomTypeName && item.name.toLowerCase() === room.roomTypeName.toLowerCase()));
+        return { ...room, hostelId: block?.hostelId || room.hostelId, blockValue: block?.value || room.blockValue, roomTypeId: type?.roomTypeId || room.roomTypeId };
+      });
+      data[7] = data[7].filter((fee) => data[4].some((block) => block.hostelId === fee.hostelId));
       setAllocationLookups({ routes: data[0], pickupPoints: data[1], vehicles: data[2], vehicleAssignments: data[3], hostelBlocks: data[4], hostelRoomTypes: data[5], hostelRooms: data[6], hostelFees: data[7] });
       if (results.some((result) => result.status === "rejected")) setAllocationLookupError("Some allocation options could not be loaded. Please refresh and try again.");
     };
@@ -455,7 +470,11 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   const hostelBlockOptions = useMemo(() => allocationLookups.hostelBlocks.filter((block) => block.active), [allocationLookups.hostelBlocks]);
   const hostelRoomOptions = useMemo(() => {
     const block = allocationLookups.hostelBlocks.find((item) => item.value === String(form.hostelBlock));
+    if (!block) return [];
     const roomTypeIds = new Set(allocationLookups.hostelRooms.filter((room) => room.active && (room.blockValue === String(form.hostelBlock) || (block?.hostelId && room.hostelId === block.hostelId))).map((room) => room.roomTypeId).filter(Boolean));
+    const blockRefs = [block.value, block.hostelId, block.code, block.name, block.label].filter(Boolean).map((value) => String(value).trim().toLowerCase());
+    allocationLookups.hostelRoomTypes.filter((type) => type.active && type.blockRefs?.some((ref) => blockRefs.includes(ref)))
+      .forEach((type) => roomTypeIds.add(String(type.roomTypeId || type.value)));
     allocationLookups.hostelFees.filter((fee) => fee.active && fee.hostelId === String(block?.hostelId || form.hostelBlock)).forEach((fee) => roomTypeIds.add(fee.roomTypeId));
     const types = allocationLookups.hostelRoomTypes.length ? allocationLookups.hostelRoomTypes : [...roomTypeIds].map((roomTypeId) => {
       const room = allocationLookups.hostelRooms.find((item) => item.roomTypeId === roomTypeId);
@@ -463,7 +482,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       const label = room?.roomTypeName || fee?.roomTypeName || `Room Type ${roomTypeId}`;
       return { value: roomTypeId, roomTypeId, label, name: label, active: true };
     });
-    return types.filter((type) => type.active && (!roomTypeIds.size || roomTypeIds.has(String(type.roomTypeId || type.value))));
+    return types.filter((type) => type.active && roomTypeIds.has(String(type.roomTypeId || type.value)));
   }, [allocationLookups.hostelBlocks, allocationLookups.hostelFees, allocationLookups.hostelRooms, allocationLookups.hostelRoomTypes, form.hostelBlock]);
   useEffect(() => {
     if (form.busType || !form.busRoute) return;
@@ -481,7 +500,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       const pickup = allocationLookups.pickupPoints.find((item) => (!route || !item.routeId || item.routeId === route.value) && (matches(current.pickupPoint, item.value, item.label) || (!current.pickupPoint && matches(current.pickupPointName, item.label))));
       if (pickup && current.pickupPoint !== pickup.value) { next.pickupPoint = pickup.value; next.pickupPointName = pickup.label; changed = true; }
       const block = allocationLookups.hostelBlocks.find((item) => matches(current.hostelBlock, item.value, item.hostelId, item.code, item.name, item.label));
-      if (block && current.hostelBlock !== block.value) { next.hostelBlock = block.value; next.hostelBlockName = block.name; changed = true; }
+      if (block && (current.hostelBlock !== block.value || current.hostelBlockName !== block.name)) { next.hostelBlock = block.value; next.hostelBlockName = block.name; changed = true; }
       const room = allocationLookups.hostelRooms.find((item) => (!block || item.blockValue === block.value || item.hostelId === block.hostelId) && matches(current.hostelRoom, item.roomTypeId, item.roomTypeName, item.value, item.roomNo));
       const type = allocationLookups.hostelRoomTypes.find((item) => matches(current.hostelRoom, item.value, item.roomTypeId, item.name, item.label) || (room?.roomTypeId && item.roomTypeId === room.roomTypeId));
       const roomTypeId = type?.roomTypeId || room?.roomTypeId || type?.value;
@@ -588,6 +607,14 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   const submit = async (event) => {
     event.preventDefault();
     const nextErrors = validate(form);
+    if (form.studentType === "Residential") {
+      if (!hostelBlockOptions.some((block) => block.value === String(form.hostelBlock))) {
+        nextErrors.hostelBlock = "Select an active block from Hostel Management.";
+      }
+      if (!hostelRoomOptions.some((type) => type.value === String(form.hostelRoom))) {
+        nextErrors.hostelRoom = "Select a room type available in the selected hostel block.";
+      }
+    }
     if (placementChanged) {
       Object.entries({ boardId: "Board", academicYearId: "Academic Year", academicLevelId: "Academic Level", groupId: "Group", programId: "Program", sectionId: "Section" }).forEach(([key, label]) => {
         const lookupKey = { boardId: "boards", academicYearId: "years", academicLevelId: "levels", groupId: "groups", programId: "programs", sectionId: "sections" }[key];
@@ -613,7 +640,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       ...(form.studentType === "Non-Residential" && form.transportRequired === "Yes"
         ? { busType: form.busType, routeId: numberOrZero(form.busRoute), pickupPointId: numberOrZero(form.pickupPoint) }
         : {}),
-      ...(form.studentType === "Residential" ? { hostelId: numberOrZero(form.hostelBlock), hostelRoom: form.hostelRoomName || form.hostelRoom } : {}),
+      ...(form.studentType === "Residential" ? { hostelId: Number.isInteger(Number(form.hostelBlock)) && Number(form.hostelBlock) > 0 ? Number(form.hostelBlock) : null, hostelBlock: allocationLookups.hostelBlocks.find((block) => block.value === String(form.hostelBlock))?.name || form.hostelBlockName || null, hostelRoom: form.hostelRoomName || form.hostelRoom } : {}),
       previousSchool: form.previousSchool.trim(), previousHallTicketNumber: form.previousHallTicketNumber.trim(), previousBoard: form.previousBoard.trim(), previousYearOfPassing: numberOrZero(form.previousYearOfPassing), previousPercentage: numberOrZero(form.previousPercentage), studentCategory: form.studentCategory.trim(), scholarshipStatus: form.scholarshipStatus.trim(), scholarshipAmount: numberOrZero(form.scholarshipAmount),
       fatherName: form.fatherName.trim(), fatherOccupation: form.fatherOccupation.trim(), fatherMobile: form.fatherMobile.trim(), fatherEmail: optionalEmail(form.fatherEmail), motherName: form.motherName.trim(), motherOccupation: form.motherOccupation.trim(), motherMobile: form.motherMobile.trim(), motherEmail: optionalEmail(form.motherEmail), guardianName: form.guardianName.trim(), guardianMobile: form.guardianMobile.trim(), parentGuardianEmail: optionalEmail(form.parentGuardianEmail), annualIncome: numberOrZero(form.annualIncome), remarks: form.remarks.trim(),
     };
@@ -669,7 +696,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       <AllocationSelectField label="Student Type" value={form.studentType} onChange={changeAllocation("studentType")} onBlur={blur("studentType")} error={errors.studentType} options={["Non-Residential", "Residential"]} placeholder="Select Type" />
       {form.studentType === "Non-Residential" ? <AllocationSelectField label="School Transport Facility Required?" value={form.transportRequired} onChange={changeAllocation("transportRequired")} onBlur={blur("transportRequired")} error={errors.transportRequired} options={["Yes", "No"]} placeholder="Select option" /> : null}
       {form.studentType === "Non-Residential" && form.transportRequired === "Yes" ? <><AllocationSelectField label="Bus Type" value={form.busType} onChange={changeAllocation("busType")} onBlur={blur("busType")} error={errors.busType} options={["AC", "Non-AC"]} placeholder="Select Bus Type" /><AllocationSelectField label="Route" value={form.busRoute} onChange={changeAllocation("busRoute")} onBlur={blur("busRoute")} error={errors.busRoute} options={routeOptions} placeholder={form.busType ? "Select Route" : "Select Bus Type first"} /><AllocationSelectField label="Pickup Point" value={form.pickupPoint} onChange={changeAllocation("pickupPoint")} onBlur={blur("pickupPoint")} error={errors.pickupPoint} options={pickupOptions} placeholder={form.busRoute ? "Select Pickup Point" : "Select Route first"} /></> : null}
-      {form.studentType === "Residential" ? <><AllocationSelectField label="Hostel Block" value={form.hostelBlock} onChange={changeAllocation("hostelBlock")} onBlur={blur("hostelBlock")} error={errors.hostelBlock} options={hostelBlockOptions} placeholder="Select Hostel Block" /><AllocationSelectField label="Room Type" value={form.hostelRoom} onChange={changeAllocation("hostelRoom")} onBlur={blur("hostelRoom")} error={errors.hostelRoom} options={hostelRoomOptions} placeholder={form.hostelBlock ? "Select Room Type" : "Select Hostel Block first"} /></> : null}
+      {form.studentType === "Residential" ? <><AllocationSelectField label="Hostel Block" value={form.hostelBlock} onChange={changeAllocation("hostelBlock")} onBlur={blur("hostelBlock")} error={errors.hostelBlock} options={hostelBlockOptions} unavailableLabel={form.hostelBlockName && !/^\d+$/.test(form.hostelBlockName) ? `${form.hostelBlockName} (unavailable — select a block)` : "Saved hostel block unavailable — select a block"} placeholder="Select Hostel Block" /><AllocationSelectField label="Room Type" value={form.hostelRoom} onChange={changeAllocation("hostelRoom")} onBlur={blur("hostelRoom")} error={errors.hostelRoom} options={hostelRoomOptions} placeholder={form.hostelBlock ? "Select Room Type" : "Select Hostel Block first"} /></> : null}
       {allocationLookupError && (form.studentType === "Residential" || (form.studentType === "Non-Residential" && form.transportRequired === "Yes")) ? <small className="student-allocation-lookup-error student-profile-full">{allocationLookupError}</small> : null}
     </ProfileSection>
     <ProfileSection title="Previous Education">
@@ -691,9 +718,9 @@ function SelectField({ label, value, onChange, options, placeholder, disabled = 
   const hasSelectedOption = options.some((option) => option.value === selected);
   return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span><select value={selected} onChange={onChange} disabled={disabled} aria-busy={loading}><option value="">{loading ? `Loading ${label.toLowerCase()}…` : placeholder}</option>{selected && !hasSelectedOption ? <option value={selected}>{loading ? `Loading ${label.toLowerCase()}…` : `${label} ${selected} (unavailable)`}</option> : null}{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
 }
-function AllocationSelectField({ label, value, onChange, onBlur, error, options, placeholder }) {
+function AllocationSelectField({ label, value, onChange, onBlur, error, options, placeholder, unavailableLabel }) {
   const selected = String(value ?? "");
   const hasSelectedOption = options.some((option) => String(typeof option === "string" ? option : option.value) === selected);
-  return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label} <span className="req">*</span></span><select value={selected} onChange={onChange}><option value="">{placeholder}</option>{selected && !hasSelectedOption ? <option value={selected}>{selected}</option> : null}{options.map((option) => { const optionValue = typeof option === "string" ? option : option.value; const optionLabel = typeof option === "string" ? option : option.label; return <option key={optionValue} value={optionValue}>{optionLabel}</option>; })}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
+  return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label} <span className="req">*</span></span><select value={selected} onChange={onChange}><option value="">{placeholder}</option>{selected && !hasSelectedOption ? <option value={selected} disabled={Boolean(unavailableLabel)}>{unavailableLabel || selected}</option> : null}{options.map((option) => { const optionValue = typeof option === "string" ? option : option.value; const optionLabel = typeof option === "string" ? option : option.label; return <option key={optionValue} value={optionValue}>{optionLabel}</option>; })}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
 }
 

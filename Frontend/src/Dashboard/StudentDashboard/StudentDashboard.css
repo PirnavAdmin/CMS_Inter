@@ -5358,3 +5358,135 @@
 .sp-results-details { display: grid; gap: 12px; min-width: 0; }
 .sp-results-details > .sp-btn { justify-self: end; }
 @media (max-width: 640px) { .sp-results-toolbar > * { width: 100%; } }
+.sp-result-dialog {
+  width: min(1200px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--sp-border, #d8dfca);
+  border-radius: 18px;
+  background: var(--sp-surface, #fff);
+  color: var(--sp-text, #20271b);
+  box-shadow: 0 24px 80px #0004;
+}
+.sp-result-dialog::backdrop { background: #17200db3; backdrop-filter: blur(5px); }
+.sp-result-dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 22px; border-bottom: 1px solid var(--sp-border, #d8dfca); }
+.sp-result-dialog-head > strong { font-size: 18px; }
+.sp-result-dialog-body { padding: 22px; }
+.sp-result-dialog-body .sp-page { padding: 0; }
+@media (max-width: 640px) {
+  .sp-result-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 20px); }
+  .sp-result-dialog-head, .sp-result-dialog-body { padding: 14px; }
+}
+.sp-results-pagination { flex-wrap: wrap; gap: 12px; }
+.sp-results-pagination .sp-results-page-size { flex-wrap: wrap; gap: 10px; }
+.sp-results-page-size label { font-size: 12px; color: var(--sp-muted); }
+.sp-results-page-size select, .sp-results-page-size input {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--sp-border);
+  border-radius: 8px;
+  background: var(--sp-surface);
+  color: var(--sp-text);
+  font: inherit;
+}
+.sp-results-page-size input { width: 80px; }
+.sp-results-custom-page-size { display: inline-flex; align-items: center; gap: 6px; }
+.sp-change-password-modal {
+  --sp-border: var(--cms-border, #d7dfc9);
+  --sp-surface: var(--cms-card-bg, #fff);
+  --sp-text: var(--cms-text, #20271b);
+  --sp-muted: var(--cms-muted, #75806c);
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+}
+.sp-change-password-modal .sp-password-form { gap: 14px; }
+.sp-change-password-modal .sp-password-field > label { display: block; margin-bottom: 6px; color: var(--sp-text); font-size: 13px; font-weight: 650; }
+.sp-change-password-modal .sp-password-field > label span { color: #dc2626; }
+.sp-change-password-modal .sp-password-input-wrap { position: relative; }
+.sp-change-password-modal .sp-password-input-wrap input { height: 44px; padding-right: 46px; background: var(--sp-surface); color: var(--sp-text); box-sizing: border-box; }
+.sp-change-password-modal .sp-password-input-wrap input[aria-invalid="true"] { border-color: #dc2626; }
+.sp-change-password-modal .sp-password-input-wrap input:focus-visible { outline: 2px solid var(--cms-primary, #819900); outline-offset: 1px; }
+.sp-change-password-modal .sp-password-eye { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border: 0; border-radius: 6px; display: grid; place-items: center; background: transparent; color: var(--sp-muted); cursor: pointer; }
+.sp-change-password-modal .sp-password-eye:focus-visible { outline: 2px solid var(--cms-primary, #819900); }
+.sp-change-password-modal .sp-password-field-error { color: #dc2626; font-size: 12px; line-height: 1.4; margin-top: 5px; }
+.sp-change-password-modal .sp-password-field-error:empty { display: none; }
+.sp-change-password-modal .sp-password-requirements { margin-top: 9px; padding: 10px 12px; border: 1px solid var(--sp-border); border-radius: 8px; color: var(--sp-muted); font-size: 12px; }
+.sp-change-password-modal .sp-password-requirements ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 0; padding: 0; list-style: none; }
+.sp-change-password-modal .sp-password-requirements li.is-met { color: #20833b; }
+.sp-change-password-modal .sp-password-strength { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.sp-change-password-modal .sp-password-strength meter { flex: 1; min-width: 40px; accent-color: var(--cms-primary, #819900); }
+.sp-change-password-modal .sp-password-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 16px; margin-top: 4px; border-top: 1px solid var(--sp-border); }
+.sp-change-password-modal .sp-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 480px) { .sp-change-password-modal .sp-password-requirements ul { grid-template-columns: 1fr; } }
+.sp-transport-na { display: inline-flex; padding: 9px 18px; border-radius: 14px; background: #fff0df; color: #e65a00; font-size: 13px; font-weight: 650; }
+.sp-transport-hostel-state { text-align: center; padding: 10px 0 0; }
+.sp-transport-hostel-icon { display: grid; place-items: center; width: 112px; height: 112px; margin: 0 auto 8px; border-radius: 50%; background: #e4f8eb; font-size: 64px; }
+.sp-transport-hostel-state h2 { font-size: 22px; margin: 10px 0; color: var(--sp-text); }
+.sp-transport-hostel-state > p { margin: 0 auto; color: var(--sp-muted); line-height: 1.6; max-width: 1000px; }
+.sp-transport-hostel-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; margin: 16px 0 24px; }
+.sp-transport-hostel-badge, .sp-transport-unassigned-badge { display: inline-flex; align-items: center; gap: 9px; padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 650; }
+.sp-transport-hostel-badge { background: #e1f8eb; color: #09853c; }
+.sp-transport-unassigned-badge { background: #eaf0f5; color: #3d526f; }
+.sp-transport-hostel-info { display: flex; align-items: center; gap: 18px; padding: 16px 18px; border: 1px solid #dff1e8; border-radius: 12px; background: #f1faf5; text-align: left; }
+.sp-transport-hostel-info-icon { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border-radius: 50%; background: #e1f4e8; color: #43795a; }
+.sp-transport-hostel-info > div { flex: 1; }
+.sp-transport-hostel-info strong { color: var(--sp-text); }
+.sp-transport-hostel-info p { margin: 5px 0 0; color: var(--sp-muted); font-size: 14px; }
+.sp-transport-hostel-info .sp-btn { flex-shrink: 0; color: #0666db; border-color: #4788f8; background: var(--sp-surface); }
+.sp-transport-no-fee { display: flex; align-items: center; gap: 24px; padding: 22px 28px; border: 1px solid #e5f0ff; border-radius: 12px; background: #f1f8ff; }
+.sp-transport-no-fee > span { display: grid; place-items: center; width: 80px; height: 80px; flex: 0 0 80px; border-radius: 50%; background: #e2f0ff; color: #0875ee; }
+.sp-transport-no-fee h3 { margin: 0 0 8px; color: var(--sp-text); font-size: 20px; }
+.sp-transport-no-fee p { margin: 0; color: var(--sp-muted); line-height: 1.6; }
+.sp-transport-conflict { margin-bottom: 16px; padding: 14px; border: 1px solid #e7cd93; background: #fff9ec; border-radius: 12px; color: var(--sp-text); }
+.sp-transport-history { margin-top: 20px; }
+.sp-transport-history h3 { font-size: 16px; }
+[data-theme="dark"] .sp-transport-hostel-info, [data-theme="dark"] .sp-transport-hostel-icon { background: #203c2c; border-color: #345340; }
+[data-theme="dark"] .sp-transport-no-fee { background: #1c2e43; border-color: #2d4766; }
+[data-theme="dark"] .sp-transport-hostel-badge { background: #1c4430; color: #83e5a7; }
+[data-theme="dark"] .sp-transport-unassigned-badge { background: #293c51; color: #c8ddf5; }
+[data-theme="dark"] .sp-transport-conflict { background: #3b3322; border-color: #665631; }
+@media (max-width: 640px) {
+  .sp-transport-hostel-state h2 { font-size: 19px; }
+  .sp-transport-hostel-info { flex-wrap: wrap; gap: 12px; }
+  .sp-transport-hostel-info .sp-btn { width: 100%; justify-content: center; }
+  .sp-transport-no-fee { padding: 16px; gap: 14px; }
+  .sp-transport-no-fee > span { width: 56px; height: 56px; flex-basis: 56px; }
+}
+.sp-hostel-na { display: inline-flex; align-items: center; gap: 9px; padding: 8px 16px; border-radius: 15px; background: #eaf4ff; color: #0055d4; font-size: 13px; font-weight: 700; }
+.sp-hostel-transport-state { padding: 18px 20px; text-align: center; border-radius: 12px; background: #f0f8ff; }
+.sp-hostel-bus-illustration { display: grid; place-items: center; width: 106px; height: 106px; margin: 0 auto 8px; border-radius: 50%; background: #cdeeff; font-size: 64px; }
+.sp-hostel-transport-state h2 { margin: 8px 0; color: var(--sp-text); font-size: 22px; }
+.sp-hostel-transport-state p { margin: 0; color: var(--sp-muted); line-height: 1.6; }
+.sp-hostel-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 16px; }
+.sp-hostel-transport-badge, .sp-hostel-unassigned-badge { display: inline-flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 14px; font-size: 13px; font-weight: 700; }
+.sp-hostel-transport-badge { color: #0055c3; background: #d9f1ff; }
+.sp-hostel-unassigned-badge { color: #34404a; background: #e8eef2; }
+.sp-hostel-transport-info { display: flex; align-items: center; gap: 20px; margin-top: 10px; padding: 20px 22px; background: #f3f8f1; border-radius: 12px; }
+.sp-hostel-transport-info > span { padding-right: 20px; border-right: 1px solid var(--sp-border); font-size: 46px; }
+.sp-hostel-transport-info > div { flex: 1; }
+.sp-hostel-transport-info strong { font-size: 18px; color: var(--sp-text); }
+.sp-hostel-transport-info p { margin: 5px 0 0; color: var(--sp-muted); line-height: 1.5; }
+.sp-hostel-transport-info .sp-btn { flex-shrink: 0; border-color: #4284ef; color: #0059db; background: var(--sp-surface); }
+.sp-hostel-no-fee { display: flex; align-items: center; gap: 24px; padding: 24px; background: #faf7f1; border-radius: 12px; }
+.sp-hostel-no-fee > span { display: grid; place-items: center; width: 96px; height: 80px; flex: 0 0 96px; color: #576369; }
+.sp-hostel-no-fee h3 { margin: 0 0 9px; font-size: 21px; color: var(--sp-text); }
+.sp-hostel-no-fee p { margin: 0; color: var(--sp-muted); line-height: 1.6; }
+[data-theme="dark"] .sp-hostel-transport-state { background: #1b3044; }
+[data-theme="dark"] .sp-hostel-bus-illustration { background: #224963; }
+[data-theme="dark"] .sp-hostel-transport-info { background: #243321; }
+[data-theme="dark"] .sp-hostel-no-fee { background: #343126; }
+[data-theme="dark"] .sp-hostel-no-fee > span { color: #cad2d6; }
+[data-theme="dark"] .sp-hostel-na, [data-theme="dark"] .sp-hostel-transport-badge { color: #a0ceff; background: #1d3f65; }
+[data-theme="dark"] .sp-hostel-unassigned-badge { color: #d1dce5; background: #34404b; }
+@media (max-width: 640px) {
+  .sp-hostel-transport-state { padding: 16px 12px; }
+  .sp-hostel-transport-state h2 { font-size: 19px; }
+  .sp-hostel-transport-info { flex-wrap: wrap; gap: 12px; padding: 16px; }
+  .sp-hostel-transport-info .sp-btn { width: 100%; justify-content: center; }
+  .sp-hostel-no-fee { gap: 12px; padding: 16px; }
+  .sp-hostel-no-fee > span { width: 52px; flex-basis: 52px; }
+  .sp-hostel-no-fee h3 { font-size: 18px; }
+}

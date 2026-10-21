@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, KeyRound, Upload, Download, Eye, FileText, LayoutGrid, List, Search, RefreshCw, FolderOpen, Trash2, UserRound, House, Landmark, GraduationCap, LockKeyhole, Pencil, Save, CalendarDays, Phone, Mail, MapPin, Building2, Globe, BookOpen, Users, Hash, Layers, Percent, Heart, Fingerprint } from "lucide-react";
+import { Camera, KeyRound, Upload, Download, Eye, EyeOff, FileText, LayoutGrid, List, Search, RefreshCw, FolderOpen, Trash2, UserRound, House, Landmark, GraduationCap, LockKeyhole, Pencil, Save, CalendarDays, Phone, Mail, MapPin, Building2, Globe, BookOpen, Users, Hash, Layers, Percent, Heart, Fingerprint } from "lucide-react";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { ConfirmDialog, Modal, SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -15,6 +15,26 @@ import {
   getStudentDocumentUrl,
   getCurrentStudentDocumentFile,
 } from "../services/studentAcademicService.js";
+
+const passwordFieldDefinitions = [["oldPassword", "Current Password", "current-password"], ["newPassword", "New Password", "new-password"], ["confirmPassword", "Confirm New Password", "new-password"]];
+const emptyPasswords = () => ({ oldPassword: "", newPassword: "", confirmPassword: "" });
+const newPasswordRequirements = ({ oldPassword, newPassword }) => [
+  { label: "8–64 characters", met: newPassword.length >= 8 && newPassword.length <= 64 },
+  { label: "One uppercase letter (A–Z)", met: /[A-Z]/.test(newPassword) },
+  { label: "One lowercase letter (a–z)", met: /[a-z]/.test(newPassword) },
+  { label: "One number (0–9)", met: /[0-9]/.test(newPassword) },
+  { label: "One special character", met: /[^A-Za-z0-9\s]/.test(newPassword) },
+  { label: "Different from current password", met: Boolean(newPassword) && newPassword !== oldPassword },
+];
+function validatePasswordChange(values) {
+  const errors = {};
+  if (!values.oldPassword.trim()) errors.oldPassword = "Current password is required.";
+  if (!values.newPassword.trim()) errors.newPassword = "New password is required.";
+  else if (newPasswordRequirements(values).some((requirement) => !requirement.met)) errors.newPassword = "New password must meet all requirements below.";
+  if (!values.confirmPassword) errors.confirmPassword = "Confirm new password is required.";
+  else if (values.confirmPassword !== values.newPassword) errors.confirmPassword = "New password and confirm password do not match.";
+  return errors;
+}
 
 const editableFields = [
   "mobileNumber", "email", "address", "city", "district", "state", "pincode", "bloodGroup", "aadhaarNumber", "nationality", "religion",
@@ -88,6 +108,29 @@ export default function StudentProfile() {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwords, setPasswords] = useState({ oldPassword: "", newPassword: "", confirmPassword: "" });
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const passwordRequestLock = useRef(false);
+  const [passwordTouched, setPasswordTouched] = useState({});
+  const [passwordVisible, setPasswordVisible] = useState({});
+  const [passwordEditable, setPasswordEditable] = useState({});
+  const [passwordServerErrors, setPasswordServerErrors] = useState({});
+  const [passwordRequestError, setPasswordRequestError] = useState("");
+  const passwordValidation = validatePasswordChange(passwords);
+  const passwordScore = newPasswordRequirements(passwords).filter((requirement) => requirement.met).length + Number(passwords.newPassword.length >= 12);
+  const passwordStrength = passwordScore >= 7 ? "Strong" : passwordScore >= 5 ? "Medium" : "Weak";
+  const resetPasswordForm = () => {
+    setPasswords(emptyPasswords());
+    setPasswordTouched({});
+    setPasswordVisible({});
+    setPasswordEditable({});
+    setPasswordServerErrors({});
+    setPasswordRequestError("");
+  };
+  function openPasswordModal() { resetPasswordForm(); setPasswordOpen(true); }
+  const closePasswordModal = () => {
+    if (passwordRequestLock.current) return;
+    resetPasswordForm();
+    setPasswordOpen(false);
+  };
   const photoRef = useRef(null);
   const videoRef = useRef(null);
   const cameraSessionRef = useRef(0);
@@ -242,19 +285,50 @@ export default function StudentProfile() {
     } catch (requestError) { const message = getApiErrorMessage(requestError); setDocumentError(message); notify(message, "error"); }
     finally { setDocumentBusy(""); }
   };
-  const changePassword = async () => {
-    if (!passwords.oldPassword || !passwords.newPassword || passwords.newPassword !== passwords.confirmPassword) { notify("Enter your current password and ensure the new passwords match.", "warning"); return; }
+  const changePassword = async (event) => {
+    event.preventDefault();
+    if (passwordRequestLock.current) return;
+    setPasswordTouched({ oldPassword: true, newPassword: true, confirmPassword: true });
+    setPasswordServerErrors({});
+    setPasswordRequestError("");
+    const validation = validatePasswordChange(passwords);
+    if (Object.keys(validation).length) {
+      document.getElementById(`student-change-${Object.keys(validation)[0]}`)?.focus();
+      return;
+    }
+    passwordRequestLock.current = true;
     setPasswordSaving(true);
-    try { await changeCurrentStudentPassword(passwords); setPasswords({ oldPassword: "", newPassword: "", confirmPassword: "" }); setPasswordOpen(false); await refreshProfile(); notify("Password changed successfully."); }
-    catch (requestError) { notify(getApiErrorMessage(requestError), "error"); }
-    finally { setPasswordSaving(false); }
+    try {
+      await changeCurrentStudentPassword({ ...passwords });
+      resetPasswordForm();
+      setPasswordOpen(false);
+      notify("Password changed successfully.");
+    } catch (requestError) {
+      const status = requestError?.response?.status;
+      const message = getApiErrorMessage(requestError);
+      if (status && status < 500) {
+        if (/(?:old|current) password.*(?:incorrect|invalid|wrong)|(?:incorrect|invalid|wrong).*(?:old|current) password/i.test(message)) setPasswordServerErrors({ oldPassword: "Current password is incorrect." });
+        else {
+          const errors = requestError.response?.data?.errors ?? requestError.response?.data?.Errors;
+          const fieldErrors = {};
+          if (errors && typeof errors === "object") {
+            for (const [field, messages] of Object.entries(errors)) {
+              const key = passwordFieldDefinitions.find(([name]) => name.toLowerCase() === field.split(".").pop().toLowerCase())?.[0];
+              if (key) fieldErrors[key] = Array.isArray(messages) ? messages.join(" ") : String(messages);
+            }
+          }
+          if (Object.keys(fieldErrors).length) setPasswordServerErrors(fieldErrors);
+          else setPasswordRequestError(message);
+        }
+      } else setPasswordRequestError("Unable to change password. Please try again.");
+    } finally { passwordRequestLock.current = false; setPasswordSaving(false); }
   };
 
   if (error && !profile) return <div className="sp-page"><StudentEmptyState title="Unable to load profile" text={error}/></div>;
   if (loading && !profile) return <div className="sp-page"><SkeletonPage variant="form" rows={8}/></div>;
   return <>
     <div className="sp-page sp-profile-page">
-      <StudentPageHeader title="My Profile" subtitle="Review and maintain your permitted student information." action={<div className="sp-actions"><button className="sp-btn" onClick={() => setPasswordOpen(true)}><KeyRound size={15}/> Change Password</button></div>}/>
+      <StudentPageHeader title="My Profile" subtitle="Review and maintain your permitted student information." action={<div className="sp-actions"><button className="sp-btn" onClick={openPasswordModal}><KeyRound size={15}/> Change Password</button></div>}/>
       <section className="sp-profile-hero"><div className="sp-photo-control"><button className="sp-photo-avatar-button" onClick={openPhotoMenu} aria-label="Open profile photo options" title="Profile photo">{photoAvailable ? <img className="sp-profile-photo" src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-avatar is-xl">{initials}</span>}</button><button className="sp-photo-camera-button" onClick={openPhotoMenu} aria-label="Change profile photo" title="Change profile photo"><Camera size={16}/></button></div><div><h2>{profile?.studentName}</h2><p>Student ID: {profile?.studentId} • Roll No: {display(profile?.rollNo, true)} • {display(profile?.sectionName, true)}</p></div><input ref={photoRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={selectPhoto}/></section>
       <nav className="sp-profile-tabs" aria-label="Profile sections">
         {[["personal", "Personal Details", UserRound], ["contact", "Contact & Address", House], ["previousSchool", "Previous School", Landmark], ["academic", "Academic Information", GraduationCap], ["documents", "Documents", FileText]].map(([id, title, TabIcon]) => <label key={id}>
@@ -307,7 +381,44 @@ export default function StudentProfile() {
         {!documents.some(([label, type]) => (documentFilter === "All" || documentCategories[type] === documentFilter) && `${label} ${type}`.toLowerCase().includes(documentSearch.trim().toLowerCase())) ? <p className="sp-doc-empty">No documents match your search.</p> : null}
       </StudentCard>
     </div>
-    {passwordOpen ? <Modal title="Change Password" onClose={() => setPasswordOpen(false)} footer={<><button className="cms-btn" onClick={() => setPasswordOpen(false)}>Cancel</button><button className="cms-btn cms-btn-primary" disabled={passwordSaving} onClick={changePassword}>{passwordSaving ? "Changing..." : "Change Password"}</button></>}><div className="sp-password-form">{[["oldPassword", "Current Password"], ["newPassword", "New Password"], ["confirmPassword", "Confirm New Password"]].map(([key, label]) => <label key={key}><span>{label}</span><input type="password" value={passwords[key]} onChange={(event) => setPasswords((current) => ({ ...current, [key]: event.target.value }))}/></label>)}</div></Modal> : null}
+    {passwordOpen ? <Modal title="Change Password" className="sp-change-password-modal" onClose={closePasswordModal}>
+      <form className="sp-password-form" autoComplete="off" noValidate onSubmit={changePassword}>
+        {passwordFieldDefinitions.map(([key, label, autoComplete]) => {
+          const fieldError = passwordServerErrors[key] || (passwordTouched[key] ? passwordValidation[key] : "");
+          const id = `student-change-${key}`;
+          return <div className="sp-password-field" key={key}>
+            <label htmlFor={id}>{label} <span aria-hidden="true">*</span></label>
+            <div className="sp-password-input-wrap">
+              <input id={id} name={`student-change-${key}`} type={passwordVisible[key] ? "text" : "password"} autoComplete={autoComplete}
+                value={passwords[key]} required disabled={passwordSaving} readOnly={!passwordEditable[key]}
+                onFocus={() => setPasswordEditable((current) => ({ ...current, [key]: true }))}
+                onChange={(event) => {
+                  setPasswords((current) => ({ ...current, [key]: event.target.value }));
+                  setPasswordTouched((current) => ({ ...current, [key]: true }));
+                  setPasswordServerErrors((current) => ({ ...current, [key]: "" }));
+                  setPasswordRequestError("");
+                }}
+                onBlur={() => setPasswordTouched((current) => ({ ...current, [key]: true }))}
+                aria-invalid={Boolean(fieldError)} aria-describedby={`${id}-error${key === "newPassword" && (passwordTouched.newPassword || passwords.newPassword) ? " student-password-requirements" : ""}`}
+              />
+              <button type="button" className="sp-password-eye" disabled={passwordSaving} aria-label={`${passwordVisible[key] ? "Hide" : "Show"} ${label.toLowerCase()}`} aria-pressed={Boolean(passwordVisible[key])} onClick={() => setPasswordVisible((current) => ({ ...current, [key]: !current[key] }))}>
+                {passwordVisible[key] ? <EyeOff size={18}/> : <Eye size={18}/>}
+              </button>
+            </div>
+            <div id={`${id}-error`} className="sp-password-field-error" aria-live="polite">{fieldError}</div>
+            {key === "newPassword" && (passwordTouched.newPassword || passwords.newPassword) ? <div id="student-password-requirements" className="sp-password-requirements">
+              <ul>{newPasswordRequirements(passwords).map(({ label: requirement, met }) => <li key={requirement} className={met ? "is-met" : ""}><span aria-hidden="true">{met ? "✓" : "○"}</span> {requirement}<span className="sp-visually-hidden">{met ? ": satisfied" : ": required"}</span></li>)}</ul>
+              <div className="sp-password-strength">Strength: <strong>{passwordStrength}</strong><meter min="0" max="7" value={passwordScore} aria-label="New password strength"/></div>
+            </div> : null}
+          </div>;
+        })}
+        {passwordRequestError ? <div role="alert" className="sp-password-field-error">{passwordRequestError}</div> : null}
+        <div className="sp-password-actions">
+          <button type="button" className="cms-btn" disabled={passwordSaving} onClick={closePasswordModal}>Cancel</button>
+          <button type="submit" className="cms-btn cms-btn-primary" disabled={passwordSaving}>{passwordSaving ? "Changing..." : "Change Password"}</button>
+        </div>
+      </form>
+    </Modal> : null}
     {documentPreview ? <Modal className="sp-doc-modal" title={documentPreview.label} onClose={() => setDocumentPreview(null)}>{documentPreview.image ? <img className="sp-doc-preview-image" src={documentPreview.url} alt={documentPreview.label}/> : <iframe className="sp-doc-preview-frame" title={documentPreview.label} src={documentPreview.url}/>}</Modal> : null}
     {photoMode && !removePhotoOpen ? <Modal className={`sp-photo-modal ${photoMode === "view" ? "is-preview" : ""}`} title={photoMode === "camera" ? "Take Photo" : photoMode === "upload" ? "Upload Photo" : "Profile Photo"} onClose={closePhotoFlow} closeOnOverlay={!photoBusy} footer={photoMode === "camera" || photoMode === "upload" ? <><button className="cms-btn" disabled={photoBusy} onClick={() => { setPhotoFile(null); setPhotoFlowError(""); setPhotoMode("menu"); }}>Cancel</button>{photoMode === "camera" && photoFile ? <button className="cms-btn" disabled={photoBusy} onClick={() => { setPhotoFile(null); setCandidateFailed(false); setPhotoFlowError(""); }}>Retake</button> : null}{photoMode === "camera" && !photoFile ? <button className="cms-btn cms-btn-primary" disabled={!cameraReady || Boolean(photoFlowError)} onClick={capturePhoto}><Camera size={15}/> Capture</button> : <button className="cms-btn cms-btn-primary" disabled={photoBusy || !photoCandidateUrl || candidateFailed} onClick={uploadPhoto}>{photoBusy ? "Saving..." : photoMode === "camera" ? "Use Photo" : "Save Photo"}</button>}</> : photoMode === "view" ? <button className="cms-btn" onClick={() => setPhotoMode("menu")}>Back</button> : null}>
       {photoMode === "menu" ? <><div className="sp-photo-summary">{photoAvailable ? <img src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-photo-initials">{initials}</span>}<h3>{profile?.studentName || "Student"}</h3><p>Roll No: {display(profile?.rollNo, true)} • {display(profile?.sectionName, true)}</p></div><div className="sp-photo-menu"><button disabled={!photoAvailable || photoLoading || photoBusy} onClick={() => setPhotoMode("view")}><Eye size={20}/> View photo</button><button disabled={photoBusy} onClick={() => { setPhotoFlowError(""); setPhotoFile(null); setPhotoMode("camera"); }}><Camera size={20}/> Take photo</button><button disabled={photoBusy} onClick={() => { setPhotoFlowError(""); photoRef.current?.click(); }}><FolderOpen size={20}/> Upload photo</button><div className="sp-photo-menu-divider"/><button className="is-danger" disabled={!profile?.photo || photoBusy} onClick={() => setRemovePhotoOpen(true)}><Trash2 size={20}/> Remove photo</button></div></> : null}
