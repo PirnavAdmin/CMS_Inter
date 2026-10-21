@@ -8,7 +8,27 @@ const normalizeCode = (value = "") =>
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-const normalizeModuleKey = (value = "") => String(value).trim().toLowerCase();
+const MODULE_ALIASES = Object.freeze({
+  "staff-reimbursements": "reimbursement",
+  "staff-reimbursement": "reimbursement",
+  "staff reimbursements": "reimbursement",
+  "staff reimbursement": "reimbursement",
+  "reimbursements": "reimbursement",
+  "reimbursement": "reimbursement",
+  "reports": "reports-analytics",
+  "reports-analytics": "reports-analytics",
+  "inventory": "inventory-management",
+  "inventory-management": "inventory-management",
+  "courses": "group-management",
+  "course-management": "group-management",
+});
+
+export const normalizeModuleKey = (value = "") => {
+  const raw = String(value).trim().toLowerCase();
+  if (MODULE_ALIASES[raw]) return MODULE_ALIASES[raw];
+  const cleaned = raw.replace(/&/g, "").replace(/\//g, "-").replace(/\s+/g, "-");
+  return MODULE_ALIASES[cleaned] || cleaned;
+};
 
 export const normalizeActionKey = (value = "") => {
   const action = String(value).trim().toLowerCase();
@@ -133,6 +153,20 @@ export const toPermissionMap = (permissions = []) => {
       });
     }
   });
+
+  
+  // Mirror aliases so lookups by raw backend slug or canonical ID both resolve
+  if (map["reimbursement"]) {
+    map["staff-reimbursements"] = map["reimbursement"];
+    map["staff-reimbursement"] = map["reimbursement"];
+    map["reimbursements"] = map["reimbursement"];
+  }
+  if (map["reports-analytics"]) {
+    map["reports"] = map["reports-analytics"];
+  }
+  if (map["inventory-management"]) {
+    map["inventory"] = map["inventory-management"];
+  }
 
   return map;
 };

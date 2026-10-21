@@ -122,7 +122,16 @@ export function transformBackendPermissionsToMatrix(rawPermissions = []) {
 
   items.forEach((item) => {
     const rawModule = item.moduleKey || item.moduleId || item.subModule || item.module || "";
-    const modId = String(rawModule).trim().toLowerCase().replace(/&/g, "").replace(/\//g, "-").replace(/\s+/g, "-");
+    let modId = String(rawModule).trim().toLowerCase().replace(/&/g, "").replace(/\//g, "-").replace(/\s+/g, "-");
+    if (modId === "staff-reimbursements" || modId === "staff-reimbursement" || modId === "reimbursements") {
+      modId = "reimbursement";
+    }
+    if (modId === "reports") {
+      modId = "reports-analytics";
+    }
+    if (modId === "inventory") {
+      modId = "inventory-management";
+    }
     if (!modId) return;
 
     if (!moduleMap.has(modId)) {
@@ -397,6 +406,13 @@ export async function updateRolePermissions(roleId, payload) {
           actions: scr.actions,
         });
       });
+      // Also include module-level summary record so module-level permissions are preserved in DB
+      permissionsInput.push({
+        module: mod.module,
+        screenId: "",
+        screenName: "",
+        actions: mod.actions,
+      });
     } else {
       permissionsInput.push({
         module: mod.module,
@@ -475,6 +491,13 @@ export async function updateUserPermissions(userId, payload) {
           screenName: scr.screenName || scr.screenId,
           actions: scr.actions,
         });
+      });
+      // Also include module-level summary record so module-level permissions are preserved in DB
+      permissionsInput.push({
+        module: mod.module,
+        screenId: "",
+        screenName: "",
+        actions: mod.actions,
       });
     } else {
       permissionsInput.push({
