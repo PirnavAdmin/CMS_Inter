@@ -369,8 +369,7 @@ namespace CollegeManagement.API.Data
         public DbSet<FeePayment> FeePayments { get; set; }
 
         public DbSet<FeeReceipt> FeeReceipts { get; set; }
-
-     
+        public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
 
 
         public DbSet<BreakType> BreakTypes { get; set; }
