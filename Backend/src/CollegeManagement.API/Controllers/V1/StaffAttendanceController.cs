@@ -226,7 +226,7 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = _jwtTokenHelper.GetUserId(User);
             if (userId.HasValue && userId.Value > 0 && _context != null)
             {
-                var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId.Value);
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId.Value);
                 if (user?.StaffId.HasValue == true && user.StaffId.Value > 0)
                 {
                     return user.StaffId.Value;
@@ -234,8 +234,73 @@ namespace CollegeManagement.API.Controllers.V1
 
                 if (!string.IsNullOrEmpty(user?.Email))
                 {
-                    var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Email == user.Email && !s.IsDeleted);
-                    if (staff != null) return staff.Id;
+                    var staff = await _context.Staffs.FirstOrDefaultAsync(s => s.Email == user.Email && !s.IsDeleted);
+                    if (staff != null)
+                    {
+                        if (user != null && !user.StaffId.HasValue)
+                        {
+                            user.StaffId = staff.Id;
+                            await _context.SaveChangesAsync();
+                        }
+                        return staff.Id;
+                    }
+                }
+
+                // Auto-provision if Admin
+                if (IsCurrentUserAdmin() && user != null)
+                {
+                    var campusId = await _context.Campuses.Select(c => c.CampusId).FirstOrDefaultAsync();
+                    if (campusId <= 0) campusId = 1;
+
+                    var names = (user.FullName ?? "Administrator").Split(' ');
+                    var firstName = names[0];
+                    var lastName = names.Length > 1 ? string.Join(" ", names.Skip(1)) : "Admin";
+
+                    var newStaff = new CollegeManagement.API.Models.Staff.Staff
+                    {
+                        EmployeeId = $"ADM{user.UserId:D3}",
+                        FirstName = firstName,
+                        LastName = lastName,
+                        Email = string.IsNullOrWhiteSpace(user.Email) ? $"admin{user.UserId}@college.local" : user.Email,
+                        Mobile = string.IsNullOrWhiteSpace(user.PhoneNumber) ? "9876543210" : user.PhoneNumber,
+                        Gender = "Other",
+                        DateOfBirth = new DateTime(1985, 1, 1),
+                        Qualification = "Master's Degree",
+                        Designation = "Administrator",
+                        StaffType = "Non-Teaching",
+                        DepartmentId = 5,
+                        CampusId = campusId,
+                        JoiningDate = DateTime.UtcNow,
+                        Status = "Active",
+                        Nationality = "Indian",
+                        Country = "India",
+                        EmploymentType = "Full Time",
+                        ProfileStatus = "Approved",
+                        ProfileCompletionPercentage = 100,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    _context.Staffs.Add(newStaff);
+                    await _context.SaveChangesAsync();
+
+                    user.StaffId = newStaff.Id;
+                    await _context.SaveChangesAsync();
+
+                    var hasBalance = await _context.StaffLeaveBalances.AnyAsync(b => b.StaffId == newStaff.Id);
+                    if (!hasBalance)
+                    {
+                        var activeYear = await _context.AcademicYears.Select(y => y.AcademicYearId).FirstOrDefaultAsync();
+                        if (activeYear <= 0) activeYear = 1;
+
+                        _context.StaffLeaveBalances.AddRange(
+                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Casual, AcademicYearId = activeYear, TotalDays = 15m, UsedDays = 0m, RemainingDays = 15m },
+                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Sick, AcademicYearId = activeYear, TotalDays = 10m, UsedDays = 0m, RemainingDays = 10m },
+                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Earned, AcademicYearId = activeYear, TotalDays = 10m, UsedDays = 0m, RemainingDays = 10m }
+                        );
+                        await _context.SaveChangesAsync();
+                    }
+
+                    return newStaff.Id;
                 }
             }
 

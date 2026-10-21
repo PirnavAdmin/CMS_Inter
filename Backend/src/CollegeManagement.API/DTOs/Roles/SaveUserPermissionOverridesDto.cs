@@ -45,6 +45,7 @@ namespace CollegeManagement.API.DTOs.Roles
             var map = new Dictionary<string, string>
             {
                 { "dashboard", "Dashboard" },
+                { "board-academic-year", "Board & Academic Year" },
                 { "group-management", "Group Management" },
                 { "subject-management", "Subject Management" },
                 { "section-room", "Section & Room" },
@@ -60,6 +61,7 @@ namespace CollegeManagement.API.DTOs.Roles
                 { "department-designation", "Department & Designation" },
                 { "staff-attendance", "Staff Attendance" },
                 { "staff-leave-management", "Staff Leave Management" },
+                { "reimbursement", "Staff Reimbursements" },
                 { "examination", "Examination" },
                 { "marks-evaluation", "Marks Evaluation" },
                 { "results", "Results" },

@@ -159,9 +159,12 @@ export function hasRole(roleCode, user = getAuthUser()) {
 }
 
 export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = getAuthUser(), screenKey = null) {
-  if (hasRole("SUPER_ADMIN", user) || hasRole("ADMIN", user)) return true;
+  if (hasRole("SUPER_ADMIN", user)) return true;
   const source = permissions ?? user?.permissions ?? user?.rolePermissions;
-  if (!source) return true;
+  if (!source) {
+    if (hasRole("ADMIN", user)) return true;
+    return true;
+  }
 
   const permissionMap = toPermissionMap(source);
   const normMod = normalizeModuleKey(moduleKey);

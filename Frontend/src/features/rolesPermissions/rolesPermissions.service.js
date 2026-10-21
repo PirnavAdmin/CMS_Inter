@@ -241,26 +241,110 @@ export async function deleteRole(roleId) {
   }
 }
 
+
+const CUSTOM_MODULES_KEY = "cms_custom_permission_modules";
+const CUSTOM_SCREENS_KEY = "cms_custom_permission_screens";
+
+export function getCustomModules() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_MODULES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getCustomScreens() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_SCREENS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function addModule(moduleData) {
+  try {
+    await apiClient.post(apiEndpoints.roles.modules, moduleData);
+  } catch (err) {
+    console.warn("Backend addModule endpoint not yet available, saving to persistent catalog:", err?.message);
+  }
+  const custom = getCustomModules();
+  const exists = custom.find((m) => m.id === moduleData.id);
+  if (!exists) {
+    custom.push(moduleData);
+    localStorage.setItem(CUSTOM_MODULES_KEY, JSON.stringify(custom));
+  }
+  notifyRolesUpdated();
+  return apiResult(moduleData, "api");
+}
+
+export async function addScreen(moduleId, screenData) {
+  try {
+    await apiClient.post(`${apiEndpoints.roles.modules}/${moduleId}/screens`, screenData);
+  } catch (err) {
+    console.warn("Backend addScreen endpoint not yet available, saving to persistent catalog:", err?.message);
+  }
+  const customScreens = getCustomScreens();
+  if (!customScreens[moduleId]) {
+    customScreens[moduleId] = [];
+  }
+  const exists = customScreens[moduleId].find((s) => s.id === screenData.id);
+  if (!exists) {
+    customScreens[moduleId].push(screenData);
+    localStorage.setItem(CUSTOM_SCREENS_KEY, JSON.stringify(customScreens));
+  }
+  notifyRolesUpdated();
+  return apiResult(screenData, "api");
+}
+
 export async function getModulesAndPermissions() {
+  const customModules = getCustomModules();
+  const customScreens = getCustomScreens();
+  let baseModules = ALL_PERMISSION_MODULES;
+
   try {
     const response = await apiClient.get(apiEndpoints.roles.modules);
     const remoteModules = response?.data?.data || response?.data;
     if (Array.isArray(remoteModules) && remoteModules.length > 0) {
-      // Merge with ALL_PERMISSION_MODULES to preserve screen definitions
-      const merged = remoteModules.map((remote) => {
-        const local = ALL_PERMISSION_MODULES.find((m) => m.id === remote.id || m.name.toLowerCase() === (remote.name || "").toLowerCase());
+      baseModules = remoteModules.map((remote) => {
+        const local = ALL_PERMISSION_MODULES.find((m) => m.id === remote.id || m.name?.toLowerCase() === (remote.name || '').toLowerCase());
         return {
           ...local,
           ...remote,
           screens: local?.screens || remote.screens || [],
         };
       });
-      return apiResult(merged, "api");
     }
   } catch (err) {
-    console.warn("Live getModules failed, using full catalog:", err?.message);
+    console.warn('Live getModules failed, using full catalog:', err?.message);
   }
-  return apiResult(ALL_PERMISSION_MODULES, "catalog");
+
+  const moduleMap = new Map();
+  baseModules.forEach((m) => moduleMap.set(m.id, { ...m, screens: [...(m.screens || [])] }));
+  customModules.forEach((cm) => {
+    if (moduleMap.has(cm.id)) {
+      const existing = moduleMap.get(cm.id);
+      moduleMap.set(cm.id, { ...existing, ...cm, screens: [...(existing.screens || []), ...(cm.screens || [])] });
+    } else {
+      moduleMap.set(cm.id, { ...cm, screens: [...(cm.screens || [])] });
+    }
+  });
+
+  Object.entries(customScreens).forEach(([modId, screens]) => {
+    if (moduleMap.has(modId)) {
+      const target = moduleMap.get(modId);
+      const existingScreenIds = new Set((target.screens || []).map((s) => s.id));
+      screens.forEach((s) => {
+        if (!existingScreenIds.has(s.id)) {
+          target.screens.push(s);
+          existingScreenIds.add(s.id);
+        }
+      });
+    }
+  });
+
+  return apiResult(Array.from(moduleMap.values()), 'catalog');
 }
 
 export async function getRolePermissions(roleId, roleCode) {

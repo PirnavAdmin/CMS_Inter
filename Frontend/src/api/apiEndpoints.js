@@ -362,6 +362,8 @@ export const apiEndpoints = {
     yearlyOverview: (staffId, academicYearId) => `/api/v1/staff-attendance/staff/${staffId}/yearly-overview?academicYearId=${academicYearId}`,
     leave: "/api/v1/staff-attendance/leave",
     leaveAction: (id) => `/api/v1/staff-attendance/leave/${id}/action`,
+    myLeaveHistory: "/api/v1/staff-attendance/leave/my-history",
+    staffLeaveHistory: (staffId) => `/api/v1/staff-attendance/leave/history/staff/${staffId}`,
     importTemplate: "/api/v1/staff-attendance/import/template",
     importExcel: "/api/v1/staff-attendance/import/excel",
     // Self-Service My Attendance

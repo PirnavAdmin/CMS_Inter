@@ -333,7 +333,7 @@ export default function ProtectedRoute({
   }
 
   // Fine-grained RBAC Module & Screen permission check
-  if (requiredModule && !isAdmin && !hasRole("SUPER_ADMIN", user)) {
+  if (requiredModule && !hasRole("SUPER_ADMIN", user)) {
     const hasPermission = can(requiredModule, requiredAction, undefined, user, requiredScreen);
     if (!hasPermission) {
       return <AccessDeniedView module={requiredModule} screen={requiredScreen} action={requiredAction} />;

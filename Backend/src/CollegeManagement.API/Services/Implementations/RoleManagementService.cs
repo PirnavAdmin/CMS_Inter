@@ -433,6 +433,7 @@ namespace CollegeManagement.API.Services.Implementations
                 },
                 new { id = "staff-attendance", name = "Staff Attendance", route = "/dashboard/attendance/staff", section = "Staff", availableActions = actions,
                     screens = new[] {
+                        new { id = "my-attendance", name = "My Attendance", availableActions = actions },
                         new { id = "mark-staff-attendance", name = "Mark Staff Attendance", availableActions = actions },
                         new { id = "staff-attendance-overview", name = "Staff Attendance Overview", availableActions = actions },
                         new { id = "staff-attendance-logs", name = "Biometric Logs & Reports", availableActions = actions }
@@ -440,6 +441,7 @@ namespace CollegeManagement.API.Services.Implementations
                 },
                 new { id = "staff-leave-management", name = "Staff Leave Management", route = "/dashboard/leave-management?tab=staff", section = "Staff", availableActions = actions,
                     screens = new[] {
+                        new { id = "apply-leave", name = "Apply Leave", availableActions = actions },
                         new { id = "leave-applications", name = "Leave Applications", availableActions = actions },
                         new { id = "leave-approvals", name = "Leave Approvals", availableActions = actions },
                         new { id = "leave-balances", name = "Leave Balance & History", availableActions = actions }

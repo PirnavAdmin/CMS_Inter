@@ -13,7 +13,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [Route("api/v1/roles")]
     [ApiController]
-    [Authorize]
+    [Authorize(Roles = "Super Admin,Admin")]
     public class RoleManagementController : ControllerBase
     {
         private readonly IRoleManagementService _roleManagementService;
@@ -175,7 +175,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Deletes a role (prohibits deleting system roles).
         /// </summary>
         [HttpDelete("{id:int}")]
-        [Authorize]
+        [Authorize(Roles = "Super Admin")]
         public async Task<IActionResult> DeleteRole(int id)
         {
             try
@@ -406,7 +406,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Resets all member overrides for a user, reverting to role defaults.
         /// </summary>
         [HttpDelete("users/{userId:int}/overrides/reset")]
-        [Authorize]
+        [Authorize(Roles = "Super Admin")]
         public async Task<IActionResult> ResetUserPermissionOverrides(int userId)
         {
             try

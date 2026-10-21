@@ -522,6 +522,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     icon: CalendarCheck,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [
+      { id: "my-attendance", name: "My Attendance", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Personal staff daily check-in, check-out and biometric attendance log" },
       { id: "mark-staff-attendance", name: "Mark Staff Attendance", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Daily check-in, check-out and attendance register" },
       { id: "staff-attendance-overview", name: "Staff Attendance Overview", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Detailed monthly attendance log for individual staff" },
       { id: "staff-attendance-logs", name: "Biometric Logs & Reports", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Monthly staff biometric logs and leave impact summary" },
@@ -535,6 +536,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     icon: CalendarDays,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [
+      { id: "apply-leave", name: "Apply Leave", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Submit personal staff leave applications and track approval workflow" },
       { id: "leave-applications", name: "Leave Applications", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Submit and track personal staff leave requests" },
       { id: "leave-approvals", name: "Leave Approvals", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Department HOD and Principal review of pending leaves" },
       { id: "leave-balances", name: "Leave Balance & History", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Annual leave ledger, quotas, and utilization summary" },

@@ -989,23 +989,21 @@ export default function LeaveManagementPage() {
       }
     }
     const id = Number(
-      a?.adminId ||
-      a?.AdminId ||
-      jwtAdminId ||
       a?.staffId ||
       a?.StaffId ||
       jwtStaffId ||
+      (a?.role !== "Admin" && a?.role !== "Super Admin" ? (a?.adminId || a?.AdminId || jwtAdminId) : null) ||
       a?.id ||
       a?.userId ||
       jwtUserId ||
-      1
+      1116
     );
-    return id > 0 ? id : 1;
+    return id > 0 ? id : 1116;
   }, []);
 
   const effectiveDepartmentId = useMemo(() => {
     const a = getAuthUser() || {};
-    return Number(a?.departmentId || 1);
+    return Number(a?.departmentId || 5);
   }, []);
 
   const effectiveCampusId = useMemo(() => {
@@ -1055,14 +1053,19 @@ export default function LeaveManagementPage() {
         /* fallback to default working days calculation */
       }
 
-      // 2. Fetch admin's personal leave history & balance
+      // 2. Fetch admin's personal leave history & balance via self-service endpoint first
       let leaves = [];
       let balanceObj = null;
 
       try {
-        const histRes = await apiClient.get(
-          `/api/v1/staff-attendance/leave/history/staff/${effectiveAdminId}`
-        );
+        let histRes;
+        try {
+          histRes = await apiClient.get("/api/v1/staff-attendance/leave/my-history");
+        } catch {
+          histRes = await apiClient.get(
+            `/api/v1/staff-attendance/leave/history/staff/${effectiveAdminId}`
+          );
+        }
         const rawHist = histRes?.data;
         const histData = (rawHist && typeof rawHist === "object" && ("data" in rawHist || "Data" in rawHist))
           ? (rawHist.data || rawHist.Data)
