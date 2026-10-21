@@ -193,6 +193,43 @@ export function normalizeRoleCode(value = "") {
   if (code === "DRIVER") return "BUS_DRIVER";
   return code;
 }
+export const ROLE_PRIORITY_ORDER = Object.freeze([
+  "SUPER_ADMIN",
+  "ADMIN",
+  "PRINCIPAL",
+  "DEAN",
+  "HOD",
+  "FACULTY",
+  "STUDENT",
+  "PARENT",
+  "ACCOUNTANT",
+  "EXAMINATION_CELL",
+  "LIBRARIAN",
+  "HOSTEL_WARDEN",
+  "PLACEMENT_OFFICER",
+  "BUS_DRIVER",
+  "OFFICE_STAFF",
+  "ADMISSION_STAFF",
+  "TRANSPORT_MANAGER",
+  "LAB_ASSISTANT",
+  "ATTENDANT",
+  "INVENTORY_MANAGER",
+  "UNASSIGNED",
+]);
+
+export function sortRolesByPriority(roles = []) {
+  if (!Array.isArray(roles)) return [];
+  const priorityMap = new Map(ROLE_PRIORITY_ORDER.map((code, index) => [code, index]));
+  return [...roles].sort((a, b) => {
+    const codeA = normalizeRoleCode(a?.code || a?.roleCode || a?.name || a?.roleName);
+    const codeB = normalizeRoleCode(b?.code || b?.roleCode || b?.name || b?.roleName);
+    const pA = priorityMap.has(codeA) ? priorityMap.get(codeA) : 999;
+    const pB = priorityMap.has(codeB) ? priorityMap.get(codeB) : 999;
+    if (pA !== pB) return pA - pB;
+    return (a?.name || "").localeCompare(b?.name || "");
+  });
+}
+
 
 export function hasRole(roleCode, user = getAuthUser()) {
   const expected = normalizeRoleCode(roleCode);

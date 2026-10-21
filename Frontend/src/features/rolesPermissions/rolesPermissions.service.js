@@ -7,7 +7,7 @@ import {
   ROLE_SEEDS,
   USER_ASSIGNMENT_FALLBACK,
 } from "./rolesPermissions.constants.js";
-import { normalizePermissionPayload, normalizeRoleCode } from "./permissionUtils.jsx";
+import { normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
 
 const cloneItem = (item) => {
   if (!item || typeof item !== "object") return item;
@@ -40,11 +40,19 @@ const ROLE_CODE_TO_ID = {
   LIBRARIAN: 9,
   HOSTEL_WARDEN: 10,
   TRAINING_PLACEMENT: 11,
+  PLACEMENT_OFFICER: 11,
   BUS_DRIVER: 12,
   DRIVER: 12,
+  ATTENDANT: 13,
+  OFFICE_STAFF: 13,
   RECEPTIONIST: 13,
+  DEAN: 14,
   LAB_ASSISTANT: 14,
-  SYSTEM_AUDITOR: 15,
+  ADMISSION_STAFF: 14,
+  PRINCIPAL: 15,
+  INVENTORY_MANAGER: 16,
+  INVENTORY: 16,
+  UNASSIGNED: 17,
 };
 
 const resolveRoleIdParam = (roleId, roleCode) => {
@@ -57,15 +65,19 @@ const resolveRoleIdParam = (roleId, roleCode) => {
 const normalizeRole = (role = {}) => {
   const count = Number(role.assignedUserCount ?? role.userCount ?? role.usersCount ?? 0);
   const code = normalizeRoleCode(role.code || role.roleCode || role.roleName || role.name);
+  const matchedSeed = ROLE_SEEDS.find(
+    (s) => s.code === code || s.roleId === (role.roleId ?? role.id) || s.id === role.id
+  );
   return {
     ...role,
     id: String(role.id ?? role.roleId ?? role.code ?? role.name),
-    roleId: Number(role.roleId ?? role.id) || undefined,
+    roleId: Number(role.roleId ?? role.id) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
     code,
-    name: role.name || role.roleName || (code === "ACCOUNTANT" ? "Accountant" : ""),
-    description: role.description || "",
-    isSystemRole: role.isSystemRole ?? true,
-    isProtected: role.isProtected ?? (code === "SUPER_ADMIN"),
+    name: role.name || role.roleName || matchedSeed?.name || (code === "ACCOUNTANT" ? "Accountant" : code),
+    description: role.description || matchedSeed?.description || "",
+    isSystemRole: role.isSystemRole ?? matchedSeed?.isSystemRole ?? false,
+    isProtected: role.isProtected ?? matchedSeed?.isProtected ?? (code === "SUPER_ADMIN"),
+    icon: role.icon || matchedSeed?.icon,
     assignedUserCount: count,
     userCount: count,
     usersCount: count,
@@ -171,14 +183,14 @@ export async function getRoles(filters = {}) {
     const response = await apiClient.get(apiEndpoints.roles.cards, { params: filters });
     const payload = response?.data?.data || response?.data || [];
     if (Array.isArray(payload) && payload.length > 0) {
-      return apiResult(payload.map(normalizeRole), "api");
+      return apiResult(sortRolesByPriority(payload.map(normalizeRole)), "api");
     }
   } catch (err) {
     console.warn("Live getRoles failed, falling back to cached/seed data:", err?.message);
   }
 
   const counts = roleCounts();
-  return apiResult(mockRoles.map((role) => ({ ...role, assignedUserCount: counts.get(role.code) ?? role.assignedUserCount })), "fallback");
+  return apiResult(sortRolesByPriority(mockRoles.map((role) => ({ ...role, assignedUserCount: counts.get(role.code) ?? role.assignedUserCount }))), "fallback");
 }
 
 export async function getRoleById(roleId) {

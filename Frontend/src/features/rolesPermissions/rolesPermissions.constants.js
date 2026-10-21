@@ -158,6 +158,29 @@ export const ROLE_SEEDS = Object.freeze([
     icon: UserCog,
   },
   {
+    id: "principal",
+    roleId: 15,
+    code: "PRINCIPAL",
+    name: "Principal",
+    description: "Head of the institution responsible for overall college administration, staff oversight, and institutional approvals.",
+    isSystemRole: false,
+    isProtected: false,
+    assignedUserCount: 1,
+    icon: Landmark,
+  },
+  {
+    id: "dean",
+    roleId: 14,
+    code: "DEAN",
+    name: "Dean",
+    description: "Head of the faculty and academic programs.",
+    isSystemRole: false,
+    isProtected: false,
+    assignedUserCount: 0,
+    icon: Building2,
+  },
+
+  {
     id: "hod",
     code: "HOD",
     name: "HOD",
@@ -303,6 +326,29 @@ export const ROLE_SEEDS = Object.freeze([
     icon: BookOpen,
     discoveredFrom: "nonTeachingRolesConfig.js laboratory support roles",
   },
+  {
+    id: "inventory-manager",
+    roleId: 16,
+    code: "INVENTORY_MANAGER",
+    name: "Inventory Manager",
+    description: "Stock tracking, supplier management, purchase orders, item distribution, and inventory reports.",
+    isSystemRole: false,
+    isProtected: false,
+    assignedUserCount: 0,
+    icon: ReceiptIndianRupee,
+  },
+  {
+    id: "unassigned",
+    roleId: 17,
+    code: "UNASSIGNED",
+    name: "Unassigned",
+    description: "Default role for users with no active assignment.",
+    isSystemRole: true,
+    isProtected: false,
+    assignedUserCount: 0,
+    icon: Users,
+  },
+
 ]);
 
 export const MODULE_PERMISSION_CONFIG = Object.freeze([
@@ -749,6 +795,17 @@ export const USER_ASSIGNMENT_FALLBACK = Object.freeze([
     status: "Active",
   },
   {
+    id: "usr-principal-001",
+    userId: "PRN-001",
+    name: "Dr. S. K. Rao",
+    userType: "Staff",
+    department: "Administration",
+    designation: "Principal",
+    roleCodes: ["PRINCIPAL"],
+    status: "Active",
+  },
+
+  {
     id: "usr-hod-001",
     userId: "EMP-1001",
     name: "Dr. Anitha Rao",
@@ -781,6 +838,16 @@ export const USER_ASSIGNMENT_FALLBACK = Object.freeze([
 ]);
 
 export const ROLE_MEMBER_FALLBACK = Object.freeze([
+  {
+    id: "usr-principal-001",
+    userId: "PRN-001",
+    name: "Dr. S. K. Rao",
+    userType: "Staff",
+    department: "Administration",
+    designation: "Principal",
+    roleCodes: ["PRINCIPAL"],
+    status: "Active",
+  },
   {
     id: "usr-hod-001",
     userId: "EMP-1001",

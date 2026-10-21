@@ -498,10 +498,12 @@ function AddModuleModal({ onClose, onAddSuccess }) {
               <option value="Academic">Academic</option>
               <option value="Student">Student</option>
               <option value="Staff">Staff</option>
+              <option value="Examinations">Examinations</option>
               <option value="Finance">Finance</option>
+              <option value="Documents & Reports">Documents & Reports</option>
+              <option value="Hostel Management">Hostel Management</option>
               <option value="Operations">Operations</option>
-              <option value="Reports">Reports</option>
-              <option value="Settings">Settings</option>
+              <option value="Overview">Overview</option>
             </select>
           </div>
           <div className="rbac-form-field">
@@ -1021,6 +1023,15 @@ function PermissionMatrix({
   }, [permissionRows]);
 
   const [expandedModules, setExpandedModules] = useState(() => new Set());
+  const [sectionFilter, setSectionFilter] = useState("all");
+
+  const availableSections = useMemo(() => {
+    const set = new Set();
+    modules.forEach((m) => {
+      if (m.section) set.add(m.section);
+    });
+    return Array.from(set).sort();
+  }, [modules]);
 
   // Auto-expand if search query matches a module or screen
   useEffect(() => {
@@ -1057,6 +1068,7 @@ function PermissionMatrix({
   const filteredModules = useMemo(() => {
     const q = query.trim().toLowerCase();
     return modules
+      .filter((module) => sectionFilter === "all" || module.section === sectionFilter)
       .map((module) => {
         const modData = permissionStructure.get(module.id);
         const modActions = modData?.actions || new Set();
@@ -1105,7 +1117,7 @@ function PermissionMatrix({
         };
       })
       .filter(Boolean);
-  }, [modules, query, statusFilter, permissionStructure]);
+  }, [modules, query, statusFilter, sectionFilter, permissionStructure]);
 
   const allAreExpanded = filteredModules.length > 0 && filteredModules.every((m) => expandedModules.has(m.id));
   const restriction = getPermissionRestriction({ selectedRole, saving });
@@ -1154,66 +1166,89 @@ function PermissionMatrix({
       </div>
 
       <div className="rbac-permission-toolbar">
-        <h3>Permissions</h3>
-        <div className="rbac-toolbar-tools">
-          <button
-            type="button"
-            className="rbac-expand-toggle-all"
-            onClick={allAreExpanded ? collapseAll : expandAll}
-            title={allAreExpanded ? "Collapse all modules" : "Expand all modules"}
-          >
-            <Layers size={14} aria-hidden="true" />
-            <span>{allAreExpanded ? "Collapse All" : "Expand All"}</span>
-          </button>
-          <button
-            type="button"
-            className="rbac-export-btn"
-            onClick={onExportCsv}
-            title="Export permission matrix to CSV"
-          >
-            <Download size={14} aria-hidden="true" />
-            <span>Export CSV</span>
-          </button>
-          <button
-            type="button"
-            className="rbac-export-btn"
-            onClick={onAddModule}
-            title="Add a new functional module to permissions"
-          >
-            <Plus size={14} aria-hidden="true" />
-            <span>Add Module</span>
-          </button>
-          <button
-            type="button"
-            className="rbac-export-btn"
-            onClick={() => onAddScreen && onAddScreen(null)}
-            title="Add a new screen under a module"
-          >
-            <Plus size={14} aria-hidden="true" />
-            <span>Add Screen</span>
-          </button>
+        <div className="rbac-permission-toolbar-top">
+          <div className="rbac-permission-title-group">
+            <h3>Permissions</h3>
+            <span className="rbac-module-count-badge">
+              {filteredModules.length} {filteredModules.length === 1 ? "module" : "modules"}
+            </span>
+          </div>
+          <div className="rbac-toolbar-tools">
+            <button
+              type="button"
+              className="rbac-expand-toggle-all"
+              onClick={allAreExpanded ? collapseAll : expandAll}
+              title={allAreExpanded ? "Collapse all modules" : "Expand all modules"}
+            >
+              <Layers size={14} aria-hidden="true" />
+              <span>{allAreExpanded ? "Collapse All" : "Expand All"}</span>
+            </button>
+            <button
+              type="button"
+              className="rbac-export-btn"
+              onClick={onExportCsv}
+              title="Export permission matrix to CSV"
+            >
+              <Download size={14} aria-hidden="true" />
+              <span>Export CSV</span>
+            </button>
+            <button
+              type="button"
+              className="rbac-export-btn rbac-btn-add-module"
+              onClick={onAddModule}
+              title="Add a new functional module to permissions"
+            >
+              <Plus size={14} aria-hidden="true" />
+              <span>Add Module</span>
+            </button>
+            <button
+              type="button"
+              className="rbac-export-btn rbac-btn-add-screen"
+              onClick={() => onAddScreen && onAddScreen(null)}
+              title="Add a new screen under a module"
+            >
+              <Plus size={14} aria-hidden="true" />
+              <span>Add Screen</span>
+            </button>
+          </div>
         </div>
-        <div className="rbac-toolbar-filters">
-          <SearchBox value={query} onChange={onQuery} placeholder="Search modules & screens..." label="Search permissions" />
-          <select
-            className="rbac-status-filter"
-            value={statusFilter}
-            onChange={(e) => onStatusFilterChange && onStatusFilterChange(e.target.value)}
-            title="Filter by permission grant status"
-            aria-label="Filter permissions by status"
-          >
-            <option value="all">All Screens</option>
-            <option value="granted">Granted Only</option>
-            <option value="denied">Denied Only</option>
-            <option value="partial">Partial Only</option>
-          </select>
-          <MarkAllControl
-            checked={markAllState.checked}
-            indeterminate={markAllState.indeterminate}
-            disabled={markAllState.disabled}
-            roleName={selectedRole?.name}
-            onChange={onMarkAll}
-          />
+        <div className="rbac-permission-toolbar-bottom">
+          <div className="rbac-search-wrapper">
+            <SearchBox value={query} onChange={onQuery} placeholder="Search modules & screens..." label="Search permissions" />
+          </div>
+          <div className="rbac-toolbar-filters">
+            <select
+              className="rbac-status-filter rbac-section-filter"
+              value={sectionFilter}
+              onChange={(e) => setSectionFilter(e.target.value)}
+              title="Filter by functional category"
+              aria-label="Filter permissions by section"
+            >
+              <option value="all">All Sections ({modules.length})</option>
+              {availableSections.map((sec) => (
+                <option key={sec} value={sec}>{sec}</option>
+              ))}
+            </select>
+            <select
+              className="rbac-status-filter"
+              value={statusFilter}
+              onChange={(e) => onStatusFilterChange && onStatusFilterChange(e.target.value)}
+              title="Filter by permission grant status"
+              aria-label="Filter permissions by status"
+            >
+              <option value="all">All Screens</option>
+              <option value="granted">Granted Only</option>
+              <option value="denied">Denied Only</option>
+              <option value="partial">Partial Only</option>
+            </select>
+            <MarkAllControl
+              checked={markAllState.checked}
+              indeterminate={markAllState.indeterminate}
+              disabled={markAllState.disabled}
+              roleName={selectedRole?.name}
+              onChange={onMarkAll}
+            />
+          </div>
         </div>
       </div>
       {filteredModules.length ? (
@@ -1895,7 +1930,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
     setRemovalCandidate(null);
   };
 
-  const assignRole = async (user, roleCode) => {
+  const assignRole = async (user, roleCode, roleId = null) => {
     if (!roleCode) return;
     if ((user.roleCodes || []).some((code) => normalizeRoleCode(code) === normalizeRoleCode(roleCode))) {
       setToast({ type: "info", message: "This user already has that role." });
@@ -1903,7 +1938,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
     }
     setSavingUserId(user.id);
     try {
-      await assignRoleToUser(user.id, roleCode);
+      await assignRoleToUser(user.id, roleCode, roleId);
       setToast({ type: "success", message: "Role assignment updated." });
       closeActionMenu();
       await loadAssignments();
@@ -2070,7 +2105,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
                     key={role.code}
                     className={`rbac-role-submenu-item ${isCurrent ? "is-current" : ""}`}
                     disabled={savingUserId === activeMenu.user.id}
-                    onClick={() => assignRole(activeMenu.user, role.code)}
+                    onClick={() => assignRole(activeMenu.user, role.code, role.roleId || role.id)}
                   >
                     {role.name}
                     {isCurrent ? <Check size={14} aria-hidden="true" /> : null}
