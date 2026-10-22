@@ -369,8 +369,7 @@ namespace CollegeManagement.API.Data
         public DbSet<FeePayment> FeePayments { get; set; }
 
         public DbSet<FeeReceipt> FeeReceipts { get; set; }
-
-     
+        public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
 
 
         public DbSet<BreakType> BreakTypes { get; set; }
@@ -1946,7 +1945,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             modelBuilder.Entity<Permission>(entity =>
             {
                 entity.HasIndex(e => e.PermissionCode).IsUnique();
-                entity.HasIndex(e => new { e.SubModule, e.Action }).IsUnique();
+                entity.HasIndex(e => new { e.SubModule, e.ScreenCode, e.Action }).IsUnique();
             });
 
             // RolePermissions Configuration

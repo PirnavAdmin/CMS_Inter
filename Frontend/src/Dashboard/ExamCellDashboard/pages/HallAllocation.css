@@ -1,0 +1,437 @@
+/* Hall Allocation Module Component-Scoped Stylesheet */
+/* Preserves Admin / Exam Cell unified olive-glass aesthetic tokens */
+
+.hall-allocation-container {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* 4 Compact Summary Cards Row matching Admin KPI cards */
+.hall-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.hall-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  min-height: 68px;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.hall-summary-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+}
+
+.hall-summary-card.tone-green {
+  border-left: 3px solid #16a34a;
+}
+.hall-summary-card.tone-blue {
+  border-left: 3px solid #2563eb;
+}
+.hall-summary-card.tone-violet {
+  border-left: 3px solid #9333ea;
+}
+.hall-summary-card.tone-orange {
+  border-left: 3px solid #d97706;
+}
+
+.hall-summary-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.tone-green .hall-summary-icon {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+.tone-blue .hall-summary-icon {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+.tone-violet .hall-summary-icon {
+  background: rgba(168, 85, 247, 0.12);
+  color: #9333ea;
+}
+.tone-orange .hall-summary-icon {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.hall-summary-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+  flex: 1;
+}
+
+.hall-summary-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cms-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hall-summary-value-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hall-summary-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--cms-text, #1A2114);
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hall-summary-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.tone-green .hall-summary-badge {
+  background: rgba(34, 197, 94, 0.14);
+  color: #16a34a;
+}
+.tone-blue .hall-summary-badge {
+  background: rgba(59, 130, 246, 0.14);
+  color: #2563eb;
+}
+.tone-violet .hall-summary-badge {
+  background: rgba(168, 85, 247, 0.14);
+  color: #9333ea;
+}
+.tone-orange .hall-summary-badge {
+  background: rgba(245, 158, 11, 0.14);
+  color: #d97706;
+}
+
+.hall-summary-subtext {
+  font-size: 11px;
+  color: var(--cms-muted, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Examination Selection & Hall Filters Panel */
+.hall-filter-card {
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.hall-filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hall-filter-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--cms-text, #1A2114);
+}
+
+.hall-filter-subtitle {
+  font-size: 13px;
+  color: var(--cms-muted, #64748b);
+  margin: 3px 0 0;
+}
+
+.hall-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hall-filter-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.hall-filter-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hall-filter-label {
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: var(--cms-text, #1A2114);
+  display: block;
+}
+
+.hall-select {
+  width: 100%;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  padding: 0 10px;
+  font-size: 13px;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.hall-select:focus {
+  border-color: var(--cms-primary);
+  box-shadow: 0 0 0 2px rgba(111, 132, 0, 0.15);
+}
+
+.hall-secondary-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hall-search-wrap {
+  flex: 1 1 260px;
+  position: relative;
+}
+
+.hall-search-input {
+  width: 100%;
+  height: 38px;
+  padding-left: 36px;
+  padding-right: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  font-size: 13px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.hall-search-input:focus {
+  border-color: var(--cms-primary);
+  box-shadow: 0 0 0 2px rgba(111, 132, 0, 0.15);
+}
+
+.hall-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--cms-muted, #94a3b8);
+  pointer-events: none;
+}
+
+.hall-room-filter-wrap {
+  flex: 0 1 240px;
+  min-width: 180px;
+}
+
+.hall-reset-btn {
+  height: 38px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hall-reset-btn:hover {
+  background: var(--cms-subtle, #f1f5f9);
+  color: var(--cms-text);
+}
+
+/* Scheduled Slots & Hall Assignments Table */
+.hall-table-card {
+  border-radius: 12px;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.hall-table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hall-table-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cms-text, #1A2114);
+}
+
+.hall-table-subtitle {
+  font-size: 12px;
+  color: var(--cms-muted, #64748b);
+  display: block;
+  margin-top: 2px;
+}
+
+.hall-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.hall-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.hall-table th {
+  padding: 10px 14px;
+  background: var(--cms-subtle, #f8fafc);
+  color: var(--cms-muted, #64748b);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--cms-border);
+  white-space: nowrap;
+}
+
+.hall-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--cms-border, rgba(0, 0, 0, 0.05));
+  color: var(--cms-text);
+  vertical-align: middle;
+}
+
+.hall-table tr:hover td {
+  background: color-mix(in srgb, var(--cms-primary) 3%, transparent);
+}
+
+/* Status Badges */
+.hall-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hall-badge.allocated {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+
+.hall-badge.pending {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1100px) {
+  .hall-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hall-filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .hall-summary-grid {
+    grid-template-columns: 1fr;
+  }
+  .hall-filter-grid {
+    grid-template-columns: 1fr;
+  }
+  .hall-secondary-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hall-room-filter-wrap {
+    flex: 1 1 100%;
+  }
+}
+
+/* Printable Seating Plan Styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-seating-plan,
+  #printable-seating-plan * {
+    visibility: visible;
+  }
+  #printable-seating-plan {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: #ffffff;
+  }
+  .modal-overlay,
+  .modal-close,
+  button {
+    display: none !important;
+  }
+}

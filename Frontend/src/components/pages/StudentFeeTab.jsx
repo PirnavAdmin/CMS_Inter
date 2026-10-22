@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getHostelBlocks, getRoomTypes } from "@/api/hostelApi.js";
 import { SkeletonTable } from "@/components/common/Ui.jsx";
 import { formatCurrency, formatDate } from "@/data/feeManagementData.js";
 
@@ -364,45 +365,50 @@ async function loadFacilityFee(studentId) {
     "IsResidential",
   ).toLowerCase();
   if (["residential", "hostel", "hosteller", "true", "2"].includes(type)) {
-    const result = await apiClient.get(apiEndpoints.hostel.fees, { skipGlobalLoader: true });
-    const block = text(
-      "hostelId",
-      "HostelId",
-      "hostelBlock",
-      "HostelBlock",
-      "hostelName",
-      "HostelName",
-      "hostelBlockName",
-      "HostelBlockName",
-    );
-    const room = text(
-      "roomTypeId",
-      "RoomTypeId",
-      "hostelRoomTypeId",
-      "HostelRoomTypeId",
-      "hostelRoom",
-      "HostelRoom",
-      "roomTypeName",
-      "RoomTypeName",
-      "hostelRoomName",
-      "HostelRoomName",
-    );
-    const fee = facilityRows(result.data).find(
+    const [feeResult, blocksResult, typesResult] = await Promise.allSettled([
+      apiClient.get(apiEndpoints.hostel.fees, { skipGlobalLoader: true }),
+      getHostelBlocks(),
+      getRoomTypes(),
+    ]);
+    const selectedValues = (...keys) => sources.flatMap((row) => keys.map((key) => readText(row, key))).filter((value) => value && value !== "0");
+    const blockValues = selectedValues("hostelId", "HostelId", "hostelBlock", "HostelBlock", "hostelName", "HostelName", "hostelBlockName", "HostelBlockName");
+    const roomValues = selectedValues("roomTypeId", "RoomTypeId", "hostelRoomTypeId", "HostelRoomTypeId", "hostelRoom", "HostelRoom", "roomTypeName", "RoomTypeName", "hostelRoomName", "HostelRoomName");
+    const fee = facilityRows(feeResult.status === "fulfilled" ? feeResult.value.data : []).find(
       (row) =>
         facilityActive(row) &&
-        facilityMatches(block, row.hostelId, row.HostelId, row.hostelName, row.HostelName) &&
-        facilityMatches(
-          room,
+        blockValues.some((value) => facilityMatches(value, row.hostelId, row.HostelId, row.hostelName, row.HostelName)) &&
+        roomValues.some((value) => facilityMatches(
+          value,
           row.roomTypeId,
           row.RoomTypeId,
           row.roomTypeName,
           row.RoomTypeName,
           row.roomTypeSpecification,
           row.RoomTypeSpecification,
-        ),
+        )),
     );
-    if (!fee)
+    if (!fee) {
+      const blocks = blocksResult.status === "fulfilled" ? facilityRows(blocksResult.value.data) : [];
+      const blockRecord = blocks.find((row) => facilityActive(row) && blockValues.some((value) => facilityMatches(value, row.hostelId, row.HostelId, row.id, row.Id, row.hostelCode, row.HostelCode, row.code, row.hostelName, row.HostelName, row.name)));
+      const blockRefs = blockRecord ? [readText(blockRecord, "hostelId", "HostelId", "id", "Id"), readText(blockRecord, "hostelCode", "HostelCode", "code", "Code"), readText(blockRecord, "hostelName", "HostelName", "name", "Name")].filter(Boolean) : [];
+      const types = typesResult.status === "fulfilled" ? facilityRows(typesResult.value.data) : [];
+      const category = types.find((row) => {
+        if (!facilityActive(row) || !roomValues.some((value) => facilityMatches(value, row.roomTypeId, row.RoomTypeId, row.id, row.Id, row.roomTypeName, row.RoomTypeName, row.roomTypeSpecification, row.RoomTypeSpecification, row.name, row.Name))) return false;
+        const mapping = read(row, "hostelIds", "HostelIds", "blockIds", "BlockIds", "hostelId", "HostelId", "blocks", "Blocks", "hostelBlocks", "HostelBlocks");
+        const refs = (Array.isArray(mapping) ? mapping : String(mapping || "").split(",")).flatMap((entry) => entry && typeof entry === "object" ? [readText(entry, "hostelId", "HostelId", "id", "Id"), readText(entry, "hostelCode", "HostelCode", "code", "Code"), readText(entry, "hostelName", "HostelName", "name", "Name")] : [entry]);
+        return refs.some((ref) => blockRefs.some((value) => facilityMatches(value, ref)));
+      });
+      const rawFee = read(category, "hostelFeeAmount", "HostelFeeAmount", "feeAmount", "FeeAmount", "fee", "Fee");
+      const match = String(rawFee ?? "").trim().match(/^(?:₹|INR|Rs\.?\s*)?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:\/\s*(mo|month|monthly|yr|year|yearly))?$/i);
+      const amount = match ? Number(match[1].replace(/,/g, "")) : null;
+      if (category && amount !== null && Number.isFinite(amount)) return { fee: {
+        type: "Hostel Fee", amount,
+        plan: readText(category, "feeFrequency", "FeeFrequency") || (/^(mo|month|monthly)$/i.test(match[2] || "") ? "Monthly" : /^(yr|year|yearly)$/i.test(match[2] || "") ? "Yearly" : "Configured Rate"),
+        detail: [readText(blockRecord, "hostelName", "HostelName", "name", "Name"), readText(category, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification", "name", "Name"), "Configured accommodation rate; payments and dues follow the student fee account."].filter(Boolean).join(" | "),
+      } };
+      if (feeResult.status === "rejected") throw feeResult.reason;
       return { error: "No hostel fee is configured for this student's hostel and room type." };
+    }
     const amount = readNumber(fee, "hostelFeeAmount", "HostelFeeAmount", "feeAmount", "FeeAmount");
     const deposit = readNumber(fee, "securityDeposit", "SecurityDeposit");
     const total =

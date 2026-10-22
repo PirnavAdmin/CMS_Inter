@@ -11,6 +11,14 @@
 .accountant-fee-page .cms-page-head { margin-bottom: 16px; gap: 12px; }
 .accountant-fee-page .cms-fee-stack { min-width: 0; }
 .accountant-fee-page .accountant-fee-ledger-body { padding: 0; }
+.accountant-fee-page .accountant-student-fee-details .cms-fee-drawer-body { min-width: 0; }
+.accountant-fee-page .accountant-student-fee-details .cms-fee-block { min-width: 0; }
+.accountant-fee-page .accountant-student-fee-details .cms-fee-account-head > div { min-width: 0; }
+.accountant-fee-page .accountant-student-fee-details .cms-fee-account-head h3,
+.accountant-fee-page .accountant-student-fee-details .cms-fee-account-head span { overflow-wrap: anywhere; }
+.accountant-fee-page .accountant-student-fee-details .cms-fee-kv .cms-badge { display: inline-flex; max-width: 100%; }
+.accountant-fee-page .accountant-student-fee-details .cms-fee-breakdown-table { width: 100%; min-width: 760px; table-layout: fixed; }
+.accountant-fee-page .accountant-student-fee-details .cms-fee-breakdown-table td:not(.num) { overflow-wrap: anywhere; white-space: normal; }
 .accountant-fee-page .cms-fee-filter-row { flex-wrap: wrap; }
 .accountant-fee-page .cms-fee-filter-row .cms-fee-filter { flex-basis: 100px; }
 .accountant-fee-page .cms-fee-types-table th:nth-child(3),

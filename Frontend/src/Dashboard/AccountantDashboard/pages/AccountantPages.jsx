@@ -233,6 +233,7 @@ export function AccountantPayments() {
         subtitle="Manage student fee transactions, faculty reimbursement payables, and bank disbursements."
         action={
           <div className="sp-actions" style={{ display: "flex", gap: "8px" }}>
+
             <Link className="sp-btn" to="/accountant-dashboard/fees?tab=ledger">Fee ledger</Link>
             <Link className="sp-btn primary" to="/accountant-dashboard/reimbursements">
               <img src={reimbursementIcon} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /> Reimbursement Portal

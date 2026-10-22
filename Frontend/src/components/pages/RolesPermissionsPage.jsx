@@ -13,6 +13,9 @@ import {
   Filter,
   Layers,
   MoreVertical,
+  Pencil,
+  Plus,
+  Trash2,
   RotateCcw,
   Save,
   Search,
@@ -34,9 +37,13 @@ import {
   PRESET_LABELS,
 } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import {
+  addModule,
+  addScreen,
   assignRoleToUser,
   cloneRole,
   createRole,
+  deleteRole,
+  updateRole,
   exportPermissionsToCsv,
   getModulesAndPermissions,
   getRolePermissions,
@@ -215,6 +222,488 @@ function initials(name = "User") {
   return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
 }
 
+
+function CreateRoleModal({ onClose, onCreateSuccess }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await createRole({
+        name: name.trim(),
+        description: description.trim(),
+      });
+      onCreateSuccess(res?.data || { name: name.trim() });
+    } catch (err) {
+      setError(err?.message || "Failed to create role.");
+      setCreating(false);
+    }
+  };
+
+  return createPortal(
+    <div className="rbac-dialog-backdrop" onClick={onClose}>
+      <section
+        className="rbac-dialog rbac-clone-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-role-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="rbac-dialog-head">
+          <div>
+            <h3 id="create-role-title">Create New Role</h3>
+            <p>Define a new role and configure its module and screen permissions.</p>
+          </div>
+          <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="rbac-clone-form">
+          {error ? <div className="rbac-alert-error">{error}</div> : null}
+          <div className="rbac-form-field">
+            <label htmlFor="create-role-name">Role Name *</label>
+            <input
+              id="create-role-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Lab Technician, Deputy Warden"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="create-role-desc">Description</label>
+            <textarea
+              id="create-role-desc"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Responsibilities, scope, and access purpose of this role"
+            />
+          </div>
+
+          <div className="rbac-dialog-actions">
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={creating}>
+              Cancel
+            </button>
+            <button type="submit" className="cms-btn cms-btn-primary" disabled={creating || !name.trim()}>
+              {creating ? "Creating..." : "Create Role"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+function EditRoleModal({ role, onClose, onEditSuccess }) {
+  const [name, setName] = useState(role?.name || "");
+  const [description, setDescription] = useState(role?.description || "");
+  const [isActive, setIsActive] = useState(role?.isActive ?? true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await updateRole(role.id, {
+        name: name.trim(),
+        description: description.trim(),
+        isActive,
+      });
+      onEditSuccess(res?.data || { ...role, name: name.trim(), description: description.trim(), isActive });
+    } catch (err) {
+      setError(err?.message || "Failed to update role.");
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="rbac-dialog-backdrop" onClick={onClose}>
+      <section
+        className="rbac-dialog rbac-clone-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-role-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="rbac-dialog-head">
+          <div>
+            <h3 id="edit-role-title">Edit Role</h3>
+            <p>Update title and description for <strong>{role?.name}</strong>.</p>
+          </div>
+          <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="rbac-clone-form">
+          {error ? <div className="rbac-alert-error">{error}</div> : null}
+          <div className="rbac-form-field">
+            <label htmlFor="edit-role-name">Role Name *</label>
+            <input
+              id="edit-role-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="edit-role-desc">Description</label>
+            <textarea
+              id="edit-role-desc"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Role description"
+            />
+          </div>
+          <div className="rbac-form-field" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <input
+              id="edit-role-active"
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              style={{ width: "16px", height: "16px" }}
+            />
+            <label htmlFor="edit-role-active" style={{ margin: 0, cursor: "pointer" }}>
+              Active (Enabled in assignments and system logins)
+            </label>
+          </div>
+
+          <div className="rbac-dialog-actions">
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit" className="cms-btn cms-btn-primary" disabled={saving || !name.trim()}>
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+
+function AddModuleModal({ onClose, onAddSuccess }) {
+  const [name, setName] = useState("");
+  const [key, setKey] = useState("");
+  const [section, setSection] = useState("Operations");
+  const [description, setDescription] = useState("");
+  const [actions, setActions] = useState(["view", "create", "edit", "delete"]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleNameChange = (val) => {
+    setName(val);
+    if (!key || key === name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")) {
+      setKey(val.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+    }
+  };
+
+  const toggleAction = (act) => {
+    setActions((prev) => (prev.includes(act) ? prev.filter((a) => a !== act) : [...prev, act]));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim() || !key.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const moduleData = {
+        id: key.trim().toLowerCase(),
+        name: name.trim(),
+        section: section.trim(),
+        description: description.trim(),
+        availableActions: actions,
+        screens: [],
+      };
+      await addModule(moduleData);
+      onAddSuccess(moduleData);
+    } catch (err) {
+      setError(err?.message || "Failed to add module.");
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="rbac-dialog-backdrop" onClick={onClose}>
+      <section
+        className="rbac-dialog rbac-clone-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-module-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="rbac-dialog-head">
+          <div>
+            <h3 id="add-module-title">Add Permission Module</h3>
+            <p>Create a new high-level functional module in the permissions matrix.</p>
+          </div>
+          <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="rbac-clone-form">
+          {error ? <div className="rbac-alert-error">{error}</div> : null}
+          <div className="rbac-form-field">
+            <label htmlFor="add-module-name">Module Name *</label>
+            <input
+              id="add-module-name"
+              type="text"
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              placeholder="e.g. Alumni Portal, Research & Publications"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="add-module-key">Module Key / Identifier *</label>
+            <input
+              id="add-module-key"
+              type="text"
+              value={key}
+              onChange={(e) => setKey(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+              placeholder="e.g. alumni-portal"
+              required
+            />
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="add-module-section">Section Category</label>
+            <select
+              id="add-module-section"
+              value={section}
+              onChange={(e) => setSection(e.target.value)}
+            >
+              <option value="Administration">Administration</option>
+              <option value="Academic">Academic</option>
+              <option value="Student">Student</option>
+              <option value="Staff">Staff</option>
+              <option value="Examinations">Examinations</option>
+              <option value="Finance">Finance</option>
+              <option value="Documents & Reports">Documents & Reports</option>
+              <option value="Hostel Management">Hostel Management</option>
+              <option value="Operations">Operations</option>
+              <option value="Overview">Overview</option>
+            </select>
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="add-module-desc">Description</label>
+            <input
+              id="add-module-desc"
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Scope and purpose of this module"
+            />
+          </div>
+
+          <div className="rbac-form-field">
+            <label>Supported Actions</label>
+            <div style={{ display: "flex", gap: "1rem", marginTop: "0.25rem" }}>
+              {["view", "create", "edit", "delete"].map((act) => (
+                <label key={act} style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: "0.9rem", textTransform: "capitalize" }}>
+                  <input
+                    type="checkbox"
+                    checked={actions.includes(act)}
+                    onChange={() => toggleAction(act)}
+                  />
+                  {act === "create" ? "Add/Create" : act}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="rbac-dialog-actions">
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit" className="cms-btn cms-btn-primary" disabled={saving || !name.trim() || !key.trim()}>
+              {saving ? "Adding..." : "Add Module"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+function AddScreenModal({ module, modules = [], onClose, onAddSuccess }) {
+  const [selectedModuleId, setSelectedModuleId] = useState(module?.id || modules[0]?.id || "");
+  const [name, setName] = useState("");
+  const [key, setKey] = useState("");
+  const [description, setDescription] = useState("");
+  const [actions, setActions] = useState(["view", "create", "edit", "delete"]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const activeModule = module || modules.find((m) => m.id === selectedModuleId);
+
+  const handleNameChange = (val) => {
+    setName(val);
+    if (!key || key === name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")) {
+      setKey(val.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
+    }
+  };
+
+  const toggleAction = (act) => {
+    setActions((prev) => (prev.includes(act) ? prev.filter((a) => a !== act) : [...prev, act]));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim() || !key.trim() || !selectedModuleId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const screenData = {
+        id: key.trim().toLowerCase(),
+        name: name.trim(),
+        description: description.trim() || name.trim(),
+        availableActions: actions,
+      };
+      await addScreen(selectedModuleId, screenData);
+      onAddSuccess(selectedModuleId, screenData);
+    } catch (err) {
+      setError(err?.message || "Failed to add screen.");
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="rbac-dialog-backdrop" onClick={onClose}>
+      <section
+        className="rbac-dialog rbac-clone-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-screen-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="rbac-dialog-head">
+          <div>
+            <h3 id="add-screen-title">Add Screen to Module</h3>
+            <p>
+              {module
+                ? `Add a new sub-screen under ${module.name}.`
+                : "Add a new sub-screen under a chosen module."}
+            </p>
+          </div>
+          <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="rbac-clone-form">
+          {error ? <div className="rbac-alert-error">{error}</div> : null}
+
+          {!module ? (
+            <div className="rbac-form-field">
+              <label htmlFor="add-screen-module-select">Target Module *</label>
+              <select
+                id="add-screen-module-select"
+                value={selectedModuleId}
+                onChange={(e) => setSelectedModuleId(e.target.value)}
+                required
+              >
+                {modules.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.section})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="rbac-form-field">
+              <label>Target Module</label>
+              <input type="text" value={`${module.name} (${module.section})`} disabled style={{ background: "#f8fafc" }} />
+            </div>
+          )}
+
+          <div className="rbac-form-field">
+            <label htmlFor="add-screen-name">Screen Name *</label>
+            <input
+              id="add-screen-name"
+              type="text"
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              placeholder="e.g. My Attendance, Apply Leave, Room Setup"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="add-screen-key">Screen Key / Identifier *</label>
+            <input
+              id="add-screen-key"
+              type="text"
+              value={key}
+              onChange={(e) => setKey(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+              placeholder="e.g. my-attendance"
+              required
+            />
+          </div>
+          <div className="rbac-form-field">
+            <label htmlFor="add-screen-desc">Description / Route</label>
+            <input
+              id="add-screen-desc"
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g. Staff individual check-in and monthly logs"
+            />
+          </div>
+
+          <div className="rbac-form-field">
+            <label>Supported Actions</label>
+            <div style={{ display: "flex", gap: "1rem", marginTop: "0.25rem" }}>
+              {["view", "create", "edit", "delete"].map((act) => (
+                <label key={act} style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: "0.9rem", textTransform: "capitalize" }}>
+                  <input
+                    type="checkbox"
+                    checked={actions.includes(act)}
+                    onChange={() => toggleAction(act)}
+                  />
+                  {act === "create" ? "Add/Create" : act}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="rbac-dialog-actions">
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit" className="cms-btn cms-btn-primary" disabled={saving || !name.trim() || !key.trim()}>
+              {saving ? "Adding..." : "Add Screen"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
 function CloneRoleModal({ role, onClose, onCloneSuccess }) {
   const [name, setName] = useState(role ? `${role.name} (Copy)` : "");
   const [description, setDescription] = useState(role ? `Cloned permissions from ${role.name}` : "");
@@ -301,7 +790,7 @@ function CloneRoleModal({ role, onClose, onCloneSuccess }) {
   );
 }
 
-function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole, query, onQuery }) {
+function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole, onNewRole, onEditRole, onDeleteRole, query, onQuery }) {
   const filteredRoles = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return roles;
@@ -312,10 +801,21 @@ function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole,
 
   return (
     <section className="rbac-panel rbac-role-panel">
-      <div className="rbac-panel-head">
-        <h2>Roles</h2>
+      <div className="rbac-role-panel-header">
+        <div className="rbac-panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2>Roles</h2>
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary cms-btn-sm"
+            onClick={onNewRole}
+            style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", padding: "4px 10px", height: "30px" }}
+            title="Create a new custom role"
+          >
+            <Plus size={14} /> New Role
+          </button>
+        </div>
+        <SearchBox value={query} onChange={onQuery} placeholder="Search roles..." label="Search roles" />
       </div>
-      <SearchBox value={query} onChange={onQuery} placeholder="Search roles..." label="Search roles" />
       <div className="rbac-role-list">
         {filteredRoles.length ? filteredRoles.map((role) => {
           const selected = String(role.id) === String(selectedRoleId);
@@ -499,6 +999,8 @@ function PermissionMatrix({
   onExportCsv,
   statusFilter = "all",
   onStatusFilterChange,
+  onAddModule,
+  onAddScreen,
 }) {
   const permissionStructure = useMemo(() => {
     const map = new Map();
@@ -523,6 +1025,15 @@ function PermissionMatrix({
   }, [permissionRows]);
 
   const [expandedModules, setExpandedModules] = useState(() => new Set());
+  const [sectionFilter, setSectionFilter] = useState("all");
+
+  const availableSections = useMemo(() => {
+    const set = new Set();
+    modules.forEach((m) => {
+      if (m.section) set.add(m.section);
+    });
+    return Array.from(set).sort();
+  }, [modules]);
 
   // Auto-expand if search query matches a module or screen
   useEffect(() => {
@@ -559,6 +1070,7 @@ function PermissionMatrix({
   const filteredModules = useMemo(() => {
     const q = query.trim().toLowerCase();
     return modules
+      .filter((module) => sectionFilter === "all" || module.section === sectionFilter)
       .map((module) => {
         const modData = permissionStructure.get(module.id);
         const modActions = modData?.actions || new Set();
@@ -607,7 +1119,7 @@ function PermissionMatrix({
         };
       })
       .filter(Boolean);
-  }, [modules, query, statusFilter, permissionStructure]);
+  }, [modules, query, statusFilter, sectionFilter, permissionStructure]);
 
   const allAreExpanded = filteredModules.length > 0 && filteredModules.every((m) => expandedModules.has(m.id));
   const restriction = getPermissionRestriction({ selectedRole, saving });
@@ -656,48 +1168,89 @@ function PermissionMatrix({
       </div>
 
       <div className="rbac-permission-toolbar">
-        <h3>Permissions</h3>
-        <div className="rbac-toolbar-tools">
-          <button
-            type="button"
-            className="rbac-expand-toggle-all"
-            onClick={allAreExpanded ? collapseAll : expandAll}
-            title={allAreExpanded ? "Collapse all modules" : "Expand all modules"}
-          >
-            <Layers size={14} aria-hidden="true" />
-            <span>{allAreExpanded ? "Collapse All" : "Expand All"}</span>
-          </button>
-          <button
-            type="button"
-            className="rbac-export-btn"
-            onClick={onExportCsv}
-            title="Export permission matrix to CSV"
-          >
-            <Download size={14} aria-hidden="true" />
-            <span>Export CSV</span>
-          </button>
+        <div className="rbac-permission-toolbar-top">
+          <div className="rbac-permission-title-group">
+            <h3>Permissions</h3>
+            <span className="rbac-module-count-badge">
+              {filteredModules.length} {filteredModules.length === 1 ? "module" : "modules"}
+            </span>
+          </div>
+          <div className="rbac-toolbar-tools">
+            <button
+              type="button"
+              className="rbac-expand-toggle-all"
+              onClick={allAreExpanded ? collapseAll : expandAll}
+              title={allAreExpanded ? "Collapse all modules" : "Expand all modules"}
+            >
+              <Layers size={14} aria-hidden="true" />
+              <span>{allAreExpanded ? "Collapse All" : "Expand All"}</span>
+            </button>
+            <button
+              type="button"
+              className="rbac-export-btn"
+              onClick={onExportCsv}
+              title="Export permission matrix to CSV"
+            >
+              <Download size={14} aria-hidden="true" />
+              <span>Export CSV</span>
+            </button>
+            <button
+              type="button"
+              className="rbac-export-btn rbac-btn-add-module"
+              onClick={onAddModule}
+              title="Add a new functional module to permissions"
+            >
+              <Plus size={14} aria-hidden="true" />
+              <span>Add Module</span>
+            </button>
+            <button
+              type="button"
+              className="rbac-export-btn rbac-btn-add-screen"
+              onClick={() => onAddScreen && onAddScreen(null)}
+              title="Add a new screen under a module"
+            >
+              <Plus size={14} aria-hidden="true" />
+              <span>Add Screen</span>
+            </button>
+          </div>
         </div>
-        <div className="rbac-toolbar-filters">
-          <SearchBox value={query} onChange={onQuery} placeholder="Search modules & screens..." label="Search permissions" />
-          <select
-            className="rbac-status-filter"
-            value={statusFilter}
-            onChange={(e) => onStatusFilterChange && onStatusFilterChange(e.target.value)}
-            title="Filter by permission grant status"
-            aria-label="Filter permissions by status"
-          >
-            <option value="all">All Screens</option>
-            <option value="granted">Granted Only</option>
-            <option value="denied">Denied Only</option>
-            <option value="partial">Partial Only</option>
-          </select>
-          <MarkAllControl
-            checked={markAllState.checked}
-            indeterminate={markAllState.indeterminate}
-            disabled={markAllState.disabled}
-            roleName={selectedRole?.name}
-            onChange={onMarkAll}
-          />
+        <div className="rbac-permission-toolbar-bottom">
+          <div className="rbac-search-wrapper">
+            <SearchBox value={query} onChange={onQuery} placeholder="Search modules & screens..." label="Search permissions" />
+          </div>
+          <div className="rbac-toolbar-filters">
+            <select
+              className="rbac-status-filter rbac-section-filter"
+              value={sectionFilter}
+              onChange={(e) => setSectionFilter(e.target.value)}
+              title="Filter by functional category"
+              aria-label="Filter permissions by section"
+            >
+              <option value="all">All Sections ({modules.length})</option>
+              {availableSections.map((sec) => (
+                <option key={sec} value={sec}>{sec}</option>
+              ))}
+            </select>
+            <select
+              className="rbac-status-filter"
+              value={statusFilter}
+              onChange={(e) => onStatusFilterChange && onStatusFilterChange(e.target.value)}
+              title="Filter by permission grant status"
+              aria-label="Filter permissions by status"
+            >
+              <option value="all">All Screens</option>
+              <option value="granted">Granted Only</option>
+              <option value="denied">Denied Only</option>
+              <option value="partial">Partial Only</option>
+            </select>
+            <MarkAllControl
+              checked={markAllState.checked}
+              indeterminate={markAllState.indeterminate}
+              disabled={markAllState.disabled}
+              roleName={selectedRole?.name}
+              onChange={onMarkAll}
+            />
+          </div>
         </div>
       </div>
       {filteredModules.length ? (
@@ -761,13 +1314,14 @@ function PermissionMatrix({
 
                     let isChecked = false;
                     let isIndeterminate = false;
+                    let enabledCount = 0;
 
                     if (selectedRole?.isProtected) {
                       isChecked = true;
                     } else if (screens.length === 0) {
                       isChecked = Boolean(modData?.actions?.has(action.key));
                     } else if (supportedScreens.length > 0) {
-                      const enabledCount = supportedScreens.filter((s) => {
+                      enabledCount = supportedScreens.filter((s) => {
                         const sActions = modData?.screens?.get(s.id);
                         if (sActions) return sActions.has(action.key);
                         return Boolean(modData?.actions?.has(action.key));
@@ -783,7 +1337,7 @@ function PermissionMatrix({
                           indeterminate={isIndeterminate}
                           disabled={restriction.disabled || !isSupported}
                           disabledReason={!isSupported ? "Action not applicable for this module" : restriction.reason}
-                          label={`${action.label} ${module.name} (All Screens)`}
+                          label={isIndeterminate ? `${action.label} ${module.name} (${enabledCount} of ${supportedScreens.length} screens)` : `${action.label} ${module.name} (All Screens)`}
                           onChange={(next) => {
                             if (!restriction.disabled && isSupported) {
                               onToggle({
@@ -853,6 +1407,18 @@ function PermissionMatrix({
                     </div>
                   );
                 })}
+                {isExpanded && (
+                  <div className="rbac-matrix-add-screen-row">
+                    <button
+                      type="button"
+                      className="rbac-add-screen-btn"
+                      onClick={() => onAddScreen && onAddScreen(module)}
+                      title={`Add a new screen under ${module.name}`}
+                    >
+                      <Plus size={13} aria-hidden="true" /> Add screen to {module.name}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -999,6 +1565,8 @@ function RoleDetails({
   setQuery,
   onSave,
   onReset,
+  onAddModule,
+  onAddScreen,
 }) {
   const updateAction = useCallback(({ roleId, moduleId, screenId, action, checked }) => {
     if (!selectedRole || String(roleId) !== String(selectedRole.id) || selectedRole.isProtected || loading || saving) return;
@@ -1215,6 +1783,8 @@ function RoleDetails({
             onExportCsv={handleExportCsv}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
+            onAddModule={onAddModule}
+            onAddScreen={onAddScreen}
           />
           <div className="rbac-savebar">
             <span>{dirty ? "You have unsaved permission changes." : "Permissions are up to date."}</span>
@@ -1363,7 +1933,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
     setRemovalCandidate(null);
   };
 
-  const assignRole = async (user, roleCode) => {
+  const assignRole = async (user, roleCode, roleId = null) => {
     if (!roleCode) return;
     if ((user.roleCodes || []).some((code) => normalizeRoleCode(code) === normalizeRoleCode(roleCode))) {
       setToast({ type: "info", message: "This user already has that role." });
@@ -1371,7 +1941,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
     }
     setSavingUserId(user.id);
     try {
-      await assignRoleToUser(user.id, roleCode);
+      await assignRoleToUser(user.id, roleCode, roleId);
       setToast({ type: "success", message: "Role assignment updated." });
       closeActionMenu();
       await loadAssignments();
@@ -1538,7 +2108,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
                     key={role.code}
                     className={`rbac-role-submenu-item ${isCurrent ? "is-current" : ""}`}
                     disabled={savingUserId === activeMenu.user.id}
-                    onClick={() => assignRole(activeMenu.user, role.code)}
+                    onClick={() => assignRole(activeMenu.user, role.code, role.roleId || role.id)}
                   >
                     {role.name}
                     {isCurrent ? <Check size={14} aria-hidden="true" /> : null}
@@ -1699,6 +2269,11 @@ export default function RolesPermissionsPage() {
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cloningRole, setCloningRole] = useState(null);
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [addingModule, setAddingModule] = useState(false);
+  const [addingScreen, setAddingScreen] = useState(null);
+  const [editingRole, setEditingRole] = useState(null);
+  const [deletingRole, setDeletingRole] = useState(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const permissionSaveInFlightRef = useRef(false);
@@ -1727,7 +2302,7 @@ export default function RolesPermissionsPage() {
           : role
       ));
     } catch (err) {
-      console.error("Failed to refresh mock role counts:", err);
+      console.error("Failed to refresh role counts:", err);
     }
   }, [activeContextFilters]);
 
@@ -1810,7 +2385,7 @@ export default function RolesPermissionsPage() {
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
       setModules(modulesResponse.data);
-      const role = nextManageableRoles.find((r) => String(r.id) === String(selectedRoleIdRef.current)) || nextManageableRoles[0] || null;
+      const role = nextAllRoles.find((r) => String(r.id) === String(selectedRoleIdRef.current)) || nextAllRoles[0] || null;
       setSelectedRole(role);
       if (role) {
         await loadPermissions(role);
@@ -1941,13 +2516,11 @@ export default function RolesPermissionsPage() {
     await persistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, permissions, lastSavedPermissions);
   };
 
-  const visiblePermissionModules = useMemo(() => {
-    const permissionModuleIds = new Set(permissions.map((row) => row.module));
-    if (!permissionModuleIds.size) return modules;
-    return modules.filter((module) => permissionModuleIds.has(module.id));
-  }, [modules, permissions]);
+  // Always show ALL modules so admins can grant permissions for any module to any role.
+  // Permission data is used only to set toggle states, not to filter module visibility.
+  const visiblePermissionModules = modules;
 
-  const routeNote = "Connected (Live API)";
+  const routeNote = "";
 
   return (
     <DashboardLayout
@@ -1975,7 +2548,7 @@ export default function RolesPermissionsPage() {
           >
             <UserPlus size={16} /> User Role Assignment
           </button>
-          <span className="rbac-route-note"><Check size={14} /> {routeNote}</span>
+          {routeNote ? <span className="rbac-route-note"><Check size={14} /> {routeNote}</span> : null}
         </div>
 
         {loading ? <div className="rbac-loading-card"><Loader label="Loading roles and permissions..." /></div> : null}
@@ -1990,11 +2563,14 @@ export default function RolesPermissionsPage() {
         {!loading && !error && activeTab === "permissions" ? (
           <div className="rbac-grid">
             <RoleList
-              roles={manageableRoles}
+              roles={allRoles}
               selectedRoleId={selectedRole?.id}
               onSelect={selectRole}
               onOpenMembers={openRoleMembers}
               onCloneRole={(role) => setCloningRole(role)}
+              onNewRole={() => setCreatingRole(true)}
+              onEditRole={(role) => setEditingRole(role)}
+              onDeleteRole={(role) => setDeletingRole(role)}
               query={roleQuery}
               onQuery={setRoleQuery}
             />
@@ -2012,6 +2588,8 @@ export default function RolesPermissionsPage() {
               setQuery={setPermissionQuery}
               onSave={savePermissions}
               onReset={() => setPermissions(lastSavedPermissions)}
+              onAddModule={() => setAddingModule(true)}
+              onAddScreen={(targetMod) => setAddingScreen(targetMod || true)}
             />
           </div>
         ) : null}
@@ -2028,6 +2606,48 @@ export default function RolesPermissionsPage() {
             onClose={closeMembersDialog}
           />
         ) : null}
+
+        {creatingRole ? (
+          <CreateRoleModal
+            onClose={() => setCreatingRole(false)}
+            onCreateSuccess={async (newRole) => {
+              setCreatingRole(false);
+              setToast({ type: "success", message: `Role "${newRole.name || 'New Role'}" created successfully!` });
+              await loadPage();
+            }}
+          />
+        ) : null}
+        {editingRole ? (
+          <EditRoleModal
+            role={editingRole}
+            onClose={() => setEditingRole(null)}
+            onEditSuccess={async (updated) => {
+              setEditingRole(null);
+              setToast({ type: "success", message: `Role "${updated.name}" updated successfully!` });
+              await loadPage();
+            }}
+          />
+        ) : null}
+        {deletingRole ? (
+          <ConfirmDialog
+            isOpen={true}
+            title="Delete Role"
+            message={`Are you sure you want to delete "${deletingRole.name}"? This action cannot be undone.${deletingRole.assignedUserCount > 0 ? ` Note: ${deletingRole.assignedUserCount} user(s) currently have this role.` : ''}`}
+            confirmText="Delete Role"
+            confirmVariant="danger"
+            onConfirm={async () => {
+              try {
+                await deleteRole(deletingRole.id);
+                setToast({ type: "success", message: `Role "${deletingRole.name}" deleted successfully!` });
+                setDeletingRole(null);
+                await loadPage();
+              } catch (err) {
+                setToast({ type: "error", message: err?.message || "Failed to delete role." });
+              }
+            }}
+            onCancel={() => setDeletingRole(null)}
+          />
+        ) : null}
         {cloningRole ? (
           <CloneRoleModal
             role={cloningRole}
@@ -2035,6 +2655,28 @@ export default function RolesPermissionsPage() {
             onCloneSuccess={async (newRole) => {
               setCloningRole(null);
               setToast({ type: "success", message: `Role "${newRole.name || 'Cloned Role'}" created successfully!` });
+              await loadPage();
+            }}
+          />
+        ) : null}
+        {addingModule ? (
+          <AddModuleModal
+            onClose={() => setAddingModule(false)}
+            onAddSuccess={async (newModule) => {
+              setAddingModule(false);
+              setToast({ type: "success", message: `Module "${newModule.name}" added successfully!` });
+              await loadPage();
+            }}
+          />
+        ) : null}
+        {addingScreen ? (
+          <AddScreenModal
+            module={typeof addingScreen === "object" ? addingScreen : null}
+            modules={modules}
+            onClose={() => setAddingScreen(null)}
+            onAddSuccess={async (modId, newScreen) => {
+              setAddingScreen(null);
+              setToast({ type: "success", message: `Screen "${newScreen.name}" added successfully!` });
               await loadPage();
             }}
           />

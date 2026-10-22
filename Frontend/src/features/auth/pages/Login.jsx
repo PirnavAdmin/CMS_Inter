@@ -4,6 +4,7 @@ import AuthLayout from "@/layouts/AuthLayout.jsx";
 import { Field, useForm } from "@/components/common/Ui.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { clearPasswordResetContext, loginUser } from "@/features/auth/services/authService.js";
+import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import { clearAuthSession, saveAuthSession } from "@/features/authStorage.js";
 import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
@@ -99,6 +100,15 @@ export default function Login() {
       const result = await loginUser({ emailOrMobile, password });
       if (!result.token) throw new Error("The login response did not include an access token.");
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
+      try {
+        const permsRes = await getCurrentUserPermissions();
+        if (permsRes?.data && Array.isArray(permsRes.data)) {
+          result.user.permissions = permsRes.data;
+          saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
+        }
+      } catch (e) {
+        console.warn("Could not load user permissions at login:", e?.message);
+      }
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
       const isWarden =

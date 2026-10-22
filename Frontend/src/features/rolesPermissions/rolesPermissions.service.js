@@ -7,7 +7,7 @@ import {
   ROLE_SEEDS,
   USER_ASSIGNMENT_FALLBACK,
 } from "./rolesPermissions.constants.js";
-import { normalizePermissionPayload, normalizeRoleCode } from "./permissionUtils.jsx";
+import { normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
 
 const cloneItem = (item) => {
   if (!item || typeof item !== "object") return item;
@@ -40,11 +40,19 @@ const ROLE_CODE_TO_ID = {
   LIBRARIAN: 9,
   HOSTEL_WARDEN: 10,
   TRAINING_PLACEMENT: 11,
+  PLACEMENT_OFFICER: 11,
   BUS_DRIVER: 12,
   DRIVER: 12,
+  ATTENDANT: 13,
+  OFFICE_STAFF: 13,
   RECEPTIONIST: 13,
+  DEAN: 14,
   LAB_ASSISTANT: 14,
-  SYSTEM_AUDITOR: 15,
+  ADMISSION_STAFF: 14,
+  PRINCIPAL: 15,
+  INVENTORY_MANAGER: 16,
+  INVENTORY: 16,
+  UNASSIGNED: 17,
 };
 
 const resolveRoleIdParam = (roleId, roleCode) => {
@@ -57,15 +65,19 @@ const resolveRoleIdParam = (roleId, roleCode) => {
 const normalizeRole = (role = {}) => {
   const count = Number(role.assignedUserCount ?? role.userCount ?? role.usersCount ?? 0);
   const code = normalizeRoleCode(role.code || role.roleCode || role.roleName || role.name);
+  const matchedSeed = ROLE_SEEDS.find(
+    (s) => s.code === code || s.roleId === (role.roleId ?? role.id) || s.id === role.id
+  );
   return {
     ...role,
     id: String(role.id ?? role.roleId ?? role.code ?? role.name),
-    roleId: Number(role.roleId ?? role.id) || undefined,
+    roleId: Number(role.roleId ?? role.id) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
     code,
-    name: role.name || role.roleName || (code === "ACCOUNTANT" ? "Accountant" : ""),
-    description: role.description || "",
-    isSystemRole: role.isSystemRole ?? true,
-    isProtected: role.isProtected ?? (code === "SUPER_ADMIN"),
+    name: role.name || role.roleName || matchedSeed?.name || (code === "ACCOUNTANT" ? "Accountant" : code),
+    description: role.description || matchedSeed?.description || "",
+    isSystemRole: role.isSystemRole ?? matchedSeed?.isSystemRole ?? false,
+    isProtected: role.isProtected ?? matchedSeed?.isProtected ?? (code === "SUPER_ADMIN"),
+    icon: role.icon || matchedSeed?.icon,
     assignedUserCount: count,
     userCount: count,
     usersCount: count,
@@ -122,7 +134,16 @@ export function transformBackendPermissionsToMatrix(rawPermissions = []) {
 
   items.forEach((item) => {
     const rawModule = item.moduleKey || item.moduleId || item.subModule || item.module || "";
-    const modId = String(rawModule).trim().toLowerCase().replace(/&/g, "").replace(/\//g, "-").replace(/\s+/g, "-");
+    let modId = String(rawModule).trim().toLowerCase().replace(/&/g, "").replace(/\//g, "-").replace(/\s+/g, "-");
+    if (modId === "staff-reimbursements" || modId === "staff-reimbursement" || modId === "reimbursements") {
+      modId = "reimbursement";
+    }
+    if (modId === "reports") {
+      modId = "reports-analytics";
+    }
+    if (modId === "inventory") {
+      modId = "inventory-management";
+    }
     if (!modId) return;
 
     if (!moduleMap.has(modId)) {
@@ -162,14 +183,14 @@ export async function getRoles(filters = {}) {
     const response = await apiClient.get(apiEndpoints.roles.cards, { params: filters });
     const payload = response?.data?.data || response?.data || [];
     if (Array.isArray(payload) && payload.length > 0) {
-      return apiResult(payload.map(normalizeRole), "api");
+      return apiResult(sortRolesByPriority(payload.map(normalizeRole)), "api");
     }
   } catch (err) {
     console.warn("Live getRoles failed, falling back to cached/seed data:", err?.message);
   }
 
   const counts = roleCounts();
-  return apiResult(mockRoles.map((role) => ({ ...role, assignedUserCount: counts.get(role.code) ?? role.assignedUserCount })), "fallback");
+  return apiResult(sortRolesByPriority(mockRoles.map((role) => ({ ...role, assignedUserCount: counts.get(role.code) ?? role.assignedUserCount }))), "fallback");
 }
 
 export async function getRoleById(roleId) {
@@ -241,26 +262,143 @@ export async function deleteRole(roleId) {
   }
 }
 
+
+const CUSTOM_MODULES_KEY = "cms_custom_permission_modules";
+const CUSTOM_SCREENS_KEY = "cms_custom_permission_screens";
+
+export function getCustomModules() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_MODULES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getCustomScreens() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_SCREENS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function addModule(moduleData) {
+  try {
+    await apiClient.post(apiEndpoints.roles.modules, moduleData);
+  } catch (err) {
+    console.warn("Backend addModule endpoint not yet available, saving to persistent catalog:", err?.message);
+  }
+  const custom = getCustomModules();
+  const exists = custom.find((m) => m.id === moduleData.id);
+  if (!exists) {
+    custom.push(moduleData);
+    localStorage.setItem(CUSTOM_MODULES_KEY, JSON.stringify(custom));
+  }
+  notifyRolesUpdated();
+  return apiResult(moduleData, "api");
+}
+
+export async function addScreen(moduleId, screenData) {
+  try {
+    await apiClient.post(`${apiEndpoints.roles.modules}/${moduleId}/screens`, screenData);
+  } catch (err) {
+    console.warn("Backend addScreen endpoint not yet available, saving to persistent catalog:", err?.message);
+  }
+  const customScreens = getCustomScreens();
+  if (!customScreens[moduleId]) {
+    customScreens[moduleId] = [];
+  }
+  const exists = customScreens[moduleId].find((s) => s.id === screenData.id);
+  if (!exists) {
+    customScreens[moduleId].push(screenData);
+    localStorage.setItem(CUSTOM_SCREENS_KEY, JSON.stringify(customScreens));
+  }
+  notifyRolesUpdated();
+  return apiResult(screenData, "api");
+}
+
+export async function deleteModule(moduleId) {
+  try {
+    await apiClient.delete(apiEndpoints.roles.deleteModule ? apiEndpoints.roles.deleteModule(moduleId) : `${apiEndpoints.roles.modules}/${moduleId}`);
+  } catch (err) {
+    console.warn("Backend deleteModule failed:", err?.message);
+  }
+  const custom = getCustomModules();
+  const filtered = custom.filter((m) => m.id !== moduleId);
+  localStorage.setItem(CUSTOM_MODULES_KEY, JSON.stringify(filtered));
+
+  const customScreens = getCustomScreens();
+  delete customScreens[moduleId];
+  localStorage.setItem(CUSTOM_SCREENS_KEY, JSON.stringify(customScreens));
+
+  notifyRolesUpdated();
+  return apiResult(true, "api");
+}
+
+export async function deleteScreen(moduleId, screenId) {
+  try {
+    await apiClient.delete(apiEndpoints.roles.moduleScreen ? apiEndpoints.roles.moduleScreen(moduleId, screenId) : `${apiEndpoints.roles.modules}/${moduleId}/screens/${screenId}`);
+  } catch (err) {
+    console.warn("Backend deleteScreen failed:", err?.message);
+  }
+  const customScreens = getCustomScreens();
+  if (customScreens[moduleId]) {
+    customScreens[moduleId] = customScreens[moduleId].filter((s) => s.id !== screenId);
+    localStorage.setItem(CUSTOM_SCREENS_KEY, JSON.stringify(customScreens));
+  }
+  notifyRolesUpdated();
+  return apiResult(true, "api");
+}
+
 export async function getModulesAndPermissions() {
+  const customModules = getCustomModules();
+  const customScreens = getCustomScreens();
+  let baseModules = ALL_PERMISSION_MODULES;
+
   try {
     const response = await apiClient.get(apiEndpoints.roles.modules);
     const remoteModules = response?.data?.data || response?.data;
     if (Array.isArray(remoteModules) && remoteModules.length > 0) {
-      // Merge with ALL_PERMISSION_MODULES to preserve screen definitions
-      const merged = remoteModules.map((remote) => {
-        const local = ALL_PERMISSION_MODULES.find((m) => m.id === remote.id || m.name.toLowerCase() === (remote.name || "").toLowerCase());
+      baseModules = remoteModules.map((remote) => {
+        const local = ALL_PERMISSION_MODULES.find((m) => m.id === remote.id || m.name?.toLowerCase() === (remote.name || '').toLowerCase());
         return {
           ...local,
           ...remote,
           screens: local?.screens || remote.screens || [],
         };
       });
-      return apiResult(merged, "api");
     }
   } catch (err) {
-    console.warn("Live getModules failed, using full catalog:", err?.message);
+    console.warn('Live getModules failed, using full catalog:', err?.message);
   }
-  return apiResult(ALL_PERMISSION_MODULES, "catalog");
+
+  const moduleMap = new Map();
+  baseModules.forEach((m) => moduleMap.set(m.id, { ...m, screens: [...(m.screens || [])] }));
+  customModules.forEach((cm) => {
+    if (moduleMap.has(cm.id)) {
+      const existing = moduleMap.get(cm.id);
+      moduleMap.set(cm.id, { ...existing, ...cm, screens: [...(existing.screens || []), ...(cm.screens || [])] });
+    } else {
+      moduleMap.set(cm.id, { ...cm, screens: [...(cm.screens || [])] });
+    }
+  });
+
+  Object.entries(customScreens).forEach(([modId, screens]) => {
+    if (moduleMap.has(modId)) {
+      const target = moduleMap.get(modId);
+      const existingScreenIds = new Set((target.screens || []).map((s) => s.id));
+      screens.forEach((s) => {
+        if (!existingScreenIds.has(s.id)) {
+          target.screens.push(s);
+          existingScreenIds.add(s.id);
+        }
+      });
+    }
+  });
+
+  return apiResult(Array.from(moduleMap.values()), 'catalog');
 }
 
 export async function getRolePermissions(roleId, roleCode) {
@@ -312,6 +450,13 @@ export async function updateRolePermissions(roleId, payload) {
           screenName: scr.screenName || scr.screenId,
           actions: scr.actions,
         });
+      });
+      // Also include module-level summary record so module-level permissions are preserved in DB
+      permissionsInput.push({
+        module: mod.module,
+        screenId: "",
+        screenName: "",
+        actions: mod.actions,
       });
     } else {
       permissionsInput.push({
@@ -391,6 +536,13 @@ export async function updateUserPermissions(userId, payload) {
           screenName: scr.screenName || scr.screenId,
           actions: scr.actions,
         });
+      });
+      // Also include module-level summary record so module-level permissions are preserved in DB
+      permissionsInput.push({
+        module: mod.module,
+        screenId: "",
+        screenName: "",
+        actions: mod.actions,
       });
     } else {
       permissionsInput.push({

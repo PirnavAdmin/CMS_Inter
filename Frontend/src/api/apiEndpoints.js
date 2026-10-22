@@ -362,6 +362,8 @@ export const apiEndpoints = {
     yearlyOverview: (staffId, academicYearId) => `/api/v1/staff-attendance/staff/${staffId}/yearly-overview?academicYearId=${academicYearId}`,
     leave: "/api/v1/staff-attendance/leave",
     leaveAction: (id) => `/api/v1/staff-attendance/leave/${id}/action`,
+    myLeaveHistory: "/api/v1/staff-attendance/leave/my-history",
+    staffLeaveHistory: (staffId) => `/api/v1/staff-attendance/leave/history/staff/${staffId}`,
     importTemplate: "/api/v1/staff-attendance/import/template",
     importExcel: "/api/v1/staff-attendance/import/excel",
     // Self-Service My Attendance
@@ -782,6 +784,9 @@ export const apiEndpoints = {
     update: (id) => `/api/v1/roles/${id}`,
     delete: (id) => `/api/v1/roles/${id}`,
     modules: "/api/v1/roles/modules",
+    deleteModule: (moduleId) => `/api/v1/roles/modules/${moduleId}`,
+    moduleScreens: (moduleId) => `/api/v1/roles/modules/${moduleId}/screens`,
+    moduleScreen: (moduleId, screenId) => `/api/v1/roles/modules/${moduleId}/screens/${screenId}`,
     permissions: (roleId) => `/api/v1/roles/${roleId}/permissions`,
     updatePermissions: (roleId) => `/api/v1/roles/${roleId}/permissions`,
     members: (roleId) => `/api/v1/roles/${roleId}/members`,

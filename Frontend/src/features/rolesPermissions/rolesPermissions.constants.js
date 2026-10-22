@@ -1,6 +1,5 @@
 import {
   BookOpen,
-  BriefcaseBusiness,
   Building2,
   Bus,
   CalendarCheck,
@@ -13,7 +12,6 @@ import {
   Home,
   Landmark,
   LayoutDashboard,
-  Library,
   Medal,
   ReceiptIndianRupee,
   Settings,
@@ -158,6 +156,29 @@ export const ROLE_SEEDS = Object.freeze([
     icon: UserCog,
   },
   {
+    id: "principal",
+    roleId: 15,
+    code: "PRINCIPAL",
+    name: "Principal",
+    description: "Head of the institution responsible for overall college administration, staff oversight, and institutional approvals.",
+    isSystemRole: false,
+    isProtected: false,
+    assignedUserCount: 1,
+    icon: Landmark,
+  },
+  {
+    id: "dean",
+    roleId: 14,
+    code: "DEAN",
+    name: "Dean",
+    description: "Head of the faculty and academic programs.",
+    isSystemRole: false,
+    isProtected: false,
+    assignedUserCount: 0,
+    icon: Building2,
+  },
+
+  {
     id: "hod",
     code: "HOD",
     name: "HOD",
@@ -220,16 +241,6 @@ export const ROLE_SEEDS = Object.freeze([
     icon: ClipboardCheck,
   },
   {
-    id: "librarian",
-    code: "LIBRARIAN",
-    name: "Library / Librarian",
-    description: "Library catalog, issue and return management access.",
-    isSystemRole: true,
-    isProtected: false,
-    assignedUserCount: 1,
-    icon: Library,
-  },
-  {
     id: "hostel-warden",
     code: "HOSTEL_WARDEN",
     name: "Hostel Warden",
@@ -238,16 +249,6 @@ export const ROLE_SEEDS = Object.freeze([
     isProtected: false,
     assignedUserCount: 1,
     icon: Home,
-  },
-  {
-    id: "placement-officer",
-    code: "PLACEMENT_OFFICER",
-    name: "Placement Officer",
-    description: "Placement drives and student application management access.",
-    isSystemRole: true,
-    isProtected: false,
-    assignedUserCount: 1,
-    icon: BriefcaseBusiness,
   },
   {
     id: "bus-driver",
@@ -303,6 +304,29 @@ export const ROLE_SEEDS = Object.freeze([
     icon: BookOpen,
     discoveredFrom: "nonTeachingRolesConfig.js laboratory support roles",
   },
+  {
+    id: "inventory-manager",
+    roleId: 16,
+    code: "INVENTORY_MANAGER",
+    name: "Inventory Manager",
+    description: "Stock tracking, supplier management, purchase orders, item distribution, and inventory reports.",
+    isSystemRole: false,
+    isProtected: false,
+    assignedUserCount: 0,
+    icon: ReceiptIndianRupee,
+  },
+  {
+    id: "unassigned",
+    roleId: 17,
+    code: "UNASSIGNED",
+    name: "Unassigned",
+    description: "Default role for users with no active assignment.",
+    isSystemRole: true,
+    isProtected: false,
+    assignedUserCount: 0,
+    icon: Users,
+  },
+
 ]);
 
 export const MODULE_PERMISSION_CONFIG = Object.freeze([
@@ -522,6 +546,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     icon: CalendarCheck,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [
+      { id: "my-attendance", name: "My Attendance", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Personal staff daily check-in, check-out and biometric attendance log" },
       { id: "mark-staff-attendance", name: "Mark Staff Attendance", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Daily check-in, check-out and attendance register" },
       { id: "staff-attendance-overview", name: "Staff Attendance Overview", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Detailed monthly attendance log for individual staff" },
       { id: "staff-attendance-logs", name: "Biometric Logs & Reports", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Monthly staff biometric logs and leave impact summary" },
@@ -535,6 +560,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     icon: CalendarDays,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [
+      { id: "apply-leave", name: "Apply Leave", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Submit personal staff leave applications and track approval workflow" },
       { id: "leave-applications", name: "Leave Applications", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Submit and track personal staff leave requests" },
       { id: "leave-approvals", name: "Leave Approvals", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Department HOD and Principal review of pending leaves" },
       { id: "leave-balances", name: "Leave Balance & History", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Annual leave ledger, quotas, and utilization summary" },
@@ -677,10 +703,12 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     screens: [
       { id: "landing-configuration", name: "Landing Page Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Campus branding, headline, hero slider, and portal links" },
       { id: "login-configuration", name: "Login Page Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Login page branding, background images, and notices" },
+      { id: "campus-images", name: "Campus Images & Sliders", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Portal landing and login slider images" },
       { id: "campus-configuration", name: "Campus Configuration & Branches", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Multi-campus branch locations and board affiliations" },
       { id: "number-series", name: "Auto Number Series", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Prefixes and sequences for admissions, invoices, and roll nos" },
       { id: "templates", name: "Templates & Bulk Uploaders", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.DOWNLOAD], description: "Certificate templates, letterheads, and Excel upload templates" },
       { id: "leave-types", name: "Leave Types & Quotas", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Casual, sick, maternity, and earned leave quotas" },
+      { id: "lop-configuration", name: "LOP (Loss of Pay) Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Loss of Pay deduction rules and leave impact configuration" },
       { id: "attendance-timing", name: "Attendance Timings & Shifts", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Grace periods, late marks, and biometric sync rules" },
       { id: "credentials", name: "Credentials Generator", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Generate login credentials for new faculty and student batches" },
       { id: "audit-logs", name: "Audit & Security Logs", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "System audit logs, user login history, and security events" },
@@ -700,33 +728,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   },
 ]);
 
-export const OPTIONAL_MODULES_CONFIRMED_BY_CONFIG = Object.freeze([
-  {
-    id: "library",
-    name: "Library",
-    section: "Operations",
-    icon: Library,
-    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
-    reason: "Library roles are present in nonTeachingRolesConfig.js.",
-    screens: [
-      { id: "book-catalog", name: "Book Catalog & Search", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Book catalog, ISBN lookup, authors, and shelf allocation" },
-      { id: "circulation", name: "Issue & Return Desk", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Issue books, process returns, calculate late fines" },
-      { id: "library-members", name: "Student & Staff Cards", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Manage library membership cards and borrowing limits" },
-    ],
-  },
-  {
-    id: "placement",
-    name: "Placement",
-    section: "Operations",
-    icon: BriefcaseBusiness,
-    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
-    reason: "Placement Officer is an existing staff role option.",
-    screens: [
-      { id: "placement-drives", name: "Recruitment Drives", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Company visits, eligibility criteria, and interview dates" },
-      { id: "student-applications", name: "Applications & Offers", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Shortlisted candidates, job offers, and salary packages" },
-    ],
-  },
-]);
+export const OPTIONAL_MODULES_CONFIRMED_BY_CONFIG = Object.freeze([]);
 
 export const ALL_PERMISSION_MODULES = Object.freeze([
   ...MODULE_PERMISSION_CONFIG,
@@ -744,6 +746,17 @@ export const USER_ASSIGNMENT_FALLBACK = Object.freeze([
     roleCodes: ["ADMIN"],
     status: "Active",
   },
+  {
+    id: "usr-principal-001",
+    userId: "PRN-001",
+    name: "Dr. S. K. Rao",
+    userType: "Staff",
+    department: "Administration",
+    designation: "Principal",
+    roleCodes: ["PRINCIPAL"],
+    status: "Active",
+  },
+
   {
     id: "usr-hod-001",
     userId: "EMP-1001",
@@ -777,6 +790,16 @@ export const USER_ASSIGNMENT_FALLBACK = Object.freeze([
 ]);
 
 export const ROLE_MEMBER_FALLBACK = Object.freeze([
+  {
+    id: "usr-principal-001",
+    userId: "PRN-001",
+    name: "Dr. S. K. Rao",
+    userType: "Staff",
+    department: "Administration",
+    designation: "Principal",
+    roleCodes: ["PRINCIPAL"],
+    status: "Active",
+  },
   {
     id: "usr-hod-001",
     userId: "EMP-1001",
@@ -961,16 +984,6 @@ export const ROLE_MEMBER_FALLBACK = Object.freeze([
     status: "Active",
   },
   {
-    id: "usr-library-001",
-    userId: "LIB-0001",
-    name: "Library Staff",
-    userType: "Staff",
-    department: "Library",
-    designation: "Librarian",
-    roleCodes: ["LIBRARIAN"],
-    status: "Active",
-  },
-  {
     id: "usr-hostel-001",
     userId: "HST-0001",
     name: "Hostel Warden",
@@ -978,16 +991,6 @@ export const ROLE_MEMBER_FALLBACK = Object.freeze([
     department: "Hostel",
     designation: "Warden",
     roleCodes: ["HOSTEL_WARDEN"],
-    status: "Active",
-  },
-  {
-    id: "usr-placement-001",
-    userId: "PLC-0001",
-    name: "Placement Officer",
-    userType: "Staff",
-    department: "Placements",
-    designation: "Placement Officer",
-    roleCodes: ["PLACEMENT_OFFICER"],
     status: "Active",
   },
   {

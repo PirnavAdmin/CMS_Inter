@@ -134,6 +134,24 @@ export const getLeaveHistory = async (staffId) => {
     }
 };
 
+export const getMyLeaveHistory = async () => {
+    try {
+        const response = await apiClient.get('/api/v1/staff-attendance/leave/my-history');
+        const data = response.data?.data || response.data?.Data;
+        if (data) {
+            const rawList = data.history || data.History || [];
+            return {
+                ...data,
+                history: rawList.map(mapLeaveRequest)
+            };
+        }
+        return data;
+    } catch (error) {
+        console.error('Error fetching personal leave history:', error);
+        throw error;
+    }
+};
+
 const mapAffectedClass = (ac) => {
     if (!ac) return ac;
     const formatTime = (timeSpan) => {

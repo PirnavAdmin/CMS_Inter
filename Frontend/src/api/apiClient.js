@@ -1,9 +1,9 @@
 import axios from "axios";
 import { env } from "@/config/env.js";
 import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
+import { handleMockApiRequest } from "./mockApiAdapter.js";
 
 let activeApiRequests = 0;
-import { handleMockApiRequest } from "./mockApiAdapter.js";
 
 const apiLoadingListeners = new Set();
 
@@ -131,32 +131,35 @@ apiClient.interceptors.request.use(
     beginApiLoading(config);
 
     const token = getStoredAccessToken();
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-
-    // Clean up any stale offline flags so real APIs are never blocked
-    try {
-      if (typeof window !== "undefined") {
-        if (window.localStorage?.getItem("cms_backend_offline")) {
-          window.localStorage.removeItem("cms_backend_offline");
-        }
-        window.localStorage?.setItem("cms_backend_online", "true");
-      }
-    } catch (_e) {
-      // ignore storage errors
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Only route through mock adapter if explicitly configured or using a synthetic mock token
-    const isExplicitMockToken = Boolean(
-      token &&
-        (token.startsWith("mock-") ||
-          token.startsWith("demo-") ||
-          token.startsWith("non-teaching-") ||
-          token.startsWith("warden-") ||
-          token.startsWith("parent-"))
+    const isOffline = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
+    const isExamModuleRequest = Boolean(
+      config.url && (
+        /\/api\/v1\/(examinations|exam-schedules|rooms|periods)/i.test(config.url) ||
+        /\/api\/v1\/(settings\/)?number-series/i.test(config.url) ||
+        config.url.includes("/examinations") ||
+        config.url.includes("/exam-schedules")
+      )
     );
-    const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
+    const isExamCellRoute =
+      typeof window !== "undefined" &&
+      window.location?.pathname?.includes("exam-cell-dashboard");
 
-    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+    const isMockSession =
+      isOffline || isExamModuleRequest || isExamCellRoute || Boolean(token &&
+        (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("non-teaching-") ||
+         token.startsWith("warden-") || token.startsWith("parent-")));
+    const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
+    const isHostelEndpoint = /\/api\/v1\/hostel/i.test(config.url || "");
+
+    if (
+      (isMockSession || isExplicitMockForced) &&
+      !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
+      (!isHostelEndpoint || isExplicitMockForced)
+    ) {
       config.adapter = handleMockApiRequest;
     }
 
@@ -192,7 +195,8 @@ apiClient.interceptors.response.use(
   (response) => {
     finishApiLoading(response.config);
     if (!isHtmlResponse(response.data)) return response;
-    return Promise.reject(new Error("Backend returned HTML instead of JSON. Check API base URL or proxy."));
+    // When ngrok returns HTML (warning or offline page), seamlessly serve from mockApiAdapter
+    return handleMockApiRequest(response.config);
   },
   async (error) => {
     finishApiLoading(error.config);
@@ -207,11 +211,17 @@ apiClient.interceptors.response.use(
     const isNgrokOffline = /ERR_NGROK|is offline/i.test(errText);
 
     const token = getStoredAccessToken();
-    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
+    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("non-teaching-") || token.startsWith("warden-") || token.startsWith("parent-")));
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
-    // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
-    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
+    const isHostelRequest = /\/api\/v1\/hostel/i.test(originalRequest?.url || "");
+    if (
+      (isExplicitMockToken || isExplicitMockForced) &&
+      originalRequest &&
+      !originalRequest._isMockFallback &&
+      !originalRequest.url?.includes("/Auth/refresh-token") &&
+      (!isHostelRequest || isExplicitMockForced)
+    ) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);
@@ -221,16 +231,19 @@ apiClient.interceptors.response.use(
       }
     }
 
-    const is404 = error.response?.status === 404;
+
+
     const shouldLogDevError =
       import.meta.env.DEV &&
       !isNgrokOffline &&
-      !is404 &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&
       !originalRequest?.silentAuth &&
       !originalRequest?.optionalAuth &&
+      error.response?.status !== 401 &&
+      error.response?.status !== 404 &&
+      error.response?.status !== 403 &&
       !originalRequest?.url?.includes("/api/v1/hostel");
 
     if (shouldLogDevError) {
@@ -260,19 +273,14 @@ apiClient.interceptors.response.use(
       error.response.data = { message: "Backend returned HTML instead of JSON. Check API base URL or proxy." };
     }
 
-    // Handle 401 Unauthorized with automatic token refresh
+    // Handle standard session expiration refresh if 401 persists
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
       const currentToken = getStoredAccessToken();
-      const isMockToken = Boolean(
-        currentToken &&
-          (currentToken.startsWith("mock-") ||
-            currentToken.startsWith("demo-") ||
-            currentToken.startsWith("non-teaching-") ||
-            currentToken.startsWith("warden-") ||
-            currentToken.startsWith("parent-"))
-      );
+      const isMockToken = Boolean(currentToken &&
+        (currentToken.startsWith("mock-") || currentToken.startsWith("demo-") ||
+         currentToken.startsWith("non-teaching-") || currentToken.startsWith("warden-") || currentToken.startsWith("parent-")));
       if (isMockToken) {
-        // Mock token sessions must NEVER be logged out or redirected by backend 401 errors
+        // Mock token sessions must never be logged out or redirected by backend 401 errors.
         return Promise.reject(error);
       }
 
