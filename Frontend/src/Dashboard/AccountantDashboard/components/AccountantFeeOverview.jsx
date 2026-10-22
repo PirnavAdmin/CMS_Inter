@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 import { AlertCircle, CalendarClock, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-import { useFinancePage, rowsOf } from "../accountantData.js";
-import { loadFeeOverview } from "../accountantFeeRequests.js";
-import { feeCompactMoney, feeDate, feeMoney, feeText, pageOf, readFee, splitFeeSchedules } from "../feeViewData.js";
+import { useFinancePage, rowsOf } from "../services/accountantData.js";
+import { loadFeeOverview } from "../api/accountantFeeRequests.js";
+import { feeCompactMoney, feeDate, feeMoney, feeText, pageOf, readFee, splitFeeSchedules } from "../utils/feeViewData.js";
 import { FeeBadge, FeeCard, FeeLoadState, FeeNotice, FeePagination, FeeTable } from "./AccountantFeeUI.jsx";
 
 const overviewTabs = [["overdue", "Overdue Fees", AlertCircle], ["upcoming", "Upcoming Fee Schedules", CalendarClock], ["recent", "Recent Payments", ReceiptText]];

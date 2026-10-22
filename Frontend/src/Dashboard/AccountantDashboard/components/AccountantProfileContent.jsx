@@ -4,8 +4,8 @@ import { Camera, Check, ChevronLeft, ChevronRight, Edit3, Lock, Save, X } from "
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { env } from "@/config/env.js";
-import { maskProfileValue, profileCollections, profileDate, profileDocumentUrl, profileValue as value, validateProfileDocument } from "../accountantProfileData.js";
-import "../AccountantProfile.css";
+import { maskProfileValue, profileCollections, profileDate, profileDocumentUrl, profileValue as value, validateProfileDocument } from "../utils/accountantProfileData.js";
+import "./AccountantProfile.css";
 import AccountantProfilePhotoEditor from "./AccountantProfilePhotoEditor.jsx";
 import AccountantProfilePhotoActions from "./AccountantProfilePhotoActions.jsx";
 

@@ -16,8 +16,8 @@ import StudentSummaryCard from "@/Dashboard/StudentDashboard/components/StudentS
 import { fetchClaims, fetchAccountEntries, disburseClaimPayment } from "@/services/reimbursementService.js";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import "@/components/pages/AdminProfilePage.css";
-import AccountantProfileContent from "./AccountantProfileContent.jsx";
-import { editableProfileFields, profileContactPayload, profileDraftRequests, updateProfileField, validateProfileDraft } from "../accountantProfileEditing.js";
+import AccountantProfileContent from "../components/AccountantProfileContent.jsx";
+import { editableProfileFields, profileContactPayload, profileDraftRequests, updateProfileField, validateProfileDraft } from "../utils/accountantProfileEditing.js";
 
 export const getRows = (payload) => {
   const value = payload?.data ?? payload?.Data ?? payload;

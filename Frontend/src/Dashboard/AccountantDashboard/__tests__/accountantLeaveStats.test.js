@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { accountantCategoryEligibility, accountantLeaveCategoryLabel, accountantLeaveTypeForCategory, getAccountantLeaveCategoryStats, getAccountantLeaveTypeLabel, getApplicableAccountantLeaveCategories, parseAccountantLeaveCategories } from "./accountantLeaveStats.js";
+import { accountantCategoryEligibility, accountantLeaveCategoryLabel, accountantLeaveTypeForCategory, getAccountantLeaveCategoryStats, getAccountantLeaveTypeLabel, getApplicableAccountantLeaveCategories, parseAccountantLeaveCategories } from "../utils/accountantLeaveStats.js";
 
 const raw = [
   { leaveCategoryId: 10, categoryCode: "MDCL", categoryName: "Medical", annualQuota: 10, applicableStaffType: "Teaching Staff Only", displayOrder: 1 },

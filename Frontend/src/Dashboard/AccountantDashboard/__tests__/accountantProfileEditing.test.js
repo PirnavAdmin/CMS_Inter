@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { editableProfileFields, profileContactPayload, profileDraftRequests, updateProfileField, validateProfileDraft } from "./accountantProfileEditing.js";
+import { editableProfileFields, profileContactPayload, profileDraftRequests, updateProfileField, validateProfileDraft } from "../utils/accountantProfileEditing.js";
 
 const staff = { id: 42, firstName: "Example", lastName: "Accountant", mobile: "9876543210", email: "example@college.test", currentAddress: "Saved address", alternateMobile: "9876543211", staffType: "Non-Teaching", departmentId: 7, bankDetails: { bankName: "Saved bank", accountNumber: "123456789012", basicSalary: 23456, panNumber: "ABCDE1234F" }, panNumber: "ABCDE1234F", experienceList: [{ organization: "Saved employer", designation: "Accountant", fromDate: "2020-01-01", toDate: "2022-01-01", totalYears: 2, roles: "Accounts" }] };
 const form = source => ({ firstName: source.firstName, lastName: source.lastName, mobile: source.mobile, email: source.email, ...editableProfileFields(source) });

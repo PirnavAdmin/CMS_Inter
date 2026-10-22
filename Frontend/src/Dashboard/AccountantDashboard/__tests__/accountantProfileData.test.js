@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { maskProfileValue, profileCollections, profileDate, profileDocumentUrl, profileJson, profileValue, validateProfileDocument } from "./accountantProfileData.js";
+import { maskProfileValue, profileCollections, profileDate, profileDocumentUrl, profileJson, profileValue, validateProfileDocument } from "../utils/accountantProfileData.js";
 
 test("maps actual profile aliases and preserves zero values without dummy defaults", () => {
   assert.equal(profileValue({ MiddleName: "Example" }, "middleName"), "Example");

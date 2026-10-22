@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { transformWithOxc } from "vite";
-import * as data from "./accountantProfileData.js";
-import { editableProfileFields, updateProfileField } from "./accountantProfileEditing.js";
+import * as data from "../utils/accountantProfileData.js";
+import { editableProfileFields, updateProfileField } from "../utils/accountantProfileEditing.js";
 
 test("Accountant steps retain edits, manage documents, open photo options and preserve password modal", async () => {
-  const source = fs.readFileSync(new URL("./pages/AccountantProfileContent.jsx", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm, "").replace("export default function", "function");
+  const source = fs.readFileSync(new URL("../components/AccountantProfileContent.jsx", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm, "").replace("export default function", "function");
   const { code } = await transformWithOxc(source, "View.jsx", { jsx: { runtime: "classic" } });
   let hooks = [], cursor = 0, pending = [], listeners = {}, clicks = 0, confirmed = false;
   const useState = initial => {

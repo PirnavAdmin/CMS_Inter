@@ -3,8 +3,8 @@ import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
-import { accountantLeaveCategoryLabel, accountantLeaveTypeForCategory, getAccountantLeaveCategoryStats, getAccountantLeaveTypeLabel, getApplicableAccountantLeaveCategories, parseAccountantLeaveCategories } from "../accountantLeaveStats.js";
-import "../AccountantLeave.css";
+import { accountantLeaveCategoryLabel, accountantLeaveTypeForCategory, getAccountantLeaveCategoryStats, getAccountantLeaveTypeLabel, getApplicableAccountantLeaveCategories, parseAccountantLeaveCategories } from "../utils/accountantLeaveStats.js";
+import "./AccountantLeave.css";
 
 const PROFILE_URL = "/api/v1/staff/me";
 const historyUrl = staffId => `/api/v1/staff-attendance/leave/history/staff/${staffId}`;
