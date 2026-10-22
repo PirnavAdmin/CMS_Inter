@@ -43,6 +43,8 @@ import {
   calculateFinancialMetrics,
   exportClaimsToCsv,
   requestClarification,
+  fetchClaims as apiFetchClaims,
+  fetchMyClaims as apiFetchMyClaims,
 } from "@/services/reimbursementService.js";
 import "./ReimbursementPage.css";
 
@@ -73,16 +75,36 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   const [activePortalTab, setActivePortalTab] = useState("all-claims");
 
   // ── Live Claims & Account Entries State ─────────────────────────────
-  const [claims, setClaims] = useState(() => reimbursementService.getStoredClaims());
-  const [accountEntries, setAccountEntries] = useState(() =>
-    reimbursementService.getStoredAccountEntries()
-  );
+  const [claims, setClaims] = useState([]);
+  const [accountEntries, setAccountEntries] = useState([]);
+  const [isLoadingClaims, setIsLoadingClaims] = useState(false);
   const [toast, setToast] = useState(null);
 
-  const refreshData = useCallback(() => {
-    setClaims(reimbursementService.getStoredClaims());
-    setAccountEntries(reimbursementService.getStoredAccountEntries());
-  }, []);
+  // Fetch claims from the real API (database-backed)
+  const refreshData = useCallback(async () => {
+    setIsLoadingClaims(true);
+    try {
+      if (isFacultyUser) {
+        // Faculty: load only their own claims
+        const myClaims = await apiFetchMyClaims();
+        setClaims(myClaims || []);
+      } else {
+        // Admin / Finance / Accountant: load all claims
+        const allClaims = await apiFetchClaims();
+        setClaims(allClaims || []);
+      }
+    } catch (err) {
+      console.warn("[Reimbursement] Failed to load claims from API:", err?.message || err);
+      setClaims([]);
+    } finally {
+      setIsLoadingClaims(false);
+    }
+  }, [isFacultyUser]);
+
+  // Load data on mount
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
   useEffect(() => {
     const onUpdated = () => refreshData();
@@ -207,6 +229,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
         size: file.size,
         type: file.type,
         dataUrl: reader.result,
+        rawFile: file,
         uploadedAt: new Date().toISOString(),
       });
       setFormErrors((prev) => ({ ...prev, file: null, proof: null }));

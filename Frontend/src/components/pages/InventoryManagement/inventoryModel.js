@@ -412,6 +412,11 @@ export function postMovement(state, kind, values) {
     ),
   };
 }
+export function canReverseMovement(state, movement) {
+  if (!movement || movement.status !== "Posted" || movement.correctionOf || movement.returnOf) return false;
+  const latest = chronological(state.movements.filter((m) => m.itemId === movement.itemId)).at(-1);
+  return latest?.id === movement.id && !state.movements.some((m) => m.returnOf === movement.id || m.correctionOf === movement.id);
+}
 export function reverseMovement(state, id, performedBy) {
   const movement = state.movements.find((m) => m.id === id);
   if (!movement || movement.status !== "Posted" || movement.correctionOf || movement.returnOf)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
   LogIn,
@@ -8,7 +8,6 @@ import {
   Briefcase,
   UserX,
   AlertCircle,
-  Fingerprint,
   RotateCw,
   Send,
   X,
@@ -16,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import "../styles/FacultyMyAttendance.css";
+import { Skeleton } from "@/components/common/Ui.jsx";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import { attendanceService } from "../../../api/attendanceService.js";
 
@@ -53,6 +53,24 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
   const hours = Math.floor(diff / 60);
   const mins = diff % 60;
   return `${hours}h ${mins}m`;
+};
+
+const normalizeTodayData = (raw) => {
+  if (!raw) return null;
+  return {
+    status: raw.status || raw.Status || "not_punched",
+    inTime: raw.inTime || raw.InTime || null,
+    outTime: raw.outTime || raw.OutTime || null,
+    shiftDuration: raw.shiftDuration || raw.ShiftDuration || "--",
+    shiftName: raw.shiftName || raw.ShiftName || "Morning (09:00 AM – 04:30 PM)",
+    shiftStartTime: raw.shiftStartTime || raw.ShiftStartTime || "09:00 AM",
+    shiftEndTime: raw.shiftEndTime || raw.ShiftEndTime || "04:30 PM",
+    isLate: Boolean(raw.isLate ?? raw.IsLate),
+    todayStatus: raw.todayStatus || raw.TodayStatus || "Absent",
+    canRegularize: Boolean(raw.canRegularize ?? raw.CanRegularize),
+    dateFormatted: raw.dateFormatted || raw.DateFormatted || new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
+    regularizationState: raw.regularizationState || raw.RegularizationState || null,
+  };
 };
 
 export default function FacultyMyAttendance() {
@@ -131,19 +149,35 @@ export default function FacultyMyAttendance() {
     [context]
   );
 
+  const contextRef = useRef(context);
+  useEffect(() => {
+    contextRef.current = context;
+  }, [context]);
+
   // Sync punch status with global Faculty context
   const syncGlobalPunchState = useCallback(
     (status, inTime, outTime) => {
-      if (context?.setPunchState) {
-        context.setPunchState({
-          isPunchedIn: status === "punched_in",
-          inTime: inTime,
-          outTime: outTime,
-          hoursWorked: inTime ? calculateDurationStr(inTime, outTime, status === "punched_in") : "--",
+      const setPunchState = contextRef.current?.setPunchState;
+      if (typeof setPunchState === "function") {
+        const isPunchedIn = status === "punched_in";
+        setPunchState((prev) => {
+          if (
+            prev?.isPunchedIn === isPunchedIn &&
+            prev?.inTime === inTime &&
+            prev?.outTime === outTime
+          ) {
+            return prev;
+          }
+          return {
+            isPunchedIn,
+            inTime: inTime,
+            outTime: outTime,
+            hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunchedIn) : "--",
+          };
         });
       }
     },
-    [context]
+    []
   );
 
   // Fetch Today's Attendance Status
@@ -151,9 +185,13 @@ export default function FacultyMyAttendance() {
     try {
       setLoadingToday(true);
       const res = await attendanceService.getMyTodayStatus();
-      if (res?.Data) {
-        setTodayData(res.Data);
-        syncGlobalPunchState(res.Data.Status || res.Data.status, res.Data.InTime || res.Data.inTime, res.Data.OutTime || res.Data.outTime);
+      const payload = res?.data || res?.Data || (res?.status ? res : null);
+      if (payload) {
+        const normalized = normalizeTodayData(payload);
+        if (normalized) {
+          setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
+        }
       }
     } catch (err) {
       console.warn("Could not load today status from backend, keeping defaults", err);
@@ -167,10 +205,37 @@ export default function FacultyMyAttendance() {
     try {
       setLoadingHistory(true);
       const res = await attendanceService.getMyAttendanceHistory(period);
-      if (res?.Data) {
+      const payload = res?.data || res?.Data || (res?.status ? res : null);
+      if (payload) {
+        const rawLogs = payload.logs || payload.Logs || [];
+        const rawMetrics = payload.metrics || payload.Metrics || {};
         setHistoryData({
-          logs: res.Data.Logs || res.Data.logs || [],
-          metrics: res.Data.Metrics || res.Data.metrics || {},
+          logs: rawLogs.map((l) => ({
+            id: l.id || l.Id,
+            day: l.day || l.Day,
+            date: l.date || l.Date,
+            rawDate: l.rawDate || l.RawDate,
+            shift: l.shift || l.Shift,
+            inTime: l.inTime || l.InTime,
+            outTime: l.outTime || l.OutTime,
+            hours: l.hours || l.Hours,
+            device: l.device || l.Device,
+            status: l.status || l.Status,
+            canRegularize: Boolean(l.canRegularize ?? l.CanRegularize),
+            isToday: Boolean(l.isToday ?? l.IsToday),
+            regularizationState: l.regularizationState || l.RegularizationState,
+            holidayName: l.holidayName || l.HolidayName || null,
+          })),
+          metrics: {
+            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "6 Days",
+            workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "--",
+            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || "0 Days",
+            presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "--",
+            leaves: rawMetrics.leaves || rawMetrics.Leaves || "0 Days",
+            leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "--",
+            absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "0 Days",
+            absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "--",
+          },
         });
       }
     } catch (err) {
@@ -180,7 +245,7 @@ export default function FacultyMyAttendance() {
     }
   }, []);
 
-  // Initial load
+  // Initial load once on mount
   useEffect(() => {
     fetchTodayStatus();
   }, [fetchTodayStatus]);
@@ -201,16 +266,21 @@ export default function FacultyMyAttendance() {
         remarks: "Faculty Self Check-In via Web Portal",
       });
 
-      if (res?.Status && res?.Data) {
-        setTodayData(res.Data);
-        syncGlobalPunchState(res.Data.Status, res.Data.InTime, res.Data.OutTime);
-        notify(res.Message || `Checked In Successfully at ${res.Data.InTime}`, "success");
+      const isSuccess = Boolean(res?.status ?? res?.Status);
+      const payload = res?.data || res?.Data;
+      if (isSuccess && payload) {
+        const normalized = normalizeTodayData(payload);
+        if (normalized) {
+          setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
+        }
+        notify(res?.message || res?.Message || `Checked In Successfully at ${payload.inTime || payload.InTime}`, "success");
         fetchHistory(activeFilter);
       } else {
-        notify(res?.Message || "Failed to check in.", "error");
+        notify(res?.message || res?.Message || "Failed to check in.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.Message || err?.message || "Failed to check in.";
+      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to check in.";
       notify(errMsg, "error");
     } finally {
       setActionLoading(false);
@@ -228,16 +298,21 @@ export default function FacultyMyAttendance() {
         remarks: "Faculty Self Check-Out via Web Portal",
       });
 
-      if (res?.Status && res?.Data) {
-        setTodayData(res.Data);
-        syncGlobalPunchState(res.Data.Status, res.Data.InTime, res.Data.OutTime);
-        notify(res.Message || `Punched Out Successfully at ${res.Data.OutTime}`, "success");
+      const isSuccess = Boolean(res?.status ?? res?.Status);
+      const payload = res?.data || res?.Data;
+      if (isSuccess && payload) {
+        const normalized = normalizeTodayData(payload);
+        if (normalized) {
+          setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
+        }
+        notify(res?.message || res?.Message || `Punched Out Successfully at ${payload.outTime || payload.OutTime}`, "success");
         fetchHistory(activeFilter);
       } else {
-        notify(res?.Message || "Failed to punch out.", "error");
+        notify(res?.message || res?.Message || "Failed to punch out.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.Message || err?.message || "Failed to punch out.";
+      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to punch out.";
       notify(errMsg, "error");
     } finally {
       setActionLoading(false);
@@ -274,16 +349,17 @@ export default function FacultyMyAttendance() {
       };
 
       const res = await attendanceService.submitRegularization(payload);
-      if (res?.Status) {
+      const isSuccess = Boolean(res?.status ?? res?.Status);
+      if (isSuccess) {
         notify("Attendance regularization request submitted successfully. Pending Principal/Admin approval.", "success");
         setRegModalOpen(false);
         fetchTodayStatus();
         fetchHistory(activeFilter);
       } else {
-        notify(res?.Message || "Failed to submit regularization.", "error");
+        notify(res?.message || res?.Message || "Failed to submit regularization.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.Message || err?.message || "Failed to submit regularization.";
+      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to submit regularization.";
       notify(errMsg, "error");
     } finally {
       setRegSubmitting(false);
@@ -315,6 +391,8 @@ export default function FacultyMyAttendance() {
         return "absent";
       case "Holiday":
         return "holiday";
+      case "Weekly Off":
+        return "weekly-off";
       case "-":
       case "--":
         return "empty";
@@ -400,8 +478,7 @@ export default function FacultyMyAttendance() {
           <div className="sp-card-header">
             <h3 className="sp-card-title">Check-In / Check-Out</h3>
             <p className="sp-card-desc">
-              Click below to record your campus entry or exit timestamp.<br />
-              Instant biometric verification enabled.
+              Click below to record your campus entry or exit timestamp.
             </p>
           </div>
 
@@ -413,28 +490,20 @@ export default function FacultyMyAttendance() {
               </div>
               <div className="sp-twin-title checkin">CHECK IN</div>
 
-              {/* Dotted Arc Gauge */}
-              <div className="sp-arc-gauge-container">
-                <svg viewBox="0 0 160 82" className="sp-arc-svg checkin-arc" fill="none">
-                  <path
-                    d="M 22 72 A 58 58 0 0 1 138 72"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeDasharray="2 7"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="sp-gauge-center">
-                  <span className="sp-gauge-time">{todayData.inTime || "--:-- --"}</span>
-                  <span className="sp-gauge-sub">{todayData.inTime ? "Checked In" : "Not Checked In"}</span>
-                </div>
+              {/* Modern Digital Clock & Status Badge */}
+              <div className="sp-digital-display checkin">
+                <span className="sp-digital-time">{todayData.inTime || "--:-- --"}</span>
+                <span className={`sp-digital-status-pill ${todayData.inTime ? "checked" : "pending"}`}>
+                  <span className="sp-status-dot">•</span>
+                  {todayData.inTime ? "Checked In" : "Not Checked In"}
+                </span>
               </div>
 
               {/* Check In Button */}
               <button
                 type="button"
                 className={`sp-punch-pill-btn checkin ${
-                  todayData.status === "not_punched" && !actionLoading ? "active" : "disabled"
+                  todayData.status === "not_punched" && !actionLoading ? "active" : "inactive"
                 }`}
                 disabled={todayData.status !== "not_punched" || actionLoading}
                 onClick={handlePunchIn}
@@ -442,7 +511,7 @@ export default function FacultyMyAttendance() {
                 {actionLoading && todayData.status === "not_punched" ? (
                   <Loader2 size={15} className="sp-spin" />
                 ) : (
-                  <Fingerprint size={15} />
+                  <LogIn size={15} />
                 )}
                 <span>Check In</span>
               </button>
@@ -457,21 +526,13 @@ export default function FacultyMyAttendance() {
               </div>
               <div className="sp-twin-title checkout">CHECK OUT</div>
 
-              {/* Dotted Arc Gauge */}
-              <div className="sp-arc-gauge-container">
-                <svg viewBox="0 0 160 82" className="sp-arc-svg checkout-arc" fill="none">
-                  <path
-                    d="M 22 72 A 58 58 0 0 1 138 72"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeDasharray="2 7"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="sp-gauge-center">
-                  <span className="sp-gauge-time">{todayData.outTime || "--:-- --"}</span>
-                  <span className="sp-gauge-sub">{todayData.outTime ? "Checked Out" : "Not Checked Out"}</span>
-                </div>
+              {/* Modern Digital Clock & Status Badge */}
+              <div className="sp-digital-display checkout">
+                <span className="sp-digital-time">{todayData.outTime || "--:-- --"}</span>
+                <span className={`sp-digital-status-pill ${todayData.outTime ? "checked" : "pending"}`}>
+                  <span className="sp-status-dot">•</span>
+                  {todayData.outTime ? "Checked Out" : "Not Checked Out"}
+                </span>
               </div>
 
               {/* Check Out Button */}
@@ -506,8 +567,17 @@ export default function FacultyMyAttendance() {
           </div>
           <div className="sp-kpi-content">
             <div className="sp-kpi-label">Working Days</div>
-            <div className="sp-kpi-value">{historyData.metrics?.workingDays || historyData.metrics?.WorkingDays || "0 Days"}</div>
-            <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || historyData.metrics?.WorkingDaysSub || "--"}</div>
+            {loadingHistory ? (
+              <>
+                <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
+                <Skeleton style={{ width: 85, height: 11, marginTop: 4 }} />
+              </>
+            ) : (
+              <>
+                <div className="sp-kpi-value">{historyData.metrics?.workingDays || historyData.metrics?.WorkingDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || historyData.metrics?.WorkingDaysSub || "--"}</div>
+              </>
+            )}
           </div>
         </div>
 
@@ -518,8 +588,17 @@ export default function FacultyMyAttendance() {
           </div>
           <div className="sp-kpi-content">
             <div className="sp-kpi-label">Present Days</div>
-            <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || historyData.metrics?.PresentDays || "0 Days"}</div>
-            <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || historyData.metrics?.PresentDaysSub || "--"}</div>
+            {loadingHistory ? (
+              <>
+                <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
+                <Skeleton style={{ width: 95, height: 11, marginTop: 4 }} />
+              </>
+            ) : (
+              <>
+                <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || historyData.metrics?.PresentDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || historyData.metrics?.PresentDaysSub || "--"}</div>
+              </>
+            )}
           </div>
         </div>
 
@@ -530,8 +609,17 @@ export default function FacultyMyAttendance() {
           </div>
           <div className="sp-kpi-content">
             <div className="sp-kpi-label">Approved Leaves</div>
-            <div className="sp-kpi-value">{historyData.metrics?.leaves || historyData.metrics?.Leaves || "0 Days"}</div>
-            <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || historyData.metrics?.LeavesSub || "--"}</div>
+            {loadingHistory ? (
+              <>
+                <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
+                <Skeleton style={{ width: 85, height: 11, marginTop: 4 }} />
+              </>
+            ) : (
+              <>
+                <div className="sp-kpi-value">{historyData.metrics?.leaves || historyData.metrics?.Leaves || "0 Days"}</div>
+                <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || historyData.metrics?.LeavesSub || "--"}</div>
+              </>
+            )}
           </div>
         </div>
 
@@ -542,8 +630,17 @@ export default function FacultyMyAttendance() {
           </div>
           <div className="sp-kpi-content">
             <div className="sp-kpi-label">Absent Days</div>
-            <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || historyData.metrics?.AbsentDays || "0 Days"}</div>
-            <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || historyData.metrics?.AbsentDaysSub || "--"}</div>
+            {loadingHistory ? (
+              <>
+                <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
+                <Skeleton style={{ width: 75, height: 11, marginTop: 4 }} />
+              </>
+            ) : (
+              <>
+                <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || historyData.metrics?.AbsentDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || historyData.metrics?.AbsentDaysSub || "--"}</div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -605,26 +702,42 @@ export default function FacultyMyAttendance() {
         </div>
 
         <div className="cms-table-wrap">
-          {loadingHistory ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "var(--cms-muted)" }}>
-              <RotateCw size={24} className="sp-spin" style={{ margin: "0 auto 10px" }} />
-              <div>Loading attendance records from biometric server...</div>
-            </div>
-          ) : (
-            <table className="sp-attendance-table">
-              <thead>
-                <tr>
-                  <th style={{ width: "16%" }}>DAY</th>
-                  <th style={{ width: "22%" }}>SHIFT</th>
-                  <th style={{ width: "15%" }}>CHECK IN</th>
-                  <th style={{ width: "15%" }}>CHECK OUT</th>
-                  <th style={{ width: "12%" }}>HOURS</th>
-                  <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                  <th style={{ width: "10%", textAlign: "center" }}>ACTION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historyData.logs && historyData.logs.length > 0 ? (
+          <table className="sp-attendance-table">
+            <thead>
+              <tr>
+                <th style={{ width: "16%" }}>DAY</th>
+                <th style={{ width: "22%" }}>SHIFT</th>
+                <th style={{ width: "15%" }}>CHECK IN</th>
+                <th style={{ width: "15%" }}>CHECK OUT</th>
+                <th style={{ width: "12%" }}>HOURS</th>
+                <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
+                <th style={{ width: "10%", textAlign: "center" }}>ACTION</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingHistory ? (
+                Array.from({ length: 6 }, (_, idx) => (
+                  <tr key={`skel-row-${idx}`} className="sp-att-skeleton-row">
+                    <td>
+                      <Skeleton style={{ width: "70%", height: 13 }} />
+                      <Skeleton style={{ width: "45%", height: 10, marginTop: 4 }} />
+                    </td>
+                    <td>
+                      <Skeleton style={{ width: "85%", height: 13 }} />
+                      <Skeleton style={{ width: "60%", height: 10, marginTop: 4 }} />
+                    </td>
+                    <td><Skeleton style={{ width: "55%", height: 13 }} /></td>
+                    <td><Skeleton style={{ width: "55%", height: 13 }} /></td>
+                    <td><Skeleton style={{ width: "45%", height: 13 }} /></td>
+                    <td style={{ textAlign: "center" }}>
+                      <Skeleton style={{ width: 68, height: 20, borderRadius: 12, margin: "0 auto" }} />
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <Skeleton style={{ width: 54, height: 22, borderRadius: 6, margin: "0 auto" }} />
+                    </td>
+                  </tr>
+                ))
+              ) : historyData.logs && historyData.logs.length > 0 ? (
                   historyData.logs.map((log) => {
                     const id = log.id || log.Id;
                     const day = log.day || log.Day;
@@ -636,6 +749,7 @@ export default function FacultyMyAttendance() {
                     const status = log.status || log.Status || "--";
                     const canReg = log.canRegularize ?? log.CanRegularize;
                     const regState = log.regularizationState || log.RegularizationState;
+                    const holidayName = log.holidayName || log.HolidayName;
                     const isUpcoming = status === "-" || status === "--";
 
                     return (
@@ -662,9 +776,16 @@ export default function FacultyMyAttendance() {
                           {isUpcoming ? (
                             <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
                           ) : (
-                            <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
-                              {status}
-                            </span>
+                            <div className="sp-status-cell">
+                              <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
+                                {status}
+                              </span>
+                              {holidayName && (
+                                <span className="sp-holiday-name-subtext" title={holidayName}>
+                                  {holidayName}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
                         <td style={{ textAlign: "center" }}>
@@ -699,7 +820,6 @@ export default function FacultyMyAttendance() {
                 )}
               </tbody>
             </table>
-          )}
         </div>
       </div>
 

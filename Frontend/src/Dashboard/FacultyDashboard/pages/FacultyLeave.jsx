@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import "../styles/FacultyLeave.css";
 import { useFacultySafe } from "../FacultyContext.jsx";
@@ -425,9 +426,21 @@ export default function FacultyLeave() {
         const selectedCat = categories.find(
           (c) => String(c.leaveCategoryId) === String(leaveForm.categoryId)
         );
-        targetLeaveType = selectedCat
-          ? (selectedCat.categoryName || "").replace(/\s*Leave\s*/i, "").trim() || "Casual"
-          : "Casual";
+        const catCode = (selectedCat?.categoryCode || "").trim().toUpperCase();
+        const catName = (selectedCat?.categoryName || "").trim().toLowerCase();
+        let canonicalEnum = "Casual";
+        if (catCode === "SL" || catName.includes("sick") || catName.includes("medical")) {
+          canonicalEnum = "Sick";
+        } else if (catCode === "EL" || catName.includes("earned") || catName.includes("privilege")) {
+          canonicalEnum = "Earned";
+        } else if (catCode === "ML" || catName.includes("maternity") || catName.includes("parental")) {
+          canonicalEnum = "Maternity";
+        } else if (catCode === "CL" || catName.includes("casual")) {
+          canonicalEnum = "Casual";
+        } else {
+          canonicalEnum = "Other";
+        }
+        targetLeaveType = canonicalEnum;
         targetCategoryId = selectedCat?.leaveCategoryId || leaveForm.categoryId;
       }
 
@@ -662,152 +675,163 @@ export default function FacultyLeave() {
       </div>
 
       {/* Apply Leave Modal */}
-      {showLeaveModal && (
-        <div
-          className="cms-overlay"
-          onClick={(e) => e.target === e.currentTarget && setShowLeaveModal(false)}
-        >
-          <div className="cms-modal sm">
-            <div className="cms-modal-head">
-              <h3>Apply for Staff Leave</h3>
-              <button className="cms-icon-btn" onClick={() => setShowLeaveModal(false)}>
-                <X size={16} />
-              </button>
-            </div>
-            <div className="cms-modal-body">
-              <div className="cms-form-grid">
-                <div className="cms-field full">
-                  <label>
-                    Leave Type <span className="req">*</span>
-                  </label>
-                  <select
-                    value={leaveForm.categoryId}
-                    onChange={(e) =>
-                      setLeaveForm({ ...leaveForm, categoryId: e.target.value })
-                    }
-                  >
-                    {categories.length === 0 && (
-                      <option value="">Loading leave categories...</option>
-                    )}
-                    {categories.map((c) => (
-                      <option key={c.leaveCategoryId} value={c.leaveCategoryId}>
-                        {c.categoryName} {c.categoryCode ? `(${c.categoryCode})` : ""} · {Number(c.annualQuota || 0)} days quota
-                      </option>
-                    ))}
-                    <option value="OTHERS">Others</option>
-                  </select>
-                </div>
-
-                {/* Conditional Custom Leave Type Field when "OTHERS" is selected */}
-                {String(leaveForm.categoryId) === "OTHERS" && (
-                  <div className="cms-field full leave-custom-field-group">
-                    <label>
-                      Custom Leave Type <span className="req">*</span>
-                    </label>
-                    <div className="leave-custom-input-wrap">
-                      <input
-                        type="text"
-                        placeholder="Enter custom leave type (e.g. Sabbatical, Bereavement)..."
-                        value={leaveForm.customLeaveType || ""}
-                        onChange={(e) =>
-                          setLeaveForm({ ...leaveForm, customLeaveType: e.target.value })
-                        }
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        className="cms-btn cms-btn-ghost leave-add-custom-btn"
-                        onClick={handleCreateCustomCategory}
-                        disabled={addingCategory || !leaveForm.customLeaveType?.trim()}
-                        title="Add to categories list"
-                      >
-                        {addingCategory ? (
-                          <Loader2 size={13} className="leave-spin" />
-                        ) : (
-                          <Plus size={13} />
-                        )}
-                        <span>Add</span>
-                      </button>
-                    </div>
-                    <span className="leave-custom-hint">
-                      This custom leave type will be saved to your institution's leave categories.
-                    </span>
+      {showLeaveModal &&
+        (typeof document !== "undefined"
+          ? createPortal(
+              <div
+                className="cms-overlay faculty-leave-modal-overlay"
+                onClick={(e) => e.target === e.currentTarget && setShowLeaveModal(false)}
+              >
+                <div className="cms-modal sm faculty-leave-modal" role="dialog" aria-modal="true">
+                  <div className="cms-modal-head">
+                    <h3>Apply for Staff Leave</h3>
+                    <button
+                      type="button"
+                      className="cms-icon-btn"
+                      onClick={() => setShowLeaveModal(false)}
+                      aria-label="Close"
+                    >
+                      <X size={15} />
+                    </button>
                   </div>
-                )}
+                  <div className="cms-modal-body">
+                    <div className="cms-form-grid">
+                      <div className="cms-field full">
+                        <label>
+                          Leave Type <span className="req">*</span>
+                        </label>
+                        <select
+                          value={leaveForm.categoryId}
+                          onChange={(e) =>
+                            setLeaveForm({ ...leaveForm, categoryId: e.target.value })
+                          }
+                        >
+                          {categories.length === 0 && (
+                            <option value="">Loading leave categories...</option>
+                          )}
+                          {categories.map((c) => (
+                            <option key={c.leaveCategoryId} value={c.leaveCategoryId}>
+                              {c.categoryName} {c.categoryCode ? `(${c.categoryCode})` : ""} · {Number(c.annualQuota || 0)} days quota
+                            </option>
+                          ))}
+                          <option value="OTHERS">Others</option>
+                        </select>
+                      </div>
 
-                <div className="cms-field">
-                  <label>
-                    From Date <span className="req">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={leaveForm.fromDate}
-                    onChange={(e) =>
-                      setLeaveForm({ ...leaveForm, fromDate: e.target.value })
-                    }
-                  />
-                </div>
+                      {/* Conditional Custom Leave Type Field when "OTHERS" is selected */}
+                      {String(leaveForm.categoryId) === "OTHERS" && (
+                        <div className="cms-field full leave-custom-field-group">
+                          <label>
+                            Custom Leave Type <span className="req">*</span>
+                          </label>
+                          <div className="leave-custom-input-wrap">
+                            <input
+                              type="text"
+                              placeholder="Enter custom leave type (e.g. Sabbatical, Bereavement)..."
+                              value={leaveForm.customLeaveType || ""}
+                              onChange={(e) =>
+                                setLeaveForm({ ...leaveForm, customLeaveType: e.target.value })
+                              }
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              className="cms-btn cms-btn-ghost leave-add-custom-btn"
+                              onClick={handleCreateCustomCategory}
+                              disabled={addingCategory || !leaveForm.customLeaveType?.trim()}
+                              title="Add to categories list"
+                            >
+                              {addingCategory ? (
+                                <Loader2 size={13} className="leave-spin" />
+                              ) : (
+                                <Plus size={13} />
+                              )}
+                              <span>Add</span>
+                            </button>
+                          </div>
+                          <span className="leave-custom-hint">
+                            This custom leave type will be saved to your institution's leave categories.
+                          </span>
+                        </div>
+                      )}
 
-                <div className="cms-field">
-                  <label>
-                    To Date <span className="req">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={leaveForm.toDate}
-                    onChange={(e) =>
-                      setLeaveForm({ ...leaveForm, toDate: e.target.value })
-                    }
-                  />
-                </div>
+                      <div className="cms-field">
+                        <label>
+                          From Date <span className="req">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={leaveForm.fromDate}
+                          onChange={(e) =>
+                            setLeaveForm({ ...leaveForm, fromDate: e.target.value })
+                          }
+                        />
+                      </div>
 
-                <div className="cms-field full">
-                  <label>
-                    Reason for Leave <span className="req">*</span>
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={leaveForm.reason}
-                    placeholder="State reason clearly..."
-                    onChange={(e) =>
-                      setLeaveForm({ ...leaveForm, reason: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
+                      <div className="cms-field">
+                        <label>
+                          To Date <span className="req">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={leaveForm.toDate}
+                          onChange={(e) =>
+                            setLeaveForm({ ...leaveForm, toDate: e.target.value })
+                          }
+                        />
+                      </div>
 
-              {leavePreviewDays > 0 ? (
-                <div style={{ fontSize: 12.5, color: "var(--cms-primary-dark)", fontWeight: 600, marginTop: 12, background: "var(--cms-primary-soft, #f4f6e8)", padding: "8px 12px", borderRadius: "6px" }}>
-                  Effective Duration: {leavePreviewDays} working day{leavePreviewDays > 1 ? "s" : ""} (Sundays &amp; official holidays excluded)
-                </div>
-              ) : leaveForm.fromDate && leaveForm.toDate ? (
-                <div style={{ fontSize: 12, color: "#DC2626", marginTop: 10, fontWeight: 500 }}>
-                  Selected range contains only non-working days (Sundays or holidays). Leave cannot be requested for 0 working days.
-                </div>
-              ) : null}
-            </div>
+                      <div className="cms-field full">
+                        <label>
+                          Reason for Leave <span className="req">*</span>
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={leaveForm.reason}
+                          placeholder="State reason clearly..."
+                          onChange={(e) =>
+                            setLeaveForm({ ...leaveForm, reason: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
 
-            <div className="cms-modal-foot">
-              <button
-                className="cms-btn cms-btn-ghost"
-                onClick={() => setShowLeaveModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="cms-btn cms-btn-primary"
-                onClick={applyLeave}
-                disabled={leaveSubmitting}
-              >
-                {leaveSubmitting && (
-                  <Loader2 size={14} className="leave-spin" style={{ marginRight: 6 }} />
-                )}
-                Submit Leave
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                    {leavePreviewDays > 0 ? (
+                      <div className="leave-duration-badge">
+                        Effective Duration: {leavePreviewDays} working day{leavePreviewDays > 1 ? "s" : ""} (Sundays &amp; official holidays excluded)
+                      </div>
+                    ) : leaveForm.fromDate && leaveForm.toDate ? (
+                      <div className="leave-duration-warning">
+                        Selected range contains only non-working days (Sundays or holidays). Leave cannot be requested for 0 working days.
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="cms-modal-foot">
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      onClick={() => setShowLeaveModal(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      onClick={applyLeave}
+                      disabled={leaveSubmitting}
+                    >
+                      {leaveSubmitting && (
+                        <Loader2 size={14} className="leave-spin" style={{ marginRight: 6 }} />
+                      )}
+                      Submit Leave
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )
+          : null)}
 
       {/* Toast Notification */}
       {toast && (

@@ -125,6 +125,11 @@ export const attendanceService = {
     return response.data;
   },
 
+  getMyLeaveHistory: async () => {
+    const response = await apiClient.get(apiEndpoints.staffAttendance.myLeaveHistory);
+    return response.data;
+  },
+
   // Self-Service My Attendance
   getMyTodayStatus: async () => {
     const response = await apiClient.get(apiEndpoints.staffAttendance.myToday);

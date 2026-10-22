@@ -1,40 +1,40 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2, Plus, Calendar, AlertCircle, RefreshCw, X, ChevronLeft, ChevronRight } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast, SkeletonRow, Skeleton } from "@/components/common/Ui.jsx";
-import { 
+import { getAuthUser, getAuthToken } from "@/features/authStorage.js";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import {
   LEAVE_STATUS,
-  getLeaveRequests, 
-  getLeaveDetails, 
-  reviewLeaveRequest, 
-  getLeaveHistorySummary, 
-  getLeaveHistory, 
-  getAffectedClasses, 
-  getEligibleSubstitutes, 
-  assignSubstitutes 
+  getLeaveRequests,
+  getLeaveDetails,
+  reviewLeaveRequest,
+  getLeaveHistorySummary,
+  getLeaveHistory,
+  getAffectedClasses,
+  getEligibleSubstitutes,
+  assignSubstitutes
 } from "@/features/leave/services/leaveStore.js";
 import "./LeaveManagementPage.css";
+
+const STATUS_BADGE = {
+  Approved: "cms-badge-active",
+  Active: "cms-badge-active",
+  Pending: "cms-badge-warn",
+  Rejected: "cms-badge-danger",
+  Cancelled: "cms-badge-inactive",
+};
 
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
 
 const prettyDate = (date) => date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
-const defaultSlots = [
-  { id: "tt-101", period: "P1", time: "09:00 AM - 10:00 AM", program: "MPC", section: "A", subject: "Mathematics" },
-  { id: "tt-103", period: "P3", time: "11:00 AM - 12:00 PM", program: "MPC", section: "B", subject: "Physics" },
-  { id: "tt-105", period: "P5", time: "01:00 PM - 02:00 PM", program: "IIT", section: "A", subject: "Physics" },
-  { id: "tt-107", period: "P7", time: "03:00 PM - 04:00 PM", program: "EAMCET", section: "A", subject: "Mathematics" }
-];
 
-const defaultFaculty = [
-  { id: "FAC002", name: "Mahesh Kumar", department: "Physics", subjects: ["Physics", "Mathematics"], classes: 3, active: true },
-  { id: "FAC001", name: "Suresh Kumar", department: "Physics", subjects: ["Physics"], classes: 4, active: true },
-  { id: "FAC004", name: "Anil Kumar", department: "Mathematics", subjects: ["Mathematics"], classes: 5, active: true },
-  { id: "FAC006", name: "Kiran Rao", department: "Mathematics", subjects: ["Mathematics"], classes: 2, active: true }
-];
 
 // Always allow viewing affected classes for any approved leave request
 const manage = (request) => {
@@ -54,16 +54,16 @@ function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected,
   const pending = String(leave.status || "").toLowerCase() === "pending";
   const staffName = leave.staffName || leave.facultyName || "Staff Member";
   const initials = staffName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-  const staffId = leave.staffCode || leave.employeeId || (typeof leave.staffId === 'string' && leave.staffId.startsWith('FAC') ? leave.staffId : (leave.staffId ? `FAC00${leave.staffId}` : "FAC005"));
-  const department = leave.department || "Mathematics";
-  const staffType = leave.staffType || "Teaching Staff";
-  
-  // Calculate or fallback balance
-  const balance = leave.balance || {
-    total: 12,
-    used: String(leave.status).toLowerCase() === "approved" ? (Number(leave.days) || 1) : 0,
-    remaining: 12 - (String(leave.status).toLowerCase() === "approved" ? (Number(leave.days) || 1) : 0)
-  };
+  const staffId = leave.staffCode || leave.employeeId || (typeof leave.staffId === 'string' && leave.staffId.startsWith('FAC') ? leave.staffId : (leave.staffId ? `FAC00${leave.staffId}` : "--"));
+  const department = leave.department || leave.departmentName || "--";
+  const staffType = leave.staffType || "--";
+
+  // Balance from leave record if available
+  const balance = leave.balance || (leave.total != null ? {
+    total: leave.total,
+    used: leave.used || 0,
+    remaining: leave.remaining !== undefined ? leave.remaining : Math.max(0, leave.total - (leave.used || 0))
+  } : null);
 
   const title = (
     <span className="leave-details-title">
@@ -90,8 +90,8 @@ function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected,
     <>
       <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
       {manage(leave) && (
-        <button 
-          className="cms-btn cms-btn-primary" 
+        <button
+          className="cms-btn cms-btn-primary"
           onClick={() => {
             setOpeningAffected(true);
             onAffected();
@@ -126,7 +126,7 @@ function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected,
           <CalendarDays size={19} />
           <div>
             <span>Leave Type</span>
-            <strong>{leave.leaveType || "Casual Leave"}</strong>
+            <strong>{leave.leaveType || "--"}</strong>
           </div>
         </div>
       </section>
@@ -135,24 +135,24 @@ function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected,
         <div className="leave-detail-card date">
           <CalendarDays size={17} />
           <span>From Date</span>
-          <strong>{leave.fromDate || "2026-09-10"}</strong>
+          <strong>{prettyDate(leave.fromDate || leave.startDate) || "--"}</strong>
         </div>
         <div className="leave-detail-card date">
           <CalendarDays size={17} />
           <span>To Date</span>
-          <strong>{leave.toDate || "2026-09-10"}</strong>
+          <strong>{prettyDate(leave.toDate || leave.endDate) || "--"}</strong>
         </div>
         <div className="leave-detail-card days">
           <Clock3 size={17} />
           <span>Total Days</span>
-          <strong>{leave.days || 1} {Number(leave.days || 1) === 1 ? "day" : "days"}</strong>
+          <strong>{leave.days || leave.totalDays || 1} {Number(leave.days || leave.totalDays || 1) === 1 ? "day" : "days"}</strong>
         </div>
       </section>
 
       <section className="leave-reason-status">
         <div className="leave-detail-panel">
           <span>Reason</span>
-          <strong>{leave.reason || "Personal work"}</strong>
+          <strong>{leave.reason || "--"}</strong>
         </div>
         <div className="leave-detail-panel">
           <span>Current Status</span>
@@ -160,14 +160,16 @@ function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected,
         </div>
       </section>
 
-      <section className="leave-detail-balance">
-        <span>Leave Balance</span>
-        <div>
-          <b>Total <strong>{balance.total} days</strong></b>
-          <b>Used <strong>{balance.used} {Number(balance.used) === 1 ? "day" : "days"}</strong></b>
-          <b>Remaining <strong>{balance.remaining} days</strong></b>
-        </div>
-      </section>
+      {balance && (
+        <section className="leave-detail-balance">
+          <span>Leave Balance</span>
+          <div>
+            <b>Total <strong>{balance.total} days</strong></b>
+            <b>Used <strong>{balance.used} {Number(balance.used) === 1 ? "day" : "days"}</strong></b>
+            <b>Remaining <strong>{balance.remaining} days</strong></b>
+          </div>
+        </section>
+      )}
 
       <section className="leave-remark">
         <div><FileText size={17} /><strong>Admin Remark</strong></div>
@@ -183,9 +185,9 @@ function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected,
       {!pending && (
         <section className="leave-reviewed">
           <UserRound size={16} />
-          <span>Reviewed by <strong>{leave.reviewedBy || leave.approvedByUserName || "Admin"}</strong></span>
+          <span>Reviewed by <strong>{leave.reviewedBy || leave.approvedByUserName || "--"}</strong></span>
           <i />
-          <span>Reviewed on <strong>{leave.reviewedOn || prettyDate(leave.approvedAt) || "08-Sep-2026"}</strong></span>
+          <span>Reviewed on <strong>{leave.reviewedOn || prettyDate(leave.approvedAt) || "--"}</strong></span>
         </section>
       )}
     </Modal>
@@ -193,7 +195,7 @@ function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected,
 }
 
 function AffectedClasses({ leave, records = [], close, assign }) {
-  const date = leave.fromDate || "2026-09-10";
+  const date = leave.fromDate || leave.startDate || "";
   const [apiRows, setApiRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openingSlotId, setOpeningSlotId] = useState(null);
@@ -217,9 +219,7 @@ function AffectedClasses({ leave, records = [], close, assign }) {
     return () => { active = false; };
   }, [leave]);
 
-  // Use API slots if available, otherwise use default slots so the UI is fully functional
-  const baseSlots = apiRows.length ? apiRows : defaultSlots;
-  const rows = baseSlots.map(slot => {
+  const rows = apiRows.map(slot => {
     const slotId = slot.timetableId || slot.id;
     const existingRec = records.find(r => (r.timetableId === slotId || r.id === slotId) && (r.date === date || !r.date) && r.status === "Active");
     return {
@@ -234,14 +234,14 @@ function AffectedClasses({ leave, records = [], close, assign }) {
     <Modal title="Affected Classes" className="leave-affected-modal" onClose={close} footer={<button className="cms-btn cms-btn-ghost" onClick={close}>Close</button>}>
       <div className="leave-context">
         <div><span>Staff</span><strong>{leave.staffName || "Staff Member"}</strong></div>
-        <div><span>Leave date</span><strong>{prettyDate(date)}</strong></div>
+        <div><span>Leave date</span><strong>{prettyDate(date) || "--"}</strong></div>
         <div><span>Leave status</span><b className="leave-sub-status assigned">Approved</b></div>
       </div>
 
       <div className="leave-progress">
         <div>
           <strong>{assignedCount} of {rows.length} classes assigned</strong>
-          <span>Temporary coverage for {prettyDate(date)}</span>
+          <span>Temporary coverage for {prettyDate(date) || "selected date"}</span>
         </div>
         <div className="leave-progress-track">
           <i style={{ width: `${rows.length ? (assignedCount / rows.length) * 100 : 0}%` }} />
@@ -274,11 +274,11 @@ function AffectedClasses({ leave, records = [], close, assign }) {
                 const isAssigned = Boolean(row.substitution);
                 return (
                   <tr key={rowId}>
-                    <td><b>{row.period}</b></td>
-                    <td>{row.time || `${row.startTime || ""} - ${row.endTime || ""}`}</td>
-                    <td>{row.program || row.group || "MPC"}</td>
-                    <td>{row.section || "A"}</td>
-                    <td>{row.subject || "Mathematics"}</td>
+                    <td><b>{row.period || "--"}</b></td>
+                    <td>{row.time || (row.startTime && row.endTime ? `${row.startTime} - ${row.endTime}` : "--")}</td>
+                    <td>{row.program || row.group || "--"}</td>
+                    <td>{row.section || "--"}</td>
+                    <td>{row.subject || "--"}</td>
                     <td>{leave.staffName || "Staff Member"}</td>
                     <td>
                       <span className={`leave-sub-status ${isAssigned ? "assigned" : "not-assigned"}`}>
@@ -286,8 +286,8 @@ function AffectedClasses({ leave, records = [], close, assign }) {
                       </span>
                     </td>
                     <td>
-                      <button 
-                        className="cms-btn cms-btn-primary leave-compact-btn" 
+                      <button
+                        className="cms-btn cms-btn-primary leave-compact-btn"
                         onClick={() => {
                           setOpeningSlotId(rowId);
                           assign({ ...row, date, leave, substitution: row.substitution });
@@ -328,15 +328,15 @@ function Assignment({ item, records = [], close, save, toast }) {
           if (Array.isArray(data) && data.length) {
             setCandidates(data);
           } else {
-            setCandidates(defaultFaculty);
+            setCandidates([]);
           }
         }).catch(() => {
-          setCandidates(defaultFaculty);
+          setCandidates([]);
         }).finally(() => {
           setLoadingCandidates(false);
         });
       } else {
-        setCandidates(defaultFaculty);
+        setCandidates([]);
         setLoadingCandidates(false);
       }
     }
@@ -352,7 +352,7 @@ function Assignment({ item, records = [], close, save, toast }) {
     setConfirming(true);
     const leaveId = item.leave?.staffLeaveRequestId || item.leave?.id;
     const ttId = item.timetableId || item.id;
-    
+
     // Call backend API if possible
     if (leaveId && (typeof ttId === 'number' || !isNaN(Number(ttId)))) {
       const numTtId = Number(ttId);
@@ -387,10 +387,10 @@ function Assignment({ item, records = [], close, save, toast }) {
   };
 
   return (
-    <Modal 
-      title={existing ? "Substitution Assignment" : "Assign Substitute"} 
-      className="leave-assignment-modal" 
-      onClose={close} 
+    <Modal
+      title={existing ? "Substitution Assignment" : "Assign Substitute"}
+      className="leave-assignment-modal"
+      onClose={close}
       footer={
         <>
           <button className="cms-btn cms-btn-ghost" onClick={close} disabled={confirming}>Cancel</button>
@@ -404,18 +404,18 @@ function Assignment({ item, records = [], close, save, toast }) {
       }
     >
       <section className="leave-assignment-context">
-        <div><span>Subject</span><strong>{item.subject}</strong></div>
-        <div><span>Class</span><strong>{item.program || item.group || "MPC"} - {item.section || "A"}</strong></div>
-        <div><span>Date & period</span><strong>{prettyDate(item.date)} · {item.period}</strong></div>
-        <div><span>Time</span><strong>{item.time || `${item.startTime || ""} - ${item.endTime || ""}`}</strong></div>
-        <div><span>Original faculty</span><strong>{item.leave?.staffName}</strong><small>On leave</small></div>
+        <div><span>Subject</span><strong>{item.subject || "--"}</strong></div>
+        <div><span>Class</span><strong>{item.program || item.group || "--"} - {item.section || "--"}</strong></div>
+        <div><span>Date & period</span><strong>{prettyDate(item.date)} · {item.period || "--"}</strong></div>
+        <div><span>Time</span><strong>{item.time || (item.startTime && item.endTime ? `${item.startTime} - ${item.endTime}` : "--")}</strong></div>
+        <div><span>Original faculty</span><strong>{item.leave?.staffName || "--"}</strong><small>On leave</small></div>
       </section>
 
       {existing ? (
         <div className="leave-existing">
           <CheckCircle2 size={20} />
           <div>
-            <strong>{(existing.faculty?.name || existing.faculty?.staffName || existing.substituteName || "Mahesh Kumar")} is assigned</strong>
+            <strong>{(existing.faculty?.name || existing.faculty?.staffName || existing.substituteName || "Assigned Faculty")} is assigned</strong>
             <span>This date-specific override does not change the published timetable.</span>
           </div>
         </div>
@@ -446,23 +446,23 @@ function Assignment({ item, records = [], close, save, toast }) {
                 const isSelected = choice === id;
                 return (
                   <label className={`leave-candidate ${isSelected ? "selected" : ""}`} key={id}>
-                    <input 
-                      type="radio" 
-                      checked={isSelected} 
-                      name="substitute" 
-                      onChange={() => { setChoice(id); setChecked(false); }} 
+                    <input
+                      type="radio"
+                      checked={isSelected}
+                      name="substitute"
+                      onChange={() => { setChoice(id); setChecked(false); }}
                     />
                     <div>
                       <strong>{name}</strong>
-                      <span>{id} · {person.department || person.departmentName || "Physics"}</span>
+                      <span>{id} · {person.department || person.departmentName || "--"}</span>
                     </div>
                     <div className="leave-candidate-checks">
-                      <span>✓ {item.subject || "Physics"} eligible</span>
+                      <span>✓ {item.subject || "Subject"} eligible</span>
                       <span>✓ Period free</span>
                       <span>✓ Not on leave</span>
                     </div>
                     <div>
-                      <b>{person.classes || person.weeklyLoadCount || 3}</b>
+                      <b>{person.classes ?? person.weeklyLoadCount ?? 0}</b>
                       <span>classes today</span>
                     </div>
                     {index === 0 && <em>Recommended</em>}
@@ -480,8 +480,8 @@ function Assignment({ item, records = [], close, save, toast }) {
                 <ShieldCheck size={18} />
                 <span>{checked ? "Available for substitution" : "Validate the selected faculty before assignment."}</span>
               </div>
-              <button 
-                className="cms-btn cms-btn-ghost" 
+              <button
+                className="cms-btn cms-btn-ghost"
                 disabled={checking}
                 onClick={() => {
                   setChecking(true);
@@ -503,6 +503,126 @@ function Assignment({ item, records = [], close, save, toast }) {
   );
 }
 
+function TablePagination({
+  currentPage,
+  pageSize,
+  totalItems,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = [10, 20, 50],
+  unit = "records"
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+
+  const start = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const end = Math.min(safePage * pageSize, totalItems);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = [];
+    if (safePage <= 4) {
+      for (let i = 1; i <= 5; i++) pages.push(i);
+      pages.push("...");
+      pages.push(totalPages);
+    } else if (safePage >= totalPages - 3) {
+      pages.push(1);
+      pages.push("...");
+      for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      pages.push("...");
+      pages.push(safePage - 1);
+      pages.push(safePage);
+      pages.push(safePage + 1);
+      pages.push("...");
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
+  if (totalItems === 0) return null;
+
+  return (
+    <div className="cms-pagination leave-pagination-bar">
+      <div className="leave-pagination-left">
+        <span className="cms-page-info">
+          Showing <strong>{start}–{end}</strong> of <strong>{totalItems}</strong> {unit}
+        </span>
+      </div>
+
+      <div className="leave-pagination-right">
+        {onPageSizeChange && (
+          <div className="leave-page-size-wrap">
+            <span className="leave-page-size-label">Rows per page:</span>
+            <select
+              className="leave-page-size-select"
+              value={pageSize}
+              onChange={(e) => {
+                onPageSizeChange(Number(e.target.value));
+                onPageChange(1);
+              }}
+              aria-label="Rows per page"
+            >
+              {pageSizeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="leave-pagination-nav">
+          <button
+            type="button"
+            className="cms-page-btn"
+            disabled={safePage <= 1}
+            onClick={() => onPageChange(Math.max(1, safePage - 1))}
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={16} />
+            <span className="leave-btn-text">Previous</span>
+          </button>
+
+          <div className="leave-page-numbers">
+            {getPageNumbers().map((p, idx) =>
+              p === "..." ? (
+                <span key={`dots-${idx}`} className="leave-pagination-dots">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={p}
+                  type="button"
+                  className={`cms-page-btn ${safePage === p ? "is-active" : ""}`}
+                  onClick={() => onPageChange(p)}
+                  aria-current={safePage === p ? "page" : undefined}
+                >
+                  {p}
+                </button>
+              )
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="cms-page-btn"
+            disabled={safePage >= totalPages}
+            onClick={() => onPageChange(Math.min(totalPages, safePage + 1))}
+            aria-label="Next page"
+          >
+            <span className="leave-btn-text">Next</span>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LeaveHistory({ onSelect }) {
   const campusCtx = useCampusContext();
   const campusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
@@ -510,7 +630,7 @@ function LeaveHistory({ onSelect }) {
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openingStaffId, setOpeningStaffId] = useState(null);
-  
+
   useEffect(() => {
     setLoading(true);
     getLeaveHistorySummary(null, null, campusId).then(data => {
@@ -523,14 +643,31 @@ function LeaveHistory({ onSelect }) {
   const [staffType, setStaffType] = useState("All Staff");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All Status");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const people = useMemo(() => {
     return historyData.filter(person => {
       const matchType = staffType === "All Staff" || person.staffType === staffType;
       const matchQuery = `${person.staffName || ""} ${person.staffId || ""} ${person.department || ""}`.toLowerCase().includes(query.toLowerCase());
-      return matchType && matchQuery;
+      let matchStatus = true;
+      if (status === "Approved") matchStatus = (person.approved || 0) > 0;
+      else if (status === "Pending") matchStatus = (person.pending || 0) > 0;
+      else if (status === "Rejected") matchStatus = (person.rejected || 0) > 0;
+      return matchType && matchQuery && matchStatus;
     });
-  }, [historyData, staffType, query]);
+  }, [historyData, staffType, query, status]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [staffType, query, status, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(people.length / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const paginatedPeople = useMemo(() => {
+    const startIndex = (safePage - 1) * pageSize;
+    return people.slice(startIndex, startIndex + pageSize);
+  }, [people, safePage, pageSize]);
 
   return (
     <main className="attendance-module leave-history-screen">
@@ -570,10 +707,10 @@ function LeaveHistory({ onSelect }) {
                 Array.from({ length: 6 }, (_, index) => (
                   <SkeletonRow key={index} columns={11} />
                 ))
-              ) : people.length ? people.map(person => {
-                const total = person.totalLeaves || 12;
+              ) : people.length ? paginatedPeople.map(person => {
+                const total = person.totalLeaves ?? person.total ?? 0;
                 const used = person.used || 0;
-                const remaining = person.remaining !== undefined ? person.remaining : (total - used);
+                const remaining = person.remaining !== undefined ? person.remaining : Math.max(0, total - used);
                 return (
                   <tr key={person.staffId}>
                     <td>
@@ -595,8 +732,8 @@ function LeaveHistory({ onSelect }) {
                     <td><LeaveStatus status="Pending" /> <small>{person.pending || 0}</small></td>
                     <td><LeaveStatus status="Rejected" /> <small>{person.rejected || 0}</small></td>
                     <td>
-                      <button 
-                        className="cms-btn cms-btn-ghost leave-view-history" 
+                      <button
+                        className="cms-btn cms-btn-ghost leave-view-history"
                         onClick={() => {
                           setOpeningStaffId(person.staffId);
                           onSelect(person);
@@ -617,6 +754,15 @@ function LeaveHistory({ onSelect }) {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalItems={people.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[5, 10, 20, 50]}
+          unit="staff"
+        />
       </section>
     </main>
   );
@@ -637,16 +783,20 @@ function StaffLeaveHistory({ person, onClose, onLeave }) {
   }, [person]);
 
   const data = detailHistory || {
-    balance: { total: person.totalLeaves || 12, used: person.used || 0, remaining: person.remaining !== undefined ? person.remaining : (12 - (person.used || 0)) },
+    balance: {
+      total: person.totalLeaves ?? person.total ?? 0,
+      used: person.used || 0,
+      remaining: person.remaining !== undefined ? person.remaining : Math.max(0, (person.totalLeaves ?? person.total ?? 0) - (person.used || 0))
+    },
     history: [],
     approved: person.approved || 0,
     pending: person.pending || 0,
     rejected: person.rejected || 0
   };
 
-  const total = data.balance?.total ?? 12;
+  const total = data.balance?.total ?? 0;
   const used = data.balance?.used ?? 0;
-  const remaining = data.balance?.remaining !== undefined ? data.balance.remaining : (total - used);
+  const remaining = data.balance?.remaining !== undefined ? data.balance.remaining : Math.max(0, total - used);
   const percent = total ? Math.min(100, Math.round((used / total) * 100)) : 0;
   const requests = data.history || data.History || data.requests || [];
 
@@ -659,7 +809,7 @@ function StaffLeaveHistory({ person, onClose, onLeave }) {
           <p>{person.department} · {person.staffType}</p>
         </div>
       </section>
-      
+
       <section className="history-balance">
         <h4>Leave Balance</h4>
         <div className="history-balance-grid">
@@ -704,8 +854,8 @@ function StaffLeaveHistory({ person, onClose, onLeave }) {
                     <td>{prettyDate(leave.toDate || leave.endDate)}</td>
                     <td>{leave.days || leave.totalDays || 1} {Number(leave.days || leave.totalDays || 1) === 1 ? "day" : "days"}</td>
                     <td>
-                      <button 
-                        className="history-status-link" 
+                      <button
+                        className="history-status-link"
                         onClick={() => {
                           setOpeningLeaveId(leave.staffLeaveRequestId || leave.id);
                           onLeave(leave);
@@ -735,11 +885,11 @@ function StaffLeaveHistory({ person, onClose, onLeave }) {
 
 function RejectLeaveConfirmation({ leave, remark, setRemark, onCancel, onConfirm, reviewing = false }) {
   return (
-    <Modal 
-      title="Reject Leave Request?" 
-      size="sm" 
-      className="leave-reject-modal" 
-      onClose={onCancel} 
+    <Modal
+      title="Reject Leave Request?"
+      size="sm"
+      className="leave-reject-modal"
+      onClose={onCancel}
       footer={
         <>
           <button className="cms-btn cms-btn-ghost" onClick={onCancel} disabled={Boolean(reviewing)}>Cancel</button>
@@ -765,6 +915,8 @@ function RejectLeaveConfirmation({ leave, remark, setRemark, onCancel, onConfirm
 export default function LeaveManagementPage() {
   const campusCtx = useCampusContext();
   const campusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
+  const academicCtx = useAcademicContext?.() || {};
+  const selectedAcademicYearId = academicCtx?.selectedAcademicYearId || 1;
 
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -781,24 +933,540 @@ export default function LeaveManagementPage() {
   const [staffHistory, setStaffHistory] = useState(null);
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState(tabParam === "today" ? "today" : "all");
+  const [activeTab, setActiveTab] = useState(tabParam === "today" ? "today" : tabParam === "all" ? "all" : "apply");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [requestPage, setRequestPage] = useState(1);
+  const [requestPageSize, setRequestPageSize] = useState(10);
+
+  useEffect(() => {
+    if (tabParam === "history") {
+      setHistoryOpen(true);
+    } else {
+      setHistoryOpen(false);
+      setActiveTab(tabParam === "all" ? "all" : "today");
+    }
+  }, [tabParam]);
+
+  // Admin personal leave states (First Reference Screen)
+  const [adminLeaveList, setAdminLeaveList] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [categorySummary, setCategorySummary] = useState(null);
+  const [adminBalance, setAdminBalance] = useState(null);
+  const [adminResponseData, setAdminResponseData] = useState(null);
+  const [adminLoading, setAdminLoading] = useState(true);
+  const [adminError, setAdminError] = useState(null);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [leaveForm, setLeaveForm] = useState({
+    categoryId: "",
+    customLeaveType: "",
+    fromDate: "",
+    toDate: "",
+    reason: "",
+  });
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const [holidays, setHolidays] = useState([]);
+
+  // Derive Admin identification strictly
+  const effectiveAdminId = useMemo(() => {
+    const a = getAuthUser() || {};
+    const token = getAuthToken();
+    let jwtAdminId = null;
+    let jwtStaffId = null;
+    let jwtUserId = null;
+    if (token) {
+      try {
+        const parts = token.split(".");
+        if (parts.length >= 2) {
+          const decoded = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+          jwtAdminId = decoded?.AdminId || decoded?.adminId || decoded?.admin_id;
+          jwtStaffId = decoded?.StaffId || decoded?.staffId || decoded?.staff_id;
+          jwtUserId = decoded?.UserId || decoded?.userId || decoded?.id || decoded?.sub;
+        }
+      } catch {
+        /* ignore parse error */
+      }
+    }
+    const id = Number(
+      a?.staffId ||
+      a?.StaffId ||
+      jwtStaffId ||
+      (a?.role !== "Admin" && a?.role !== "Super Admin" ? (a?.adminId || a?.AdminId || jwtAdminId) : null) ||
+      a?.id ||
+      a?.userId ||
+      jwtUserId ||
+      1116
+    );
+    return id > 0 ? id : 1116;
+  }, []);
+
+  const effectiveDepartmentId = useMemo(() => {
+    const a = getAuthUser() || {};
+    return Number(a?.departmentId || 5);
+  }, []);
+
+  const effectiveCampusId = useMemo(() => {
+    const a = getAuthUser() || {};
+    return Number(campusId || a?.campusId || 1);
+  }, [campusId]);
+
+  // Fetch admin leave data and categories from backend
+  const fetchAdminLeaveData = useCallback(async () => {
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      // 1. Fetch leave categories and summary
+      try {
+        const [catRes, sumRes] = await Promise.allSettled([
+          apiClient.get("/api/v1/leave-categories"),
+          apiClient.get("/api/v1/leave-categories/summary"),
+        ]);
+
+        if (catRes.status === "fulfilled") {
+          const catList = catRes.value?.data?.data || catRes.value?.data?.Data || catRes.value?.data || [];
+          if (Array.isArray(catList) && catList.length > 0) {
+            setCategories(catList);
+            setLeaveForm((prev) => ({
+              ...prev,
+              categoryId: prev.categoryId || catList[0]?.leaveCategoryId || "",
+            }));
+          }
+        }
+
+        if (sumRes.status === "fulfilled") {
+          const sumData = sumRes.value?.data?.data || sumRes.value?.data?.Data;
+          if (sumData) {
+            setCategorySummary(sumData);
+          }
+        }
+      } catch (catErr) {
+        console.warn("Could not fetch leave categories:", catErr);
+      }
+
+      // Fetch official holidays to exclude from working days
+      try {
+        const holRes = await apiClient.get("/api/v1/holidays", { params: { pageSize: 100 } });
+        const hList = holRes?.data?.data || holRes?.data || [];
+        if (Array.isArray(hList)) setHolidays(hList);
+      } catch {
+        /* fallback to default working days calculation */
+      }
+
+      // 2. Fetch admin's personal leave history & balance via self-service endpoint first
+      let leaves = [];
+      let balanceObj = null;
+
+      try {
+        let histRes;
+        try {
+          histRes = await apiClient.get("/api/v1/staff-attendance/leave/my-history");
+        } catch {
+          histRes = await apiClient.get(
+            `/api/v1/staff-attendance/leave/history/staff/${effectiveAdminId}`
+          );
+        }
+        const rawHist = histRes?.data;
+        const histData = (rawHist && typeof rawHist === "object" && ("data" in rawHist || "Data" in rawHist))
+          ? (rawHist.data || rawHist.Data)
+          : rawHist;
+        if (histData) {
+          setAdminResponseData(histData);
+          balanceObj = histData.balance || {
+            total: histData.total,
+            used: histData.used,
+            remaining: histData.remaining,
+          };
+          if (Array.isArray(histData.history)) {
+            leaves = histData.history;
+          }
+        }
+      } catch (histErr) {
+        console.warn("Could not fetch admin leave history:", histErr);
+      }
+
+      // Fallback if history endpoint returned empty
+      if (leaves.length === 0) {
+        try {
+          const leaveRes = await apiClient.get("/api/v1/staff-attendance/leave", {
+            params: { staffId: effectiveAdminId, campusId: effectiveCampusId },
+          });
+          const leaveData = leaveRes?.data?.data || leaveRes?.data?.Data || leaveRes?.data;
+          if (Array.isArray(leaveData) && leaveData.length > 0) {
+            leaves = leaveData;
+          }
+        } catch (leaveErr) {
+          console.warn("Could not fetch admin leaves list:", leaveErr);
+        }
+      }
+
+      // Sort newest first
+      leaves.sort((a, b) => {
+        const dateA = new Date(a.startDate || a.fromDate || a.createdAt || 0);
+        const dateB = new Date(b.startDate || b.fromDate || b.createdAt || 0);
+        return dateB - dateA;
+      });
+
+      setAdminLeaveList(leaves);
+      setAdminBalance(balanceObj);
+    } catch (err) {
+      console.error("Failed to load admin leave records:", err);
+      setAdminError(getApiErrorMessage(err) || "Failed to load leave records.");
+    } finally {
+      setAdminLoading(false);
+    }
+  }, [effectiveAdminId, effectiveCampusId]);
+
+  useEffect(() => {
+    fetchAdminLeaveData();
+  }, [fetchAdminLeaveData]);
+
+  // Approved admin leaves & Response Status KPI stats
+  const approvedAdminLeaves = useMemo(
+    () => adminLeaveList.filter((l) => (l.status || "").toLowerCase() === "approved"),
+    [adminLeaveList]
+  );
+
+  // Admin stats derived directly from the backend leave history response status and balance
+  const adminStats = useMemo(() => {
+    const listTotal = adminLeaveList.length;
+    const listApproved = adminLeaveList.filter((l) => (l.status || "").toLowerCase() === "approved").length;
+    const listPending = adminLeaveList.filter((l) => (l.status || "").toLowerCase() === "pending").length;
+    const listRejected = adminLeaveList.filter((l) => (l.status || "").toLowerCase() === "rejected").length;
+
+    const source = adminResponseData?.data || adminResponseData || {};
+    const totalRequests = Number(source?.totalRequests ?? (source?.history ? source.history.length : listTotal));
+    const approved = Number(source?.approved ?? listApproved);
+    const pending = Number(source?.pending ?? listPending);
+    const rejected = Number(source?.rejected ?? listRejected);
+
+    const totalDays = Number(source?.total ?? source?.balance?.total ?? adminBalance?.total ?? 0);
+    const usedDays = Number(source?.used ?? source?.balance?.used ?? adminBalance?.used ?? approved);
+    const remainingDays = Number(source?.remaining ?? source?.balance?.remaining ?? adminBalance?.remaining ?? Math.max(0, totalDays - usedDays));
+
+    const balanceText = totalDays > 0 ? `${remainingDays} / ${totalDays} Days Left` : `${remainingDays} Days Left`;
+
+    return {
+      totalRequests,
+      approved,
+      pending,
+      rejected,
+      totalDays,
+      usedDays,
+      remainingDays,
+      balanceText,
+    };
+  }, [adminResponseData, adminLeaveList, adminBalance]);
+
+  // Working days duration preview calculation (excludes Sundays & holidays)
+  const leavePreviewDays = useMemo(() => {
+    if (!leaveForm.fromDate || !leaveForm.toDate || leaveForm.toDate < leaveForm.fromDate) return 0;
+    const start = new Date(`${leaveForm.fromDate}T00:00:00`);
+    const end = new Date(`${leaveForm.toDate}T00:00:00`);
+    let count = 0;
+    const cur = new Date(start);
+    while (cur <= end) {
+      const isSunday = cur.getDay() === 0;
+      const curIso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+      const isHoliday = holidays.some((h) => {
+        const hStart = (h.startDate || h.holidayDate || "").slice(0, 10);
+        const hEnd = (h.endDate || hStart).slice(0, 10);
+        return curIso >= hStart && curIso <= hEnd && (h.status === "Active" || !h.status);
+      });
+      if (!isSunday && !isHoliday) {
+        count++;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count;
+  }, [leaveForm.fromDate, leaveForm.toDate, holidays]);
+
+  const handleOpenApplyModal = () => {
+    setShowApplyModal(true);
+    setLeaveForm({
+      categoryId: categories.length > 0 ? categories[0].leaveCategoryId : "OTHERS",
+      customLeaveType: "",
+      fromDate: "",
+      toDate: "",
+      reason: "",
+    });
+  };
+
+  // Create custom leave category via POST /api/v1/leave-categories
+  const handleCreateCustomCategory = async () => {
+    const customName = (leaveForm.customLeaveType || "").trim();
+    if (!customName) {
+      setMessage("Please enter a custom leave type name.");
+      return;
+    }
+
+    const existing = categories.find(
+      (c) => (c.categoryName || "").trim().toLowerCase() === customName.toLowerCase()
+    );
+    if (existing) {
+      setLeaveForm((prev) => ({
+        ...prev,
+        categoryId: existing.leaveCategoryId,
+        customLeaveType: "",
+      }));
+      setMessage(`Selected existing category: ${existing.categoryName}`);
+      return existing.leaveCategoryId;
+    }
+
+    setAddingCategory(true);
+    try {
+      const code =
+        customName
+          .replace(/[^a-zA-Z0-9]/g, "")
+          .substring(0, 4)
+          .toUpperCase() || "LV";
+
+      const newCatPayload = {
+        categoryName: customName,
+        categoryCode: code,
+        annualQuota: 10,
+        applicableStaffType: "All Staff",
+        allowCarryForward: false,
+        requiresProof: false,
+        description: `Custom leave type: ${customName}`,
+        displayOrder: categories.length + 1,
+      };
+
+      const res = await apiClient.post("/api/v1/leave-categories", newCatPayload);
+      const created = res?.data?.data || res?.data;
+      const createdId = created?.leaveCategoryId || created?.id;
+
+      setMessage(`Custom leave type "${customName}" added successfully!`);
+
+      try {
+        const catRes = await apiClient.get("/api/v1/leave-categories");
+        const catList = catRes?.data?.data || catRes?.data?.Data || catRes?.data || [];
+        if (Array.isArray(catList) && catList.length > 0) {
+          setCategories(catList);
+          const found = catList.find(
+            (c) => (c.categoryName || "").trim().toLowerCase() === customName.toLowerCase()
+          );
+          if (found) {
+            setLeaveForm((prev) => ({
+              ...prev,
+              categoryId: found.leaveCategoryId,
+              customLeaveType: "",
+            }));
+            return found.leaveCategoryId;
+          }
+        }
+      } catch {
+        /* proceed to fallback create */
+      }
+
+      if (createdId) {
+        setCategories((prev) => [...prev, { ...newCatPayload, leaveCategoryId: createdId }]);
+        setLeaveForm((prev) => ({
+          ...prev,
+          categoryId: createdId,
+          customLeaveType: "",
+        }));
+        return createdId;
+      }
+      return null;
+    } catch (err) {
+      console.error("Failed to create custom leave category:", err);
+      setMessage(getApiErrorMessage(err) || "Failed to create custom leave category.");
+      return null;
+    } finally {
+      setAddingCategory(false);
+    }
+  };
+
+  // Submit leave request via POST /api/v1/staff-attendance/leave using Admin ID
+  const applyAdminLeave = async () => {
+    if (!leaveForm.fromDate || !leaveForm.toDate || !leaveForm.reason.trim()) {
+      setMessage("Please complete all required fields.");
+      return;
+    }
+    if (new Date(leaveForm.toDate) < new Date(leaveForm.fromDate)) {
+      setMessage("To Date cannot be earlier than From Date.");
+      return;
+    }
+    if (leavePreviewDays <= 0) {
+      setMessage("Selected leave range contains 0 working days (Sundays and official holidays are excluded).");
+      return;
+    }
+
+    setLeaveSubmitting(true);
+    try {
+      let targetCategoryId = leaveForm.categoryId;
+      let targetLeaveType = "Casual";
+
+      if (String(leaveForm.categoryId) === "OTHERS") {
+        const customName = (leaveForm.customLeaveType || "").trim();
+        if (!customName) {
+          setLeaveSubmitting(false);
+          setMessage("Please enter a custom leave type name.");
+          return;
+        }
+
+        const existing = categories.find(
+          (c) => (c.categoryName || "").trim().toLowerCase() === customName.toLowerCase()
+        );
+
+        if (existing) {
+          targetCategoryId = existing.leaveCategoryId;
+          targetLeaveType = existing.categoryName;
+        } else {
+          const code =
+            customName
+              .replace(/[^a-zA-Z0-9]/g, "")
+              .substring(0, 4)
+              .toUpperCase() || "LV";
+
+          const newCatPayload = {
+            categoryName: customName,
+            categoryCode: code,
+            annualQuota: 10,
+            applicableStaffType: "All Staff",
+            allowCarryForward: false,
+            requiresProof: false,
+            description: `Custom leave type: ${customName}`,
+            displayOrder: categories.length + 1,
+          };
+
+          try {
+            const res = await apiClient.post("/api/v1/leave-categories", newCatPayload);
+            const created = res?.data?.data || res?.data;
+            targetCategoryId = created?.leaveCategoryId || created?.id;
+            targetLeaveType = customName;
+
+            const catRes = await apiClient.get("/api/v1/leave-categories");
+            const catList = catRes?.data?.data || catRes?.data?.Data || catRes?.data || [];
+            if (Array.isArray(catList) && catList.length > 0) {
+              setCategories(catList);
+            }
+          } catch (createErr) {
+            console.warn("Could not create leave category on server, submitting directly:", createErr);
+            targetCategoryId = categories[0]?.leaveCategoryId || 1;
+            targetLeaveType = customName;
+          }
+        }
+      } else {
+        const selectedCat = categories.find(
+          (c) => String(c.leaveCategoryId) === String(leaveForm.categoryId)
+        );
+        targetLeaveType = selectedCat
+          ? (selectedCat.categoryName || "").replace(/\s*Leave\s*/i, "").trim() || "Casual"
+          : "Casual";
+        targetCategoryId = selectedCat?.leaveCategoryId || leaveForm.categoryId;
+      }
+
+      const payload = {
+        staffId: effectiveAdminId,
+        leaveType: targetLeaveType,
+        leaveCategoryId: Number(targetCategoryId || 1),
+        startDate: new Date(leaveForm.fromDate).toISOString(),
+        endDate: new Date(leaveForm.toDate).toISOString(),
+        reason: leaveForm.reason.trim(),
+        departmentId: effectiveDepartmentId,
+        academicYearId: Number(selectedAcademicYearId || 1),
+      };
+
+      const res = await apiClient.post("/api/v1/staff-attendance/leave", payload);
+      if (res.data?.status || res.status === 200 || res.status === 201) {
+        setMessage("Leave application submitted successfully!");
+        setShowApplyModal(false);
+        setLeaveForm({
+          categoryId: categories[0]?.leaveCategoryId || "",
+          customLeaveType: "",
+          fromDate: "",
+          toDate: "",
+          reason: "",
+        });
+        fetchAdminLeaveData();
+        loadRequests();
+      }
+    } catch (err) {
+      console.error("Failed to apply for leave:", err);
+      setMessage(getApiErrorMessage(err) || "Failed to apply for leave.");
+    } finally {
+      setLeaveSubmitting(false);
+    }
+  };
+
+  // Cancel pending admin leave application
+  const handleCancelAdminLeave = async (leave) => {
+    const leaveId = leave.staffLeaveRequestId || leave.id;
+    if (!leaveId) return;
+    if (!window.confirm("Are you sure you want to cancel this leave application?")) return;
+    try {
+      await apiClient.post(`/api/v1/staff-attendance/leave/${leaveId}/action`, {
+        status: "Cancelled",
+        rejectionReason: "Cancelled by employee",
+      });
+      setMessage("Leave application cancelled successfully.");
+      fetchAdminLeaveData();
+      loadRequests();
+    } catch (err) {
+      console.error("Failed to cancel leave:", err);
+      setMessage(getApiErrorMessage(err) || "Failed to cancel leave application.");
+    }
+  };
+
+  const getAdminLeaveTypeName = (l) => {
+    if (l.leaveCategoryName) return l.leaveCategoryName;
+    const type = l.leaveType;
+    if (!type) return "Leave";
+    const lower = String(type).toLowerCase();
+    if (lower.includes("casual")) return "Casual Leave (CL)";
+    if (lower.includes("sick")) return "Sick Leave (SL)";
+    if (lower.includes("earned")) return "Earned Leave (EL)";
+    if (lower.includes("maternity")) return "Maternity Leave (ML)";
+    if (lower.includes("duty")) return "On-Duty (OD)";
+    if (lower.includes("compensatory")) return "Compensatory Off (CO)";
+    if (lower.includes("medical")) return "Medical Leave";
+    return type;
+  };
+
+  const formatAdminDate = (dateStr) => {
+    if (!dateStr) return "-";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
   const todayDate = useMemo(() => new Date(), []);
-  const todayIso = useMemo(() => todayDate.toISOString().split("T")[0], [todayDate]);
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
   const todayFormatted = useMemo(() => todayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }), [todayDate]);
 
-  const currentTabRequests = useMemo(() => {
-    const isTodayActive = (req) => {
-      const s = req.fromDate || (req.startDate ? req.startDate.split("T")[0] : "");
-      const e = req.toDate || (req.endDate ? req.endDate.split("T")[0] : "");
-      if (!s) return false;
-      return todayIso >= s && (!e || todayIso <= e);
-    };
+  const isTodayMatch = useCallback((req) => {
+    const s = req.fromDate || (req.startDate ? String(req.startDate).split("T")[0] : "");
+    const e = req.toDate || (req.endDate ? String(req.endDate).split("T")[0] : "");
+    const applied = req.appliedDate || (req.createdAt ? String(req.createdAt).split("T")[0] : "") || (req.CreatedAt ? String(req.CreatedAt).split("T")[0] : "");
 
-    return activeTab === "today" ? requests.filter(isTodayActive) : requests;
-  }, [requests, activeTab, todayIso]);
+    // 1. Matches if application was requested today
+    const isRequestedToday = Boolean(applied && applied === todayIso);
+
+    // 2. Matches if leave is active today
+    const isOnLeaveToday = Boolean(s && todayIso >= s && (!e || todayIso <= e));
+
+    return isRequestedToday || isOnLeaveToday;
+  }, [todayIso]);
+
+  const todayRequestsCount = useMemo(() => {
+    return requests.filter(isTodayMatch).length;
+  }, [requests, isTodayMatch]);
+
+  const currentTabRequests = useMemo(() => {
+    return activeTab === "today" ? requests.filter(isTodayMatch) : requests;
+  }, [requests, activeTab, isTodayMatch]);
 
   const filteredRequests = useMemo(() => {
     return currentTabRequests.filter(req => {
@@ -819,18 +1487,68 @@ export default function LeaveManagementPage() {
     });
   }, [currentTabRequests, statusFilter, searchQuery]);
 
-  const loadRequests = () => {
+  // Pagination for Requests Table (default: 5, supports custom page size)
+  const [requestsPage, setRequestsPage] = useState(1);
+  const [requestsPageSize, setRequestsPageSize] = useState(5);
+  const [isCustomPageSize, setIsCustomPageSize] = useState(false);
+  const [customPageSizeInput, setCustomPageSizeInput] = useState("5");
+
+  useEffect(() => {
+    setRequestsPage(1);
+  }, [searchQuery, statusFilter, activeTab]);
+
+  const totalRequestsCount = filteredRequests.length;
+  const totalRequestsPages = Math.max(1, Math.ceil(totalRequestsCount / (requestsPageSize || 5)));
+  const safeRequestsPage = Math.min(requestsPage, totalRequestsPages);
+
+  const paginatedRequests = useMemo(() => {
+    const size = requestsPageSize > 0 ? requestsPageSize : 5;
+    const start = (safeRequestsPage - 1) * size;
+    return filteredRequests.slice(start, start + size);
+  }, [filteredRequests, safeRequestsPage, requestsPageSize]);
+
+  const handlePageSizeChange = (e) => {
+    const val = e.target.value;
+    if (val === "custom") {
+      setIsCustomPageSize(true);
+      const parsed = parseInt(customPageSizeInput, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        setRequestsPageSize(parsed);
+      }
+    } else {
+      setIsCustomPageSize(false);
+      const num = parseInt(val, 10);
+      setRequestsPageSize(num);
+      setCustomPageSizeInput(String(num));
+    }
+    setRequestsPage(1);
+  };
+
+  const handleCustomPageSizeInput = (e) => {
+    const val = e.target.value;
+    setCustomPageSizeInput(val);
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 500) {
+      setRequestsPageSize(parsed);
+      setRequestsPage(1);
+    }
+  };
+
+  const startRecord = totalRequestsCount === 0 ? 0 : (safeRequestsPage - 1) * (requestsPageSize || 5) + 1;
+  const endRecord = totalRequestsCount === 0 ? 0 : Math.min(safeRequestsPage * (requestsPageSize || 5), totalRequestsCount);
+
+  const loadRequests = useCallback(() => {
     setLoading(true);
     getLeaveRequests(null, null, null, campusId).then(data => {
       if (Array.isArray(data)) setRequests(data);
     }).catch(console.error).finally(() => {
       setLoading(false);
     });
-  };
+  }, [campusId]);
 
   useEffect(() => {
     loadRequests();
-  }, [campusId]);
+  }, [loadRequests]);
 
   const openDetails = (req) => {
     setSelected(req); // Open immediately so the modal is never blocked
@@ -849,7 +1567,7 @@ export default function LeaveManagementPage() {
     }
   };
 
-  const commitReview = (status) => { 
+  const commitReview = (status) => {
     const statusVal = status === "Approved" ? LEAVE_STATUS.APPROVED : LEAVE_STATUS.REJECTED;
     const leaveId = (selected && (selected.staffLeaveRequestId || selected.id)) || (rejecting && (rejecting.staffLeaveRequestId || rejecting.id));
     if (!leaveId) return;
@@ -866,13 +1584,13 @@ export default function LeaveManagementPage() {
       setReviewing(false);
     });
   };
-  
-  const review = (status) => { 
-    if (status === "Rejected") { 
-      setRejecting(selected); 
-      return; 
-    } 
-    commitReview(status); 
+
+  const review = (status) => {
+    if (status === "Rejected") {
+      setRejecting(selected);
+      return;
+    }
+    commitReview(status);
   };
 
   const openAssignment = (item) => {
@@ -888,10 +1606,10 @@ export default function LeaveManagementPage() {
   if (historyOpen) {
     return (
       <>
-        <DashboardLayout 
-          title="Leave History" 
-          subtitle="View staff leave usage, requests, and approval history" 
-          breadcrumb={["Operations", "Leave Management", "Leave History"]} 
+        <DashboardLayout
+          title="Leave History"
+          subtitle="View staff leave usage, requests, and approval history"
+          breadcrumb={["Operations", "Leave Management", "Leave History"]}
           actions={
             <button className="cms-btn cms-btn-ghost leave-history-button" onClick={() => { setHistoryOpen(false); setStaffHistory(null); }}>
               Back to Leave Management
@@ -902,52 +1620,52 @@ export default function LeaveManagementPage() {
         </DashboardLayout>
 
         {staffHistory && (
-          <StaffLeaveHistory 
-            person={staffHistory} 
-            onClose={() => setStaffHistory(null)} 
-            onLeave={(leave) => { setStaffHistory(null); openDetails(leave); }} 
+          <StaffLeaveHistory
+            person={staffHistory}
+            onClose={() => setStaffHistory(null)}
+            onLeave={(leave) => { setStaffHistory(null); openDetails(leave); }}
           />
         )}
 
         {selected && (
-          <LeaveDetails 
-            leave={selected} 
-            remark={remark} 
-            setRemark={setRemark} 
-            onClose={() => setSelected(null)} 
-            onReview={review} 
-            onAffected={() => { setAffected(selected); setSelected(null); }} 
+          <LeaveDetails
+            leave={selected}
+            remark={remark}
+            setRemark={setRemark}
+            onClose={() => setSelected(null)}
+            onReview={review}
+            onAffected={() => { setAffected(selected); setSelected(null); }}
             reviewing={reviewing}
           />
         )}
 
         {rejecting && (
-          <RejectLeaveConfirmation 
-            leave={rejecting} 
-            remark={remark} 
-            setRemark={setRemark} 
-            onCancel={() => setRejecting(null)} 
-            onConfirm={() => commitReview("Rejected")} 
+          <RejectLeaveConfirmation
+            leave={rejecting}
+            remark={remark}
+            setRemark={setRemark}
+            onCancel={() => setRejecting(null)}
+            onConfirm={() => commitReview("Rejected")}
             reviewing={reviewing}
           />
         )}
 
         {affected && (
-          <AffectedClasses 
-            leave={affected} 
+          <AffectedClasses
+            leave={affected}
             records={records}
-            close={() => setAffected(null)} 
-            assign={openAssignment} 
+            close={() => setAffected(null)}
+            assign={openAssignment}
           />
         )}
 
         {assignment && (
-          <Assignment 
-            item={assignment} 
+          <Assignment
+            item={assignment}
             records={records}
-            close={() => setAssignment(null)} 
-            save={saveAssignment} 
-            toast={setMessage} 
+            close={() => setAssignment(null)}
+            save={saveAssignment}
+            toast={setMessage}
           />
         )}
 
@@ -958,28 +1676,48 @@ export default function LeaveManagementPage() {
 
   return (
     <>
-      <DashboardLayout 
-        title="Leave Management" 
-        subtitle={activeTab === "today" ? `Showing leaves active on today (${todayFormatted})` : "Review and manage all staff leave requests across all dates"} 
-        breadcrumb={["Operations", "Leave Management"]} 
+      <DashboardLayout
+        title="Leave Management"
+        subtitle={
+          activeTab === "apply"
+            ? "Apply for casual, sick, or earned leave and track approval status."
+            : activeTab === "today"
+              ? `Showing leaves active on today (${todayFormatted})`
+              : "Review and manage all staff leave requests across all dates"
+        }
+        breadcrumb={["Operations", "Leave Management"]}
         actions={
-          <button className="cms-btn cms-btn-ghost leave-history-button" onClick={() => setHistoryOpen(true)}>
-            <HistoryIcon size={16} /> History
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {activeTab === "apply" && (
+              <button className="cms-btn cms-btn-primary" onClick={handleOpenApplyModal}>
+                <Plus size={14} /> Apply Leave
+              </button>
+            )}
+            <button className="cms-btn cms-btn-ghost leave-history-button" onClick={() => setHistoryOpen(true)}>
+              <HistoryIcon size={16} /> History
+            </button>
+          </div>
         }
       >
         <main className="attendance-module">
           {/* Tabs Container */}
           <div className="leave-tabs-card">
-            <button 
-              type="button" 
+            <button
+              type="button"
+              className={`leave-tab-btn ${activeTab === "apply" ? "active" : ""}`}
+              onClick={() => setActiveTab("apply")}
+            >
+              <FileText size={16} /> Apply Leave
+            </button>
+            <button
+              type="button"
               className={`leave-tab-btn ${activeTab === "today" ? "active" : ""}`}
               onClick={() => setActiveTab("today")}
             >
-              <CalendarDays size={16} /> Today's Leaves <span className="tab-pill">TODAY</span>
+              <CalendarDays size={16} /> Today's Leaves <span className="tab-pill count">{todayRequestsCount}</span>
             </button>
-            <button 
-              type="button" 
+            <button
+              type="button"
               className={`leave-tab-btn ${activeTab === "all" ? "active" : ""}`}
               onClick={() => setActiveTab("all")}
             >
@@ -987,169 +1725,550 @@ export default function LeaveManagementPage() {
             </button>
           </div>
 
-          {/* Stat Summary Cards */}
-          <section className="att-summary att-leave-summary">
-            {["Total Requests", "Pending Review", "Approved", "Rejected"].map(label => {
-              let count = 0;
-              if (label === "Total Requests") count = currentTabRequests.length;
-              else if (label === "Pending Review") count = currentTabRequests.filter(r => r.status === "Pending").length;
-              else if (label === "Approved") count = currentTabRequests.filter(r => r.status === "Approved").length;
-              else if (label === "Rejected") count = currentTabRequests.filter(r => r.status === "Rejected").length;
+          {activeTab === "apply" ? (
+            <div className="leave-apply-screen-wrap">
 
-              return (
-                <div key={label}>
-                  <span>{label}</span>
-                  <b>{count}</b>
+              {/* Error Banner */}
+              {adminError && (
+                <div className="leave-error-banner" role="alert">
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <AlertCircle size={18} />
+                    <span>{adminError}</span>
+                  </div>
+                  <button
+                    className="cms-btn cms-btn-ghost"
+                    style={{ padding: "4px 10px", fontSize: 12 }}
+                    onClick={fetchAdminLeaveData}
+                  >
+                    <RefreshCw size={13} /> Retry
+                  </button>
                 </div>
-              );
-            })}
-          </section>
+              )}
 
-          {/* Filter Bar */}
-          <div className="leave-filter-bar">
-            <div className="leave-search-box">
-              <Search size={16} />
-              <input 
-                type="text" 
-                placeholder="Search faculty name, ID, department..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div className="leave-status-filter">
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="all">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
-            </div>
-          </div>
+              {/* Leave Analytics / Response Status KPI Cards Strip */}
+              <div className="leave-stat-grid">
+                <div className="leave-stat-card">
+                  <div className="leave-stat-icon tone-blue">
+                    <FileText size={20} />
+                  </div>
+                  <div className="leave-stat-content">
+                    <div className="leave-stat-label">Total Requests</div>
+                    <div className="leave-stat-value">
+                      {adminLoading ? <Loader2 size={16} className="leave-spin" /> : adminStats.totalRequests}
+                    </div>
+                    <div className="leave-stat-sub">
+                      {adminLoading ? "Loading balance..." : `Balance: ${adminStats.balanceText}`}
+                    </div>
+                  </div>
+                </div>
 
-          {/* Requests Table */}
-          <section className="att-card att-table-card">
-            <div className="att-scroll">
-              <table className="cms-table">
-                <thead>
-                  <tr>
-                    {["Request ID", "Staff Name", "Department", "Staff Type", "Leave Type", "From Date", "To Date", "Days", "Reason", "Status", "Action"].map(head => (
-                      <th key={head}>{head}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    Array.from({ length: 6 }, (_, index) => (
-                      <SkeletonRow key={index} columns={11} />
-                    ))
-                  ) : filteredRequests.length === 0 ? (
-                    <tr>
-                      <td colSpan={11} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
-                        {activeTab === "today" 
-                          ? "No active leaves for today." 
-                          : "No leave requests found matching these filters."}
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredRequests.map(request => {
-                      const rid = request.staffLeaveRequestId || request.id;
-                      const initials = (request.staffName || "Staff").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-                      return (
-                        <tr key={rid}>
-                          <td><strong>LR-{String(rid).padStart(3, "0")}</strong></td>
-                          <td>
-                            <div className="staff-table-info">
-                              <span className="staff-avatar-circle">{initials}</span>
-                              <div className="staff-name-col">
-                                <strong>{request.staffName}</strong>
-                                <span>ID: {request.staffCode || request.staffId}</span>
-                              </div>
+                <div className="leave-stat-card">
+                  <div className="leave-stat-icon tone-green">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div className="leave-stat-content">
+                    <div className="leave-stat-label">Approved</div>
+                    <div className="leave-stat-value">
+                      {adminLoading ? <Loader2 size={16} className="leave-spin" /> : adminStats.approved}
+                    </div>
+                    <div className="leave-stat-sub">
+                      {adminLoading ? "..." : adminStats.approved === 1 ? "1 Request Approved" : `${adminStats.approved} Requests Approved`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="leave-stat-card">
+                  <div className="leave-stat-icon tone-amber">
+                    <Clock3 size={20} />
+                  </div>
+                  <div className="leave-stat-content">
+                    <div className="leave-stat-label">Pending Review</div>
+                    <div className="leave-stat-value">
+                      {adminLoading ? <Loader2 size={16} className="leave-spin" /> : adminStats.pending}
+                    </div>
+                    <div className="leave-stat-sub">
+                      {adminLoading ? "..." : adminStats.pending === 1 ? "1 Request Awaiting" : `${adminStats.pending} Awaiting Review`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="leave-stat-card">
+                  <div className="leave-stat-icon tone-red">
+                    <XCircle size={20} />
+                  </div>
+                  <div className="leave-stat-content">
+                    <div className="leave-stat-label">Rejected</div>
+                    <div className="leave-stat-value">
+                      {adminLoading ? <Loader2 size={16} className="leave-spin" /> : adminStats.rejected}
+                    </div>
+                    <div className="leave-stat-sub">
+                      {adminLoading ? "..." : adminStats.rejected === 1 ? "1 Request Declined" : `${adminStats.rejected} Requests Declined`}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Leave Applications History Table Card */}
+              <div className="leave-history-card-wrap">
+                <div className="leave-history-card-head">
+                  <h3>Leave Applications History</h3>
+                </div>
+                <div className="leave-history-table-wrap">
+                  <table className="cms-table">
+                    <thead>
+                      <tr>
+                        <th>TYPE</th>
+                        <th>FROM DATE</th>
+                        <th>TO DATE</th>
+                        <th>DAYS</th>
+                        <th>REASON</th>
+                        <th>APPLIED ON</th>
+                        <th>STATUS</th>
+                        <th>APPROVER</th>
+                        <th>ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminLoading ? (
+                        <tr>
+                          <td colSpan="9" style={{ textAlign: "center", padding: "32px 20px" }}>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                              <Loader2 size={24} className="leave-spin" style={{ color: "var(--cms-primary)" }} />
+                              <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>Loading leave applications...</span>
                             </div>
                           </td>
-                          <td>{request.department || "Mathematics"}</td>
-                          <td>
-                            <span style={{ fontSize: 12, color: "#475569", background: "#f1f5f9", padding: "3px 8px", borderRadius: 6, fontWeight: 600 }}>
-                              {request.staffType || "Teaching Staff"}
-                            </span>
-                          </td>
-                          <td><strong>{request.leaveType}</strong></td>
-                          <td>{prettyDate(request.fromDate || request.startDate)}</td>
-                          <td>{prettyDate(request.toDate || request.endDate)}</td>
-                          <td>
-                            <span className="days-pill">
-                              {request.days || 1} {Number(request.days || 1) === 1 ? "day" : "days"}
-                            </span>
-                          </td>
-                          <td style={{ maxWidth: 220 }}>
-                            <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 12 }}>
-                              {request.reason || "—"}
-                            </span>
-                          </td>
-                          <td><LeaveStatus status={request.status} /></td>
-                          <td>
-                            <button 
-                              className="cms-action-btn" 
-                              onClick={() => openDetails(request)} 
-                              aria-label="View request"
-                              disabled={openingRequestId === rid}
-                            >
-                              {openingRequestId === rid ? (
-                                <Loader2 size={15} style={{ animation: "cms-spin 0.8s linear infinite" }} />
-                              ) : (
-                                <Eye size={16} />
-                              )}
-                            </button>
+                        </tr>
+                      ) : adminLeaveList.length === 0 ? (
+                        <tr>
+                          <td colSpan="9" style={{ textAlign: "center", padding: "40px 20px" }}>
+                            <div className="empty-leave-state">
+                              <Calendar size={32} style={{ color: "var(--cms-muted)", opacity: 0.7, marginBottom: 8 }} />
+                              <h4>No Leave Applications Found</h4>
+                              <p>
+                                You have not submitted any leave applications yet.
+                                <br />
+                                Click "+ Apply Leave" above to apply for casual, sick, or earned leave.
+                              </p>
+                            </div>
                           </td>
                         </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                      ) : (
+                        adminLeaveList.map((l) => (
+                          <tr key={l.staffLeaveRequestId || l.id}>
+                            <td className="cms-strong">{getAdminLeaveTypeName(l)}</td>
+                            <td>{formatAdminDate(l.startDate || l.fromDate)}</td>
+                            <td>{formatAdminDate(l.endDate || l.toDate)}</td>
+                            <td><strong>{l.totalDays || l.days || 1}</strong></td>
+                            <td style={{ maxWidth: 220, whiteSpace: "normal" }}>{l.reason || "--"}</td>
+                            <td style={{ color: "var(--cms-muted)" }}>{formatAdminDate(l.createdAt || l.appliedOn)}</td>
+                            <td>
+                              <span className={`cms-badge ${STATUS_BADGE[l.status] || "cms-badge-warn"}`}>
+                                {l.status}
+                              </span>
+                            </td>
+                            <td>{l.approvedByUserName || l.reviewedBy || "--"}</td>
+                            <td>
+                              {l.status === "Pending" ? (
+                                <button
+                                  type="button"
+                                  className="cms-btn cms-btn-ghost"
+                                  style={{ padding: "4px 8px", fontSize: 12, color: "var(--cms-red)" }}
+                                  onClick={() => handleCancelAdminLeave(l)}
+                                >
+                                  Cancel
+                                </button>
+                              ) : (
+                                <span style={{ color: "var(--cms-muted)" }}>--</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-          </section>
+          ) : (
+            <>
+              {/* Stat Summary Cards */}
+              <section className="att-summary att-leave-summary">
+                {["Total Requests", "Pending Review", "Approved", "Rejected"].map(label => {
+                  let count = 0;
+                  if (label === "Total Requests") count = currentTabRequests.length;
+                  else if (label === "Pending Review") count = currentTabRequests.filter(r => r.status === "Pending").length;
+                  else if (label === "Approved") count = currentTabRequests.filter(r => r.status === "Approved").length;
+                  else if (label === "Rejected") count = currentTabRequests.filter(r => r.status === "Rejected").length;
+
+                  return (
+                    <div key={label}>
+                      <span>{label}</span>
+                      <b>{count}</b>
+                    </div>
+                  );
+                })}
+              </section>
+
+              {/* Filter Bar */}
+              <div className="leave-filter-bar">
+                <div className="leave-search-box">
+                  <Search size={16} />
+                  <input
+                    type="text"
+                    placeholder="Search faculty name, ID, department..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <div className="leave-status-filter">
+                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="all">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Requests Table */}
+              <section className="att-card att-table-card">
+                <div className="att-scroll">
+                  <table className="cms-table">
+                    <thead>
+                      <tr>
+                        {["Request ID", "Staff Name", "Department", "Staff Type", "Leave Type", "From Date", "To Date", "Days", "Reason", "Status", "Action"].map(head => (
+                          <th key={head}>{head}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        Array.from({ length: 6 }, (_, index) => (
+                          <SkeletonRow key={index} columns={11} />
+                        ))
+                      ) : filteredRequests.length === 0 ? (
+                        <tr>
+                          <td colSpan={11} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
+                            {activeTab === "today"
+                              ? "No active leaves for today."
+                              : "No leave requests found matching these filters."}
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedRequests.map(request => {
+                          const rid = request.staffLeaveRequestId || request.id;
+                          const initials = (request.staffName || "Staff").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                          return (
+                            <tr key={rid}>
+                              <td><strong>LR-{String(rid).padStart(3, "0")}</strong></td>
+                              <td>
+                                <div className="staff-table-info">
+                                  <span className="staff-avatar-circle">{initials}</span>
+                                  <div className="staff-name-col">
+                                    <strong>{request.staffName}</strong>
+                                    <span>ID: {request.staffCode || request.staffId}</span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>{request.department || "--"}</td>
+                              <td>
+                                <span className="staff-type-pill">
+                                  {request.staffType || "--"}
+                                </span>
+                              </td>
+                              <td><strong>{request.leaveType}</strong></td>
+                              <td>{prettyDate(request.fromDate || request.startDate)}</td>
+                              <td>{prettyDate(request.toDate || request.endDate)}</td>
+                              <td>
+                                <span className="days-pill">
+                                  {request.days || 1} {Number(request.days || 1) === 1 ? "day" : "days"}
+                                </span>
+                              </td>
+                              <td style={{ maxWidth: 220 }}>
+                                <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 12 }}>
+                                  {request.reason || "—"}
+                                </span>
+                              </td>
+                              <td><LeaveStatus status={request.status} /></td>
+                              <td>
+                                <button
+                                  className="cms-action-btn"
+                                  onClick={() => openDetails(request)}
+                                  aria-label="View request"
+                                  disabled={openingRequestId === rid}
+                                >
+                                  {openingRequestId === rid ? (
+                                    <Loader2 size={15} style={{ animation: "cms-spin 0.8s linear infinite" }} />
+                                  ) : (
+                                    <Eye size={16} />
+                                  )}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="leave-pagination-bar">
+                  <div className="leave-record-summary">
+                    Showing {startRecord}–{endRecord} of {totalRequestsCount} records
+                  </div>
+                  <div className="leave-pagination-controls">
+                    <span className="leave-page-size-label">Per page:</span>
+                    <select
+                      className="leave-page-size-select"
+                      value={isCustomPageSize ? "custom" : requestsPageSize}
+                      onChange={handlePageSizeChange}
+                      aria-label="Records per page"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={15}>15</option>
+                      <option value={25}>25</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    {isCustomPageSize && (
+                      <input
+                        type="number"
+                        min="1"
+                        max="500"
+                        className="leave-page-size-custom-input"
+                        value={customPageSizeInput}
+                        onChange={handleCustomPageSizeInput}
+                        placeholder="Qty"
+                        title="Enter custom records per page"
+                        aria-label="Custom records per page"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      className="leave-page-nav-btn"
+                      onClick={() => setRequestsPage((p) => Math.max(1, p - 1))}
+                      disabled={safeRequestsPage <= 1}
+                    >
+                      Previous
+                    </button>
+                    <span className="leave-page-counter">
+                      {safeRequestsPage} / {totalRequestsPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="leave-page-nav-btn"
+                      onClick={() => setRequestsPage((p) => Math.min(totalRequestsPages, p + 1))}
+                      disabled={safeRequestsPage >= totalRequestsPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
         </main>
       </DashboardLayout>
 
+      {/* Admin Apply Leave Modal */}
+      {showApplyModal &&
+        (typeof document !== "undefined"
+          ? createPortal(
+            <div
+              className="cms-overlay faculty-leave-modal-overlay"
+              onClick={(e) => e.target === e.currentTarget && setShowApplyModal(false)}
+            >
+              <div className="cms-modal sm faculty-leave-modal" role="dialog" aria-modal="true">
+                <div className="cms-modal-head">
+                  <h3>Apply for Staff Leave</h3>
+                  <button
+                    type="button"
+                    className="cms-icon-btn"
+                    onClick={() => setShowApplyModal(false)}
+                    aria-label="Close"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+                <div className="cms-modal-body">
+                  <div className="cms-form-grid">
+                    <div className="cms-field full">
+                      <label>
+                        Leave Type <span className="req">*</span>
+                      </label>
+                      <select
+                        value={leaveForm.categoryId}
+                        onChange={(e) =>
+                          setLeaveForm({ ...leaveForm, categoryId: e.target.value })
+                        }
+                      >
+                        {categories.length === 0 && (
+                          <option value="">Loading leave categories...</option>
+                        )}
+                        {categories.map((c) => (
+                          <option key={c.leaveCategoryId} value={c.leaveCategoryId}>
+                            {c.categoryName}
+                          </option>
+                        ))}
+                        <option value="OTHERS">Others</option>
+                      </select>
+                    </div>
+
+                    {/* Conditional Custom Leave Type Field when "OTHERS" is selected */}
+                    {String(leaveForm.categoryId) === "OTHERS" && (
+                      <div className="cms-field full leave-custom-field-group">
+                        <label>
+                          Custom Leave Type <span className="req">*</span>
+                        </label>
+                        <div className="leave-custom-input-wrap">
+                          <input
+                            type="text"
+                            placeholder="Enter custom leave type (e.g. Sabbatical, Bereavement)..."
+                            value={leaveForm.customLeaveType || ""}
+                            onChange={(e) =>
+                              setLeaveForm({ ...leaveForm, customLeaveType: e.target.value })
+                            }
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-ghost leave-add-custom-btn"
+                            onClick={handleCreateCustomCategory}
+                            disabled={addingCategory || !leaveForm.customLeaveType?.trim()}
+                            title="Add to categories list"
+                          >
+                            {addingCategory ? (
+                              <Loader2 size={13} className="leave-spin" />
+                            ) : (
+                              <Plus size={13} />
+                            )}
+                            <span>Add</span>
+                          </button>
+                        </div>
+                        <span className="leave-custom-hint">
+                          This custom leave type will be saved to your institution's leave categories.
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="cms-field">
+                      <label>
+                        From Date <span className="req">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={leaveForm.fromDate}
+                        onChange={(e) =>
+                          setLeaveForm({ ...leaveForm, fromDate: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div className="cms-field">
+                      <label>
+                        To Date <span className="req">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={leaveForm.toDate}
+                        onChange={(e) =>
+                          setLeaveForm({ ...leaveForm, toDate: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div className="cms-field full">
+                      <label>
+                        Reason for Leave <span className="req">*</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={leaveForm.reason}
+                        placeholder="State reason clearly..."
+                        onChange={(e) =>
+                          setLeaveForm({ ...leaveForm, reason: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  {leavePreviewDays > 0 ? (
+                    <div className="leave-duration-badge">
+                      Effective Duration: {leavePreviewDays} working day{leavePreviewDays > 1 ? "s" : ""} (Sundays &amp; official holidays excluded)
+                    </div>
+                  ) : leaveForm.fromDate && leaveForm.toDate ? (
+                    <div className="leave-duration-warning">
+                      Selected range contains only non-working days (Sundays or holidays). Leave cannot be requested for 0 working days.
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="cms-modal-foot">
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-ghost"
+                    onClick={() => setShowApplyModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-primary"
+                    onClick={applyAdminLeave}
+                    disabled={leaveSubmitting}
+                  >
+                    {leaveSubmitting && (
+                      <Loader2 size={14} className="leave-spin" style={{ marginRight: 6 }} />
+                    )}
+                    Submit Leave
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+          : null)}
+
       {selected && (
-        <LeaveDetails 
-          leave={selected} 
-          remark={remark} 
-          setRemark={setRemark} 
-          onClose={() => setSelected(null)} 
-          onReview={review} 
-          onAffected={() => { setAffected(selected); setSelected(null); }} 
+        <LeaveDetails
+          leave={selected}
+          remark={remark}
+          setRemark={setRemark}
+          onClose={() => setSelected(null)}
+          onReview={review}
+          onAffected={() => { setAffected(selected); setSelected(null); }}
           reviewing={reviewing}
         />
       )}
 
       {rejecting && (
-        <RejectLeaveConfirmation 
-          leave={rejecting} 
-          remark={remark} 
-          setRemark={setRemark} 
-          onCancel={() => setRejecting(null)} 
-          onConfirm={() => commitReview("Rejected")} 
+        <RejectLeaveConfirmation
+          leave={rejecting}
+          remark={remark}
+          setRemark={setRemark}
+          onCancel={() => setRejecting(null)}
+          onConfirm={() => commitReview("Rejected")}
           reviewing={reviewing}
         />
       )}
 
       {affected && (
-        <AffectedClasses 
-          leave={affected} 
+        <AffectedClasses
+          leave={affected}
           records={records}
-          close={() => setAffected(null)} 
-          assign={openAssignment} 
+          close={() => setAffected(null)}
+          assign={openAssignment}
         />
       )}
 
       {assignment && (
-        <Assignment 
-          item={assignment} 
+        <Assignment
+          item={assignment}
           records={records}
-          close={() => setAssignment(null)} 
-          save={saveAssignment} 
-          toast={setMessage} 
+          close={() => setAssignment(null)}
+          save={saveAssignment}
+          toast={setMessage}
         />
       )}
 

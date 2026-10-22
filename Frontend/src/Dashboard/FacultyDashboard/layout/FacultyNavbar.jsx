@@ -11,7 +11,7 @@ import { useFaculty } from "../FacultyContext.jsx";
 import { facultyMockData } from "../data/facultyMockData.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
-import { clearAuthSession } from "@/features/authStorage.js";
+import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 
 export function NavbarIcon({ src }) {
   return <img className="cms-navbar-3d-icon" src={src} alt="" aria-hidden="true" />;
@@ -61,7 +61,13 @@ export default function FacultyNavbar() {
     setSelectedAcademicYear: facultySetSelectedAcademicYear,
   } = useFaculty();
 
-  const { selectedCampus } = useCampusContext();
+  const {
+    campuses,
+    activeCampuses,
+    selectedCampus,
+    setSelectedCampus,
+    loading: campusLoading,
+  } = useCampusContext();
 
   const {
     boards,
@@ -74,66 +80,255 @@ export default function FacultyNavbar() {
     academicYearsLoading,
   } = useAcademicContext();
 
-  // Robust Board Resolution
-  const availableBoards = useMemo(() => {
-    if (Array.isArray(boards) && boards.length > 0) return boards;
-    if (Array.isArray(facultyMockData.boards) && facultyMockData.boards.length > 0) {
-      return facultyMockData.boards.map((b) => ({
-        ...b,
-        name: b.name === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : b.name,
-        boardName: b.name === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : b.name,
+  // 1. Staff Assigned Campuses Resolution
+  const availableCampuses = useMemo(() => {
+    const all = Array.isArray(activeCampuses) && activeCampuses.length > 0
+      ? activeCampuses
+      : (Array.isArray(campuses) && campuses.length > 0 ? campuses : []);
+
+    const authUser = getAuthUser();
+
+    // Array of campus objects on profileData
+    if (Array.isArray(profileData?.assignedCampuses) && profileData.assignedCampuses.length > 0) {
+      const idSet = new Set(profileData.assignedCampuses.map((c) => String(c.id ?? c.campusId)).filter(Boolean));
+      const matched = all.filter((c) => idSet.has(String(c.id ?? c.campusId)));
+      if (matched.length > 0) return matched;
+      return profileData.assignedCampuses.map((c) => ({
+        id: c.id ?? c.campusId,
+        campusId: c.id ?? c.campusId,
+        name: c.name || c.campusName || "Assigned Campus",
+        code: c.code || c.campusCode || "CAMPUS",
       }));
     }
-    return FALLBACK_BOARDS;
-  }, [boards]);
 
+    // Array of campus IDs on profileData or authUser
+    const assignedIds = (Array.isArray(profileData?.assignedCampusIds) && profileData.assignedCampusIds.length > 0)
+      ? profileData.assignedCampusIds
+      : (Array.isArray(authUser?.assignedCampusIds) && authUser.assignedCampusIds.length > 0)
+      ? authUser.assignedCampusIds
+      : null;
+
+    if (Array.isArray(assignedIds) && assignedIds.length > 0) {
+      const idSet = new Set(assignedIds.map(String));
+      const matched = all.filter((c) => idSet.has(String(c.id ?? c.campusId)));
+      if (matched.length > 0) return matched;
+    }
+
+    // Single campus assigned on profileData or authUser
+    const singleId = profileData?.campusId ?? authUser?.campusId;
+    if (singleId) {
+      const matched = all.filter((c) => String(c.id ?? c.campusId) === String(singleId));
+      if (matched.length > 0) return matched;
+      const cName = profileData?.campusName || authUser?.campusName || "Main Campus (HQ)";
+      return [{ id: singleId, campusId: singleId, name: cName, campusName: cName, code: "MAIN" }];
+    }
+
+    // Default: allow available active campuses
+    return all.length > 0 ? all : [{ id: 1, campusId: 1, name: "Main Campus (HQ)", campusName: "Main Campus (HQ)", code: "MAIN" }];
+  }, [activeCampuses, campuses, profileData]);
+
+  // Active Campus Resolution
+  const activeCampus = useMemo(() => {
+    if (selectedCampus?.id || selectedCampus?.campusId) {
+      const match = availableCampuses.find(
+        (c) => String(c.id ?? c.campusId) === String(selectedCampus?.id ?? selectedCampus?.campusId)
+      );
+      if (match) return match;
+    }
+    return availableCampuses[0] || selectedCampus || null;
+  }, [selectedCampus, availableCampuses]);
+
+  // 2. Staff Assigned Boards Resolution
+  const availableBoards = useMemo(() => {
+    const allBoards = (Array.isArray(boards) && boards.length > 0)
+      ? boards
+      : (Array.isArray(facultyMockData.boards) && facultyMockData.boards.length > 0
+          ? facultyMockData.boards.map((b) => ({
+              ...b,
+              name: b.name === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : b.name,
+              boardName: b.name === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : b.name,
+            }))
+          : FALLBACK_BOARDS);
+
+    const authUser = getAuthUser();
+
+    // Array of board objects on profileData
+    if (Array.isArray(profileData?.assignedBoards) && profileData.assignedBoards.length > 0) {
+      const idSet = new Set(profileData.assignedBoards.map((b) => String(b.id ?? b.boardId)).filter(Boolean));
+      const matched = allBoards.filter((b) => idSet.has(String(b.id ?? b.boardId)));
+      if (matched.length > 0) return matched;
+      return profileData.assignedBoards.map((b) => ({
+        id: b.id ?? b.boardId,
+        boardId: b.id ?? b.boardId,
+        name: b.name === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : (b.name || b.boardName || "Assigned Board"),
+        boardName: b.name === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : (b.name || b.boardName || "Assigned Board"),
+        code: b.code || "BIEAP",
+      }));
+    }
+
+    // Array of board IDs on profileData or authUser
+    const assignedIds = (Array.isArray(profileData?.assignedBoardIds) && profileData.assignedBoardIds.length > 0)
+      ? profileData.assignedBoardIds
+      : (Array.isArray(authUser?.assignedBoardIds) && authUser.assignedBoardIds.length > 0)
+      ? authUser.assignedBoardIds
+      : null;
+
+    if (Array.isArray(assignedIds) && assignedIds.length > 0) {
+      const idSet = new Set(assignedIds.map(String));
+      const matched = allBoards.filter((b) => idSet.has(String(b.id ?? b.boardId)));
+      if (matched.length > 0) return matched;
+    }
+
+    // Single board assigned on profileData or authUser
+    const singleBoardId = profileData?.boardId ?? authUser?.boardId;
+    const singleBoardName = profileData?.boardName ?? profileData?.board ?? authUser?.boardName ?? authUser?.board;
+    if (singleBoardId || singleBoardName) {
+      const matched = allBoards.filter((b) =>
+        (singleBoardId && String(b.id ?? b.boardId) === String(singleBoardId)) ||
+        (singleBoardName && (b.name === singleBoardName || b.code === singleBoardName || b.boardName === singleBoardName))
+      );
+      if (matched.length > 0) return matched;
+      const bName = singleBoardName === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : (singleBoardName || "Board of Intermediate Education, Andhra Pradesh");
+      return [{ id: singleBoardId || "1", boardId: singleBoardId || 1, name: bName, boardName: bName, code: profileData?.boardCode || "BIEAP" }];
+    }
+
+    return allBoards;
+  }, [boards, profileData]);
+
+  // Active Board Resolution
   const activeBoard = useMemo(() => {
-    if (selectedBoard?.name || selectedBoard?.code) return selectedBoard;
+    if (selectedBoard?.name || selectedBoard?.code || selectedBoard?.id) {
+      const match = availableBoards.find(
+        (b) => String(b.id ?? b.boardId) === String(selectedBoard?.id ?? selectedBoard?.boardId) ||
+               (b.code && b.code === selectedBoard?.code) ||
+               (b.name && b.name === selectedBoard?.name)
+      );
+      if (match) return match;
+    }
     try {
       const stored = localStorage.getItem("cms_selected_board");
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed?.name || parsed?.code) return parsed;
+        if (parsed?.name || parsed?.code) {
+          const match = availableBoards.find(
+            (b) => String(b.id ?? b.boardId) === String(parsed.id ?? parsed.boardId) ||
+                   (b.code && b.code === parsed.code)
+          );
+          if (match) return match;
+        }
       }
     } catch {}
     return availableBoards[0] || null;
   }, [selectedBoard, availableBoards]);
 
-  // Robust Academic Year Resolution (ensures years are always selectable)
+  // 3. Staff Assigned Academic Years Resolution
   const availableAcademicYears = useMemo(() => {
-    if (Array.isArray(academicYears) && academicYears.length > 0) return academicYears;
-    return FALLBACK_ACADEMIC_YEARS;
-  }, [academicYears]);
+    const allYears = Array.isArray(academicYears) && academicYears.length > 0 ? academicYears : FALLBACK_ACADEMIC_YEARS;
+    const authUser = getAuthUser();
 
+    // Array of academic year objects on profileData
+    if (Array.isArray(profileData?.assignedAcademicYears) && profileData.assignedAcademicYears.length > 0) {
+      const idSet = new Set(profileData.assignedAcademicYears.map((y) => String(y.id ?? y.academicYearId ?? y.code ?? y)).filter(Boolean));
+      const matched = allYears.filter((y) => idSet.has(String(y.id)) || idSet.has(String(y.code)) || idSet.has(String(y.name)));
+      if (matched.length > 0) return matched;
+    }
+
+    // Array of academic year IDs on profileData or authUser
+    const assignedIds = (Array.isArray(profileData?.assignedAcademicYearIds) && profileData.assignedAcademicYearIds.length > 0)
+      ? profileData.assignedAcademicYearIds
+      : (Array.isArray(authUser?.assignedAcademicYearIds) && authUser.assignedAcademicYearIds.length > 0)
+      ? authUser.assignedAcademicYearIds
+      : null;
+
+    if (Array.isArray(assignedIds) && assignedIds.length > 0) {
+      const idSet = new Set(assignedIds.map(String));
+      const matched = allYears.filter((y) => idSet.has(String(y.id)) || idSet.has(String(y.academicYearId)) || idSet.has(String(y.code)));
+      if (matched.length > 0) return matched;
+    }
+
+    // Single academic year assigned on profileData or authUser
+    const singleYearId = profileData?.academicYearId ?? authUser?.academicYearId;
+    const singleYearName = profileData?.academicYear ?? authUser?.academicYear;
+    if (singleYearId || singleYearName) {
+      const matched = allYears.filter((y) =>
+        (singleYearId && (String(y.id) === String(singleYearId) || String(y.academicYearId) === String(singleYearId))) ||
+        (singleYearName && (y.name === singleYearName || y.code === singleYearName || y.label === singleYearName))
+      );
+      if (matched.length > 0) return matched;
+      return [{
+        id: singleYearId || "2026-2027",
+        code: singleYearName || "2026-2027",
+        name: singleYearName || "2026-2027",
+        label: singleYearName || "2026-2027",
+      }];
+    }
+
+    return allYears;
+  }, [academicYears, profileData]);
+
+  // Active Academic Year Resolution
   const activeAcademicYear = useMemo(() => {
-    if (selectedAcademicYear?.name || selectedAcademicYear?.code) return selectedAcademicYear;
+    if (selectedAcademicYear?.name || selectedAcademicYear?.code || selectedAcademicYear?.id) {
+      const match = availableAcademicYears.find(
+        (y) => String(y.id ?? y.academicYearId) === String(selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId) ||
+               (y.code && y.code === selectedAcademicYear?.code) ||
+               (y.name && y.name === selectedAcademicYear?.name)
+      );
+      if (match) return match;
+    }
     try {
       const stored = localStorage.getItem("cms_selected_academic_year");
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed?.name || parsed?.code) return parsed;
+        if (parsed?.name || parsed?.code) {
+          const match = availableAcademicYears.find(
+            (y) => String(y.id ?? y.academicYearId) === String(parsed.id ?? parsed.academicYearId) ||
+                   (y.code && y.code === parsed.code)
+          );
+          if (match) return match;
+        }
       }
     } catch {}
     return availableAcademicYears[0] || null;
   }, [selectedAcademicYear, availableAcademicYears]);
 
-  // Sync initial selections back to contexts if they were null
+  // Sync initial selections back to contexts if they were null or out of assigned scope
   useEffect(() => {
-    if (!selectedBoard && activeBoard) {
+    if (activeCampus && String(selectedCampus?.id ?? selectedCampus?.campusId) !== String(activeCampus.id ?? activeCampus.campusId)) {
+      if (setSelectedCampus) setSelectedCampus(activeCampus);
+      try {
+        localStorage.setItem("cms_selected_campus_id", String(activeCampus.id ?? activeCampus.campusId));
+      } catch {}
+    }
+  }, [activeCampus, selectedCampus, setSelectedCampus]);
+
+  useEffect(() => {
+    if (activeBoard && String(selectedBoard?.id ?? selectedBoard?.boardId) !== String(activeBoard.id ?? activeBoard.boardId)) {
       if (academicSetSelectedBoard) academicSetSelectedBoard(activeBoard);
       if (facultySetSelectedBoard) facultySetSelectedBoard(activeBoard);
+      try {
+        localStorage.setItem("cms_selected_board", JSON.stringify(activeBoard));
+      } catch {}
     }
-    if (!selectedAcademicYear && activeAcademicYear) {
+  }, [activeBoard, selectedBoard, academicSetSelectedBoard, facultySetSelectedBoard]);
+
+  useEffect(() => {
+    if (activeAcademicYear && String(selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId) !== String(activeAcademicYear.id ?? activeAcademicYear.academicYearId)) {
       if (academicSetSelectedAcademicYear) academicSetSelectedAcademicYear(activeAcademicYear);
       if (facultySetSelectedAcademicYear) facultySetSelectedAcademicYear(activeAcademicYear);
+      try {
+        localStorage.setItem("cms_selected_academic_year", JSON.stringify(activeAcademicYear));
+      } catch {}
     }
-  }, [selectedBoard, activeBoard, selectedAcademicYear, activeAcademicYear, academicSetSelectedBoard, facultySetSelectedBoard, academicSetSelectedAcademicYear, facultySetSelectedAcademicYear]);
+  }, [activeAcademicYear, selectedAcademicYear, academicSetSelectedAcademicYear, facultySetSelectedAcademicYear]);
 
   // Dropdown States
+  const [campusOpen, setCampusOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
   const [responsiveOpen, setResponsiveOpen] = useState(false);
 
+  const campusRef = useRef(null);
   const boardRef = useRef(null);
   const yearRef = useRef(null);
   const responsiveRef = useRef(null);
@@ -147,7 +342,16 @@ export default function FacultyNavbar() {
   const [profileDropOpen, setProfileDropOpen] = useState(false);
   const profileDropRef = useRef(null);
 
-  // Board & Academic Year Selection Handlers
+  // Selection Handlers
+  const handleCampusSelect = (campus) => {
+    if (setSelectedCampus) setSelectedCampus(campus);
+    try {
+      localStorage.setItem("cms_selected_campus_id", String(campus.id ?? campus.campusId));
+    } catch {}
+    setCampusOpen(false);
+    setResponsiveOpen(false);
+  };
+
   const handleBoardSelect = (board) => {
     if (academicSetSelectedBoard) academicSetSelectedBoard(board);
     if (facultySetSelectedBoard) facultySetSelectedBoard(board);
@@ -201,6 +405,7 @@ export default function FacultyNavbar() {
   // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
+      if (campusRef.current && !campusRef.current.contains(e.target)) setCampusOpen(false);
       if (boardRef.current && !boardRef.current.contains(e.target)) setBoardOpen(false);
       if (yearRef.current && !yearRef.current.contains(e.target)) setYearOpen(false);
       if (responsiveRef.current && !responsiveRef.current.contains(e.target)) setResponsiveOpen(false);
@@ -211,11 +416,22 @@ export default function FacultyNavbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const campusDisplayName = selectedCampus?.name || selectedCampus?.campusName || selectedCampus?.code || "Main Campus (HQ)";
+  const campusDisplayName = activeCampus?.name || activeCampus?.campusName || activeCampus?.code || selectedCampus?.name || "Main Campus (HQ)";
   const boardDisplayName = activeBoard?.name || activeBoard?.boardName || activeBoard?.code || (boardsLoading ? "Loading boards..." : "Board of Intermediate Education, Andhra Pradesh");
   const yearDisplayName = activeAcademicYear?.name || activeAcademicYear?.label || activeAcademicYear?.code || "2026-2027";
 
+  const [photoOverride, setPhotoOverride] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      setPhotoOverride(e.detail?.photoUrl !== undefined ? e.detail.photoUrl : null);
+    };
+    window.addEventListener("cms-staff-photo-updated", handler);
+    return () => window.removeEventListener("cms-staff-photo-updated", handler);
+  }, []);
+
   const activePhoto = useMemo(() => {
+    if (photoOverride !== null) return photoOverride;
     return (
       profileData?.photoUrl ||
       (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
@@ -223,7 +439,7 @@ export default function FacultyNavbar() {
         ? `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}`
         : null)
     );
-  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
+  }, [photoOverride, profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
 
   return (
     <header className="cms-topbar">
@@ -278,21 +494,63 @@ export default function FacultyNavbar() {
       <div className="cms-top-actions">
         {/* DESKTOP SELECTORS (≥ 1120px): Side-by-side Campus + Board + Academic Year */}
         <div className="cms-academic-selectors cms-academic-selectors-desktop">
-          {/* Campus Selector (Read-Only) */}
-          <div
-            className="cms-academic-btn cms-academic-btn-campus is-readonly"
-            title={`Assigned Campus: ${campusDisplayName} (Configured by Administrator)`}
-            aria-label="Campus (Read-Only)"
-          >
-            <div className="cms-academic-btn-icon">
-              <Building2 size={16} color="var(--cms-primary)" />
-            </div>
-            <div className="cms-academic-btn-text">
-              <span className="cms-academic-btn-label">Campus</span>
-              <span className="cms-academic-btn-value" title={campusDisplayName}>
-                {campusDisplayName}
-              </span>
-            </div>
+          {/* Campus Selector (Interactive Dropdown) */}
+          <div className="cms-academic-dropdown-wrap" ref={campusRef}>
+            <button
+              type="button"
+              className={`cms-academic-btn ${campusOpen ? "is-open" : ""}`}
+              onClick={() => {
+                setCampusOpen((v) => !v);
+                setBoardOpen(false);
+                setYearOpen(false);
+                setProfileDropOpen(false);
+              }}
+              disabled={campusLoading && !availableCampuses.length}
+              aria-label="Select Campus"
+              aria-expanded={campusOpen}
+            >
+              <div className="cms-academic-btn-icon">
+                <Building2 size={16} color="var(--cms-primary)" />
+              </div>
+              <div className="cms-academic-btn-text">
+                <span className="cms-academic-btn-label">Campus</span>
+                <span className="cms-academic-btn-value" title={campusDisplayName}>
+                  {campusDisplayName}
+                </span>
+              </div>
+              <ChevronDown size={12} className="cms-academic-btn-arrow" />
+            </button>
+
+            {campusOpen && (
+              <div className="cms-academic-dropdown-panel">
+                <div className="cms-academic-panel-header">
+                  {availableCampuses.length > 1 ? "Select Campus" : "Assigned Campus"}
+                </div>
+                <div className="cms-academic-panel-list">
+                  {availableCampuses.map((c) => {
+                    const isSelected =
+                      String(activeCampus?.id ?? activeCampus?.campusId) === String(c.id ?? c.campusId) ||
+                      (c.code && activeCampus?.code === c.code);
+                    return (
+                      <button
+                        key={c.id || c.campusId}
+                        type="button"
+                        className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
+                        onClick={() => handleCampusSelect(c)}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px", textAlign: "left" }}>
+                          <span className="cms-academic-item-name" title={c.name || c.campusName}>
+                            {c.name || c.campusName}
+                          </span>
+                          {c.code && <span style={{ fontSize: "11px", color: "var(--cms-muted)" }}>{c.code}</span>}
+                        </div>
+                        {isSelected && <CheckCircle2 size={16} className="cms-academic-check" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Board Selector (Interactive Dropdown) */}
@@ -302,6 +560,7 @@ export default function FacultyNavbar() {
               className={`cms-academic-btn ${boardOpen ? "is-open" : ""}`}
               onClick={() => {
                 setBoardOpen((v) => !v);
+                setCampusOpen(false);
                 setYearOpen(false);
                 setProfileDropOpen(false);
               }}
@@ -323,17 +582,19 @@ export default function FacultyNavbar() {
 
             {boardOpen && (
               <div className="cms-academic-dropdown-panel">
-                <div className="cms-academic-panel-header">Select Board</div>
+                <div className="cms-academic-panel-header">
+                  {availableBoards.length > 1 ? "Select Board" : "Assigned Board"}
+                </div>
                 <div className="cms-academic-panel-list">
                   {availableBoards.map((b) => {
                     const isSelected =
-                      String(activeBoard?.id) === String(b.id) ||
+                      String(activeBoard?.id ?? activeBoard?.boardId) === String(b.id ?? b.boardId) ||
                       activeBoard?.code === b.code ||
                       activeBoard?.name === b.name ||
                       activeBoard?.boardName === b.boardName;
                     return (
                       <button
-                        key={b.id || b.code}
+                        key={b.id || b.boardId || b.code}
                         type="button"
                         className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
                         onClick={() => handleBoardSelect(b)}
@@ -357,6 +618,7 @@ export default function FacultyNavbar() {
               className={`cms-academic-btn ${yearOpen ? "is-open" : ""}`}
               onClick={() => {
                 setYearOpen((v) => !v);
+                setCampusOpen(false);
                 setBoardOpen(false);
                 setProfileDropOpen(false);
               }}
@@ -378,18 +640,20 @@ export default function FacultyNavbar() {
 
             {yearOpen && (
               <div className="cms-academic-dropdown-panel">
-                <div className="cms-academic-panel-header">Select Academic Year</div>
+                <div className="cms-academic-panel-header">
+                  {availableAcademicYears.length > 1 ? "Select Academic Year" : "Assigned Academic Year"}
+                </div>
                 <div className="cms-academic-panel-list">
                   {availableAcademicYears.map((y) => {
                     const normalize = (s) => String(s || "").trim().replace(/[–—]/g, "-").replace(/\s+/g, "");
                     const isSelected =
-                      String(activeAcademicYear?.id) === String(y.id) ||
+                      String(activeAcademicYear?.id ?? activeAcademicYear?.academicYearId) === String(y.id ?? y.academicYearId) ||
                       normalize(activeAcademicYear?.code) === normalize(y.code) ||
                       normalize(activeAcademicYear?.name) === normalize(y.name) ||
                       normalize(activeAcademicYear?.label) === normalize(y.label);
                     return (
                       <button
-                        key={y.id || y.code}
+                        key={y.id || y.academicYearId || y.code}
                         type="button"
                         className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
                         onClick={() => handleYearSelect(y)}
@@ -412,6 +676,7 @@ export default function FacultyNavbar() {
             className={`cms-academic-btn cms-academic-responsive-trigger ${responsiveOpen ? "is-open" : ""}`}
             onClick={() => {
               setResponsiveOpen((v) => !v);
+              setCampusOpen(false);
               setBoardOpen(false);
               setYearOpen(false);
               setProfileDropOpen(false);
@@ -425,7 +690,7 @@ export default function FacultyNavbar() {
             <div className="cms-academic-btn-text">
               <span className="cms-academic-btn-label">Academic Context</span>
               <span className="cms-academic-btn-value">
-                {activeBoard?.code || "Board"} · {activeAcademicYear?.name || "Year"}
+                {activeCampus?.code || "Campus"} · {activeBoard?.code || "Board"} · {activeAcademicYear?.name || "Year"}
               </span>
             </div>
             <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -433,15 +698,31 @@ export default function FacultyNavbar() {
 
           {responsiveOpen && (
             <div className="cms-academic-dropdown-panel cms-academic-responsive-panel">
-              {/* Read-Only Campus */}
+              {/* Campus Selector */}
               <div className="cms-academic-responsive-section">
                 <div className="cms-academic-responsive-sec-title">
                   <Building2 size={13} color="var(--cms-primary)" />
-                  <span>Campus (Assigned by Admin)</span>
+                  <span>{availableCampuses.length > 1 ? "Switch Campus" : "Assigned Campus"}</span>
                 </div>
-                <div className="cms-academic-readonly-badge">
-                  <span className="cms-badge-name" title={campusDisplayName}>{campusDisplayName}</span>
-                  <span className="cms-badge-lock"><Lock size={10} /> Read-only</span>
+                <div className="cms-academic-panel-list">
+                  {availableCampuses.map((c) => {
+                    const isSelected =
+                      String(activeCampus?.id ?? activeCampus?.campusId) === String(c.id ?? c.campusId) ||
+                      (c.code && activeCampus?.code === c.code);
+                    return (
+                      <button
+                        key={c.id || c.campusId}
+                        type="button"
+                        className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
+                        onClick={() => handleCampusSelect(c)}
+                      >
+                        <span className="cms-academic-item-name" title={c.name || c.campusName}>
+                          {c.name || c.campusName}
+                        </span>
+                        {isSelected && <CheckCircle2 size={15} className="cms-academic-check" />}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -449,18 +730,18 @@ export default function FacultyNavbar() {
               <div className="cms-academic-responsive-section">
                 <div className="cms-academic-responsive-sec-title">
                   <NavbarIcon src={navbarBoardIcon} />
-                  <span>Switch Board</span>
+                  <span>{availableBoards.length > 1 ? "Switch Board" : "Assigned Board"}</span>
                 </div>
                 <div className="cms-academic-panel-list">
                   {availableBoards.map((b) => {
                     const isSelected =
-                      String(activeBoard?.id) === String(b.id) ||
+                      String(activeBoard?.id ?? activeBoard?.boardId) === String(b.id ?? b.boardId) ||
                       activeBoard?.code === b.code ||
                       activeBoard?.name === b.name ||
                       activeBoard?.boardName === b.boardName;
                     return (
                       <button
-                        key={b.id || b.code}
+                        key={b.id || b.boardId || b.code}
                         type="button"
                         className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
                         onClick={() => handleBoardSelect(b)}
@@ -479,19 +760,19 @@ export default function FacultyNavbar() {
               <div className="cms-academic-responsive-section">
                 <div className="cms-academic-responsive-sec-title">
                   <NavbarIcon src={navbarAcademicYearIcon} />
-                  <span>Switch Academic Year</span>
+                  <span>{availableAcademicYears.length > 1 ? "Switch Academic Year" : "Assigned Academic Year"}</span>
                 </div>
                 <div className="cms-academic-panel-list">
                   {availableAcademicYears.map((y) => {
                     const normalize = (s) => String(s || "").trim().replace(/[–—]/g, "-").replace(/\s+/g, "");
                     const isSelected =
-                      String(activeAcademicYear?.id) === String(y.id) ||
+                      String(activeAcademicYear?.id ?? activeAcademicYear?.academicYearId) === String(y.id ?? y.academicYearId) ||
                       normalize(activeAcademicYear?.code) === normalize(y.code) ||
                       normalize(activeAcademicYear?.name) === normalize(y.name) ||
                       normalize(activeAcademicYear?.label) === normalize(y.label);
                     return (
                       <button
-                        key={y.id || y.code}
+                        key={y.id || y.academicYearId || y.code}
                         type="button"
                         className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
                         onClick={() => handleYearSelect(y)}

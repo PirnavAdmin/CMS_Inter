@@ -43,6 +43,7 @@ export const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: dashboardIcon, group: "MAIN" },
   { id: "profile", label: "My Profile", icon: staffIcon, group: "MAIN" },
   { id: "timetable", label: "My Timetable", icon: timetableIcon, group: "ACADEMICS" },
+  { id: "classes", label: "My Classes", icon: staffIcon, group: "ACADEMICS" },
   { id: "attendance", label: "Student Attendance", icon: attendanceIcon, group: "ACADEMICS" },
   { id: "marks", label: "Marks Entry", icon: marksEvaluationIcon, group: "ACADEMICS" },
   { id: "examduties", label: "Exam Duties", icon: examinationIcon, group: "ACADEMICS" },
@@ -66,7 +67,9 @@ export const permissionByModule = {
   salary: "VIEW_PAYSLIPS",
   holidays: "VIEW_HOLIDAYS",
   classes: "VIEW_CLASSES",
+  reimbursements: "VIEW_REIMBURSEMENTS",
 };
+
 
 export default function FacultySidebar() {
   const { activeModule, setActiveModule, sidebarOpen, setSidebarOpen, profileData, initials } = useFaculty();
@@ -74,7 +77,18 @@ export default function FacultySidebar() {
 
   const navGroups = ["MAIN", "ACADEMICS", "HR & FINANCE", "ADMINISTRATION"];
 
+  const [photoOverride, setPhotoOverride] = React.useState(null);
+
+  React.useEffect(() => {
+    const handler = (e) => {
+      setPhotoOverride(e.detail?.photoUrl !== undefined ? e.detail.photoUrl : null);
+    };
+    window.addEventListener("cms-staff-photo-updated", handler);
+    return () => window.removeEventListener("cms-staff-photo-updated", handler);
+  }, []);
+
   const activePhoto = useMemo(() => {
+    if (photoOverride !== null) return photoOverride;
     return (
       profileData?.photoUrl ||
       (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
@@ -82,7 +96,7 @@ export default function FacultySidebar() {
         ? `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}`
         : null)
     );
-  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
+  }, [photoOverride, profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
 
   return (
     <aside className={`cms-sidebar ${sidebarOpen ? "open is-open" : ""}`}>

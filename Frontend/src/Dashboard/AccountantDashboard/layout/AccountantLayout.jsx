@@ -24,6 +24,7 @@ const accountantMenu = [
   {
     section: "ACCOUNT",
     items: [
+      { to: "/accountant-dashboard/my-attendance", label: "My Attendance", icon: adminIconAssets.attendanceImpact },
       { to: "/accountant-dashboard/profile", label: "My Profile", icon: adminIconAssets.profile },
     ],
   },

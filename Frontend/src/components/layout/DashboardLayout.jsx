@@ -18,6 +18,7 @@ import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
+import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -520,7 +521,28 @@ export default function DashboardLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
-  const user = readUser();
+  const [currentUser, setCurrentUser] = useState(() => readUser());
+  const user = currentUser;
+
+  useEffect(() => {
+    if (!currentUser || hasRole("SUPER_ADMIN", currentUser)) return;
+    if (currentUser.permissions || currentUser.rolePermissions) return;
+
+    getCurrentUserPermissions()
+      .then((res) => {
+        if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+          const updated = { ...currentUser, permissions: res.data };
+          try {
+            const raw = window.localStorage.getItem("user") ? window.localStorage : window.sessionStorage;
+            raw.setItem("user", JSON.stringify(updated));
+          } catch {}
+          setCurrentUser(updated);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not load current user permissions:", err?.message);
+      });
+  }, [currentUser]);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
@@ -536,7 +558,7 @@ export default function DashboardLayout({
       else if (isPrincipal) base = principalMenu;
       else base = menu;
     }
-    if (user && !hasRole("SUPER_ADMIN", user) && !hasRole("ADMIN", user) && (user.permissions || user.rolePermissions)) {
+    if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
       return base
         .map((group) => ({
           ...group,
@@ -606,12 +628,13 @@ export default function DashboardLayout({
             if (!disposed) {
               const data = certRes?.data?.data ?? certRes?.data?.Data ?? certRes?.data ?? {};
               const reqCount = Number(data.requestedCount ?? data.RequestedCount) || 0;
-              if (reqCount > 0) {
+              const isCurrentlyOnCertPage = window.location.pathname.startsWith("/dashboard/certificates");
+              if (reqCount > 0 && !isCurrentlyOnCertPage) {
                 notifs.push({
                   id: "admin-notif-certificate",
                   title: "Student Certificate Requests",
                   count: reqCount,
-                  to: "/dashboard/certificates?status=Requested",
+                  to: "/dashboard/certificates?tab=actions&status=Requested",
                   label: "certificates"
                 });
               }
@@ -633,7 +656,12 @@ export default function DashboardLayout({
       try {
         channel = new BroadcastChannel("cms_notifications");
         channel.onmessage = (event) => {
-          if (event.data?.type === "NEW_REIMBURSEMENT" || event.data?.type === "NEW_CERTIFICATE_REQUEST") {
+          if (
+            event.data?.type === "NEW_REIMBURSEMENT" ||
+            event.data?.type === "NEW_CERTIFICATE_REQUEST" ||
+            event.data?.type === "CERTIFICATE_STATUS_UPDATED" ||
+            event.data?.type === "REIMBURSEMENT_STATUS_UPDATED"
+          ) {
             setHasViewedNotifications(false);
             fetchLiveNotifications();
           }
@@ -697,6 +725,14 @@ export default function DashboardLayout({
   }, [pathname]);
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
+  }, [pathname]);
+  useEffect(() => {
+    if (pathname.startsWith("/dashboard/certificates")) {
+      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-certificate"));
+    }
+    if (pathname.startsWith("/dashboard/reimbursements")) {
+      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-reimbursement"));
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -1212,7 +1248,16 @@ export default function DashboardLayout({
                   <div><strong>Notifications</strong><small>Sample activity</small></div>
                 </div>
                 {currentNotifications.map((notification) => (
-                  <button key={notification.id} type="button" className="cms-notif-item" onClick={() => { setNotifOpen(false); goTo(notification.to); }}>
+                  <button
+                    key={notification.id}
+                    type="button"
+                    className="cms-notif-item"
+                    onClick={() => {
+                      setNotifOpen(false);
+                      setLiveNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+                      navigate(notification.to);
+                    }}
+                  >
                     <span className="cms-notif-count">{notification.count}</span>
                     <span><p>{notification.title}</p><small>Open {notification.label}</small></span>
                     <ChevronRight size={15} aria-hidden="true" />

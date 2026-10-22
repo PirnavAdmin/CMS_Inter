@@ -3,6 +3,42 @@ import { useLocation, useNavigate } from "react-router-dom";
 // No mock data
 import { getAuthUser } from "@/features/authStorage.js";
 import * as staffApi from "@/api/staffApi.js";
+import { attendanceService } from "@/api/attendanceService.js";
+
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr) return null;
+  const match = String(timeStr).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const ampm = match[3]?.toUpperCase();
+  if (ampm === "PM" && hours < 12) hours += 12;
+  if (ampm === "AM" && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+};
+
+const calculateDurationStr = (inTime, outTime, isActive = false) => {
+  if (!inTime || inTime === "--") return "0h 0m";
+  const inMins = parseTimeToMinutes(inTime);
+  if (inMins === null) return "0h 0m";
+
+  let targetMins;
+  if (outTime && outTime !== "--") {
+    targetMins = parseTimeToMinutes(outTime);
+  } else if (isActive) {
+    const now = new Date();
+    targetMins = now.getHours() * 60 + now.getMinutes();
+  } else {
+    return "0h 0m";
+  }
+
+  if (targetMins === null) return "0h 0m";
+  let diff = targetMins - inMins;
+  if (diff < 0) diff += 24 * 60;
+  const hours = Math.floor(diff / 60);
+  const mins = diff % 60;
+  return `${hours}h ${mins}m`;
+};
 
 const FacultyContext = createContext(null);
 
@@ -108,7 +144,7 @@ const getInitialPunchState = () => {
     const saved = localStorage.getItem("staff_punch_state");
     if (saved) return JSON.parse(saved);
   } catch {}
-  return { isPunchedIn: true, inTime: "08:45 AM", outTime: null, hoursWorked: "4 hrs 32 mins" };
+  return { isPunchedIn: false, inTime: null, outTime: null, hoursWorked: "--" };
 };
 
 export const pathToModule = {
@@ -125,6 +161,7 @@ export const pathToModule = {
   payslips: "salary",
   holidays: "holidays",
   settings: "settings",
+  reimbursements: "reimbursements",
 };
 
 export const moduleToPath = {
@@ -140,6 +177,7 @@ export const moduleToPath = {
   salary: "payslips",
   holidays: "holidays",
   settings: "settings",
+  reimbursements: "reimbursements",
 };
 
 export function FacultyProvider({ children }) {
@@ -236,6 +274,35 @@ export function FacultyProvider({ children }) {
   // Biometric Punch State
   const [punchState, setPunchState] = useState(getInitialPunchState);
 
+  // Sync punch status with backend on initial load
+  useEffect(() => {
+    const authUser = getAuthUser();
+    if (!authUser) return;
+    attendanceService
+      .getMyTodayStatus()
+      .then((res) => {
+        const payload = res?.data || res?.Data || (res?.status ? res : null);
+        if (payload) {
+          const isPunched = payload.status === "punched_in" || payload.Status === "punched_in";
+          const inTime = payload.inTime || payload.InTime || null;
+          const outTime = payload.outTime || payload.OutTime || null;
+          const next = {
+            isPunchedIn: isPunched,
+            inTime,
+            outTime,
+            hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunched) : "--",
+          };
+          setPunchState(next);
+          try {
+            localStorage.setItem("staff_punch_state", JSON.stringify(next));
+          } catch {}
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch today punch status in FacultyContext:", err?.message || err);
+      });
+  }, []);
+
   const togglePunch = () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -285,33 +352,47 @@ export function FacultyProvider({ children }) {
     return `${first}${last}`.toUpperCase();
   }, [profileData.firstName, profileData.lastName, profileData.fullName, profileData.name]);
 
-  const value = {
-    profileData,
-    setProfileData,
-    persistStaffProfile,
-    isEditingProfile,
-    setIsEditingProfile,
-    profileStep,
-    setProfileStep,
-    punchState,
-    setPunchState,
-    togglePunch,
-    toast,
-    notify,
-    selectedBoard,
-    setSelectedBoard,
-    selectedAcademicYear,
-    setSelectedAcademicYear,
-    boards,
-    academicYears,
-    boardsLoading,
-    academicYearsLoading,
-    activeModule,
-    setActiveModule,
-    sidebarOpen,
-    setSidebarOpen,
-    initials,
-  };
+  const value = useMemo(
+    () => ({
+      profileData,
+      setProfileData,
+      persistStaffProfile,
+      isEditingProfile,
+      setIsEditingProfile,
+      profileStep,
+      setProfileStep,
+      punchState,
+      setPunchState,
+      togglePunch,
+      toast,
+      notify,
+      selectedBoard,
+      setSelectedBoard,
+      selectedAcademicYear,
+      setSelectedAcademicYear,
+      boards,
+      academicYears,
+      boardsLoading,
+      academicYearsLoading,
+      activeModule,
+      setActiveModule,
+      sidebarOpen,
+      setSidebarOpen,
+      initials,
+    }),
+    [
+      profileData,
+      isEditingProfile,
+      profileStep,
+      punchState,
+      toast,
+      selectedBoard,
+      selectedAcademicYear,
+      activeModule,
+      sidebarOpen,
+      initials,
+    ]
+  );
 
   return <FacultyContext.Provider value={value}>{children}</FacultyContext.Provider>;
 }

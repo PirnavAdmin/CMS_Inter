@@ -267,14 +267,7 @@ export default function FacultyMarks() {
               return Array.from(map.values());
             });
           }
-          if (secList.length > 0 && !selectedSection) {
-            const first = secList[0];
-            setSelectedSection(first.sectionId);
-            if (first.academicLevelId) setSelectedLevel(first.academicLevelId);
-            if (first.groupId) setSelectedGroup(first.groupId);
-            if (first.programId) setSelectedProgram(first.programId);
-            setContextApplied(true);
-          }
+          // Do not auto-select section or apply context on mount; wait for faculty selection
         }
       })
       .catch((err) => console.warn("Could not load faculty timetable sections:", err));
@@ -317,7 +310,6 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setLevelsList(list);
-          if (list.length && !selectedLevel) setSelectedLevel(list[0].academicLevelId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching levels for marks:", err));
@@ -339,7 +331,6 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setGroupsList(list);
-          if (list.length && !selectedGroup) setSelectedGroup(list[0].groupId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching groups for marks:", err));
@@ -355,7 +346,6 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setProgramsList(list);
-          if (list.length && !selectedProgram) setSelectedProgram(list[0].programId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching programs for marks:", err));
@@ -379,14 +369,13 @@ export default function FacultyMarks() {
         const list = res.data?.data || res.data || [];
         if (isMounted) {
           setSectionsList(list);
-          if (list.length && !selectedSection) setSelectedSection(list[0].sectionId || list[0].id);
         }
       })
       .catch((err) => console.warn("Error fetching sections for marks:", err));
     return () => { isMounted = false; };
   }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, selectedProgram]);
 
-  // Merge live sections with allocated timetable sections
+  // Strictly constrain sections to Faculty's allocated timetable sections
   const displaySections = useMemo(() => {
     const map = new Map();
     allocatedSections.forEach((s) => {
@@ -394,6 +383,10 @@ export default function FacultyMarks() {
         map.set(String(s.sectionId), { ...s, isAssigned: true });
       }
     });
+    if (allocatedSections.length > 0) {
+      return Array.from(map.values());
+    }
+    // Fallback only if no allocations found for this faculty
     sectionsList.forEach((s) => {
       const id = String(s.sectionId || s.id);
       if (!map.has(id)) {
@@ -464,19 +457,19 @@ export default function FacultyMarks() {
     return subjectsList;
   }, [subjectsList, allocatedSubjects, selectedLevel]);
 
-  // Auto-sync selectedSubject to a valid allocated subject
+  // Auto-sync selectedSubject only when context is applied
   useEffect(() => {
-    if (filteredSubjects.length > 0) {
+    if (contextApplied && filteredSubjects.length > 0) {
       const exists = filteredSubjects.some((s) => String(s.subjectId || s.id) === String(selectedSubject));
       if (!exists) {
         const nextSub = filteredSubjects[0].subjectId || filteredSubjects[0].id;
         setSelectedSubject(nextSub);
-        if (contextApplied && selectedExam) {
+        if (selectedExam) {
           handleExamOrSubjectChange(selectedExam, nextSub);
         }
       }
     }
-  }, [filteredSubjects]);
+  }, [contextApplied, filteredSubjects]);
 
   // Quick helper to select assigned class from chips
   const selectAssignedClass = (sec) => {
@@ -591,14 +584,16 @@ export default function FacultyMarks() {
       // Check if marks are already persisted in DB for this subject & exam
       let savedMarksMap = new Map();
       try {
-        const marksRes = await apiClient.get(`/api/v1/marks/subject/${newSubject}`);
-        const marksData = marksRes.data?.data || marksRes.data || [];
-        if (Array.isArray(marksData)) {
-          marksData.forEach((m) => {
-            if (String(m.examinationId) === String(newExam)) {
-              savedMarksMap.set(Number(m.studentId), m);
-            }
-          });
+        if (newSubject && Number(newSubject) > 0) {
+          const marksRes = await apiClient.get(`/api/v1/marks/subject/${newSubject}`).catch(() => null);
+          const marksData = marksRes?.data?.data || marksRes?.data || [];
+          if (Array.isArray(marksData)) {
+            marksData.forEach((m) => {
+              if (String(m.examinationId) === String(newExam)) {
+                savedMarksMap.set(Number(m.studentId), m);
+              }
+            });
+          }
         }
       } catch (e) {
         // ignore if endpoint not found
