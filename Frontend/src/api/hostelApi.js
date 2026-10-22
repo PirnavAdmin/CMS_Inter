@@ -42,7 +42,13 @@ async function callOrFallback(apiCall, fallbackFn) {
   if (USE_MOCK_DATA) {
     return fallbackFn();
   }
-  return apiCall();
+  try {
+    const res = await apiCall();
+    if (res && res.data) return res;
+    return fallbackFn();
+  } catch {
+    return fallbackFn();
+  }
 }
 
 /**
