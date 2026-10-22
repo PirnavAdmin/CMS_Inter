@@ -236,6 +236,7 @@ builder.Services.AddScoped<IDesignationService, DesignationService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IFeeService, FeeService>();
+builder.Services.AddScoped<IFacilityTransitionService, FacilityTransitionService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<CollegeManagement.API.Services.IProgramService, CollegeManagement.API.Services.ProgramService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
@@ -677,10 +678,34 @@ try
             await dbContext.Database.ExecuteSqlRawAsync(@"
                 ALTER TABLE `FeePaymentPlans` ADD COLUMN IF NOT EXISTS `UpdatedAt` datetime(6) NULL;
             ");
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE IF NOT EXISTS `facility_transition_histories` (
+                    `TransitionId` INT NOT NULL AUTO_INCREMENT,
+                    `StudentId` INT NOT NULL,
+                    `FromFacility` VARCHAR(50) NOT NULL,
+                    `ToFacility` VARCHAR(50) NOT NULL,
+                    `TransitionDate` DATETIME(6) NOT NULL,
+                    `MonthsUsedFromFacility` INT NOT NULL,
+                    `ProratedFromFee` DECIMAL(18,2) NOT NULL,
+                    `MonthsUsedToFacility` INT NOT NULL,
+                    `ProratedToFee` DECIMAL(18,2) NOT NULL,
+                    `ExcessCreditTransferred` DECIMAL(18,2) NOT NULL,
+                    `PreviousTotalFee` DECIMAL(18,2) NOT NULL,
+                    `NewTotalFee` DECIMAL(18,2) NOT NULL,
+                    `PreviousBalance` DECIMAL(18,2) NOT NULL,
+                    `NewBalance` DECIMAL(18,2) NOT NULL,
+                    `Remarks` VARCHAR(500) NULL,
+                    `PerformedBy` VARCHAR(100) NULL,
+                    `CreatedAt` DATETIME(6) NOT NULL,
+                    PRIMARY KEY (`TransitionId`),
+                    KEY `IX_facility_transition_histories_StudentId` (`StudentId`),
+                    CONSTRAINT `FK_facility_transition_histories_Students_StudentId` FOREIGN KEY (`StudentId`) REFERENCES `Students` (`StudentId`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
         }
         catch (Exception fpEx)
         {
-            app.Logger.LogWarning(fpEx, "Failed to align FeePaymentPlans schema.");
+            app.Logger.LogWarning(fpEx, "Failed to align FeePaymentPlans schema or facility_transition_histories table.");
         }
     }
     catch (Exception spEx)

@@ -2066,6 +2066,27 @@ button,
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary) 18%, transparent) !important;
 }
 
+/* Number stepper inputs fix: prevent overflow / vertical clipping of numbers */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
+.cms-stepper-input {
+  box-sizing: border-box !important;
+  text-align: center !important;
+  padding: 0 4px !important;
+  line-height: 1.2 !important;
+  vertical-align: middle !important;
+  overflow: visible !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
 .cms-alloc-modal-select {
   width: 100%;
   height: 38px !important;
@@ -3935,3 +3956,125 @@ button,
 :root[data-theme="dark"] .cms-hostel-dropdown-item.is-selected {
   background-color: #2b3921 !important;
 }
+<<<<<<< HEAD
+
+/* ── Monthly Revenue & Fee Collection Report KPI Highlights ── */
+.cms-revenue-report-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 960px) {
+  .cms-revenue-report-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
+  .cms-revenue-report-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cms-rev-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cms-rev-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.cms-rev-kpi-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cms-rev-kpi-card.is-billed .cms-rev-kpi-icon {
+  background: var(--cms-primary-soft, #eef3d2);
+  color: var(--cms-primary, #6b8e23);
+}
+
+.cms-rev-kpi-card.is-collected .cms-rev-kpi-icon {
+  background: var(--cms-green-soft, #e6f9ed);
+  color: var(--cms-green, #16a34a);
+}
+
+.cms-rev-kpi-card.is-pending .cms-rev-kpi-icon {
+  background: var(--cms-red-soft, #fef2f2);
+  color: var(--cms-red, #dc2626);
+}
+
+.cms-rev-kpi-card.is-efficiency .cms-rev-kpi-icon {
+  background: var(--cms-amber-soft, #fef9c3);
+  color: var(--cms-amber, #d97706);
+}
+
+.cms-rev-kpi-data {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cms-rev-kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cms-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cms-rev-kpi-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--cms-text);
+  line-height: 1.2;
+}
+
+.cms-rev-kpi-sub {
+  font-size: 11.5px;
+  color: var(--cms-muted);
+  font-weight: 500;
+}
+
+.cms-rev-progress-bg {
+  width: 100%;
+  height: 6px;
+  background: var(--cms-border);
+  border-radius: 9999px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.cms-rev-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cms-amber, #d97706), var(--cms-green, #16a34a));
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+.cms-report-tfoot td {
+  padding: 12px 14px;
+  border-top: 2px solid var(--cms-border);
+  background: var(--cms-subtle);
+  font-size: 12.5px;
+}
+=======
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402

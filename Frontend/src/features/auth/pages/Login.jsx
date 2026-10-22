@@ -111,6 +111,11 @@ export default function Login() {
       }
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
+<<<<<<< HEAD
+      const userRole = String(result.user.role || "").toLowerCase();
+      const isExamCell = isExamCellRole(userRole) || result.roleType === "examcell";
+      const isPrincipal = userRole === "principal" || userRole.includes("principal");
+=======
       const isWarden =
         isWardenRole(result.user?.role, result.user) ||
         result.roleType === "warden" ||
@@ -128,6 +133,7 @@ export default function Login() {
           userRole === "nonteaching" ||
           result.roleType === "non_teaching" ||
           String(result.user?.staffType || "").toLowerCase() === "non-teaching");
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       const isFacultyOrStaff =
         !isWarden &&
         !isNonTeaching &&

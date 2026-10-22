@@ -746,3 +746,79 @@
   border-top: 1px solid var(--nts-border);
   background: var(--nts-subtle);
 }
+
+/* Button Utilities */
+.nts-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 650;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.nts-btn-sm {
+  padding: 5px 10px;
+  font-size: 11.5px;
+  border-radius: 6px;
+}
+
+.nts-btn-primary {
+  background: var(--nts-primary);
+  color: #ffffff;
+  border-color: var(--nts-primary);
+}
+
+.nts-btn-primary:hover {
+  background: var(--nts-primary-hover);
+  border-color: var(--nts-primary-hover);
+}
+
+.nts-btn-outline {
+  background: var(--nts-surface);
+  color: var(--nts-text);
+  border-color: var(--nts-border);
+}
+
+.nts-btn-outline:hover {
+  background: var(--nts-subtle);
+}
+
+.nts-btn-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.nts-btn-danger:hover {
+  background: #fecaca;
+}
+
+.nts-alert-banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.nts-alert-info {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+
+.nts-alert-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
