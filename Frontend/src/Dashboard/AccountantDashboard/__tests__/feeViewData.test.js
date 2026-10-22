@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { matchRoutes, resolvePath } from "react-router-dom";
-import { feeMoney, pageOf, readFee, scopedStructures, scopedFeeMasters, savedYearSummary, splitFeeSchedules } from "./feeViewData.js";
+import { feeMoney, pageOf, readFee, scopedStructures, scopedFeeMasters, savedYearSummary, splitFeeSchedules } from "../utils/feeViewData.js";
 
 const ledger = Array.from({ length: 25 }, (_, index) => ({
   studentFeeId: index + 1, studentName: `Student ${index + 1}`, admissionNumber: `ADM-${index + 1}`,
@@ -81,8 +81,8 @@ test("overview separates overdue and upcoming without treating paid schedules as
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("every active accountant sidebar destination has a registered portal route", async () => {
-  const routes = await read("./AccountantPortalRoutes.jsx");
-  const layout = await read("./layout/AccountantLayout.jsx");
+  const routes = await read("../AccountantPortalRoutes.jsx");
+  const layout = await read("../layout/AccountantLayout.jsx");
   const paths = [...routes.matchAll(/<Route path="([^"]+)"/g)].map((match) => match[1]).filter((path) => path !== "*");
   const destinations = [...layout.matchAll(/to: "([^"]+)"/g)].map((match) => match[1]);
   const registered = [{ path: "/accountant-dashboard", children: [{ index: true }, ...paths.map((path) => ({ path }))] }];
@@ -92,9 +92,9 @@ test("every active accountant sidebar destination has a registered portal route"
 });
 
 test("dashboard and nested page links remain inside valid accountant destinations", async () => {
-  const dashboard = await read("./AccountantDashboard.jsx");
-  const pages = await read("./pages/AccountantPages.jsx");
-  const fees = await read("./pages/AccountantFeeManagement.jsx");
+  const dashboard = await read("../AccountantDashboard.jsx");
+  const pages = await read("../pages/AccountantPages.jsx");
+  const fees = await read("../pages/AccountantFeeManagement.jsx");
   for (const source of [dashboard, pages, fees]) {
     for (const [, destination] of source.matchAll(/\bto="([^"]+)"/g)) {
       assert.ok(destination.startsWith("/accountant-dashboard/"), destination);
@@ -108,7 +108,7 @@ test("dashboard and nested page links remain inside valid accountant destination
 });
 
 test("new fee views only read data and gate access using existing permissions", async () => {
-  const source = await read("./pages/AccountantFeeManagement.jsx");
+  const source = await read("../pages/AccountantFeeManagement.jsx");
   assert.doesNotMatch(source, /apiClient\.(post|put|patch|delete)\(/);
   assert.match(source, /permissions\.canView\("fee-management", screen\)/);
   assert.match(source, /permissions\.loading/);
@@ -117,7 +117,7 @@ test("new fee views only read data and gate access using existing permissions", 
 });
 
 test("personal attendance never queries the student or administrative staff register", async () => {
-  const source = await read("./pages/AccountantMyAttendance.jsx");
+  const source = await read("../pages/AccountantMyAttendance.jsx");
   assert.match(source, /getAuthUser\(\)/);
   assert.match(source, /Check In/);
   assert.match(source, /Check Out/);

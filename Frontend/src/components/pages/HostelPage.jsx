@@ -9019,8 +9019,6 @@ export default function HostelPage() {
             {activeMajorTab === "setup" && renderSetupMasters()}
             {activeMajorTab === "students" && renderStudentManagement()}
             {activeMajorTab === "reports" && renderReportsSection()}
-          </>
-        )}
 
         {/* Global Modals */}
         {modal.isOpen && modal.type === "block" && (
@@ -12940,7 +12938,7 @@ function RoomModal({
                 </button>
               )}
             </div>
-          </form>
+          </div>
         )}
 
         {/* TAB 2: FULL BLOCK MULTI-FLOOR SETUP (Configure all floors of block) */}
@@ -16358,4 +16356,3 @@ function TransferModal({
       </Modal>
     );
   }
--

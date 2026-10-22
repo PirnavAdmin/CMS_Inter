@@ -121,7 +121,8 @@ export const toPermissionMap = (permissions = []) => {
   }
 
   permissions.forEach((item) => {
-    const modKey = normalizeModuleKey(getPermissionModuleKey(item));
+    const rawMod = String(getPermissionModuleKey(item) || "").trim().toLowerCase();
+    const modKey = normalizeModuleKey(rawMod);
     if (!modKey) return;
 
     // Module-level actions
@@ -166,6 +167,31 @@ export const toPermissionMap = (permissions = []) => {
   }
   if (map["inventory-management"]) {
     map["inventory"] = map["inventory-management"];
+  }
+  if (map["marks-evaluation"]) {
+    map["marks"] = map["marks-evaluation"];
+  }
+  if (map["staff-attendance"]) {
+    map["myattendance"] = map["staff-attendance"];
+    map["my-attendance"] = map["staff-attendance"];
+  }
+  if (map["staff-leave-management"]) {
+    map["leave"] = map["staff-leave-management"];
+    map["staff-leave"] = map["staff-leave-management"];
+  }
+  if (map["holiday-management"]) {
+    map["holidays"] = map["holiday-management"];
+  }
+  if (map["payroll"]) {
+    map["salary"] = map["payroll"];
+    map["payslips"] = map["payroll"];
+  }
+  if (map["examinations"]) {
+    map["examduties"] = map["examinations"];
+    map["exam-duties"] = map["examinations"];
+  }
+  if (map["subject-management"]) {
+    map["classes"] = map["subject-management"];
   }
 
   // Mirror settings screens so direct screen-name or module-screen lookups resolve seamlessly
@@ -252,15 +278,21 @@ const SETTINGS_SCREENS = Object.freeze([
 
 export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = getAuthUser(), screenKey = null) {
   if (hasRole("SUPER_ADMIN", user)) return true;
-  const source = permissions ?? user?.permissions ?? user?.rolePermissions;
-  if (!source) {
-    if (hasRole("ADMIN", user)) return true;
+  let normMod = normalizeModuleKey(moduleKey);
+  const normAct = normalizeActionKey(actionKey);
+
+  // Baseline dashboard and profile view access for any authenticated role
+  if (normAct === ACTIONS.VIEW && (normMod === "dashboard" || normMod === "profile")) {
     return true;
   }
 
+  const source = permissions ?? user?.permissions ?? user?.rolePermissions;
+  if (!source || (Array.isArray(source) && source.length === 0)) {
+    if (hasRole("ADMIN", user)) return true;
+    return false;
+  }
+
   const permissionMap = toPermissionMap(source);
-  let normMod = normalizeModuleKey(moduleKey);
-  const normAct = normalizeActionKey(actionKey);
   let normScr = screenKey ? normalizeModuleKey(screenKey) : null;
 
   if (SETTINGS_SCREENS.includes(normMod) && !normScr) {

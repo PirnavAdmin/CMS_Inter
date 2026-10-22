@@ -12,6 +12,7 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
   const [values, setValues] = useState(initial);
   const [touched, setTouched] = useState({});
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const lock = useRef(false);
   const receiptInput = useRef(null);
   const receiptVersion = useRef(0);

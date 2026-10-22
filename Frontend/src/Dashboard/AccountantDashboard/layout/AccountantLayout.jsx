@@ -1,4 +1,5 @@
 import staffLeaveIcon from "@/assets/settings-3d/leave-types.png";
+import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import { Outlet } from "react-router-dom";
 import DashboardLayout, { adminIconAssets } from "@/components/layout/DashboardLayout.jsx";
 import "../../StudentDashboard/StudentDashboard.css";
@@ -27,6 +28,7 @@ const accountantMenu = [
     items: [
       { to: "/accountant-dashboard/my-attendance", label: "My Attendance", icon: adminIconAssets.attendanceImpact },
       { to: "/accountant-dashboard/leave", label: "Staff Leave", icon: staffLeaveIcon },
+      { to: "/accountant-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon },
       { to: "/accountant-dashboard/profile", label: "My Profile", icon: adminIconAssets.profile },
     ],
   },

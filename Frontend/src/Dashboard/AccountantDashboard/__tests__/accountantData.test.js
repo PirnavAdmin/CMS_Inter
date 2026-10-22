@@ -4,7 +4,7 @@ import { createServer } from "vite";
 
 const server = await createServer({ server: { middlewareMode: true }, appType: "custom" });
 after(() => server.close());
-const { rowsOf, unwrap, loadSections, loadPaymentHistory, loadScopedLedger, requestError } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/accountantData.js");
+const { rowsOf, unwrap, loadSections, loadPaymentHistory, loadScopedLedger, requestError } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantData.js");
 const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
 
 test("normalizes report details, serialized collections, and attendance rows", () => {

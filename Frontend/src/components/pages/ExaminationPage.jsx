@@ -2950,7 +2950,7 @@ const deleteScheduleFromBackend = async (examId, scheduleId) => {
   return { success: true };
 };
 
-const normalizeExamRecord = (e) => {
+const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList = [], studentsList = []) => {
   const id = normalizeId(e?.examinationId ?? e?.id);
   const rawLevels =
     e?.academicLevelIds ??
@@ -4387,6 +4387,7 @@ export default function ExaminationPage() {
           showToast(errMsg, "error");
         }
       } else {
+        let resolvedExamCode = "";
         try {
           const targetCampus = Number(effectiveCampusId) || 1;
 
@@ -4416,7 +4417,7 @@ export default function ExaminationPage() {
           };
 
           // The atomic generation response is the source of truth for the saved exam code.
-          let resolvedExamCode = await generateNextExamCode();
+          resolvedExamCode = await generateNextExamCode();
 
           let res;
           let attempt = 0;
@@ -5669,8 +5670,8 @@ export default function ExaminationPage() {
 
               // 2. Reschedule existing examination sessions to match the updated examination period
               const isComb = isCombinedExamination(editingExam);
-              const userStart = formatTimeOnly(sch?.startTime || defaultSessionStartTime || "09:00");
-              const userEnd = formatTimeOnly(sch?.endTime || defaultSessionEndTime || "12:00", userStart);
+              const userStart = formatTimeOnly("09:00");
+              const userEnd = formatTimeOnly("12:00", userStart);
 
               let existingSchedules = [];
               try {
@@ -5768,9 +5769,7 @@ export default function ExaminationPage() {
                     : editingExam.groupId ? [editingExam.groupId] : []
                 ).map((id) => Number(id) || id).filter(Boolean);
 
-                const effectiveGids = targetGids.length > 0
-                  ? targetGids
-                  : (selectedGroupId ? [Number(selectedGroupId)] : []);
+                const effectiveGids = targetGids;
 
                 for (const gid of effectiveGids) {
                   const selectedProgramIds = getSelectedProgramsForGroup(editingExam, gid);

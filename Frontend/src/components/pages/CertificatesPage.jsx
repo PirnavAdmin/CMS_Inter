@@ -2352,14 +2352,7 @@ export default function CertificatesPage() {
       setToast("Unsupported certificate type.");
       return;
     }
-<<<<<<< HEAD
-    const matchedStudent = findStudentByAdmission(admissionNo) ||
-      mockStudents.find((s) => String(s.admissionNo).trim().toLowerCase() === admissionNo.toLowerCase()) ||
-      null;
-
-    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo || "MADM-0068";
-    const studentName = matchedStudent?.name || form.student || "Student";
-=======
+    const studentName = findStudentByAdmission(admissionNo)?.name || form.student || "Student";
     const matchedStudent = findStudentByAdmission(admissionNo);
     if (!matchedStudent && !fromRequestMeta) {
       setErrors((prev) => ({ ...prev, admissionNo: "Select a valid student from the admissions list." }));
@@ -2380,7 +2373,6 @@ export default function CertificatesPage() {
         return;
       }
     }
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
 
     setCreating(true);
     try {
@@ -2431,7 +2423,6 @@ export default function CertificatesPage() {
       } catch (apiError) {
         console.warn("Server generation offline/fallback:", apiError);
       }
-<<<<<<< HEAD
 
       if (!createdCertificate) {
         const certCount = rows.length + 1;
@@ -2497,31 +2488,6 @@ export default function CertificatesPage() {
         requestedCount: (prev.requestedCount || 0) + 1,
       }));
 
-=======
-      if (createdCertificate) {
-        setRows((currentRows) => [
-          createdCertificate,
-          ...currentRows.filter((row) => (
-            String(row.backendId || row.id) !== String(createdCertificate.backendId || createdCertificate.id)
-            && String(row.number) !== String(createdCertificate.number)
-          )),
-        ]);
-      }
-      try {
-        const channel = new BroadcastChannel("cms_notifications");
-        channel.postMessage({
-          type: "CERTIFICATE_STATUS_UPDATED",
-          admissionNo: canonicalAdmissionNo,
-          certificateType: certificateRequest.type,
-          status: "Generated",
-        });
-        channel.close();
-      } catch {
-        // Ignore channel error
-      }
-      setFromRequestMeta(null);
-      await refreshCertificateData({ showLoader: false });
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       resetForm();
       setActiveTab("certificates");
       setPage(1);

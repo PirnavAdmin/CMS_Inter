@@ -1,3 +1,15 @@
+const isSameRole = (a, b) => {
+  if (!a || !b) return false;
+  const aRoleId = Number(a.roleId ?? a.id);
+  const bRoleId = Number(b.roleId ?? b.id);
+  if (!Number.isNaN(aRoleId) && aRoleId > 0 && !Number.isNaN(bRoleId) && bRoleId > 0) {
+    return aRoleId === bRoleId;
+  }
+  if (a.id && b.id && String(a.id) === String(b.id)) return true;
+  if (a.code && b.code && String(a.code).toUpperCase() === String(b.code).toUpperCase()) return true;
+  return false;
+};
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -790,7 +802,7 @@ function CloneRoleModal({ role, onClose, onCloneSuccess }) {
   );
 }
 
-function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole, onNewRole, onEditRole, onDeleteRole, query, onQuery }) {
+function RoleList({ roles, selectedRoleId, selectedRole, onSelect, onOpenMembers, onCloneRole, onNewRole, onEditRole, onDeleteRole, query, onQuery }) {
   const filteredRoles = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return roles;
@@ -801,22 +813,24 @@ function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole,
 
   return (
     <section className="rbac-panel rbac-role-panel">
-      <div className="rbac-panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2>Roles</h2>
-        <button
-          type="button"
-          className="cms-btn cms-btn-primary cms-btn-sm"
-          onClick={onNewRole}
-          style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", padding: "4px 10px", height: "30px" }}
-          title="Create a new custom role"
-        >
-          <Plus size={14} /> New Role
-        </button>
+      <div className="rbac-role-panel-header">
+        <div className="rbac-panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2>Roles</h2>
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary cms-btn-sm"
+            onClick={onNewRole}
+            style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", padding: "4px 10px", height: "30px" }}
+            title="Create a new custom role"
+          >
+            <Plus size={14} /> New Role
+          </button>
+        </div>
+        <SearchBox value={query} onChange={onQuery} placeholder="Search roles..." label="Search roles" />
       </div>
-      <SearchBox value={query} onChange={onQuery} placeholder="Search roles..." label="Search roles" />
       <div className="rbac-role-list">
         {filteredRoles.length ? filteredRoles.map((role) => {
-          const selected = String(role.id) === String(selectedRoleId);
+          const selected = isSameRole(role, selectedRole) || (selectedRoleId != null && String(role.id) === String(selectedRoleId));
           return (
             <div
               className={`rbac-role-item ${selected ? "is-selected" : ""}`}
@@ -1312,13 +1326,14 @@ function PermissionMatrix({
 
                     let isChecked = false;
                     let isIndeterminate = false;
+                    let enabledCount = 0;
 
                     if (selectedRole?.isProtected) {
                       isChecked = true;
                     } else if (screens.length === 0) {
                       isChecked = Boolean(modData?.actions?.has(action.key));
                     } else if (supportedScreens.length > 0) {
-                      const enabledCount = supportedScreens.filter((s) => {
+                      enabledCount = supportedScreens.filter((s) => {
                         const sActions = modData?.screens?.get(s.id);
                         if (sActions) return sActions.has(action.key);
                         return Boolean(modData?.actions?.has(action.key));
@@ -1334,7 +1349,7 @@ function PermissionMatrix({
                           indeterminate={isIndeterminate}
                           disabled={restriction.disabled || !isSupported}
                           disabledReason={!isSupported ? "Action not applicable for this module" : restriction.reason}
-                          label={`${action.label} ${module.name} (All Screens)`}
+                          label={isIndeterminate ? `${action.label} ${module.name} (${enabledCount} of ${supportedScreens.length} screens)` : `${action.label} ${module.name} (All Screens)`}
                           onChange={(next) => {
                             if (!restriction.disabled && isSupported) {
                               onToggle({
@@ -2275,12 +2290,14 @@ export default function RolesPermissionsPage() {
   const [toast, setToast] = useState(null);
   const permissionSaveInFlightRef = useRef(false);
   const selectedRoleIdRef = useRef(null);
+  const selectedRoleRef = useRef(null);
   const pageRequestRef = useRef(0);
   const roleCountsRequestRef = useRef(0);
 
   useEffect(() => {
+    selectedRoleRef.current = selectedRole;
     selectedRoleIdRef.current = selectedRole?.id;
-  }, [selectedRole?.id]);
+  }, [selectedRole]);
 
   const refreshRoleCounts = useCallback(async () => {
     const requestId = roleCountsRequestRef.current + 1;
@@ -2295,7 +2312,7 @@ export default function RolesPermissionsPage() {
       setManageableRoles(getManageableRoles(nextAllRoles));
       setSelectedRole((role) => (
         role
-          ? nextAllRoles.find((nextRole) => String(nextRole.id) === String(role.id)) || role
+          ? nextAllRoles.find((nextRole) => isSameRole(nextRole, role)) || role
           : role
       ));
     } catch (err) {
@@ -2336,10 +2353,15 @@ export default function RolesPermissionsPage() {
       setRoleMembers(members);
       setMembersError("");
       setMembersRole((current) => (
-        current && String(current.id) === String(role.id)
-          ? { ...current, assignedUserCount: role.assignedUserCount }
+        current && isSameRole(current, role)
+          ? { ...current, assignedUserCount: members.length }
           : current
       ));
+      setAllRoles((prevRoles) =>
+        prevRoles.map((r) =>
+          isSameRole(r, role) ? { ...r, assignedUserCount: members.length } : r
+        )
+      );
     } catch (err) {
       setRoleMembers([]);
       setMembersError(err?.message || "Unable to load role members.");
@@ -2382,7 +2404,7 @@ export default function RolesPermissionsPage() {
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
       setModules(modulesResponse.data);
-      const role = nextAllRoles.find((r) => String(r.id) === String(selectedRoleIdRef.current)) || nextAllRoles[0] || null;
+      const role = nextAllRoles.find((r) => isSameRole(r, selectedRoleRef.current) || (selectedRoleIdRef.current != null && String(r.id) === String(selectedRoleIdRef.current))) || nextAllRoles[0] || null;
       setSelectedRole(role);
       if (role) {
         await loadPermissions(role);
@@ -2424,7 +2446,7 @@ export default function RolesPermissionsPage() {
   const guardDirty = () => !dirty || window.confirm("Discard unsaved permission changes?");
 
   const selectRole = async (role) => {
-    if (String(role.id) === String(selectedRole?.id)) return;
+    if (isSameRole(role, selectedRole)) return;
     if (!guardDirty()) return;
     setSelectedRole(role);
     setSelectedMember(null);
@@ -2545,7 +2567,7 @@ export default function RolesPermissionsPage() {
           >
             <UserPlus size={16} /> User Role Assignment
           </button>
-          <span className="rbac-route-note"><Check size={14} /> {routeNote}</span>
+          {routeNote ? <span className="rbac-route-note"><Check size={14} /> {routeNote}</span> : null}
         </div>
 
         {loading ? <div className="rbac-loading-card"><Loader label="Loading roles and permissions..." /></div> : null}
@@ -2562,6 +2584,7 @@ export default function RolesPermissionsPage() {
             <RoleList
               roles={allRoles}
               selectedRoleId={selectedRole?.id}
+              selectedRole={selectedRole}
               onSelect={selectRole}
               onOpenMembers={openRoleMembers}
               onCloneRole={(role) => setCloningRole(role)}

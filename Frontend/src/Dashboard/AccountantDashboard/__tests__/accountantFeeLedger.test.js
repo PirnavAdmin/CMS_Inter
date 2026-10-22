@@ -7,9 +7,9 @@ import { createServer } from "vite";
 
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => server.close());
-const { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/accountantFeeLedger.js");
+const { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantFeeLedger.js");
 const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
-const { FeePagination } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/pages/AccountantFeeUI.jsx");
+const { FeePagination } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantFeeUI.jsx");
 const withAdapter = async (adapter, work) => {
   const original = client.defaults.adapter;
   client.defaults.adapter = adapter;
@@ -111,7 +111,7 @@ test("Admin-style Previous/Next controls reflect the first, middle, last and emp
 });
 
 test("returning from details retains ledger state, while search and filter changes reset the page", async () => {
-  const source = await readFile(new URL("./pages/AccountantFeeManagement.jsx", import.meta.url), "utf8");
+  const source = await readFile(new URL("../pages/AccountantFeeManagement.jsx", import.meta.url), "utf8");
   assert.match(source, /if \(detailRow\) return <FeeDetails[^\n]*onClose=\{\(\) => setDetailRow\(null\)\}/);
   assert.match(source, /const changeFilter = .*setPageNumber\(1\)/);
   assert.match(source, /setSearch\(value\); setPageNumber\(1\)/);

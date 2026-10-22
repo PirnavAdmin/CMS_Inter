@@ -12,6 +12,7 @@ import {
 import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
 import AccountantMyAttendance from "./pages/AccountantMyAttendance.jsx";
 import AccountantLeave from "./pages/AccountantLeave.jsx";
+import AccountantHolidays from "./pages/AccountantHolidays.jsx";
 
 export default function AccountantPortalRoutes() {
   return (
@@ -28,6 +29,7 @@ export default function AccountantPortalRoutes() {
         <Route path="profile" element={<AccountantProfile />} />
         <Route path="my-attendance" element={<AccountantMyAttendance />} />
         <Route path="leave" element={<AccountantLeave />} />
+        <Route path="holidays" element={<AccountantHolidays />} />
         <Route path="*" element={<Navigate to="/accountant-dashboard" replace />} />
       </Route>
     </Routes>
