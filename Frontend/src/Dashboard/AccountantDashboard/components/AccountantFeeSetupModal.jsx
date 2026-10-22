@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { Modal } from "@/components/common/Ui.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { useFinancePage, requestError } from "../accountantData.js";
-import { feeMoney, feeStatus, feeText, readFee, scopedFeeMasters } from "../feeViewData.js";
-import { loadFeeOptions, loadSetupEditor, saveSetupRecord, setupDraft, setupNames, structureDraftPreview, validateSetupDraft } from "../accountantFeeSetup.js";
-import { FeeLoadState, FeeNotice, FeeTable } from "./AccountantFeeUI.jsx";
+import { useFinancePage, requestError } from "../services/accountantService.js";
+import { feeMoney, feeStatus, feeText, readFee, scopedFeeMasters } from "../utils/feeViewData.js";
+import { loadFeeOptions, loadSetupEditor, saveSetupRecord, setupDraft, setupNames, structureDraftPreview, validateSetupDraft } from "../services/accountantService.js";
+import { FeeLoadState, FeeNotice, FeeTable } from "./AccountantUI.jsx";
 
 const categories = ["Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous"];
 const opts = (rows, idKey, labelKey) => (rows || []).map((row) => ({ value: readFee(row, idKey) ?? readFee(row, "id"), label: readFee(row, labelKey) ?? readFee(row, "name") ?? readFee(row, idKey) })).filter((option) => option.value != null);

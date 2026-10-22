@@ -5,16 +5,16 @@ import { ConfirmDialog } from "@/components/common/Ui.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
 import { adminIconAssets } from "@/components/layout/DashboardLayout.jsx";
-import { loadScopedLedger, requestError, rowsOf, useFinancePage, useFinanceParams } from "../accountantData.js";
-import { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } from "../accountantFeeLedger.js";
-import { loadSetupRecords } from "../accountantFeeRequests.js";
-import { deleteSetupRecord, feeSetupAccess, requireSetupAction, setupId, setupNames } from "../accountantFeeSetup.js";
-import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../feeViewData.js";
-import AccountantFeeOverview from "./AccountantFeeOverview.jsx";
-import AccountantFeeSetupModal from "./AccountantFeeSetupModal.jsx";
-import { FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "./AccountantFeeUI.jsx";
+import { loadScopedLedger, requestError, rowsOf, useFinancePage, useFinanceParams } from "../services/accountantService.js";
+import { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } from "../services/accountantService.js";
+import { loadSetupRecords } from "../services/accountantService.js";
+import { deleteSetupRecord, feeSetupAccess, requireSetupAction, setupId, setupNames } from "../services/accountantService.js";
+import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../utils/feeViewData.js";
+import AccountantFeeOverview from "../components/AccountantFeeOverview.jsx";
+import AccountantFeeSetupModal from "../components/AccountantFeeSetupModal.jsx";
+import { FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "../components/AccountantUI.jsx";
 import "@/components/pages/FeeManagementPage.css";
-import "../AccountantFeeManagement.css";
+import "./AccountantFeeManagement.css";
 
 const field = (label, key, type) => ({ label, num: type === "money", value: (row) => {
   const value = readFee(row, key);

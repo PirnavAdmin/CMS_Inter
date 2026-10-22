@@ -450,9 +450,8 @@ export async function updateRolePermissions(roleId, payload) {
     notifyRolesUpdated();
     return apiResult(normalized, "api");
   } catch (err) {
-    console.warn("Live updateRolePermissions failed:", err?.message);
-    notifyRolesUpdated();
-    return apiResult(normalized, "fallback");
+    console.error("Live updateRolePermissions failed:", err);
+    throw err;
   }
 }
 
@@ -537,9 +536,8 @@ export async function updateUserPermissions(userId, payload) {
     notifyRolesUpdated();
     return apiResult(normalized, "api");
   } catch (err) {
-    console.warn("Live updateUserPermissions failed:", err?.message);
-    notifyRolesUpdated();
-    return apiResult(normalized, "fallback");
+    console.error("Live updateUserPermissions failed:", err);
+    throw err;
   }
 }
 
