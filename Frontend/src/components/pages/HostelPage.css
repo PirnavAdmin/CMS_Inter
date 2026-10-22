@@ -3956,7 +3956,6 @@ input[type="number"] {
 :root[data-theme="dark"] .cms-hostel-dropdown-item.is-selected {
   background-color: #2b3921 !important;
 }
-<<<<<<< HEAD
 
 /* ── Monthly Revenue & Fee Collection Report KPI Highlights ── */
 .cms-revenue-report-kpis {
@@ -4076,5 +4075,3 @@ input[type="number"] {
   background: var(--cms-subtle);
   font-size: 12.5px;
 }
-=======
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402

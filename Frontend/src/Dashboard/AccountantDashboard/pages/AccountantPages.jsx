@@ -133,10 +133,7 @@ export function AccountantPayments() {
             department: c.department,
             category: c.category,
             approvedAmount: c.approvedAmount || c.amount,
-<<<<<<< HEAD
-=======
             approvalDate: c.approvedDate || c.date || "—",
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
             paymentStatus: c.status === "Paid" ? "Paid / Disbursed" : "Payable (Awaiting Disbursement)",
             disbursedDate: c.disbursedDate,
             paymentRef: c.paymentReference,
@@ -236,13 +233,9 @@ export function AccountantPayments() {
         subtitle="Manage student fee transactions, faculty reimbursement payables, and bank disbursements."
         action={
           <div className="sp-actions" style={{ display: "flex", gap: "8px" }}>
-<<<<<<< HEAD
-            <Link className="sp-btn" to="fees">Fee ledger</Link>
-            <Link className="sp-btn primary" to="/accountant-dashboard/reimbursement">
-=======
+
             <Link className="sp-btn" to="/accountant-dashboard/fees?tab=ledger">Fee ledger</Link>
             <Link className="sp-btn primary" to="/accountant-dashboard/reimbursements">
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
               <img src={reimbursementIcon} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /> Reimbursement Portal
             </Link>
           </div>
