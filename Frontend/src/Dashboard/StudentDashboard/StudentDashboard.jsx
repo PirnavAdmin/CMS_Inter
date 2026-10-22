@@ -117,6 +117,13 @@ const normalizeFeeSummary = (detailsPayload, ledgerPayload) => {
   };
 };
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function StudentDashboard() {
 
   const [greeting, setGreeting] = useState(getGreeting);
@@ -137,6 +144,7 @@ export default function StudentDashboard() {
   const [attendanceError, setAttendanceError] = useState("");
   const [latestResult, setLatestResult] = useState(null);
   const [resultError, setResultError] = useState("");
+  const resultPublished = Boolean(latestResult && (latestResult.published || latestResult.status === "PUBLISHED" || latestResult.isPublished));
   const [feeSummary, setFeeSummary] = useState(null);
   const [feeLoading, setFeeLoading] = useState(true);
   const [feeError, setFeeError] = useState("");

@@ -1314,13 +1314,14 @@ function PermissionMatrix({
 
                     let isChecked = false;
                     let isIndeterminate = false;
+                    let enabledCount = 0;
 
                     if (selectedRole?.isProtected) {
                       isChecked = true;
                     } else if (screens.length === 0) {
                       isChecked = Boolean(modData?.actions?.has(action.key));
                     } else if (supportedScreens.length > 0) {
-                      const enabledCount = supportedScreens.filter((s) => {
+                      enabledCount = supportedScreens.filter((s) => {
                         const sActions = modData?.screens?.get(s.id);
                         if (sActions) return sActions.has(action.key);
                         return Boolean(modData?.actions?.has(action.key));

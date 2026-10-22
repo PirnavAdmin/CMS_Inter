@@ -609,6 +609,9 @@ export default function DashboardLayout({
   profilePath,
   settingsPath,
   showSettingsAction = true,
+  showCampusSelector = true,
+  showBoardSelector = true,
+  showAcademicYearSelector = true,
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {

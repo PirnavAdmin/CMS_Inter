@@ -355,6 +355,7 @@ export function PublicOnlyRoute({ children }) {
   const isPrincipal = !isWarden && isPrincipalRole(role);
   const isParent = !isWarden && isParentRole(role);
   const isAccountant = !isWarden && isAccountantRole(role);
+  const isStudent = isStudentRole(role);
 
   if (isTokenValid) {
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;

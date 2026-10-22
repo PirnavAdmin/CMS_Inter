@@ -1396,6 +1396,14 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     return normalizeId(rawId || "1");
   }, [effectiveCampus, selectedCampus, selectedCampusId]);
 
+  const effectiveBoardId = useMemo(() => {
+    return normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId ?? (allBoards[0]?.id || ""));
+  }, [selectedBoardId, selectedBoard, allBoards]);
+
+  const effectiveYearId = useMemo(() => {
+    return normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? "");
+  }, [selectedAcademicYearId, selectedAcademicYear]);
+
   // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
   const [tab, setTab] = useState(forcedTab || initialTab || "entry");
 
@@ -2441,6 +2449,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           const pracVal = findVal(/^(practical|practical\s*marks|practicalmarks)$/i);
           const theoVal = findVal(/^(theory|theory\s*marks|theorymarks)$/i);
           const objVal = findVal(/^(objective|objective\s*marks|objectivemarks|marks|total|obtained|obtained\s*marks|total\s*marks)$/i);
+          const totVal = objVal;
           const absVal = findVal(/^(absent|is\s*absent|isabsent)$/i);
           const remVal = findVal(/^(remarks|remark|comments)$/i);
 
