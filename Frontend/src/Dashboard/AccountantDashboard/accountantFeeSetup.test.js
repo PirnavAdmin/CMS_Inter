@@ -30,13 +30,17 @@ test("view-only roles never acquire create/edit/delete access", () => {
   assert.equal(setup.feeSetupAccess(loading, "types").create, false);
 });
 
-test("hostel permissions are isolated and transport uses its actual routes permission", () => {
+test("hostel permissions are isolated and transport fares use Fee Setup permissions", () => {
   const hostel = permissions([{ module: "fee-management", screenId: "hostel-fees", actions: ["view", "edit"] }]);
   assert.equal(setup.feeSetupAccess(hostel, "hostel").edit, true);
   const transport = permissions([{ module: "transport", screenId: "routes", actions: ["view", "manage-routes", "edit"] }]);
-  const access = setup.feeSetupAccess(transport, "transport");
+  const access = setup.feeSetupAccess(feePermissions(["view", "create", "edit", "delete"]), "transport");
   assert.deepEqual([access.view, access.create, access.edit, access.delete], [true, true, true, false]);
-  assert.equal(setup.feeSetupAccess(feePermissions(["view", "create", "edit"]), "transport").view, false);
+  assert.equal(setup.feeSetupAccess(transport, "transport").view, false);
+  const readOnly = setup.feeSetupAccess(feePermissions(["view"]), "transport");
+  assert.deepEqual([readOnly.view, readOnly.create, readOnly.edit, readOnly.delete], [true, false, false, false]);
+  assert.throws(() => setup.requireSetupAction(readOnly, "create", "POST", "/api/v1/transport/pickup-points"), /fee-management:fee-structure:create/);
+  assert.throws(() => setup.requireSetupAction(readOnly, "edit", "PUT", "/api/v1/transport/pickup-points/1"), /fee-management:fee-structure:edit/);
 });
 
 test("unauthorized writes are blocked before contacting any endpoint", async () => {
