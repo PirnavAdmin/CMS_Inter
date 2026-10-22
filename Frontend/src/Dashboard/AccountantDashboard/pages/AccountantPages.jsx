@@ -17,6 +17,7 @@ import { fetchClaims, fetchAccountEntries, disburseClaimPayment } from "@/servic
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import "@/components/pages/AdminProfilePage.css";
 import AccountantProfileContent from "../components/AccountantProfileContent.jsx";
+import AccountantPayrollRecords from "../components/AccountantPayrollRecords.jsx";
 import { editableProfileFields, profileContactPayload, profileDraftRequests, updateProfileField, validateProfileDraft } from "../utils/accountantProfileEditing.js";
 
 export const getRows = (payload) => {
@@ -606,7 +607,7 @@ export function AccountantPayroll() {
         <StudentSummaryCard icon={adminIconAssets.attendanceImpact} label="Pending" value={getNumber(summary, ["pendingCount", "PendingCount"]) ?? "-"} note="From payroll API" tone="orange" />
       </section>
       <StudentCard title="Payroll Records" subtitle="Read-only payroll information">
-        <StudentDataTable columns={["Staff Member", "Month", "Net Amount", "Status"]} statusColumns={[3]} rows={(state.data?.payslips || []).map((row) => ({ "Staff Member": row.staffName, Month: row.month, "Net Amount": formatMoney(row.amount), Status: row.status }))} empty="No payroll records available." />
+        <AccountantPayrollRecords key={JSON.stringify(campusParams)} records={state.data?.payslips || []} formatAmount={formatMoney} />
       </StudentCard>
     </> : null}
   </>;
