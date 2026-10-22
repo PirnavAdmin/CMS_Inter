@@ -1731,7 +1731,7 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
   useEffect(() => {
     let cancelled = false;
     setFaculty([]);
-    if (leisure || !form.subjectId || !context.campusId) return;
+    if (!form.subjectId || !context.campusId) return;
     Promise.all([
       campusTeachingStaff(context.campusId),
       apiClient.get(apiEndpoints.timetable.getAllocatedFaculties, {
@@ -1839,9 +1839,9 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
             workingDays.map((day) => ({ id: day, name: DAYS[day] })),
           )}
           {select("Period", "periodId", data.periods.filter((period) => !isBreakPeriod(period)))}
-          {!leisure && select("Subject", "subjectId", data.subjects)}
-          {!leisure && select("Staff", "facultyId", faculty, facultyOptionLabel)}
-          {!leisure && select("Room", "roomId", data.rooms)}
+          {select("Subject", "subjectId", data.subjects)}
+          {select("Staff", "facultyId", faculty, facultyOptionLabel)}
+          {select("Room", "roomId", data.rooms)}
           <Field label="Remarks">
             <input value={form.remarks} onChange={set("remarks")} disabled={saving} />
           </Field>

@@ -112,6 +112,11 @@ function isAdminRole(role) {
   return normalized === "admin" || normalized.includes("admin");
 }
 
+function isStudentRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "student" || normalized.includes("student");
+}
+
 export function AccessDeniedView({ module, screen, action }) {
   return (
     <div style={{
@@ -213,6 +218,7 @@ export default function ProtectedRoute({
   const isPrincipal = !isWarden && isPrincipalRole(role);
   const isParent = !isWarden && isParentRole(role);
   const isAccountant = !isWarden && isAccountantRole(role);
+  const isStudent = isStudentRole(role);
 
   const isExamCell = !isWarden && isExamCellRole(role);
 
@@ -349,6 +355,7 @@ export function PublicOnlyRoute({ children }) {
   const isPrincipal = !isWarden && isPrincipalRole(role);
   const isParent = !isWarden && isParentRole(role);
   const isAccountant = !isWarden && isAccountantRole(role);
+  const isStudent = isStudentRole(role);
 
   if (isTokenValid) {
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;
@@ -359,8 +366,15 @@ export function PublicOnlyRoute({ children }) {
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
-    return <Navigate to="/student-dashboard" replace />;
+    if (isStudent) return <Navigate to="/student-dashboard" replace />;
+    if (user?.isAdmin) return <Navigate to="/dashboard" replace />;
   }
+
+  // If a valid token exists but there is no user and no role, clear orphan token
+  if (isTokenValid && !user && !role) {
+    clearAuthSession();
+  }
+
   return children || <Outlet />;
 }
 

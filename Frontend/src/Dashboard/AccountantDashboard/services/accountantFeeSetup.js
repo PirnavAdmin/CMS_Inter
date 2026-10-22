@@ -1,8 +1,8 @@
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
-import { checkedFeeData, checkedFeeRows } from "./accountantFeeRequests.js";
-import { readFee, feeStatus, scopedFeeMasters } from "./feeViewData.js";
+import { checkedFeeData, checkedFeeRows } from "../api/accountantFeeRequests.js";
+import { readFee, feeStatus, scopedFeeMasters } from "../utils/feeViewData.js";
 import { requestError } from "./accountantData.js";
 
 export const setupNames = { types: "Fee Type", structures: "Fee Structure", hostel: "Hostel Fee", transport: "Transport Fee", scholarships: "Scholarship", fine: "Fine Rule" };
@@ -10,11 +10,12 @@ export const setupIdKeys = { types: "feeTypeId", structures: "feeStructureId", h
 export const setupId = (kind, row) => readFee(row, setupIdKeys[kind]);
 
 export function feeSetupAccess(permissions, kind) {
-  const module = kind === "transport" ? "transport" : "fee-management";
-  const screen = kind === "transport" ? "routes" : kind === "hostel" ? "hostel-fees" : "fee-structure";
+  const module = "fee-management";
+  const screen = kind === "hostel" ? "hostel-fees" : "fee-structure";
   const ready = !permissions.loading && !permissions.error;
   const view = Boolean(ready && permissions.canView(module, screen));
-  const actions = { create: kind === "transport" ? ACTIONS.MANAGE_ROUTES : ACTIONS.CREATE, edit: ACTIONS.EDIT, delete: kind === "transport" ? null : ACTIONS.DELETE };
+  // Transport fare configuration belongs to Fee Setup, not route management.
+  const actions = { create: ACTIONS.CREATE, edit: ACTIONS.EDIT, delete: kind === "transport" ? null : ACTIONS.DELETE };
   return { module, screen, view, ...Object.fromEntries(Object.entries(actions).map(([key, action]) => [key, Boolean(view && action && permissions.canDo(module, action, screen))])) };
 }
 

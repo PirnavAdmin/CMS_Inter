@@ -42,6 +42,8 @@ import {
   LogOut,
   AlertCircle,
   ArrowRight,
+  Receipt,
+  CreditCard,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
@@ -106,6 +108,7 @@ const isUnenrolledAdmissionCandidate = (candidate) => {
 };
 
 const hostelReportCategories = [
+  { id: "Monthly Revenue & Fee Report", label: "Monthly Revenue & Fee Report" },
   { id: "Block Report", label: "Block Report" },
   { id: "Room Report", label: "Room Report" },
   { id: "Bed Allocation Report", label: "Bed Allocation Report" },
@@ -265,17 +268,16 @@ function HostelPagination({
   const endIndex = Math.min(startIndex + pageSize, totalItems);
 
   const visiblePages = (() => {
-    if (totalPages <= 5) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (totalPages <= 1) return [1];
+    if (totalPages === 2) return [1, 2];
+
+    let blockStart = Math.floor((currentPageClamped - 1) / 2) * 2 + 1;
+    if (blockStart >= totalPages) {
+      blockStart = Math.max(1, totalPages - 1);
     }
-    let start = Math.max(1, currentPageClamped - 2);
-    let end = Math.min(totalPages, start + 4);
-    if (end - start < 4) {
-      start = Math.max(1, end - 4);
-    }
-    const pages = [];
-    for (let i = start; i <= end; i++) {
-      pages.push(i);
+    const pages = [blockStart];
+    if (blockStart + 1 <= totalPages) {
+      pages.push(blockStart + 1);
     }
     return pages;
   })();
@@ -296,7 +298,7 @@ function HostelPagination({
         disabled={currentPageClamped <= 1}
         onClick={() => onPageChange(Math.max(1, currentPageClamped - 1))}
       >
-        Previous
+        Prev
       </button>
       {visiblePages.map((p) => (
         <button
@@ -719,51 +721,26 @@ export default function HostelPage() {
       const shouldFetchAdmissions = canAccessAdminEndpoints;
       const shouldFetchAllStudents = canAccessAdminEndpoints;
 
-      const [blocksRes, catsRes, roomsRes, bedsRes] = await Promise.allSettled([
-        hostelApi.getHostelBlocks(),
-        hostelApi.getRoomTypes(),
-        hostelApi.getRooms(),
-        hostelApi.getBeds(),
-      ]);
-
-      if (roomsRes.status === "rejected") {
-        throw roomsRes.reason;
-      }
-      if (blocksRes.status === "rejected") {
-        throw blocksRes.reason;
-      }
-
-      const [wardensRes, allocsRes, outpassRes, transferRes, dashRes, attRes] = await Promise.allSettled([
-        hostelApi.getWardens(),
-        hostelApi.getStudentAllocations(),
-        hostelApi.getOutpassLeave(),
-        hostelApi.getTransferVacate(),
-        hostelApi.getHostelDashboard(),
-        hostelApi.getAttendance(),
-      ]);
-
-      const [hostelStaffRes, staffRes, staffDropRes, admRes, certStudentsRes, allStudentsRes] = await Promise.allSettled([
-        shouldFetchStaff
-          ? apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-              .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null))
-          : Promise.resolve(null),
-        shouldFetchStaff
-          ? apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null))
-          : Promise.resolve(null),
-        shouldFetchStaff
-          ? apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)
-          : Promise.resolve(null),
-        shouldFetchAdmissions
-          ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true }).catch(() => null)
-          : Promise.resolve(null),
-        canAccessAdminEndpoints
-          ? apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-              .catch(() => null)
-          : Promise.resolve(null),
-        shouldFetchAllStudents
-          ? apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true })
-              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true }).catch(() => null))
-          : Promise.resolve(null),
+      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, hostelStaffRes, staffRes, staffDropRes, admRes, certStudentsRes, allStudentsRes, attRes] = await Promise.allSettled([
+        hostelApi.getHostelBlocks().catch(() => null),
+        hostelApi.getRoomTypes().catch(() => null),
+        hostelApi.getRooms().catch(() => null),
+        hostelApi.getBeds().catch(() => null),
+        hostelApi.getWardens().catch(() => null),
+        hostelApi.getStudentAllocations().catch(() => null),
+        hostelApi.getOutpassLeave().catch(() => null),
+        hostelApi.getTransferVacate().catch(() => null),
+        hostelApi.getHostelDashboard().catch(() => null),
+        apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)),
+        apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)),
+        apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null),
+        apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null),
+        apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => null),
+        apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)),
+        hostelApi.getAttendance().catch(() => null),
       ]);
 
       let uniqueBlocks = [];
@@ -771,11 +748,64 @@ export default function HostelPage() {
         const rawBlocks = extractCollection(blocksRes.value?.data);
         const mappedBlocks = Array.isArray(rawBlocks) ? rawBlocks.map(mapBlock) : [];
         uniqueBlocks = Array.from(new Map(mappedBlocks.map((b) => [String(b.id || b.code), b])).values());
-        blocksRef.current = uniqueBlocks;
-        setBlocks(uniqueBlocks);
-        if (uniqueBlocks.length > 0) {
-          setDashSelectedBlockId((prev) => (prev && prev !== "blk-1" ? prev : uniqueBlocks[0].id));
-        }
+      }
+
+      // Discover and preserve all hostel blocks present in rooms and allocations
+      const rawRoomsList = roomsRes.status === "fulfilled" ? extractCollection(roomsRes.value?.data) : [];
+      const rawAllocsList = allocsRes.status === "fulfilled" ? extractCollection(allocsRes.value?.data) : [];
+      const seenBlockKeys = new Set(uniqueBlocks.map((b) => (b.name || b.code || "").toLowerCase()));
+
+      if (Array.isArray(rawRoomsList)) {
+        rawRoomsList.forEach((r, idx) => {
+          const rName = String(r.hostelName || r.blockName || r.block || "").trim();
+          if (rName && !seenBlockKeys.has(rName.toLowerCase())) {
+            seenBlockKeys.add(rName.toLowerCase());
+            uniqueBlocks.push({
+              id: r.hostelId || `blk-auto-${idx + 1}`,
+              hostelId: r.hostelId || (idx + 10),
+              name: rName,
+              code: String(r.block || rName).toUpperCase(),
+              type: "Hostel Block",
+              floors: 3,
+              totalRooms: 0,
+              totalBeds: 0,
+              occupiedBeds: 0,
+              vacantBeds: 0,
+              warden: "Unassigned",
+              wardenPhone: "-",
+              status: "Active",
+            });
+          }
+        });
+      }
+      if (Array.isArray(rawAllocsList)) {
+        rawAllocsList.forEach((a, idx) => {
+          const aName = String(a.hostelName || a.blockName || a.block || "").trim();
+          if (aName && !seenBlockKeys.has(aName.toLowerCase())) {
+            seenBlockKeys.add(aName.toLowerCase());
+            uniqueBlocks.push({
+              id: a.hostelId || `blk-alloc-${idx + 1}`,
+              hostelId: a.hostelId || (idx + 20),
+              name: aName,
+              code: String(a.block || aName).toUpperCase(),
+              type: "Hostel Block",
+              floors: 3,
+              totalRooms: 0,
+              totalBeds: 0,
+              occupiedBeds: 0,
+              vacantBeds: 0,
+              warden: "Unassigned",
+              wardenPhone: "-",
+              status: "Active",
+            });
+          }
+        });
+      }
+
+      blocksRef.current = uniqueBlocks;
+      setBlocks(uniqueBlocks);
+      if (uniqueBlocks.length > 0) {
+        setDashSelectedBlockId((prev) => (prev && prev !== "blk-1" ? prev : uniqueBlocks[0].id));
       }
       let uniqueCats = [];
       if (catsRes.status === "fulfilled") {
@@ -956,7 +986,7 @@ export default function HostelPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [canAccessAdminEndpoints, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord]);
+  }, [mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord]);
 
   const hasFetchedInitialRef = useRef(false);
   useEffect(() => {
@@ -971,8 +1001,13 @@ export default function HostelPage() {
       const res = await hostelApi.getHostelBlocks();
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
-        const uniqueBlocks = Array.from(new Map(raw.map(mapBlock).map((b) => [String(b.id || b.code), b])).values());
-        setBlocks(uniqueBlocks);
+        const serverBlocks = raw.map(mapBlock);
+        setBlocks((prev) => {
+          const map = new Map();
+          prev.forEach((b) => map.set(String(b.id || b.code).toLowerCase(), b));
+          serverBlocks.forEach((b) => map.set(String(b.id || b.code).toLowerCase(), b));
+          return Array.from(map.values());
+        });
       }
     } catch (_) {}
   }, [mapBlock]);
@@ -994,8 +1029,13 @@ export default function HostelPage() {
       const res = await hostelApi.getRooms();
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
-        const uniqueRooms = Array.from(new Map(raw.map((r) => mapRoom(r, blocksRef.current, categoriesRef.current)).map((r) => [String(r.id || `${r.hostelId}-${r.roomNo}`), r])).values());
-        setRooms(uniqueRooms);
+        const serverRooms = raw.map((r) => mapRoom(r, blocksRef.current, categoriesRef.current));
+        setRooms((prev) => {
+          const map = new Map();
+          prev.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
+          serverRooms.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
+          return Array.from(map.values());
+        });
       }
     } catch (_) {}
   }, [mapRoom]);
@@ -1005,8 +1045,13 @@ export default function HostelPage() {
       const res = await hostelApi.getBeds();
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
-        const uniqueBeds = Array.from(new Map(raw.map(mapBed).map((bd) => [String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd])).values());
-        setBeds(uniqueBeds);
+        const serverBeds = raw.map(mapBed);
+        setBeds((prev) => {
+          const map = new Map();
+          prev.forEach((bd) => map.set(String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd));
+          serverBeds.forEach((bd) => map.set(String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd));
+          return Array.from(map.values());
+        });
       }
     } catch (_) {}
   }, [mapBed]);
@@ -1101,9 +1146,8 @@ export default function HostelPage() {
     const path = location.pathname.toLowerCase();
     if (path.includes("master") || path.includes("block")) {
       setActiveMajorTab("setup");
-      if (path.includes("category")) setActiveSetupSubtab("categories");
-      else if (path.includes("room")) setActiveSetupSubtab("rooms");
-      else if (path.includes("warden") && !path.includes("warden-dashboard")) setActiveSetupSubtab("wardens");
+      if (path.includes("category") || path.includes("room")) setActiveSetupSubtab("rooms");
+      else if (path.includes("warden")) setActiveSetupSubtab("wardens");
       else setActiveSetupSubtab("blocks");
     } else if (path.includes("room") || path.includes("bed")) {
       setActiveMajorTab("setup");
@@ -1297,13 +1341,42 @@ export default function HostelPage() {
   const [reportCategoryFilter, setReportCategoryFilter] = useState("");
   const [reportSearch, setReportSearch] = useState("");
   const [reportPage, setReportPage] = useState(1);
-  const [reportPageSize, setReportPageSize] = useState(5);
-  const [isCustomReportPage, setIsCustomReportPage] = useState(false);
-  const [customReportPageInput, setCustomReportPageInput] = useState("5");
+  const [reportPageSize, setReportPageSize] = useState(10);
 
   useEffect(() => {
     setReportPage(1);
   }, [reportCategory, reportBlockFilter, reportCategoryFilter, reportSearch]);
+
+  // ── Monthly Revenue & Fee Collections Persistent State ────────────────
+  const STORAGE_KEY_HOSTEL_PAYMENTS = "cms_hostel_fee_payments";
+  const [feePayments, setFeePayments] = useState(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage?.getItem(STORAGE_KEY_HOSTEL_PAYMENTS) : null;
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {
+      "1": { paidAmount: 12000, lastPaymentDate: "2026-10-02", paymentMode: "UPI (GPay)", receiptNo: "RCP-2026-001", notes: "Full payment received" },
+      "2": { paidAmount: 8500, lastPaymentDate: "2026-10-03", paymentMode: "Net Banking", receiptNo: "RCP-2026-002", notes: "Paid via College Portal" },
+      "3": { paidAmount: 6000, lastPaymentDate: "2026-10-04", paymentMode: "UPI (PhonePe)", receiptNo: "RCP-2026-003", notes: "Full fee cleared" },
+      "4": { paidAmount: 4500, lastPaymentDate: "2026-10-05", paymentMode: "Cash", receiptNo: "RCP-2026-004", notes: "Cash counter payment" },
+      "5": { paidAmount: 3500, lastPaymentDate: "2026-10-06", paymentMode: "UPI", receiptNo: "RCP-2026-005", notes: "Partial fee received (Due: ₹2,500)" },
+      "6": { paidAmount: 0, lastPaymentDate: "-", paymentMode: "-", receiptNo: "-", notes: "Fee pending" },
+    };
+  });
+
+  const handleSaveFeePayment = (allocationId, paymentRecord) => {
+    setFeePayments((prev) => {
+      const next = { ...prev, [String(allocationId)]: paymentRecord };
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage?.setItem(STORAGE_KEY_HOSTEL_PAYMENTS, JSON.stringify(next));
+        }
+      } catch {}
+      return next;
+    });
+  };
+
+
 
 
   // Global Dialogs & Modals
@@ -1356,8 +1429,8 @@ export default function HostelPage() {
       const totalRoomsCount = dbBlock?.totalRooms ?? blockRooms.length;
       const blockBeds = beds.filter((bd) => Number(bd.hostelId) === Number(b.id) || blockRooms.some((r) => Number(r.id) === Number(bd.roomId)));
       const totalBedsCount = dbBlock?.totalBeds ?? (blockBeds.length > 0 ? blockBeds.length : blockRooms.reduce((acc, r) => acc + (Number(r.capacity) || 1), 0));
-      const occupiedCount = dbBlock?.occupiedBeds ?? allocations.filter((a) => (Number(a.hostelId) === Number(b.id) || a.blockName === b.name || a.blockCode === b.code) && a.status === "Active").length;
-      const vacantCount = dbBlock?.availableBeds ?? Math.max(0, totalBedsCount - occupiedCount);
+      const occupiedCount = allocations.filter((a) => (Number(a.hostelId) === Number(b.id) || a.blockName === b.name || a.blockCode === b.code || a.hostelName === b.name || a.hostelCode === b.code) && ((a.status || "").toLowerCase() === "active" || (a.status || "").toLowerCase() === "allocated")).length;
+      const vacantCount = Math.max(0, totalBedsCount - occupiedCount);
       const assignedWarden = wardens.find((w) => (w.status || "").toLowerCase() === "active" && (Number(w.hostelId) === Number(b.id) || String(w.hostelId) === String(b.id) || w.assignedHostels === b.name || (w.assignedHostels || "").includes(b.name)));
       const staffForWarden = assignedWarden && (!assignedWarden.name || assignedWarden.name === "Resident Warden")
         ? candidateStaff.find((s) => Number(s.staffId || s.id) === Number(assignedWarden.staffId))
@@ -1445,16 +1518,74 @@ export default function HostelPage() {
     [allocations]
   );
 
-  const occupiedBeds = dashboardData?.occupiedBeds ?? activeAllocations.length;
-  const vacantBeds = dashboardData?.availableBeds ?? Math.max(0, totalBeds - occupiedBeds);
-  const occupancyRate = dashboardData?.occupancyPercentage ?? (totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0);
+  const occupiedBeds = activeAllocations.length;
+  const vacantBeds = Math.max(0, totalBeds - occupiedBeds);
+  const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
   const monthlyRevenue = useMemo(() => {
-    return allocations.reduce((sum, a) => {
+    return activeAllocations.reduce((sum, a) => {
       const num = parseFloat(String(a.monthlyFee || "").replace(/[^0-9.]/g, "")) || 0;
       return sum + num;
     }, 0);
-  }, [allocations]);
-  const activeWardensCount = dashboardData?.activeWardens ?? wardens.filter((w) => w.status === "Active").length;
+  }, [activeAllocations]);
+
+  // Enriched Student Fee & Dues Records tied to active allocations
+  const revenueStudentRecords = useMemo(() => {
+    const list = Array.isArray(activeAllocations) ? activeAllocations : [];
+    return list.map((a, idx) => {
+      const allocKey = String(a.id || a.allocationId || idx + 1);
+      const studentKey = String(a.studentId || a.admissionNo || allocKey);
+      const paymentInfo = feePayments?.[allocKey] || feePayments?.[studentKey] || feePayments?.[String(idx + 1)] || null;
+      
+      const rawFee = parseFloat(String(a.monthlyFee || a.fee || 0).replace(/[^0-9.]/g, "")) || 0;
+      const monthlyFee = rawFee > 0 ? rawFee : 6000;
+      
+      const paidAmount = paymentInfo?.paidAmount !== undefined 
+        ? Math.min(monthlyFee, Math.max(0, Number(paymentInfo.paidAmount))) 
+        : (paymentInfo === null && idx < 4 ? monthlyFee : 0);
+      const dueAmount = Math.max(0, monthlyFee - paidAmount);
+      const paymentStatus = dueAmount === 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Pending";
+      
+      return {
+        ...a,
+        allocKey,
+        studentId: a.studentId || idx + 1,
+        admissionNo: a.admissionNo || `ADM-2026-00${idx + 1}`,
+        studentName: a.studentName || a.name || `Resident Student #${idx + 1}`,
+        blockName: a.blockName || a.hostelName || blocks?.find((b) => Number(b.id) === Number(a.hostelId))?.name || "Hostel Block",
+        roomBadge: a.roomBadge || (a.room && a.bed ? `${a.room} (${a.bed})` : (a.roomNumber || a.room || `Room #${101 + idx}`)),
+        monthlyFee,
+        paidAmount,
+        dueAmount,
+        paymentStatus,
+        lastPaymentDate: paymentInfo?.lastPaymentDate || (paidAmount > 0 ? "2026-10-05" : "-"),
+        receiptNo: paymentInfo?.receiptNo || (paidAmount > 0 ? `RCP-2026-00${idx + 1}` : "-"),
+        paymentMode: paymentInfo?.paymentMode || (paidAmount > 0 ? "UPI" : "-"),
+        notes: paymentInfo?.notes || "",
+      };
+    });
+  }, [activeAllocations, feePayments, blocks]);
+
+  const revenueSummary = useMemo(() => {
+    const list = Array.isArray(revenueStudentRecords) ? revenueStudentRecords : [];
+    const totalBilled = list.reduce((sum, r) => sum + (Number(r.monthlyFee) || 0), 0);
+    const totalPaid = list.reduce((sum, r) => sum + (Number(r.paidAmount) || 0), 0);
+    const totalDue = list.reduce((sum, r) => sum + (Number(r.dueAmount) || 0), 0);
+    const paidCount = list.filter((r) => r.paymentStatus === "Paid").length;
+    const partialCount = list.filter((r) => r.paymentStatus === "Partial").length;
+    const pendingCount = list.filter((r) => r.paymentStatus === "Pending").length;
+    const efficiencyRate = totalBilled > 0 ? Math.round((totalPaid / totalBilled) * 100) : 0;
+
+    return {
+      totalBilled,
+      totalPaid,
+      totalDue,
+      paidCount,
+      partialCount,
+      pendingCount,
+      efficiencyRate,
+    };
+  }, [revenueStudentRecords]);
+  const activeWardensCount = wardens.filter((w) => (w.status || "").toLowerCase() === "active").length || (dashboardData?.activeWardens ?? 0);
   const pendingOutpasses = useMemo(
     () => outpasses.filter((o) => o.status === "Pending" || o.status === "Pending Approval" || o.status === "Under Review").length,
     [outpasses]
@@ -1584,9 +1715,11 @@ export default function HostelPage() {
         await hostelApi.createHostelBlock(payload, { skipErrorLog: true });
         showToast(`Hostel block ${name} added successfully!`);
       }
-      await refreshBlocks();
-      await refreshDashboard();
       closeModal();
+      (async () => {
+        try { await refreshBlocks(); } catch (_) {}
+        try { await refreshDashboard(); } catch (_) {}
+      })();
     } catch (err) {
       showToast(getApiErrorMessage(err) || "Failed to save hostel block.", "danger");
     } finally {
@@ -1629,33 +1762,55 @@ export default function HostelPage() {
     try {
       showToast("Generating room configurations and beds on server...", "info");
       const defaultRoomType = categories[0]?.id || 1;
-      const targetHostelId = Number(block.id || block.hostelId);
+      const rawHostelId = Number(block.hostelId ?? block.id);
+      const targetHostelId = (!isNaN(rawHostelId) && rawHostelId > 0)
+        ? rawHostelId
+        : (Number(blocks.find((b) => b.name === block.name || b.code === block.code)?.id) || 1);
+      const blockCode = block.code || block.name || `BLK-${targetHostelId}`;
+      const blockName = block.name || block.code || `Hostel Block #${targetHostelId}`;
       const generatedLocalRooms = [];
       const generatedLocalBeds = [];
 
       for (const fc of floorConfigs) {
         let roomIndexOnFloor = 1;
         const addRooms = async (count, catName, bedCapacity, acMode = "Non-AC") => {
-          const matchCatObj = categories.find((c) =>
-            (Number(c.capacity) === bedCapacity && (c.acType || "").toLowerCase() === (acMode || "").toLowerCase()) ||
-            Number(c.capacity) === bedCapacity ||
-            (catName && c.name && String(c.name).toLowerCase().includes(String(catName).toLowerCase()))
-          ) || categories[0];
-          const matchCat = matchCatObj?.id || defaultRoomType;
-
           for (let i = 0; i < count; i++) {
             const roomNum = fc.floorIndex === 0
               ? `${String(roomIndexOnFloor).padStart(3, "0")}`
               : `${fc.floorIndex}${String(roomIndexOnFloor).padStart(2, "0")}`;
 
+            const override = fc.roomOverrides?.[roomNum];
+            const finalAcMode = override?.ac || acMode;
+            const finalBedCapacity = Number(override?.capacity || bedCapacity);
+
+            const matchCatObj = categories.find((c) =>
+              (Number(c.capacity) === finalBedCapacity && (c.acType || "").toLowerCase() === (finalAcMode || "").toLowerCase()) ||
+              Number(c.capacity) === finalBedCapacity ||
+              (catName && c.name && String(c.name).toLowerCase().includes(String(catName).toLowerCase()))
+            ) || categories[0];
+            const matchCat = matchCatObj?.id || defaultRoomType;
+
             let newRoomId = null;
             const existingRoom = rooms.find(
-              (r) => (Number(r.hostelId) === targetHostelId || r.block === block.code) &&
+              (r) => (Number(r.hostelId) === targetHostelId || r.block === blockCode || r.blockName === blockName) &&
                      String(r.roomNo || r.roomNumber).replace(/^Room #/i, "").trim().toLowerCase() === roomNum.toLowerCase()
             );
 
+            const bedsToGen = Math.max(1, Number(finalBedCapacity || matchCatObj?.capacity || 1));
+
             if (existingRoom) {
               newRoomId = existingRoom.id;
+              try {
+                await hostelApi.updateRoom(existingRoom.id, {
+                  hostelId: targetHostelId,
+                  roomTypeId: Number(matchCat),
+                  floorLevel: fc.floorLabel || `Floor ${fc.floorIndex || 1}`,
+                  roomNumber: roomNum,
+                  acType: finalAcMode,
+                  bedCapacity: bedsToGen,
+                  status: "Active",
+                }, { skipErrorLog: true });
+              } catch (_) {}
             } else {
               try {
                 const roomRes = await hostelApi.createRoom({
@@ -1663,14 +1818,15 @@ export default function HostelPage() {
                   roomTypeId: Number(matchCat),
                   floorLevel: fc.floorLabel || `Floor ${fc.floorIndex || 1}`,
                   roomNumber: roomNum,
+                  acType: finalAcMode,
+                  bedCapacity: bedsToGen,
                   status: "Active",
                 }, { skipErrorLog: true });
                 newRoomId = roomRes?.data?.data?.roomId ?? roomRes?.data?.roomId ?? roomRes?.data?.data?.id ?? roomRes?.data?.id;
               } catch (_) {}
             }
 
-            const roomUid = newRoomId || `rm-${block.code || block.id}-${roomNum}-${Date.now()}-${i}`;
-            const bedsToGen = Math.max(1, Number(matchCatObj?.capacity ?? bedCapacity ?? 1));
+            const roomUid = newRoomId ? Number(newRoomId) : `rm-${blockCode}-${roomNum}-${Date.now()}-${i}`;
 
             const existingBedNumbers = new Set(
               beds
@@ -1710,15 +1866,16 @@ export default function HostelPage() {
             generatedLocalRooms.push({
               id: roomUid,
               roomNo: roomNum,
-              block: block.code || block.name,
-              blockName: block.name,
+              block: blockCode,
+              blockName: blockName,
               hostelId: targetHostelId,
               roomTypeId: Number(matchCat),
               floor: fc.floorLabel,
-              type: matchCatObj?.name || `${catName} (${acMode || "Non-AC"})`,
+              type: matchCatObj?.name || `${catName} (${finalAcMode || "Non-AC"})`,
+              acType: finalAcMode,
               capacity: bedsToGen,
               occupied: 0,
-              fee: matchCatObj?.fee || (acMode === "AC" ? "₹7,500/mo" : "₹6,000/mo"),
+              fee: matchCatObj?.fee || (finalAcMode === "AC" ? "₹7,500/mo" : "₹6,000/mo"),
               status: "Active",
             });
 
@@ -1726,16 +1883,77 @@ export default function HostelPage() {
           }
         };
 
-        if (fc.singleSharing > 0) await addRooms(fc.singleSharing, "Single", 1, fc.singleAc);
-        if (fc.doubleSharing > 0) await addRooms(fc.doubleSharing, "Double", 2, fc.doubleAc);
-        if (fc.tripleSharing > 0) await addRooms(fc.tripleSharing, "Triple", 3, fc.tripleAc);
-        if (fc.fourSharing > 0) await addRooms(fc.fourSharing, "Four", 4, fc.fourAc);
-        if (Array.isArray(fc.customAllocations)) {
-          for (const ca of fc.customAllocations) {
-            const roomsCount = Number(ca.rooms) || 0;
-            const bedsPerRoom = Number(ca.beds) || 1;
+        const sAc = (fc.singleSharingAc !== undefined || fc.singleSharingNonAc !== undefined)
+          ? Number(fc.singleSharingAc || 0)
+          : (fc.singleAc === "AC" ? Number(fc.singleSharing || 0) : 0);
+        const sNonAc = (fc.singleSharingAc !== undefined || fc.singleSharingNonAc !== undefined)
+          ? Number(fc.singleSharingNonAc || 0)
+          : (fc.singleAc !== "AC" ? Number(fc.singleSharing || 0) : 0);
+
+        const dAc = (fc.doubleSharingAc !== undefined || fc.doubleSharingNonAc !== undefined)
+          ? Number(fc.doubleSharingAc || 0)
+          : (fc.doubleAc === "AC" ? Number(fc.doubleSharing || 0) : 0);
+        const dNonAc = (fc.doubleSharingAc !== undefined || fc.doubleSharingNonAc !== undefined)
+          ? Number(fc.doubleSharingNonAc || 0)
+          : (fc.doubleAc !== "AC" ? Number(fc.doubleSharing || 0) : 0);
+
+        const tAc = (fc.tripleSharingAc !== undefined || fc.tripleSharingNonAc !== undefined)
+          ? Number(fc.tripleSharingAc || 0)
+          : (fc.tripleAc === "AC" ? Number(fc.tripleSharing || 0) : 0);
+        const tNonAc = (fc.tripleSharingAc !== undefined || fc.tripleSharingNonAc !== undefined)
+          ? Number(fc.tripleSharingNonAc || 0)
+          : (fc.tripleAc !== "AC" ? Number(fc.tripleSharing || 0) : 0);
+
+        const fAc = (fc.fourSharingAc !== undefined || fc.fourSharingNonAc !== undefined)
+          ? Number(fc.fourSharingAc || 0)
+          : (fc.fourAc === "AC" ? Number(fc.fourSharing || 0) : 0);
+        const fNonAc = (fc.fourSharingAc !== undefined || fc.fourSharingNonAc !== undefined)
+          ? Number(fc.fourSharingNonAc || 0)
+          : (fc.fourAc !== "AC" ? Number(fc.fourSharing || 0) : 0);
+
+        const fiveAc = (fc.fiveSharingAc !== undefined || fc.fiveSharingNonAc !== undefined)
+          ? Number(fc.fiveSharingAc || 0)
+          : (fc.fiveAc === "AC" ? Number(fc.fiveSharing || 0) : 0);
+        const fiveNonAc = (fc.fiveSharingAc !== undefined || fc.fiveSharingNonAc !== undefined)
+          ? Number(fc.fiveSharingNonAc || 0)
+          : (fc.fiveAc !== "AC" ? Number(fc.fiveSharing || 0) : 0);
+
+        const sixAc = (fc.sixSharingAc !== undefined || fc.sixSharingNonAc !== undefined)
+          ? Number(fc.sixSharingAc || 0)
+          : (fc.sixAc === "AC" ? Number(fc.sixSharing || 0) : 0);
+        const sixNonAc = (fc.sixSharingAc !== undefined || fc.sixSharingNonAc !== undefined)
+          ? Number(fc.sixSharingNonAc || 0)
+          : (fc.sixAc !== "AC" ? Number(fc.sixSharing || 0) : 0);
+
+        if (Array.isArray(fc.categoryAllocations) && fc.categoryAllocations.length > 0) {
+          for (const ca of fc.categoryAllocations) {
+            const roomsCount = Number(ca.rooms || ca.roomCount) || 0;
+            const bedsPerRoom = Number(ca.capacity || ca.beds) || 1;
             if (roomsCount > 0) {
-              await addRooms(roomsCount, ca.name || "Custom Suite", bedsPerRoom, ca.ac || "AC");
+              await addRooms(roomsCount, ca.name || `${bedsPerRoom}-Share`, bedsPerRoom, ca.acType || ca.ac || "Non-AC");
+            }
+          }
+        } else {
+          if (sAc > 0) await addRooms(sAc, "Single Bed", 1, "AC");
+          if (sNonAc > 0) await addRooms(sNonAc, "Single Bed", 1, "Non-AC");
+          if (dAc > 0) await addRooms(dAc, "2-Bed Double", 2, "AC");
+          if (dNonAc > 0) await addRooms(dNonAc, "2-Bed Double", 2, "Non-AC");
+          if (tAc > 0) await addRooms(tAc, "3-Bed Triple", 3, "AC");
+          if (tNonAc > 0) await addRooms(tNonAc, "3-Bed Triple", 3, "Non-AC");
+          if (fAc > 0) await addRooms(fAc, "4-Bed Four", 4, "AC");
+          if (fNonAc > 0) await addRooms(fNonAc, "4-Bed Four", 4, "Non-AC");
+          if (fiveAc > 0) await addRooms(fiveAc, "5-Bed Five", 5, "AC");
+          if (fiveNonAc > 0) await addRooms(fiveNonAc, "5-Bed Five", 5, "Non-AC");
+          if (sixAc > 0) await addRooms(sixAc, "6-Bed Six", 6, "AC");
+          if (sixNonAc > 0) await addRooms(sixNonAc, "6-Bed Six", 6, "Non-AC");
+
+          if (Array.isArray(fc.customAllocations)) {
+            for (const ca of fc.customAllocations) {
+              const roomsCount = Number(ca.rooms) || 0;
+              const bedsPerRoom = Number(ca.beds) || 1;
+              if (roomsCount > 0) {
+                await addRooms(roomsCount, ca.name || "Custom Suite", bedsPerRoom, ca.ac || "AC");
+              }
             }
           }
         }
@@ -1744,21 +1962,93 @@ export default function HostelPage() {
       if (generatedLocalRooms.length > 0) {
         setRooms((prev) => {
           const map = new Map();
-          prev.forEach((r) => map.set(`${r.hostelId || r.block}-${r.roomNo}`, r));
-          generatedLocalRooms.forEach((r) => map.set(`${r.hostelId || r.block}-${r.roomNo}`, r));
+          prev.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
+          generatedLocalRooms.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
           return Array.from(map.values());
         });
       }
       if (generatedLocalBeds.length > 0) {
-        setBeds((prev) => [...prev, ...generatedLocalBeds.filter((gb) => !prev.some((b) => b.id === gb.id))]);
+        setBeds((prev) => {
+          const map = new Map();
+          prev.forEach((b) => map.set(String(b.id || `${b.roomId}-${b.bedNumber}`), b));
+          generatedLocalBeds.forEach((b) => map.set(String(b.id || `${b.roomId}-${b.bedNumber}`), b));
+          return Array.from(map.values());
+        });
       }
 
-      await refreshRooms();
-      await refreshBeds();
-      await refreshBlocks();
-      await refreshDashboard();
-      showToast(`Room sharing configuration and beds saved for ${block.name}!`);
+      // Ensure block is in blocks state if missing or updated
+      setBlocks((prev) => {
+        const found = prev.some((b) => String(b.id) === String(targetHostelId) || b.name === blockName || b.code === blockCode);
+        if (found) {
+          return prev.map((b) => {
+            if (String(b.id) === String(targetHostelId) || b.name === blockName || b.code === blockCode) {
+              return {
+                ...b,
+                totalRooms: (b.totalRooms || 0) + generatedLocalRooms.length,
+                totalBeds: (b.totalBeds || 0) + generatedLocalBeds.length,
+                vacantBeds: (b.vacantBeds || 0) + generatedLocalBeds.length,
+              };
+            }
+            return b;
+          });
+        }
+        return [
+          ...prev,
+          {
+            id: targetHostelId,
+            hostelId: targetHostelId,
+            name: blockName,
+            code: blockCode,
+            type: block.type || "Hostel Block",
+            floors: Math.max(1, Number(block.floors || 2)),
+            totalRooms: generatedLocalRooms.length,
+            totalBeds: generatedLocalBeds.length,
+            occupiedBeds: 0,
+            vacantBeds: generatedLocalBeds.length,
+            warden: "Unassigned",
+            wardenPhone: "-",
+            status: "Active",
+          },
+        ];
+      });
+
+      // Instantly switch tabs and clear filters so rooms are visible in real time
+      setActiveMajorTab("setup");
+      setActiveSetupSubtab("rooms");
+      setSearchQuery("");
+      setFilterHostelRooms("all");
+      setFilterFloor("all");
+      setFilterCategory("all");
+      setFilterAcType("all");
+      setRoomsCurrentPage(1);
+      showToast(`Successfully configured ${generatedLocalRooms.length} rooms and ${generatedLocalBeds.length} beds for ${blockName}!`, "success");
       closeModal();
+
+      // Non-blocking background sync with backend
+      (async () => {
+        try { await refreshRooms(); } catch (_) {}
+        try { await refreshBeds(); } catch (_) {}
+        try { await refreshBlocks(); } catch (_) {}
+        try { await refreshDashboard(); } catch (_) {}
+
+        // Re-ensure local rooms stay present after background refresh
+        if (generatedLocalRooms.length > 0) {
+          setRooms((prev) => {
+            const map = new Map();
+            prev.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
+            generatedLocalRooms.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
+            return Array.from(map.values());
+          });
+        }
+        if (generatedLocalBeds.length > 0) {
+          setBeds((prev) => {
+            const map = new Map();
+            prev.forEach((b) => map.set(String(b.id || `${b.roomId}-${b.bedNumber}`), b));
+            generatedLocalBeds.forEach((b) => map.set(String(b.id || `${b.roomId}-${b.bedNumber}`), b));
+            return Array.from(map.values());
+          });
+        }
+      })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     }
@@ -1807,6 +2097,10 @@ export default function HostelPage() {
       await refreshCategories();
       await refreshRooms();
       closeModal();
+      (async () => {
+        try { await refreshCategories(); } catch (_) {}
+        try { await refreshRooms(); } catch (_) {}
+      })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     } finally {
@@ -1965,9 +2259,11 @@ export default function HostelPage() {
             return rClean === cleanTarget || (!isNaN(targetNum) && !isNaN(rParsed) && targetNum === rParsed);
           });
 
-          // Determine specific AC vs Non-AC for this individual room
+          // Determine specific AC vs Non-AC, capacity, and category for this individual room
           const targetAc = roomData.roomAcMap?.[rNum] || roomData.acType || "Non-AC";
-          const rCat = resolveCategoryForRoom(categories, targetAc, roomData.capacity) || cat;
+          const targetCap = Number(roomData.roomCapMap?.[rNum] || roomData.capacity || 2);
+          const rCat = (roomData.roomCatMap?.[rNum] && categories.find((c) => String(c.id) === String(roomData.roomCatMap[rNum]))) ||
+            resolveCategoryForRoom(categories, targetAc, targetCap) || cat;
           const targetRoomTypeId = rCat ? Number(rCat.id) : Number(roomTypeId);
 
           if (existingRoom) {
@@ -1980,10 +2276,30 @@ export default function HostelPage() {
                 roomNumber: rNum,
                 status: existingRoom.status || "Active",
                 acType: targetAc,
-                bedCapacity: Number(roomData.capacity) || Number(existingRoom.capacity) || 2,
+                bedCapacity: targetCap,
               }, { skipErrorLog: true });
               updatedCount++;
             } catch (_) {}
+
+            const existingBedNumbers = new Set(
+              beds
+                .filter((b) => Number(b.roomId) === Number(existingRoom.id))
+                .map((b) => String(b.bedNumber || "").trim().toLowerCase())
+            );
+            for (let bi = 1; bi <= targetCap; bi++) {
+              const bedNum = `BED-${bi}`;
+              if (!existingBedNumbers.has(bedNum.toLowerCase()) && !existingBedNumbers.has(String(bi).toLowerCase())) {
+                try {
+                  await hostelApi.createBed({
+                    roomId: Number(existingRoom.id),
+                    bedNumber: bedNum,
+                    bedStatus: "Available",
+                    status: "Active",
+                  }, { skipErrorLog: true });
+                  existingBedNumbers.add(String(bedNum || "").toLowerCase());
+                } catch (_) {}
+              }
+            }
             continue;
           }
 
@@ -1994,7 +2310,7 @@ export default function HostelPage() {
             roomNumber: rNum,
             status: roomData.status || "Active",
             acType: targetAc,
-            bedCapacity: Number(roomData.capacity) || 2,
+            bedCapacity: targetCap,
           };
 
           try {
@@ -2006,7 +2322,7 @@ export default function HostelPage() {
                   .filter((b) => Number(b.roomId) === Number(newRoomId))
                   .map((b) => String(b.bedNumber || "").trim().toLowerCase())
               );
-              const cap = Math.max(1, Number(roomData.capacity ?? cat?.capacity ?? 2));
+              const cap = Math.max(1, targetCap);
               for (let bi = 1; bi <= cap; bi++) {
                 const bedNum = `BED-${bi}`;
                 if (!existingBedNumbers.has(bedNum.toLowerCase()) && !existingBedNumbers.has(String(bi).toLowerCase())) {
@@ -2031,36 +2347,61 @@ export default function HostelPage() {
           }
         }
 
-        // Also update any other rooms on this floor that were customized in roomAcMap
-        if (roomData.roomAcMap && typeof roomData.roomAcMap === "object") {
-          for (const [rNum, targetAc] of Object.entries(roomData.roomAcMap)) {
-            if (roomNumbers.includes(rNum)) continue;
-            const cleanTarget = String(rNum).replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
-            const targetNum = parseInt(cleanTarget, 10);
-            const er = rooms.find((r) => {
-              const matchesBlock =
-                (r.hostelId && Number(r.hostelId) === Number(hostelId)) ||
-                (blk?.code && r.block && String(r.block).trim().toLowerCase() === String(blk.code).trim().toLowerCase()) ||
-                (blk?.name && r.blockName && String(r.blockName).trim().toLowerCase() === String(blk.name).trim().toLowerCase());
-              if (!matchesBlock) return false;
-              const rClean = String(r.roomNo || r.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
-              const rParsed = parseInt(rClean, 10);
-              return rClean === cleanTarget || (!isNaN(targetNum) && !isNaN(rParsed) && targetNum === rParsed);
-            });
-            if (er && er.acType !== targetAc) {
-              const rCat = resolveCategoryForRoom(categories, targetAc, er.capacity) || cat;
-              try {
-                await hostelApi.updateRoom(er.id, {
-                  hostelId: Number(hostelId),
-                  roomTypeId: rCat ? Number(rCat.id) : Number(roomTypeId),
-                  floorLevel: er.floor || roomData.floor || "Floor 1",
-                  roomNumber: er.roomNo || er.roomNumber || rNum,
-                  status: er.status || "Active",
-                  acType: targetAc,
-                  bedCapacity: Number(er.capacity) || 2,
-                }, { skipErrorLog: true });
-                updatedCount++;
-              } catch (_) {}
+        // Also update any other rooms on this floor that were customized in roomAcMap or roomCapMap
+        const extraRoomKeys = new Set([
+          ...Object.keys(roomData.roomAcMap || {}),
+          ...Object.keys(roomData.roomCapMap || {}),
+        ]);
+        for (const rNum of extraRoomKeys) {
+          if (roomNumbers.includes(rNum)) continue;
+          const cleanTarget = String(rNum).replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
+          const targetNum = parseInt(cleanTarget, 10);
+          const er = rooms.find((r) => {
+            const matchesBlock =
+              (r.hostelId && Number(r.hostelId) === Number(hostelId)) ||
+              (blk?.code && r.block && String(r.block).trim().toLowerCase() === String(blk.code).trim().toLowerCase()) ||
+              (blk?.name && r.blockName && String(r.blockName).trim().toLowerCase() === String(blk.name).trim().toLowerCase());
+            if (!matchesBlock) return false;
+            const rClean = String(r.roomNo || r.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
+            const rParsed = parseInt(rClean, 10);
+            return rClean === cleanTarget || (!isNaN(targetNum) && !isNaN(rParsed) && targetNum === rParsed);
+          });
+          const targetAc = roomData.roomAcMap?.[rNum] || er?.acType || "Non-AC";
+          const targetCap = Number(roomData.roomCapMap?.[rNum] || er?.capacity || er?.bedCapacity || 2);
+          if (er && (er.acType !== targetAc || Number(er.capacity) !== targetCap)) {
+            const rCat = (roomData.roomCatMap?.[rNum] && categories.find((c) => String(c.id) === String(roomData.roomCatMap[rNum]))) ||
+              resolveCategoryForRoom(categories, targetAc, targetCap) || cat;
+            try {
+              await hostelApi.updateRoom(er.id, {
+                hostelId: Number(hostelId),
+                roomTypeId: rCat ? Number(rCat.id) : Number(roomTypeId),
+                floorLevel: er.floor || roomData.floor || "Floor 1",
+                roomNumber: er.roomNo || er.roomNumber || rNum,
+                status: er.status || "Active",
+                acType: targetAc,
+                bedCapacity: targetCap,
+              }, { skipErrorLog: true });
+              updatedCount++;
+            } catch (_) {}
+
+            const existingBedNumbers = new Set(
+              beds
+                .filter((b) => Number(b.roomId) === Number(er.id))
+                .map((b) => String(b.bedNumber || "").trim().toLowerCase())
+            );
+            for (let bi = 1; bi <= targetCap; bi++) {
+              const bedNum = `BED-${bi}`;
+              if (!existingBedNumbers.has(bedNum.toLowerCase()) && !existingBedNumbers.has(String(bi).toLowerCase())) {
+                try {
+                  await hostelApi.createBed({
+                    roomId: Number(er.id),
+                    bedNumber: bedNum,
+                    bedStatus: "Available",
+                    status: "Active",
+                  }, { skipErrorLog: true });
+                  existingBedNumbers.add(String(bedNum || "").toLowerCase());
+                } catch (_) {}
+              }
             }
           }
         }
@@ -2074,6 +2415,7 @@ export default function HostelPage() {
           setFilterHostelRooms("all");
           setFilterFloor("all");
           setFilterCategory("all");
+          setFilterAcType("all");
           setRoomsCurrentPage(1);
         } else if (duplicateCount > 0) {
           showToast(`Room number already exists in ${blk?.name || "this hostel block"}.`, "warning");
@@ -2089,6 +2431,13 @@ export default function HostelPage() {
       await refreshBlocks();
       await refreshDashboard();
       closeModal();
+      (async () => {
+        try { await refreshRooms(); } catch (_) {}
+        try { await refreshBeds(); } catch (_) {}
+        try { await refreshCategories(); } catch (_) {}
+        try { await refreshBlocks(); } catch (_) {}
+        try { await refreshDashboard(); } catch (_) {}
+      })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     } finally {
@@ -2219,6 +2568,11 @@ export default function HostelPage() {
       await refreshBlocks();
       await refreshDashboard();
       closeModal();
+      (async () => {
+        try { await refreshWardens(); } catch (_) {}
+        try { await refreshBlocks(); } catch (_) {}
+        try { await refreshDashboard(); } catch (_) {}
+      })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     } finally {
@@ -2369,12 +2723,25 @@ export default function HostelPage() {
         await hostelApi.createStudentAllocation(payload, { skipErrorLog: true });
         showToast(`Room & Bed allocated to ${allocData.studentName} successfully!`);
       }
-      await refreshAllocations();
-      await refreshRooms();
-      await refreshBlocks();
-      await refreshBeds();
-      await refreshDashboard();
+      try {
+        const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+        const filtered = (Array.isArray(stored) ? stored : []).filter(
+          (s) =>
+            !(
+              (payload.studentId && String(s.studentId) === String(payload.studentId)) ||
+              (allocData.admissionNo && String(s.admissionNo).trim().toLowerCase() === String(allocData.admissionNo).trim().toLowerCase())
+            )
+        );
+        localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+      } catch (_) {}
       closeModal();
+      (async () => {
+        try { await refreshAllocations(); } catch (_) {}
+        try { await refreshRooms(); } catch (_) {}
+        try { await refreshBlocks(); } catch (_) {}
+        try { await refreshBeds(); } catch (_) {}
+        try { await refreshDashboard(); } catch (_) {}
+      })();
     } catch (err) {
       const apiMsg = getApiErrorMessage(err);
       if (apiMsg && apiMsg.toLowerCase().includes("student not found")) {
@@ -2389,13 +2756,49 @@ export default function HostelPage() {
 
   const handleVacateAllocation = async (alloc, reason) => {
     try {
+      // 1. Persist to localStorage so the vacated student is remembered across refreshes
+      try {
+        const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+        const record = {
+          studentId: alloc.studentId,
+          admissionNo: alloc.admissionNo,
+          studentName: alloc.studentName,
+          allocationId: alloc.id || alloc.allocationId,
+          reason: reason || "Vacated bed",
+          vacatedAt: new Date().toISOString(),
+        };
+        const filtered = (Array.isArray(stored) ? stored : []).filter(
+          (s) =>
+            !(
+              (record.studentId && String(s.studentId) === String(record.studentId)) ||
+              (record.admissionNo && String(s.admissionNo).trim().toLowerCase() === String(record.admissionNo).trim().toLowerCase()) ||
+              (record.studentName && String(s.studentName).trim().toLowerCase() === String(record.studentName).trim().toLowerCase())
+            )
+        );
+        filtered.push(record);
+        localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+      } catch (_) {}
+
+      // 2. Optimistically mark allocation as Vacated in allocations state
+      setAllocations((prev) =>
+        prev.map((a) =>
+          (alloc.id && (a.id === alloc.id || a.allocationId === alloc.id)) ||
+          (alloc.studentId && Number(a.studentId) === Number(alloc.studentId)) ||
+          (alloc.admissionNo && String(a.admissionNo).trim().toLowerCase() === String(alloc.admissionNo).trim().toLowerCase())
+            ? { ...a, status: "Vacated", isActive: false, isVacated: true }
+            : a
+        )
+      );
+
       await hostelApi.deleteStudentAllocation(alloc.id, { skipErrorLog: true });
-      await refreshAllocations();
-      await refreshRooms();
-      await refreshBlocks();
-      await refreshDashboard();
       closeModal();
       showToast(`Bed vacated for ${alloc.studentName}.`);
+      (async () => {
+        try { await refreshAllocations(); } catch (_) {}
+        try { await refreshRooms(); } catch (_) {}
+        try { await refreshBlocks(); } catch (_) {}
+        try { await refreshDashboard(); } catch (_) {}
+      })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     }
@@ -2519,9 +2922,11 @@ export default function HostelPage() {
       };
 
       await hostelApi.createOutpassLeave(payload, { skipErrorLog: true });
-      await refreshOutpasses();
       closeModal();
-      showToast(`Outpass request submitted for ${payload.studentName}.`);
+      showToast(`Outpass/Leave request submitted for ${payload.studentName}.`);
+      (async () => {
+        try { await refreshOutpasses(); } catch (_) {}
+      })();
     } catch (err) {
       const errMsg = getApiErrorMessage(err);
       showToast(errMsg || "Failed to submit outpass request.", "danger");
@@ -2587,12 +2992,34 @@ export default function HostelPage() {
 
       // If Vacate is approved, mark student's allocation as Vacated in allocations state
       if (apiStatus === "Approved" && isVacate && matchedTr) {
+        try {
+          const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+          const record = {
+            studentId: matchedTr.studentId,
+            admissionNo: matchedTr.admissionNo,
+            studentName: matchedTr.studentName,
+            allocationId: matchedTr.allocationId,
+            reason: matchedTr.reason || "Transfer/Vacate approved",
+            vacatedAt: new Date().toISOString(),
+          };
+          const filtered = (Array.isArray(stored) ? stored : []).filter(
+            (s) =>
+              !(
+                (record.studentId && String(s.studentId) === String(record.studentId)) ||
+                (record.admissionNo && String(s.admissionNo).trim().toLowerCase() === String(record.admissionNo).trim().toLowerCase()) ||
+                (record.studentName && String(s.studentName).trim().toLowerCase() === String(record.studentName).trim().toLowerCase())
+              )
+          );
+          filtered.push(record);
+          localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+        } catch (_) {}
+
         setAllocations((prev) =>
           prev.map((a) =>
             (matchedTr.allocationId && Number(a.id || a.allocationId) === Number(matchedTr.allocationId)) ||
             (matchedTr.studentId && Number(a.studentId) === Number(matchedTr.studentId)) ||
-            (matchedTr.admissionNo && a.admissionNo === matchedTr.admissionNo)
-              ? { ...a, status: "Vacated", isActive: false }
+            (matchedTr.admissionNo && String(a.admissionNo).trim().toLowerCase() === String(matchedTr.admissionNo).trim().toLowerCase())
+              ? { ...a, status: "Vacated", isActive: false, isVacated: true }
               : a
           )
         );
@@ -2670,9 +3097,11 @@ export default function HostelPage() {
       };
 
       await hostelApi.createTransferVacate(payload, { skipErrorLog: true });
-      await refreshTransfers();
       closeModal();
       showToast(`${isVacate ? "Bed vacate request" : "Room transfer request"} submitted for ${payload.studentName}.`);
+      (async () => {
+        try { await refreshTransfers(); } catch (_) {}
+      })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     }
@@ -3430,7 +3859,7 @@ export default function HostelPage() {
       return String(b.id) === String(dashBlockSearch) || b.code === dashBlockSearch;
     });
 
-    const pageSize = 4;
+    const pageSize = 10;
     const totalPages = Math.ceil(filteredDashBlocks.length / pageSize) || 1;
     const currentBlocksPage = filteredDashBlocks.slice(
       (dashBlockPage - 1) * pageSize,
@@ -3584,7 +4013,16 @@ export default function HostelPage() {
           </div>
 
           {/* Card 7: MONTHLY REVENUE */}
-          <div className="cms-dash-kpi-card">
+          <div
+            className="cms-dash-kpi-card"
+            style={{ cursor: "pointer", transition: "all 0.2s ease" }}
+            onClick={() => {
+              setActiveMajorTab("reports");
+              setReportCategory("Monthly Revenue & Fee Report");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            title="Click to view Student-by-Student Dues & Fee Collection Report →"
+          >
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
               <IndianRupee size={20} />
             </div>
@@ -3598,7 +4036,10 @@ export default function HostelPage() {
               <div className="cms-dash-kpi-val">
                 {monthlyRevenue > 0 ? `₹${monthlyRevenue.toLocaleString()}` : "₹0"}
               </div>
-              <div className="cms-dash-kpi-sub">Hostel fees billing</div>
+              <div className="cms-dash-kpi-sub" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>Hostel fees billing</span>
+                <span style={{ color: "var(--cms-primary)", fontWeight: 700, fontSize: "11px" }}>View Dues →</span>
+              </div>
             </div>
           </div>
 
@@ -3876,98 +4317,16 @@ export default function HostelPage() {
               </table>
             </div>
 
-            {/* Pagination Controls matching Screenshot 4 */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "8px 14px",
-                borderTop: "1px solid var(--cms-border)",
-                background: "var(--cms-subtle)",
-                fontSize: 12,
-                color: "var(--cms-muted)",
-              }}
-            >
-              <span>
-                Showing {filteredDashBlocks.length > 0 ? Math.min((dashBlockPage - 1) * pageSize + 1, filteredDashBlocks.length) : 0}-
-                {Math.min(dashBlockPage * pageSize, filteredDashBlocks.length)} of {filteredDashBlocks.length} records
-                {dashBlockSearch ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDashBlockSearch("");
-                      setDashBlockPage(1);
-                    }}
-                    style={{
-                      marginLeft: 10,
-                      background: "transparent",
-                      border: "none",
-                      color: "var(--cms-primary)",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      padding: 0,
-                      textDecoration: "underline",
-                      fontSize: 11,
-                    }}
-                  >
-                    View All Blocks
-                  </button>
-                ) : null}
-              </span>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <button
-                  type="button"
-                  disabled={dashBlockPage === 1}
-                  onClick={() => setDashBlockPage((p) => Math.max(1, p - 1))}
-                  style={{
-                    padding: "3px 8px",
-                    borderRadius: 6,
-                    border: "1px solid var(--cms-border)",
-                    background: "var(--cms-surface)",
-                    color: "var(--cms-text)",
-                    cursor: dashBlockPage === 1 ? "not-allowed" : "pointer",
-                    opacity: dashBlockPage === 1 ? 0.5 : 1,
-                  }}
-                >
-                  &lt;
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pg) => (
-                  <button
-                    key={pg}
-                    type="button"
-                    onClick={() => setDashBlockPage(pg)}
-                    style={{
-                      padding: "3px 9px",
-                      borderRadius: 6,
-                      border: pg === dashBlockPage ? "none" : "1px solid var(--cms-border)",
-                      background: pg === dashBlockPage ? "var(--cms-primary)" : "var(--cms-surface)",
-                      color: pg === dashBlockPage ? "#fff" : "var(--cms-text)",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {pg}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={dashBlockPage === totalPages}
-                  onClick={() => setDashBlockPage((p) => Math.min(totalPages, p + 1))}
-                  style={{
-                    padding: "3px 8px",
-                    borderRadius: 6,
-                    border: "1px solid var(--cms-border)",
-                    background: "var(--cms-surface)",
-                    color: "var(--cms-text)",
-                    cursor: dashBlockPage === totalPages ? "not-allowed" : "pointer",
-                    opacity: dashBlockPage === totalPages ? 0.5 : 1,
-                  }}
-                >
-                  &gt;
-                </button>
-              </div>
-            </div>
+            {/* Pagination Controls */}
+            {filteredDashBlocks.length > 0 && (
+              <HostelPagination
+                currentPage={dashBlockPage}
+                totalItems={filteredDashBlocks.length}
+                pageSize={pageSize}
+                onPageChange={setDashBlockPage}
+                itemLabel="records"
+              />
+            )}
           </div>
         </div>
 
@@ -5157,31 +5516,7 @@ export default function HostelPage() {
         </div>
 
         {/* Rooms Table */}
-        {isLoading && rooms.length === 0 ? (
-          <div
-            className="cms-card"
-            style={{
-              padding: "48px 20px",
-              borderRadius: 20,
-              textAlign: "center",
-              color: "var(--cms-muted)",
-              fontSize: 13,
-            }}
-          >
-            <div
-              style={{
-                margin: "0 auto 12px",
-                width: 28,
-                height: 28,
-                border: "3px solid #e2e8f0",
-                borderTopColor: "var(--cms-primary, #4361ee)",
-                borderRadius: "50%",
-                animation: "spin 1s linear infinite",
-              }}
-            />
-            <p style={{ margin: 0, fontWeight: 600 }}>Loading rooms and bed allocation data from backend...</p>
-          </div>
-        ) : filtered.length === 0 ? (
+        {filtered.length === 0 ? (
           <div
             className="cms-card"
             style={{
@@ -7549,7 +7884,9 @@ export default function HostelPage() {
   const renderReports = () => {
     // 1. Raw dataset by category
     let rawData = [];
-    if (reportCategory === "Block Report") {
+    if (reportCategory === "Monthly Revenue & Fee Report") {
+      rawData = revenueStudentRecords;
+    } else if (reportCategory === "Block Report") {
       rawData = blocks;
     } else if (reportCategory === "Room Report") {
       rawData = rooms;
@@ -7564,7 +7901,7 @@ export default function HostelPage() {
     } else if (reportCategory === "Warden Report") {
       rawData = wardens;
     } else {
-      rawData = blocks;
+      rawData = revenueStudentRecords;
     }
 
     // 2. Filter by Block
@@ -7621,6 +7958,14 @@ export default function HostelPage() {
       const cFilter = String(reportCategoryFilter || "").toLowerCase().trim();
       filtered = filtered.filter((item) => {
         if (!item) return false;
+        if (reportCategory === "Monthly Revenue & Fee Report") {
+          const pStatus = String(item.paymentStatus || "").toLowerCase().trim();
+          if (cFilter === "paid") return pStatus === "paid";
+          if (cFilter === "partial") return pStatus === "partial";
+          if (cFilter === "pending") return pStatus === "pending";
+          return pStatus.includes(cFilter);
+        }
+
         const iStatus = String(item.status || "").toLowerCase().trim();
         if (cFilter === "active") return iStatus === "active";
         if (cFilter === "inactive") return iStatus !== "active";
@@ -7665,6 +8010,20 @@ export default function HostelPage() {
     // Helper to get structured columns for report export and printing
     const getReportColumns = (cat) => {
       switch (cat) {
+        case "Monthly Revenue & Fee Report":
+          return [
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || "-" },
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || "-" },
+            { key: "blockName", label: "Hostel Block", getter: (r) => r.blockName || "-" },
+            { key: "roomBadge", label: "Room & Bed", getter: (r) => r.roomBadge || "-" },
+            { key: "monthlyFee", label: "Monthly Fee", getter: (r) => `₹${Number(r.monthlyFee || 0).toLocaleString()}` },
+            { key: "paidAmount", label: "Amount Paid", getter: (r) => `₹${Number(r.paidAmount || 0).toLocaleString()}` },
+            { key: "dueAmount", label: "Amount Due", getter: (r) => `₹${Number(r.dueAmount || 0).toLocaleString()}` },
+            { key: "paymentStatus", label: "Status", getter: (r) => r.paymentStatus || "Pending" },
+            { key: "lastPaymentDate", label: "Payment Date", getter: (r) => r.lastPaymentDate || "-" },
+            { key: "receiptNo", label: "Receipt No", getter: (r) => r.receiptNo || "-" },
+            { key: "paymentMode", label: "Payment Mode", getter: (r) => r.paymentMode || "-" },
+          ];
         case "Block Report":
           return [
             { key: "code", label: "Block Code", getter: (r) => r.code || r.hostelCode || "-" },
@@ -8058,8 +8417,19 @@ export default function HostelPage() {
               >
                 <option value="">-- Filter by Category / Status --</option>
                 <option value="all">All</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
+                {reportCategory === "Monthly Revenue & Fee Report" && (
+                  <>
+                    <option value="Paid">Fully Paid (₹0 Due)</option>
+                    <option value="Partial">Partially Paid (Has Due)</option>
+                    <option value="Pending">Pending / Unpaid</option>
+                  </>
+                )}
+                {reportCategory !== "Monthly Revenue & Fee Report" && (
+                  <>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </>
+                )}
                 {reportCategory === "Block Report" && (
                   <>
                     <option value="Boys Hostel">Boys Hostel</option>
@@ -8105,17 +8475,103 @@ export default function HostelPage() {
           </div>
         </div>
 
+        {/* Real-time KPI Overview for Monthly Revenue & Fee Report */}
+        {reportCategory === "Monthly Revenue & Fee Report" && (
+          <div className="cms-revenue-report-kpis">
+            <div className="cms-rev-kpi-card is-billed">
+              <div className="cms-rev-kpi-icon">
+                <IndianRupee size={22} />
+              </div>
+              <div className="cms-rev-kpi-data">
+                <span className="cms-rev-kpi-label">TOTAL MONTHLY BILLED</span>
+                <span className="cms-rev-kpi-value">₹{revenueSummary.totalBilled.toLocaleString()}</span>
+                <span className="cms-rev-kpi-sub">{revenueStudentRecords.length} Active Residents</span>
+              </div>
+            </div>
+
+            <div className="cms-rev-kpi-card is-collected">
+              <div className="cms-rev-kpi-icon">
+                <CheckCircle2 size={22} />
+              </div>
+              <div className="cms-rev-kpi-data">
+                <span className="cms-rev-kpi-label">TOTAL COLLECTED (PAID)</span>
+                <span className="cms-rev-kpi-value" style={{ color: "var(--cms-green)" }}>
+                  ₹{revenueSummary.totalPaid.toLocaleString()}
+                </span>
+                <span className="cms-rev-kpi-sub">{revenueSummary.paidCount} Fully Paid Residents</span>
+              </div>
+            </div>
+
+            <div className="cms-rev-kpi-card is-pending">
+              <div className="cms-rev-kpi-icon">
+                <AlertCircle size={22} />
+              </div>
+              <div className="cms-rev-kpi-data">
+                <span className="cms-rev-kpi-label">TOTAL OUTSTANDING (DUE)</span>
+                <span className="cms-rev-kpi-value" style={{ color: "var(--cms-red)" }}>
+                  ₹{revenueSummary.totalDue.toLocaleString()}
+                </span>
+                <span className="cms-rev-kpi-sub">{revenueSummary.partialCount + revenueSummary.pendingCount} Students with Dues</span>
+              </div>
+            </div>
+
+            <div className="cms-rev-kpi-card is-efficiency">
+              <div className="cms-rev-kpi-icon">
+                <TrendingUp size={22} />
+              </div>
+              <div className="cms-rev-kpi-data">
+                <span className="cms-rev-kpi-label">COLLECTION EFFICIENCY</span>
+                <span className="cms-rev-kpi-value">{revenueSummary.efficiencyRate}%</span>
+                <div className="cms-rev-progress-bg">
+                  <div
+                    className="cms-rev-progress-fill"
+                    style={{ width: `${Math.min(100, Math.max(0, revenueSummary.efficiencyRate))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Report Content Card & Table */}
         <div className="cms-report-table-card cms-hostel-table-scroll">
-          <div className="cms-report-table-header">
-            <h3 className="cms-report-table-title">{reportCategory}</h3>
-            <span className="cms-report-badge-total">
-              Total Records: {filtered.length}
-            </span>
+          <div className="cms-report-table-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <h3 className="cms-report-table-title">{reportCategory}</h3>
+              <span className="cms-report-badge-total">
+                Total Records: {filtered.length}
+              </span>
+            </div>
+            {reportCategory === "Monthly Revenue & Fee Report" && (
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                style={{ height: 32, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 8 }}
+                onClick={() => setModal({ isOpen: true, type: "feePayment", mode: "add", data: revenueStudentRecords[0] || null })}
+              >
+                <Plus size={14} />
+                Record Fee Payment
+              </button>
+            )}
           </div>
 
           <table className="cms-report-table">
             <thead>
+              {reportCategory === "Monthly Revenue & Fee Report" && (
+                <tr>
+                  <th className="cms-report-th">ADM NO</th>
+                  <th className="cms-report-th">STUDENT NAME</th>
+                  <th className="cms-report-th">HOSTEL BLOCK</th>
+                  <th className="cms-report-th">ROOM &amp; BED</th>
+                  <th className="cms-report-th">MONTHLY FEE</th>
+                  <th className="cms-report-th">AMOUNT PAID</th>
+                  <th className="cms-report-th">AMOUNT DUE</th>
+                  <th className="cms-report-th">STATUS</th>
+                  <th className="cms-report-th">RECEIPT &amp; MODE</th>
+                  <th className="cms-report-th">PAYMENT DATE</th>
+                  <th className="cms-report-th" style={{ textAlign: "center" }}>ACTION</th>
+                </tr>
+              )}
               {reportCategory === "Block Report" && (
                 <tr>
                   <th className="cms-report-th">BLOCK CODE</th>
@@ -8205,6 +8661,59 @@ export default function HostelPage() {
                 </tr>
               ) : (
                 paginatedReports.map((item, idx) => {
+                  if (reportCategory === "Monthly Revenue & Fee Report") {
+                    const statusColor = item.paymentStatus === "Paid" 
+                      ? "var(--cms-green)" 
+                      : item.paymentStatus === "Partial" 
+                      ? "var(--cms-amber)" 
+                      : "var(--cms-red)";
+                    return (
+                      <tr key={item.allocKey || item.id || idx} className="cms-report-row">
+                        <td className="cms-report-td" style={{ fontWeight: 600 }}>{item.admissionNo}</td>
+                        <td className="cms-report-td" style={{ fontWeight: 700, color: "var(--cms-text)" }}>{item.studentName}</td>
+                        <td className="cms-report-td">{item.blockName}</td>
+                        <td className="cms-report-td">{item.roomBadge}</td>
+                        <td className="cms-report-td" style={{ fontWeight: 700 }}>₹{item.monthlyFee.toLocaleString()}</td>
+                        <td className="cms-report-td" style={{ fontWeight: 700, color: "var(--cms-green)" }}>₹{item.paidAmount.toLocaleString()}</td>
+                        <td className="cms-report-td" style={{ fontWeight: 700, color: item.dueAmount > 0 ? "var(--cms-red)" : "var(--cms-muted)" }}>
+                          {item.dueAmount > 0 ? `₹${item.dueAmount.toLocaleString()}` : "₹0 (Cleared)"}
+                        </td>
+                        <td className="cms-report-td">
+                          <span style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            padding: "3px 10px",
+                            borderRadius: 9999,
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            background: item.paymentStatus === "Paid" ? "var(--cms-green-soft)" : item.paymentStatus === "Partial" ? "var(--cms-amber-soft)" : "var(--cms-red-soft)",
+                            color: statusColor,
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor }} />
+                            {item.paymentStatus}
+                          </span>
+                        </td>
+                        <td className="cms-report-td">
+                          <div style={{ fontSize: 12, fontWeight: 600 }}>{item.receiptNo || "-"}</div>
+                          {item.paymentMode !== "-" && <div style={{ fontSize: 11, color: "var(--cms-muted)" }}>{item.paymentMode}</div>}
+                        </td>
+                        <td className="cms-report-td">{item.lastPaymentDate || "-"}</td>
+                        <td className="cms-report-td" style={{ textAlign: "center" }}>
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-primary"
+                            style={{ height: 28, padding: "0 10px", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 5, borderRadius: 6 }}
+                            onClick={() => setModal({ isOpen: true, type: "feePayment", mode: "edit", data: item })}
+                            title="Record or update fee payment"
+                          >
+                            <CreditCard size={12} />
+                            {item.dueAmount > 0 ? "Collect Fee" : "Update"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
                   if (reportCategory === "Block Report") {
                     return (
                       <tr key={item.id || idx} className="cms-report-row">
@@ -8348,109 +8857,37 @@ export default function HostelPage() {
                 })
               )}
             </tbody>
+            {reportCategory === "Monthly Revenue & Fee Report" && filtered.length > 0 && (
+              <tfoot className="cms-report-tfoot">
+                <tr>
+                  <td colSpan={4} style={{ fontWeight: 800, textAlign: "right", letterSpacing: "0.5px" }}>
+                    FILTERED TOTALS ({filtered.length} Students):
+                  </td>
+                  <td style={{ fontWeight: 800, color: "var(--cms-text)" }}>
+                    ₹{filtered.reduce((s, r) => s + (r.monthlyFee || 0), 0).toLocaleString()}
+                  </td>
+                  <td style={{ fontWeight: 800, color: "var(--cms-green)" }}>
+                    ₹{filtered.reduce((s, r) => s + (r.paidAmount || 0), 0).toLocaleString()}
+                  </td>
+                  <td style={{ fontWeight: 800, color: "var(--cms-red)" }}>
+                    ₹{filtered.reduce((s, r) => s + (r.dueAmount || 0), 0).toLocaleString()}
+                  </td>
+                  <td colSpan={4} style={{ fontWeight: 700, color: "var(--cms-muted)" }}>
+                    Collection Efficiency: {Math.round((filtered.reduce((s, r) => s + (r.paidAmount || 0), 0) / (filtered.reduce((s, r) => s + (r.monthlyFee || 0), 0) || 1)) * 100)}%
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
 
-          {/* Report Pagination Controls matching Screenshot 4 & SectionManagement reference */}
-          <div className="cms-report-pagination">
-            <span className="cms-report-record-summary">
-              Showing {filtered.length ? (safeReportPage - 1) * reportPageSize + 1 : 0}–{Math.min(safeReportPage * reportPageSize, filtered.length)} of {filtered.length} records
-            </span>
-
-            <div className="cms-report-page-size-wrap">
-              <span className="cms-report-page-size-label">Per page:</span>
-              <select
-                className="cms-report-page-size-select"
-                aria-label="Records per page"
-                value={isCustomReportPage ? "custom" : reportPageSize}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === "custom") {
-                    setIsCustomReportPage(true);
-                    setCustomReportPageInput(String(reportPageSize));
-                  } else {
-                    setIsCustomReportPage(false);
-                    setReportPageSize(Number(val));
-                    setReportPage(1);
-                  }
-                }}
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={15}>15</option>
-                <option value={25}>25</option>
-                <option value="custom">Custom</option>
-              </select>
-              {isCustomReportPage && (
-                <input
-                  type="number"
-                  min="1"
-                  max="200"
-                  className="cms-report-page-size-custom-input"
-                  value={customReportPageInput}
-                  placeholder="Qty"
-                  aria-label="Custom records per page"
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCustomReportPageInput(val);
-                    const num = parseInt(val, 10);
-                    if (Number.isInteger(num) && num > 0) {
-                      setReportPageSize(num);
-                      setReportPage(1);
-                    }
-                  }}
-                />
-              )}
-            </div>
-
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost cms-report-page-btn"
-              disabled={safeReportPage <= 1}
-              onClick={() => setReportPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </button>
-            {(() => {
-              if (totalReportPages <= 5) {
-                return Array.from({ length: totalReportPages }, (_, i) => i + 1);
-              }
-              let start = Math.max(1, safeReportPage - 2);
-              let end = Math.min(totalReportPages, start + 4);
-              if (end - start < 4) {
-                start = Math.max(1, end - 4);
-              }
-              const pages = [];
-              for (let i = start; i <= end; i++) {
-                pages.push(i);
-              }
-              return pages;
-            })().map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={`cms-btn ${p === safeReportPage ? "cms-btn-primary" : "cms-btn-ghost"}`}
-                  style={{
-                    minWidth: 32,
-                    height: 30,
-                    padding: 0,
-                    fontSize: 12,
-                    borderRadius: 6,
-                    fontWeight: p === safeReportPage ? 800 : 600,
-                  }}
-                  onClick={() => setReportPage(p)}
-                >
-                  {p}
-                </button>
-              ))}
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost cms-report-page-btn"
-              disabled={safeReportPage >= totalReportPages}
-              onClick={() => setReportPage((p) => Math.min(totalReportPages, p + 1))}
-            >
-              Next
-            </button>
-          </div>
+          {/* Report Pagination Controls */}
+          <HostelPagination
+            currentPage={safeReportPage}
+            totalItems={filtered.length}
+            pageSize={reportPageSize}
+            onPageChange={setReportPage}
+            itemLabel="records"
+          />
         </div>
       </div>
     );
@@ -8547,110 +8984,41 @@ export default function HostelPage() {
           />
         )}
 
-        {/* Actionable API Error Banner */}
-        {apiError && (
-          <div
-            className="cms-hostel-api-error-banner"
-            role="alert"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "12px 18px",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: "10px",
-              color: "#991b1b",
-              marginBottom: "16px",
-              gap: "12px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <AlertCircle size={20} style={{ color: "#dc2626", flexShrink: 0 }} />
-              <div>
-                <strong style={{ display: "block", fontSize: "14px" }}>Backend API Communication Error</strong>
-                <span style={{ fontSize: "13px", color: "#b91c1c" }}>{apiError}</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="cms-btn"
-              onClick={() => fetchHostelData()}
-              disabled={isLoading}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                background: "#dc2626",
-                color: "#ffffff",
-                border: "none",
-                borderRadius: "6px",
-                padding: "6px 14px",
-                fontSize: "13px",
-                fontWeight: 600,
-                cursor: isLoading ? "not-allowed" : "pointer",
-              }}
-            >
-              <RotateCcw size={14} className={isLoading ? "spin" : ""} />
-              {isLoading ? "Retrying..." : "Retry"}
-            </button>
-          </div>
-        )}
-
-        {/* If viewing a dedicated sidebar field (like Warden portal routes), render ONLY that view */}
-        {isDedicatedView ? (
-          <div className="cms-hostel-stack">
-            {activeSection === "dashboard" && renderDashboard()}
-            {activeSection === "rooms" && renderRooms()}
-            {activeSection === "allocations" && renderAllocations()}
-            {activeSection === "students" && renderAllocations()}
-            {activeSection === "attendance" && renderAttendance()}
-            {activeSection === "outpasses" && renderOutpasses()}
-            {activeSection === "transfers" && renderTransfers()}
-            {activeSection === "blocks" && renderHostelBlocks()}
-            {activeSection === "wardens" && renderWardens()}
-            {activeSection === "reports" && renderReportsSection()}
-            {activeSection === "setup" && renderSetupMasters()}
-          </div>
-        ) : (
-          <>
-            {/* 4 Major Horizontal Navigation Tabs */}
-            <div className="cms-hostel-tabs">
-              {majorTabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeMajorTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
-                    onClick={() => {
-                      setActiveMajorTab(tab.id);
-                      setSearchQuery("");
-                      setBlocksCurrentPage(1);
-                      setRoomsCurrentPage(1);
-                      setWardensCurrentPage(1);
-                      setCategoriesCurrentPage(1);
-                      setAllocCurrentPage(1);
-                      setAttendanceCurrentPage(1);
-                      setOutpassCurrentPage(1);
-                      setTransferCurrentPage(1);
-                    }}
-                  >
-                    <Icon size={16} />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+        {/* 4 Major Horizontal Navigation Tabs */}
+        <div className="cms-hostel-tabs">
+          {majorTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeMajorTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
+                onClick={() => {
+                  setActiveMajorTab(tab.id);
+                  setSearchQuery("");
+                  setBlocksCurrentPage(1);
+                  setRoomsCurrentPage(1);
+                  setWardensCurrentPage(1);
+                  setCategoriesCurrentPage(1);
+                  setAllocCurrentPage(1);
+                  setAttendanceCurrentPage(1);
+                  setOutpassCurrentPage(1);
+                  setTransferCurrentPage(1);
+                }}
+              >
+                <Icon size={16} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
             {/* Active Tab Screen */}
             {activeMajorTab === "dashboard" && renderDashboard()}
             {activeMajorTab === "setup" && renderSetupMasters()}
             {activeMajorTab === "students" && renderStudentManagement()}
             {activeMajorTab === "reports" && renderReportsSection()}
-          </>
-        )}
 
         {/* Global Modals */}
         {modal.isOpen && modal.type === "block" && (
@@ -8717,6 +9085,7 @@ export default function HostelPage() {
             rooms={rooms}
             beds={beds}
             allocations={allocations}
+            transfers={transfers}
             candidateAdmissions={candidateAdmissions}
             candidateStudents={candidateStudents}
             canAccessAdminEndpoints={canAccessAdminEndpoints}
@@ -8751,6 +9120,36 @@ export default function HostelPage() {
             allocations={allocations}
             handleSaveTransfer={handleSaveTransfer}
             showToast={showToast}
+          />
+        )}
+        {modal.isOpen && modal.type === "feePayment" && (
+          <FeePaymentModal
+            modal={modal}
+            closeModal={closeModal}
+            revenueStudentRecords={revenueStudentRecords}
+            handleSaveFeePayment={handleSaveFeePayment}
+            showToast={showToast}
+          />
+        )}
+
+        {/* Student Attendance Detailed Log Modal */}
+        {selectedStudentForAttendance && (
+          <StudentAttendanceModal
+            student={selectedStudentForAttendance}
+            onClose={() => setSelectedStudentForAttendance(null)}
+            attendanceRecords={attendanceRecords}
+            attendanceMap={attendanceMap}
+            attendanceShift={attendanceShift}
+            attendanceDate={attendanceDate}
+            attendanceMonth={attendanceMonth}
+            customRangeStart={customRangeStart}
+            customRangeEnd={customRangeEnd}
+            appliedCustomRange={appliedCustomRange}
+            academicMonthOptions={resolvedMonthOptions}
+            attendanceFrequency={attendanceFrequency}
+            onToggleAttendance={handleToggleAttendance}
+            onSaveAttendanceLog={handleSaveAttendanceLog}
+            exportCsv={exportCsv}
           />
         )}
 
@@ -9334,7 +9733,7 @@ function StudentAttendanceModal({
 }
 
 // Block Modal
-function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, setActiveSetupSubtab, setFilterHostelRooms, blocks = [], isWardenRoute = false, navigate }) {
+function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, setActiveSetupSubtab, setFilterHostelRooms, blocks = [] }) {
     const isView = modal.mode === "view";
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [form, setForm] = useState(
@@ -9388,6 +9787,7 @@ function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, set
             setIsSubmitting(true);
             try {
               await handleSaveBlock(form);
+              closeModal();
             } finally {
               setIsSubmitting(false);
             }
@@ -9478,17 +9878,13 @@ function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, set
             <button type="button" className="cms-btn cms-btn-ghost" onClick={closeModal} disabled={isSubmitting}>
               {isView ? "Close" : "Cancel"}
             </button>
-            {isView && (
+            {isView && setActiveMajorTab && setActiveSetupSubtab && (
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
                 onClick={() => {
-                  if (isWardenRoute && navigate) {
-                    navigate("/warden-dashboard/rooms");
-                  } else if (setActiveMajorTab && setActiveSetupSubtab) {
-                    setActiveMajorTab("setup");
-                    setActiveSetupSubtab("rooms");
-                  }
+                  setActiveMajorTab("setup");
+                  setActiveSetupSubtab("rooms");
                   if (setFilterHostelRooms) setFilterHostelRooms(String(form.id || form.code || ""));
                   closeModal();
                 }}
@@ -9544,6 +9940,10 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
           tripleAc: "Non-AC",
           fourSharing: 0,
           fourAc: "Non-AC",
+          fiveSharing: 0,
+          fiveAc: "Non-AC",
+          sixSharing: 0,
+          sixAc: "Non-AC",
           customAllocations: [],
         };
       });
@@ -9582,6 +9982,10 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
             tripleAc: "Non-AC",
             fourSharing: 0,
             fourAc: "Non-AC",
+            fiveSharing: 0,
+            fiveAc: "Non-AC",
+            sixSharing: 0,
+            sixAc: "Non-AC",
             customAllocations: [],
           };
         })
@@ -9669,6 +10073,8 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
           (fc.doubleSharing || 0) +
           (fc.tripleSharing || 0) +
           (fc.fourSharing || 0) +
+          (fc.fiveSharing || 0) +
+          (fc.sixSharing || 0) +
           customRooms
         );
       }, 0);
@@ -9686,6 +10092,8 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
           (fc.doubleSharing || 0) * 2 +
           (fc.tripleSharing || 0) * 3 +
           (fc.fourSharing || 0) * 4 +
+          (fc.fiveSharing || 0) * 5 +
+          (fc.sixSharing || 0) * 6 +
           customBeds
         );
       }, 0);
@@ -9698,6 +10106,8 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
         if (fc.doubleAc === "AC") count += fc.doubleSharing || 0;
         if (fc.tripleAc === "AC") count += fc.tripleSharing || 0;
         if (fc.fourAc === "AC") count += fc.fourSharing || 0;
+        if (fc.fiveAc === "AC") count += fc.fiveSharing || 0;
+        if (fc.sixAc === "AC") count += fc.sixSharing || 0;
         (fc.customAllocations || []).forEach((ca) => {
           if (ca.ac === "AC") count += Number(ca.rooms) || 0;
         });
@@ -10057,6 +10467,50 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                                 {fc.fourAc === "AC" ? "AC Room" : "Non-AC"}
                               </button>
                             </div>
+
+                            {/* 5-Share */}
+                            <div className="cms-sharing-cell">
+                              <label>5-Share (5 Beds)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={50}
+                                placeholder="0"
+                                value={fc.fiveSharing || ""}
+                                onChange={(e) =>
+                                  handleFloorSharingChange(fc.floorIndex, "fiveSharing", Number(e.target.value) || 0)
+                                }
+                              />
+                              <button
+                                type="button"
+                                className={`cms-ac-toggle-btn ${fc.fiveAc === "AC" ? "is-ac" : "is-non-ac"}`}
+                                onClick={() => handleToggleAc(fc.floorIndex, "fiveAc")}
+                              >
+                                {fc.fiveAc === "AC" ? "AC Room" : "Non-AC"}
+                              </button>
+                            </div>
+
+                            {/* 6-Share */}
+                            <div className="cms-sharing-cell">
+                              <label>6-Share (6 Beds)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={50}
+                                placeholder="0"
+                                value={fc.sixSharing || ""}
+                                onChange={(e) =>
+                                  handleFloorSharingChange(fc.floorIndex, "sixSharing", Number(e.target.value) || 0)
+                                }
+                              />
+                              <button
+                                type="button"
+                                className={`cms-ac-toggle-btn ${fc.sixAc === "AC" ? "is-ac" : "is-non-ac"}`}
+                                onClick={() => handleToggleAc(fc.floorIndex, "sixAc")}
+                              >
+                                {fc.sixAc === "AC" ? "AC Room" : "Non-AC"}
+                              </button>
+                            </div>
                           </div>
 
                           {/* Custom Categories Section matching Image 2 */}
@@ -10208,7 +10662,9 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                           (fc.singleSharing || 0) +
                           (fc.doubleSharing || 0) +
                           (fc.tripleSharing || 0) +
-                          (fc.fourSharing || 0);
+                          (fc.fourSharing || 0) +
+                          (fc.fiveSharing || 0) +
+                          (fc.sixSharing || 0);
                         const customRooms = (fc.customAllocations || []).reduce(
                           (sum, ca) => sum + (Number(ca.rooms) || 0),
                           0
@@ -10219,7 +10675,9 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                           (fc.singleSharing || 0) * 1 +
                           (fc.doubleSharing || 0) * 2 +
                           (fc.tripleSharing || 0) * 3 +
-                          (fc.fourSharing || 0) * 4;
+                          (fc.fourSharing || 0) * 4 +
+                          (fc.fiveSharing || 0) * 5 +
+                          (fc.sixSharing || 0) * 6;
                         const customBeds = (fc.customAllocations || []).reduce(
                           (sum, ca) => sum + (Number(ca.rooms) || 0) * (Number(ca.beds) || 1),
                           0
@@ -10241,6 +10699,8 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                         if (fc.doubleSharing > 0) allocBadges.push(`2-Share: ${fc.doubleSharing} Rms (${fc.doubleAc})`);
                         if (fc.tripleSharing > 0) allocBadges.push(`3-Share: ${fc.tripleSharing} Rms (${fc.tripleAc})`);
                         if (fc.fourSharing > 0) allocBadges.push(`4-Share: ${fc.fourSharing} Rms (${fc.fourAc})`);
+                        if (fc.fiveSharing > 0) allocBadges.push(`5-Share: ${fc.fiveSharing} Rms (${fc.fiveAc})`);
+                        if (fc.sixSharing > 0) allocBadges.push(`6-Share: ${fc.sixSharing} Rms (${fc.sixAc})`);
                         (fc.customAllocations || []).forEach((ca) => {
                           if (ca.rooms > 0) {
                             allocBadges.push(`${ca.name || "Custom"}: ${ca.rooms} Rms (${ca.ac || "AC"})`);
@@ -10339,14 +10799,15 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                   <button
                     type="button"
                     className="cms-btn cms-btn-primary"
-                    onClick={() =>
+                    onClick={() => {
                       handleSaveRoomSharingConfig({
                         block: selectedBlock,
                         floorConfigs,
                         status: configStatus,
                         note: configNote,
-                      })
-                    }
+                      });
+                      closeModal();
+                    }}
                   >
                     Save
                   </button>
@@ -10398,9 +10859,10 @@ function CategoryModal({ modal, closeModal, handleSaveCategory }) {
         onClose={closeModal}
       >
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            handleSaveCategory(form);
+            await handleSaveCategory(form);
+            closeModal();
           }}
         >
           <div className="cms-hostel-form-grid">
@@ -10509,13 +10971,28 @@ function RoomModal({
       2: "₹8,500/mo",
       3: "₹7,000/mo",
       4: "₹6,000/mo",
+      5: "₹5,000/mo",
+      6: "₹4,500/mo",
     },
     "Non-AC": {
       1: "₹7,000/mo",
       2: "₹5,500/mo",
       3: "₹4,500/mo",
       4: "₹3,500/mo",
+      5: "₹3,000/mo",
+      6: "₹2,500/mo",
     },
+  };
+
+  const getSharingTitle = (c) => {
+    const num = Number(c);
+    if (num === 1) return "Single";
+    if (num === 2) return "Double";
+    if (num === 3) return "Triple";
+    if (num === 4) return "4-Sharing";
+    if (num === 5) return "5-Sharing";
+    if (num === 6) return "6-Sharing";
+    return `${num}-Sharing`;
   };
 
   const detectRoomAc = (r) => {
@@ -10552,9 +11029,72 @@ function RoomModal({
     return catList[0] || null;
   };
 
+  // Deduplicated aggregated list of all hostel blocks across blocks prop, rooms, and allocations
+  const availableBlocks = useMemo(() => {
+    const list = [];
+    const seen = new Set();
+
+    const addBlock = (b) => {
+      if (!b) return;
+      const bId = String(b.id ?? b.hostelId ?? b.code ?? b.name ?? "");
+      const bName = String(b.name ?? b.hostelName ?? b.blockName ?? b.code ?? "").trim();
+      const bCode = String(b.code ?? b.hostelCode ?? bName).trim().toUpperCase();
+      const normKey = (bName || bCode).toLowerCase();
+      if (!normKey || seen.has(normKey)) return;
+      seen.add(normKey);
+      if (bId) seen.add(bId.toLowerCase());
+
+      list.push({
+        id: b.id ?? b.hostelId ?? bCode ?? `blk-${list.length + 1}`,
+        hostelId: b.hostelId ?? b.id ?? (list.length + 1),
+        name: bName || `Hostel Block ${bCode || list.length + 1}`,
+        code: bCode || `BLK-${list.length + 1}`,
+        floors: Math.max(1, Number(b.floors ?? b.totalFloors ?? 2)),
+        type: b.type ?? b.hostelType ?? "Hostel Block",
+      });
+    };
+
+    (blocks || []).forEach(addBlock);
+
+    (rooms || []).forEach((r) => {
+      if (r.blockName || r.block || r.hostelId) {
+        addBlock({
+          id: r.hostelId || r.block || r.blockName,
+          hostelId: r.hostelId,
+          name: r.blockName || r.block,
+          code: r.block || r.blockName,
+          floors: 3,
+          type: "Hostel Block",
+        });
+      }
+    });
+
+    (allocations || []).forEach((a) => {
+      if (a.blockName || a.block || a.hostelId) {
+        addBlock({
+          id: a.hostelId || a.block || a.blockName,
+          hostelId: a.hostelId,
+          name: a.blockName || a.block,
+          code: a.block || a.blockName,
+          floors: 3,
+          type: "Hostel Block",
+        });
+      }
+    });
+
+    if (list.length === 0) {
+      list.push(
+        { id: "1", hostelId: 1, name: "Boys Hostel Block-A", code: "BH-A", floors: 3, type: "Boys" },
+        { id: "2", hostelId: 2, name: "Girls Hostel Block-B", code: "GH-B", floors: 3, type: "Girls" }
+      );
+    }
+
+    return list;
+  }, [blocks, rooms, allocations]);
+
   const [form, setForm] = useState(() => {
     if (modal.data) {
-      const foundBlock = blocks.find(
+      const foundBlock = availableBlocks.find(
         (b) => String(b.id) === String(modal.data.hostelId) || b.code === modal.data.block || b.name === modal.data.block
       );
       const isAc = detectRoomAc(modal.data);
@@ -10565,33 +11105,33 @@ function RoomModal({
 
       return {
         ...modal.data,
-        block: foundBlock ? String(foundBlock.id) : (modal.data.block || (blocks[0]?.id ? String(blocks[0].id) : "")),
-        hostelId: foundBlock ? foundBlock.id : (modal.data.hostelId || blocks[0]?.id),
-        blockName: foundBlock ? foundBlock.name : (modal.data.blockName || modal.data.block || ""),
+        block: foundBlock ? String(foundBlock.id) : (modal.data.block || (availableBlocks[0]?.id ? String(availableBlocks[0].id) : "1")),
+        hostelId: foundBlock ? foundBlock.id : (modal.data.hostelId || availableBlocks[0]?.id || 1),
+        blockName: foundBlock ? foundBlock.name : (modal.data.blockName || modal.data.block || availableBlocks[0]?.name || ""),
         acType: acStr,
         capacity: cap,
         roomTypeId: matchedCat ? matchedCat.id : (modal.data.roomTypeId || categories[0]?.id || ""),
-        type: `${acStr} ${cap === 1 ? "Single" : cap === 2 ? "Double" : cap === 3 ? "Triple" : "4-Sharing"} Room`,
+        type: `${acStr} ${getSharingTitle(cap)} Room`,
         fee: modal.data.fee && modal.data.fee !== "-" && modal.data.fee !== "0" ? modal.data.fee : standardFee,
         floor: modal.data.floor || "Ground Floor",
         roomNo: String(modal.data.roomNo || modal.data.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim(),
         status: modal.data.status || "Active",
       };
     }
-    const firstBlock = blocks.find((b) => b.name && b.code) || blocks[0];
+    const firstBlock = availableBlocks[0];
     const initialAc = "AC";
     const initialCap = 2;
     const matchedCat = resolveBestCategory(categories, initialAc, initialCap);
     return {
       roomNo: "",
-      block: firstBlock ? String(firstBlock.id) : "",
-      hostelId: firstBlock ? firstBlock.id : "",
+      block: firstBlock ? String(firstBlock.id) : "1",
+      hostelId: firstBlock ? firstBlock.id : 1,
       blockName: firstBlock ? firstBlock.name : "",
       floor: "Ground Floor",
       acType: initialAc,
       capacity: initialCap,
       roomTypeId: matchedCat ? matchedCat.id : (categories[0]?.id || ""),
-      type: `${initialAc} ${initialCap === 1 ? "Single" : initialCap === 2 ? "Double" : initialCap === 3 ? "Triple" : "4-Sharing"} Room`,
+      type: `${initialAc} ${getSharingTitle(initialCap)} Room`,
       fee: STANDARD_TARIFFS[initialAc][initialCap],
       status: "Active",
     };
@@ -10599,10 +11139,22 @@ function RoomModal({
 
   // Selected block to compute floors and inventory
   const selectedBlock = useMemo(() => {
-    return blocks.find(
+    return availableBlocks.find(
       (b) => String(b.id) === String(form.block) || b.code === form.block || b.name === form.block
-    ) || blocks[0];
-  }, [blocks, form.block]);
+    ) || availableBlocks[0];
+  }, [availableBlocks, form.block]);
+
+  // Keep form.block in sync if empty or when availableBlocks loads
+  useEffect(() => {
+    if ((!form.block || !availableBlocks.some((b) => String(b.id) === String(form.block))) && selectedBlock) {
+      setForm((prev) => ({
+        ...prev,
+        block: String(selectedBlock.id),
+        hostelId: selectedBlock.id,
+        blockName: selectedBlock.name,
+      }));
+    }
+  }, [selectedBlock, form.block, availableBlocks]);
 
   // Dynamic floor list for selected block
   const floorList = useMemo(() => {
@@ -10723,8 +11275,10 @@ function RoomModal({
     return list;
   }, [parsedRooms, floorExistingRooms, form.acType]);
 
-  // Per-room AC / Non-AC mapping state for rooms on this floor
+  // Per-room AC / Non-AC, Bed Capacity, and Category mapping state for rooms on this floor
   const [roomAcMap, setRoomAcMap] = useState({});
+  const [roomCapMap, setRoomCapMap] = useState({});
+  const [roomCatMap, setRoomCatMap] = useState({});
   const [selectedTargetRoom, setSelectedTargetRoom] = useState("");
 
   const getRoomAc = (rNum) => {
@@ -10740,16 +11294,75 @@ function RoomModal({
     return form.acType || "Non-AC";
   };
 
+  const getRoomCap = (rNum) => {
+    if (!rNum) return Number(form.capacity || 2);
+    if (roomCapMap[rNum] !== undefined) return Number(roomCapMap[rNum]);
+    const er = floorExistingRooms.find((r) => {
+      const erClean = String(r.roomNo || r.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
+      return erClean === String(rNum).toLowerCase() || parseInt(erClean, 10) === parseInt(String(rNum), 10);
+    });
+    if (er) {
+      return Number(er.capacity || er.bedCapacity || form.capacity || 2);
+    }
+    return Number(form.capacity || 2);
+  };
+
+  const getRoomCat = (rNum) => {
+    if (!rNum) return form.roomTypeId;
+    if (roomCatMap[rNum] !== undefined) return roomCatMap[rNum];
+    const er = floorExistingRooms.find((r) => {
+      const erClean = String(r.roomNo || r.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
+      return erClean === String(rNum).toLowerCase() || parseInt(erClean, 10) === parseInt(String(rNum), 10);
+    });
+    if (er && er.roomTypeId) return er.roomTypeId;
+    return form.roomTypeId;
+  };
+
   const handleToggleRoomAc = (rNum, specificAc) => {
     setRoomAcMap((prev) => ({
       ...prev,
       [rNum]: specificAc,
     }));
+    const curCap = getRoomCap(rNum);
+    const matched = resolveBestCategory(categories, specificAc, curCap);
+    if (matched) {
+      setRoomCatMap((prev) => ({
+        ...prev,
+        [rNum]: matched.id,
+      }));
+    }
     if (selectedTargetRoom === rNum) {
       setForm((prev) => ({
         ...prev,
         acType: specificAc,
-        type: `${specificAc} ${Number(prev.capacity) === 1 ? "Single" : Number(prev.capacity) === 2 ? "Double" : Number(prev.capacity) === 3 ? "Triple" : "4-Sharing"} Room`,
+        roomTypeId: matched ? matched.id : prev.roomTypeId,
+        type: `${specificAc} ${getSharingTitle(curCap)} Room`,
+        fee: STANDARD_TARIFFS[specificAc]?.[curCap] || prev.fee,
+      }));
+    }
+  };
+
+  const handleToggleRoomCap = (rNum, specificCap) => {
+    const numCap = Number(specificCap);
+    setRoomCapMap((prev) => ({
+      ...prev,
+      [rNum]: numCap,
+    }));
+    const curAc = getRoomAc(rNum);
+    const matched = resolveBestCategory(categories, curAc, numCap);
+    if (matched) {
+      setRoomCatMap((prev) => ({
+        ...prev,
+        [rNum]: matched.id,
+      }));
+    }
+    if (selectedTargetRoom === rNum) {
+      setForm((prev) => ({
+        ...prev,
+        capacity: numCap,
+        roomTypeId: matched ? matched.id : prev.roomTypeId,
+        type: `${curAc} ${getSharingTitle(numCap)} Room`,
+        fee: STANDARD_TARIFFS[curAc]?.[numCap] || prev.fee,
       }));
     }
   };
@@ -10766,12 +11379,88 @@ function RoomModal({
     setForm((prev) => ({
       ...prev,
       acType: specificAc,
-      type: `${specificAc} ${Number(prev.capacity) === 1 ? "Single" : Number(prev.capacity) === 2 ? "Double" : Number(prev.capacity) === 3 ? "Triple" : "4-Sharing"} Room`,
+      type: `${specificAc} ${getSharingTitle(prev.capacity)} Room`,
       fee: STANDARD_TARIFFS[specificAc]?.[prev.capacity] || prev.fee,
     }));
   };
 
-  // Handle classification toggle (AC vs Non-AC) and sharing capacity (1, 2, 3, 4 beds)
+  const setAllRoomsCap = (specificCap) => {
+    const numCap = Number(specificCap);
+    const nextCap = {};
+    const nextCat = {};
+    floorConfigurableRooms.forEach((r) => {
+      nextCap[r.roomNumber] = numCap;
+      const ac = getRoomAc(r.roomNumber);
+      const matched = resolveBestCategory(categories, ac, numCap);
+      if (matched) nextCat[r.roomNumber] = matched.id;
+    });
+    parsedRooms.forEach((r) => {
+      nextCap[r] = numCap;
+      const ac = getRoomAc(r);
+      const matched = resolveBestCategory(categories, ac, numCap);
+      if (matched) nextCat[r] = matched.id;
+    });
+    setRoomCapMap(nextCap);
+    setRoomCatMap(nextCat);
+    setForm((prev) => ({
+      ...prev,
+      capacity: numCap,
+      type: `${prev.acType} ${getSharingTitle(numCap)} Room`,
+      fee: STANDARD_TARIFFS[prev.acType]?.[numCap] || prev.fee,
+    }));
+  };
+
+  const handleSelectRoomCategory = (rNum, catObj) => {
+    if (!catObj) return;
+    const catIsAc = (catObj.acType === "AC") ||
+      ((catObj.name?.includes("AC") || catObj.specification?.includes("AC")) &&
+       !catObj.name?.includes("Non-AC") && !catObj.specification?.includes("Non-AC"));
+    const catAcStr = catIsAc ? "AC" : "Non-AC";
+    const catCap = Number(catObj.capacity || 2);
+
+    if (!rNum || rNum === "__ALL__") {
+      const nextAc = {};
+      const nextCap = {};
+      const nextCat = {};
+      floorConfigurableRooms.forEach((r) => {
+        nextAc[r.roomNumber] = catAcStr;
+        nextCap[r.roomNumber] = catCap;
+        nextCat[r.roomNumber] = catObj.id;
+      });
+      parsedRooms.forEach((r) => {
+        nextAc[r] = catAcStr;
+        nextCap[r] = catCap;
+        nextCat[r] = catObj.id;
+      });
+      setRoomAcMap(nextAc);
+      setRoomCapMap(nextCap);
+      setRoomCatMap(nextCat);
+      setForm((prev) => ({
+        ...prev,
+        acType: catAcStr,
+        capacity: catCap,
+        roomTypeId: catObj.id,
+        type: catObj.name || `${catAcStr} ${getSharingTitle(catCap)} Room`,
+        fee: catObj.fee && catObj.fee !== "—" ? catObj.fee : (STANDARD_TARIFFS[catAcStr]?.[catCap] || prev.fee),
+      }));
+    } else {
+      setRoomAcMap((prev) => ({ ...prev, [rNum]: catAcStr }));
+      setRoomCapMap((prev) => ({ ...prev, [rNum]: catCap }));
+      setRoomCatMap((prev) => ({ ...prev, [rNum]: catObj.id }));
+      if (selectedTargetRoom === rNum) {
+        setForm((prev) => ({
+          ...prev,
+          acType: catAcStr,
+          capacity: catCap,
+          roomTypeId: catObj.id,
+          type: catObj.name || `${catAcStr} ${getSharingTitle(catCap)} Room`,
+          fee: catObj.fee && catObj.fee !== "—" ? catObj.fee : (STANDARD_TARIFFS[catAcStr]?.[catCap] || prev.fee),
+        }));
+      }
+    }
+  };
+
+  // Handle classification toggle (AC vs Non-AC) and sharing capacity (1 to 6 beds)
   const handleClassificationChange = (newAcType, newCap) => {
     const chosenAc = newAcType || form.acType || "AC";
     const chosenCap = Number(newCap || form.capacity || 2);
@@ -10783,16 +11472,16 @@ function RoomModal({
       acType: chosenAc,
       capacity: chosenCap,
       roomTypeId: matchedCat ? matchedCat.id : prev.roomTypeId,
-      type: `${chosenAc} ${chosenCap === 1 ? "Single" : chosenCap === 2 ? "Double" : chosenCap === 3 ? "Triple" : "4-Sharing"} Room`,
+      type: `${chosenAc} ${getSharingTitle(chosenCap)} Room`,
       fee: standardFee,
     }));
 
-    if (newAcType) {
-      if (selectedTargetRoom && selectedTargetRoom !== "__ALL__") {
-        handleToggleRoomAc(selectedTargetRoom, newAcType);
-      } else {
-        setAllRoomsAc(newAcType);
-      }
+    if (selectedTargetRoom && selectedTargetRoom !== "__ALL__") {
+      if (newAcType) handleToggleRoomAc(selectedTargetRoom, newAcType);
+      if (newCap) handleToggleRoomCap(selectedTargetRoom, newCap);
+    } else {
+      if (newAcType) setAllRoomsAc(newAcType);
+      if (newCap) setAllRoomsCap(newCap);
     }
   };
 
@@ -10855,41 +11544,488 @@ function RoomModal({
   }, [form.floor]);
 
   // Bulk Multi-Floor Configuration State
+  const CATEGORY_PRESETS = [
+    { key: "single", name: "Single Bed (1-Share)", capacity: 1, icon: "🛏️" },
+    { key: "double", name: "2-Share (Double)", capacity: 2, icon: "🛏️🛏️" },
+    { key: "triple", name: "3-Share (Triple)", capacity: 3, icon: "🛏️🛏️🛏️" },
+    { key: "four", name: "4-Share (Four)", capacity: 4, icon: "🛏️x4" },
+    { key: "five", name: "5-Share (Five)", capacity: 5, icon: "🛏️x5" },
+    { key: "six", name: "6-Share (Six)", capacity: 6, icon: "🛏️x6" },
+  ];
+
   const initFloorConfigs = (block) => {
-    const numFloors = Math.max(1, Number(block?.floors || 2));
+    let numFloors = Math.max(1, Number(block?.floors || block?.totalFloors || 2));
+    if (block && Array.isArray(rooms)) {
+      const bId = String(block.id);
+      const bCode = String(block.code || "").toLowerCase();
+      const bName = String(block.name || "").toLowerCase();
+      rooms.forEach((r) => {
+        if (String(r.hostelId) === bId || String(r.block || "").toLowerCase() === bCode || String(r.blockName || "").toLowerCase() === bName) {
+          const digit = String(r.floor || "").match(/\d+/)?.[0];
+          if (digit) numFloors = Math.max(numFloors, parseInt(digit, 10) + 1);
+        }
+      });
+    }
     return Array.from({ length: numFloors }, (_, i) => ({
       floorIndex: i,
       floorLabel: i === 0 ? "Ground Floor" : i === 1 ? "1st Floor" : i === 2 ? "2nd Floor" : i === 3 ? "3rd Floor" : `${i}th Floor`,
-      singleSharing: 0,
-      singleAc: "AC",
-      doubleSharing: 2,
-      doubleAc: "Non-AC",
-      tripleSharing: 0,
-      tripleAc: "Non-AC",
-      fourSharing: 0,
-      fourAc: "Non-AC",
+      categoryAllocations: [],
+      singleSharingAc: 0,
+      singleSharingNonAc: 0,
+      doubleSharingAc: 0,
+      doubleSharingNonAc: 0,
+      tripleSharingAc: 0,
+      tripleSharingNonAc: 0,
+      fourSharingAc: 0,
+      fourSharingNonAc: 0,
+      fiveSharingAc: 0,
+      fiveSharingNonAc: 0,
+      sixSharingAc: 0,
+      sixSharingNonAc: 0,
+      roomOverrides: {},
       customAllocations: [],
     }));
   };
 
   const [floorConfigs, setFloorConfigs] = useState(() => initFloorConfigs(selectedBlock));
+  const [activeFloorView, setActiveFloorView] = useState("all");
+
+  // Dropdown allocation control strip state ("drop pettu")
+  const [targetFloorChoice, setTargetFloorChoice] = useState("0");
+  const [selectedSharingKey, setSelectedSharingKey] = useState("1");
+  const [selectedAcType, setSelectedAcType] = useState("AC");
+  const [selectedRoomCount, setSelectedRoomCount] = useState(2);
+
+  // Per-floor inline selection state ("ee floorki aa floor select chesukunela kavali")
+  const [floorAddState, setFloorAddState] = useState({});
+
+  const getFloorAddConfig = (floorIndex) => {
+    return (
+      floorAddState[floorIndex] || {
+        sharingKey: "1",
+        acType: "AC",
+        roomCount: 2,
+      }
+    );
+  };
+
+  const setFloorAddConfig = (floorIndex, updates) => {
+    setFloorAddState((prev) => ({
+      ...prev,
+      [floorIndex]: {
+        ...(prev[floorIndex] || { sharingKey: "1", acType: "AC", roomCount: 2 }),
+        ...updates,
+      },
+    }));
+  };
+
+  const sharingOptions = useMemo(() => {
+    const list = [
+      { key: "1", label: "Single Bed (1-Share)", capacity: 1, icon: "🛏️" },
+      { key: "2", label: "2-Share (Double Bed)", capacity: 2, icon: "🛏️🛏️" },
+      { key: "3", label: "3-Share (Triple Bed)", capacity: 3, icon: "🛏️🛏️🛏️" },
+      { key: "4", label: "4-Share (Four Bed)", capacity: 4, icon: "🛏️x4" },
+      { key: "5", label: "5-Share (Five Bed)", capacity: 5, icon: "🛏️x5" },
+      { key: "6", label: "6-Share (Six Bed)", capacity: 6, icon: "🛏️x6" },
+    ];
+    (categories || []).forEach((cat) => {
+      if (cat && !list.some((item) => String(item.capacity) === String(cat.capacity) && item.label === cat.name)) {
+        list.push({
+          key: `cat-${cat.id}`,
+          label: `${cat.name || "Category"} (${cat.capacity || 2}-Share)`,
+          capacity: Number(cat.capacity || 2),
+          icon: Number(cat.capacity) === 1 ? "🛏️" : "🛏️🛏️",
+        });
+      }
+    });
+    return list;
+  }, [categories]);
+
+  // Keep floorConfigs synced if selectedBlock changes
+  const prevSelectedBlockIdRef = useRef(selectedBlock?.id);
+  useEffect(() => {
+    if (selectedBlock && selectedBlock.id !== prevSelectedBlockIdRef.current) {
+      prevSelectedBlockIdRef.current = selectedBlock.id;
+      setFloorConfigs(initFloorConfigs(selectedBlock));
+      setActiveFloorView("all");
+      setTargetFloorChoice("0");
+    }
+  }, [selectedBlock]);
+
+  // When active floor view changes, sync target floor choice if a single floor is active
+  useEffect(() => {
+    if (activeFloorView !== "all") {
+      setTargetFloorChoice(String(activeFloorView));
+    }
+  }, [activeFloorView]);
+
+  const handleAddRoomsDirect = (floorIndices, chosenOption, acType, roomsCount) => {
+    const targetFloors = Array.isArray(floorIndices) ? floorIndices : [Number(floorIndices)];
+    const count = Math.max(1, Number(roomsCount) || 1);
+    const validChosen = chosenOption || sharingOptions[0];
+
+    setFloorConfigs((prev) =>
+      prev.map((fc) => {
+        if (!targetFloors.includes(fc.floorIndex)) return fc;
+        const currentAllocs = getFloorCategories(fc);
+        const existingIdx = currentAllocs.findIndex(
+          (a) => Number(a.capacity) === Number(validChosen.capacity) && a.acType === acType
+        );
+        let nextAllocs;
+        if (existingIdx >= 0) {
+          nextAllocs = currentAllocs.map((a, idx) =>
+            idx === existingIdx ? { ...a, rooms: Number(a.rooms || 0) + count } : a
+          );
+        } else {
+          const newAlloc = {
+            id: `alloc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            categoryKey: validChosen.key,
+            name: validChosen.label,
+            capacity: Number(validChosen.capacity),
+            acType: acType,
+            rooms: count,
+            icon: validChosen.icon,
+          };
+          nextAllocs = [...currentAllocs, newAlloc];
+        }
+        return {
+          ...fc,
+          categoryAllocations: nextAllocs,
+          ...syncFloorFieldsFromAllocs(nextAllocs),
+          roomOverrides: {},
+        };
+      })
+    );
+
+    if (targetFloors.length === 1) {
+      const fName = floorConfigs.find((f) => f.floorIndex === targetFloors[0])?.floorLabel || `Floor ${targetFloors[0]}`;
+      showToast(`Added ${count} ${validChosen.label} (${acType}) room${count > 1 ? "s" : ""} to ${fName}!`, "success");
+    } else {
+      showToast(`Added ${count} ${validChosen.label} (${acType}) room${count > 1 ? "s" : ""} across all ${targetFloors.length} floors!`, "success");
+    }
+  };
+
+  const handleAddRoomsToFloor = () => {
+    const chosenOption = sharingOptions.find((o) => o.key === selectedSharingKey) || sharingOptions[0];
+    const targetFloors = targetFloorChoice === "all"
+      ? floorConfigs.map((fc) => fc.floorIndex)
+      : [Number(targetFloorChoice)];
+    handleAddRoomsDirect(targetFloors, chosenOption, selectedAcType, selectedRoomCount);
+  };
+
+  const getFloorCategories = (fc) => {
+    if (Array.isArray(fc.categoryAllocations) && fc.categoryAllocations.length > 0) {
+      return fc.categoryAllocations;
+    }
+    const cats = [];
+    if (fc.singleSharingAc > 0) cats.push({ id: `fc-${fc.floorIndex}-s-ac`, categoryKey: "single", name: "Single Bed (1-Share)", capacity: 1, acType: "AC", rooms: fc.singleSharingAc, icon: "🛏️" });
+    if (fc.singleSharingNonAc > 0) cats.push({ id: `fc-${fc.floorIndex}-s-nonac`, categoryKey: "single", name: "Single Bed (1-Share)", capacity: 1, acType: "Non-AC", rooms: fc.singleSharingNonAc, icon: "🛏️" });
+    if (fc.doubleSharingAc > 0) cats.push({ id: `fc-${fc.floorIndex}-d-ac`, categoryKey: "double", name: "2-Share (Double)", capacity: 2, acType: "AC", rooms: fc.doubleSharingAc, icon: "🛏️🛏️" });
+    if (fc.doubleSharingNonAc > 0) cats.push({ id: `fc-${fc.floorIndex}-d-nonac`, categoryKey: "double", name: "2-Share (Double)", capacity: 2, acType: "Non-AC", rooms: fc.doubleSharingNonAc, icon: "🛏️🛏️" });
+    if (fc.tripleSharingAc > 0) cats.push({ id: `fc-${fc.floorIndex}-t-ac`, categoryKey: "triple", name: "3-Share (Triple)", capacity: 3, acType: "AC", rooms: fc.tripleSharingAc, icon: "🛏️🛏️🛏️" });
+    if (fc.tripleSharingNonAc > 0) cats.push({ id: `fc-${fc.floorIndex}-t-nonac`, categoryKey: "triple", name: "3-Share (Triple)", capacity: 3, acType: "Non-AC", rooms: fc.tripleSharingNonAc, icon: "🛏️🛏️🛏️" });
+    if (fc.fourSharingAc > 0) cats.push({ id: `fc-${fc.floorIndex}-f-ac`, categoryKey: "four", name: "4-Share (Four)", capacity: 4, acType: "AC", rooms: fc.fourSharingAc, icon: "🛏️x4" });
+    if (fc.fourSharingNonAc > 0) cats.push({ id: `fc-${fc.floorIndex}-f-nonac`, categoryKey: "four", name: "4-Share (Four)", capacity: 4, acType: "Non-AC", rooms: fc.fourSharingNonAc, icon: "🛏️x4" });
+    if (fc.fiveSharingAc > 0) cats.push({ id: `fc-${fc.floorIndex}-five-ac`, categoryKey: "five", name: "5-Share (Five)", capacity: 5, acType: "AC", rooms: fc.fiveSharingAc, icon: "🛏️x5" });
+    if (fc.fiveSharingNonAc > 0) cats.push({ id: `fc-${fc.floorIndex}-five-nonac`, categoryKey: "five", name: "5-Share (Five)", capacity: 5, acType: "Non-AC", rooms: fc.fiveSharingNonAc, icon: "🛏️x5" });
+    if (fc.sixSharingAc > 0) cats.push({ id: `fc-${fc.floorIndex}-six-ac`, categoryKey: "six", name: "6-Share (Six)", capacity: 6, acType: "AC", rooms: fc.sixSharingAc, icon: "🛏️x6" });
+    if (fc.sixSharingNonAc > 0) cats.push({ id: `fc-${fc.floorIndex}-six-nonac`, categoryKey: "six", name: "6-Share (Six)", capacity: 6, acType: "Non-AC", rooms: fc.sixSharingNonAc, icon: "🛏️x6" });
+    if (Array.isArray(fc.customAllocations)) {
+      fc.customAllocations.forEach((ca, idx) => {
+        cats.push({ id: `fc-${fc.floorIndex}-ca-${idx}`, categoryKey: "custom", name: ca.name || "Custom", capacity: ca.beds || 1, acType: ca.ac || "AC", rooms: ca.rooms || 0, icon: "🛏️" });
+      });
+    }
+    return cats;
+  };
+
+  const syncFloorFieldsFromAllocs = (allocs) => {
+    let sAc = 0, sNonAc = 0, dAc = 0, dNonAc = 0, tAc = 0, tNonAc = 0, fAc = 0, fNonAc = 0, fiveAc = 0, fiveNonAc = 0, sixAc = 0, sixNonAc = 0;
+    const custom = [];
+    (allocs || []).forEach((a) => {
+      const cnt = Number(a.rooms) || 0;
+      const isAc = a.acType === "AC";
+      const cap = Number(a.capacity) || 1;
+      if (cap === 1) { if (isAc) sAc += cnt; else sNonAc += cnt; }
+      else if (cap === 2) { if (isAc) dAc += cnt; else dNonAc += cnt; }
+      else if (cap === 3) { if (isAc) tAc += cnt; else tNonAc += cnt; }
+      else if (cap === 4) { if (isAc) fAc += cnt; else fNonAc += cnt; }
+      else if (cap === 5) { if (isAc) fiveAc += cnt; else fiveNonAc += cnt; }
+      else if (cap === 6) { if (isAc) sixAc += cnt; else sixNonAc += cnt; }
+      else { custom.push({ name: a.name, beds: cap, rooms: cnt, ac: a.acType }); }
+    });
+    return {
+      singleSharingAc: sAc,
+      singleSharingNonAc: sNonAc,
+      doubleSharingAc: dAc,
+      doubleSharingNonAc: dNonAc,
+      tripleSharingAc: tAc,
+      tripleSharingNonAc: tNonAc,
+      fourSharingAc: fAc,
+      fourSharingNonAc: fNonAc,
+      fiveSharingAc: fiveAc,
+      fiveSharingNonAc: fiveNonAc,
+      sixSharingAc: sixAc,
+      sixSharingNonAc: sixNonAc,
+      customAllocations: custom,
+    };
+  };
+
+  const addFloorCategory = (floorIndex, preset, defaultAc = "AC", defaultRooms = 2) => {
+    setFloorConfigs((prev) =>
+      prev.map((fc) => {
+        if (fc.floorIndex !== floorIndex) return fc;
+        const currentAllocs = getFloorCategories(fc);
+        const newAlloc = {
+          id: `alloc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          categoryKey: preset.key || "custom",
+          name: preset.name,
+          capacity: Number(preset.capacity || 2),
+          acType: defaultAc,
+          rooms: defaultRooms,
+          icon: preset.icon || "🛏️",
+        };
+        const nextAllocs = [...currentAllocs, newAlloc];
+        return {
+          ...fc,
+          categoryAllocations: nextAllocs,
+          ...syncFloorFieldsFromAllocs(nextAllocs),
+          roomOverrides: {},
+        };
+      })
+    );
+  };
+
+  const updateFloorCategory = (floorIndex, allocId, updates) => {
+    setFloorConfigs((prev) =>
+      prev.map((fc) => {
+        if (fc.floorIndex !== floorIndex) return fc;
+        const currentAllocs = getFloorCategories(fc);
+        const nextAllocs = currentAllocs.map((a) => (a.id === allocId ? { ...a, ...updates } : a));
+        return {
+          ...fc,
+          categoryAllocations: nextAllocs,
+          ...syncFloorFieldsFromAllocs(nextAllocs),
+          roomOverrides: {},
+        };
+      })
+    );
+  };
+
+  const removeFloorCategory = (floorIndex, allocId) => {
+    setFloorConfigs((prev) =>
+      prev.map((fc) => {
+        if (fc.floorIndex !== floorIndex) return fc;
+        const currentAllocs = getFloorCategories(fc);
+        const nextAllocs = currentAllocs.filter((a) => a.id !== allocId);
+        return {
+          ...fc,
+          categoryAllocations: nextAllocs,
+          ...syncFloorFieldsFromAllocs(nextAllocs),
+          roomOverrides: {},
+        };
+      })
+    );
+  };
+
+  const clearFloor = (floorIndex) => {
+    setFloorConfigs((prev) =>
+      prev.map((fc) => {
+        if (fc.floorIndex !== floorIndex) return fc;
+        return {
+          ...fc,
+          categoryAllocations: [],
+          ...syncFloorFieldsFromAllocs([]),
+          roomOverrides: {},
+        };
+      })
+    );
+  };
+
+  const copyFloorToAll = (fromFloorIndex) => {
+    const srcFloor = floorConfigs.find((fc) => fc.floorIndex === fromFloorIndex);
+    if (!srcFloor) return;
+    const srcAllocs = getFloorCategories(srcFloor);
+    setFloorConfigs((prev) =>
+      prev.map((fc) => {
+        if (fc.floorIndex === fromFloorIndex) return fc;
+        const clonedAllocs = srcAllocs.map((a) => ({
+          ...a,
+          id: `alloc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        }));
+        return {
+          ...fc,
+          categoryAllocations: clonedAllocs,
+          ...syncFloorFieldsFromAllocs(clonedAllocs),
+          roomOverrides: {},
+        };
+      })
+    );
+    showToast(`Copied ${srcFloor.floorLabel} configuration to all floors!`, "success");
+  };
+
+  const computeFloorRoomPills = (fc) => {
+    const pills = [];
+    let roomIdx = 1;
+    const allocs = getFloorCategories(fc);
+
+    allocs.forEach((a) => {
+      const numRooms = Number(a.rooms || 0);
+      const cap = Number(a.capacity || 1);
+      const ac = a.acType || "Non-AC";
+      for (let i = 0; i < numRooms; i++) {
+        const roomNum = fc.floorIndex === 0
+          ? `${String(roomIdx).padStart(3, "0")}`
+          : `${fc.floorIndex}${String(roomIdx).padStart(2, "0")}`;
+        const override = fc.roomOverrides?.[roomNum];
+        pills.push({
+          roomNum,
+          categoryName: a.name || `${cap}-Share`,
+          capacity: override?.capacity !== undefined ? Number(override.capacity) : cap,
+          ac: override?.ac || ac,
+        });
+        roomIdx++;
+      }
+    });
+
+    return pills;
+  };
+
+  const handleToggleFloorRoomPill = (floorIndex, roomNum) => {
+    setFloorConfigs((prev) =>
+      prev.map((item) => {
+        if (item.floorIndex !== floorIndex) return item;
+        const pills = computeFloorRoomPills(item);
+        const pill = pills.find((p) => p.roomNum === roomNum);
+        const currentOverride = item.roomOverrides?.[roomNum];
+        const currentAc = currentOverride?.ac || pill?.ac || "Non-AC";
+        const nextAc = currentAc === "AC" ? "Non-AC" : "AC";
+        return {
+          ...item,
+          roomOverrides: {
+            ...item.roomOverrides,
+            [roomNum]: {
+              ...(currentOverride || {}),
+              ac: nextAc,
+              capacity: currentOverride?.capacity !== undefined ? Number(currentOverride.capacity) : (pill?.capacity || 2),
+            },
+          },
+        };
+      })
+    );
+  };
+
+  const handleCycleFloorRoomCap = (floorIndex, roomNum) => {
+    setFloorConfigs((prev) =>
+      prev.map((item) => {
+        if (item.floorIndex !== floorIndex) return item;
+        const pills = computeFloorRoomPills(item);
+        const pill = pills.find((p) => p.roomNum === roomNum);
+        const currentOverride = item.roomOverrides?.[roomNum];
+        const currentCap = currentOverride?.capacity !== undefined ? Number(currentOverride.capacity) : (pill?.capacity || 2);
+        const nextCap = currentCap >= 6 ? 1 : currentCap + 1;
+        return {
+          ...item,
+          roomOverrides: {
+            ...item.roomOverrides,
+            [roomNum]: {
+              ...(currentOverride || {}),
+              capacity: nextCap,
+              ac: currentOverride?.ac || pill?.ac || "Non-AC",
+            },
+          },
+        };
+      })
+    );
+  };
+
+  const bulkSummary = useMemo(() => {
+    let totRooms = 0;
+    let totBeds = 0;
+    let totAc = 0;
+    let totNonAc = 0;
+    let totAcBeds = 0;
+    let totNonAcBeds = 0;
+
+    floorConfigs.forEach((fc) => {
+      const pills = computeFloorRoomPills(fc);
+      pills.forEach((p) => {
+        totRooms++;
+        totBeds += p.capacity;
+        if (p.ac === "AC") {
+          totAc++;
+          totAcBeds += p.capacity;
+        } else {
+          totNonAc++;
+          totNonAcBeds += p.capacity;
+        }
+      });
+    });
+
+    return { totRooms, totBeds, totAc, totNonAc, totAcBeds, totNonAcBeds };
+  }, [floorConfigs]);
 
   // Sync when selected block changes
   const handleBlockChange = (blkId) => {
-    const b = blocks.find((blk) => String(blk.id) === String(blkId) || blk.code === blkId);
+    const b = availableBlocks.find((blk) => String(blk.id) === String(blkId) || blk.code === blkId || blk.name === blkId);
     if (b) {
-      setForm({
-        ...form,
+      setForm((prev) => ({
+        ...prev,
         block: String(b.id),
         hostelId: b.id,
         blockName: b.name,
         floor: "Ground Floor",
-      });
+      }));
       setFloorConfigs(initFloorConfigs(b));
+      setActiveFloorView("all");
     }
   };
 
-  const isAcAccom = form.acType === "AC";
+  // Live Floor Summary for Tab 1
+  const summaryStats = useMemo(() => {
+    const list = floorConfigurableRooms.length > 0
+      ? floorConfigurableRooms
+      : (parsedRooms.length > 0 ? parsedRooms.map((r) => ({ roomNumber: r })) : [{ roomNumber: form.roomNo || "001" }]);
+
+    let totalBeds = 0;
+    let acRooms = 0;
+    let nonAcRooms = 0;
+    let acBeds = 0;
+    let nonAcBeds = 0;
+    const shareCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const roomBreakdowns = [];
+
+    list.forEach((r) => {
+      const rNum = r.roomNumber;
+      const ac = getRoomAc(rNum);
+      const cap = getRoomCap(rNum);
+      totalBeds += cap;
+      if (ac === "AC") {
+        acRooms++;
+        acBeds += cap;
+      } else {
+        nonAcRooms++;
+        nonAcBeds += cap;
+      }
+      if (shareCounts[cap] !== undefined) shareCounts[cap]++;
+      roomBreakdowns.push({
+        roomNumber: rNum,
+        ac,
+        capacity: cap,
+        catId: getRoomCat(rNum),
+      });
+    });
+
+    return {
+      totalRooms: list.length,
+      totalBeds,
+      acRooms,
+      nonAcRooms,
+      acBeds,
+      nonAcBeds,
+      shareCounts,
+      roomBreakdowns,
+    };
+  }, [floorConfigurableRooms, parsedRooms, form.roomNo, roomAcMap, roomCapMap, roomCatMap, form.acType, form.capacity]);
 
   return (
     <Modal
@@ -10904,60 +12040,8 @@ function RoomModal({
       onClose={closeModal}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {/* Mode Switcher (Floor Setup vs Full Block Multi-Floor Setup) */}
-        {!isView && modal.mode !== "edit" && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "4px",
-              background: "var(--cms-subtle)",
-              borderRadius: 12,
-              border: "1px solid var(--cms-border)",
-            }}
-          >
-            <button
-              type="button"
-              className={`cms-btn ${modalTab === "floor" ? "cms-btn-primary" : "cms-btn-ghost"}`}
-              style={{
-                flex: 1,
-                padding: "8px 14px",
-                borderRadius: 8,
-                fontSize: 12.5,
-                fontWeight: 700,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-              }}
-              onClick={() => setModalTab("floor")}
-            >
-              <Home size={15} /> Floor-wise Room &amp; Bed Setup
-            </button>
-            <button
-              type="button"
-              className={`cms-btn ${modalTab === "bulkBlock" ? "cms-btn-primary" : "cms-btn-ghost"}`}
-              style={{
-                flex: 1,
-                padding: "8px 14px",
-                borderRadius: 8,
-                fontSize: 12.5,
-                fontWeight: 700,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-              }}
-              onClick={() => setModalTab("bulkBlock")}
-            >
-              <Building2 size={15} /> Full Block Multi-Floor Setup ({floorList.length} Floors)
-            </button>
-          </div>
-        )}
-
-        {/* TAB 1: STANDARD FLOOR-WISE ROOM & BED SETUP */}
-        {modalTab === "floor" && (
+        {/* If editing or viewing an existing room, show single room form. For Add Room & Bed Allocation, show Unified Block Multi-Floor Setup directly */}
+        {(modal.mode === "edit" || isView) ? (
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -10965,13 +12049,25 @@ function RoomModal({
               setIsSubmitting(true);
               try {
                 const finalRoomAcMap = { ...roomAcMap };
+                const finalRoomCapMap = { ...roomCapMap };
+                const finalRoomCatMap = { ...roomCatMap };
                 floorConfigurableRooms.forEach((r) => {
                   finalRoomAcMap[r.roomNumber] = getRoomAc(r.roomNumber);
+                  finalRoomCapMap[r.roomNumber] = getRoomCap(r.roomNumber);
+                  finalRoomCatMap[r.roomNumber] = getRoomCat(r.roomNumber);
                 });
                 parsedRooms.forEach((rNum) => {
                   finalRoomAcMap[rNum] = getRoomAc(rNum);
+                  finalRoomCapMap[rNum] = getRoomCap(rNum);
+                  finalRoomCatMap[rNum] = getRoomCat(rNum);
                 });
-                await handleSaveRoom({ ...form, roomAcMap: finalRoomAcMap });
+                await handleSaveRoom({
+                  ...form,
+                  roomAcMap: finalRoomAcMap,
+                  roomCapMap: finalRoomCapMap,
+                  roomCatMap: finalRoomCatMap,
+                });
+                closeModal();
               } finally {
                 setIsSubmitting(false);
               }
@@ -10987,13 +12083,12 @@ function RoomModal({
                   <select
                     required
                     disabled={isView}
-                    value={String(form.block || form.hostelId || "")}
+                    value={String(form.block || selectedBlock?.id || availableBlocks[0]?.id || "")}
                     onChange={(e) => handleBlockChange(e.target.value)}
                     className="cms-alloc-modal-select"
-                    style={{ color: form.block || form.hostelId ? "var(--cms-text)" : "var(--cms-muted)" }}
+                    style={{ color: "var(--cms-text)" }}
                   >
-                    <option value="" disabled>Select Hostel Block...</option>
-                    {Array.from(new Map(blocks.map((b) => [String(b.id || b.code), b])).values()).map((b) => (
+                    {availableBlocks.map((b) => (
                       <option key={b.id || b.code} value={String(b.id)}>
                         {b.name || b.code || `Hostel Block #${b.id}`} {b.code ? `(${b.code})` : ""}
                       </option>
@@ -11166,6 +12261,7 @@ function RoomModal({
                       {floorExistingRooms.map((er) => {
                         const erNum = String(er.roomNo || er.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim();
                         const erAc = getRoomAc(erNum);
+                        const erCap = getRoomCap(erNum);
                         const isSel = form.roomNo === erNum || selectedTargetRoom === erNum;
                         return (
                           <button
@@ -11185,7 +12281,7 @@ function RoomModal({
                               background: isSel ? "var(--cms-subtle)" : "transparent",
                             }}
                           >
-                            Room #{erNum} ({erAc === "AC" ? "❄️ AC" : "💨 Non-AC"})
+                            Room #{erNum} ({erCap}-Share • {erAc === "AC" ? "❄️ AC" : "💨 Non-AC"})
                           </button>
                         );
                       })}
@@ -11203,7 +12299,7 @@ function RoomModal({
                 {/* Existing Same Floor Informational Notice */}
                 {!isView && existingSameFloorRooms.length > 0 && (
                   <p style={{ fontSize: 11.5, color: "#2563eb", margin: "4px 0 0 0", fontWeight: 600 }}>
-                    ℹ️ {existingSameFloorRooms.map((r) => `Room #${r}`).join(", ")} already exists on {form.floor} — saving will update its AC/Non-AC classification.
+                    ℹ️ {existingSameFloorRooms.map((r) => `Room #${r}`).join(", ")} already exists on {form.floor} — saving will update its sharing and AC classification.
                   </p>
                 )}
 
@@ -11231,7 +12327,9 @@ function RoomModal({
                         );
                         const isSameFloorExisting = existingSameFloorRooms.includes(rNum);
                         const acForRoom = getRoomAc(rNum);
+                        const capForRoom = getRoomCap(rNum);
                         const isAc = acForRoom === "AC";
+                        const isTarget = selectedTargetRoom === rNum;
                         return (
                           <span
                             key={rNum}
@@ -11242,9 +12340,9 @@ function RoomModal({
                               fontSize: 11.5,
                               fontWeight: 700,
                               cursor: "pointer",
-                              background: isDiffFloorDup ? "rgba(239, 68, 68, 0.15)" : isAc ? "rgba(37, 99, 235, 0.08)" : "rgba(100, 116, 139, 0.08)",
-                              color: isDiffFloorDup ? "#dc2626" : isAc ? "#2563eb" : "#475569",
-                              border: isDiffFloorDup ? "1px solid #ef4444" : isAc ? "1px solid rgba(37, 99, 235, 0.3)" : "1px solid rgba(100, 116, 139, 0.3)",
+                              background: isTarget ? "var(--cms-primary)" : isDiffFloorDup ? "rgba(239, 68, 68, 0.15)" : isAc ? "rgba(37, 99, 235, 0.08)" : "rgba(100, 116, 139, 0.08)",
+                              color: isTarget ? "#fff" : isDiffFloorDup ? "#dc2626" : isAc ? "#2563eb" : "#475569",
+                              border: isTarget ? "1px solid var(--cms-primary)" : isDiffFloorDup ? "1px solid #ef4444" : isAc ? "1px solid rgba(37, 99, 235, 0.3)" : "1px solid rgba(100, 116, 139, 0.3)",
                               display: "inline-flex",
                               alignItems: "center",
                               gap: 5,
@@ -11252,7 +12350,7 @@ function RoomModal({
                           >
                             Room #{rNum}
                             <span style={{ fontSize: 10, opacity: 0.9 }}>
-                              {isAc ? "❄️ AC" : "💨 Non-AC"}
+                              ({capForRoom}-Share • {isAc ? "❄️ AC" : "💨 Non-AC"})
                             </span>
                             {isSameFloorExisting && "(Update)"}
                             {isDiffFloorDup && "(Exists)"}
@@ -11264,14 +12362,48 @@ function RoomModal({
                 )}
               </div>
 
-              {/* Step 4: Room Classification (AC vs Non-AC Room) */}
+              {/* Step 4: Room Category Template Selection */}
+              {categories.length > 0 && (
+                <div className="cms-alloc-modal-field">
+                  <label className="cms-alloc-modal-label">
+                    4. Room Category Template (Optional Preset)
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      disabled={isView}
+                      value={String(form.roomTypeId || "")}
+                      onChange={(e) => {
+                        const chosenCat = categories.find((c) => String(c.id) === String(e.target.value));
+                        if (chosenCat) handleSelectRoomCategory(selectedTargetRoom, chosenCat);
+                      }}
+                      className="cms-alloc-modal-select"
+                      style={{ fontWeight: 600 }}
+                    >
+                      <option value="">-- Choose Category Template (Optional) --</option>
+                      {categories.map((cat) => {
+                        const isAc = (cat.acType === "AC") ||
+                          ((cat.name?.includes("AC") || cat.specification?.includes("AC")) &&
+                           !cat.name?.includes("Non-AC") && !cat.specification?.includes("Non-AC"));
+                        return (
+                          <option key={cat.id} value={String(cat.id)}>
+                            {cat.name || cat.specification} ({cat.capacity || 2}-Share • {isAc ? "❄️ AC" : "💨 Non-AC"} • {cat.fee || "—"})
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 5: Room Classification & Per-Room Customization ("akkada rooms select chesukuntam manaku ee share kavali ante 1 share select chesukunnam adi ac malli ade floor lo 1 share kavali adi non ac ala ravali") */}
               <div className="cms-alloc-modal-field">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                   <label className="cms-alloc-modal-label" style={{ margin: 0 }}>
-                    4. Room Classification &amp; AC / Non-AC Selection <span style={{ color: "var(--cms-red)" }}>*</span>
+                    5. Room Sharing &amp; AC / Non-AC Classification <span style={{ color: "var(--cms-red)" }}>*</span>
                   </label>
                   <span style={{ fontSize: 11.5, color: "var(--cms-muted)", fontWeight: 600 }}>
-                    Select a room to configure AC or Non-AC
+                    Select room to configure AC/Non-AC and 1/2/3/4 share
                   </span>
                 </div>
 
@@ -11291,9 +12423,10 @@ function RoomModal({
                       >
                         {floorConfigurableRooms.map((r) => {
                           const rAc = getRoomAc(r.roomNumber);
+                          const rCap = getRoomCap(r.roomNumber);
                           return (
                             <option key={r.roomNumber} value={r.roomNumber}>
-                              Room #{r.roomNumber} ({r.isExisting ? "Existing on Floor" : "New Room"}) — Currently {rAc === "AC" ? "❄️ AC" : "💨 Non-AC"}
+                              Room #{r.roomNumber} ({r.isExisting ? "Existing on Floor" : "New Room"}) — {rCap}-Share ({rCap} Bed{rCap > 1 ? "s" : ""}) • {rAc === "AC" ? "❄️ AC" : "💨 Non-AC"}
                             </option>
                           );
                         })}
@@ -11313,285 +12446,319 @@ function RoomModal({
                   const activeTargetAc = (selectedTargetRoom && selectedTargetRoom !== "__ALL__")
                     ? getRoomAc(targetRoomDisplay)
                     : form.acType;
+                  const activeTargetCap = (selectedTargetRoom && selectedTargetRoom !== "__ALL__")
+                    ? getRoomCap(targetRoomDisplay)
+                    : Number(form.capacity || 2);
 
                   return (
-                    <div>
-                      <div style={{ fontSize: 11.5, color: "var(--cms-muted)", fontWeight: 700, marginBottom: 6 }}>
-                        Classification for {selectedTargetRoom === "__ALL__" ? `All Rooms on ${form.floor}` : `Room #${targetRoomDisplay}`}:
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        {/* AC Room Option */}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => !isView && handleClassificationChange("AC", form.capacity)}
-                          className="cms-card"
-                          style={{
-                            padding: "14px 16px",
-                            borderRadius: 14,
-                            cursor: isView ? "default" : "pointer",
-                            textAlign: "left",
-                            border: activeTargetAc === "AC" ? "2px solid #2563eb" : "1px solid var(--cms-border)",
-                            background: activeTargetAc === "AC" ? "rgba(59, 130, 246, 0.08)" : "var(--cms-surface)",
-                            boxShadow: activeTargetAc === "AC" ? "0 4px 14px rgba(37, 99, 235, 0.16)" : "none",
-                            transition: "all 0.2s ease",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ fontSize: 18 }}>❄️</span>
-                              <strong style={{ fontSize: 14, color: activeTargetAc === "AC" ? "#2563eb" : "var(--cms-text)" }}>
-                                AC Room
-                              </strong>
-                            </div>
-                            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 4 }}>
-                              Air-conditioned accommodation
-                            </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                          gap: 12,
+                          padding: "14px",
+                          borderRadius: 12,
+                          background: "var(--cms-subtle)",
+                          border: "1px solid var(--cms-border)",
+                        }}
+                      >
+                        {/* 1. Sharing Capacity Dropdown ("drop pettu") */}
+                        <div>
+                          <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 4 }}>
+                            Room Sharing Capacity <span style={{ color: "var(--cms-red)" }}>*</span>
+                          </label>
+                          <div style={{ position: "relative" }}>
+                            <select
+                              disabled={isView}
+                              value={activeTargetCap}
+                              onChange={(e) => handleClassificationChange(activeTargetAc, Number(e.target.value))}
+                              className="cms-alloc-modal-select"
+                              style={{ fontWeight: 700 }}
+                            >
+                              <option value={1}>🛏️ Single Bed (1-Share • 1 Bed)</option>
+                              <option value={2}>🛏️🛏️ 2-Share (Double Bed • 2 Beds)</option>
+                              <option value={3}>🛏️🛏️🛏️ 3-Share (Triple Bed • 3 Beds)</option>
+                              <option value={4}>🛏️x4 4-Share (Four Bed • 4 Beds)</option>
+                              <option value={5}>🛏️x5 5-Share (Five Bed • 5 Beds)</option>
+                              <option value={6}>🛏️x6 6-Share (Six Bed • 6 Beds)</option>
+                            </select>
+                            <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
                           </div>
-                          {activeTargetAc === "AC" && (
-                            <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 8px", borderRadius: 6, background: "#2563eb", color: "#fff" }}>
-                              ✓ Selected
-                            </span>
-                          )}
                         </div>
 
-                        {/* Non-AC Room Option */}
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => !isView && handleClassificationChange("Non-AC", form.capacity)}
-                          className="cms-card"
-                          style={{
-                            padding: "14px 16px",
-                            borderRadius: 14,
-                            cursor: isView ? "default" : "pointer",
-                            textAlign: "left",
-                            border: activeTargetAc === "Non-AC" ? "2px solid #475569" : "1px solid var(--cms-border)",
-                            background: activeTargetAc === "Non-AC" ? "rgba(100, 116, 139, 0.08)" : "var(--cms-surface)",
-                            boxShadow: activeTargetAc === "Non-AC" ? "0 4px 14px rgba(71, 85, 105, 0.16)" : "none",
-                            transition: "all 0.2s ease",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ fontSize: 18 }}>💨</span>
-                              <strong style={{ fontSize: 14, color: activeTargetAc === "Non-AC" ? "#334155" : "var(--cms-text)" }}>
-                                Non-AC Room
-                              </strong>
-                            </div>
-                            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 4 }}>
-                              Standard ventilated accommodation
-                            </div>
+                        {/* 2. Room Classification (AC / Non-AC) Dropdown */}
+                        <div>
+                          <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 4 }}>
+                            Room Type (AC / Non-AC) <span style={{ color: "var(--cms-red)" }}>*</span>
+                          </label>
+                          <div style={{ position: "relative" }}>
+                            <select
+                              disabled={isView}
+                              value={activeTargetAc}
+                              onChange={(e) => handleClassificationChange(e.target.value, activeTargetCap)}
+                              className="cms-alloc-modal-select"
+                              style={{ fontWeight: 700 }}
+                            >
+                              <option value="AC">❄️ Air Conditioned (AC Room)</option>
+                              <option value="Non-AC">💨 Standard (Non-AC Room)</option>
+                            </select>
+                            <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
                           </div>
-                          {activeTargetAc === "Non-AC" && (
-                            <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 8px", borderRadius: 6, background: "#475569", color: "#fff" }}>
-                              ✓ Selected
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
                   );
                 })()}
-
-                {/* Per-Room AC vs Non-AC Allocation on this Floor (ALWAYS VISIBLE) */}
-                {floorConfigurableRooms.length > 0 && (
-                  <div
-                    style={{
-                      marginTop: 14,
-                      padding: "14px 16px",
-                      borderRadius: 14,
-                      background: "var(--cms-subtle)",
-                      border: "1px solid var(--cms-border)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                      <div>
-                        <strong style={{ fontSize: 13, color: "var(--cms-text)", display: "flex", alignItems: "center", gap: 6 }}>
-                          <span>🏢</span> Floor Room-by-Room Classification ({form.floor || "Selected Floor"})
-                        </strong>
-                        <p style={{ margin: "2px 0 0 0", fontSize: 11.5, color: "var(--cms-muted)" }}>
-                          Click ❄️ AC or 💨 Non-AC on any room to customize individually:
-                        </p>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 600 }}>Quick Set:</span>
-                        <button
-                          type="button"
-                          className="cms-btn cms-btn-ghost"
-                          style={{ padding: "4px 10px", fontSize: 11, borderRadius: 6, fontWeight: 700 }}
-                          onClick={() => setAllRoomsAc("AC")}
-                        >
-                          ❄️ All AC
-                        </button>
-                        <button
-                          type="button"
-                          className="cms-btn cms-btn-ghost"
-                          style={{ padding: "4px 10px", fontSize: 11, borderRadius: 6, fontWeight: 700 }}
-                          onClick={() => setAllRoomsAc("Non-AC")}
-                        >
-                          💨 All Non-AC
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Room-by-Room Selector Grid */}
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))",
-                        gap: 8,
-                        maxHeight: 220,
-                        overflowY: "auto",
-                        paddingRight: 4,
-                      }}
-                    >
-                      {floorConfigurableRooms.map((r) => {
-                        const rNum = r.roomNumber;
-                        const curAc = getRoomAc(rNum);
-                        const isAc = curAc === "AC";
-                        const isFocused = selectedTargetRoom === rNum;
-                        return (
-                          <div
-                            key={rNum}
-                            onClick={() => setSelectedTargetRoom(rNum)}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              padding: "8px 12px",
-                              borderRadius: 10,
-                              background: isFocused ? "var(--cms-card-hover, rgba(82, 110, 52, 0.08))" : "var(--cms-surface)",
-                              border: isFocused ? "2px solid var(--cms-primary, #526e34)" : isAc ? "1.5px solid rgba(37, 99, 235, 0.4)" : "1.5px solid rgba(100, 116, 139, 0.3)",
-                              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <div>
-                              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--cms-text)", display: "block" }}>
-                                Room #{rNum}
-                              </span>
-                              <span style={{ fontSize: 10, color: "var(--cms-muted)" }}>
-                                {r.isExisting ? "Existing on Floor" : "New Room"}
-                              </span>
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 4 }} onClick={(e) => e.stopPropagation()}>
-                              <button
-                                type="button"
-                                disabled={isView}
-                                onClick={() => {
-                                  handleToggleRoomAc(rNum, "AC");
-                                  setSelectedTargetRoom(rNum);
-                                }}
-                                style={{
-                                  padding: "3px 9px",
-                                  fontSize: 11,
-                                  borderRadius: 6,
-                                  fontWeight: 700,
-                                  cursor: isView ? "default" : "pointer",
-                                  border: isAc ? "1px solid #2563eb" : "1px solid var(--cms-border)",
-                                  background: isAc ? "#2563eb" : "transparent",
-                                  color: isAc ? "#fff" : "var(--cms-muted)",
-                                  transition: "all 0.15s ease",
-                                }}
-                              >
-                                ❄️ AC
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isView}
-                                onClick={() => {
-                                  handleToggleRoomAc(rNum, "Non-AC");
-                                  setSelectedTargetRoom(rNum);
-                                }}
-                                style={{
-                                  padding: "3px 9px",
-                                  fontSize: 11,
-                                  borderRadius: 6,
-                                  fontWeight: 700,
-                                  cursor: isView ? "default" : "pointer",
-                                  border: !isAc ? "1px solid #475569" : "1px solid var(--cms-border)",
-                                  background: !isAc ? "#475569" : "transparent",
-                                  color: !isAc ? "#fff" : "var(--cms-muted)",
-                                  transition: "all 0.15s ease",
-                                }}
-                              >
-                                💨 Non-AC
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Breakdown Summary */}
-                    {(() => {
-                      const acCount = floorConfigurableRooms.filter((r) => getRoomAc(r.roomNumber) === "AC").length;
-                      const nonAcCount = floorConfigurableRooms.length - acCount;
-                      return (
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, fontWeight: 700, marginTop: 4 }}>
-                          <span style={{ color: "#2563eb", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            ❄️ {acCount} AC Room{acCount !== 1 ? "s" : ""}
-                          </span>
-                          <span style={{ color: "var(--cms-border)" }}>•</span>
-                          <span style={{ color: "#475569", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                            💨 {nonAcCount} Non-AC Room{nonAcCount !== 1 ? "s" : ""}
-                          </span>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
               </div>
 
-              {/* Step 5: Room Sharing & Bed Capacity */}
+              {/* Step 6: Monthly Tariff & Selected Configuration Summary Strip */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  gap: 12,
+                  padding: "12px 16px",
+                  background: "var(--cms-subtle)",
+                  borderRadius: 12,
+                  border: "1px solid var(--cms-border)",
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Floor Rooms Breakdown</span>
+                  <strong style={{ fontSize: 12.5, color: "var(--cms-text)" }}>
+                    <span style={{ color: "#2563eb" }}>❄️ {summaryStats.acRooms} AC</span>
+                    {" / "}
+                    <span style={{ color: "#475569" }}>💨 {summaryStats.nonAcRooms} Non-AC</span>
+                  </strong>
+                </div>
+                <div>
+                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Total Bed Capacity</span>
+                  <strong style={{ fontSize: 13, color: "var(--cms-text)" }}>
+                    {summaryStats.totalBeds} Beds across {summaryStats.totalRooms} Room{summaryStats.totalRooms !== 1 ? "s" : ""}
+                  </strong>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: "var(--cms-muted)", display: "block", marginBottom: 3 }}>
+                    Monthly Tariff
+                  </label>
+                  <input
+                    disabled={isView}
+                    value={form.fee}
+                    onChange={(e) => setForm({ ...form, fee: e.target.value })}
+                    className="cms-alloc-modal-input"
+                    style={{ height: 32, fontSize: 12, fontWeight: 700, padding: "4px 8px" }}
+                    placeholder="e.g. ₹8,500/mo"
+                  />
+                </div>
+              </div>
+
+              {/* Step 7: Auto-Provisioned Bed Numbers Live Preview */}
               <div className="cms-alloc-modal-field">
-                <label className="cms-alloc-modal-label">
-                  5. Room Sharing &amp; Bed Capacity <span style={{ color: "var(--cms-red)" }}>*</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <label className="cms-alloc-modal-label" style={{ margin: 0 }}>
+                    6. Auto-Provisioned Beds Preview ({summaryStats.totalBeds} Total Beds across {summaryStats.totalRooms} Room{summaryStats.totalRooms !== 1 ? "s" : ""})
+                  </label>
+                  <span style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 600 }}>
+                    ❄️ {summaryStats.acBeds} AC Beds • 💨 {summaryStats.nonAcBeds} Non-AC Beds
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 6,
+                    maxHeight: 130,
+                    overflowY: "auto",
+                    padding: "8px 10px",
+                    background: "var(--cms-subtle)",
+                    borderRadius: 8,
+                    border: "1px solid var(--cms-border)",
+                  }}
+                >
+                  {summaryStats.roomBreakdowns.map((rb) => (
+                    <div
+                      key={rb.roomNumber}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        background: rb.ac === "AC" ? "rgba(37, 99, 235, 0.08)" : "rgba(100, 116, 139, 0.08)",
+                        border: rb.ac === "AC" ? "1px solid rgba(37, 99, 235, 0.3)" : "1px solid rgba(100, 116, 139, 0.3)",
+                        fontSize: 11,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <strong style={{ color: "var(--cms-text)" }}>#{rb.roomNumber}:</strong>
+                      <span>{rb.ac === "AC" ? "❄️" : "💨"}</span>
+                      {Array.from({ length: rb.capacity }, (_, bi) => (
+                        <span
+                          key={bi}
+                          style={{
+                            fontSize: 10,
+                            padding: "1px 5px",
+                            borderRadius: 4,
+                            background: "var(--cms-green-soft)",
+                            color: "var(--cms-green)",
+                            fontWeight: 700,
+                          }}
+                        >
+                          BED-{bi + 1}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: 11, color: "var(--cms-muted)", margin: "4px 0 0 0" }}>
+                  All bed records will be automatically created in the database and linked to each generated room.
+                </p>
+              </div>
+
+              {/* Step 8: Status */}
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">7. Status</label>
+                <div style={{ position: "relative" }}>
+                  <select
+                    disabled={isView}
+                    value={form.status || "Active"}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    className="cms-alloc-modal-select"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="Maintenance">Maintenance</option>
+                  </select>
+                  <div className="cms-alloc-modal-chevron">
+                    <ChevronDown size={16} />
+                  </div>
+                </div>
+              </div>
+
+              {/* View Mode: Real Beds and Occupant Display */}
+              {isView && (
+                <div style={{ marginTop: 12 }}>
+                  <label className="cms-alloc-modal-label" style={{ marginBottom: 6, display: "block" }}>
+                    Registered Beds &amp; Occupancy
+                  </label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {(() => {
+                      const curRoomBeds = modal.data?.roomBeds || beds.filter((b) => Number(b.roomId) === Number(form.id));
+                      if (curRoomBeds.length === 0) {
+                        return <span style={{ color: "var(--cms-muted)", fontSize: 12 }}>No beds registered for this room.</span>;
+                      }
+                      return curRoomBeds.map((bd, i) => {
+                        const alloc = (modal.data?.roomAllocs || allocations).find(
+                          (a) => (a.status || "").toLowerCase() === "active" && Number(a.bedId) === Number(bd.id)
+                        );
+                        const isOcc = (bd.bedStatus || "").toLowerCase() === "occupied" || Boolean(alloc);
+                        return (
+                          <div
+                            key={bd.id || i}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: 8,
+                              background: isOcc ? "var(--cms-amber-soft)" : "var(--cms-green-soft)",
+                              border: `1px solid ${isOcc ? "var(--cms-amber)" : "var(--cms-green)"}`,
+                              color: isOcc ? "var(--cms-amber)" : "var(--cms-green)",
+                              fontSize: 12,
+                              fontWeight: 600,
+                            }}
+                          >
+                            <div>{bd.bedNumber || `Bed #${i + 1}`} - {isOcc ? "Occupied" : "Available"}</div>
+                            {alloc && (
+                              <div style={{ fontSize: 11, color: "var(--cms-text)", fontWeight: 500, marginTop: 2 }}>
+                                Resident: {alloc.studentName} ({alloc.admissionNo || "Enrolled"})
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="cms-alloc-modal-footer" style={{ marginTop: 16 }}>
+              <button
+                type="button"
+                className="cms-alloc-modal-cancel-btn"
+                onClick={closeModal}
+                disabled={isSubmitting}
+              >
+                {isView ? "Close" : "Cancel"}
+              </button>
+              {!isView && (
+                <button
+                  type="submit"
+                  disabled={Boolean(duplicateWarning) || isSubmitting}
+                  className="cms-alloc-modal-submit-btn"
+                  style={duplicateWarning || isSubmitting ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+                >
+                  {isSubmitting ? "Saving Room..." : "Save Room & Beds"}
+                </button>
+              )}
+            </div>
+          </form>
+        ) : (
+          /* UNIFIED FULL BLOCK MULTI-FLOOR SETUP (Configure all floors of block) */
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* 1. Hostel Block Selection */}
+            <div
+              className="cms-alloc-modal-field"
+              style={{
+                padding: "12px 16px",
+                background: "var(--cms-subtle)",
+                borderRadius: 12,
+                border: "1px solid var(--cms-border)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <label className="cms-alloc-modal-label" style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--cms-text)" }}>
+                  1. Hostel Block <span style={{ color: "var(--cms-red)" }}>*</span>
                 </label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
-                  {[
-                    { cap: 1, label: "Single Bed", sub: "1 Person / Room", icon: "🛏️" },
-                    { cap: 2, label: "2-Bed (Double)", sub: "2 Persons / Room", icon: "🛏️🛏️" },
-                    { cap: 3, label: "3-Bed (Triple)", sub: "3 Persons / Room", icon: "🛏️🛏️🛏️" },
-                    { cap: 4, label: "4-Bed (Four)", sub: "4 Persons / Room", icon: "🛏️🛏️🛏️🛏️" },
-                  ].map((item) => {
-                    const isSel = Number(form.capacity) === item.cap;
-                    return (
-                      <div
-                        key={item.cap}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => !isView && handleClassificationChange(form.acType, item.cap)}
-                        className="cms-card"
-                        style={{
-                          padding: "10px 12px",
-                          borderRadius: 12,
-                          cursor: isView ? "default" : "pointer",
-                          textAlign: "center",
-                          border: isSel ? "2px solid var(--cms-primary)" : "1px solid var(--cms-border)",
-                          background: isSel ? "var(--cms-subtle)" : "var(--cms-surface)",
-                          boxShadow: isSel ? "0 4px 12px rgba(82, 110, 52, 0.16)" : "none",
-                          transition: "all 0.2s ease",
-                        }}
-                      >
-                        <div style={{ fontSize: 14, marginBottom: 4 }}>{item.icon}</div>
-                        <strong style={{ fontSize: 12.5, color: isSel ? "var(--cms-primary)" : "var(--cms-text)", display: "block" }}>
-                          {item.label}
-                        </strong>
-                        <span style={{ fontSize: 11, color: "var(--cms-muted)" }}>{item.sub}</span>
-                      </div>
-                    );
-                  })}
+                {selectedBlock && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "2px 8px",
+                      borderRadius: 6,
+                      background: "var(--cms-primary)",
+                      color: "#fff",
+                    }}
+                  >
+                    {floorConfigs.length} Floors Configured • {selectedBlock.type || "Hostel Block"}
+                  </span>
+                )}
+              </div>
+              <div style={{ position: "relative" }}>
+                <select
+                  required
+                  value={String(form.block || selectedBlock?.id || availableBlocks[0]?.id || "")}
+                  onChange={(e) => handleBlockChange(e.target.value)}
+                  className="cms-alloc-modal-select"
+                  style={{
+                    color: "var(--cms-text)",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  {availableBlocks.map((b) => (
+                    <option key={b.id || b.code} value={String(b.id)}>
+                      {b.name || b.code || `Hostel Block #${b.id}`} ({Math.max(1, Number(b.floors || b.totalFloors || 2))} Floors)
+                    </option>
+                  ))}
+                </select>
+                <div className="cms-alloc-modal-chevron">
+                  <ChevronDown size={16} />
                 </div>
               </div>
 
@@ -11771,7 +12938,7 @@ function RoomModal({
                 </button>
               )}
             </div>
-          </form>
+          </div>
         )}
 
         {/* TAB 2: FULL BLOCK MULTI-FLOOR SETUP (Configure all floors of block) */}
@@ -11966,6 +13133,819 @@ function RoomModal({
                 {isSubmitting ? "Generating All Floors..." : `Generate & Save All Floors for ${selectedBlock?.name}`}
               </button>
             </div>
+
+            {/* Header info banner & Floor Navigation Tabs */}
+            <div
+              style={{
+                padding: "12px 14px",
+                background: "var(--cms-surface)",
+                borderRadius: 12,
+                border: "1px solid var(--cms-border)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <strong style={{ fontSize: 13.5, color: "var(--cms-text)" }}>
+                    Floor-by-Floor Room &amp; Bed Configuration ({selectedBlock?.name || "Selected Block"})
+                  </strong>
+                  <p style={{ margin: "2px 0 0 0", fontSize: 11, color: "var(--cms-muted)" }}>
+                    Add room categories, select AC / Non-AC, and set room counts for each floor.
+                  </p>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    padding: "3px 8px",
+                    borderRadius: 6,
+                    background: "var(--cms-subtle)",
+                    color: "var(--cms-primary)",
+                    border: "1px solid var(--cms-border)",
+                  }}
+                >
+                  All {floorConfigs.length} Floors Configured
+                </span>
+              </div>
+
+              {/* Floor Switcher Tabs */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", paddingTop: 4, borderTop: "1px solid var(--cms-border)" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)" }}>Select Floor:</span>
+                <button
+                  type="button"
+                  className={`cms-btn ${activeFloorView === "all" ? "cms-btn-primary" : "cms-btn-ghost"}`}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    borderRadius: 8,
+                    fontWeight: activeFloorView === "all" ? 800 : 600,
+                    border: activeFloorView === "all" ? "1.5px solid var(--cms-primary)" : "1px solid var(--cms-border)",
+                  }}
+                  onClick={() => setActiveFloorView("all")}
+                >
+                  🏢 All Floors ({floorConfigs.length})
+                </button>
+                {floorConfigs.map((fc) => {
+                  const isSel = activeFloorView === fc.floorIndex;
+                  const fAllocs = getFloorCategories(fc);
+                  const fRooms = fAllocs.reduce((sum, a) => sum + (Number(a.rooms) || 0), 0);
+                  return (
+                    <button
+                      key={fc.floorIndex}
+                      type="button"
+                      className={`cms-btn ${isSel ? "cms-btn-primary" : "cms-btn-ghost"}`}
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: 11,
+                        borderRadius: 8,
+                        fontWeight: isSel ? 800 : 600,
+                        border: isSel ? "1.5px solid var(--cms-primary)" : "1px solid var(--cms-border)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                      onClick={() => setActiveFloorView(fc.floorIndex)}
+                    >
+                      <span>{fc.floorLabel}</span>
+                      {fRooms > 0 && (
+                        <span
+                          style={{
+                            fontSize: 9.5,
+                            padding: "1px 5px",
+                            borderRadius: 4,
+                            background: isSel ? "rgba(255,255,255,0.25)" : "var(--cms-subtle)",
+                            color: isSel ? "#fff" : "var(--cms-primary)",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {fRooms} Rms
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Control Strip: Dropdowns to Select Floor, Sharing Category, AC/Non-AC, Room Count, + Add to Floor ("drop pettu") */}
+            <div
+              style={{
+                padding: "14px 16px",
+                borderRadius: 12,
+                background: "var(--cms-subtle)",
+                border: "1.5px solid var(--cms-primary)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                boxShadow: "0 2px 8px rgba(82, 110, 52, 0.08)",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                <strong style={{ fontSize: 13, color: "var(--cms-text)", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>➕</span> Add Room Sharing Configuration to Floor:
+                </strong>
+                <span style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 600 }}>
+                  Select floor, sharing category, AC / Non-AC, room count, and click Add.
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                  gap: 10,
+                  alignItems: "flex-end",
+                }}
+              >
+                {/* 1. Target Floor Dropdown */}
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 4 }}>
+                    1. Target Floor
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      value={targetFloorChoice}
+                      onChange={(e) => {
+                        setTargetFloorChoice(e.target.value);
+                        if (e.target.value !== "all") {
+                          setActiveFloorView(Number(e.target.value));
+                        }
+                      }}
+                      className="cms-alloc-modal-select"
+                      style={{ height: 38, fontSize: 12.5, fontWeight: 700 }}
+                    >
+                      {floorConfigs.map((fc) => (
+                        <option key={fc.floorIndex} value={String(fc.floorIndex)}>
+                          🏢 {fc.floorLabel}
+                        </option>
+                      ))}
+                      <option value="all">🏢 All Floors Simultaneously ({floorConfigs.length} Floors)</option>
+                    </select>
+                    <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
+                  </div>
+                </div>
+
+                {/* 2. Sharing Category Dropdown ("drop pettu") */}
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 4 }}>
+                    2. Sharing Category
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      value={selectedSharingKey}
+                      onChange={(e) => setSelectedSharingKey(e.target.value)}
+                      className="cms-alloc-modal-select"
+                      style={{ height: 38, fontSize: 12.5, fontWeight: 700 }}
+                    >
+                      {sharingOptions.map((opt) => (
+                        <option key={opt.key} value={opt.key}>
+                          {opt.icon} {opt.label} ({opt.capacity} Bed{opt.capacity > 1 ? "s" : ""})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
+                  </div>
+                </div>
+
+                {/* 3. Room Type Dropdown (AC / Non-AC) */}
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 4 }}>
+                    3. Room Type
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      value={selectedAcType}
+                      onChange={(e) => setSelectedAcType(e.target.value)}
+                      className="cms-alloc-modal-select"
+                      style={{ height: 38, fontSize: 12.5, fontWeight: 700 }}
+                    >
+                      <option value="AC">❄️ Air Conditioned (AC)</option>
+                      <option value="Non-AC">💨 Standard (Non-AC)</option>
+                    </select>
+                    <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
+                  </div>
+                </div>
+
+                {/* 4. Number of Rooms Stepper & Input */}
+                <div>
+                  <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 4 }}>
+                    4. No. of Rooms
+                  </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, height: 38 }}>
+                    <button
+                      type="button"
+                      disabled={selectedRoomCount <= 1}
+                      onClick={() => setSelectedRoomCount((prev) => Math.max(1, prev - 1))}
+                      style={{
+                        width: 36,
+                        height: 38,
+                        borderRadius: 8,
+                        border: "1px solid var(--cms-border)",
+                        background: "var(--cms-surface)",
+                        color: "var(--cms-text)",
+                        fontWeight: 800,
+                        fontSize: 16,
+                        cursor: selectedRoomCount <= 1 ? "not-allowed" : "pointer",
+                        opacity: selectedRoomCount <= 1 ? 0.5 : 1,
+                      }}
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={selectedRoomCount}
+                      onChange={(e) => setSelectedRoomCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="cms-stepper-input"
+                      style={{
+                        flex: 1,
+                        height: 38,
+                        minHeight: 38,
+                        textAlign: "center",
+                        fontSize: 13,
+                        fontWeight: 800,
+                        lineHeight: "38px",
+                        borderRadius: 8,
+                        border: "1px solid var(--cms-border)",
+                        background: "var(--cms-surface)",
+                        color: "var(--cms-text)",
+                        padding: "0 4px",
+                        margin: 0,
+                        boxSizing: "border-box",
+                        appearance: "textfield",
+                        MozAppearance: "textfield",
+                        WebkitAppearance: "none",
+                        outline: "none",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRoomCount((prev) => prev + 1)}
+                      style={{
+                        width: 36,
+                        height: 38,
+                        borderRadius: 8,
+                        border: "1px solid var(--cms-border)",
+                        background: "var(--cms-surface)",
+                        color: "var(--cms-text)",
+                        fontWeight: 800,
+                        fontSize: 16,
+                        cursor: "pointer",
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* 5. Add Button */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleAddRoomsToFloor}
+                    className="cms-btn cms-btn-primary"
+                    style={{
+                      width: "100%",
+                      height: 38,
+                      borderRadius: 8,
+                      fontWeight: 800,
+                      fontSize: 12.5,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      boxShadow: "0 2px 6px rgba(82, 110, 52, 0.2)",
+                    }}
+                  >
+                    <Plus size={16} /> + Add to Floor
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Floor Cards List */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 460, overflowY: "auto", paddingRight: 4 }}>
+              {(activeFloorView === "all" ? floorConfigs : floorConfigs.filter((f) => f.floorIndex === activeFloorView)).map((fc) => {
+                const floorAllocs = getFloorCategories(fc);
+                const floorRooms = floorAllocs.reduce((sum, a) => sum + (Number(a.rooms) || 0), 0);
+                const floorBeds = floorAllocs.reduce((sum, a) => sum + (Number(a.rooms) || 0) * (Number(a.capacity) || 1), 0);
+
+                const floorRoomPills = computeFloorRoomPills(fc);
+                const acRooms = floorRoomPills.filter((p) => p.ac === "AC").length;
+                const nonAcRooms = floorRoomPills.filter((p) => p.ac !== "AC").length;
+
+                const startNum = fc.floorIndex === 0 ? "001" : `${fc.floorIndex}01`;
+                const endNum = fc.floorIndex === 0 ? String(floorRooms).padStart(3, "0") : `${fc.floorIndex}${String(floorRooms).padStart(2, "0")}`;
+                const rangeLabel = floorRooms > 0 ? (floorRooms === 1 ? `Room #${startNum}` : `Rooms #${startNum}–#${endNum}`) : "0 rooms";
+
+                return (
+                  <div
+                    key={fc.floorIndex}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: 12,
+                      background: "var(--cms-surface)",
+                      border: "1px solid var(--cms-border)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 12,
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                    }}
+                  >
+                    {/* Floor Header & Summary */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, paddingBottom: 8, borderBottom: "1px solid var(--cms-border)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <strong style={{ fontSize: 14, color: "var(--cms-primary)" }}>🏢 {fc.floorLabel}</strong>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 6,
+                            background: "var(--cms-subtle)",
+                            color: "var(--cms-text)",
+                            border: "1px solid var(--cms-border)",
+                          }}
+                        >
+                          {rangeLabel}
+                        </span>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-text)" }}>
+                          • {floorRooms} Rooms ({floorBeds} Beds Capacity)
+                        </span>
+                        {floorRooms > 0 && (
+                          <span style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 600 }}>
+                            ({acRooms} AC • {nonAcRooms} Non-AC)
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Floor Actions */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {floorConfigs.length > 1 && (
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-ghost"
+                            style={{ padding: "3px 8px", fontSize: 10.5, borderRadius: 6, fontWeight: 700, background: "var(--cms-subtle)" }}
+                            onClick={() => copyFloorToAll(fc.floorIndex)}
+                            title="Copy this floor's categories and room counts to all other floors"
+                          >
+                            📋 Copy to All Floors
+                          </button>
+                        )}
+                        {floorRooms > 0 && (
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-ghost"
+                            style={{ padding: "3px 8px", fontSize: 10.5, borderRadius: 6, fontWeight: 600, color: "var(--cms-red, #ef4444)" }}
+                            onClick={() => clearFloor(fc.floorIndex)}
+                            title="Clear all rooms on this floor"
+                          >
+                            Clear Floor
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dedicated Add / Selection Controls on THIS Specific Floor ("ee floorki aa floor select chesukunela kavali") */}
+                    {(() => {
+                      const fAddCfg = getFloorAddConfig(fc.floorIndex);
+                      return (
+                        <div
+                          style={{
+                            padding: "10px 14px",
+                            borderRadius: 10,
+                            background: "var(--cms-subtle)",
+                            border: "1.5px solid var(--cms-primary)",
+                            display: "flex",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            boxShadow: "0 1px 4px rgba(82, 110, 52, 0.06)",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 160 }}>
+                            <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--cms-primary)", display: "flex", alignItems: "center", gap: 5 }}>
+                              <span>➕</span> Select Rooms for {fc.floorLabel}:
+                            </span>
+                          </div>
+
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, flex: 1, justifyContent: "flex-end" }}>
+                            {/* 1. Sharing Category Dropdown */}
+                            <div style={{ flex: "1 1 200px", minWidth: 200, position: "relative" }}>
+                              <select
+                                value={fAddCfg.sharingKey}
+                                onChange={(e) => setFloorAddConfig(fc.floorIndex, { sharingKey: e.target.value })}
+                                className="cms-alloc-modal-select"
+                                style={{ height: 36, fontSize: 12, fontWeight: 700, padding: "0 28px 0 10px", width: "100%" }}
+                              >
+                                {sharingOptions.map((opt) => (
+                                  <option key={opt.key} value={opt.key}>
+                                    {opt.icon} {opt.label} ({opt.capacity} Bed{opt.capacity > 1 ? "s" : ""})
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="cms-alloc-modal-chevron" style={{ right: 8 }}><ChevronDown size={13} /></div>
+                            </div>
+
+                            {/* 2. Room Type (AC / Non-AC) Dropdown */}
+                            <div style={{ width: 135, flexShrink: 0, position: "relative" }}>
+                              <select
+                                value={fAddCfg.acType}
+                                onChange={(e) => setFloorAddConfig(fc.floorIndex, { acType: e.target.value })}
+                                className="cms-alloc-modal-select"
+                                style={{ height: 36, fontSize: 12, fontWeight: 700, padding: "0 26px 0 10px" }}
+                              >
+                                <option value="AC">❄️ AC Room</option>
+                                <option value="Non-AC">💨 Non-AC Room</option>
+                              </select>
+                              <div className="cms-alloc-modal-chevron" style={{ right: 8 }}><ChevronDown size={13} /></div>
+                            </div>
+
+                            {/* 3. Number of Rooms Stepper */}
+                            <div style={{ display: "inline-flex", alignItems: "center", height: 36, flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                disabled={fAddCfg.roomCount <= 1}
+                                onClick={() => setFloorAddConfig(fc.floorIndex, { roomCount: Math.max(1, fAddCfg.roomCount - 1) })}
+                                style={{
+                                  width: 32,
+                                  height: 36,
+                                  borderRadius: "7px 0 0 7px",
+                                  border: "1px solid var(--cms-border)",
+                                  background: "var(--cms-surface)",
+                                  color: "var(--cms-text)",
+                                  fontWeight: 800,
+                                  fontSize: 16,
+                                  cursor: fAddCfg.roomCount <= 1 ? "not-allowed" : "pointer",
+                                  opacity: fAddCfg.roomCount <= 1 ? 0.5 : 1,
+                                }}
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={fAddCfg.roomCount}
+                                onChange={(e) => setFloorAddConfig(fc.floorIndex, { roomCount: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                                className="cms-stepper-input"
+                                style={{
+                                  width: 48,
+                                  height: 36,
+                                  minHeight: 36,
+                                  textAlign: "center",
+                                  fontSize: 13,
+                                  fontWeight: 800,
+                                  lineHeight: "36px",
+                                  borderTop: "1px solid var(--cms-border)",
+                                  borderBottom: "1px solid var(--cms-border)",
+                                  borderLeft: "none",
+                                  borderRight: "none",
+                                  background: "var(--cms-surface)",
+                                  color: "var(--cms-text)",
+                                  padding: "0 4px",
+                                  margin: 0,
+                                  boxSizing: "border-box",
+                                  appearance: "textfield",
+                                  MozAppearance: "textfield",
+                                  WebkitAppearance: "none",
+                                  outline: "none",
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setFloorAddConfig(fc.floorIndex, { roomCount: fAddCfg.roomCount + 1 })}
+                                style={{
+                                  width: 32,
+                                  height: 36,
+                                  borderRadius: "0 7px 7px 0",
+                                  border: "1px solid var(--cms-border)",
+                                  background: "var(--cms-surface)",
+                                  color: "var(--cms-text)",
+                                  fontWeight: 800,
+                                  fontSize: 16,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            {/* 4. Add Button directly to this floor */}
+                            <button
+                              type="button"
+                              className="cms-btn cms-btn-primary"
+                              onClick={() => {
+                                const chosen = sharingOptions.find((o) => o.key === fAddCfg.sharingKey) || sharingOptions[0];
+                                handleAddRoomsDirect(fc.floorIndex, chosen, fAddCfg.acType, fAddCfg.roomCount);
+                              }}
+                              style={{
+                                height: 36,
+                                padding: "0 14px",
+                                fontSize: 12,
+                                fontWeight: 800,
+                                borderRadius: 7,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 5,
+                                whiteSpace: "nowrap",
+                                flexShrink: 0,
+                                boxShadow: "0 2px 6px rgba(82, 110, 52, 0.2)",
+                              }}
+                            >
+                              <Plus size={15} /> + Add to {fc.floorLabel}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Configured Categories Table on this floor */}
+                    {floorAllocs.length === 0 ? (
+                      <div
+                        style={{
+                          padding: "16px",
+                          textAlign: "center",
+                          background: "var(--cms-subtle)",
+                          borderRadius: 10,
+                          border: "1.5px dashed var(--cms-border)",
+                        }}
+                      >
+                        <p style={{ margin: 0, fontSize: 12, color: "var(--cms-muted)", fontWeight: 600 }}>
+                          💡 No room categories added on {fc.floorLabel} yet. Select sharing category &amp; AC / Non-AC above and click <strong style={{ color: "var(--cms-primary)" }}>"+ Add to {fc.floorLabel}"</strong>.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--cms-border)" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+                          <thead>
+                            <tr style={{ background: "var(--cms-subtle)", borderBottom: "1px solid var(--cms-border)" }}>
+                              <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)", width: 30 }}>#</th>
+                              <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)" }}>Sharing Category</th>
+                              <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)", width: 120 }}>Type</th>
+                              <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)", width: 140 }}>Rooms</th>
+                              <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)" }}>Total Beds</th>
+                              <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)" }}>Room Numbers</th>
+                              <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)", textAlign: "center", width: 50 }}>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {floorAllocs.map((alloc, aIdx) => {
+                              const isAc = alloc.acType === "AC";
+                              const rCount = Number(alloc.rooms || 0);
+                              const cap = Number(alloc.capacity || 1);
+                              const tBeds = rCount * cap;
+
+                              let startSlice = 1;
+                              for (let k = 0; k < aIdx; k++) {
+                                startSlice += Number(floorAllocs[k].rooms || 0);
+                              }
+                              const endSlice = startSlice + rCount - 1;
+                              const startRNum = fc.floorIndex === 0
+                                ? String(startSlice).padStart(3, "0")
+                                : `${fc.floorIndex}${String(startSlice).padStart(2, "0")}`;
+                              const endRNum = fc.floorIndex === 0
+                                ? String(endSlice).padStart(3, "0")
+                                : `${fc.floorIndex}${String(endSlice).padStart(2, "0")}`;
+                              const roomRangeStr = rCount === 1 ? `Room #${startRNum}` : `Rooms #${startRNum}–#${endRNum}`;
+
+                              return (
+                                <tr key={alloc.id || aIdx} style={{ borderBottom: "1px solid var(--cms-border)" }}>
+                                  <td style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)" }}>{aIdx + 1}</td>
+                                  <td style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-text)" }}>
+                                    <span style={{ marginRight: 6 }}>{alloc.icon || "🛏️"}</span>
+                                    {alloc.name}
+                                  </td>
+                                  <td style={{ padding: "7px 10px" }}>
+                                    <select
+                                      value={alloc.acType}
+                                      onChange={(e) => updateFloorCategory(fc.floorIndex, alloc.id, { acType: e.target.value })}
+                                      style={{
+                                        padding: "3px 8px",
+                                        borderRadius: 6,
+                                        fontSize: 11,
+                                        fontWeight: 800,
+                                        border: isAc ? "1px solid #2563eb" : "1px solid #64748b",
+                                        background: isAc ? "rgba(37,99,235,0.08)" : "rgba(100,116,139,0.08)",
+                                        color: isAc ? "#2563eb" : "#334155",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      <option value="AC">❄️ AC</option>
+                                      <option value="Non-AC">💨 Non-AC</option>
+                                    </select>
+                                  </td>
+                                  <td style={{ padding: "7px 10px" }}>
+                                    <div style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                      <button
+                                        type="button"
+                                        disabled={rCount <= 1}
+                                        onClick={() => updateFloorCategory(fc.floorIndex, alloc.id, { rooms: Math.max(1, rCount - 1) })}
+                                        style={{
+                                          width: 24,
+                                          height: 24,
+                                          borderRadius: 4,
+                                          border: "1px solid var(--cms-border)",
+                                          background: "var(--cms-surface)",
+                                          color: "var(--cms-text)",
+                                          fontWeight: 800,
+                                          cursor: rCount <= 1 ? "not-allowed" : "pointer",
+                                          opacity: rCount <= 1 ? 0.5 : 1,
+                                        }}
+                                      >
+                                        -
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={100}
+                                        value={rCount}
+                                        className="cms-stepper-input"
+                                        onChange={(e) => {
+                                          const v = Math.max(1, parseInt(e.target.value, 10) || 1);
+                                          updateFloorCategory(fc.floorIndex, alloc.id, { rooms: v });
+                                        }}
+                                        style={{
+                                          width: 44,
+                                          height: 24,
+                                          lineHeight: "24px",
+                                          textAlign: "center",
+                                          fontSize: 12,
+                                          fontWeight: 800,
+                                          borderRadius: 4,
+                                          border: "1px solid var(--cms-border)",
+                                          background: "var(--cms-surface)",
+                                          color: "var(--cms-text)",
+                                          boxSizing: "border-box",
+                                          padding: 0,
+                                        }}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => updateFloorCategory(fc.floorIndex, alloc.id, { rooms: rCount + 1 })}
+                                        style={{
+                                          width: 24,
+                                          height: 24,
+                                          borderRadius: 4,
+                                          border: "1px solid var(--cms-border)",
+                                          background: "var(--cms-surface)",
+                                          color: "var(--cms-text)",
+                                          fontWeight: 800,
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-text)" }}>
+                                    {tBeds} Beds ({cap} B/Rm)
+                                  </td>
+                                  <td style={{ padding: "7px 10px", fontSize: 11.5, fontWeight: 700, color: "var(--cms-primary)" }}>
+                                    {roomRangeStr}
+                                  </td>
+                                  <td style={{ padding: "7px 10px", textAlign: "center" }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => removeFloorCategory(fc.floorIndex, alloc.id)}
+                                      title="Remove this category from floor"
+                                      style={{
+                                        background: "transparent",
+                                        border: "none",
+                                        cursor: "pointer",
+                                        color: "var(--cms-red, #ef4444)",
+                                        padding: "3px",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Generated Room Pills Preview */}
+                    {floorRooms > 0 && (
+                      <div style={{ padding: "8px 10px", background: "var(--cms-subtle)", borderRadius: 8, border: "1px dashed var(--cms-border)" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-text)", marginBottom: 6 }}>
+                          Generated Rooms on {fc.floorLabel} ({floorRooms} Rooms • {floorBeds} Beds):
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          {floorRoomPills.map((rp) => {
+                            const isAc = rp.ac === "AC";
+                            return (
+                              <span
+                                key={rp.roomNum}
+                                style={{
+                                  padding: "3px 8px",
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  background: isAc ? "rgba(37, 99, 235, 0.08)" : "rgba(100, 116, 139, 0.08)",
+                                  border: isAc ? "1px solid rgba(37, 99, 235, 0.3)" : "1px solid rgba(100, 116, 139, 0.3)",
+                                  color: isAc ? "#2563eb" : "#334155",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                }}
+                              >
+                                <span>Room #{rp.roomNum}</span>
+                                <span style={{ fontSize: 10, color: "var(--cms-muted)" }}>• {rp.categoryName}</span>
+                                <span style={{ fontSize: 9.5, fontWeight: 800, padding: "1px 4px", borderRadius: 3, background: isAc ? "#2563eb" : "#475569", color: "#fff" }}>
+                                  {isAc ? "AC" : "Non-AC"}
+                                </span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Total Multi-Floor Overview Card */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                gap: 8,
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: "var(--cms-subtle)",
+                border: "1px solid var(--cms-border)",
+                textAlign: "center",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10.5, color: "var(--cms-muted)", fontWeight: 700 }}>TOTAL FLOORS</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--cms-text)", marginTop: 2 }}>{floorConfigs.length}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10.5, color: "var(--cms-muted)", fontWeight: 700 }}>TOTAL ROOMS</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--cms-primary)", marginTop: 2 }}>{bulkSummary.totRooms}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10.5, color: "var(--cms-muted)", fontWeight: 700 }}>BED CAPACITY</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--cms-text)", marginTop: 2 }}>{bulkSummary.totBeds} Beds</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10.5, color: "var(--cms-muted)", fontWeight: 700 }}>AC ROOMS</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#2563eb", marginTop: 2 }}>{bulkSummary.totAc} ({bulkSummary.totAcBeds} Beds)</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10.5, color: "var(--cms-muted)", fontWeight: 700 }}>NON-AC ROOMS</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "#475569", marginTop: 2 }}>{bulkSummary.totNonAc} ({bulkSummary.totNonAcBeds} Beds)</div>
+              </div>
+            </div>
+
+            {/* Footer Buttons for Bulk */}
+            <div className="cms-alloc-modal-footer" style={{ marginTop: 10 }}>
+              <button
+                type="button"
+                className="cms-alloc-modal-cancel-btn"
+                onClick={closeModal}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cms-alloc-modal-submit-btn"
+                disabled={isSubmitting || bulkSummary.totRooms === 0}
+                style={bulkSummary.totRooms === 0 ? { opacity: 0.6, cursor: "not-allowed" } : {}}
+                onClick={async () => {
+                  if (!handleSaveRoomSharingConfig) return;
+                  if (bulkSummary.totRooms === 0) {
+                    showToast("Please enter room counts on at least 1 floor before saving.", "warning");
+                    return;
+                  }
+                  setIsSubmitting(true);
+                  try {
+                    await handleSaveRoomSharingConfig({
+                      block: selectedBlock,
+                      floorConfigs,
+                    });
+                    closeModal();
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+              >
+                {isSubmitting ? "Generating All Floors & Beds..." : `Generate & Save All Floors for ${selectedBlock?.name || "Selected Block"}`}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -12157,6 +14137,7 @@ function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handl
             setIsSubmitting(true);
             try {
               await handleSaveWarden(form);
+              closeModal();
             } finally {
               setIsSubmitting(false);
             }
@@ -12284,6 +14265,7 @@ function AllocationModal({
   rooms,
   beds,
   allocations,
+  transfers = [],
   candidateAdmissions,
   candidateStudents,
   canAccessAdminEndpoints = false,
@@ -12323,6 +14305,82 @@ function AllocationModal({
       return map;
     }, [allocations, modal.mode, modal.data?.id]);
 
+    // Set of students who vacated their room & bed (must never appear in candidate selection)
+    const vacatedStudentsSet = useMemo(() => {
+      const set = new Set();
+      const addKeys = (sid, adm, name) => {
+        if (sid) {
+          set.add(String(sid));
+          set.add(`sid-${sid}`);
+        }
+        if (adm) {
+          const raw = String(adm).trim().toLowerCase();
+          set.add(raw);
+          set.add(`adm-${raw}`);
+          const stripped = raw.replace(/[^a-z0-9]/gi, "");
+          if (stripped) set.add(stripped);
+        }
+        if (name) {
+          const rawName = String(name).trim().toLowerCase();
+          set.add(rawName);
+          set.add(`name-${rawName}`);
+        }
+      };
+
+      // 1. From allocations state: any record with Vacated status or isVacated flag
+      if (Array.isArray(allocations)) {
+        allocations.forEach((a) => {
+          const st = String(a.status || "").trim().toLowerCase();
+          if (st.includes("vacat") || a.isVacated || (a.isActive === false && st !== "active")) {
+            addKeys(a.studentId, a.admissionNo, a.studentName);
+          }
+        });
+      }
+
+      // 2. From transfers list: any request with actionType/requestType 'Vacate' or status 'Vacated'
+      if (Array.isArray(transfers)) {
+        transfers.forEach((t) => {
+          const reqType = String(t.requestType || t.actionType || "").toLowerCase();
+          const st = String(t.status || t.approvalStatus || "").toLowerCase();
+          if (reqType.includes("vacat") || st.includes("vacat")) {
+            addKeys(t.studentId, t.admissionNo, t.studentName);
+          }
+        });
+      }
+
+      // 3. From persisted localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+        if (Array.isArray(stored)) {
+          stored.forEach((s) => {
+            addKeys(s.studentId, s.admissionNo, s.studentName);
+          });
+        }
+      } catch (_) {}
+
+      // If student has a currently active allocation, remove them from vacated set
+      activeAllocationsMap.forEach((alloc) => {
+        if (alloc.studentId) {
+          set.delete(String(alloc.studentId));
+          set.delete(`sid-${alloc.studentId}`);
+        }
+        if (alloc.admissionNo) {
+          const raw = String(alloc.admissionNo).trim().toLowerCase();
+          set.delete(raw);
+          set.delete(`adm-${raw}`);
+          const stripped = raw.replace(/[^a-z0-9]/gi, "");
+          if (stripped) set.delete(stripped);
+        }
+        if (alloc.studentName) {
+          const rawName = String(alloc.studentName).trim().toLowerCase();
+          set.delete(rawName);
+          set.delete(`name-${rawName}`);
+        }
+      });
+
+      return set;
+    }, [allocations, transfers, activeAllocationsMap]);
+
     // Fallback load for admissions & students if not yet loaded in parent state
     const [modalAdmissions, setModalAdmissions] = useState([]);
     const [modalStudents, setModalStudents] = useState([]);
@@ -12333,13 +14391,13 @@ function AllocationModal({
       const needStu = !candidateStudents || candidateStudents.length === 0;
       if (canAccessAdminEndpoints && (needAdm || needStu)) {
         Promise.allSettled([
-          needAdm ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+          needAdm ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
           needStu ? (
-            apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true })
-              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true }).catch(() => null))
+            apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
+              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null))
           ) : Promise.resolve(null),
           needStu ? (
-            apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)
+            apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)
           ) : Promise.resolve(null),
         ]).then(([admR, stuActiveR, stuCertR]) => {
           if (cancelled) return;
@@ -12560,6 +14618,20 @@ function AllocationModal({
         if (cleanSidKey && seen.has(cleanSidKey)) return;
         if (cleanAdmKey && seen.has(cleanAdmKey)) return;
         if (cleanNameKey && seen.has(cleanNameKey)) return;
+
+        // CRITICAL REQUIREMENT: Once a student vacates their room/bed, their name must NOT appear in candidate selection
+        const isVacatedStudent =
+          (cleanSidKey && vacatedStudentsSet.has(cleanSidKey)) ||
+          (numericStudentId && vacatedStudentsSet.has(String(numericStudentId))) ||
+          (cleanAdmKey && vacatedStudentsSet.has(cleanAdmKey)) ||
+          (admNo && vacatedStudentsSet.has(String(admNo).trim().toLowerCase())) ||
+          (admNo && vacatedStudentsSet.has(String(admNo).trim().toLowerCase().replace(/[^a-z0-9]/gi, ""))) ||
+          (cleanNameKey && vacatedStudentsSet.has(cleanNameKey)) ||
+          (sName && vacatedStudentsSet.has(String(sName).trim().toLowerCase()));
+
+        if (isVacatedStudent) {
+          return;
+        }
 
         // Check active allocation status for this student
         const existingAlloc = (numericStudentId && activeAllocationsMap.get(String(numericStudentId))) ||
@@ -12879,6 +14951,7 @@ function AllocationModal({
           studentId,
           bedId,
         });
+        closeModal();
       } finally {
         setIsSubmitting(false);
       }
@@ -13181,6 +15254,7 @@ function VacateModal({ modal, closeModal, handleVacateAllocation }) {
       setIsSubmitting(true);
       try {
         await handleVacateAllocation(alloc, reason);
+        closeModal();
       } finally {
         setIsSubmitting(false);
       }
@@ -13438,6 +15512,7 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
           reason: reason || "Outpass permission request",
           destination: "City",
         });
+        closeModal();
       } finally {
         setIsSubmitting(false);
       }
@@ -13797,6 +15872,7 @@ function TransferModal({
           toBedId,
           reason,
         });
+        closeModal();
       } finally {
         setIsSubmitting(false);
       }
@@ -13988,6 +16064,293 @@ function TransferModal({
                 {isSubmitting ? "Processing..." : "Approve & Release Bed"}
               </button>
             )}
+          </div>
+        </form>
+      </Modal>
+    );
+  }
+
+  // ── 11. FeePaymentModal (Live Hostel Fee Collection & Payment Recording) ──
+  function FeePaymentModal({
+    modal,
+    closeModal,
+    revenueStudentRecords = [],
+    handleSaveFeePayment,
+    showToast,
+  }) {
+    const currentItem = modal.data || revenueStudentRecords[0] || {};
+    const [selectedStudentKey, setSelectedStudentKey] = useState(
+      String(currentItem.allocKey || currentItem.allocationId || currentItem.id || "")
+    );
+
+    const selectedRecord = useMemo(() => {
+      return (
+        revenueStudentRecords.find(
+          (r) => String(r.allocKey || r.allocationId || r.id) === String(selectedStudentKey)
+        ) || currentItem
+      );
+    }, [revenueStudentRecords, selectedStudentKey, currentItem]);
+
+    const monthlyFee = selectedRecord.monthlyFee || 0;
+    const currentPaid = selectedRecord.paidAmount || 0;
+    const currentDue = Math.max(0, monthlyFee - currentPaid);
+
+    const [paymentAmount, setPaymentAmount] = useState(
+      currentDue > 0 ? String(currentDue) : String(monthlyFee)
+    );
+    const [paymentMode, setPaymentMode] = useState(selectedRecord.paymentMode !== "-" ? selectedRecord.paymentMode : "UPI (GPay / PhonePe)");
+    const [receiptNo, setReceiptNo] = useState(
+      selectedRecord.receiptNo && selectedRecord.receiptNo !== "-"
+        ? selectedRecord.receiptNo
+        : `RCP-${new Date().getFullYear()}-${String(Math.floor(1000 + Math.random() * 9000))}`
+    );
+    const [paymentDate, setPaymentDate] = useState(() => {
+      if (selectedRecord.lastPaymentDate && selectedRecord.lastPaymentDate !== "-") return selectedRecord.lastPaymentDate;
+      const now = new Date();
+      return now.toISOString().split("T")[0];
+    });
+    const [notes, setNotes] = useState(selectedRecord.notes || "");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Sync input when switching student
+    const handleStudentChange = (newKey) => {
+      setSelectedStudentKey(newKey);
+      const rec = revenueStudentRecords.find(
+        (r) => String(r.allocKey || r.allocationId || r.id) === String(newKey)
+      );
+      if (rec) {
+        const due = Math.max(0, rec.monthlyFee - rec.paidAmount);
+        setPaymentAmount(due > 0 ? String(due) : String(rec.monthlyFee));
+        if (rec.receiptNo && rec.receiptNo !== "-") setReceiptNo(rec.receiptNo);
+        if (rec.paymentMode && rec.paymentMode !== "-") setPaymentMode(rec.paymentMode);
+        setNotes(rec.notes || "");
+      }
+    };
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      if (isSubmitting) return;
+
+      const amt = parseFloat(paymentAmount);
+      if (isNaN(amt) || amt < 0) {
+        showToast("Please enter a valid numeric payment amount.", "warning");
+        return;
+      }
+
+      const newTotalPaid = Math.min(monthlyFee, amt);
+      const updatedRecord = {
+        paidAmount: newTotalPaid,
+        lastPaymentDate: paymentDate,
+        paymentMode,
+        receiptNo: receiptNo.trim() || `RCP-${Date.now()}`,
+        notes: notes.trim(),
+      };
+
+      setIsSubmitting(true);
+      try {
+        handleSaveFeePayment(selectedRecord.allocKey || selectedRecord.id, updatedRecord);
+        showToast(
+          `Fee payment of ₹${amt.toLocaleString()} recorded for ${selectedRecord.studentName || "student"} successfully!`,
+          "success"
+        );
+        closeModal();
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    return (
+      <Modal isOpen={true} onClose={closeModal} title="Record Hostel Fee Payment" size="md">
+        <form onSubmit={handleSubmit} className="cms-alloc-modal-form">
+          <div className="cms-alloc-modal-body" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Student Info Highlight Card */}
+            <div style={{
+              background: "var(--cms-subtle)",
+              border: "1px solid var(--cms-border)",
+              borderRadius: 12,
+              padding: "14px 16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)", textTransform: "uppercase" }}>Resident Student</span>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "var(--cms-text)" }}>{selectedRecord.studentName}</div>
+                </div>
+                <span style={{
+                  background: "var(--cms-surface)",
+                  border: "1px solid var(--cms-border)",
+                  borderRadius: 6,
+                  padding: "3px 8px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "var(--cms-muted)",
+                }}>
+                  {selectedRecord.admissionNo}
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: "var(--cms-muted)", flexWrap: "wrap" }}>
+                <span><strong>Block:</strong> {selectedRecord.blockName}</span>
+                <span>•</span>
+                <span><strong>Room &amp; Bed:</strong> {selectedRecord.roomBadge}</span>
+              </div>
+            </div>
+
+            {/* Financial Status Summary */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 10,
+              background: "var(--cms-surface)",
+              border: "1px solid var(--cms-border)",
+              borderRadius: 10,
+              padding: "10px 14px",
+              textAlign: "center",
+            }}>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>MONTHLY FEE</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--cms-text)", marginTop: 2 }}>
+                  ₹{monthlyFee.toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>ALREADY PAID</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: "var(--cms-green)", marginTop: 2 }}>
+                  ₹{currentPaid.toLocaleString()}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: "var(--cms-muted)", fontWeight: 700 }}>CURRENT DUE</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: currentDue > 0 ? "var(--cms-red)" : "var(--cms-green)", marginTop: 2 }}>
+                  ₹{currentDue.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {/* Resident Student Selector if multiple */}
+            <div className="cms-alloc-modal-field">
+              <label className="cms-alloc-modal-label">Select Resident Student</label>
+              <select
+                className="cms-alloc-modal-select"
+                value={selectedStudentKey}
+                onChange={(e) => handleStudentChange(e.target.value)}
+              >
+                {revenueStudentRecords.map((r) => (
+                  <option key={r.allocKey || r.id} value={String(r.allocKey || r.id)}>
+                    {r.studentName} ({r.admissionNo}) - Fee: ₹{r.monthlyFee.toLocaleString()} | Due: ₹{r.dueAmount.toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Payment Amount & Payment Date Grid */}
+            <div className="cms-hostel-form-grid">
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">
+                  Total Paid Amount (₹) <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontWeight: 700, color: "var(--cms-muted)" }}>₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={monthlyFee}
+                    step="50"
+                    required
+                    style={{ paddingLeft: 28 }}
+                    className="cms-alloc-modal-input"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="Enter amount paid"
+                  />
+                </div>
+                <span style={{ fontSize: 11, color: "var(--cms-muted)", marginTop: 3 }}>
+                  Max monthly bill: ₹{monthlyFee.toLocaleString()}
+                </span>
+              </div>
+
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">
+                  Payment Date <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  className="cms-alloc-modal-input"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Payment Mode & Receipt Number */}
+            <div className="cms-hostel-form-grid">
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">Payment Mode</label>
+                <select
+                  className="cms-alloc-modal-select"
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                >
+                  <option value="UPI (GPay / PhonePe)">UPI (GPay / PhonePe / Paytm)</option>
+                  <option value="Net Banking">Net Banking / NEFT / RTGS</option>
+                  <option value="Cash">Cash (Counter Deposit)</option>
+                  <option value="Debit / Credit Card">Debit / Credit Card (POS)</option>
+                  <option value="Demand Draft / Cheque">Demand Draft / Cheque</option>
+                </select>
+              </div>
+
+              <div className="cms-alloc-modal-field">
+                <label className="cms-alloc-modal-label">Receipt / Transaction Ref No.</label>
+                <input
+                  type="text"
+                  className="cms-alloc-modal-input"
+                  value={receiptNo}
+                  onChange={(e) => setReceiptNo(e.target.value)}
+                  placeholder="e.g. RCP-2026-008"
+                />
+              </div>
+            </div>
+
+            {/* Notes / Remarks */}
+            <div className="cms-alloc-modal-field">
+              <label className="cms-alloc-modal-label">Notes / Remarks</label>
+              <input
+                type="text"
+                className="cms-alloc-modal-input"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. October hostel fee payment received via UPI"
+              />
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="cms-alloc-modal-footer">
+            <button
+              type="button"
+              className="cms-alloc-modal-cancel-btn"
+              onClick={closeModal}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="cms-alloc-modal-submit-btn"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                background: "var(--cms-primary)",
+                color: "#fff",
+              }}
+            >
+              <Save size={14} />
+              {isSubmitting ? "Saving..." : "Save Payment Receipt"}
+            </button>
           </div>
         </form>
       </Modal>

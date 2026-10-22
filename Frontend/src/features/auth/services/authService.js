@@ -1,5 +1,8 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT } from "@/features/authStorage.js";
+import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+
 
 const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
 const ACCOUNT_TYPES = new Set(["admin", "user"]);
@@ -325,32 +328,40 @@ export function findParentAccount(input) {
     };
   }
 
-  // Parent A (parent-001 - Suresh Kumar) - default parent account
+  // Real Integrated Parent Account in Database (UserId: 859, Naveen Ponnapula, Children: 860 niharika, 863 Neha K)
   if (
     val === "parent" ||
     val === "parent1" ||
     val === "parent-a" ||
     val === "parent-001" ||
     val === "par-2026-001" ||
+    val === "859" ||
     val.includes("parent") ||
-    val.includes("suresh") ||
-    val.includes("srinivas") ||
+    val.includes("naveen") ||
+    val.includes("niharika") ||
     val === "parent@cms.com" ||
     val === "parent1@cms.com" ||
+    val === "naveenponnapula0@gmail.com" ||
     val === "parent@pirnav.edu.in" ||
     val === "suresh.k@example.com" ||
+    val.includes("suresh") ||
+    val.includes("srinivas") ||
+    digits === "8765445678" ||
     digits === "9876543210"
   ) {
     return {
-      id: "parent-001",
-      name: "Suresh Kumar",
-      email: val.includes("@") ? val : "parent@cms.com",
-      role: "parent",
+      id: "859",
+      userId: 859,
+      name: "Parent / Guardian",
+      fullName: "Parent / Guardian",
+      email: val.includes("@") ? val : "naveenponnapula0@gmail.com",
+      role: "Parent",
+      roleType: "parent",
       isAdmin: false,
-      mobile: "9876543210",
+      mobile: "8765445678",
       relation: "Father",
-      studentId: "stu-001",
-      studentName: "Rahul Kumar",
+      studentId: "860",
+      studentName: "niharika",
     };
   }
 
@@ -504,6 +515,8 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   if (expectedAccountType === "admin" && !isAdmin) {
     throw new Error("Authentication failed because the server returned an invalid admin response.");
   }
+  const isExamCell = isExamCellRole(normalizedRole) || normalizedRole.includes("exam");
+
   const staffId = data.StaffId || data.staffId || payload.StaffId || payload.staffId || jwtClaims.StaffId || jwtClaims.staffId || null;
   const employeeId = data.EmployeeId || data.employeeId || payload.EmployeeId || payload.employeeId || jwtClaims.EmployeeId || jwtClaims.employeeId || null;
   const designation =
@@ -569,7 +582,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   return {
     token,
     user,
-    roleType: isWarden ? "warden" : isAdmin ? "admin" : isFaculty ? "faculty" : isParent ? "parent" : "student",
+    roleType: isWarden ? "warden" : isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
     message: getMessage(payload, data, "Login successful."),
   };
 }

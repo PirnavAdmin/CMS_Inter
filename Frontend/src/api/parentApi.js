@@ -114,6 +114,21 @@ export const getStudentResults = async (studentId) => {
 };
 
 /**
+ * 5b. GET /api/v1/marks/student/{studentId}
+ * Retrieves direct subject marks entered for a student across all examinations.
+ */
+export const getStudentMarks = async (studentId) => {
+  if (!isBackendStudentId(studentId)) return [];
+  try {
+    const res = await api.get(`/api/v1/marks/student/${encodeURIComponent(studentId)}`);
+    const data = res?.data?.data ?? res?.data ?? [];
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
+
+/**
  * 6. GET /api/v1/students/me/results/{examinationId}/memo?studentId={studentId}
  * Retrieves detailed marks memo with subject-wise scores for a specific completed exam.
  */
@@ -123,14 +138,60 @@ export const getStudentResultMemo = async (examinationId, studentId) => {
     const res = await api.get(`/api/v1/students/me/results/${encodeURIComponent(examinationId)}/memo`, {
       params: studentId ? { studentId } : {},
     });
-    return res?.data?.data ?? res?.data ?? null;
+    const memo = res?.data?.data ?? res?.data ?? null;
+    if (memo && Array.isArray(memo.subjects) && memo.subjects.length > 0) {
+      return memo;
+    }
   } catch {
-    return null;
+    // Fall back to building memo from real marks endpoint
   }
+
+  try {
+    const allMarks = await getStudentMarks(studentId);
+    const examMarks = allMarks.filter((m) => String(m.examinationId) === String(examinationId));
+    if (examMarks.length > 0) {
+      const first = examMarks[0];
+      const subjects = examMarks.map((m) => ({
+        subjectId: m.subjectId,
+        subjectCode: m.subjectCode || `SUB-${m.subjectId}`,
+        subjectName: m.subjectName || `Subject ${m.subjectId}`,
+        maxMarks: m.passingMarks ? (m.passingMarks === 35 ? 100 : m.passingMarks * 2) : 100,
+        passingMarks: m.passingMarks || 35,
+        internalMarks: m.internalMarks || 0,
+        practicalMarks: m.practicalMarks || 0,
+        theoryMarks: m.theoryMarks ?? m.totalMarks ?? 0,
+        totalMarks: m.totalMarks ?? m.theoryMarks ?? 0,
+        resultStatus: m.isPass ? "PASS" : "FAIL",
+      }));
+      const totalMarks = subjects.reduce((sum, s) => sum + (s.totalMarks || 0), 0);
+      const maxTotalMarks = subjects.reduce((sum, s) => sum + (s.maxMarks || 0), 0);
+      const percentage = maxTotalMarks > 0 ? Math.round((totalMarks / maxTotalMarks) * 1000) / 10 : 0;
+      return {
+        studentId: Number(studentId),
+        rollNo: first.rollNo || "",
+        studentName: first.studentName || "",
+        examinationName: first.examinationName || `Examination #${examinationId}`,
+        examCode: first.examCode || "EXM",
+        academicYear: first.academicYearName || "2026-2027",
+        courseName: first.group || "MPC",
+        sectionName: first.sectionName || "REG-1",
+        totalMarks,
+        maxTotalMarks,
+        percentage,
+        grade: percentage >= 85 ? "A+" : percentage >= 75 ? "A" : percentage >= 60 ? "B" : "Pass",
+        resultStatus: subjects.every((s) => s.resultStatus === "PASS") ? "PASS" : "FAIL",
+        subjects,
+      };
+    }
+  } catch {
+    // Return null if unavailable
+  }
+  return null;
 };
 
 /**
- * Optional auxiliary helper: Fetch subjects by group if available
+ * 7. GET /api/v1/subjects/group/{groupId}
+ * Fetches curriculum subjects mapped to a specific student group.
  */
 export const getSubjectsByGroup = async (groupId) => {
   if (!groupId) return [];
@@ -143,7 +204,7 @@ export const getSubjectsByGroup = async (groupId) => {
 };
 
 /**
- * 7. GET /api/v1/attendance/student/{studentId}/yearly-overview
+ * 8. GET /api/v1/attendance/student/{studentId}/yearly-overview
  * Retrieves the yearly attendance overview for a specific student.
  */
 export const getStudentAttendanceOverview = async (studentId, academicYearId) => {
@@ -159,22 +220,34 @@ export const getStudentAttendanceOverview = async (studentId, academicYearId) =>
 };
 
 /**
- * 8. GET /api/v1/timetable/student/{studentId}
- * Gets published weekly timetable for a student.
+ * 9. GET /api/v1/timetable/student/{studentId} or /api/v1/timetable/section/{sectionId}
+ * Gets weekly timetable slots for a student or section.
  */
-export const getStudentTimetable = async (studentId) => {
+export const getStudentTimetable = async (studentId, sectionId) => {
   if (!isBackendStudentId(studentId)) return [];
   try {
     const res = await api.get(`/api/v1/timetable/student/${encodeURIComponent(studentId)}`);
     const data = res?.data?.data ?? res?.data ?? [];
-    return Array.isArray(data) ? data : [];
+    if (Array.isArray(data) && data.length > 0) return data;
   } catch {
-    return [];
+    // Continue to section fallback
   }
+
+  // In College Management Systems, timetable schedules are assigned by section
+  if (sectionId) {
+    try {
+      const sectionRes = await api.get(`/api/v1/timetable/section/${encodeURIComponent(sectionId)}`);
+      const sectionData = sectionRes?.data?.data ?? sectionRes?.data ?? [];
+      if (Array.isArray(sectionData) && sectionData.length > 0) return sectionData;
+    } catch {
+      // Return empty
+    }
+  }
+  return [];
 };
 
 /**
- * 9. GET /api/v1/attendance/student/{studentId}/subjects
+ * 10. GET /api/v1/attendance/student/{studentId}/subjects
  * Retrieves subject-wise attendance breakdown for a student.
  */
 export const getStudentAttendanceSubjects = async (studentId) => {
@@ -189,20 +262,60 @@ export const getStudentAttendanceSubjects = async (studentId) => {
 };
 
 /**
- * 10. GET /api/v1/attendance/student/{studentId}/daily-logs?month={month}&year={year}
+ * 11. GET /api/v1/attendance/student/{studentId}/daily-logs
  * Retrieves detailed daily attendance punch logs for a student.
  */
 export const getStudentDailyAttendanceLogs = async (studentId, { month, year } = {}) => {
   if (!isBackendStudentId(studentId)) return [];
   try {
-    const params = {};
-    if (month !== undefined && month !== null && month !== "" && month !== "all") {
-      params.month = Number(month);
-    }
-    if (year !== undefined && year !== null && year !== "") {
-      params.year = Number(year);
-    }
+    const now = new Date();
+    const params = {
+      month: (month !== undefined && month !== null && month !== "" && month !== "all") ? Number(month) : (now.getMonth() + 1),
+      year: (year !== undefined && year !== null && year !== "") ? Number(year) : now.getFullYear(),
+    };
     const res = await api.get(`/api/v1/attendance/student/${encodeURIComponent(studentId)}/daily-logs`, { params });
+    const data = res?.data?.data ?? res?.data ?? [];
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * 12. GET /api/v1/examinations
+ * Retrieves examinations scheduled for the student's campus and group.
+ */
+export const getStudentExaminations = async (campusId = 1, groupId = 37) => {
+  try {
+    const res = await api.get("/api/v1/examinations", {
+      params: {
+        CampusId: campusId || 1,
+        GroupId: groupId || 37,
+      },
+    });
+    const data = res?.data?.data ?? res?.data ?? [];
+    if (Array.isArray(data) && data.length > 0) return data;
+  } catch {
+    // Try fallback
+  }
+
+  try {
+    const fallback = await api.get("/api/v1/dashboard/upcoming-examinations");
+    const data = fallback?.data?.data ?? fallback?.data ?? [];
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * 13. GET /api/v1/examinations/{examinationId}/schedules
+ * Retrieves paper-wise schedules, timings, rooms, and invigilators for an examination.
+ */
+export const getExaminationSchedules = async (examinationId) => {
+  if (!examinationId) return [];
+  try {
+    const res = await api.get(`/api/v1/examinations/${encodeURIComponent(examinationId)}/schedules`);
     const data = res?.data?.data ?? res?.data ?? [];
     return Array.isArray(data) ? data : [];
   } catch {

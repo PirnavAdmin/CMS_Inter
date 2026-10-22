@@ -1,6 +1,5 @@
 import {
   BookOpen,
-  BriefcaseBusiness,
   Building2,
   Bus,
   CalendarCheck,
@@ -13,7 +12,6 @@ import {
   Home,
   Landmark,
   LayoutDashboard,
-  Library,
   Medal,
   ReceiptIndianRupee,
   Settings,
@@ -139,6 +137,7 @@ export const PRESET_LABELS = Object.freeze({
 export const ROLE_SEEDS = Object.freeze([
   {
     id: "super-admin",
+    roleId: 1,
     code: "SUPER_ADMIN",
     name: "Super Admin",
     description: "Protected platform owner with full access to every module and system setting.",
@@ -149,6 +148,7 @@ export const ROLE_SEEDS = Object.freeze([
   },
   {
     id: "admin",
+    roleId: 2,
     code: "ADMIN",
     name: "Admin",
     description: "Administrative access for college operations and records.",
@@ -179,9 +179,9 @@ export const ROLE_SEEDS = Object.freeze([
     assignedUserCount: 0,
     icon: Building2,
   },
-
   {
     id: "hod",
+    roleId: 3,
     code: "HOD",
     name: "HOD",
     description: "Department-level academic oversight and staff coordination.",
@@ -192,6 +192,7 @@ export const ROLE_SEEDS = Object.freeze([
   },
   {
     id: "faculty",
+    roleId: 4,
     code: "FACULTY",
     name: "Faculty",
     description: "Teaching, class, attendance and marks management access.",
@@ -202,6 +203,7 @@ export const ROLE_SEEDS = Object.freeze([
   },
   {
     id: "student",
+    roleId: 5,
     code: "STUDENT",
     name: "Student",
     description: "Student dashboard and personal academic information access.",
@@ -212,6 +214,7 @@ export const ROLE_SEEDS = Object.freeze([
   },
   {
     id: "parent",
+    roleId: 6,
     code: "PARENT",
     name: "Parent",
     description: "Guardian access for student progress, attendance and fee visibility.",
@@ -234,6 +237,7 @@ export const ROLE_SEEDS = Object.freeze([
   },
   {
     id: "examination-cell",
+    roleId: 8,
     code: "EXAMINATION_CELL",
     name: "Examination Cell",
     description: "Examination schedules, marks workflows and results publishing access.",
@@ -244,16 +248,18 @@ export const ROLE_SEEDS = Object.freeze([
   },
   {
     id: "librarian",
+    roleId: 9,
     code: "LIBRARIAN",
-    name: "Library / Librarian",
-    description: "Library catalog, issue and return management access.",
+    name: "Librarian",
+    description: "Library cataloging, book issuance, returns, and digital library resources access.",
     isSystemRole: true,
     isProtected: false,
     assignedUserCount: 1,
-    icon: Library,
+    icon: BookOpen,
   },
   {
     id: "hostel-warden",
+    roleId: 10,
     code: "HOSTEL_WARDEN",
     name: "Hostel Warden",
     description: "Hostel room, student allocation and residential operations access.",
@@ -264,17 +270,21 @@ export const ROLE_SEEDS = Object.freeze([
   },
   {
     id: "placement-officer",
-    code: "PLACEMENT_OFFICER",
+    roleId: 11,
+    code: "TRAINING_PLACEMENT",
     name: "Placement Officer",
-    description: "Placement drives and student application management access.",
+    aliases: ["PLACEMENT_OFFICER"],
+    description: "Campus placement drives, corporate tie-ups, and student recruitment coordination.",
     isSystemRole: true,
     isProtected: false,
     assignedUserCount: 1,
-    icon: BriefcaseBusiness,
+    icon: Medal,
   },
   {
     id: "bus-driver",
+    roleId: 12,
     code: "BUS_DRIVER",
+    aliases: ["DRIVER"],
     name: "Bus Driver",
     description: "Transport route and assigned vehicle visibility for driver workflows.",
     isSystemRole: true,
@@ -283,53 +293,22 @@ export const ROLE_SEEDS = Object.freeze([
     icon: Bus,
   },
   {
-    id: "office-staff",
-    code: "OFFICE_STAFF",
-    name: "Office Staff",
-    description: "Confirmed administration role for general office operations.",
-    isSystemRole: true,
-    isProtected: false,
-    assignedUserCount: 3,
-    icon: Landmark,
-    discoveredFrom: "nonTeachingRolesConfig.js administration roles",
-  },
-  {
-    id: "admission-staff",
-    code: "ADMISSION_STAFF",
-    name: "Admission Staff",
-    description: "Confirmed admissions role for student admission workflows.",
-    isSystemRole: true,
-    isProtected: false,
-    assignedUserCount: 2,
-    icon: ClipboardList,
-    discoveredFrom: "nonTeachingRolesConfig.js admissions department",
-  },
-  {
-    id: "transport-manager",
-    code: "TRANSPORT_MANAGER",
-    name: "Transport Manager",
-    description: "Confirmed transport operations role for routes, vehicles and driver coordination.",
+    id: "attendant",
+    roleId: 13,
+    code: "ATTENDANT",
+    aliases: ["OFFICE_STAFF", "RECEPTIONIST"],
+    name: "Attendant",
+    description: "Campus facilities, support operations, and attendance assistance.",
     isSystemRole: true,
     isProtected: false,
     assignedUserCount: 1,
-    icon: Bus,
-    discoveredFrom: "nonTeachingRolesConfig.js transport roles",
-  },
-  {
-    id: "lab-assistant",
-    code: "LAB_ASSISTANT",
-    name: "Lab Assistant",
-    description: "Confirmed laboratory support role for lab access and equipment workflows.",
-    isSystemRole: true,
-    isProtected: false,
-    assignedUserCount: 2,
-    icon: BookOpen,
-    discoveredFrom: "nonTeachingRolesConfig.js laboratory support roles",
+    icon: UserCheck,
   },
   {
     id: "inventory-manager",
     roleId: 16,
     code: "INVENTORY_MANAGER",
+    aliases: ["INVENTORY"],
     name: "Inventory Manager",
     description: "Stock tracking, supplier management, purchase orders, item distribution, and inventory reports.",
     isSystemRole: false,
@@ -348,7 +327,6 @@ export const ROLE_SEEDS = Object.freeze([
     assignedUserCount: 0,
     icon: Users,
   },
-
 ]);
 
 export const MODULE_PERMISSION_CONFIG = Object.freeze([
@@ -750,33 +728,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   },
 ]);
 
-export const OPTIONAL_MODULES_CONFIRMED_BY_CONFIG = Object.freeze([
-  {
-    id: "library",
-    name: "Library",
-    section: "Operations",
-    icon: Library,
-    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
-    reason: "Library roles are present in nonTeachingRolesConfig.js.",
-    screens: [
-      { id: "book-catalog", name: "Book Catalog & Search", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Book catalog, ISBN lookup, authors, and shelf allocation" },
-      { id: "circulation", name: "Issue & Return Desk", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Issue books, process returns, calculate late fines" },
-      { id: "library-members", name: "Student & Staff Cards", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Manage library membership cards and borrowing limits" },
-    ],
-  },
-  {
-    id: "placement",
-    name: "Placement",
-    section: "Operations",
-    icon: BriefcaseBusiness,
-    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
-    reason: "Placement Officer is an existing staff role option.",
-    screens: [
-      { id: "placement-drives", name: "Recruitment Drives", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Company visits, eligibility criteria, and interview dates" },
-      { id: "student-applications", name: "Applications & Offers", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Shortlisted candidates, job offers, and salary packages" },
-    ],
-  },
-]);
+export const OPTIONAL_MODULES_CONFIRMED_BY_CONFIG = Object.freeze([]);
 
 export const ALL_PERMISSION_MODULES = Object.freeze([
   ...MODULE_PERMISSION_CONFIG,
@@ -1032,16 +984,6 @@ export const ROLE_MEMBER_FALLBACK = Object.freeze([
     status: "Active",
   },
   {
-    id: "usr-library-001",
-    userId: "LIB-0001",
-    name: "Library Staff",
-    userType: "Staff",
-    department: "Library",
-    designation: "Librarian",
-    roleCodes: ["LIBRARIAN"],
-    status: "Active",
-  },
-  {
     id: "usr-hostel-001",
     userId: "HST-0001",
     name: "Hostel Warden",
@@ -1049,16 +991,6 @@ export const ROLE_MEMBER_FALLBACK = Object.freeze([
     department: "Hostel",
     designation: "Warden",
     roleCodes: ["HOSTEL_WARDEN"],
-    status: "Active",
-  },
-  {
-    id: "usr-placement-001",
-    userId: "PLC-0001",
-    name: "Placement Officer",
-    userType: "Staff",
-    department: "Placements",
-    designation: "Placement Officer",
-    roleCodes: ["PLACEMENT_OFFICER"],
     status: "Active",
   },
   {
