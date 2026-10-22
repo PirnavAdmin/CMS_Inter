@@ -85,7 +85,7 @@ export default function Login() {
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
       const userRole = String(result.user.role || "").toLowerCase();
-      const isExamCell = isExamCellRole(userRole);
+      const isExamCell = isExamCellRole(userRole) || result.roleType === "examcell";
       const isPrincipal = userRole === "principal" || userRole.includes("principal");
       const isFacultyOrStaff =
         userRole === "faculty" ||

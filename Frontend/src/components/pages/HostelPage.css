@@ -2066,6 +2066,27 @@ button,
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary) 18%, transparent) !important;
 }
 
+/* Number stepper inputs fix: prevent overflow / vertical clipping of numbers */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
+.cms-stepper-input {
+  box-sizing: border-box !important;
+  text-align: center !important;
+  padding: 0 4px !important;
+  line-height: 1.2 !important;
+  vertical-align: middle !important;
+  overflow: visible !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
 .cms-alloc-modal-select {
   width: 100%;
   height: 38px !important;

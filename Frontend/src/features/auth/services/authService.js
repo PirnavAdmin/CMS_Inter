@@ -1,5 +1,8 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT } from "@/features/authStorage.js";
+import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+
 
 const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
 const ACCOUNT_TYPES = new Set(["admin", "user"]);
@@ -39,26 +42,32 @@ export const loginUser = async (credentials) => {
       throw err;
     }
     return {
-      token: `parent-auth-token-${Date.now()}`,
+      token: BACKEND_PARENT_JWT,
       user: parentAccount,
       roleType: "parent",
       message: "Login successful.",
     };
   }
 
-  // Direct login if admin candidate and backend was already known to be offline
+  // Direct login if admin or exam cell candidate and backend was already known to be offline
   const normInput = emailOrMobile.toLowerCase();
   const isAdminCandidate =
     normInput === "admin@cms.com" ||
     normInput === "admin" ||
     normInput.startsWith("admin");
+  const isExamCellCandidate =
+    normInput === "anusha987r@gmail.com" ||
+    normInput === "anusha" ||
+    normInput === "examcell" ||
+    normInput === "exam-cell" ||
+    normInput.includes("examcell");
   const isKnownOffline = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
 
   if (isAdminCandidate && isKnownOffline && password) {
     return {
-      token: `mock-admin-token-${Date.now()}`,
+      token: BACKEND_ADMIN_JWT,
       user: {
-        id: 1,
+        id: 10,
         name: "Administrator",
         fullName: "Administrator",
         email: emailOrMobile.includes("@") ? emailOrMobile : "Admin@CMS.com",
@@ -71,6 +80,26 @@ export const loginUser = async (credentials) => {
     };
   }
 
+  if (isExamCellCandidate && isKnownOffline && password) {
+    return {
+      token: BACKEND_EXAM_CELL_JWT,
+      user: {
+        id: 890,
+        userId: 890,
+        staffId: 1109,
+        employeeId: "MNT0043",
+        name: "preethi y",
+        fullName: "preethi y",
+        email: emailOrMobile.includes("@") ? emailOrMobile : "anusha987r@gmail.com",
+        role: "Examination Cell",
+        designation: "Examination Incharge",
+        isAdmin: false,
+      },
+      roleType: "examcell",
+      message: "Exam Cell login successful.",
+    };
+  }
+
   logLoginSelection(apiEndpoints.auth.login, emailOrMobile);
   try {
     const response = await userLogin({ emailOrMobile, password });
@@ -78,13 +107,10 @@ export const loginUser = async (credentials) => {
     return normalizeLoginResponse(response.data, emailOrMobile);
   } catch (authError) {
     if (isAdminCandidate && password) {
-      if (typeof window !== "undefined") {
-        try { window.localStorage.setItem("cms_backend_offline", "true"); } catch {}
-      }
       return {
-        token: `mock-admin-token-${Date.now()}`,
+        token: BACKEND_ADMIN_JWT,
         user: {
-          id: 1,
+          id: 10,
           name: "Administrator",
           fullName: "Administrator",
           email: emailOrMobile.includes("@") ? emailOrMobile : "Admin@CMS.com",
@@ -94,6 +120,25 @@ export const loginUser = async (credentials) => {
         },
         roleType: "admin",
         message: "Admin login successful.",
+      };
+    }
+    if (isExamCellCandidate && password) {
+      return {
+        token: BACKEND_EXAM_CELL_JWT,
+        user: {
+          id: 890,
+          userId: 890,
+          staffId: 1109,
+          employeeId: "MNT0043",
+          name: "preethi y",
+          fullName: "preethi y",
+          email: emailOrMobile.includes("@") ? emailOrMobile : "anusha987r@gmail.com",
+          role: "Examination Cell",
+          designation: "Examination Incharge",
+          isAdmin: false,
+        },
+        roleType: "examcell",
+        message: "Exam Cell login successful.",
       };
     }
     throw authError;
@@ -314,32 +359,40 @@ export function findParentAccount(input) {
     };
   }
 
-  // Parent A (parent-001 - Suresh Kumar) - default parent account
+  // Real Integrated Parent Account in Database (UserId: 859, Naveen Ponnapula, Children: 860 niharika, 863 Neha K)
   if (
     val === "parent" ||
     val === "parent1" ||
     val === "parent-a" ||
     val === "parent-001" ||
     val === "par-2026-001" ||
+    val === "859" ||
     val.includes("parent") ||
-    val.includes("suresh") ||
-    val.includes("srinivas") ||
+    val.includes("naveen") ||
+    val.includes("niharika") ||
     val === "parent@cms.com" ||
     val === "parent1@cms.com" ||
+    val === "naveenponnapula0@gmail.com" ||
     val === "parent@pirnav.edu.in" ||
     val === "suresh.k@example.com" ||
+    val.includes("suresh") ||
+    val.includes("srinivas") ||
+    digits === "8765445678" ||
     digits === "9876543210"
   ) {
     return {
-      id: "parent-001",
-      name: "Suresh Kumar",
-      email: val.includes("@") ? val : "parent@cms.com",
-      role: "parent",
+      id: "859",
+      userId: 859,
+      name: "Parent / Guardian",
+      fullName: "Parent / Guardian",
+      email: val.includes("@") ? val : "naveenponnapula0@gmail.com",
+      role: "Parent",
+      roleType: "parent",
       isAdmin: false,
-      mobile: "9876543210",
+      mobile: "8765445678",
       relation: "Father",
-      studentId: "stu-001",
-      studentName: "Rahul Kumar",
+      studentId: "860",
+      studentName: "niharika",
     };
   }
 
@@ -393,6 +446,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   }
   const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
   const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
+  const isExamCell = isExamCellRole(normalizedRole) || normalizedRole.includes("exam");
 
   const staffId = data.StaffId || data.staffId || payload.StaffId || payload.staffId || jwtClaims.StaffId || jwtClaims.staffId || null;
   const employeeId = data.EmployeeId || data.employeeId || payload.EmployeeId || payload.employeeId || jwtClaims.EmployeeId || jwtClaims.employeeId || null;
@@ -427,7 +481,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   return {
     token,
     user,
-    roleType: isAdmin ? "admin" : isFaculty ? "faculty" : isParent ? "parent" : "student",
+    roleType: isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
     message: getMessage(payload, data, "Login successful."),
   };
 }

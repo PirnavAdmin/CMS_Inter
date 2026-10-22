@@ -80,6 +80,10 @@ const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
   reimbursement: reimbursementIcon,
   reimbursements: reimbursementIcon,
   "inventory management": Boxes,
+  "exam schedule": examinationIcon,
+  "marks evaluation": marksEvaluationIcon,
+  "marks entry": marksEvaluationIcon,
+  "my attendance": generatedSidebarIcons.staffAttendance,
 });
 
 const PAGE_ICON_ROUTE_ALIASES = [
@@ -108,6 +112,23 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/warden-dashboard/reports", icon: reportsAnalyticsIcon },
   { path: "/warden-dashboard/profile", icon: staffIcon },
   { path: "/warden-dashboard", icon: dashboardIcon },
+  { path: "/exam-cell-dashboard/exams", icon: examinationIcon },
+  { path: "/exam-cell-dashboard/exam-timetable", icon: timetableIcon },
+  { path: "/exam-cell-dashboard/hall-allocation", icon: sectionsIcon },
+  { path: "/exam-cell-dashboard/hall-tickets", icon: certificatesIcon },
+  { path: "/exam-cell-dashboard/marks-entry", icon: marksEvaluationIcon },
+  { path: "/exam-cell-dashboard/marks-verification", icon: reportsAnalyticsIcon },
+  { path: "/exam-cell-dashboard/results", icon: resultsIcon },
+  { path: "/exam-cell-dashboard/publish-results", icon: promotionIcon },
+  { path: "/exam-cell-dashboard/attendance", icon: attendanceIcon },
+  { path: "/exam-cell-dashboard/check-in-out", icon: generatedSidebarIcons.staffAttendance },
+  { path: "/exam-cell-dashboard/my-attendance", icon: generatedSidebarIcons.staffAttendance },
+  { path: "/exam-cell-dashboard/certificates", icon: certificatesIcon },
+  { path: "/exam-cell-dashboard/promotions", icon: promotionIcon },
+  { path: "/exam-cell-dashboard/holidays", icon: holidayManagementIcon },
+  { path: "/exam-cell-dashboard/reports", icon: reportsAnalyticsIcon },
+  { path: "/exam-cell-dashboard/profile", icon: staffIcon },
+  { path: "/exam-cell-dashboard", icon: dashboardIcon },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -295,6 +316,46 @@ export const principalMenu = [
   },
 ];
 
+export const examCellMenu = [
+  {
+    section: "Overview",
+    items: [{ to: "/exam-cell-dashboard", label: "Dashboard", icon: dashboardIcon }],
+  },
+  {
+    section: "Examinations",
+    items: [
+      { to: "/exam-cell-dashboard/exams", label: "Examination", icon: examinationIcon },
+      { to: "/exam-cell-dashboard/hall-allocation", label: "Hall Allocation", icon: sectionsIcon },
+      { to: "/exam-cell-dashboard/hall-tickets", label: "Hall Tickets", icon: certificatesIcon },
+    ],
+  },
+  {
+    section: "Marks & Results",
+    items: [
+      { to: "/exam-cell-dashboard/marks-entry", label: "Marks Entry", icon: marksEvaluationIcon },
+      { to: "/exam-cell-dashboard/results", label: "Results", icon: resultsIcon },
+    ],
+  },
+  {
+    section: "Student Operations",
+    items: [
+      { to: "/exam-cell-dashboard/attendance", label: "Attendance", icon: attendanceIcon },
+      { to: "/exam-cell-dashboard/check-in-out", label: "My Attendance", icon: generatedSidebarIcons.staffAttendance },
+      { to: "/exam-cell-dashboard/certificates", label: "Certificates", icon: certificatesIcon },
+      { to: "/exam-cell-dashboard/promotions", label: "Promotions", icon: promotionIcon },
+      { to: "/exam-cell-dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
+    ],
+  },
+  {
+    section: "Reports & Account",
+    items: [
+      { to: "/exam-cell-dashboard/reports", label: "Exam Reports", icon: reportsAnalyticsIcon },
+      { to: "/exam-cell-dashboard/profile", label: "My Profile", icon: staffIcon },
+      { to: "/exam-cell-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon },
+    ],
+  },
+];
+
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
@@ -360,6 +421,8 @@ const parentSearchIndex = [
   { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
 ];
 
+const examCellSearchIndex = createSearchIndex(examCellMenu);
+
 const breadcrumbLinkForLabel = (label) =>
   searchIndex.find((item) => item.label.toLowerCase() === String(label).toLowerCase())?.to;
 
@@ -375,6 +438,8 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
       matches = pathname === "/dashboard";
     } else if (path === "/parent-dashboard") {
       matches = pathname === "/parent-dashboard";
+    } else if (path === "/exam-cell-dashboard") {
+      matches = pathname === "/exam-cell-dashboard";
     } else if (path === "/dashboard/attendance" || path === "/dashboard/attendance/student") {
       matches =
         !pathname.startsWith("/dashboard/attendance/staff") &&
@@ -385,6 +450,27 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
       matches =
         pathname === "/dashboard/attendance/staff" ||
         pathname.startsWith("/dashboard/attendance/staff/");
+    } else if (path === "/exam-cell-dashboard/exams") {
+      matches =
+        pathname === "/exam-cell-dashboard/exams" ||
+        pathname.startsWith("/exam-cell-dashboard/exams/") ||
+        pathname === "/exam-cell-dashboard/exam-timetable";
+    } else if (path === "/exam-cell-dashboard/marks-entry") {
+      matches =
+        pathname === "/exam-cell-dashboard/marks-entry" ||
+        pathname.startsWith("/exam-cell-dashboard/marks-entry/") ||
+        pathname === "/exam-cell-dashboard/marks-verification";
+    } else if (path === "/exam-cell-dashboard/results") {
+      matches =
+        pathname === "/exam-cell-dashboard/results" ||
+        pathname.startsWith("/exam-cell-dashboard/results/") ||
+        pathname === "/exam-cell-dashboard/publish-results";
+    } else if (path === "/exam-cell-dashboard/attendance") {
+      matches =
+        pathname === "/exam-cell-dashboard/attendance" ||
+        pathname.startsWith("/exam-cell-dashboard/attendance/");
+    } else if (path === "/exam-cell-dashboard/check-in-out") {
+      matches = pathname === "/exam-cell-dashboard/check-in-out" || pathname === "/exam-cell-dashboard/my-attendance";
     } else {
       matches = pathname === path || pathname.startsWith(`${path}/`);
     }
@@ -393,7 +479,13 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : pathname.startsWith("/principal-dashboard") ? principalMenu : menu;
+  const activeMenus = pathname.startsWith("/parent-dashboard")
+    ? parentMenu
+    : pathname.startsWith("/principal-dashboard")
+    ? principalMenu
+    : pathname.startsWith("/exam-cell-dashboard")
+    ? examCellMenu
+    : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
@@ -447,6 +539,12 @@ function readUser() {
 function isPrincipalRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   return normalized === "principal" || normalized.includes("principal");
+}
+
+export function isExamCellRole(role) {
+  return /^exam(?:ination)?cell(?:staff|officer|coordinator)?$/.test(
+    String(role || "").replace(/[^a-z]/gi, "").toLowerCase()
+  );
 }
 
 function initials(name = "CMS Admin") {
@@ -510,11 +608,12 @@ export default function DashboardLayout({
   const user = readUser();
   const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
   const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
-  const activeMenu = menuOverride || (isParent ? parentMenu : isPrincipal ? principalMenu : menu);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
-  const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
-  const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
-  const canManageAcademicContext = !isParent && !menuOverride;
+  const isExamCell = isExamCellRole(user?.role) || pathname.startsWith("/exam-cell-dashboard");
+  const activeMenu = menuOverride || (isParent ? parentMenu : isPrincipal ? principalMenu : isExamCell ? examCellMenu : menu);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : isExamCell ? examCellSearchIndex : searchIndex);
+  const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/dashboard/settings/my-profile");
+  const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  const canManageAcademicContext = !isParent && !isExamCell && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
   const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
@@ -568,7 +667,13 @@ export default function DashboardLayout({
     if (pathname.startsWith("/dashboard/faculty")) setFacultyOpen(true);
   }, [pathname, setFacultyOpen]);
   useEffect(() => {
-    if (pathname.startsWith("/dashboard/attendance/")) setAttendanceOpen(true);
+    if (
+      pathname.startsWith("/dashboard/attendance") ||
+      pathname.startsWith("/exam-cell-dashboard/attendance") ||
+      pathname.startsWith("/exam-cell-dashboard/check-in-out")
+    ) {
+      setAttendanceOpen(true);
+    }
   }, [pathname]);
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
@@ -634,11 +739,42 @@ export default function DashboardLayout({
     if (basePath === "/dashboard") return pathname === "/dashboard";
     if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
+    if (basePath === "/exam-cell-dashboard") return pathname === "/exam-cell-dashboard";
     if (basePath === "/dashboard/settings") {
       return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
     }
     if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
       return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
+    }
+    if (to === "/exam-cell-dashboard/exams") {
+      return (
+        pathname === "/exam-cell-dashboard/exams" ||
+        pathname.startsWith("/exam-cell-dashboard/exams/") ||
+        pathname === "/exam-cell-dashboard/exam-timetable"
+      );
+    }
+    if (to === "/exam-cell-dashboard/marks-entry") {
+      return (
+        pathname === "/exam-cell-dashboard/marks-entry" ||
+        pathname.startsWith("/exam-cell-dashboard/marks-entry/") ||
+        pathname === "/exam-cell-dashboard/marks-verification"
+      );
+    }
+    if (to === "/exam-cell-dashboard/results") {
+      return (
+        pathname === "/exam-cell-dashboard/results" ||
+        pathname.startsWith("/exam-cell-dashboard/results/") ||
+        pathname === "/exam-cell-dashboard/publish-results"
+      );
+    }
+    if (to === "/exam-cell-dashboard/attendance") {
+      return (
+        pathname === "/exam-cell-dashboard/attendance" ||
+        pathname.startsWith("/exam-cell-dashboard/attendance/")
+      );
+    }
+    if (to === "/exam-cell-dashboard/check-in-out") {
+      return pathname === "/exam-cell-dashboard/check-in-out" || pathname === "/exam-cell-dashboard/my-attendance";
     }
     if (searchStr && !location.search.includes(searchStr)) return false;
 
@@ -694,7 +830,7 @@ export default function DashboardLayout({
                 }
                 if (item.children) {
                   const isFacultyMenu = item.to === "/dashboard/faculty";
-                  const isAttendanceMenu = item.to === "/dashboard/attendance";
+                  const isAttendanceMenu = item.to === "/dashboard/attendance" || item.to === "/exam-cell-dashboard/attendance" || item.to.includes("attendance");
                   const isSettingsMenu = item.to === "/dashboard/settings";
                   const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : false;
                   const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : () => {};
@@ -708,8 +844,16 @@ export default function DashboardLayout({
                           className={`cms-nav-link ${active || item.children.some(childIsActive) ? "is-active" : ""}`}
                           onClick={(event) => {
                             if (isAttendanceMenu) {
-                              event.preventDefault();
-                              setOpen((v) => !v);
+                              if (item.to === "/dashboard/attendance") {
+                                event.preventDefault();
+                                setOpen((v) => !v);
+                              } else {
+                                if (pathname === item.to) {
+                                  setOpen((v) => !v);
+                                } else {
+                                  setOpen(true);
+                                }
+                              }
                             } else {
                               setAttendanceOpen(false);
                             }

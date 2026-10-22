@@ -268,6 +268,23 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
     console.warn("Notice: could not query students endpoint:", err);
   }
 
+  // Resilient fallback: query students by sectionId if multi-param filter returned 0
+  if (studentMap.size === 0 && sectionId) {
+    try {
+      const res = await apiClient.get(apiEndpoints.students?.list || "/api/v1/students", {
+        params: { sectionId: Number(sectionId) || sectionId, pageSize: 100 },
+        skipGlobalLoader: true,
+      });
+      const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
+      const batch = Array.isArray(payload)
+        ? payload
+        : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
+      addRecords(batch);
+    } catch (err) {
+      console.warn("Fallback student query failed:", err);
+    }
+  }
+
   const list = Array.from(studentMap.values());
   list.sort((a, b) => {
     if (a.rollNo && b.rollNo) {
@@ -882,7 +899,29 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
           },
         });
-        const rawExams = unwrapRecords(examsRes);
+        let rawExams = unwrapRecords(examsRes);
+        // Fallback: if program-specific query returned 0 exams, fetch completed exams for the group
+        if (!rawExams.length && filters.program) {
+          try {
+            const fallbackRes = await apiClient.get(apiEndpoints.examinations.getAll, {
+              params: {
+                boardId: currentBoard || undefined,
+                academicYearId: currentYear || undefined,
+                academicLevelId: filters.level || undefined,
+                groupId: filters.group || undefined,
+                status: "COMPLETED",
+              },
+              headers: {
+                ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+              },
+              skipGlobalLoader: true,
+            });
+            rawExams = unwrapRecords(fallbackRes);
+          } catch (e) {
+            // ignore
+          }
+        }
+
         const examList = (rawExams.length ? rawExams : [])
           .map((e) => {
             const rawStatus = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
@@ -911,10 +950,27 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               isActive: e.isActive !== false,
               isCompleted: Boolean(e.isCompleted || rawStatus === "COMPLETED"),
             };
-          })
-          .filter((e) => {
+          });
+
+        let filteredExamList = examList.filter((e) => {
+          if (!e.isActive) return false;
+          // STRICT FILTER: Only genuinely Completed Examinations
+          const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
+          if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+
+          if (currentBoard && e.boardId && !eq(e.boardId, currentBoard)) return false;
+          if (currentYear && e.academicYearId && !eq(e.academicYearId, currentYear)) return false;
+          if (filters.level && e.academicLevelId && !eq(e.academicLevelId, filters.level)) return false;
+          if (filters.group && e.groupId && !eq(e.groupId, filters.group)) return false;
+          if (filters.program && e.programId && !eq(e.programId, filters.program)) return false;
+
+          return true;
+        });
+
+        // If strict program matching left no exams, allow group-level completed exams
+        if (filteredExamList.length === 0 && filters.program) {
+          filteredExamList = examList.filter((e) => {
             if (!e.isActive) return false;
-            // STRICT FILTER: Only genuinely Completed Examinations
             const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
             if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
 
@@ -922,15 +978,14 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             if (currentYear && e.academicYearId && !eq(e.academicYearId, currentYear)) return false;
             if (filters.level && e.academicLevelId && !eq(e.academicLevelId, filters.level)) return false;
             if (filters.group && e.groupId && !eq(e.groupId, filters.group)) return false;
-            if (filters.program && e.programId && !eq(e.programId, filters.program)) return false;
-
             return true;
           });
+        }
 
         if (isMounted) {
-          setExams(examList);
+          setExams(filteredExamList);
           setFilters((prev) => {
-            if (prev.exam && !examList.some((e) => eq(e.id, prev.exam))) {
+            if (prev.exam && !filteredExamList.some((e) => eq(e.id, prev.exam))) {
               return { ...prev, exam: "" };
             }
             return prev;
@@ -995,7 +1050,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   };
 }
 
-export default function MarksEntryPage({ embedded = false } = {}) {
+export default function MarksEntryPage({ embedded = false, initialTab = "entry" } = {}) {
   const {
     campuses: contextCampuses = [],
     activeCampuses = [],
@@ -1039,7 +1094,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   }, [effectiveCampus, selectedCampus, selectedCampusId]);
 
   // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
-  const [tab, setTab] = useState("entry");
+  const [tab, setTab] = useState(initialTab);
+
+  useEffect(() => {
+    if (initialTab && initialTab !== tab) {
+      setTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Initial Master Boards (Loaded once on mount)
   const [allBoards, setAllBoards] = useState([]);
@@ -1285,10 +1346,40 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       console.warn("Could not fetch exam schedules:", e);
     }
 
+    if (!schedules.length) {
+      try {
+        const schedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`).catch(() => null);
+        const fetchedSchedules = unwrapRecords(schedRes);
+        if (fetchedSchedules?.length) {
+          schedules = fetchedSchedules;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    if (!schedules.length) {
+      try {
+        const schedRes2 = await apiClient.get(`/api/v1/examination-schedules`, { params: { examinationId: examId } }).catch(() => null);
+        const fetchedSchedules2 = unwrapRecords(schedRes2);
+        if (fetchedSchedules2?.length) {
+          schedules = fetchedSchedules2;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
     const effectiveExam = examDetail || selectedExam;
 
     const configs = schedules.map((s) => {
       const isObjective = isObjectiveExamination(s, effectiveExam);
+      const maxMarks = Number(s.maxMarks || 100);
+      const internalMax = isObjective ? 0 : Number(s.internalMax ?? 20);
+      const practicalMax = isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0));
+      const remainingTheory = Math.max(0, maxMarks - internalMax - practicalMax);
+      const rawTheory = Number(s.theoryMax ?? remainingTheory);
+      const theoryMax = isObjective ? 0 : (internalMax + practicalMax + rawTheory === maxMarks ? rawTheory : remainingTheory);
+
       return {
         id: `cfg-${examId}-${s.subjectId}`,
         examinationId: examId,
@@ -1297,21 +1388,11 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         subjectName: s.subjectName || `Subject ${s.subjectId}`,
         subjectCode: s.subjectCode || "",
         mode: isObjective ? "OBJECTIVE" : "REGULAR",
-        maxMarks: Number(s.maxMarks || 100),
-        passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
-        internalMax: isObjective ? 0 : Number(s.internalMax ?? 20),
-        practicalMax: isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
-        theoryMax: isObjective
-          ? 0
-          : Number(
-            s.theoryMax ??
-            Math.max(
-              0,
-              Number(s.maxMarks || 100) -
-              Number(s.internalMax ?? 20) -
-              Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
-            )
-          ),
+        maxMarks,
+        passPercentage: Number(s.passingMarks ? (s.passingMarks / maxMarks) * 100 : 35),
+        internalMax,
+        practicalMax,
+        theoryMax,
         facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
         facultyId: s.invigilatorId || s.facultyId || "",
       };
@@ -1476,27 +1557,52 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       setEntryStudents(studentList);
 
       // 2. Fetch Completed Examinations strictly matching academic scope
-      const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
-        params: {
-          campusId: effectiveCampusId || undefined,
-          CampusId: effectiveCampusId || undefined,
-          boardId: effectiveEntryFilters.board,
-          BoardId: effectiveEntryFilters.board,
-          academicYearId: effectiveEntryFilters.year,
-          AcademicYearId: effectiveEntryFilters.year,
-          academicLevelId: effectiveEntryFilters.level,
-          AcademicLevelId: effectiveEntryFilters.level,
-          groupId: effectiveEntryFilters.group,
-          GroupId: effectiveEntryFilters.group,
-          programId: effectiveEntryFilters.program || undefined,
-          ProgramId: effectiveEntryFilters.program || undefined,
-          status: "COMPLETED",
-          Status: "COMPLETED",
-        },
-        skipGlobalLoader: true,
-      });
-      const rawExams = unwrapRecords(examsRes);
-      const examList = (rawExams || [])
+      let rawExams = [];
+      try {
+        const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
+          params: {
+            campusId: effectiveCampusId || undefined,
+            CampusId: effectiveCampusId || undefined,
+            boardId: effectiveEntryFilters.board,
+            BoardId: effectiveEntryFilters.board,
+            academicYearId: effectiveEntryFilters.year,
+            AcademicYearId: effectiveEntryFilters.year,
+            academicLevelId: effectiveEntryFilters.level,
+            AcademicLevelId: effectiveEntryFilters.level,
+            groupId: effectiveEntryFilters.group,
+            GroupId: effectiveEntryFilters.group,
+            programId: effectiveEntryFilters.program || undefined,
+            ProgramId: effectiveEntryFilters.program || undefined,
+            status: "COMPLETED",
+            Status: "COMPLETED",
+          },
+          skipGlobalLoader: true,
+        });
+        rawExams = unwrapRecords(examsRes) || [];
+      } catch (err) {
+        console.warn("Could not fetch exams with program filter:", err);
+      }
+
+      if (!rawExams.length && effectiveEntryFilters.program) {
+        try {
+          const fallbackRes = await apiClient.get(apiEndpoints.examinations.getAll, {
+            params: {
+              campusId: effectiveCampusId || undefined,
+              boardId: effectiveEntryFilters.board,
+              academicYearId: effectiveEntryFilters.year,
+              academicLevelId: effectiveEntryFilters.level,
+              groupId: effectiveEntryFilters.group,
+              status: "COMPLETED",
+            },
+            skipGlobalLoader: true,
+          });
+          rawExams = unwrapRecords(fallbackRes) || [];
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      let examList = (rawExams || [])
         .map((e) => {
           const rawStatus = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
           const examCode = e.examCode ?? e.code ?? "";
@@ -1541,9 +1647,53 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           return true;
         });
 
-      const chosenExamId = entryExamId && examList.some((e) => eq(e.id, entryExamId))
+      if (examList.length === 0 && entry.filters.program) {
+        examList = (rawExams || [])
+          .map((e) => {
+            const rawStatus = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
+            const examCode = e.examCode ?? e.code ?? "";
+            const examName = e.examName ?? e.examinationName ?? e.name ?? "Examination";
+            const examId = normalizeId(e.examinationId ?? e.id ?? e.examId);
+            return {
+              ...e,
+              id: examId,
+              examinationId: examId,
+              code: examCode,
+              examCode: examCode,
+              name: examName,
+              examName: examName,
+              status: rawStatus,
+              scheduleMode: e.scheduleMode || e.mode || "",
+              examPattern: e.examPattern || e.pattern || e.patternName || "",
+              examCategory: e.examCategory || e.category || "",
+              startDate: e.startDate || e.examStartDate || e.examDate || null,
+              endDate: e.endDate || e.examEndDate || e.completionDate || null,
+              boardId: normalizeId(e.boardId ?? e.BoardId),
+              academicYearId: normalizeId(e.academicYearId ?? e.AcademicYearId ?? e.yearId),
+              academicLevelId: normalizeId(e.academicLevelId ?? e.AcademicLevelId),
+              groupId: normalizeId(e.groupId ?? e.GroupId),
+              programId: normalizeId(e.programId ?? e.ProgramId),
+              schedules: e.schedules || e.examinationSchedules || [],
+              isActive: e.isActive !== false,
+              isCompleted: Boolean(e.isCompleted || rawStatus === "COMPLETED"),
+            };
+          })
+          .filter((e) => {
+            if (!e.isActive) return false;
+            const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
+            if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+
+            if (entry.filters.board && e.boardId && !eq(e.boardId, entry.filters.board)) return false;
+            if (entry.filters.year && e.academicYearId && !eq(e.academicYearId, entry.filters.year)) return false;
+            if (entry.filters.level && e.academicLevelId && !eq(e.academicLevelId, entry.filters.level)) return false;
+            if (entry.filters.group && e.groupId && !eq(e.groupId, entry.filters.group)) return false;
+            return true;
+          });
+      }
+
+      const chosenExamId = (entryExamId && examList.some((e) => eq(e.id, entryExamId)))
         ? entryExamId
-        : "";
+        : (examList[0]?.id || "");
       setEntryExamId(chosenExamId);
       if (entry.setExams) entry.setExams(examList);
 
@@ -2590,6 +2740,27 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         console.warn("Could not fetch schedules for evaluation:", e);
       }
 
+      if (!schedules.length) {
+        try {
+          const schedRes = await apiClient.get(`/api/v1/examinations/${evalState.filters.exam}/schedules`).catch(() => null);
+          const rawScheds = unwrapRecords(schedRes);
+          if (rawScheds?.length) schedules = rawScheds;
+        } catch (e) {
+          // ignore
+        }
+      }
+      if (!schedules.length) {
+        try {
+          const schedRes2 = await apiClient.get(`/api/v1/examination-schedules`, {
+            params: { examinationId: evalState.filters.exam },
+          }).catch(() => null);
+          const rawScheds2 = unwrapRecords(schedRes2);
+          if (rawScheds2?.length) schedules = rawScheds2;
+        } catch (e) {
+          // ignore
+        }
+      }
+
       const effectiveExam = examDetail || selectedExam;
 
       const configs = [];
@@ -2600,6 +2771,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         seenConfigSubjects.add(subjId);
 
         const isObjective = isObjectiveExamination(s, effectiveExam);
+        const maxMarks = Number(s.maxMarks || 100);
+        const internalMax = isObjective ? 0 : Number(s.internalMax ?? 20);
+        const practicalMax = isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0));
+        const remainingTheory = Math.max(0, maxMarks - internalMax - practicalMax);
+        const rawTheory = Number(s.theoryMax ?? remainingTheory);
+        const theoryMax = isObjective ? 0 : (internalMax + practicalMax + rawTheory === maxMarks ? rawTheory : remainingTheory);
+
         configs.push({
           id: `cfg-${evalState.filters.exam}-${subjId}`,
           examinationId: evalState.filters.exam,
@@ -2608,21 +2786,11 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           subjectName: s.subjectName || `Subject ${subjId}`,
           subjectCode: s.subjectCode || "",
           mode: isObjective ? "OBJECTIVE" : "REGULAR",
-          maxMarks: Number(s.maxMarks || 100),
-          passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
-          internalMax: isObjective ? 0 : Number(s.internalMax ?? 20),
-          practicalMax: isObjective ? 0 : Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
-          theoryMax: isObjective
-            ? 0
-            : Number(
-              s.theoryMax ??
-              Math.max(
-                0,
-                Number(s.maxMarks || 100) -
-                Number(s.internalMax ?? 20) -
-                Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
-              )
-            ),
+          maxMarks,
+          passPercentage: Number(s.passingMarks ? (s.passingMarks / maxMarks) * 100 : 35),
+          internalMax,
+          practicalMax,
+          theoryMax,
           facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
           facultyId: s.invigilatorId || s.facultyId || "",
         });
@@ -2811,7 +2979,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         subjectId: subjId,
       });
       const ws = workspaces[key];
-      if (ws && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())) {
+      if (ws) {
         items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
       }
     });

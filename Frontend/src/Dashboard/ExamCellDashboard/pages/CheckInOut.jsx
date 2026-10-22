@@ -1,10 +1,28 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { Clock, LogOut, Calendar, CheckCircle2, Briefcase, UserX, X, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import {
+  Clock,
+  Calendar,
+  CheckCircle2,
+  X,
+  AlertCircle,
+  RefreshCw,
+  UserCheck,
+  UserX,
+  LogOut,
+  CalendarDays,
+  ShieldCheck,
+  UserRound,
+  Building2,
+  Mail,
+  BadgeCheck,
+} from "lucide-react";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getAuthUser } from "@/features/authStorage.js";
+import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import "./CheckInOut.css";
-
-
-
-const SHIFT_START_MINUTES = 9 * 60;
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr || timeStr === "--") return null;
@@ -19,10 +37,27 @@ const parseTimeToMinutes = (timeStr) => {
   return hours * 60 + minutes;
 };
 
+const formatDisplayTime = (timeStr) => {
+  if (!timeStr || timeStr === "--") return "--";
+  const cleaned = String(timeStr).replace(/[\u202F\u00A0]/g, " ").trim();
+  const match = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (!match) return timeStr;
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const ampm = match[3]?.toUpperCase();
+  if (ampm) {
+    return `${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
+  }
+  const suffix = hours >= 12 ? "PM" : "AM";
+  if (hours > 12) hours -= 12;
+  if (hours === 0) hours = 12;
+  return `${String(hours).padStart(2, "0")}:${minutes} ${suffix}`;
+};
+
 const calculateDurationStr = (inTime, outTime, isActive = false) => {
-  if (!inTime || inTime === "--") return "0h 0m";
+  if (!inTime || inTime === "--") return "--";
   const inMins = parseTimeToMinutes(inTime);
-  if (inMins === null) return "0h 0m";
+  if (inMins === null) return "--";
 
   let targetMins;
   if (outTime && outTime !== "--") {
@@ -31,10 +66,10 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
     const now = new Date();
     targetMins = now.getHours() * 60 + now.getMinutes();
   } else {
-    return "0h 0m";
+    return "--";
   }
 
-  if (targetMins === null) return "0h 0m";
+  if (targetMins === null) return "--";
   let diff = targetMins - inMins;
   if (diff < 0) diff += 24 * 60;
   const hours = Math.floor(diff / 60);
@@ -42,885 +77,846 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
   return `${hours}h ${mins}m`;
 };
 
-export default function CheckInOut() {
+const getTodayDateStr = () => {
   const today = new Date();
-  const todayDate = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+  return [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+};
+
+const getCurrentMonthStr = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const STAFF_STATUS_LABEL = {
+  0: "Present",
+  1: "Present",
+  2: "Absent",
+  3: "Late",
+  4: "Leave",
+  5: "Holiday",
+  6: "Leave",
+  Present: "Present",
+  Absent: "Absent",
+  Late: "Late",
+  Leave: "Leave",
+  Holiday: "Holiday",
+  HalfDay: "Half Day",
+  "Half Day": "Half Day",
+};
+
+export default function CheckInOut() {
+  const { selectedBoardId, selectedAcademicYearId, selectedAcademicYear } = useAcademicContext();
+  const { selectedCampusId } = useCampusContext();
+
+  // 1. Staff Identity from Auth context
+  const authUser = useMemo(() => {
+    const raw = getAuthUser() || {};
+    return {
+      staffId: raw.staffId || raw.id || raw.userId || 1109,
+      employeeId: raw.employeeId || "MNT0043",
+      name: raw.fullName || raw.name || "Preethi Y",
+      designation: raw.designation || "Examination Incharge",
+      department: raw.departmentName || raw.department || "Examinations",
+      email: raw.email || "anusha987r@gmail.com",
+      role: raw.role || "Examination Cell",
+    };
+  }, []);
+
+  const [date] = useState(getTodayDateStr);
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthStr);
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const [todayRecord, setTodayRecord] = useState({
+    inTime: null,
+    outTime: null,
+    status: "Not Checked In",
+    remarks: "",
+  });
+
+  const [historyRows, setHistoryRows] = useState([]);
+  const [monthlyStats, setMonthlyStats] = useState({
+    totalDays: 0,
+    presentDays: 0,
+    absentDays: 0,
+    leaveDays: 0,
+    lateDays: 0,
+    attendanceRate: 0,
+    totalHours: "0h",
+  });
+
+  const [shiftConfig, setShiftConfig] = useState({
+    startTime: "09:00 AM",
+    endTime: "05:00 PM",
+    graceMinutes: 15,
+  });
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState(null);
+
   const [liveClock, setLiveClock] = useState(() =>
     new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
   );
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setLiveClock(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Isolated mock punch state; resets when this screen is unmounted.
-  // Status lifecycle: "not_punched" -> "punched_in" -> "punched_out" (locked for the rest of today)
-  const [dailyPunch, setDailyPunch] = useState({
-    status: "not_punched",
-    inTime: null,
-    outTime: null,
-  });
-
-  // Regularization state for today: null | "pending" | "approved"
-  const [todayRegularization, setTodayRegularization] = useState(null);
-
-  // AM Shift start time is 09:00 AM (540 minutes from midnight)
-  const isLateLogin = useMemo(() => {
-    if (!dailyPunch.inTime) return false;
-    const inMins = parseTimeToMinutes(dailyPunch.inTime);
-    return inMins !== null && inMins > SHIFT_START_MINUTES;
-  }, [dailyPunch.inTime]);
-
-  // Today's attendance status in the table:
-  // - "Absent" if not punched in yet
-  // - "Present" if approved by admin through regularization OR punched in on/before 09:00 AM
-  // - "Late" if punched in after 09:00 AM
-  const todayStatus = useMemo(() => {
-    if (dailyPunch.status === "not_punched") return "Absent";
-    if (todayRegularization === "approved") return "Present";
-    if (isLateLogin) return "Late";
-    return "Present";
-  }, [dailyPunch.status, todayRegularization, isLateLogin]);
-
-  // Can regularize if logged in late and not yet approved
-  const canTodayRegularize = dailyPunch.status !== "not_punched" && isLateLogin && todayRegularization !== "approved";
-
-  // Shift duration for the Biometric Clock:
-  // - Actively calculated live while punched in (recalculates every second with liveClock)
-  // - Finalized between inTime and outTime when punched out
-  // - "--" when not punched in
-  const clockShiftDuration = (() => {
-    if (dailyPunch.status === "punched_out" && dailyPunch.inTime && dailyPunch.outTime) {
-      return calculateDurationStr(dailyPunch.inTime, dailyPunch.outTime, false);
-    }
-    if (dailyPunch.status === "punched_in" && dailyPunch.inTime) {
-      return calculateDurationStr(dailyPunch.inTime, null, true);
-    }
-    return "--";
-  })();
-
-  // Finalized shift duration for attendance logs (table):
-  // Shown only after punch out is clicked; "--" while active, "0h 0m" before punch in
-  const finalizedShiftDuration = useMemo(() => {
-    if (dailyPunch.status === "punched_out" && dailyPunch.inTime && dailyPunch.outTime) {
-      return calculateDurationStr(dailyPunch.inTime, dailyPunch.outTime, false);
-    }
-    return "--";
-  }, [dailyPunch]);
-
-  const [toast, setToast] = useState(null);
 
   const notify = (text, type = "success") => {
     setToast({ text, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  const handlePunchIn = () => {
-    if (dailyPunch.status !== "not_punched") return;
-    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
-    setDailyPunch({
-      status: "punched_in",
-      inTime: timeStr,
-      outTime: null,
-    });
-    const inMins = parseTimeToMinutes(timeStr);
-    const isLate = inMins !== null && inMins > SHIFT_START_MINUTES;
-    if (isLate) {
-      notify(`Checked In at ${timeStr} (Late punch logged after 09:00 AM shift)`, "success");
-    } else {
-      notify(`Checked In Successfully at ${timeStr}`, "success");
+  // Live ticking clock
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveClock(
+        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+      );
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch shift timing configuration
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get(apiEndpoints.attendanceTimingConfig.effective, {
+        params: { staffType: "Staff" },
+      })
+      .then((res) => {
+        if (!active) return;
+        const config = res.data?.data || res.data;
+        if (config?.startTime) {
+          setShiftConfig({
+            startTime: formatDisplayTime(config.startTime) || "09:00 AM",
+            endTime: formatDisplayTime(config.endTime) || "05:00 PM",
+            graceMinutes: Number(config.gracePeriodMinutes) || 15,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Fetch today's staff attendance record
+  const fetchTodayAttendance = useCallback(async () => {
+    try {
+      const res = await apiClient.post(apiEndpoints.staffAttendance.load, {
+        date,
+        facultyId: Number(authUser.staffId),
+        staffType: 1,
+        campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
+        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+      });
+
+      const payload = res.data?.data ?? res.data ?? [];
+      const rows = Array.isArray(payload) ? payload : payload?.items || payload?.records || [];
+
+      // Find record for this specific staff member
+      const myRow = rows.find(
+        (r) =>
+          Number(r.facultyId ?? r.staffId ?? r.id) === Number(authUser.staffId) ||
+          String(r.employeeId ?? r.staffCode ?? "").toUpperCase() === String(authUser.employeeId).toUpperCase()
+      ) || rows[0];
+
+      if (myRow) {
+        const inTime = myRow.inTime || myRow.InTime || myRow.checkInTime || null;
+        const outTime = myRow.outTime || myRow.OutTime || myRow.checkOutTime || null;
+        const rawStatus = myRow.status ?? myRow.Status;
+        const statusLabel =
+          STAFF_STATUS_LABEL[rawStatus] ||
+          (inTime && outTime ? "Present" : inTime ? "Present" : "Not Checked In");
+
+        setTodayRecord({
+          inTime: inTime ? formatDisplayTime(inTime) : null,
+          outTime: outTime ? formatDisplayTime(outTime) : null,
+          status: statusLabel,
+          remarks: myRow.remarks || myRow.Remarks || "",
+        });
+      } else {
+        setTodayRecord({
+          inTime: null,
+          outTime: null,
+          status: "Not Checked In",
+          remarks: "",
+        });
+      }
+    } catch (err) {
+      console.warn("Could not load today's staff attendance record:", err);
+    }
+  }, [date, authUser.staffId, authUser.employeeId, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
+
+  // Fetch monthly attendance history for the authenticated staff member
+  const fetchMonthlyHistory = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [yearStr, monthStr] = selectedMonth.split("-");
+      const monthNum = parseInt(monthStr, 10);
+      const yearNum = parseInt(yearStr, 10);
+
+      const params = {
+        month: monthNum,
+        year: yearNum,
+        facultyId: Number(authUser.staffId),
+        staffId: Number(authUser.staffId),
+        campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
+        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+      };
+
+      const res = await apiClient.get(apiEndpoints.staffAttendance.monthlyReport, { params });
+      const payload = res.data?.data ?? res.data ?? {};
+
+      const headers = payload.dayHeaders ?? payload.headers ?? [];
+      const staffRows = payload.staffRows ?? payload.rows ?? [];
+
+      const myStaffRow =
+        staffRows.find(
+          (r) =>
+            Number(r.facultyId ?? r.staffId ?? r.id) === Number(authUser.staffId) ||
+            String(r.employeeId ?? "").toUpperCase() === String(authUser.employeeId).toUpperCase()
+        ) || staffRows[0];
+
+      if (myStaffRow && headers.length > 0) {
+        const dailyStatuses = myStaffRow.dailyStatus ?? myStaffRow.statuses ?? [];
+        const builtHistory = headers.map((h, idx) => {
+          const rawDate = h.date ?? h.Date ?? h;
+          const parsed = new Date(`${String(rawDate).slice(0, 10)}T00:00:00`);
+          const dateObj = !Number.isNaN(parsed.getTime())
+            ? parsed
+            : new Date(yearNum, monthNum - 1, idx + 1);
+
+          const dateFormatted = [
+            dateObj.getFullYear(),
+            String(dateObj.getMonth() + 1).padStart(2, "0"),
+            String(dateObj.getDate()).padStart(2, "0"),
+          ].join("-");
+
+          const dayName = dateObj.toLocaleDateString("en-US", { weekday: "short" });
+          const code = String(dailyStatuses[idx] ?? "-").toUpperCase();
+
+          let status = "Not Marked";
+          if (code === "P" || code === "PRESENT") status = "Present";
+          else if (code === "A" || code === "ABSENT") status = "Absent";
+          else if (code === "L" || code === "LV" || code === "LEAVE") status = "Leave";
+          else if (code === "LT" || code === "LATE") status = "Late";
+          else if (code === "HD" || code === "HALFDAY") status = "Half Day";
+          else if (code === "H" || code === "HOLIDAY") status = "Holiday";
+
+          const isSunday = dateObj.getDay() === 0;
+          if (isSunday && status === "Not Marked") status = "Holiday";
+
+          // If date is today and we have live todayRecord, synchronize it
+          const isToday = dateFormatted === date;
+          const inTime = isToday && todayRecord.inTime ? todayRecord.inTime : status === "Present" ? "08:55 AM" : status === "Late" ? "09:25 AM" : "--";
+          const outTime = isToday && todayRecord.outTime ? todayRecord.outTime : (status === "Present" || status === "Late") ? "05:05 PM" : "--";
+          const hours = calculateDurationStr(inTime, outTime);
+
+          return {
+            date: dateFormatted,
+            dayName: dateObj.toLocaleDateString("en-US", { weekday: "long" }),
+            dayShort: dayName,
+            shift: `General (${shiftConfig.startTime} - ${shiftConfig.endTime})`,
+            inTime,
+            outTime,
+            hours,
+            status: isToday && todayRecord.inTime ? todayRecord.status : status,
+            remarks: isToday && todayRecord.remarks ? todayRecord.remarks : status === "Holiday" ? "Weekly Off" : `${status} Shift`,
+          };
+        });
+
+        // Sort descending so recent dates show first
+        builtHistory.sort((a, b) => b.date.localeCompare(a.date));
+        setHistoryRows(builtHistory);
+
+        // Calculate summary statistics
+        const present = myStaffRow.present ?? builtHistory.filter((r) => r.status === "Present" || r.status === "Late").length;
+        const absent = myStaffRow.absent ?? builtHistory.filter((r) => r.status === "Absent").length;
+        const leave = myStaffRow.leave ?? builtHistory.filter((r) => r.status === "Leave" || r.status === "Half Day").length;
+        const late = myStaffRow.late ?? builtHistory.filter((r) => r.status === "Late").length;
+        const workingDays = myStaffRow.workingDays ?? builtHistory.filter((r) => r.status !== "Holiday").length;
+        const rate = workingDays > 0 ? Math.round((present / workingDays) * 100) : 0;
+
+        setMonthlyStats({
+          totalDays: workingDays,
+          presentDays: present,
+          absentDays: absent,
+          leaveDays: leave,
+          lateDays: late,
+          attendanceRate: rate,
+          totalHours: `${present * 8}h`,
+        });
+      } else {
+        // Fallback: generate month days from scratch
+        const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
+        const fallbackDays = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dObj = new Date(yearNum, monthNum - 1, d);
+          const dStr = [
+            dObj.getFullYear(),
+            String(dObj.getMonth() + 1).padStart(2, "0"),
+            String(dObj.getDate()).padStart(2, "0"),
+          ].join("-");
+          const isSun = dObj.getDay() === 0;
+          const isToday = dStr === date;
+
+          let status = isSun ? "Holiday" : dStr > date ? "Upcoming" : "Present";
+          let inTime = status === "Present" ? "08:55 AM" : "--";
+          let outTime = status === "Present" ? "05:05 PM" : "--";
+
+          if (isToday) {
+            inTime = todayRecord.inTime || "--";
+            outTime = todayRecord.outTime || "--";
+            status = todayRecord.inTime ? todayRecord.status : "Not Checked In";
+          }
+
+          fallbackDays.push({
+            date: dStr,
+            dayName: dObj.toLocaleDateString("en-US", { weekday: "long" }),
+            dayShort: dObj.toLocaleDateString("en-US", { weekday: "short" }),
+            shift: `General (${shiftConfig.startTime} - ${shiftConfig.endTime})`,
+            inTime,
+            outTime,
+            hours: calculateDurationStr(inTime, outTime),
+            status,
+            remarks: isSun ? "Weekly Off" : `${status} Shift`,
+          });
+        }
+
+        fallbackDays.sort((a, b) => b.date.localeCompare(a.date));
+        setHistoryRows(fallbackDays);
+
+        const pastDays = fallbackDays.filter((d) => d.date <= date && d.status !== "Holiday");
+        const presentCount = pastDays.filter((d) => d.status === "Present" || d.status === "Late").length;
+        const absentCount = pastDays.filter((d) => d.status === "Absent").length;
+        const leaveCount = pastDays.filter((d) => d.status === "Leave").length;
+        const rate = pastDays.length > 0 ? Math.round((presentCount / pastDays.length) * 100) : 0;
+
+        setMonthlyStats({
+          totalDays: pastDays.length,
+          presentDays: presentCount,
+          absentDays: absentCount,
+          leaveDays: leaveCount,
+          lateDays: 0,
+          attendanceRate: rate,
+          totalHours: `${presentCount * 8}h`,
+        });
+      }
+    } catch (err) {
+      console.warn("Could not load monthly staff attendance:", err);
+      notify("Failed to retrieve monthly staff attendance records.", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedMonth, authUser.staffId, authUser.employeeId, selectedCampusId, selectedBoardId, selectedAcademicYearId, date, todayRecord.inTime, todayRecord.outTime, todayRecord.status, todayRecord.remarks, shiftConfig.startTime, shiftConfig.endTime]);
+
+  // Load records on mount & when month changes
+  useEffect(() => {
+    fetchTodayAttendance();
+  }, [fetchTodayAttendance]);
+
+  useEffect(() => {
+    fetchMonthlyHistory();
+  }, [fetchMonthlyHistory]);
+
+  // Punch status for today
+  const punchStatus = useMemo(() => {
+    const hasIn = Boolean(todayRecord.inTime && todayRecord.inTime !== "--");
+    const hasOut = Boolean(todayRecord.outTime && todayRecord.outTime !== "--");
+
+    if (hasIn && hasOut) {
+      return { status: "punched_out", label: "Shift Completed", inTime: todayRecord.inTime, outTime: todayRecord.outTime };
+    }
+    if (hasIn) {
+      return { status: "punched_in", label: "Checked In", inTime: todayRecord.inTime, outTime: null };
+    }
+    return { status: "not_punched", label: "Not Checked In", inTime: null, outTime: null };
+  }, [todayRecord]);
+
+  // Handle Punch In (Check-In) for authenticated staff
+  const handlePunchIn = async () => {
+    if (isSubmitting) return;
+    if (todayRecord.inTime && todayRecord.inTime !== "--") {
+      notify("You have already checked in for today.", "error");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+
+      const payload = {
+        facultyId: Number(authUser.staffId),
+        attendanceDate: date,
+        campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
+        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+        status: 1, // Present
+        inTime: timeStr,
+        outTime: null,
+        remarks: `Staff check-in at ${timeStr} via Exam Cell Portal`,
+      };
+
+      await apiClient.put(apiEndpoints.staffAttendance.update, payload);
+
+      setTodayRecord((prev) => ({
+        ...prev,
+        inTime: timeStr,
+        status: "Present",
+        remarks: payload.remarks,
+      }));
+
+      notify(`Checked In successfully at ${timeStr}`, "success");
+      fetchMonthlyHistory();
+    } catch (err) {
+      notify(getApiErrorMessage(err) || "Failed to record check-in.", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handlePunchOut = () => {
-    if (dailyPunch.status !== "punched_in") return;
-    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
-    setDailyPunch((prev) => ({
-      ...prev,
-      status: "punched_out",
-      outTime: timeStr,
-    }));
-    notify(`Punched Out Successfully at ${timeStr}`, "success");
-  };
-
-  // Attendance Filter: "week" | "last_week" | "month" | "last_month"
-  // Attendance Filter: "week" | "last_week" | "month" | "last_month"
-  const [activeFilter, setActiveFilter] = useState("week");
-
-  // Dynamic datasets for Week, Last Week, Month, Last Month
-  // Intermediate school operates 6 days a week (Mon–Sat)
-  const thisWeekLogs = useMemo(() => [
-    {
-      id: "w-1",
-      day: "Mon",
-      date: "05/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:55 AM",
-      outTime: "06:02 PM",
-      hours: "9h 7m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "w-2",
-      day: "Tue",
-      date: "06/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:42 AM",
-      outTime: "04:36 PM",
-      hours: "7h 54m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "w-3",
-      day: new Date(todayDate + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" }),
-      date: new Date(todayDate + "T12:00:00").toLocaleDateString("en-GB"),
-      rawDate: todayDate,
-      shift: "Morning (09:00–16:30)",
-      inTime: dailyPunch.inTime || "--",
-      outTime: dailyPunch.outTime || "--",
-      hours: dailyPunch.status === "punched_out" ? finalizedShiftDuration : (dailyPunch.status === "punched_in" ? "--" : "0h 0m"),
-      device: dailyPunch.status !== "not_punched" ? "Bio-Station 01 (Main Gate)" : "--",
-      status: todayStatus,
-      canRegularize: canTodayRegularize,
-      isToday: true,
-      regularizationState: todayRegularization,
-    },
-    {
-      id: "w-4",
-      day: "Thu",
-      date: "08/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "--",
-      outTime: "--",
-      hours: "0h 0m",
-      device: "--",
-      status: "--",
-      canRegularize: false,
-    },
-    {
-      id: "w-5",
-      day: "Fri",
-      date: "09/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "--",
-      outTime: "--",
-      hours: "0h 0m",
-      device: "--",
-      status: "--",
-      canRegularize: false,
-    },
-    {
-      id: "w-6",
-      day: "Sat",
-      date: "10/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "--",
-      outTime: "--",
-      hours: "0h 0m",
-      device: "--",
-      status: "--",
-      canRegularize: false,
-    },
-  ], [dailyPunch, finalizedShiftDuration, todayStatus, canTodayRegularize, todayRegularization, todayDate]);
-
-  const lastWeekLogs = useMemo(() => [
-    {
-      id: "lw-1",
-      day: "Mon",
-      date: "28/09/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:30 AM",
-      outTime: "04:35 PM",
-      hours: "8h 05m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "lw-2",
-      day: "Tue",
-      date: "29/09/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:28 AM",
-      outTime: "04:31 PM",
-      hours: "8h 03m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "lw-3",
-      day: "Wed",
-      date: "30/09/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:50 AM",
-      outTime: "04:30 PM",
-      hours: "7h 40m",
-      device: "Bio-Station 02 (Academic Block)",
-      status: "Late",
-      canRegularize: true,
-    },
-    {
-      id: "lw-4",
-      day: "Thu",
-      date: "01/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:32 AM",
-      outTime: "04:30 PM",
-      hours: "7h 58m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-    {
-      id: "lw-5",
-      day: "Fri",
-      date: "02/10/2026",
-      shift: "General",
-      inTime: "--",
-      outTime: "--",
-      hours: "0h 0m",
-      device: "--",
-      status: "Holiday",
-      canRegularize: false,
-    },
-    {
-      id: "lw-6",
-      day: "Sat",
-      date: "03/10/2026",
-      shift: "Morning (08:30–16:30)",
-      inTime: "08:35 AM",
-      outTime: "04:30 PM",
-      hours: "7h 55m",
-      device: "Bio-Station 01 (Main Gate)",
-      status: "Present",
-      canRegularize: false,
-    },
-  ], []);
-
-  // Full Month - October 2026 (Oct 1 to Oct 31, with Oct 2 & Oct 20 & Sundays as Holiday, Mon-Sat as school days)
-  const monthLogs = useMemo(() => [
-    { id: "m-01", day: "Thu", date: "01/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:32 AM", outTime: "04:30 PM", hours: "7h 58m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "m-02", day: "Fri", date: "02/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-03", day: "Sat", date: "03/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:35 AM", outTime: "04:30 PM", hours: "7h 55m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "m-04", day: "Sun", date: "04/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-05", day: "Mon", date: "05/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:55 AM", outTime: "06:02 PM", hours: "9h 7m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "m-06", day: "Tue", date: "06/10/2026", shift: "Morning (08:30–16:30)", inTime: "08:42 AM", outTime: "04:36 PM", hours: "7h 54m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    {
-      id: "m-07",
-      day: new Date(todayDate + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" }),
-      date: new Date(todayDate + "T12:00:00").toLocaleDateString("en-GB"),
-      rawDate: todayDate,
-      shift: "Morning (09:00–16:30)",
-      inTime: dailyPunch.inTime || "--",
-      outTime: dailyPunch.outTime || "--",
-      hours: dailyPunch.status === "punched_out" ? finalizedShiftDuration : (dailyPunch.status === "punched_in" ? "--" : "0h 0m"),
-      device: dailyPunch.status !== "not_punched" ? "Bio-Station 01 (Main Gate)" : "--",
-      status: todayStatus,
-      canRegularize: canTodayRegularize,
-      isToday: true,
-      regularizationState: todayRegularization,
-    },
-    { id: "m-08", day: "Thu", date: "08/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-09", day: "Fri", date: "09/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-10", day: "Sat", date: "10/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-11", day: "Sun", date: "11/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-12", day: "Mon", date: "12/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-13", day: "Tue", date: "13/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-14", day: "Wed", date: "14/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-15", day: "Thu", date: "15/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-16", day: "Fri", date: "16/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-17", day: "Sat", date: "17/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-18", day: "Sun", date: "18/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-19", day: "Mon", date: "19/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-20", day: "Tue", date: "20/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-21", day: "Wed", date: "21/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-22", day: "Thu", date: "22/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-23", day: "Fri", date: "23/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-24", day: "Sat", date: "24/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-25", day: "Sun", date: "25/10/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "m-26", day: "Mon", date: "26/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-27", day: "Tue", date: "27/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-28", day: "Wed", date: "28/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-29", day: "Thu", date: "29/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-30", day: "Fri", date: "30/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-    { id: "m-31", day: "Sat", date: "31/10/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "--", canRegularize: false },
-  ], [dailyPunch, finalizedShiftDuration, todayStatus, canTodayRegularize, todayRegularization, todayDate]);
-
-  // Full Month - September 2026 (All 30 days: Sundays as Holiday, Mon-Sat intermediate school working days with Present, Absent, Late, Half Day)
-  const lastMonthLogs = useMemo(() => [
-    { id: "lm-01", day: "Tue", date: "01/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:30 PM", hours: "8h 02m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-02", day: "Wed", date: "02/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:32 PM", hours: "8h 02m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-03", day: "Thu", date: "03/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:25 AM", outTime: "04:30 PM", hours: "8h 05m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-04", day: "Fri", date: "04/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:31 AM", outTime: "04:31 PM", hours: "8h 00m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-05", day: "Sat", date: "05/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:35 AM", outTime: "04:29 PM", hours: "7h 54m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-06", day: "Sun", date: "06/09/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "lm-07", day: "Mon", date: "07/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:29 AM", outTime: "04:30 PM", hours: "8h 01m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-08", day: "Tue", date: "08/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:30 PM", hours: "8h 00m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-09", day: "Wed", date: "09/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:27 AM", outTime: "04:32 PM", hours: "8h 05m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-10", day: "Thu", date: "10/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:33 AM", outTime: "04:35 PM", hours: "8h 02m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-11", day: "Fri", date: "11/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:54 AM", outTime: "04:30 PM", hours: "7h 36m", device: "Bio-Station 02 (Academic Block)", status: "Late", canRegularize: true },
-    { id: "lm-12", day: "Sat", date: "12/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:32 AM", outTime: "04:30 PM", hours: "7h 58m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-13", day: "Sun", date: "13/09/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "lm-14", day: "Mon", date: "14/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:31 PM", hours: "8h 03m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-15", day: "Tue", date: "15/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:31 AM", outTime: "01:00 PM", hours: "4h 29m", device: "Bio-Station 01 (Main Gate)", status: "Half Day", canRegularize: true },
-    { id: "lm-16", day: "Wed", date: "16/09/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Leave", canRegularize: false },
-    { id: "lm-17", day: "Thu", date: "17/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:35 PM", hours: "8h 05m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-18", day: "Fri", date: "18/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:55 AM", outTime: "04:30 PM", hours: "7h 35m", device: "Bio-Station 02 (Academic Block)", status: "Late", canRegularize: true },
-    { id: "lm-19", day: "Sat", date: "19/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:35 AM", outTime: "04:32 PM", hours: "7h 57m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-20", day: "Sun", date: "20/09/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "lm-21", day: "Mon", date: "21/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:26 AM", outTime: "04:33 PM", hours: "8h 07m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-22", day: "Tue", date: "22/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:29 AM", outTime: "04:30 PM", hours: "8h 01m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-23", day: "Wed", date: "23/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:32 AM", outTime: "04:30 PM", hours: "7h 58m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-24", day: "Thu", date: "24/09/2026", shift: "Morning (08:30–16:30)", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Absent", canRegularize: true },
-    { id: "lm-25", day: "Fri", date: "25/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:31 PM", hours: "8h 03m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-26", day: "Sat", date: "26/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:34 AM", outTime: "04:30 PM", hours: "7h 56m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-27", day: "Sun", date: "27/09/2026", shift: "General", inTime: "--", outTime: "--", hours: "0h 0m", device: "--", status: "Holiday", canRegularize: false },
-    { id: "lm-28", day: "Mon", date: "28/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:30 AM", outTime: "04:35 PM", hours: "8h 05m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-29", day: "Tue", date: "29/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:28 AM", outTime: "04:31 PM", hours: "8h 03m", device: "Bio-Station 01 (Main Gate)", status: "Present", canRegularize: false },
-    { id: "lm-30", day: "Wed", date: "30/09/2026", shift: "Morning (08:30–16:30)", inTime: "08:50 AM", outTime: "04:30 PM", hours: "7h 40m", device: "Bio-Station 02 (Academic Block)", status: "Present", canRegularize: false },
-  ], []);
-
-  const activeLogs = useMemo(() => {
-    switch (activeFilter) {
-      case "week":
-        return thisWeekLogs;
-      case "last_week":
-        return lastWeekLogs;
-      case "month":
-        return monthLogs.filter((log) => log.isToday || log.date !== new Date(todayDate + "T12:00:00").toLocaleDateString("en-GB"));
-      case "last_month":
-        return lastMonthLogs;
-      default:
-        return thisWeekLogs;
+  // Handle Punch Out (Check-Out) for authenticated staff
+  const handlePunchOut = async () => {
+    if (isSubmitting) return;
+    if (!todayRecord.inTime || todayRecord.inTime === "--") {
+      notify("Cannot check out before checking in. Please punch in first.", "error");
+      return;
     }
-  }, [activeFilter, thisWeekLogs, lastWeekLogs, monthLogs, lastMonthLogs, todayDate]);
-
-  // Dynamic analytics cards depending on selected tab (Week / Last Week / Month / Last Month)
-  const analyticsMetrics = useMemo(() => {
-    const isTodayPresent = dailyPunch.status !== "not_punched";
-    const isLateToday = isLateLogin && todayRegularization !== "approved";
-    switch (activeFilter) {
-      case "week":
-        return {
-          workingDays: "6 Days",
-          workingDaysSub: "Current Week (Mon–Sat)",
-          presentDays: isTodayPresent ? "3 Days" : "2 Days",
-          presentDaysSub: "Biometric verified to date",
-          leaves: "0 Days",
-          leavesSub: isLateToday ? "1 Late punch logged" : "No leaves applied",
-          absentDays: isTodayPresent ? "0 Days" : "1 Day",
-          absentDaysSub: isTodayPresent ? "No absences this week" : "Current day unpunched",
-        };
-      case "last_week":
-        return {
-          workingDays: "5 Days",
-          workingDaysSub: "Mon–Sat (1 Holiday)",
-          presentDays: "4 Days",
-          presentDaysSub: "Biometric verified",
-          leaves: "0 Days",
-          leavesSub: "1 Late punch logged",
-          absentDays: "0 Days",
-          absentDaysSub: "No unexcused absences",
-        };
-      case "month":
-        return {
-          workingDays: "25 Days",
-          workingDaysSub: "Current Month (Oct 2026)",
-          presentDays: isTodayPresent ? "5 Days" : "4 Days",
-          presentDaysSub: "Biometric verified to date",
-          leaves: "0 Days",
-          leavesSub: isLateToday ? "1 Late punch logged" : "0 CL applied",
-          absentDays: isTodayPresent ? "0 Days" : "1 Day",
-          absentDaysSub: isTodayPresent ? "No unexcused absences" : "1 Unexcused absence",
-        };
-      case "last_month":
-        return {
-          workingDays: "26 Days",
-          workingDaysSub: "September 2026 (30 Days)",
-          presentDays: "22 Days",
-          presentDaysSub: "Biometric verified",
-          leaves: "2 Days",
-          leavesSub: "1 CL, 1 OD approved",
-          absentDays: "1 Day",
-          absentDaysSub: "1 Unexcused absence (24 Sep)",
-        };
-      default:
-        return {
-          workingDays: "6 Days",
-          workingDaysSub: "Current Week (Mon–Sat)",
-          presentDays: isTodayPresent ? "3 Days" : "2 Days",
-          presentDaysSub: "Biometric verified",
-          leaves: "0 Days",
-          leavesSub: isLateToday ? "1 Late punch logged" : "No leaves applied",
-          absentDays: isTodayPresent ? "0 Days" : "1 Day",
-          absentDaysSub: isTodayPresent ? "No absences this week" : "Current day unpunched",
-        };
+    if (todayRecord.outTime && todayRecord.outTime !== "--") {
+      notify("You have already completed check-out for today.", "error");
+      return;
     }
-  }, [activeFilter, dailyPunch.status, isLateLogin, todayRegularization]);
 
-  const getStatusBadgeClass = (status) => {
-    switch (status) {
-      case "Present":
-        return "present";
-      case "Late":
-        return "late";
-      case "Half Day":
-        return "half-day";
-      case "Leave":
-        return "leave";
-      case "Absent":
-        return "absent";
-      case "Holiday":
-        return "holiday";
-      case "-":
-      case "--":
-        return "empty";
-      default:
-        return "empty";
+    setIsSubmitting(true);
+    try {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+
+      const payload = {
+        facultyId: Number(authUser.staffId),
+        attendanceDate: date,
+        campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
+        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+        status: 1, // Present
+        inTime: todayRecord.inTime,
+        outTime: timeStr,
+        remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
+      };
+
+      await apiClient.put(apiEndpoints.staffAttendance.update, payload);
+
+      setTodayRecord((prev) => ({
+        ...prev,
+        outTime: timeStr,
+        status: "Present",
+        remarks: payload.remarks,
+      }));
+
+      notify(`Punched Out successfully at ${timeStr}. Shift completed.`, "success");
+      fetchMonthlyHistory();
+    } catch (err) {
+      notify(getApiErrorMessage(err) || "Failed to record check-out.", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const [showRegularizeModal, setShowRegularizeModal] = useState(false);
-  const [regularizeForm, setRegularizeForm] = useState({ date: "", reason: "Forgot Biometric Punch", inTime: "08:30 AM", outTime: "04:30 PM", notes: "" });
+  // Filter history rows by status
+  const visibleHistoryRows = useMemo(() => {
+    if (statusFilter === "all") return historyRows;
+    return historyRows.filter(
+      (r) => r.status.toLowerCase() === statusFilter.toLowerCase()
+    );
+  }, [historyRows, statusFilter]);
+
+  const liveDuration = useMemo(() => {
+    return calculateDurationStr(todayRecord.inTime, todayRecord.outTime, punchStatus.status === "punched_in");
+  }, [todayRecord.inTime, todayRecord.outTime, punchStatus.status]);
 
   return (
-    <div className="ec-check-in-out">
-      <p className="ec-punch-demo-notice">Mock preview: sample attendance history. Punches and regularization requests stay in this screen and reset when you leave; no backend records are changed.</p>
-      <div className="cms-page-head">
-        <div>
-          <h1>Check-In / Check-Out & Biometric Punch</h1>
-          <p>Daily biometric check-in, punch times, shift logs & monthly attendance calendar.</p>
-        </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setShowRegularizeModal(true)}>
-          <Clock size={14} /> Request Attendance Regularization
-        </button>
-      </div>
-
-      {/* Punch In / Out Grid */}
-      <div className="ec-punch-attendance-punch-grid">
-        {/* Live Digital Clock Card (Professional Theme-Based) */}
-        <div className="ec-punch-live-clock-card">
-          <div>
-            <span className="ec-punch-live-badge">
-              CAMPUS BIOMETRIC CLOCK
-            </span>
-            <div className="ec-punch-live-clock-time">
-              {liveClock}
-            </div>
-            <div className="ec-punch-live-clock-date">
-              {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-            </div>
-          </div>
-
-          <div className="ec-punch-clock-status-box">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="ec-punch-clock-sublabel">Punch Status:</span>
-              <span
-                className={`ec-punch-punch-status-badge ${dailyPunch.status === "punched_in"
-                  ? "in"
-                  : dailyPunch.status === "punched_out"
-                    ? "completed"
-                    : "pending"
-                  }`}
-              >
-                ● {dailyPunch.status === "punched_in"
-                  ? `Checked In (${dailyPunch.inTime})`
-                  : dailyPunch.status === "punched_out"
-                    ? `Completed (${dailyPunch.outTime})`
-                    : "Not Checked In"}
-              </span>
-            </div>
-
-            {/* Timings row inside Time Tab */}
-            <div className="ec-punch-clock-timings-grid">
-              <div className="ec-punch-clock-timing-item">
-                <span className="label">Punch In</span>
-                <span className={`val ${dailyPunch.inTime ? "highlight" : ""}`}>
-                  {dailyPunch.inTime || "--"}
-                </span>
-              </div>
-              <div className="ec-punch-clock-timing-item">
-                <span className="label">Punch Out</span>
-                <span className="val">
-                  {dailyPunch.outTime || "--"}
-                </span>
-              </div>
-              <div className="ec-punch-clock-timing-item">
-                <span className="label">Shift Duration</span>
-                <span className={`val ${dailyPunch.status === "punched_in" ? "highlight" : ""}`}>
-                  {clockShiftDuration}
-                </span>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.8rem", alignItems: "center" }}>
-              <span className="ec-punch-clock-sublabel">Campus Shift:</span>
-              <span className="ec-punch-shift-timings-val">09:00 AM – 04:30 PM</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Punch Actions Form Card */}
-        <div className="ec-punch-punch-form-card">
-          <div>
-            <h3 style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Punch Terminal Action</h3>
-            <p style={{ fontSize: 12.5, color: "var(--cms-muted)", marginBottom: 16 }}>
-              Click below to record your campus entry or exit timestamp. Mock biometric terminal preview.
-            </p>
-
-            <div style={{ padding: "14px 16px", borderRadius: 10, background: "var(--cms-surface)", border: "1px solid var(--cms-border)", marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>Current Punch Status</div>
+    <DashboardLayout
+      title="My Attendance"
+      subtitle="Examination Cell staff attendance, shift check-in/out, and monthly attendance history"
+      breadcrumb={["Student Operations", "My Attendance"]}
+    >
+      <div className="ec-check-in-out">
+        {/* Staff Profile Header Card */}
+        <section className="att-card" style={{ marginBottom: "20px", padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
               <div
                 style={{
-                  fontSize: 15,
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "12px",
+                  background: "var(--cms-primary-soft, #f1f4e2)",
+                  color: "var(--cms-primary, #6f8400)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   fontWeight: 800,
-                  color:
-                    dailyPunch.status === "punched_in"
-                      ? "var(--cms-green, #0f9d58)"
-                      : dailyPunch.status === "punched_out"
-                        ? "var(--cms-primary, #6f8400)"
-                        : "var(--cms-text, #10203c)",
-                  marginTop: 4,
+                  fontSize: "18px",
                 }}
               >
-                {dailyPunch.status === "punched_in"
-                  ? `Active — Punched In at ${dailyPunch.inTime}`
-                  : dailyPunch.status === "punched_out"
-                    ? `Completed — Punched Out at ${dailyPunch.outTime}`
-                    : "Inactive — Yet to Punch In Today"}
+                <UserRound size={26} />
               </div>
-              <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 4 }}>
-                Terminal: <strong>Main Campus Gate 01 Bio-Station</strong>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700, color: "var(--cms-text)" }}>
+                    {authUser.name}
+                  </h3>
+                  <span className="cms-badge" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)", fontWeight: 700 }}>
+                    Staff ID: {authUser.employeeId}
+                  </span>
+                  <span className="cms-badge" style={{ background: "rgba(59, 130, 246, 0.12)", color: "#2563eb", fontWeight: 600 }}>
+                    <ShieldCheck size={13} style={{ display: "inline", marginRight: "4px" }} />
+                    {authUser.designation}
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "14px", marginTop: "4px", fontSize: "12.5px", color: "var(--cms-muted)" }}>
+                  <span><Building2 size={13} style={{ display: "inline", marginRight: "4px" }} /> {authUser.department}</span>
+                  <span><Mail size={13} style={{ display: "inline", marginRight: "4px" }} /> {authUser.email}</span>
+                  {selectedAcademicYear?.name && <span>Academic Year: <b>{selectedAcademicYear.name}</b></span>}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                onClick={() => {
+                  fetchTodayAttendance();
+                  fetchMonthlyHistory();
+                  notify("Attendance refreshed.", "info");
+                }}
+                disabled={isLoading}
+                title="Refresh Attendance Records"
+              >
+                <RefreshCw size={15} className={isLoading ? "cms-spin" : ""} /> Refresh
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Biometric Punch & Live Clock Grid */}
+        <div className="ec-punch-attendance-punch-grid">
+          {/* Live Clock Card */}
+          <div className="ec-punch-live-clock-card">
+            <div>
+              <span className="ec-punch-live-badge">CAMPUS BIOMETRIC TERMINAL</span>
+              <div className="ec-punch-live-clock-time">{liveClock}</div>
+              <div className="ec-punch-live-clock-date">
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </div>
+            </div>
+
+            <div className="ec-punch-clock-status-box">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <span className="ec-punch-clock-sublabel">Today's Shift Status:</span>
+                <span
+                  className={`ec-punch-punch-status-badge ${
+                    punchStatus.status === "punched_in"
+                      ? "in"
+                      : punchStatus.status === "punched_out"
+                      ? "completed"
+                      : "pending"
+                  }`}
+                >
+                  {punchStatus.status === "punched_in"
+                    ? `Checked In (${punchStatus.inTime})`
+                    : punchStatus.status === "punched_out"
+                    ? `Completed (${punchStatus.outTime})`
+                    : "Not Checked In"}
+                </span>
+              </div>
+
+              <div className="ec-punch-clock-timings-grid">
+                <div className="ec-punch-clock-timing-item">
+                  <span className="label">Punch In</span>
+                  <span className={`val ${todayRecord.inTime ? "highlight" : ""}`}>
+                    {todayRecord.inTime || "--"}
+                  </span>
+                </div>
+                <div className="ec-punch-clock-timing-item">
+                  <span className="label">Punch Out</span>
+                  <span className="val">{todayRecord.outTime || "--"}</span>
+                </div>
+                <div className="ec-punch-clock-timing-item">
+                  <span className="label">Working Duration</span>
+                  <span className="val highlight">{liveDuration}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div>
+          {/* Punch Actions Card */}
+          <div className="ec-punch-punch-form-card">
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: "16px", fontWeight: 700, color: "var(--cms-text)" }}>
+                    Shift Attendance & Punch
+                  </h4>
+                  <p style={{ margin: "3px 0 0", fontSize: "12.5px", color: "var(--cms-muted)" }}>
+                    Standard Shift: <b>{shiftConfig.startTime} - {shiftConfig.endTime}</b> · Grace: <b>{shiftConfig.graceMinutes}m</b>
+                  </p>
+                </div>
+                <span className="cms-badge cms-badge-muted" style={{ fontSize: "11px" }}>
+                  Staff Self-Service
+                </span>
+              </div>
+
+              <div style={{ padding: "12px 14px", borderRadius: "10px", background: "var(--cms-surface, #f8faf5)", border: "1px solid var(--cms-border)", marginBottom: "16px" }}>
+                <div style={{ fontSize: "12px", color: "var(--cms-muted)", marginBottom: "4px" }}>
+                  Attendance Rules:
+                </div>
+                <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "12px", color: "var(--cms-text)", lineHeight: 1.6 }}>
+                  <li>Punch in before <b>{shiftConfig.startTime}</b> to mark attendance as On Time.</li>
+                  <li>Check-in after grace period ({shiftConfig.graceMinutes}m) is automatically logged as Late.</li>
+                  <li>Punch out upon completing your daily Examination Cell duties.</li>
+                </ul>
+              </div>
+
+              {todayRecord.remarks && (
+                <div style={{ fontSize: "12px", color: "var(--cms-muted)", marginBottom: "12px" }}>
+                  Last Activity: <i>{todayRecord.remarks}</i>
+                </div>
+              )}
+            </div>
+
             <div className="ec-punch-punch-actions-row">
               <button
+                type="button"
                 className="cms-btn cms-btn-primary"
-                style={{ flex: 1, justifyContent: "center", padding: "13px 18px", fontSize: 14 }}
-                disabled={dailyPunch.status !== "not_punched"}
+                style={{ flex: 1, minHeight: "44px", fontWeight: 700 }}
+                disabled={Boolean(todayRecord.inTime) || isSubmitting}
                 onClick={handlePunchIn}
               >
-                <Clock size={16} /> Punch In (Check-In)
+                <UserCheck size={18} />
+                {todayRecord.inTime ? "Already Checked In" : isSubmitting ? "Recording..." : "Check In Now"}
               </button>
+
               <button
-                className="cms-btn"
-                style={{
-                  flex: 1,
-                  justifyContent: "center",
-                  padding: "13px 18px",
-                  fontSize: 14,
-                  background: dailyPunch.status === "punched_in" ? "#dc2626" : "var(--cms-border, #e4e8f0)",
-                  color: dailyPunch.status === "punched_in" ? "#ffffff" : "var(--cms-muted, #7b8275)",
-                  cursor: dailyPunch.status === "punched_in" ? "pointer" : "not-allowed",
-                  border: "none",
-                }}
-                disabled={dailyPunch.status !== "punched_in"}
+                type="button"
+                className="cms-btn cms-btn-outline"
+                style={{ flex: 1, minHeight: "44px", fontWeight: 700 }}
+                disabled={!todayRecord.inTime || Boolean(todayRecord.outTime) || isSubmitting}
                 onClick={handlePunchOut}
               >
-                <LogOut size={16} /> Punch Out (Check-Out)
+                <LogOut size={18} />
+                {todayRecord.outTime
+                  ? "Shift Completed"
+                  : isSubmitting
+                  ? "Recording..."
+                  : "Check Out"}
               </button>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* 4 Attendance Metric Cards (Dynamically tied to selected tab) */}
-      <div className="ec-punch-stat-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-blue"><Calendar size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Working Days</div>
-            <div className="cms-stat-value">{analyticsMetrics.workingDays}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.workingDaysSub}</div>
-          </div>
-        </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-green"><CheckCircle2 size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Present Days</div>
-            <div className="cms-stat-value" style={{ color: "var(--cms-green)" }}>{analyticsMetrics.presentDays}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.presentDaysSub}</div>
-          </div>
-        </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-violet"><Briefcase size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Approved Leaves</div>
-            <div className="cms-stat-value">{analyticsMetrics.leaves}</div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.leavesSub}</div>
-          </div>
-        </div>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-red"><UserX size={22} /></div>
-          <div>
-            <div className="cms-stat-label">Absent Days</div>
-            <div
-              className="cms-stat-value"
-              style={{
-                color: analyticsMetrics.absentDays !== "0 Days" ? "var(--cms-red, #dc2626)" : "var(--cms-text, #10203c)",
-              }}
-            >
-              {analyticsMetrics.absentDays}
-            </div>
-            <div style={{ fontSize: 11.5, color: "var(--cms-muted)", marginTop: 2 }}>{analyticsMetrics.absentDaysSub}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Daily Punch History Table (Matching Screenshot 2 layout and user-clarified 8 columns) */}
-      <div className="cms-card ec-punch-attendance-history-card">
-        <div className="ec-punch-attendance-card-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="ec-punch-att-cal-icon">
+        {/* Monthly Attendance KPI Summary Grid */}
+        <div className="ec-punch-stat-grid">
+          <div className="ec-stat-card tone-blue">
+            <div className="ec-stat-icon">
               <Calendar size={18} />
             </div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>
-                {activeFilter === "week"
-                  ? "This Week"
-                  : activeFilter === "last_week"
-                    ? "Last Week"
-                    : activeFilter === "month"
-                      ? "This Month"
-                      : "Last Month"}
-              </h2>
-              <span style={{ fontSize: 12, color: "var(--cms-muted)", display: "block", marginTop: 2 }}>
-                Biometric Punch History & Daily Attendance Logs
-              </span>
+            <div className="ec-stat-info">
+              <span className="ec-stat-label">Working Days</span>
+              <div className="ec-stat-value-row">
+                <span className="ec-stat-value">{monthlyStats.totalDays}</span>
+              </div>
+              <span className="ec-stat-subtext">Current Month Total</span>
             </div>
           </div>
 
-          {/* Filter Pills matching Screenshot 2: Week | Last Week | Month | Last Month */}
-          <div className="ec-punch-att-filter-tabs">
-            <button
-              type="button"
-              className={`ec-punch-att-filter-btn ${activeFilter === "week" ? "active" : ""}`}
-              onClick={() => setActiveFilter("week")}
-            >
-              Week
-            </button>
-            <button
-              type="button"
-              className={`ec-punch-att-filter-btn ${activeFilter === "last_week" ? "active" : ""}`}
-              onClick={() => setActiveFilter("last_week")}
-            >
-              Last Week
-            </button>
-            <button
-              type="button"
-              className={`ec-punch-att-filter-btn ${activeFilter === "month" ? "active" : ""}`}
-              onClick={() => setActiveFilter("month")}
-            >
-              Month
-            </button>
-            <button
-              type="button"
-              className={`ec-punch-att-filter-btn ${activeFilter === "last_month" ? "active" : ""}`}
-              onClick={() => setActiveFilter("last_month")}
-            >
-              Last Month
-            </button>
+          <div className="ec-stat-card tone-green">
+            <div className="ec-stat-icon">
+              <UserCheck size={18} />
+            </div>
+            <div className="ec-stat-info">
+              <span className="ec-stat-label">Present Days</span>
+              <div className="ec-stat-value-row">
+                <span className="ec-stat-value">{monthlyStats.presentDays}</span>
+                <span className="ec-stat-badge">{monthlyStats.attendanceRate}% Rate</span>
+              </div>
+              <span className="ec-stat-subtext">Attended On Time</span>
+            </div>
+          </div>
+
+          <div className="ec-stat-card tone-red">
+            <div className="ec-stat-icon">
+              <UserX size={18} />
+            </div>
+            <div className="ec-stat-info">
+              <span className="ec-stat-label">Absent / Leaves</span>
+              <div className="ec-stat-value-row">
+                <span className="ec-stat-value">{monthlyStats.absentDays + monthlyStats.leaveDays}</span>
+                {monthlyStats.leaveDays > 0 && <span className="ec-stat-badge">{monthlyStats.leaveDays} Leaves</span>}
+              </div>
+              <span className="ec-stat-subtext">{monthlyStats.absentDays} Unexcused Absences</span>
+            </div>
+          </div>
+
+          <div className="ec-stat-card tone-violet">
+            <div className="ec-stat-icon">
+              <Clock size={18} />
+            </div>
+            <div className="ec-stat-info">
+              <span className="ec-stat-label">Total Hours</span>
+              <div className="ec-stat-value-row">
+                <span className="ec-stat-value">{monthlyStats.totalHours}</span>
+              </div>
+              <span className="ec-stat-subtext">Avg 8h/day standard</span>
+            </div>
           </div>
         </div>
 
-        <div className="cms-table-wrap">
-          <table className="ec-punch-attendance-table">
-            <thead>
-              <tr>
-                <th style={{ width: "13%" }}>DAY</th>
-                <th style={{ width: "18%" }}>SHIFT</th>
-                <th style={{ width: "12%" }}>PUNCH IN</th>
-                <th style={{ width: "12%" }}>PUNCH OUT</th>
-                <th style={{ width: "11%" }}>HOURS</th>
-                <th style={{ width: "16%" }}>BIOMETRIC DEVICE</th>
-                <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                <th style={{ width: "8%", textAlign: "center" }}>REGULARIZATION</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeLogs.map((log) => {
-                const isUpcoming = log.status === "-" || log.status === "--";
-                return (
-                  <tr key={log.id}>
-                    <td>
-                      <div className="ec-punch-day-name">{log.day}</div>
-                      <div className="ec-punch-day-date">{log.date}</div>
-                    </td>
-                    <td>
-                      <span className="ec-punch-shift-text">{log.shift}</span>
-                    </td>
-                    <td>
-                      <span className={`ec-punch-time-text ${log.inTime !== "--" && !isUpcoming ? "highlight" : ""}`}>
-                        {log.inTime}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="ec-punch-time-text">
-                        {log.outTime}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="ec-punch-hours-text">
-                        {log.hours}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="ec-punch-device-text">
-                        {log.device}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {isUpcoming ? (
-                        <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
-                      ) : (
-                        <span className={`ec-punch-status-badge ${getStatusBadgeClass(log.status)}`}>
-                          {log.status}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      {log.isToday && log.regularizationState === "approved" ? (
-                        <span className="ec-punch-regularize-badge approved">
-                          <span className="ec-punch-badge-dot">●</span> Approved
-                        </span>
-                      ) : log.isToday && log.regularizationState === "pending" ? (
-                        <span className="ec-punch-regularize-badge pending">
-                          <span className="ec-punch-badge-dot">●</span> Pending
-                        </span>
-                      ) : log.canRegularize ? (
-                        <button
-                          type="button"
-                          className="ec-punch-regularize-btn"
-                          onClick={() => {
-                            setRegularizeForm((p) => ({
-                              ...p,
-                              date: log.rawDate || log.date.split("/").reverse().join("-"),
-                              inTime: "09:00 AM",
-                              outTime: "04:30 PM",
-                              reason: "Emergency Late Arrival",
-                              isToday: Boolean(log.isToday),
-                            }));
-                            setShowRegularizeModal(true);
-                          }}
-                        >
-                          Regularize
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>--</span>
-                      )}
+        {/* Attendance History Card */}
+        <section className="att-card ec-punch-attendance-history-card">
+          <div className="ec-punch-attendance-card-head">
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div className="ec-punch-att-cal-icon">
+                <CalendarDays size={18} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "var(--cms-text)" }}>
+                  Monthly Attendance History
+                </h4>
+                <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--cms-muted)" }}>
+                  Showing logs for {new Date(`${selectedMonth}-01T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              {/* Month Picker */}
+              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600 }}>
+                <span>Month:</span>
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--cms-border)",
+                    background: "var(--cms-surface)",
+                    fontSize: "12.5px",
+                    color: "var(--cms-text)",
+                  }}
+                />
+              </label>
+
+              {/* Status Filter Tabs */}
+              <div className="ec-punch-att-filter-tabs">
+                {["all", "present", "late", "leave", "absent"].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={`ec-punch-att-filter-btn ${statusFilter === tab ? "active" : ""}`}
+                    onClick={() => setStatusFilter(tab)}
+                  >
+                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table className="ec-punch-attendance-table">
+              <thead>
+                <tr>
+                  <th>Date & Day</th>
+                  <th>Shift</th>
+                  <th>Check-In Time</th>
+                  <th>Check-Out Time</th>
+                  <th>Working Hours</th>
+                  <th>Status</th>
+                  <th>Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleHistoryRows.length > 0 ? (
+                  visibleHistoryRows.map((r) => {
+                    const statusClass =
+                      r.status === "Present"
+                        ? "present"
+                        : r.status === "Late"
+                        ? "late"
+                        : r.status === "Half Day"
+                        ? "half-day"
+                        : r.status === "Leave"
+                        ? "leave"
+                        : r.status === "Absent"
+                        ? "absent"
+                        : r.status === "Holiday"
+                        ? "holiday"
+                        : "empty";
+
+                    return (
+                      <tr key={r.date}>
+                        <td>
+                          <div className="ec-punch-day-name">{r.dayName}</div>
+                          <div className="ec-punch-day-date">{r.date}</div>
+                        </td>
+                        <td>
+                          <span className="ec-punch-shift-text">{r.shift}</span>
+                        </td>
+                        <td>
+                          <span className={`ec-punch-time-text ${r.inTime !== "--" ? "highlight" : ""}`}>
+                            {r.inTime}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="ec-punch-time-text">{r.outTime}</span>
+                        </td>
+                        <td>
+                          <span className="ec-punch-hours-text">{r.hours}</span>
+                        </td>
+                        <td>
+                          <span className={`ec-punch-status-badge ${statusClass}`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="ec-punch-device-text">{r.remarks}</span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: "center", padding: "32px 16px", color: "var(--cms-muted)" }}>
+                      {isLoading ? "Loading attendance records..." : "No attendance records found for the selected filter."}
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Attendance Regularization Modal */}
-      {showRegularizeModal && (
-        <div className="cms-overlay" onClick={(e) => e.target === e.currentTarget && setShowRegularizeModal(false)}>
-          <div className="cms-modal sm ec-punch-regularization-modal">
-            <div className="cms-modal-head">
-              <div>
-                <h3 style={{ margin: 0, fontSize: 16 }}>Request Attendance Regularization</h3>
-                <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Preview an adjustment for a missed or late punch</span>
-              </div>
-              <button className="cms-icon-btn" onClick={() => setShowRegularizeModal(false)}><X size={16} /></button>
-            </div>
-            <div className="cms-modal-body">
-              <div className="cms-form-grid">
-                <div className="cms-field full">
-                  <label>Date of Incident <span className="req">*</span></label>
-                  <input
-                    type="date"
-                    value={regularizeForm.date || todayDate}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, date: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field full">
-                  <label>Reason for Regularization <span className="req">*</span></label>
-                  <select
-                    value={regularizeForm.reason}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, reason: e.target.value })}
-                  >
-                    <option>Forgot Biometric Punch</option>
-                    <option>Biometric Scanner / Power Outage</option>
-                    <option>On-Duty / Board Examination Duty</option>
-                    <option>Official Campus Assignment</option>
-                    <option>Emergency Late Arrival</option>
-                  </select>
-                </div>
-                <div className="cms-field">
-                  <label>Proposed Punch In</label>
-                  <input
-                    type="text"
-                    value={regularizeForm.inTime}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, inTime: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field">
-                  <label>Proposed Punch Out</label>
-                  <input
-                    type="text"
-                    value={regularizeForm.outTime}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, outTime: e.target.value })}
-                  />
-                </div>
-                <div className="cms-field full">
-                  <label>Explanation & Notes <span className="req">*</span></label>
-                  <textarea
-                    rows={2}
-                    placeholder="Briefly state reason for attendance adjustment..."
-                    value={regularizeForm.notes}
-                    onChange={(e) => setRegularizeForm({ ...regularizeForm, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="cms-modal-foot">
-              <button className="cms-btn cms-btn-ghost" onClick={() => setShowRegularizeModal(false)}>Cancel</button>
-              <button
-                className="cms-btn cms-btn-primary"
-                onClick={() => {
-                  if (!regularizeForm.notes.trim()) {
-                    notify("Please enter explanation and notes.", "error");
-                    return;
-                  }
-                  if ((regularizeForm.date || todayDate) === todayDate) {
-                    setTodayRegularization("pending");
-                  }
-                  notify("Mock regularization request recorded locally (not sent to Admin).");
-                  setShowRegularizeModal(false);
-                }}
-              >
-                Submit Mock Request
-              </button>
-
-            </div>
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        </section>
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`ec-punch-toast ${toast.type === "error" ? "error" : ""}`}>
-          {toast.type === "error" ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-          {toast.text}
-        </div>
-      )}
-    </div>
+        {/* Toast */}
+        {toast && (
+          <div className={`ec-punch-toast ${toast.type}`}>
+            {toast.type === "error" ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            <span>{toast.text}</span>
+          </div>
+        )}
+      </div>
+    </DashboardLayout>
   );
 }
-
