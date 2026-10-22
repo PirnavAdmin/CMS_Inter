@@ -167,6 +167,31 @@ export const toPermissionMap = (permissions = []) => {
   if (map["inventory-management"]) {
     map["inventory"] = map["inventory-management"];
   }
+  if (map["marks-evaluation"]) {
+    map["marks"] = map["marks-evaluation"];
+  }
+  if (map["staff-attendance"]) {
+    map["myattendance"] = map["staff-attendance"];
+    map["my-attendance"] = map["staff-attendance"];
+  }
+  if (map["staff-leave-management"]) {
+    map["leave"] = map["staff-leave-management"];
+    map["staff-leave"] = map["staff-leave-management"];
+  }
+  if (map["holiday-management"]) {
+    map["holidays"] = map["holiday-management"];
+  }
+  if (map["payroll"]) {
+    map["salary"] = map["payroll"];
+    map["payslips"] = map["payroll"];
+  }
+  if (map["examinations"]) {
+    map["examduties"] = map["examinations"];
+    map["exam-duties"] = map["examinations"];
+  }
+  if (map["subject-management"]) {
+    map["classes"] = map["subject-management"];
+  }
 
   // Mirror settings screens so direct screen-name or module-screen lookups resolve seamlessly
   const settingsScreens = [
@@ -255,7 +280,7 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
   const source = permissions ?? user?.permissions ?? user?.rolePermissions;
   if (!source) {
     if (hasRole("ADMIN", user)) return true;
-    return true;
+    return false;
   }
 
   const permissionMap = toPermissionMap(source);
