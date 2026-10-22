@@ -227,8 +227,7 @@
 }
 
 .sp-shell {
-  --sp-sidebar-width: var(--cms-sidebar-w, 218px);
-  --sp-header-height: var(--cms-header-height, clamp(56px, 4.2vw, 64px));
+  --sp-sidebar-width: 180px;
   --sp-primary: #6f8700;
   --sp-primary-dark: #536600;
   --sp-primary-hover: #819b08;
@@ -292,8 +291,8 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  height: var(--sp-header-height);
-  min-height: var(--sp-header-height);
+  height: 64px;
+  min-height: 64px;
   padding: 3px 5px;
   overflow: hidden;
   border-bottom: 1px solid var(--sp-border);
@@ -302,7 +301,7 @@
 .sp-brand img {
   display: block;
   width: 100%;
-  height: calc(var(--sp-header-height) - 6px);
+  height: 58px;
   object-fit: contain;
   filter: brightness(1.08) contrast(1.14) saturate(1.08) drop-shadow(0 1px 1px rgba(21, 38, 73, .12));
 }
@@ -419,9 +418,8 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  flex: 0 0 var(--sp-header-height);
-  height: var(--sp-header-height);
-  min-height: var(--sp-header-height);
+  flex: 0 0 64px;
+  height: 64px;
   padding: 0 22px;
   border-bottom: 1px solid var(--sp-border);
   background: var(--sp-header);
@@ -2116,8 +2114,8 @@
 
 @media(max-width:620px) {
   .sp-navbar {
-    flex-basis: var(--sp-header-height);
-    height: var(--sp-header-height);
+    flex-basis: 62px;
+    height: 62px;
     padding: 0 12px
   }
 
@@ -3530,155 +3528,6 @@
 }
 
 /* Profile presentation: native section selectors preserve existing form state. */
-.sp-profile-page .sp-page-header {
-  min-height: 42px;
-  margin-bottom: 4px;
-}
-
-.sp-profile-page .sp-page-header h1 {
-  font-size: 22px;
-}
-
-.sp-profile-page .sp-profile-hero {
-  gap: 18px;
-  padding: 12px 20px;
-  border: 1px solid var(--sp-border);
-  border-radius: 14px;
-  background: var(--sp-surface);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
-}
-
-.sp-profile-page .sp-photo-control {
-  flex: 0 0 60px;
-  width: 60px;
-  height: 60px;
-}
-
-.sp-profile-page .sp-photo-avatar-button {
-  width: 60px;
-  height: 60px;
-  border-radius: 15px;
-  background: var(--sp-soft);
-}
-
-.sp-profile-page .sp-photo-avatar-button .sp-avatar {
-  border-radius: 13px;
-  font-size: 20px;
-}
-
-.sp-profile-page .sp-photo-camera-button {
-  width: 23px;
-  height: 23px;
-  bottom: -3px;
-  right: -3px;
-}
-
-.sp-profile-page .sp-photo-camera-button svg {
-  width: 12px;
-  height: 12px;
-}
-
-.sp-profile-page .sp-profile-hero h2 {
-  font-size: 20px;
-}
-
-.sp-profile-page .sp-profile-hero p {
-  font-size: 14px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.sp-profile-page .sp-profile-summary-inline {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  min-width: 0;
-}
-
-.sp-profile-page .sp-profile-summary-inline p {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  margin: 0;
-}
-
-.sp-profile-page .sp-profile-summary-inline p > span::before {
-  content: "•";
-  margin-right: 12px;
-  color: var(--sp-muted);
-}
-
-.sp-profile-page .sp-profile-summary-inline p strong {
-  color: var(--sp-primary-dark);
-  font-weight: 700;
-}
-
-.sp-profile-page .sp-profile-tabs {
-  counter-reset: student-profile-step;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 12px;
-  background: var(--sp-soft);
-}
-
-.sp-profile-page .sp-profile-tabs label {
-  counter-increment: student-profile-step;
-}
-
-.sp-profile-page .sp-profile-tabs span {
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
-}
-
-.sp-profile-page .sp-profile-tabs span > svg {
-  display: none;
-}
-
-.sp-profile-page .sp-profile-tabs span::before {
-  content: counter(student-profile-step);
-  display: grid;
-  place-items: center;
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--sp-border);
-  color: var(--sp-text);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.sp-profile-page .sp-profile-tabs input:checked + span {
-  background: var(--sp-surface);
-  color: var(--sp-primary-dark);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 8%);
-}
-
-.sp-profile-page .sp-profile-tabs input:checked + span::before {
-  background: var(--sp-primary);
-  color: #fff;
-}
-
-.sp-profile-page .sp-profile-section,
-.sp-profile-page .sp-profile-academic,
-.sp-profile-page > .sp-documents {
-  border: 1px solid var(--sp-border);
-  border-radius: 12px;
-  background: var(--sp-surface);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 4%);
-}
-
-.sp-profile-page .sp-profile-input input,
-.sp-profile-page .sp-profile-input select,
-.sp-profile-page .sp-profile-input textarea {
-  background: var(--sp-soft);
-  border-radius: 7px;
-  padding: 6px 10px;
-}
-
 .sp-profile-page:has(.sp-profile-tabs) {
   row-gap: 8px;
   align-content: start
@@ -3745,7 +3594,7 @@
   padding: 11px 16px;
   border-radius: 7px;
   color: var(--sp-muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 650
 }
 
@@ -3785,7 +3634,7 @@
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-fields,
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-fields.is-form {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px 16px
+  gap: 18px 20px
 }
 
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-value,
@@ -3806,14 +3655,14 @@
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-value strong {
   display: flex;
   align-items: center;
-  min-height: 35px;
+  min-height: 44px;
   box-sizing: border-box;
   margin: 0;
-  padding: 6px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--sp-border);
   border-radius: 8px;
   background: var(--sp-soft);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500
 }
 
@@ -3831,22 +3680,22 @@
 
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-input input,
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-input select {
-  min-height: 35px;
-  font-size: 12px
+  min-height: 44px;
+  font-size: 13px
 }
 
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-section .sp-card-body {
-  padding: 14px 18px
+  padding: 20px
 }
 
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-section .sp-card-head {
-  padding: 10px 18px
+  padding: 14px 20px
 }
 
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-academic .sp-card-body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px 16px
+  gap: 18px 20px
 }
 
 .sp-profile-page:has(.sp-profile-tabs) .sp-profile-academic-row {
@@ -5006,7 +4855,7 @@
 
 @media(min-width:901px) {
   .sp-sidebar-collapsed {
-    --sp-sidebar-width: var(--cms-sidebar-collapsed-w, 70px);
+    --sp-sidebar-width: 64px;
   }
 
   .sp-sidebar-collapsed .sp-sidebar nav h2,
