@@ -17,6 +17,7 @@ const nonTeachingMenu = [
       { to: "/non-teaching-dashboard/attendance", label: "My Attendance", icon: adminIconAssets.attendanceImpact },
       { to: "/non-teaching-dashboard/leave", label: "Leave Management", icon: generatedSidebarIcons.staffLeave },
       { to: "/non-teaching-dashboard/tasks", label: "My Tasks", icon: generatedSidebarIcons.department },
+      { to: "/non-teaching-dashboard/payslip", label: "Payslip", icon: generatedSidebarIcons.payroll },
       { to: "/non-teaching-dashboard/announcements", label: "Announcements", icon: adminIconAssets.financialReports },
     ],
   },
@@ -36,6 +37,8 @@ export default function NonTeachingLayout() {
       profilePath="/non-teaching-dashboard/profile"
       settingsPath={null}
       showSettingsAction={false}
+      showBoardSelector={false}
+      showAcademicYearSelector={false}
     >
       <div className="non-teaching-shell">
         <Outlet />

@@ -56,31 +56,20 @@ export function isWardenRole(role, user) {
 }
 
 export function isNonTeachingRole(role, user) {
-  const normalized = String(role || "").trim().toLowerCase();
-  if (
-    normalized === "non_teaching_staff" ||
-    normalized === "non-teaching" ||
-    normalized === "non-teaching-staff" ||
-    normalized === "nonteaching" ||
-    normalized === "non_teaching"
-  ) {
-    return true;
-  }
+  const check = (val) => {
+    if (!val) return false;
+    const s = String(val).trim().toLowerCase();
+    const clean = s.replace(/[-_\s]/g, "");
+    return clean === "nonteaching" || clean === "nonteachingstaff";
+  };
+  if (check(role)) return true;
   if (user && typeof user === "object") {
-    const userRole = String(user.role || "").trim().toLowerCase();
-    if (
-      userRole === "non_teaching_staff" ||
-      userRole === "non-teaching" ||
-      userRole === "non-teaching-staff" ||
-      userRole === "nonteaching" ||
-      userRole === "non_teaching"
-    ) {
-      return true;
-    }
-    const staffType = String(user.staffType || user.type || "").trim().toLowerCase();
-    if (staffType === "non-teaching" || staffType === "nonteaching") {
-      return true;
-    }
+    if (check(user.role)) return true;
+    if (check(user.staffType)) return true;
+    if (check(user.type)) return true;
+    if (check(user.designationType)) return true;
+    if (check(user.roleType)) return true;
+    if (check(user.userType)) return true;
   }
   return false;
 }
@@ -248,7 +237,7 @@ export default function ProtectedRoute({
   const isExamCell = !isWarden && isExamCellRole(role);
 
   // Non-Teaching check
-  if (requireNonTeaching && !isNonTeaching && !isAdmin) {
+  if (requireNonTeaching && !isNonTeaching && !isAdmin && !isPrincipal) {
     const destination = isWarden
       ? "/warden-dashboard"
       : isPrincipal

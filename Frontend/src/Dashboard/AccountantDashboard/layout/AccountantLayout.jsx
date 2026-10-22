@@ -1,3 +1,4 @@
+import staffLeaveIcon from "@/assets/settings-3d/leave-types.png";
 import { Outlet } from "react-router-dom";
 import DashboardLayout, { adminIconAssets } from "@/components/layout/DashboardLayout.jsx";
 import "../../StudentDashboard/StudentDashboard.css";
@@ -25,6 +26,7 @@ const accountantMenu = [
     section: "ACCOUNT",
     items: [
       { to: "/accountant-dashboard/my-attendance", label: "My Attendance", icon: adminIconAssets.attendanceImpact },
+      { to: "/accountant-dashboard/leave", label: "Staff Leave", icon: staffLeaveIcon },
       { to: "/accountant-dashboard/profile", label: "My Profile", icon: adminIconAssets.profile },
     ],
   },

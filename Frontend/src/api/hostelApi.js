@@ -26,26 +26,23 @@ import {
   deleteHostelTransfer as deleteHostelTransferStore,
 } from "@/modules/hostel/data/hostelStore.js";
 
-// Feature flag: by default false because Swagger documentation & server verify
-// that the backend does not implement /api/v1/hostel controllers yet.
-const USE_LIVE_API = import.meta.env.VITE_USE_LIVE_HOSTEL_API === "true";
+// Live API is the authoritative source for all hostel management operations.
+// Mock store is ONLY used when explicitly requested via VITE_USE_MOCK_DATA="true".
+const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
 const wrapResponse = (data) => Promise.resolve({ data: { success: true, data } });
 const wrapSuccess = (data = {}) => Promise.resolve({ data: { success: true, ...data } });
 
 /**
- * Execute live API call if flag is enabled, otherwise use local store fallback.
+ * Execute live API call.
+ * If VITE_USE_MOCK_DATA="true" is set, use local store fallback.
+ * Real API errors are NOT silently caught so the UI can display actionable error states.
  */
 async function callOrFallback(apiCall, fallbackFn) {
-  if (USE_LIVE_API) {
-    try {
-      const res = await apiCall();
-      if (res && res.data) return res;
-    } catch {
-      // Backend failed or 404, fallback to local store
-    }
+  if (USE_MOCK_DATA) {
+    return fallbackFn();
   }
-  return fallbackFn();
+  return apiCall();
 }
 
 /**

@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "@/config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken, BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT } from "../features/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
 import { handleMockApiRequest } from "./mockApiAdapter.js";
 
 let activeApiRequests = 0;
@@ -148,40 +148,18 @@ apiClient.interceptors.request.use(
       typeof window !== "undefined" &&
       window.location?.pathname?.includes("exam-cell-dashboard");
 
-<<<<<<< HEAD
     const isMockSession =
-      isOffline ||
-      isExamModuleRequest ||
-      isExamCellRoute ||
-      Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("parent-auth-token-")));
-
-    if (isMockSession && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
-=======
-    // Clean up any stale offline flags so real APIs are never blocked
-    try {
-      if (typeof window !== "undefined") {
-        if (window.localStorage?.getItem("cms_backend_offline")) {
-          window.localStorage.removeItem("cms_backend_offline");
-        }
-        window.localStorage?.setItem("cms_backend_online", "true");
-      }
-    } catch (_e) {
-      // ignore storage errors
-    }
-
-    // Only route through mock adapter if explicitly configured or using a synthetic mock token
-    const isExplicitMockToken = Boolean(
-      token &&
-        (token.startsWith("mock-") ||
-          token.startsWith("demo-") ||
-          token.startsWith("non-teaching-") ||
-          token.startsWith("warden-") ||
-          token.startsWith("parent-"))
-    );
+      isOffline || isExamModuleRequest || isExamCellRoute || Boolean(token &&
+        (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("non-teaching-") ||
+         token.startsWith("warden-") || token.startsWith("parent-")));
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
+    const isHostelEndpoint = /\/api\/v1\/hostel/i.test(config.url || "");
 
-    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
+    if (
+      (isMockSession || isExplicitMockForced) &&
+      !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
+      (!isHostelEndpoint || isExplicitMockForced)
+    ) {
       config.adapter = handleMockApiRequest;
     }
 
@@ -233,27 +211,17 @@ apiClient.interceptors.response.use(
     const isNgrokOffline = /ERR_NGROK|is offline/i.test(errText);
 
     const token = getStoredAccessToken();
-    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
+    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("non-teaching-") || token.startsWith("warden-") || token.startsWith("parent-")));
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
-<<<<<<< HEAD
-    // Automatic fallback to mock adapter for missing endpoints (404), offline backend (ERR_NGROK), 502/503/504 proxy errors, Network Errors, or HTML error pages
-    const isProxyOrBackendFailure =
-      error.response?.status === 404 ||
-      error.response?.status === 502 ||
-      error.response?.status === 503 ||
-      error.response?.status === 504 ||
-      error.code === "ERR_NETWORK" ||
-      error.message === "Network Error" ||
-      isNgrokOffline ||
-      !error.response ||
-      isHtmlResponse(error.response?.data);
-
-    if (isProxyOrBackendFailure && originalRequest && !originalRequest._isMockFallback && !originalRequest.url?.includes("/Auth/refresh-token")) {
-=======
-    // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
-    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
+    const isHostelRequest = /\/api\/v1\/hostel/i.test(originalRequest?.url || "");
+    if (
+      (isExplicitMockToken || isExplicitMockForced) &&
+      originalRequest &&
+      !originalRequest._isMockFallback &&
+      !originalRequest.url?.includes("/Auth/refresh-token") &&
+      (!isHostelRequest || isExplicitMockForced)
+    ) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);
@@ -273,13 +241,10 @@ apiClient.interceptors.response.use(
       !originalRequest?.skipAuthRedirect &&
       !originalRequest?.silentAuth &&
       !originalRequest?.optionalAuth &&
-<<<<<<< HEAD
       error.response?.status !== 401 &&
       error.response?.status !== 404 &&
-      error.response?.status !== 403;
-=======
+      error.response?.status !== 403 &&
       !originalRequest?.url?.includes("/api/v1/hostel");
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
 
     if (shouldLogDevError) {
       if (!error.response) {
@@ -311,21 +276,11 @@ apiClient.interceptors.response.use(
     // Handle standard session expiration refresh if 401 persists
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
       const currentToken = getStoredAccessToken();
-<<<<<<< HEAD
-      const isParentSession = Boolean(typeof window !== "undefined" && window.location?.pathname?.startsWith("/parent-dashboard"));
-      if (isParentSession) {
-=======
-      const isMockToken = Boolean(
-        currentToken &&
-          (currentToken.startsWith("mock-") ||
-            currentToken.startsWith("demo-") ||
-            currentToken.startsWith("non-teaching-") ||
-            currentToken.startsWith("warden-") ||
-            currentToken.startsWith("parent-"))
-      );
+      const isMockToken = Boolean(currentToken &&
+        (currentToken.startsWith("mock-") || currentToken.startsWith("demo-") ||
+         currentToken.startsWith("non-teaching-") || currentToken.startsWith("warden-") || currentToken.startsWith("parent-")));
       if (isMockToken) {
-        // Mock token sessions must NEVER be logged out or redirected by backend 401 errors
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
+        // Mock token sessions must never be logged out or redirected by backend 401 errors.
         return Promise.reject(error);
       }
 
