@@ -1,8 +1,8 @@
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
-import { checkedFeeData, checkedFeeRows } from "./accountantFeeRequests.js";
-import { readFee, feeStatus, scopedFeeMasters } from "./feeViewData.js";
+import { checkedFeeData, checkedFeeRows } from "../api/accountantFeeRequests.js";
+import { readFee, feeStatus, scopedFeeMasters } from "../utils/feeViewData.js";
 import { requestError } from "./accountantData.js";
 
 export const setupNames = { types: "Fee Type", structures: "Fee Structure", hostel: "Hostel Fee", transport: "Transport Fee", scholarships: "Scholarship", fine: "Fine Rule" };

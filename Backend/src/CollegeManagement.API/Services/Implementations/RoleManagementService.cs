@@ -197,20 +197,10 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new KeyNotFoundException($"Role with ID {roleId} was not found.");
             }
 
-            var applicableSubModules = await _permissionRepository.GetApplicableSubModulesForRoleAsync(roleId);
-            var applicableSet = new HashSet<string>(applicableSubModules, StringComparer.OrdinalIgnoreCase);
-
             var normalizedModules = request.GetNormalizedModules();
 
-            // Filter to only modules applicable to this role
-            var filteredModules = normalizedModules
-                .Where(m => applicableSet.Count == 0 || 
-                            applicableSet.Contains(m.SubModule) || 
-                            applicableSet.Contains(ModulePermissionMatrixDto.NormalizeToKebabCase(m.SubModule)))
-                .ToList();
-
             // Enforce dependencies: Add/Edit/Delete require View
-            foreach (var item in filteredModules)
+            foreach (var item in normalizedModules)
             {
                 if (item.CanAdd || item.CanEdit || item.CanDelete)
                 {
@@ -224,7 +214,29 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            await _permissionRepository.UpdateRolePermissionsAsync(roleId, filteredModules);
+            // Sync RoleModules with any newly enabled submodules so the role's assigned module list stays in sync
+            var enabledSubModules = normalizedModules
+                .Where(m => m.CanView || m.CanAdd || m.CanEdit || m.CanDelete)
+                .Select(m => m.SubModule)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (enabledSubModules.Count > 0)
+            {
+                var existingRoleModules = await _permissionRepository.GetApplicableSubModulesForRoleAsync(roleId);
+                var missingModules = enabledSubModules
+                    .Where(m => !existingRoleModules.Contains(m, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (missingModules.Count > 0)
+                {
+                    var allModules = existingRoleModules.Concat(missingModules).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                    await _permissionRepository.SetRoleModulesAsync(roleId, allModules);
+                }
+            }
+
+            await _permissionRepository.UpdateRolePermissionsAsync(roleId, normalizedModules);
             return true;
         }
 

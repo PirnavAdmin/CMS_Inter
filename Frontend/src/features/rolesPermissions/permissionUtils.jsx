@@ -278,15 +278,21 @@ const SETTINGS_SCREENS = Object.freeze([
 
 export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = getAuthUser(), screenKey = null) {
   if (hasRole("SUPER_ADMIN", user)) return true;
+  let normMod = normalizeModuleKey(moduleKey);
+  const normAct = normalizeActionKey(actionKey);
+
+  // Baseline dashboard and profile view access for any authenticated role
+  if (normAct === ACTIONS.VIEW && (normMod === "dashboard" || normMod === "profile")) {
+    return true;
+  }
+
   const source = permissions ?? user?.permissions ?? user?.rolePermissions;
-  if (!source) {
+  if (!source || (Array.isArray(source) && source.length === 0)) {
     if (hasRole("ADMIN", user)) return true;
     return false;
   }
 
   const permissionMap = toPermissionMap(source);
-  let normMod = normalizeModuleKey(moduleKey);
-  const normAct = normalizeActionKey(actionKey);
   let normScr = screenKey ? normalizeModuleKey(screenKey) : null;
 
   if (SETTINGS_SCREENS.includes(normMod) && !normScr) {

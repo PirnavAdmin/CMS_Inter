@@ -16,6 +16,9 @@ import StudentSummaryCard from "@/Dashboard/StudentDashboard/components/StudentS
 import { fetchClaims, fetchAccountEntries, disburseClaimPayment } from "@/services/reimbursementService.js";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import "@/components/pages/AdminProfilePage.css";
+import AccountantProfileContent from "../components/AccountantProfileContent.jsx";
+import AccountantPayrollRecords from "../components/AccountantPayrollRecords.jsx";
+import { editableProfileFields, profileContactPayload, profileDraftRequests, updateProfileField, validateProfileDraft } from "../utils/accountantProfileEditing.js";
 
 export const getRows = (payload) => {
   const value = payload?.data ?? payload?.Data ?? payload;
@@ -604,7 +607,7 @@ export function AccountantPayroll() {
         <StudentSummaryCard icon={adminIconAssets.attendanceImpact} label="Pending" value={getNumber(summary, ["pendingCount", "PendingCount"]) ?? "-"} note="From payroll API" tone="orange" />
       </section>
       <StudentCard title="Payroll Records" subtitle="Read-only payroll information">
-        <StudentDataTable columns={["Staff Member", "Month", "Net Amount", "Status"]} statusColumns={[3]} rows={(state.data?.payslips || []).map((row) => ({ "Staff Member": row.staffName, Month: row.month, "Net Amount": formatMoney(row.amount), Status: row.status }))} empty="No payroll records available." />
+        <AccountantPayrollRecords key={JSON.stringify(campusParams)} records={state.data?.payslips || []} formatAmount={formatMoney} />
       </StudentCard>
     </> : null}
   </>;
@@ -664,6 +667,10 @@ export function AccountantReports() {
 }
 
 export function AccountantProfile() {
+  const profileReadRef = useRef(null);
+  const profileSaveLock = useRef(false);
+  const photoUploadLock = useRef(false);
+  const passwordLock = useRef(false);
   const user = useMemo(() => getAuthUser() || {}, []);
   const requestSeq = useRef(0);
   const photoObjectUrl = useRef("");
@@ -744,19 +751,24 @@ export function AccountantProfile() {
     setProfileState((state) => ({ ...state, loading: true, staffError: "", accountError: "", lookupError: "", photoError: "" }));
 
     const sessionIdentity = getSessionIdentity(user);
-    const accountPromise = sessionIdentity.userId
-      ? apiClient.get(apiEndpoints.auth.userById(sessionIdentity.userId), { skipErrorLog: true }).then((response) => unwrapApiData(response.data))
-      : Promise.resolve(null);
-    const lookupsPromise = Promise.allSettled([
-      apiClient.get(apiEndpoints.campuses.list, { params: { isActive: true }, skipErrorLog: true }).then((response) => getRows(response.data)),
-      apiClient.get(apiEndpoints.faculty.lookupDepartments, { params: { staffType: "Non-Teaching" }, skipErrorLog: true }).then((response) => getRows(response.data)),
-      apiClient.get(apiEndpoints.faculty.lookupDesignations, { params: { staffType: "Non-Teaching" }, skipErrorLog: true }).then((response) => getRows(response.data)),
-    ]);
-    const initialStaffPromise = sessionIdentity.staffIdentifier
-      ? loadStaffByIdentifier(sessionIdentity.staffIdentifier)
-      : Promise.resolve(null);
+    if (!profileReadRef.current) {
+      const accountPromise = sessionIdentity.userId
+        ? apiClient.get(apiEndpoints.auth.userById(sessionIdentity.userId), { skipErrorLog: true }).then((response) => unwrapApiData(response.data))
+        : Promise.resolve(null);
+      const lookupsPromise = Promise.allSettled([
+        apiClient.get(apiEndpoints.campuses.list, { params: { isActive: true }, skipErrorLog: true }).then((response) => getRows(response.data)),
+        apiClient.get(apiEndpoints.faculty.lookupDepartments, { params: { staffType: "Non-Teaching" }, skipErrorLog: true }).then((response) => getRows(response.data)),
+        apiClient.get(apiEndpoints.faculty.lookupDesignations, { params: { staffType: "Non-Teaching" }, skipErrorLog: true }).then((response) => getRows(response.data)),
+      ]);
+      const initialStaffPromise = sessionIdentity.staffIdentifier
+        ? loadStaffByIdentifier(sessionIdentity.staffIdentifier)
+        : Promise.resolve(null);
 
-    const [accountResult, initialStaffResult, lookupResults] = await Promise.allSettled([accountPromise, initialStaffPromise, lookupsPromise]);
+      profileReadRef.current = Promise.allSettled([accountPromise, initialStaffPromise, lookupsPromise]);
+    }
+    const pending = profileReadRef.current;
+    const [accountResult, initialStaffResult, lookupResults] = await pending;
+    if (profileReadRef.current === pending) profileReadRef.current = null;
     if (seq !== requestSeq.current) return;
 
     const accountData = accountResult.status === "fulfilled" ? accountResult.value : null;
@@ -811,7 +823,7 @@ export function AccountantProfile() {
   const handleProfileChange = (field) => (event) => {
     setProfileSuccess("");
     setProfileError("");
-    setForm((current) => ({ ...current, [field]: event.target.value }));
+    setForm((current) => updateProfileField(current, field, event.target.value));
   };
 
   const handleCancelProfile = () => {
@@ -823,34 +835,55 @@ export function AccountantProfile() {
 
   const handleSaveProfile = async (event) => {
     event.preventDefault();
+    if (profileSaveLock.current) return;
     setProfileError("");
     setProfileSuccess("");
     if (!staffId) {
       setProfileError("Staff profile ID is required before saving.");
       return;
     }
-    const validation = validateProfileForm(form);
+    const contactChanged = form.mobile.trim() !== String(readAny(staff, ["mobile", "Mobile"])).trim() || form.email.trim() !== String(readAny(staff, ["email", "Email"])).trim();
+    const validation = (!form.firstName.trim() || !form.lastName.trim() ? "First and last name are required." : "") || (contactChanged ? validateProfileForm(form) || (!form.email.trim() ? "Email is required when updating contact information." : "") : "") || validateProfileDraft(staff, form);
     if (validation) {
       setProfileError(validation);
       return;
     }
+    profileSaveLock.current = true;
     setSavingProfile(true);
+    let writes = 0;
     try {
-      const payload = buildStaffUpdatePayload(staff, form);
-      const payloadError = validateStaffUpdatePayload(payload);
-      if (payloadError) {
-        setProfileError(payloadError);
-        return;
+      const requests = profileDraftRequests(staff, form);
+      if (contactChanged) {
+        // This existing self-service contract resolves staff from authentication and
+        // does not require unrelated official-record fields or staff-management access.
+        const response = await apiClient.put(apiEndpoints.faculty.updateProfileSettings, profileContactPayload(staff, form));
+        if ((response.data?.success ?? response.data?.Success) === false) throw new Error(response.data.message || "Contact update failed.");
+        writes += 1;
+        // The settings endpoint splits fullName at the first space. Preserve the
+        // original first/last-name boundaries, including compound first names.
+        const personalRequest = requests.find(request => request.sectionName === "Personal");
+        if (personalRequest) Object.assign(personalRequest.personal, { firstName: form.firstName.trim(), lastName: form.lastName.trim() });
+        else requests.unshift({ sectionName: "Personal", personal: { firstName: form.firstName.trim(), lastName: form.lastName.trim() } });
       }
-      const response = await apiClient.put(apiEndpoints.faculty.update(staffId), payload);
-      const updated = await loadStaffByIdentifier(staffId).catch(() => unwrapApiData(response.data));
+      for (const payload of requests) {
+        const response = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(staffId), payload);
+        if ((response.data?.status ?? response.data?.Status) === false) throw new Error(response.data.message || "Profile section update failed.");
+        writes += 1;
+      }
+      const updated = await loadStaffByIdentifier(staffId);
+      if (getNumericId(readAny(updated, ["id", "Id", "staffId", "StaffId"])) !== staffId) throw new Error("Profile update completed, but the staff record could not be verified. Please refresh before making further changes.");
       setProfileState((state) => ({ ...state, staff: updated, staffError: "" }));
       setForm(createProfileForm(updated));
       setEditing(false);
       setProfileSuccess("Profile details updated successfully.");
     } catch (error) {
-      setProfileError(getApiErrorMessage(error) || "Failed to update profile details.");
+      if (writes) {
+        const saved = await loadStaffByIdentifier(staffId).catch(() => null);
+        if (getNumericId(readAny(saved, ["id", "Id", "staffId", "StaffId"])) === staffId) setProfileState(state => ({ ...state, staff: saved }));
+      }
+      setProfileError(`${writes ? "Some changes reached the server. Your draft is retained; review and retry the remaining changes. " : ""}${getApiErrorMessage(error) || "Failed to update profile details."}`);
     } finally {
+      profileSaveLock.current = false;
       setSavingProfile(false);
     }
   };
@@ -860,7 +893,7 @@ export function AccountantProfile() {
     event.target.value = "";
     setPhotoSuccess("");
     setPhotoUploadError("");
-    if (!file) return;
+    if (!file || photoUploadLock.current) return;
     if (!staffId) {
       setPhotoUploadError("Staff profile ID is required before uploading a photo.");
       return;
@@ -877,22 +910,27 @@ export function AccountantProfile() {
     const formData = new FormData();
     formData.append("StaffId", String(staffId));
     formData.append("Photo", file);
+    photoUploadLock.current = true;
     setPhotoUploading(true);
     try {
-      await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData);
+      const response = await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData);
+      if ((response.data?.status ?? response.data?.Status) === false) throw new Error(response.data.message || "Photo upload failed.");
       setPhotoSuccess("Profile photo updated successfully.");
       await loadPhoto(staffId);
       const updatedStaff = await loadStaffByIdentifier(staffId).catch(() => null);
       if (updatedStaff) setProfileState((state) => ({ ...state, staff: updatedStaff }));
     } catch (error) {
       setPhotoUploadError(getApiErrorMessage(error) || "Failed to upload profile photo.");
+      throw error;
     } finally {
+      photoUploadLock.current = false;
       setPhotoUploading(false);
     }
   };
 
   const handleUpdatePassword = async (event) => {
     event.preventDefault();
+    if (passwordLock.current) return;
     setPasswordSuccess("");
     setPasswordError("");
     if (!currentPassword) {
@@ -907,6 +945,7 @@ export function AccountantProfile() {
       setPasswordError("New password and confirm password do not match.");
       return;
     }
+    passwordLock.current = true;
     setPasswordLoading(true);
     try {
       await apiClient.post(apiEndpoints.auth.changePassword, { oldPassword: currentPassword, newPassword, confirmNewPassword: confirmPassword });
@@ -917,109 +956,49 @@ export function AccountantProfile() {
     } catch (error) {
       setPasswordError(getApiErrorMessage(error) || "Failed to update password.");
     } finally {
+      passwordLock.current = false;
       setPasswordLoading(false);
     }
   };
 
-  return <>
-    <StudentPageHeader title="My Profile" subtitle="Account information for the signed-in finance user." />
-    <div className="admin-profile-container accountant-profile-container">
-      <div className="admin-profile-grid">
-        <div className="admin-profile-card">
-          <div className="admin-profile-card-header">
-            <div className="admin-profile-card-title-group">
-              <span className="admin-profile-title-icon"><User size={20} /></span>
-              <h2>Basic Details &amp; Profile Setup</h2>
-            </div>
-            <div className="accountant-profile-actions">
-              <span className="admin-role-badge">{display.role || "Accountant"}</span>
-              {staff ? (
-                editing ? <>
-                  <button type="button" className="sp-btn" onClick={handleCancelProfile} disabled={savingProfile}><X size={14} /> Cancel</button>
-                  <button type="submit" form="accountantProfileForm" className="sp-btn primary" disabled={savingProfile}><Save size={14} /> {savingProfile ? "Saving..." : "Save"}</button>
-                </> : (
-                  <button type="button" className="sp-btn" onClick={() => setEditing(true)}><Edit3 size={14} /> Edit</button>
-                )
-              ) : null}
-            </div>
-          </div>
+  const resetPasswordForm = useCallback(() => {
+    setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+    setShowCurrentPassword(false); setShowNewPassword(false); setShowConfirmPassword(false);
+    setPasswordError(""); setPasswordSuccess("");
+  }, []);
+  const refreshDocuments = async () => {
+    const updated = await loadStaffByIdentifier(staffId);
+    const updatedId = getNumericId(readAny(updated, ["id", "Id", "staffId", "StaffId"]));
+    if (updatedId !== staffId) throw new Error("Updated documents did not match your staff profile.");
+    setProfileState(state => ({ ...state, staff: updated }));
+  };
 
-          {profileState.loading ? <div className="sp-api-state">Loading accountant profile...</div> : null}
-          {profileState.staffError ? <ProfileNotice type="error" message={profileState.staffError} onRetry={loadProfile} /> : null}
-          {profileState.accountError ? <ProfileNotice type="warning" message={`Account details could not be loaded. ${profileState.accountError}`} /> : null}
-          {profileState.lookupError ? <ProfileNotice type="warning" message={profileState.lookupError} /> : null}
-          {profileState.photoError && !photoUrl ? <ProfileNotice type="warning" message={profileState.photoError} /> : null}
-          {profileSuccess ? <div className="admin-feedback-msg success"><CheckCircle2 size={16} /> {profileSuccess}</div> : null}
-          {profileError ? <div className="admin-feedback-msg error"><AlertCircle size={16} /> {profileError}</div> : null}
-
-          <div className="admin-photo-section">
-            <label className="admin-photo-label">Profile Photo</label>
-            <div className="admin-photo-content">
-              <div className="admin-avatar-wrapper">
-                {photoUrl ? (
-                  <img src={photoUrl} alt="Accountant Profile" className="admin-avatar-img" />
-                ) : (
-                  <div className="admin-avatar-placeholder accountant-avatar-initials">{initials}</div>
-                )}
-              </div>
-              <div className="admin-photo-actions">
-                <strong>{display.fullName || "Accountant"}</strong>
-                <p className="admin-photo-hint">{display.email || "Email not available"}</p>
-                <div className="accountant-photo-controls">
-                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" className="accountant-hidden-file" onChange={handlePhotoSelect} />
-                  <button type="button" className="sp-btn" disabled={!staffId || photoUploading} onClick={() => fileInputRef.current?.click()}><Camera size={14} /> {photoUploading ? "Uploading..." : "Replace Photo"}</button>
-                  <small>JPEG or PNG, up to 5 MB.</small>
-                </div>
-                {photoSuccess ? <div className="admin-feedback-msg success"><CheckCircle2 size={16} /> {photoSuccess}</div> : null}
-                {photoUploadError ? <div className="admin-feedback-msg error"><AlertCircle size={16} /> {photoUploadError}</div> : null}
-              </div>
-            </div>
-          </div>
-
-          <form id="accountantProfileForm" onSubmit={handleSaveProfile} className="admin-profile-form-grid">
-            <ReadOnlyField label="Full Name" value={display.fullName} />
-            <ProfileField label="First Name" value={form.firstName} editing={editing} onChange={handleProfileChange("firstName")} required />
-            <ProfileField label="Last Name" value={form.lastName} editing={editing} onChange={handleProfileChange("lastName")} required />
-            <ProfileField label="Email Address" type="email" value={form.email} editing={editing} onChange={handleProfileChange("email")} />
-            <ProfileField label="Contact Phone Number" value={form.mobile} editing={editing} onChange={handleProfileChange("mobile")} required />
-            <ReadOnlyField label="Employee / Staff ID" value={display.employeeId} />
-            <ReadOnlyField label="Department" value={display.department} />
-            <ReadOnlyField label="Designation" value={display.designation} />
-            <ReadOnlyField label="Campus / Branch Assignment" value={display.campus} />
-            <ReadOnlyField label="Username" value={display.username} />
-            <ReadOnlyField label="Assigned Role" value={display.role} />
-            <div className="admin-form-group">
-              <label>Account Status</label>
-              <div className="admin-status-box"><span className="admin-status-dot" /> {display.status || "Not available"}</div>
-            </div>
-          </form>
-        </div>
-
-        <div className="admin-security-card">
-          <div className="admin-security-header">
-            <div className="admin-security-icon-circle"><KeyRound size={18} /></div>
-            <div className="admin-security-title-wrap">
-              <h2>Account Security</h2>
-              <p>Update your login password</p>
-            </div>
-          </div>
-
-          {passwordSuccess ? <div className="admin-feedback-msg success"><CheckCircle2 size={16} /> {passwordSuccess}</div> : null}
-          {passwordError ? <div className="admin-feedback-msg error"><AlertCircle size={16} /> {passwordError}</div> : null}
-
-          <form onSubmit={handleUpdatePassword} className="admin-security-form">
-            <PasswordField id="accountantCurrentPassword" label="Current Password" value={currentPassword} setValue={setCurrentPassword} visible={showCurrentPassword} setVisible={setShowCurrentPassword} />
-            <PasswordField id="accountantNewPassword" label="New Password" value={newPassword} setValue={setNewPassword} visible={showNewPassword} setVisible={setShowNewPassword} placeholder="At least 6 characters" />
-            <PasswordField id="accountantConfirmPassword" label="Confirm New Password" value={confirmPassword} setValue={setConfirmPassword} visible={showConfirmPassword} setVisible={setShowConfirmPassword} placeholder="Re-enter new password" />
-            <button type="submit" className="admin-btn-update-password" disabled={passwordLoading}>
-              <Lock size={15} />
-              {passwordLoading ? "Updating..." : "Update Password"}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  </>;
+  return <AccountantProfileContent
+    staff={staff} staffId={staffId} display={display} initials={initials}
+    loading={profileState.loading} photoUrl={photoUrl} photoUploading={photoUploading}
+    photoSuccess={photoSuccess} photoError={photoUploadError} fileInputRef={fileInputRef} onPhotoSelect={handlePhotoSelect}
+    editing={editing} savingProfile={savingProfile} form={form} onChange={handleProfileChange}
+    onEdit={() => setEditing(true)} onCancel={handleCancelProfile} onSave={handleSaveProfile}
+    EditableField={ProfileField} onDocumentsChanged={refreshDocuments}
+    passwordLoading={passwordLoading} passwordSuccess={passwordSuccess} resetPassword={resetPasswordForm}
+    notices={<>
+      {profileState.staffError && <ProfileNotice type="error" message={profileState.staffError} onRetry={loadProfile} />}
+      {profileState.accountError && <ProfileNotice type="warning" message={`Account details could not be loaded. ${profileState.accountError}`} />}
+      {profileState.lookupError && <ProfileNotice type="warning" message={profileState.lookupError} />}
+      {profileState.photoError && !photoUrl && <ProfileNotice type="warning" message={profileState.photoError} />}
+      {profileSuccess && <div className="admin-feedback-msg success" role="status"><CheckCircle2 size={16} /> {profileSuccess}</div>}
+      {profileError && <div className="admin-feedback-msg error" role="alert"><AlertCircle size={16} /> {profileError}</div>}
+    </>}
+    securityForm={<>
+      {passwordError && <div className="admin-feedback-msg error" role="alert"><AlertCircle size={16} /> {passwordError}</div>}
+      <form onSubmit={handleUpdatePassword} className="admin-security-form">
+        <PasswordField id="accountantCurrentPassword" label="Current Password" value={currentPassword} setValue={setCurrentPassword} visible={showCurrentPassword} setVisible={setShowCurrentPassword} />
+        <PasswordField id="accountantNewPassword" label="New Password" value={newPassword} setValue={setNewPassword} visible={showNewPassword} setVisible={setShowNewPassword} placeholder="At least 6 characters" />
+        <PasswordField id="accountantConfirmPassword" label="Confirm New Password" value={confirmPassword} setValue={setConfirmPassword} visible={showConfirmPassword} setVisible={setShowConfirmPassword} placeholder="Re-enter new password" />
+        <button type="submit" className="admin-btn-update-password" disabled={passwordLoading}><Lock size={15} /> {passwordLoading ? "Updating..." : "Update Password"}</button>
+      </form>
+    </>}
+  />;
 }
 
 const unwrapApiData = (payload) => payload?.data ?? payload?.Data ?? payload;
@@ -1101,9 +1080,10 @@ const normalizeAccountantProfile = (staff, account, sessionUser, lookups) => {
   };
 };
 
-const createEmptyProfileForm = () => ({ firstName: "", lastName: "", email: "", mobile: "" });
+const createEmptyProfileForm = () => ({ firstName: "", lastName: "", email: "", mobile: "", ...editableProfileFields(null) });
 
 const createProfileForm = (staff) => ({
+  ...editableProfileFields(staff),
   firstName: String(readAny(staff, ["firstName", "FirstName"])),
   lastName: String(readAny(staff, ["lastName", "LastName"])),
   email: String(readAny(staff, ["email", "Email"])),
@@ -1119,107 +1099,6 @@ const validateProfileForm = (form) => {
   return "";
 };
 
-const staffValue = (staff, keys, fallback = undefined) => {
-  const value = readAny(staff, keys, "");
-  return value === "" ? fallback : value;
-};
-
-const nestedStaffValue = (staff, path, fallback = null) => {
-  let value = staff;
-  for (const key of path) value = value?.[key];
-  return value === undefined || value === null || value === "" ? fallback : value;
-};
-
-const normalizeDateForPayload = (value) => {
-  if (!value) return value;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toISOString();
-};
-
-const buildStaffUpdatePayload = (staff, form) => ({
-  firstName: form.firstName.trim(),
-  middleName: staffValue(staff, ["middleName", "MiddleName"], null),
-  lastName: form.lastName.trim(),
-  fatherOrHusbandName: staffValue(staff, ["fatherOrHusbandName", "FatherOrHusbandName", "guardianName", "GuardianName"], null),
-  gender: staffValue(staff, ["gender", "Gender"], ""),
-  dateOfBirth: normalizeDateForPayload(staffValue(staff, ["dateOfBirth", "DateOfBirth"], null)),
-  maritalStatus: staffValue(staff, ["maritalStatus", "MaritalStatus"], null),
-  nationality: staffValue(staff, ["nationality", "Nationality"], "Indian"),
-  aadhaar: staffValue(staff, ["aadhaar", "Aadhaar"], null),
-  panNumber: staffValue(staff, ["panNumber", "PanNumber", "pan", "Pan"], null),
-  mobile: form.mobile.trim(),
-  alternateMobile: staffValue(staff, ["alternateMobile", "AlternateMobile"], null),
-  email: form.email.trim() || null,
-  bloodGroup: staffValue(staff, ["bloodGroup", "BloodGroup"], null),
-  currentAddress: staffValue(staff, ["currentAddress", "CurrentAddress"], null),
-  permanentAddress: staffValue(staff, ["permanentAddress", "PermanentAddress"], null),
-  city: staffValue(staff, ["city", "City"], null),
-  district: staffValue(staff, ["district", "District"], null),
-  state: staffValue(staff, ["state", "State"], null),
-  pincode: staffValue(staff, ["pincode", "Pincode", "pin", "Pin"], null),
-  country: staffValue(staff, ["country", "Country"], "India"),
-  qualification: staffValue(staff, ["qualification", "Qualification"], null),
-  designation: staffValue(staff, ["designation", "Designation"], null),
-  designationId: staffValue(staff, ["designationId", "DesignationId"], null),
-  staffType: staffValue(staff, ["staffType", "StaffType", "facultyType", "FacultyType"], "Non-Teaching"),
-  departmentId: staffValue(staff, ["departmentId", "DepartmentId"], null),
-  department: staffValue(staff, ["department", "Department"], null),
-  campusId: staffValue(staff, ["campusId", "CampusId"], null),
-  campusName: staffValue(staff, ["campusName", "CampusName"], null),
-  assignedCampusIds: staffValue(staff, ["assignedCampusIds", "AssignedCampusIds"], []),
-  boardId: staffValue(staff, ["boardId", "BoardId"], null),
-  boardCode: staffValue(staff, ["boardCode", "BoardCode"], null),
-  boardName: staffValue(staff, ["boardName", "BoardName"], null),
-  assignedBoardIds: staffValue(staff, ["assignedBoardIds", "AssignedBoardIds"], []),
-  joiningDate: normalizeDateForPayload(staffValue(staff, ["joiningDate", "JoiningDate", "dateOfJoining", "DateOfJoining"], null)),
-  experience: Number(staffValue(staff, ["experience", "Experience"], 0)) || 0,
-  employmentType: staffValue(staff, ["employmentType", "EmploymentType"], "Full Time"),
-  status: staffValue(staff, ["status", "Status"], "Active"),
-  photoPath: staffValue(staff, ["photoPath", "PhotoPath"], null),
-  profileStatus: staffValue(staff, ["profileStatus", "ProfileStatus"], null),
-  profileCompletionPercentage: staffValue(staff, ["profileCompletionPercentage", "ProfileCompletionPercentage"], null),
-  correctionNotes: staffValue(staff, ["correctionNotes", "CorrectionNotes"], null),
-  allocatedSubjects: staffValue(staff, ["allocatedSubjects", "AllocatedSubjects", "subjects", "Subjects"], []),
-  bankName: staffValue(staff, ["bankName", "BankName"], nestedStaffValue(staff, ["bankDetails", "bankName"], nestedStaffValue(staff, ["BankDetails", "BankName"]))),
-  accountHolder: staffValue(staff, ["accountHolder", "AccountHolder", "accountHolderName", "AccountHolderName"], nestedStaffValue(staff, ["bankDetails", "accountHolderName"], nestedStaffValue(staff, ["BankDetails", "AccountHolderName"]))),
-  accountNumber: staffValue(staff, ["accountNumber", "AccountNumber"], nestedStaffValue(staff, ["bankDetails", "accountNumber"], nestedStaffValue(staff, ["BankDetails", "AccountNumber"]))),
-  ifsc: staffValue(staff, ["ifsc", "Ifsc", "ifscCode", "IfscCode"], nestedStaffValue(staff, ["bankDetails", "ifscCode"], nestedStaffValue(staff, ["BankDetails", "IfscCode"]))),
-  branch: staffValue(staff, ["branch", "Branch"], nestedStaffValue(staff, ["bankDetails", "branch"], nestedStaffValue(staff, ["BankDetails", "Branch"]))),
-  accountType: staffValue(staff, ["accountType", "AccountType"], nestedStaffValue(staff, ["bankDetails", "accountType"], nestedStaffValue(staff, ["BankDetails", "AccountType"]))),
-  emergencyName: staffValue(staff, ["emergencyName", "EmergencyName", "contactName", "ContactName"], nestedStaffValue(staff, ["emergencyContact", "contactName"], nestedStaffValue(staff, ["EmergencyContact", "ContactName"]))),
-  emergencyRelationship: staffValue(staff, ["emergencyRelationship", "EmergencyRelationship", "relationship", "Relationship"], nestedStaffValue(staff, ["emergencyContact", "relationship"], nestedStaffValue(staff, ["EmergencyContact", "Relationship"]))),
-  emergencyMobile: staffValue(staff, ["emergencyMobile", "EmergencyMobile"], nestedStaffValue(staff, ["emergencyContact", "mobile"], nestedStaffValue(staff, ["EmergencyContact", "Mobile"]))),
-  emergencyAlternate: staffValue(staff, ["emergencyAlternate", "EmergencyAlternate"], nestedStaffValue(staff, ["emergencyContact", "alternateMobile"], nestedStaffValue(staff, ["EmergencyContact", "AlternateMobile"]))),
-  emergencyAddress: staffValue(staff, ["emergencyAddress", "EmergencyAddress"], nestedStaffValue(staff, ["emergencyContact", "address"], nestedStaffValue(staff, ["EmergencyContact", "Address"]))),
-  highestQualification: staffValue(staff, ["highestQualification", "HighestQualification"], null),
-  university: staffValue(staff, ["university", "University"], null),
-  specialization: staffValue(staff, ["specialization", "Specialization"], null),
-  passingYear: staffValue(staff, ["passingYear", "PassingYear"], null),
-  percentage: staffValue(staff, ["percentage", "Percentage"], null),
-  totalExperience: staffValue(staff, ["totalExperience", "TotalExperience"], null),
-  previousInstitution: staffValue(staff, ["previousInstitution", "PreviousInstitution"], null),
-  previousDesignation: staffValue(staff, ["previousDesignation", "PreviousDesignation"], null),
-  experienceFrom: staffValue(staff, ["experienceFrom", "ExperienceFrom"], null),
-  experienceTo: staffValue(staff, ["experienceTo", "ExperienceTo"], null),
-  educationJson: staffValue(staff, ["educationJson", "EducationJson"], null),
-  experienceJson: staffValue(staff, ["experienceJson", "ExperienceJson"], null),
-  documentsJson: staffValue(staff, ["documentsJson", "DocumentsJson"], null),
-  bankDetailsJson: staffValue(staff, ["bankDetailsJson", "BankDetailsJson"], null),
-  emergencyContactJson: staffValue(staff, ["emergencyContactJson", "EmergencyContactJson"], null),
-  departmentSpecificJson: staffValue(staff, ["departmentSpecificJson", "DepartmentSpecificJson"], null),
-  departmentSpecific: staffValue(staff, ["departmentSpecific", "DepartmentSpecific"], null),
-  documents: staffValue(staff, ["documentsMap", "DocumentsMap"], null),
-});
-
-const validateStaffUpdatePayload = (payload) => {
-  if (!payload.firstName) return "First name is required.";
-  if (!payload.lastName) return "Last name is required.";
-  if (!payload.mobile) return "Mobile number is required.";
-  if (!payload.gender) return "Cannot save because the backend staff record is missing gender.";
-  if (!payload.dateOfBirth) return "Cannot save because the backend staff record is missing date of birth.";
-  return "";
-};
-
 function ProfileNotice({ type = "warning", message, onRetry }) {
   return (
     <div className={`admin-feedback-msg ${type === "error" ? "error" : "accountant-warning"}`}>
@@ -1231,10 +1110,12 @@ function ProfileNotice({ type = "warning", message, onRetry }) {
 }
 
 function ProfileField({ label, value, editing, onChange, type = "text", required = false }) {
+  const id = `accountant-profile-edit-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const displayValue = value === "" || value == null ? (["date", "number"].includes(type) ? "" : "Not available") : value;
   return (
     <div className="admin-form-group">
-      <label>{label}</label>
-      <input className="admin-input" type={type} value={editing ? value : value || "Not available"} onChange={onChange} readOnly={!editing} disabled={!editing} required={required} />
+      <label htmlFor={id}>{label}</label>
+      <input id={id} className="admin-input" type={type} value={editing ? value : displayValue} step={type === "number" ? "any" : undefined} min={type === "number" ? 0 : undefined} onChange={onChange} readOnly={!editing} disabled={!editing} required={required} />
     </div>
   );
 }
