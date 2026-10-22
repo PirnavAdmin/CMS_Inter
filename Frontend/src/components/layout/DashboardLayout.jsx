@@ -13,7 +13,9 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
-import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
+import { clearAuthSession, getAuthUser, getAuthToken } from "@/features/authStorage.js";
+import { env } from "@/config/env.js";
+import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
@@ -594,7 +596,11 @@ function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
 
-
+// Module-level notifications cache to prevent duplicate backend requests on route navigation
+let cachedLiveNotifications = [];
+let lastNotifFetchTimestamp = 0;
+let lastNotifCampus = null;
+const NOTIF_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 
 export default function DashboardLayout({
   title,
@@ -677,6 +683,12 @@ export default function DashboardLayout({
 
   useEffect(() => {
     let mounted = true;
+    const isSuperAdmin = currentUser && hasRole("SUPER_ADMIN", currentUser);
+    if (!isSuperAdmin) {
+      setCustomModules(getCustomModules());
+      return;
+    }
+
     const loadModules = () => {
       getModulesAndPermissions().then((res) => {
         if (!mounted) return;
@@ -695,7 +707,7 @@ export default function DashboardLayout({
       mounted = false;
       window.removeEventListener("roles-updated", loadModules);
     };
-  }, []);
+  }, [currentUser]);
 
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
@@ -779,7 +791,19 @@ export default function DashboardLayout({
   useEffect(() => {
     let disposed = false;
     if (canReviewReimbursements || canReviewCertificates) {
-      const fetchLiveNotifications = async () => {
+      const fetchLiveNotifications = async (force = false) => {
+        const now = Date.now();
+        if (
+          !force &&
+          lastNotifCampus === reimbursementCampusId &&
+          now - lastNotifFetchTimestamp < NOTIF_CACHE_TTL_MS
+        ) {
+          if (!disposed && cachedLiveNotifications.length > 0) {
+            setLiveNotifications(cachedLiveNotifications);
+          }
+          return;
+        }
+
         const notifs = [];
         try {
           if (canReviewReimbursements) {
@@ -828,11 +852,48 @@ export default function DashboardLayout({
         }
 
         if (!disposed) {
+          cachedLiveNotifications = notifs;
+          lastNotifFetchTimestamp = Date.now();
+          lastNotifCampus = reimbursementCampusId;
           setLiveNotifications(notifs);
         }
       };
 
       fetchLiveNotifications();
+
+      // SignalR Push Connection: ONLY fetch when server pushes a real notification event
+      let hubConnection = null;
+      try {
+        const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
+        if (token) {
+          const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
+          hubConnection = new HubConnectionBuilder()
+            .withUrl(`${base}/hubs/notifications`, {
+              accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
+              headers: { "ngrok-skip-browser-warning": "true" },
+            })
+            .withAutomaticReconnect()
+            .configureLogging(LogLevel.None)
+            .build();
+
+          hubConnection.on("NotificationReceived", () => {
+            if (!disposed) {
+              setHasViewedNotifications(false);
+              fetchLiveNotifications(true);
+            }
+          });
+
+          hubConnection.start()
+            .then(() => {
+              if (reimbursementCampusId && hubConnection) {
+                hubConnection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
+      } catch {
+        // Fallback
+      }
 
       // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
       let channel = null;
@@ -846,21 +907,29 @@ export default function DashboardLayout({
             event.data?.type === "REIMBURSEMENT_STATUS_UPDATED"
           ) {
             setHasViewedNotifications(false);
-            fetchLiveNotifications();
+            fetchLiveNotifications(true);
           }
         };
       } catch {
         // Fallback
       }
 
-      const timer = setInterval(() => {
-        fetchLiveNotifications();
-      }, 60000);
+      // Listen for same-tab local events so badges update immediately upon action
+      const handleLocalAction = () => {
+        setHasViewedNotifications(false);
+        fetchLiveNotifications(true);
+      };
+      window.addEventListener("cms-reimbursements-updated", handleLocalAction);
+      window.addEventListener("cms-certificates-updated", handleLocalAction);
 
       return () => {
         disposed = true;
-        clearInterval(timer);
         if (channel) channel.close();
+        if (hubConnection) {
+          hubConnection.stop().catch(() => {});
+        }
+        window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
+        window.removeEventListener("cms-certificates-updated", handleLocalAction);
       };
     }
     setLiveNotifications([]);

@@ -390,12 +390,24 @@ export async function submitClaim(claimPayload) {
     }
   }
 
-  // Notify components across window
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cms-reimbursements-updated"));
-  }
+  // Notify components across window and cross-tab
+  broadcastReimbursementEvent("NEW_REIMBURSEMENT");
 
   return normalizeClaim(created) || { ...payload, id: newId, claimId: newId };
+}
+
+/**
+ * Helper to notify same-tab and cross-tab components instantly of reimbursement updates
+ */
+function broadcastReimbursementEvent(type = "REIMBURSEMENT_STATUS_UPDATED") {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("cms-reimbursements-updated"));
+    try {
+      const channel = new BroadcastChannel("cms_notifications");
+      channel.postMessage({ type, timestamp: Date.now() });
+      channel.close();
+    } catch {}
+  }
 }
 
 /**
@@ -409,8 +421,8 @@ export async function approveClaim(claimId, payload = {}) {
     approvedBy: payload.approvedBy || "Finance Admin",
   };
   const res = await reimbursementApi.verifyReimbursement(claimId, body);
+  broadcastReimbursementEvent("REIMBURSEMENT_STATUS_UPDATED");
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cms-reimbursements-updated"));
     window.dispatchEvent(new Event("cms-account-updated"));
   }
   return res?.data?.data ?? res?.data ?? res;
@@ -430,9 +442,7 @@ export async function rejectClaim(claimId, payload = {}) {
     rejectedBy: payload.rejectedBy || "Finance Admin",
   };
   const res = await reimbursementApi.rejectReimbursement(claimId, body);
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cms-reimbursements-updated"));
-  }
+  broadcastReimbursementEvent("REIMBURSEMENT_STATUS_UPDATED");
   return res?.data?.data ?? res?.data ?? res;
 }
 
@@ -550,8 +560,8 @@ export async function disburseClaimPayment(claimId, payload = {}) {
     disbursedBy: payload.disbursedBy || "Accounts Officer",
   };
   const res = await reimbursementApi.markReimbursementPaid(claimId, body);
+  broadcastReimbursementEvent("REIMBURSEMENT_STATUS_UPDATED");
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cms-reimbursements-updated"));
     window.dispatchEvent(new Event("cms-account-updated"));
   }
   return res?.data?.data ?? res?.data ?? res;

@@ -2062,13 +2062,8 @@ export default function CertificatesPage() {
       // Fallback if BroadcastChannel unavailable
     }
 
-    const polling = setInterval(() => {
-      loadWorkflowStats();
-    }, 30000);
-
     return () => {
       if (channel) channel.close();
-      clearInterval(polling);
     };
   }, []);
 

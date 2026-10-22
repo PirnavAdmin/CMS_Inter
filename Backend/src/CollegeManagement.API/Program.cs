@@ -584,6 +584,7 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
+app.MapHub<CollegeManagement.API.Hubs.NotificationHub>("/hubs/notifications");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
