@@ -194,6 +194,7 @@ export const menu = [
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
+      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
       { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
       { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes },
     ],
@@ -664,7 +665,9 @@ export default function DashboardLayout({
           try {
             const raw = window.localStorage.getItem("user") ? window.localStorage : window.sessionStorage;
             raw.setItem("user", JSON.stringify(updated));
-          } catch {}
+          } catch {
+            // Keep permissions in React state when browser storage is unavailable.
+          }
           setCurrentUser(updated);
         }
       })
