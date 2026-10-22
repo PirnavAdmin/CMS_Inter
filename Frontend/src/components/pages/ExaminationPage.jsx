@@ -3400,9 +3400,21 @@ export default function ExaminationPage() {
         return true;
       });
 
+      // Graceful fallback: If strict Board/Year filtering excludes all examinations but normalized has records for this campus (or overall),
+      // fallback to campus examinations so UI does not show a blank list due to navbar mismatch
+      let finalExams = filteredExams;
+      if (filteredExams.length === 0 && normalized.length > 0) {
+        const campusFallback = normalized.filter((exam) => {
+          if (!effCampusStr) return true;
+          const examCampId = normalizeId(exam.campusId);
+          return !examCampId || examCampId === effCampusStr;
+        });
+        finalExams = campusFallback.length > 0 ? campusFallback : normalized;
+      }
+
       setExams((prev) => {
         const prevMap = new Map(prev.map((e) => [normalizeId(e.id), e]));
-        return filteredExams.map((exam) => {
+        return finalExams.map((exam) => {
           const existing = prevMap.get(normalizeId(exam.id));
           if (existing) {
             return {
@@ -3421,7 +3433,7 @@ export default function ExaminationPage() {
           return exam;
         });
       });
-      const initialSchedules = filteredExams.flatMap((exam, index) =>
+      const initialSchedules = finalExams.flatMap((exam, index) =>
         Array.isArray(raw[index]?.schedules) || Array.isArray(raw[index]?.examinationSchedules)
           ? (exam.schedules || []).map((entry) => ({ ...entry, examId: exam.id }))
           : []
@@ -3435,7 +3447,7 @@ export default function ExaminationPage() {
         });
       }
       if (isRetry) showToast("Examinations reloaded successfully.", "success");
-      return filteredExams;
+      return finalExams;
     } catch (error) {
       if (signal.aborted) return;
       setExams([]);
@@ -4101,6 +4113,49 @@ export default function ExaminationPage() {
     setErrors({});
   };
 
+  const handleExportExaminationList = () => {
+    if (!list.length) {
+      showToast("No examinations found to export.", "warning");
+      return;
+    }
+
+    const exportData = list.map((e) => ({
+      "Exam Code": e.code || "",
+      "Exam Name": e.name || "",
+      "Academic Level(s)": getLevelNames(e, academicLevels),
+      "Group(s)": getGroupNames(e, groups),
+      "Program(s)": getProgramNames(e, programs),
+      "Exam Category": e.examCategory || "Regular",
+      "Exam Pattern(s)": e.examPattern || "Standard Pattern",
+      "Start Date": d(e.startDate),
+      "End Date": d(e.endDate),
+      "Status": normalizeStatus(e.status) || "DRAFT",
+      "Total Marks": e.totalMarks || "—",
+      "Pass Percentage": e.passPercentage ? `${e.passPercentage}%` : "—",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    ws["!cols"] = [
+      { wch: 16 },
+      { wch: 28 },
+      { wch: 20 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 16 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 16 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Examinations");
+    const dateStr = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `Examinations_List_${dateStr}.xlsx`);
+    showToast("Examination list exported successfully.", "success");
+  };
+
   const printSchedule = async (targetExam = null) => {
     const targetExams = targetExam
       ? [targetExam]
@@ -4315,7 +4370,7 @@ export default function ExaminationPage() {
             setViewMode("schedule");
             setEditingExamId(null);
             if (periodChanged && subjectsAdded) {
-              showToast("Examination updated. Examination period and subjects changed; please review the timetable.", "warning");
+              showToast("Examination updated. Examination period and subjects changed; please review the exam schedule.", "warning");
             } else if (periodChanged) {
               showToast("Examination updated. Examination period changed; please review and reschedule affected dates.", "warning");
             } else {
@@ -4528,14 +4583,9 @@ export default function ExaminationPage() {
     } finally { mutationRef.current = false; }
   };
 
-  // Delete Examination API Call (DRAFT or CANCELLED)
+  // Delete Examination API Call
   const handleDeleteExam = async () => {
     if (!remove || deleteLoading || mutationRef.current) return;
-    if (remove.status !== "DRAFT" && remove.status !== "CANCELLED") {
-      showToast("Only DRAFT or CANCELLED examinations can be deleted.", "error");
-      setRemove(null);
-      return;
-    }
     try {
       mutationRef.current = true;
       setDeleteLoading(true);
@@ -4548,7 +4598,7 @@ export default function ExaminationPage() {
         return next;
       });
       setSchedules((prev) => prev.filter((item) => String(item.examId) !== String(remove.id)));
-      showToast(remove.status === "CANCELLED" ? "Cancelled examination deleted." : "Draft examination deleted.", "success");
+      showToast(`Examination "${remove.name || ''}" deleted successfully.`, "success");
     } catch (err) {
       const errMsg = getApiErrorMessage(err) || "Failed to delete examination.";
       showToast(errMsg, "error");
@@ -4561,7 +4611,6 @@ export default function ExaminationPage() {
 
   const handleCancelExam = async () => {
     if (!cancelExamTarget || cancelLoading || mutationRef.current) return;
-    if (normalizeStatus(cancelExamTarget.status) !== "SCHEDULED") return;
     mutationRef.current = true;
     setCancelLoading(true);
     try {
@@ -4574,7 +4623,19 @@ export default function ExaminationPage() {
       await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
       showToast(`Examination "${cancelExamTarget.name}" cancelled successfully.`, "success");
     } catch (error) {
-      showToast(getApiErrorMessage(error) || "Failed to cancel examination.", "error");
+      try {
+        await apiClient.put(`/api/v1/examinations/${cancelExamTarget.id}`, {
+          ...cancelExamTarget,
+          status: "CANCELLED",
+        }, {
+          params: { campusId: effectiveCampusId },
+        });
+        setExams((previous) => previous.map((exam) => String(exam.id) === String(cancelExamTarget.id) ? { ...exam, status: "CANCELLED" } : exam));
+        await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
+        showToast(`Examination "${cancelExamTarget.name}" cancelled successfully.`, "success");
+      } catch (_err) {
+        showToast(getApiErrorMessage(error) || "Failed to cancel examination.", "error");
+      }
     } finally {
       mutationRef.current = false;
       setCancelLoading(false);
@@ -5116,7 +5177,7 @@ export default function ExaminationPage() {
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost exam-export-btn"
-                onClick={() => printSchedule()}
+                onClick={handleExportExaminationList}
                 title="Export Examination List"
               >
                 <Printer size={15} /> Export
@@ -5194,84 +5255,74 @@ export default function ExaminationPage() {
                       <td>
                         <div className="cms-actions">
                           <button
+                            type="button"
                             className="cms-action-btn view"
                             title="View Details"
                             onClick={() => handleOpenDetails(e)}
                           >
                             <Eye size={15} />
                           </button>
-                          {["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED"].includes(e.status) && (
-                            <button
-                              className="cms-action-btn"
-                              title={e.status === "COMPLETED" ? "View Examination Schedule" : "Schedule / Reschedule Examination"}
-                              onClick={() => {
-                                const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
-                                const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
-                                if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId) {
-                                  showToast("Please switch to the matching Board in the navigation bar before scheduling this examination.", "warning");
-                                  return;
-                                }
-                                if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId) {
-                                  showToast("Please switch to the matching Academic Year in the navigation bar before scheduling this examination.", "warning");
-                                  return;
-                                }
-                                setExamId(String(e.id));
-                                setActiveTab("schedule");
-                                setEditing(null);
-                              }}
-                            >
-                              <CalendarDays size={15} />
-                            </button>
-                          )}
-                          {e.status === "DRAFT" && (
-                            <button
-                              className="cms-action-btn edit"
-                              title="Edit Examination Scope"
-                              onClick={() => {
-                                const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
-                                const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
-                                if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId) {
-                                  showToast("Please switch to the matching Board in the navigation bar before editing this examination.", "warning");
-                                  return;
-                                }
-                                if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId) {
-                                  showToast("Please switch to the matching Academic Year in the navigation bar before editing this examination.", "warning");
-                                  return;
-                                }
-                                setEditingExamId(String(e.id));
-                                setViewMode("edit");
-                              }}
-                            >
-                              <Pencil size={15} />
-                            </button>
-                          )}
-                          {["SCHEDULED", "COMPLETED"].includes(e.status) && (
-                            <button
-                              className="cms-action-btn"
-                              title="Export Schedule Excel"
-                              onClick={() => printSchedule(e)}
-                            >
-                              <Printer size={15} />
-                            </button>
-                          )}
-                          {["DRAFT", "SCHEDULED"].includes(e.status) && (
-                            <button
-                              className="cms-action-btn warning"
-                              title="Cancel Examination"
-                              onClick={() => setCancelExamTarget(e)}
-                            >
-                              <Ban size={15} />
-                            </button>
-                          )}
-                          {["DRAFT", "CANCELLED"].includes(e.status) && (
-                            <button
-                              className="cms-action-btn danger"
-                              title={e.status === "CANCELLED" ? "Delete Cancelled Exam" : "Delete Draft"}
-                              onClick={() => setRemove(e)}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="cms-action-btn"
+                            title={e.status === "COMPLETED" ? "View Examination Schedule" : "Schedule / Reschedule Examination"}
+                            onClick={() => {
+                              const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
+                              const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
+                              if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
+                                setSelectedBoard(e.boardId);
+                              }
+                              if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
+                                setSelectedAcademicYear(e.yearId);
+                              }
+                              setExamId(String(e.id));
+                              setActiveTab("schedule");
+                              setEditing(null);
+                            }}
+                          >
+                            <CalendarDays size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="cms-action-btn edit"
+                            title="Edit Examination Scope"
+                            onClick={() => {
+                              const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
+                              const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
+                              if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
+                                setSelectedBoard(e.boardId);
+                              }
+                              if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
+                                setSelectedAcademicYear(e.yearId);
+                              }
+                              setEditingExamId(String(e.id));
+                              setViewMode("edit");
+                            }}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="cms-action-btn warning"
+                            title={normalizeStatus(e.status) === "CANCELLED" ? "Examination already cancelled" : "Cancel Examination"}
+                            onClick={() => {
+                              if (normalizeStatus(e.status) === "CANCELLED") {
+                                showToast(`Examination "${e.name}" is already cancelled.`, "info");
+                                return;
+                              }
+                              setCancelExamTarget(e);
+                            }}
+                          >
+                            <Ban size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="cms-action-btn danger"
+                            title="Delete Examination"
+                            onClick={() => setRemove(e)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -5496,14 +5547,30 @@ export default function ExaminationPage() {
             groups={groups}
             programs={programs}
             students={students}
-            onRefreshStudents={async () => {
+            onRefreshStudents={async (eventOrManual = false) => {
               const res = await fetchStudentsList();
-              showToast?.(`Synchronized ${res.length} student records from Admissions.`, "success");
+              const isManual = Boolean(
+                eventOrManual === true ||
+                eventOrManual?.nativeEvent ||
+                eventOrManual?.isTrusted ||
+                eventOrManual?.target
+              );
+              if (isManual) {
+                showToast?.(`Synchronized ${res.length} student records from Admissions.`, "success");
+              }
             }}
             rooms={rooms}
-            onRefreshRooms={async () => {
+            onRefreshRooms={async (eventOrManual = false) => {
               const res = await fetchRoomsList();
-              showToast?.(`Synchronized ${res.length} examination halls and capacities.`, "success");
+              const isManual = Boolean(
+                eventOrManual === true ||
+                eventOrManual?.nativeEvent ||
+                eventOrManual?.isTrusted ||
+                eventOrManual?.target
+              );
+              if (isManual) {
+                showToast?.(`Synchronized ${res.length} examination halls and capacities.`, "success");
+              }
             }}
             setSchedules={setSchedules}
             onReloadSchedules={fetchSchedulesForExam}
@@ -5758,13 +5825,13 @@ export default function ExaminationPage() {
 
       {remove && (
         <ConfirmDialog
-          title={remove.status === "CANCELLED" ? "Delete cancelled examination" : "Delete draft examination"}
+          title={remove.status === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
           message={`Delete ${remove.name}? All associated schedules will be removed.`}
           onCancel={() => !deleteLoading && setRemove(null)}
           onConfirm={handleDeleteExam}
           loading={deleteLoading}
-          confirmLabel="Confirm"
-          loadingLabel="Confirming..."
+          confirmLabel="Delete"
+          loadingLabel="Deleting..."
           danger={true}
         />
       )}
@@ -7573,7 +7640,7 @@ function ExamForm({
         _original: originalBackendRecordRef.current || existing,
       };
 
-      await onSave(payload, !existing);
+      await onSave(payload, proceedToSchedule);
     } finally {
       setSaving(false);
       isSubmittingRef.current = false;
@@ -8156,17 +8223,18 @@ function ScheduleSection({
   const [readinessErrors, setReadinessErrors] = useState([]);
   const [editingHallsSchedule, setEditingHallsSchedule] = useState(null);
 
-  // Draft schedules can be created; scheduled, ongoing or completed examinations can be viewed or managed.
+  // Draft schedules can be created; scheduled, ongoing, completed, active, published or cancelled examinations can be viewed or managed.
   const schedulableExams = useMemo(
-    () => exams.filter((ex) => ["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED"].includes(normalizeStatus(ex.status))),
+    () => exams.filter((ex) => ["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED", "ACTIVE", "PUBLISHED", "CANCELLED"].includes(normalizeStatus(ex.status))),
     [exams],
   );
 
   useEffect(() => {
-    if (examId && (!exam || !["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED"].includes(normalizeStatus(exam.status)))) {
-      setExamId("");
+    if (examId && (!exam || !["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED", "ACTIVE", "PUBLISHED", "CANCELLED"].includes(normalizeStatus(exam.status)))) {
+      const stillValid = schedulableExams.some((e) => normalizeId(e.id) === normalizeId(examId));
+      if (!stillValid) setExamId("");
     }
-  }, [examId, exam, setExamId]);
+  }, [examId, exam, schedulableExams, setExamId]);
 
   // Exam Group Scope Tabs in Schedule View
   const examGroupIds = useMemo(() => (exam?.groupIds || [exam?.groupId]).filter(Boolean).map(normalizeId), [exam]);
@@ -8855,7 +8923,7 @@ function ScheduleSection({
     <>
       <div className="exam-toolbar">
         <div>
-          <h2>Exam Schedule & Postponement Editor</h2>
+          <h2>Exam Schedule Editor</h2>
           <p>Configure or reschedule subject dates, timings, halls, and invigilator faculty group-wise.</p>
         </div>
         {exam && entries.length > 0 && (
@@ -9305,7 +9373,7 @@ function ScheduleSection({
               <div className="exam-print-area" aria-hidden="true">
                 <div style={{ textAlign: "center", marginBottom: "16px" }}>
                   <h1 style={{ fontSize: "18px", margin: "0 0 4px", fontWeight: "bold" }}>
-                    COLLEGE EXAMINATION TIMETABLE / SCHEDULE
+                    COLLEGE EXAMINATION SCHEDULE
                   </h1>
                   <h2 style={{ fontSize: "14px", margin: "0 0 6px" }}>
                     {exam.name} ({exam.code}) — {nameOf(boards, exam.boardId)}

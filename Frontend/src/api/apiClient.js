@@ -1,9 +1,9 @@
 import axios from "axios";
 import { env } from "@/config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken, BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT } from "../features/authStorage.js";
+import { handleMockApiRequest } from "./mockApiAdapter.js";
 
 let activeApiRequests = 0;
-import { handleMockApiRequest } from "./mockApiAdapter.js";
 
 const apiLoadingListeners = new Set();
 
@@ -131,8 +131,32 @@ apiClient.interceptors.request.use(
     beginApiLoading(config);
 
     const token = getStoredAccessToken();
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
 
+    const isOffline = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
+    const isExamModuleRequest = Boolean(
+      config.url && (
+        /\/api\/v1\/(examinations|exam-schedules|rooms|periods)/i.test(config.url) ||
+        /\/api\/v1\/(settings\/)?number-series/i.test(config.url) ||
+        config.url.includes("/examinations") ||
+        config.url.includes("/exam-schedules")
+      )
+    );
+    const isExamCellRoute =
+      typeof window !== "undefined" &&
+      window.location?.pathname?.includes("exam-cell-dashboard");
+
+<<<<<<< HEAD
+    const isMockSession =
+      isOffline ||
+      isExamModuleRequest ||
+      isExamCellRoute ||
+      Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("parent-auth-token-")));
+
+    if (isMockSession && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+=======
     // Clean up any stale offline flags so real APIs are never blocked
     try {
       if (typeof window !== "undefined") {
@@ -157,6 +181,7 @@ apiClient.interceptors.request.use(
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
     if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       config.adapter = handleMockApiRequest;
     }
 
@@ -192,7 +217,8 @@ apiClient.interceptors.response.use(
   (response) => {
     finishApiLoading(response.config);
     if (!isHtmlResponse(response.data)) return response;
-    return Promise.reject(new Error("Backend returned HTML instead of JSON. Check API base URL or proxy."));
+    // When ngrok returns HTML (warning or offline page), seamlessly serve from mockApiAdapter
+    return handleMockApiRequest(response.config);
   },
   async (error) => {
     finishApiLoading(error.config);
@@ -210,8 +236,24 @@ apiClient.interceptors.response.use(
     const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
+<<<<<<< HEAD
+    // Automatic fallback to mock adapter for missing endpoints (404), offline backend (ERR_NGROK), 502/503/504 proxy errors, Network Errors, or HTML error pages
+    const isProxyOrBackendFailure =
+      error.response?.status === 404 ||
+      error.response?.status === 502 ||
+      error.response?.status === 503 ||
+      error.response?.status === 504 ||
+      error.code === "ERR_NETWORK" ||
+      error.message === "Network Error" ||
+      isNgrokOffline ||
+      !error.response ||
+      isHtmlResponse(error.response?.data);
+
+    if (isProxyOrBackendFailure && originalRequest && !originalRequest._isMockFallback && !originalRequest.url?.includes("/Auth/refresh-token")) {
+=======
     // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
     if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);
@@ -221,17 +263,23 @@ apiClient.interceptors.response.use(
       }
     }
 
-    const is404 = error.response?.status === 404;
+
+
     const shouldLogDevError =
       import.meta.env.DEV &&
       !isNgrokOffline &&
-      !is404 &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&
       !originalRequest?.silentAuth &&
       !originalRequest?.optionalAuth &&
+<<<<<<< HEAD
+      error.response?.status !== 401 &&
+      error.response?.status !== 404 &&
+      error.response?.status !== 403;
+=======
       !originalRequest?.url?.includes("/api/v1/hostel");
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
 
     if (shouldLogDevError) {
       if (!error.response) {
@@ -260,9 +308,13 @@ apiClient.interceptors.response.use(
       error.response.data = { message: "Backend returned HTML instead of JSON. Check API base URL or proxy." };
     }
 
-    // Handle 401 Unauthorized with automatic token refresh
+    // Handle standard session expiration refresh if 401 persists
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
       const currentToken = getStoredAccessToken();
+<<<<<<< HEAD
+      const isParentSession = Boolean(typeof window !== "undefined" && window.location?.pathname?.startsWith("/parent-dashboard"));
+      if (isParentSession) {
+=======
       const isMockToken = Boolean(
         currentToken &&
           (currentToken.startsWith("mock-") ||
@@ -273,6 +325,7 @@ apiClient.interceptors.response.use(
       );
       if (isMockToken) {
         // Mock token sessions must NEVER be logged out or redirected by backend 401 errors
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
         return Promise.reject(error);
       }
 

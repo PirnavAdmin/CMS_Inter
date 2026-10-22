@@ -77,17 +77,17 @@ export default function AttendanceOverviewPage() {
   }, [id, loadData]);
 
   const title = staff ? "Staff Attendance Overview" : "Student Attendance Overview";
-  const backPath = staff ? "/exam-cell-dashboard/attendance/staff" : "/exam-cell-dashboard/attendance/student";
+  const backPath = staff ? "/exam-cell-dashboard/check-in-out" : "/exam-cell-dashboard/attendance";
   const backState = !staff && location.state?.attendanceState ? { attendanceState: location.state.attendanceState } : undefined;
   const yearLabel = selectedAcademicYear?.name || selectedAcademicYear?.label || profile?.academicYearName || '';
   const subtitle = yearLabel ? `Academic Year: ${yearLabel}` : '';
   
   if (loading) {
-    return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}><main className="attendance-module"><SkeletonDashboard cards={4} tableColumns={5} /></main></DashboardLayout>;
+    return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Student Operations", "Attendance", title]}><main className="attendance-module"><SkeletonDashboard cards={4} tableColumns={5} /></main></DashboardLayout>;
   }
 
   if (error) {
-    return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}>
+    return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Student Operations", "Attendance", title]}>
       <main className="attendance-module att-overview-page">
         <Link className="cms-back-link" to={backPath} state={backState}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
         <section className="att-card" style={{ padding: "2rem", textAlign: "center" }}>
