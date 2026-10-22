@@ -1714,8 +1714,11 @@ function Generate({ goDraft, notify, initial }) {
 }
 
 function SlotEditor({ context, data, slot, workingDays, close, saved, notify, lab = false }) {
+<<<<<<< HEAD
+=======
   const [slotType, setSlotType] = useState(() => getTimetableSlotType(slot));
   const leisure = slotType === "Leisure";
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
   const [form, setForm] = useState({
     dayOfWeek: getTimetableSlotDay(slot),
     periodId: String(pick(slot, "periodId", "PeriodId") ?? ""),
@@ -1731,7 +1734,7 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
   useEffect(() => {
     let cancelled = false;
     setFaculty([]);
-    if (leisure || !form.subjectId || !context.campusId) return;
+    if (!form.subjectId || !context.campusId) return;
     Promise.all([
       campusTeachingStaff(context.campusId),
       apiClient.get(apiEndpoints.timetable.getAllocatedFaculties, {
@@ -1748,6 +1751,17 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
       })
       .catch((e) => { if (!cancelled) notify(getApiErrorMessage(e)); });
     return () => { cancelled = true; };
+<<<<<<< HEAD
+  }, [context, form.subjectId, notify]);
+  const set = (key) => (e) => setForm((x) => ({ ...x, [key]: e.target.value }));
+  const save = async () => {
+    if (saving) return;
+    if (!faculty.some((entry) => String(entry.id) === String(form.facultyId))) {
+      notify("Select an allocated teacher from the selected campus before saving.");
+      return;
+    }
+    setSaving(true);
+=======
   }, [context, form.subjectId, leisure, notify]);
   const set = (key) => (e) => {
     setError("");
@@ -1756,6 +1770,7 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
   const save = async () => {
     if (saving || savingRef.current) return;
     setError("");
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
     try {
       const payload = buildTimetableSlotPayload(context, form, slotType, slot);
       if (!workingDays.map(Number).includes(Number(form.dayOfWeek))) throw new Error("Select a working day before saving.");
@@ -1827,29 +1842,38 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
     <Modal title={lab ? "Add Lab / Practical" : timetableId(slot) ? "Edit Timetable Slot" : "Add Timetable Slot"} className="ttm-slot-editor-modal" onClose={saving ? () => {} : close}>
       <div className="ttm-modal-body">
         <div className="ttm-form-grid">
+<<<<<<< HEAD
+=======
           <Field label="Slot Type">
             <select value={slotType} onChange={(event) => { setSlotType(event.target.value); setError(""); }} disabled={saving}>
               <option value="Teaching">Teaching</option>
               <option value="Leisure">Leisure</option>
             </select>
           </Field>
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
           {select(
             "Day",
             "dayOfWeek",
             workingDays.map((day) => ({ id: day, name: DAYS[day] })),
           )}
           {select("Period", "periodId", data.periods.filter((period) => !isBreakPeriod(period)))}
-          {!leisure && select("Subject", "subjectId", data.subjects)}
-          {!leisure && select("Staff", "facultyId", faculty, facultyOptionLabel)}
-          {!leisure && select("Room", "roomId", data.rooms)}
+          {select("Subject", "subjectId", data.subjects)}
+          {select("Staff", "facultyId", faculty, facultyOptionLabel)}
+          {select("Room", "roomId", data.rooms)}
           <Field label="Remarks">
             <input value={form.remarks} onChange={set("remarks")} disabled={saving} />
           </Field>
         </div>
+<<<<<<< HEAD
+        <footer>
+          {timetableId(slot) ? <Btn className="cms-btn cms-btn-ghost" disabled={saving} onClick={deleteSlot}>Delete</Btn> : null}
+          {timetableId(slot) ? (
+=======
         {error ? <p className="ttm-validation-error" role="alert">{error}</p> : null}
         <footer>
           {timetableId(slot) ? <Btn className="cms-btn cms-btn-ghost" disabled={saving} onClick={deleteSlot}>Delete</Btn> : null}
           {timetableId(slot) && getTimetableSlotType(slot) === slotType ? (
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
             <Btn className="cms-btn cms-btn-ghost" disabled={saving} onClick={toggleSlotPublish}>
               {pick(slot, "isPublished", "IsPublished") ? "Unpublish Slot" : "Publish Slot"}
             </Btn>
@@ -1857,7 +1881,11 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
           <Btn className="cms-btn cms-btn-ghost" disabled={saving} onClick={close}>
             Cancel
           </Btn>
+<<<<<<< HEAD
+          <Btn disabled={saving} onClick={save}>{saving ? "Saving…" : lab ? "Add Lab" : "Save Slot"}</Btn>
+=======
           <Btn disabled={saving} onClick={save}>{saving ? "Saving…" : leisure ? "Save Leisure" : lab ? "Add Lab" : "Save Slot"}</Btn>
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
         </footer>
       </div>
     </Modal>
