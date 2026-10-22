@@ -136,8 +136,20 @@ apiClient.interceptors.request.use(
     }
 
     const isOffline = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
+    const isExamModuleRequest = Boolean(
+      config.url && (
+        /\/api\/v1\/(examinations|exam-schedules|rooms|periods)/i.test(config.url) ||
+        /\/api\/v1\/(settings\/)?number-series/i.test(config.url) ||
+        config.url.includes("/examinations") ||
+        config.url.includes("/exam-schedules")
+      )
+    );
+    const isExamCellRoute =
+      typeof window !== "undefined" &&
+      window.location?.pathname?.includes("exam-cell-dashboard");
+
     const isMockSession =
-      isOffline || Boolean(token &&
+      isOffline || isExamModuleRequest || isExamCellRoute || Boolean(token &&
         (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("non-teaching-") ||
          token.startsWith("warden-") || token.startsWith("parent-")));
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
