@@ -1,20 +1,18 @@
 const nameKey = value => String(value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, " ");
-const nameCodes = {
-  casual: "CL", "casual leave": "CL",
-  sick: "SL", "sick leave": "SL", medical: "SL", "medical leave": "SL",
-  earned: "EL", "earned leave": "EL", privilege: "EL", "privilege leave": "EL",
-  "on duty": "OD", "on duty leave": "OD", duty: "OD",
-};
-
 const valueOf = (item, key) => item?.[key] ?? item?.[key[0].toUpperCase() + key.slice(1)];
+
 export function parseAccountantLeaveCategories(response) {
   const body = response?.data;
   if ((body?.status ?? body?.Status ?? body?.success ?? body?.Success) === false) throw new Error(body?.message || body?.Message || "Leave categories request failed.");
   const rows = Array.isArray(body) ? body : body?.data ?? body?.Data;
   if (!Array.isArray(rows)) throw new Error("Leave categories response is invalid.");
-  const fields = ["leaveCategoryId", "categoryCode", "categoryName", "annualQuota", "applicableStaffType", "isActive"];
-  return rows.map(row => Object.fromEntries(fields.map(key => [key, valueOf(row, key)])))
-    .filter(category => Number.isInteger(Number(category.leaveCategoryId)) && Number(category.leaveCategoryId) > 0);
+  const fields = ["leaveCategoryId", "categoryCode", "categoryName", "annualQuota", "applicableStaffType", "isActive", "displayOrder", "requiresProof", "allowCarryForward"];
+  const categories = new Map();
+  for (const row of rows) {
+    const category = Object.fromEntries(fields.map(key => [key, valueOf(row, key)]));
+    if (Number.isInteger(Number(category.leaveCategoryId)) && Number(category.leaveCategoryId) > 0) categories.set(String(category.leaveCategoryId), category);
+  }
+  return [...categories.values()];
 }
 
 export function accountantCategoryEligibility(category, staffType) {
@@ -24,14 +22,30 @@ export function accountantCategoryEligibility(category, staffType) {
   const staff = key(staffType);
   if (!staff) return null;
   if (audience === "teaching") return staff === "teaching";
-  // LeaveCategoryService initializes Non-Teaching balances for StaffType != Teaching.
+  // Matches LeaveCategoryService's Non-Teaching balance initialization rule.
   if (audience === "nonteaching") return staff !== "teaching";
   return null;
 }
 
-function categoryCode(category) {
-  const code = String(category.categoryCode ?? "").trim().toUpperCase();
-  return code || nameCodes[nameKey(category.categoryName)] || null;
+export function getApplicableAccountantLeaveCategories(categories, staffType) {
+  const order = category => category.displayOrder != null && Number.isFinite(Number(category.displayOrder)) ? Number(category.displayOrder) : Infinity;
+  return categories.filter(category => category.isActive !== false && accountantCategoryEligibility(category, staffType) === true)
+    .sort((a, b) => order(a) - order(b));
+}
+
+export function accountantLeaveCategoryLabel(category) {
+  return `${category.categoryName || "Leave"}${category.categoryCode ? ` (${category.categoryCode})` : ""}`;
+}
+
+// Existing enum contract used by the submission API; this is not a list of cards.
+export function accountantLeaveTypeForCategory(category) {
+  const code = String(category.categoryCode || "").trim().toUpperCase();
+  const name = nameKey(category.categoryName);
+  if (code === "CL" || name.includes("casual")) return "Casual";
+  if (code === "SL" || /sick|medical/.test(name)) return "Sick";
+  if (code === "EL" || /earned|privilege/.test(name)) return "Earned";
+  if (code === "ML" || name.includes("maternity")) return "Maternity";
+  return "Other";
 }
 
 function days(value) {
@@ -40,54 +54,47 @@ function days(value) {
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
-function leaveCode(leave, categories) {
-  if (leave.leaveCategoryId != null) {
-    const category = categories.find(item => String(item.leaveCategoryId) === String(leave.leaveCategoryId));
-    if (category) return categoryCode(category);
-  }
+// IDs are authoritative. Legacy enum-only history is usable only when it has one
+// unambiguous configured category. Never assume that Other means CO or On-Duty.
+function historyCategory(leave, catalog) {
+  if (leave.leaveCategoryId != null) return { id: String(leave.leaveCategoryId), candidates: [] };
   if (leave.leaveCategoryName) {
-    const category = categories.find(item => nameKey(item.categoryName) === nameKey(leave.leaveCategoryName));
-    return category ? categoryCode(category) : nameCodes[nameKey(leave.leaveCategoryName)] || null;
+    const named = catalog.filter(category => nameKey(category.categoryName) === nameKey(leave.leaveCategoryName));
+    if (named.length === 1) return { id: String(named[0].leaveCategoryId), candidates: [] };
   }
-  return nameCodes[nameKey(leave.leaveType)] || null;
+  const type = nameKey(leave.leaveType);
+  if (!type) return { id: null, candidates: catalog };
+  const canonical = { casual: "Casual", sick: "Sick", medical: "Sick", earned: "Earned", maternity: "Maternity", other: "Other" }[type];
+  const candidates = catalog.filter(category => canonical ? accountantLeaveTypeForCategory(category) === canonical : nameKey(category.categoryCode) === type);
+  if (canonical !== "Other" && candidates.length === 1) return { id: String(candidates[0].leaveCategoryId), candidates: [] };
+  return { id: null, candidates };
 }
 
-// Keep the catalog intact so a teaching-only category can be distinguished from
-// a missing category. Policy quotas do not verify an employee/year allocation.
-export function getAccountantLeaveStats(categories, leaves, code, historyAvailable = true, { staffType, categoriesAvailable = true } = {}) {
-  const configured = categories.filter(category => categoryCode(category) === code);
-  const active = configured.filter(category => category.isActive !== false);
-  const matched = active.filter(category => accountantCategoryEligibility(category, staffType) === true);
-  let state = "policy";
-  let message = "Approved days used / category policy quota. Individual employee allocation is not returned by this API.";
-  if (!categoriesAvailable) { state = "unavailable"; message = "Leave categories could not be loaded."; }
-  else if (!configured.length) { state = "not_configured"; message = "No matching category was returned by the leave categories API."; }
-  else if (!active.length) { state = "inactive"; message = "This leave category is inactive."; }
-  else if (!matched.length) {
-    const unknown = active.some(category => accountantCategoryEligibility(category, staffType) === null);
-    state = unknown ? "eligibility_unknown" : "inapplicable";
-    message = unknown ? "Staff classification or category eligibility is unavailable." : `This category does not apply to your staff classification (${staffType}).`;
-  }
-  else if (matched.length !== 1 || days(matched[0].annualQuota) === null) { state = "quota_unavailable"; message = "The applicable category has no unambiguous valid policy quota."; }
-  const quota = state === "policy" ? days(matched[0].annualQuota) : null;
+export function getAccountantLeaveTypeLabel(leave, catalog) {
+  const resolved = historyCategory(leave, catalog);
+  const category = catalog.find(item => String(item.leaveCategoryId) === resolved.id);
+  return category?.categoryName || leave.leaveCategoryName || leave.leaveType || "Leave";
+}
+
+export function getAccountantLeaveCategoryStats(category, catalog, leaves, historyAvailable = true) {
+  const quota = days(category.annualQuota);
   let used = historyAvailable ? 0 : null;
   if (historyAvailable) {
     for (const leave of leaves) {
       if (nameKey(leave.status) !== "approved") continue;
-      const resolvedCode = leaveCode(leave, categories);
-      // The history API may omit category identifiers for Other leave. It cannot
-      // distinguish On-Duty from other custom categories in that case.
-      if (code === "OD" && !resolvedCode && nameKey(leave.leaveType) === "other") {
-        used = null;
-        break;
-      }
-      if (resolvedCode !== code) continue;
+      const resolved = historyCategory(leave, catalog);
+      if (!resolved.id && resolved.candidates.some(item => String(item.leaveCategoryId) === String(category.leaveCategoryId))) { used = null; break; }
+      if (resolved.id !== String(category.leaveCategoryId)) continue;
       const count = days(leave.totalDays);
       if (count === null) { used = null; break; }
       used += count;
     }
   }
-  const remaining = quota !== null && used !== null ? Math.max(0, quota - used) : null;
-  const labels = { unavailable: "Unavailable", not_configured: "Not configured", inactive: "Inactive", eligibility_unknown: "Eligibility unknown", inapplicable: "Not applicable" };
-  return { quota, used, remaining, state, message, text: labels[state] || `${used ?? "--"} / ${quota ?? "--"} Days` };
+  // The API returns policy limits, not employee/category allocations or accruals.
+  return {
+    quota, used,
+    policyRemaining: quota !== null && used !== null ? Math.max(0, quota - used) : null,
+    message: "Approved days used / category policy quota. Individual allocations, accruals and carry-forward balances are not supplied by this API.",
+    text: `${used ?? "--"} / ${quota ?? "--"} Days`,
+  };
 }
