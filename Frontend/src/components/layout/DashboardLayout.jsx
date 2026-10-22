@@ -673,6 +673,30 @@ export default function DashboardLayout({
         console.warn("Could not load current user permissions:", err?.message);
       });
   }, [currentUser]);
+  const [customModules, setCustomModules] = useState(() => getCustomModules());
+
+  useEffect(() => {
+    let mounted = true;
+    const loadModules = () => {
+      getModulesAndPermissions().then((res) => {
+        if (!mounted) return;
+        if (res?.data && Array.isArray(res.data)) {
+          const custom = res.data.filter((m) => !m.isSystem && m.id !== "dashboard");
+          setCustomModules(custom);
+        }
+      }).catch(() => {
+        if (mounted) setCustomModules(getCustomModules());
+      });
+    };
+
+    loadModules();
+    window.addEventListener("roles-updated", loadModules);
+    return () => {
+      mounted = false;
+      window.removeEventListener("roles-updated", loadModules);
+    };
+  }, []);
+
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
