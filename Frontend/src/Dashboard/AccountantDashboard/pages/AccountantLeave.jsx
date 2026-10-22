@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { accountantCategoryEligibility, getAccountantLeaveStats, parseAccountantLeaveCategories } from "../accountantLeaveStats.js";
 import "../AccountantLeave.css";
 
 const PROFILE_URL = "/api/v1/staff/me";
@@ -20,13 +21,7 @@ const unwrap = response => {
 };
 const apiError = (err, method, url) => `${method} ${url}${err?.response?.status ? ` (HTTP ${err.response.status})` : ""}: ${getApiErrorMessage(err)}`;
 const normalize = (obj, fields) => Object.fromEntries(fields.map(name => [name, field(obj, name)]));
-const categoryFields = ["leaveCategoryId", "categoryName", "categoryCode", "annualQuota", "applicableStaffType", "isActive"];
 const leaveFields = ["staffLeaveRequestId", "staffId", "leaveType", "leaveCategoryId", "leaveCategoryName", "startDate", "endDate", "totalDays", "reason", "createdAt", "status", "approvedByUserName"];
-const staffTypeKey = value => String(value || "").toLowerCase().replace(/staff|only|[\s-]/g, "");
-const categoryMatches = (category, staffType) => {
-  const applies = staffTypeKey(category.applicableStaffType);
-  return applies === "all" || (Boolean(applies) && applies === staffTypeKey(staffType));
-};
 const enumForCategory = category => {
   const code = String(category.categoryCode || "").toUpperCase();
   const name = String(category.categoryName || "").toLowerCase();
@@ -47,8 +42,10 @@ export default function AccountantLeave() {
   const academic = useAcademicContext() || {};
   const [leaveList, setLeaveList] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [policyCategories, setPolicyCategories] = useState([]);
+  const [categoriesAvailable, setCategoriesAvailable] = useState(false);
+  const [staffType, setStaffType] = useState(null);
   const [staffId, setStaffId] = useState(null);
-  const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [prerequisitesLoading, setPrerequisitesLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -60,6 +57,7 @@ export default function AccountantLeave() {
   const [toast, setToast] = useState(null);
   const [formError, setFormError] = useState(null);
   const requestRef = useRef(0);
+  const prerequisitesRequestRef = useRef(null);
   const submitLock = useRef(false);
   const cancelLock = useRef(false);
   const modalRef = useRef(null);
@@ -79,10 +77,19 @@ export default function AccountantLeave() {
     setHistoryError(null);
     setLeaveList([]);
     setStaffId(null);
-    setBalance(null);
     setCategories([]);
+    setPolicyCategories([]);
+    setCategoriesAvailable(false);
+    setStaffType(null);
     // Resolve identity independently of history. Never use a user ID as a staff ID.
-    const results = await Promise.allSettled([apiClient.get(PROFILE_URL), apiClient.get(CATEGORY_URL)]);
+    // StrictMode replays mount effects in development. Share only the current
+    // in-flight reads within this page; subsequent refreshes always fetch anew.
+    if (!prerequisitesRequestRef.current) {
+      prerequisitesRequestRef.current = Promise.allSettled([apiClient.get(PROFILE_URL), apiClient.get(CATEGORY_URL)]);
+    }
+    const pending = prerequisitesRequestRef.current;
+    const results = await pending;
+    if (prerequisitesRequestRef.current === pending) prerequisitesRequestRef.current = null;
     if (request !== requestRef.current) return;
     let profile;
     let id;
@@ -94,15 +101,17 @@ export default function AccountantLeave() {
       id = positiveId(field(profile, "staffId") ?? field(profile, "id"));
       if (!id) throw new Error("Your authenticated staff profile did not return a valid staff ID. Leave submission is unavailable.");
       setStaffId(id);
+      setStaffType(field(profile, "staffType") || null);
     } catch (err) {
       errors.push(apiError(err, "GET", PROFILE_URL));
       profile = null;
     }
     try {
       if (results[1].status === "rejected") throw results[1].reason;
-      const rows = unwrap(results[1].value);
-      if (!Array.isArray(rows)) throw new Error("Leave categories response is invalid.");
-      const available = rows.map(row => normalize(row, categoryFields)).filter(category => positiveId(category.leaveCategoryId) && category.isActive !== false && categoryMatches(category, field(profile, "staffType")));
+      const catalog = parseAccountantLeaveCategories(results[1].value);
+      setPolicyCategories(catalog);
+      setCategoriesAvailable(true);
+      const available = catalog.filter(category => category.isActive !== false && accountantCategoryEligibility(category, field(profile, "staffType")) === true);
       setCategories(available);
       if (!available.length) errors.push("No applicable leave categories are available for your staff type.");
     } catch (err) { errors.push(apiError(err, "GET", CATEGORY_URL)); }
@@ -124,8 +133,6 @@ export default function AccountantLeave() {
       const leaves = rows.map(row => normalize(row, leaveFields));
       if (leaves.some(row => positiveId(row.staffId) !== id)) throw new Error("Leave history contains records outside your staff identity.");
       setLeaveList(leaves.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
-      const rawBalance = field(history, "balance");
-      setBalance(rawBalance ? normalize(rawBalance, ["total", "used", "remaining"]) : null);
     } catch (err) {
       if (request !== requestRef.current) return;
       const message = apiError(err, "GET", url);
@@ -157,15 +164,13 @@ export default function AccountantLeave() {
     return () => { document.removeEventListener("keydown", onKey); previous?.focus?.(); };
   }, [showLeaveModal]);
 
-  const stats = (code, keyword) => {
-    if (loading) return "Loading...";
-    if (historyError) return "-- / -- Days";
-    const matches = categories.filter(c => c.categoryCode?.toUpperCase() === code || c.categoryName?.toLowerCase().includes(keyword));
-    if (code === "OD" && leaveList.some(l => l.status === "Approved" && l.leaveType === "Other" && !l.leaveCategoryName && !l.leaveCategoryId)) return "-- / -- Days";
-    const used = leaveList.filter(l => l.status === "Approved" && (matches.some(c => String(c.leaveCategoryId) === String(l.leaveCategoryId)) || String(l.leaveCategoryName || l.leaveType || "").toLowerCase().includes(keyword))).reduce((sum,l) => sum + (Number(l.totalDays) || 0),0);
-    // The personal history contract exposes only an aggregate balance, not category allocations.
-    return `${used} / -- Days`;
-  };
+  const categoryStats = Object.fromEntries(["CL", "SL", "EL", "OD"].map(code => [
+    code, getAccountantLeaveStats(policyCategories, leaveList, code, !historyError, { staffType, categoriesAvailable }),
+  ]));
+  const missingQuotas = Object.keys(categoryStats).filter(code => ["quota_unavailable", "eligibility_unknown"].includes(categoryStats[code].state));
+  const hasPolicyQuotas = Object.values(categoryStats).some(stats => stats.state === "policy");
+  const unknownUsage = Object.keys(categoryStats).filter(code => ["policy", "quota_unavailable"].includes(categoryStats[code].state) && categoryStats[code].used === null);
+  const stats = code => loading ? "Loading..." : categoryStats[code].text;
   const handleOpenModal = () => {
     if (prerequisitesLoading || !staffId || !categories.length) return;
     setLeaveForm(blankForm());
@@ -255,7 +260,7 @@ export default function AccountantLeave() {
           </div>
           <div>
             <div className="cms-stat-label">Casual Leave (CL)</div>
-            <div className="cms-stat-value">{stats("CL", "casual")}</div>
+            <div className="cms-stat-value" title={categoryStats.CL.message}>{stats("CL")}</div>
           </div>
         </div>
 
@@ -265,7 +270,7 @@ export default function AccountantLeave() {
           </div>
           <div>
             <div className="cms-stat-label">Sick Leave (SL)</div>
-            <div className="cms-stat-value">{stats("SL", "sick")}</div>
+            <div className="cms-stat-value" title={categoryStats.SL.message}>{stats("SL")}</div>
           </div>
         </div>
 
@@ -275,7 +280,7 @@ export default function AccountantLeave() {
           </div>
           <div>
             <div className="cms-stat-label">Earned Leave (EL)</div>
-            <div className="cms-stat-value">{stats("EL", "earned")}</div>
+            <div className="cms-stat-value" title={categoryStats.EL.message}>{stats("EL")}</div>
           </div>
         </div>
 
@@ -285,15 +290,18 @@ export default function AccountantLeave() {
           </div>
           <div>
             <div className="cms-stat-label">On-Duty (OD)</div>
-            <div className="cms-stat-value">{stats("OD", "duty")}</div>
+            <div className="cms-stat-value" title={categoryStats.OD.message}>{stats("OD")}</div>
           </div>
         </div>
       </div>
 
-      <p className="accountant-leave-balance-note">
-        Cards show approved days used / allocated quota. Individual category allocations are unavailable; unclassified usage is shown as --.
-        {balance && ` Overall balance: ${balance.remaining ?? "--"} / ${balance.total ?? "--"} days remaining.`}
-      </p>
+      {!loading && (hasPolicyQuotas || missingQuotas.length > 0 || (!historyError && unknownUsage.length > 0)) && (
+        <p className="accountant-leave-balance-note" role="status">
+          {hasPolicyQuotas && "Values show approved days used / applicable category policy quota, not a verified individual employee allocation. "}
+          {missingQuotas.length > 0 && `Leave policy quotas are unavailable for: ${missingQuotas.join(", ")}.`}
+          {!historyError && unknownUsage.length > 0 && ` Approved usage cannot be determined for: ${unknownUsage.join(", ")}.`}
+        </p>
+      )}
       {/* Leave Applications History Table Card */}
       <div className="cms-card">
         <div className="cms-card-head">
