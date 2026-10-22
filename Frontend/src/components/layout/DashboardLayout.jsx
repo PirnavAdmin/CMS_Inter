@@ -184,68 +184,68 @@ export const menu = [
   {
     section: "Overview",
     items: [
-      { to: "/dashboard", label: "Dashboard", icon: dashboardIcon },
+      { to: "/dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: "dashboard" },
     ],
   },
   {
     section: "Academic",
     items: [
-      { to: "/dashboard/courses", label: "Group Management", icon: generatedSidebarIcons.groups },
-      { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon },
-      { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
-      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
-      { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
-      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes },
+      { to: "/dashboard/courses", label: "Group Management", icon: generatedSidebarIcons.groups, moduleKey: "group-management", screenKey: "courses" },
+      { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon, moduleKey: "subject-management" },
+      { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon, moduleKey: "section-room" },
+      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
+      { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
+      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes, moduleKey: "inventory-management" },
     ],
   },
   {
     section: "Student",
     items: [
-      { to: "/dashboard/admission", label: "Student Admission", icon: generatedSidebarIcons.admission },
-      { to: "/dashboard/students", label: "Student Management", icon: studentsIcon },
-      { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon },
-      { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon },
-      { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon },
-      { to: "/dashboard/transport", label: "Transport", icon: transportBusIcon },
+      { to: "/dashboard/admission", label: "Student Admission", icon: generatedSidebarIcons.admission, moduleKey: "student-admission" },
+      { to: "/dashboard/students", label: "Student Management", icon: studentsIcon, moduleKey: "student-management" },
+      { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon, moduleKey: "section-allocation" },
+      { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon, moduleKey: "attendance" },
+      { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon, moduleKey: "promotion" },
+      { to: "/dashboard/transport", label: "Transport", icon: transportBusIcon, moduleKey: "transport" },
     ],
   },
   {
     section: "Staff",
     items: [
-      { to: "/dashboard/staff", label: "Staff Management", icon: staffIcon },
-      { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department },
-      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
-      { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon },
+      { to: "/dashboard/staff", label: "Staff Management", icon: staffIcon, moduleKey: "staff-management" },
+      { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department, moduleKey: "department-designation" },
+      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance" },
+      { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management" },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon, moduleKey: "reimbursement" },
     ],
   },
   {
     section: "Examinations",
     items: [
-      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon },
-      { to: "/dashboard/marks-entry", label: "Marks Evaluation", icon: marksEvaluationIcon },
-      { to: "/dashboard/results", label: "Results", icon: resultsIcon },
+      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon, moduleKey: "examinations" },
+      { to: "/dashboard/marks-entry", label: "Marks Evaluation", icon: marksEvaluationIcon, moduleKey: "marks-evaluation" },
+      { to: "/dashboard/results", label: "Results", icon: resultsIcon, moduleKey: "results" },
     ],
   },
   {
     section: "Finance",
     items: [
-      { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
-      { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
-      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon },
+      { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon, moduleKey: "fee-management" },
+      { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll, moduleKey: "payroll" },
+      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon, moduleKey: "reimbursement" },
     ],
   },
   {
     section: "Documents & Reports",
     items: [
-      { to: "/dashboard/certificates", label: "Certificates", icon: certificatesIcon },
-      { to: "/dashboard/reports", label: "Reports & Analytics", icon: reportsAnalyticsIcon },
+      { to: "/dashboard/certificates", label: "Certificates", icon: certificatesIcon, moduleKey: "certificates" },
+      { to: "/dashboard/reports", label: "Reports & Analytics", icon: reportsAnalyticsIcon, moduleKey: "reports-analytics" },
     ],
   },
   {
     section: "Hostel Management",
     items: [
-      { to: "/hostel", label: "Hostel Management", icon: hostelManagementIcon },
+      { to: "/hostel", label: "Hostel Management", icon: hostelManagementIcon, moduleKey: "hostel-management" },
     ],
   },
   {
@@ -255,6 +255,7 @@ export const menu = [
         to: "/dashboard/settings",
         label: "Settings",
         icon: boardAcademicYearIcon,
+        moduleKey: "settings",
       },
     ],
   },
@@ -349,39 +350,39 @@ export const wardenMenu = [
 export const examCellMenu = [
   {
     section: "Overview",
-    items: [{ to: "/exam-cell-dashboard", label: "Dashboard", icon: dashboardIcon }],
+    items: [{ to: "/exam-cell-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: "dashboard" }],
   },
   {
     section: "Examinations",
     items: [
-      { to: "/exam-cell-dashboard/exams", label: "Examination", icon: examinationIcon },
-      { to: "/exam-cell-dashboard/hall-allocation", label: "Hall Allocation", icon: sectionsIcon },
-      { to: "/exam-cell-dashboard/hall-tickets", label: "Hall Tickets", icon: certificatesIcon },
+      { to: "/exam-cell-dashboard/exams", label: "Examination", icon: examinationIcon, moduleKey: "examinations" },
+      { to: "/exam-cell-dashboard/hall-allocation", label: "Hall Allocation", icon: sectionsIcon, moduleKey: "examinations", screenKey: "hall-allocation" },
+      { to: "/exam-cell-dashboard/hall-tickets", label: "Hall Tickets", icon: certificatesIcon, moduleKey: "examinations", screenKey: "hall-tickets" },
     ],
   },
   {
     section: "Marks & Results",
     items: [
-      { to: "/exam-cell-dashboard/marks-entry", label: "Marks Entry", icon: marksEvaluationIcon },
-      { to: "/exam-cell-dashboard/results", label: "Results", icon: resultsIcon },
+      { to: "/exam-cell-dashboard/marks-entry", label: "Marks Entry", icon: marksEvaluationIcon, moduleKey: "marks-evaluation" },
+      { to: "/exam-cell-dashboard/results", label: "Results", icon: resultsIcon, moduleKey: "results" },
     ],
   },
   {
     section: "Student Operations",
     items: [
-      { to: "/exam-cell-dashboard/attendance", label: "Attendance", icon: attendanceIcon },
-      { to: "/exam-cell-dashboard/check-in-out", label: "My Attendance", icon: generatedSidebarIcons.staffAttendance },
-      { to: "/exam-cell-dashboard/certificates", label: "Certificates", icon: certificatesIcon },
-      { to: "/exam-cell-dashboard/promotions", label: "Promotions", icon: promotionIcon },
-      { to: "/exam-cell-dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
+      { to: "/exam-cell-dashboard/attendance", label: "Attendance", icon: attendanceIcon, moduleKey: "attendance" },
+      { to: "/exam-cell-dashboard/check-in-out", label: "My Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance", screenKey: "my-attendance" },
+      { to: "/exam-cell-dashboard/certificates", label: "Certificates", icon: certificatesIcon, moduleKey: "certificates" },
+      { to: "/exam-cell-dashboard/promotions", label: "Promotions", icon: promotionIcon, moduleKey: "promotion" },
+      { to: "/exam-cell-dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
     ],
   },
   {
     section: "Reports & Account",
     items: [
-      { to: "/exam-cell-dashboard/reports", label: "Exam Reports", icon: reportsAnalyticsIcon },
-      { to: "/exam-cell-dashboard/profile", label: "My Profile", icon: staffIcon },
-      { to: "/exam-cell-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon },
+      { to: "/exam-cell-dashboard/reports", label: "Exam Reports", icon: reportsAnalyticsIcon, moduleKey: "reports-analytics" },
+      { to: "/exam-cell-dashboard/profile", label: "My Profile", icon: staffIcon, moduleKey: "profile" },
+      { to: "/exam-cell-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: "settings" },
     ],
   },
 ];
@@ -655,23 +656,37 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!currentUser || hasRole("SUPER_ADMIN", currentUser)) return;
-    if (currentUser.permissions || currentUser.rolePermissions) return;
 
-    getCurrentUserPermissions()
-      .then((res) => {
-        if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-          const updated = { ...currentUser, permissions: res.data };
-          try {
-            const raw = window.localStorage.getItem("user") ? window.localStorage : window.sessionStorage;
-            raw.setItem("user", JSON.stringify(updated));
-          } catch {}
-          setCurrentUser(updated);
-        }
-      })
-      .catch((err) => {
-        console.warn("Could not load current user permissions:", err?.message);
-      });
-  }, [currentUser]);
+    let isMounted = true;
+    const fetchPerms = () => {
+      getCurrentUserPermissions()
+        .then((res) => {
+          if (isMounted && res?.data && Array.isArray(res.data)) {
+            const updated = { ...currentUser, permissions: res.data };
+            try {
+              for (const storage of [window.localStorage, window.sessionStorage]) {
+                if (storage.getItem("user")) storage.setItem("user", JSON.stringify(updated));
+              }
+            } catch {}
+            setCurrentUser(updated);
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not load current user permissions:", err?.message);
+        });
+    };
+
+    fetchPerms();
+
+    const handleUpdate = () => fetchPerms();
+    window.addEventListener("roles-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("roles-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
@@ -695,7 +710,7 @@ export default function DashboardLayout({
           ...group,
           items: (group.items || []).filter((item) => {
             if (!item.moduleKey || item.moduleKey === "dashboard") return true;
-            return can(item.moduleKey, ACTIONS.VIEW, undefined, user);
+            return can(item.moduleKey, ACTIONS.VIEW, user?.permissions, user, item.screenKey);
           }),
         }))
         .filter((group) => group.items.length > 0);

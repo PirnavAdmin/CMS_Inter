@@ -313,7 +313,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves today's punch status and shift information for the logged-in staff member.
         /// </summary>
         [HttpGet("my-today")]
-        [BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyTodayStatus()
@@ -327,7 +326,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Records check-in (punch in) timestamp for the logged-in staff member.
         /// </summary>
         [HttpPost("punch-in")]
-        [BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -352,7 +350,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Records check-out (punch out) timestamp for the logged-in staff member.
         /// </summary>
         [HttpPost("punch-out")]
-        [BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -377,7 +374,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves personal attendance logs and analytics metrics for the requested period (week, last_week, month, last_month).
         /// </summary>
         [HttpGet("my-history")]
-        [BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceHistoryResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyAttendanceHistory([FromQuery] string period = "week")
@@ -391,7 +387,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Submits an attendance regularization request for missing punch, late arrival, or official on-duty.
         /// </summary>
         [HttpPost("regularize")]
-        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
