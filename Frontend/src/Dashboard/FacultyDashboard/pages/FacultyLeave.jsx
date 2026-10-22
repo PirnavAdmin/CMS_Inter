@@ -15,6 +15,66 @@ const STATUS_BADGE = {
   Cancelled: "cms-badge-inactive",
 };
 
+export const STANDARD_LEAVE_CATEGORIES = [
+  { leaveCategoryId: 1, categoryName: "medical", categoryCode: "MDCL", annualQuota: 10 },
+  { leaveCategoryId: 2, categoryName: "Casual Leave", categoryCode: "CL", annualQuota: 12 },
+  { leaveCategoryId: 3, categoryName: "Sick Leave", categoryCode: "SL", annualQuota: 10 },
+  { leaveCategoryId: 4, categoryName: "Earned Leave", categoryCode: "EL", annualQuota: 15 },
+  { leaveCategoryId: 5, categoryName: "Maternity Leave", categoryCode: "ML", annualQuota: 17 },
+  { leaveCategoryId: 6, categoryName: "Compensatory Off", categoryCode: "CO", annualQuota: 5 },
+];
+
+export function mergeLeaveCategories(apiCategories = []) {
+  if (!Array.isArray(apiCategories) || apiCategories.length === 0) {
+    return STANDARD_LEAVE_CATEGORIES;
+  }
+
+  const result = STANDARD_LEAVE_CATEGORIES.map((std) => {
+    const match = apiCategories.find((c) => {
+      const code = (c.categoryCode || "").trim().toUpperCase();
+      const name = (c.categoryName || "").trim().toLowerCase();
+      return (
+        (std.categoryCode && code === std.categoryCode) ||
+        name === std.categoryName.toLowerCase() ||
+        (std.categoryCode === "MDCL" && (code === "MDCL" || name.includes("medical"))) ||
+        (std.categoryCode === "CL" && (code === "CL" || name.includes("casual"))) ||
+        (std.categoryCode === "SL" && (code === "SL" || name.includes("sick"))) ||
+        (std.categoryCode === "EL" && (code === "EL" || name.includes("earned"))) ||
+        (std.categoryCode === "ML" && (code === "ML" || name.includes("maternity"))) ||
+        (std.categoryCode === "CO" && (code === "CO" || name.includes("compensatory")))
+      );
+    });
+
+    if (match) {
+      return {
+        ...std,
+        ...match,
+        categoryName: std.categoryName,
+        categoryCode: std.categoryCode,
+        annualQuota: match.annualQuota ?? std.annualQuota,
+        leaveCategoryId: match.leaveCategoryId || match.id || std.leaveCategoryId,
+      };
+    }
+    return std;
+  });
+
+  apiCategories.forEach((apiCat) => {
+    const code = (apiCat.categoryCode || "").trim().toUpperCase();
+    const name = (apiCat.categoryName || "").trim().toLowerCase();
+    const alreadyIncluded = result.some(
+      (r) =>
+        (r.categoryCode && r.categoryCode === code) ||
+        r.categoryName.toLowerCase() === name ||
+        String(r.leaveCategoryId) === String(apiCat.leaveCategoryId || apiCat.id)
+    );
+    if (!alreadyIncluded && name && name !== "others") {
+      result.push(apiCat);
+    }
+  });
+
+  return result;
+}
+
 export default function FacultyLeave() {
   const context = useFacultySafe();
   const profileData = context?.profileData || {};
@@ -23,14 +83,14 @@ export default function FacultyLeave() {
   const selectedCampusId = academicCtx.selectedCampusId;
 
   const [leaveList, setLeaveList] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState(STANDARD_LEAVE_CATEGORIES);
   const [categorySummary, setCategorySummary] = useState(null);
   const [staffBalance, setStaffBalance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
-    categoryId: "",
+    categoryId: 1,
     customLeaveType: "",
     fromDate: "",
     toDate: "",
@@ -118,13 +178,14 @@ export default function FacultyLeave() {
 
         if (catRes.status === "fulfilled") {
           const catList = catRes.value?.data?.data || catRes.value?.data?.Data || catRes.value?.data || [];
-          if (Array.isArray(catList) && catList.length > 0) {
-            setCategories(catList);
-            setLeaveForm((prev) => ({
-              ...prev,
-              categoryId: prev.categoryId || catList[0]?.leaveCategoryId || "",
-            }));
-          }
+          const merged = mergeLeaveCategories(catList);
+          setCategories(merged);
+          setLeaveForm((prev) => ({
+            ...prev,
+            categoryId: prev.categoryId || merged[0]?.leaveCategoryId || 1,
+          }));
+        } else {
+          setCategories(STANDARD_LEAVE_CATEGORIES);
         }
 
         if (sumRes.status === "fulfilled") {

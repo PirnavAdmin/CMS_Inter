@@ -21,6 +21,7 @@ import {
   assignSubstitutes
 } from "@/features/leave/services/leaveStore.js";
 import "./LeaveManagementPage.css";
+import { STANDARD_LEAVE_CATEGORIES, mergeLeaveCategories } from "@/Dashboard/FacultyDashboard/pages/FacultyLeave.jsx";
 
 const STATUS_BADGE = {
   Approved: "cms-badge-active",
@@ -950,7 +951,7 @@ export default function LeaveManagementPage() {
 
   // Admin personal leave states (First Reference Screen)
   const [adminLeaveList, setAdminLeaveList] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState(STANDARD_LEAVE_CATEGORIES);
   const [categorySummary, setCategorySummary] = useState(null);
   const [adminBalance, setAdminBalance] = useState(null);
   const [adminResponseData, setAdminResponseData] = useState(null);
@@ -958,7 +959,7 @@ export default function LeaveManagementPage() {
   const [adminError, setAdminError] = useState(null);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
-    categoryId: "",
+    categoryId: 1,
     customLeaveType: "",
     fromDate: "",
     toDate: "",
@@ -1025,13 +1026,14 @@ export default function LeaveManagementPage() {
 
         if (catRes.status === "fulfilled") {
           const catList = catRes.value?.data?.data || catRes.value?.data?.Data || catRes.value?.data || [];
-          if (Array.isArray(catList) && catList.length > 0) {
-            setCategories(catList);
-            setLeaveForm((prev) => ({
-              ...prev,
-              categoryId: prev.categoryId || catList[0]?.leaveCategoryId || "",
-            }));
-          }
+          const merged = mergeLeaveCategories(catList);
+          setCategories(merged);
+          setLeaveForm((prev) => ({
+            ...prev,
+            categoryId: prev.categoryId || merged[0]?.leaveCategoryId || 1,
+          }));
+        } else {
+          setCategories(STANDARD_LEAVE_CATEGORIES);
         }
 
         if (sumRes.status === "fulfilled") {
@@ -2108,7 +2110,7 @@ export default function LeaveManagementPage() {
                         )}
                         {categories.map((c) => (
                           <option key={c.leaveCategoryId} value={c.leaveCategoryId}>
-                            {c.categoryName}
+                            {c.categoryName} {c.categoryCode ? `(${c.categoryCode})` : ""} · {Number(c.annualQuota || 0)} days quota
                           </option>
                         ))}
                         <option value="OTHERS">Others</option>

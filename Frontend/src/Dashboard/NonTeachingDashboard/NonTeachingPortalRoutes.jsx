@@ -27,6 +27,7 @@ export default function NonTeachingPortalRoutes() {
         <Route path="payslips" element={<Navigate to="/non-teaching-dashboard/payslip" replace />} />
         <Route path="announcements" element={<NonTeachingAnnouncements />} />
         <Route path="department" element={<NonTeachingDepartment />} />
+        <Route path="department/:dept" element={<NonTeachingDepartment />} />
         <Route path="support" element={<NonTeachingSupport />} />
         <Route path="*" element={<Navigate to="/non-teaching-dashboard" replace />} />
       </Route>
