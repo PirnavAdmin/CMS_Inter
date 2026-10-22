@@ -1,8 +1,8 @@
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { requestError } from "./accountantData.js";
-import { checkedFeeData } from "../api/accountantFeeRequests.js";
-import { readFee } from "../utils/feeViewData.js";
+import { checkedFeeData } from "./accountantFeeRequests.js";
+import { readFee } from "./feeViewData.js";
 
 const invalid = (message) => Object.assign(new Error(message), { code: "ACCOUNTANT_DATA_ERROR" });
 const validId = (value) => /^\d+$/.test(String(value ?? "")) && Number.isSafeInteger(Number(value)) && Number(value) > 0 && Number(value) <= 2147483647;

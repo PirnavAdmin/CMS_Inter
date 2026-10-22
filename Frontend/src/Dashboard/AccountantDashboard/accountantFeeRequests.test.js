@@ -3,11 +3,11 @@ import { after, test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer } from "vite";
-import { pageOf } from "../utils/feeViewData.js";
+import { pageOf } from "./feeViewData.js";
 
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => server.close());
-const { checkedFeeRows, loadSetupRecords, loadFeeOverview } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/api/accountantFeeRequests.js");
+const { checkedFeeRows, loadSetupRecords, loadFeeOverview } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/accountantFeeRequests.js");
 const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
 
 const withAdapter = async (adapter, work) => {
@@ -94,7 +94,7 @@ test("overview reports unsuccessful dashboard envelopes rather than inventing to
 });
 
 test("fee table and pagination render the Admin classes with ten rows and correct boundaries", async () => {
-  const { FeeTable, FeePagination } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantFeeUI.jsx");
+  const { FeeTable, FeePagination } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/pages/AccountantFeeUI.jsx");
   const records = Array.from({ length: 23 }, (_, index) => ({ studentName: `Test Student ${index + 1}` }));
   const first = pageOf(records, 1);
   const html = renderToStaticMarkup(createElement(FeeTable, { rows: first.rows, columns: [{ label: "Student", value: (row) => row.studentName }] }));
@@ -111,7 +111,7 @@ test("fee table and pagination render the Admin classes with ten rows and correc
 });
 
 test("loading, permission errors, and empty results render distinct table states", async () => {
-  const { FeeTable } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantFeeUI.jsx");
+  const { FeeTable } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/pages/AccountantFeeUI.jsx");
   const props = { rows: [], columns: [{ label: "Name", value: () => "" }], empty: "No fee types found." };
   const loading = renderToStaticMarkup(createElement(FeeTable, { ...props, loading: true }));
   assert.match(loading, /accountant-fee-skeleton/);
@@ -123,7 +123,7 @@ test("loading, permission errors, and empty results render distinct table states
 });
 
 test("overview renders Admin summary, chart and tabs without zero-filled missing metrics", async () => {
-  const { default: Overview } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantFeeOverview.jsx");
+  const { default: Overview } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/pages/AccountantFeeOverview.jsx");
   const html = renderToStaticMarkup(createElement(Overview, { params: {} }));
   assert.equal((html.match(/class="cms-fee-stat-value">-</g) || []).length, 4);
   for (const label of ["Group-wise Collection", "Fee Management Overview", "Overdue Fees", "Upcoming Fee Schedules", "Recent Payments"]) assert.ok(html.includes(label), label);

@@ -121,8 +121,7 @@ export const toPermissionMap = (permissions = []) => {
   }
 
   permissions.forEach((item) => {
-    const rawMod = String(getPermissionModuleKey(item) || "").trim().toLowerCase();
-    const modKey = normalizeModuleKey(rawMod);
+    const modKey = normalizeModuleKey(getPermissionModuleKey(item));
     if (!modKey) return;
 
     // Module-level actions
@@ -308,9 +307,8 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
       return true;
     }
   }
-
   const source = permissions ?? user?.permissions ?? user?.rolePermissions;
-  if (!source || (Array.isArray(source) && source.length === 0)) {
+  if (!source) {
     if (hasRole("ADMIN", user)) return true;
     return false;
   }

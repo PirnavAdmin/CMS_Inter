@@ -28,12 +28,5 @@ namespace CollegeManagement.API.Services.Interfaces
         List<object> GetModulesMetadata();
         Task<List<RoleModuleDto>> GetModulesForRoleAsync(int roleId);
         Task<bool> SetModulesForRoleAsync(int roleId, UpdateRoleModulesRequest request);
-
-        // Custom Modules & Screens CRUD
-        Task<ModuleMetadataDto> AddCustomModuleAsync(CreateCustomModuleRequest request);
-        Task<ScreenMetadataDto> AddCustomScreenAsync(string moduleId, CreateCustomScreenRequest request);
-        Task<bool> DeleteCustomModuleAsync(string moduleId);
-        Task<bool> DeleteCustomScreenAsync(string moduleId, string screenId);
-        Task<List<ModuleMetadataDto>> GetAllModulesMetadataAsync();
     }
 }

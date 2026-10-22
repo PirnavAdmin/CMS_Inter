@@ -1,4 +1,4 @@
-import { formatCurrency, formatCompactCurrency } from "../../../data/feeManagementData.js";
+import { formatCurrency, formatCompactCurrency } from "../../data/feeManagementData.js";
 
 export const readFee = (row, key) => row?.[key] ?? row?.[key[0].toUpperCase() + key.slice(1)];
 

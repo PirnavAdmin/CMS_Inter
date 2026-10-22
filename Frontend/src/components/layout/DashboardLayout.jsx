@@ -18,7 +18,7 @@ import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
-import { getCurrentUserPermissions, getCustomModules, getModulesAndPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
+import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -184,68 +184,69 @@ export const menu = [
   {
     section: "Overview",
     items: [
-      { to: "/dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: "dashboard" },
+      { to: "/dashboard", label: "Dashboard", icon: dashboardIcon },
     ],
   },
   {
     section: "Academic",
     items: [
-      { to: "/dashboard/courses", label: "Group Management", icon: generatedSidebarIcons.groups, moduleKey: "group-management" },
-      { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon, moduleKey: "subject-management" },
-      { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon, moduleKey: "section-room" },
-      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
-      { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
-      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes, moduleKey: "inventory-management" },
+      { to: "/dashboard/courses", label: "Group Management", icon: generatedSidebarIcons.groups },
+      { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon },
+      { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
+      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
+      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
+      { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
+      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes },
     ],
   },
   {
     section: "Student",
     items: [
-      { to: "/dashboard/admission", label: "Student Admission", icon: generatedSidebarIcons.admission, moduleKey: "student-admission" },
-      { to: "/dashboard/students", label: "Student Management", icon: studentsIcon, moduleKey: "student-management" },
-      { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon, moduleKey: "section-allocation" },
-      { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon, moduleKey: "attendance" },
-      { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon, moduleKey: "promotion" },
-      { to: "/dashboard/transport", label: "Transport", icon: transportBusIcon, moduleKey: "transport" },
+      { to: "/dashboard/admission", label: "Student Admission", icon: generatedSidebarIcons.admission },
+      { to: "/dashboard/students", label: "Student Management", icon: studentsIcon },
+      { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon },
+      { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon },
+      { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon },
+      { to: "/dashboard/transport", label: "Transport", icon: transportBusIcon },
     ],
   },
   {
     section: "Staff",
     items: [
-      { to: "/dashboard/staff", label: "Staff Management", icon: staffIcon, moduleKey: "staff-management" },
-      { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department, moduleKey: "department-designation" },
-      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance" },
-      { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management" },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon, moduleKey: "reimbursement" },
+      { to: "/dashboard/staff", label: "Staff Management", icon: staffIcon },
+      { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department },
+      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
+      { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon },
     ],
   },
   {
     section: "Examinations",
     items: [
-      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon, moduleKey: "examination" },
-      { to: "/dashboard/marks-entry", label: "Marks Evaluation", icon: marksEvaluationIcon, moduleKey: "marks-evaluation" },
-      { to: "/dashboard/results", label: "Results", icon: resultsIcon, moduleKey: "results" },
+      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon },
+      { to: "/dashboard/marks-entry", label: "Marks Evaluation", icon: marksEvaluationIcon },
+      { to: "/dashboard/results", label: "Results", icon: resultsIcon },
     ],
   },
   {
     section: "Finance",
     items: [
-      { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon, moduleKey: "fee-management" },
-      { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll, moduleKey: "payroll" },
-      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon, moduleKey: "reimbursement" },
+      { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
+      { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
+      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon },
     ],
   },
   {
     section: "Documents & Reports",
     items: [
-      { to: "/dashboard/certificates", label: "Certificates", icon: certificatesIcon, moduleKey: "certificates" },
-      { to: "/dashboard/reports", label: "Reports & Analytics", icon: reportsAnalyticsIcon, moduleKey: "reports-analytics" },
+      { to: "/dashboard/certificates", label: "Certificates", icon: certificatesIcon },
+      { to: "/dashboard/reports", label: "Reports & Analytics", icon: reportsAnalyticsIcon },
     ],
   },
   {
     section: "Hostel Management",
     items: [
-      { to: "/hostel", label: "Hostel Management", icon: hostelManagementIcon, moduleKey: "hostel-management" },
+      { to: "/hostel", label: "Hostel Management", icon: hostelManagementIcon },
     ],
   },
   {
@@ -255,7 +256,6 @@ export const menu = [
         to: "/dashboard/settings",
         label: "Settings",
         icon: boardAcademicYearIcon,
-        moduleKey: "settings",
       },
     ],
   },
@@ -665,7 +665,9 @@ export default function DashboardLayout({
           try {
             const raw = window.localStorage.getItem("user") ? window.localStorage : window.sessionStorage;
             raw.setItem("user", JSON.stringify(updated));
-          } catch {}
+          } catch {
+            // Keep permissions in React state when browser storage is unavailable.
+          }
           setCurrentUser(updated);
         }
       })
@@ -673,30 +675,6 @@ export default function DashboardLayout({
         console.warn("Could not load current user permissions:", err?.message);
       });
   }, [currentUser]);
-  const [customModules, setCustomModules] = useState(() => getCustomModules());
-
-  useEffect(() => {
-    let mounted = true;
-    const loadModules = () => {
-      getModulesAndPermissions().then((res) => {
-        if (!mounted) return;
-        if (res?.data && Array.isArray(res.data)) {
-          const custom = res.data.filter((m) => !m.isSystem && m.id !== "dashboard");
-          setCustomModules(custom);
-        }
-      }).catch(() => {
-        if (mounted) setCustomModules(getCustomModules());
-      });
-    };
-
-    loadModules();
-    window.addEventListener("roles-updated", loadModules);
-    return () => {
-      mounted = false;
-      window.removeEventListener("roles-updated", loadModules);
-    };
-  }, []);
-
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
@@ -712,34 +690,7 @@ export default function DashboardLayout({
       else if (isParent) base = parentMenu;
       else if (isPrincipal) base = principalMenu;
       else if (isExamCell) base = examCellMenu;
-      else {
-        let mergedMenu = menu.map((group) => ({ ...group, items: [...group.items] }));
-        if (Array.isArray(customModules) && customModules.length > 0) {
-          customModules.forEach((cm) => {
-            if (!cm || !cm.id) return;
-            const targetSection = cm.section || "Custom Modules";
-            let sectionGroup = mergedMenu.find(
-              (g) => g.section.toLowerCase() === targetSection.toLowerCase()
-            );
-            if (!sectionGroup) {
-              sectionGroup = { section: targetSection, items: [] };
-              mergedMenu.push(sectionGroup);
-            }
-
-            const itemRoute = cm.route || `/dashboard/custom/${cm.id}`;
-            if (!sectionGroup.items.some((item) => item.moduleKey === cm.id || item.to === itemRoute)) {
-              sectionGroup.items.push({
-                to: itemRoute,
-                label: cm.name || cm.id,
-                icon: Boxes,
-                moduleKey: cm.id,
-                isCustom: true,
-              });
-            }
-          });
-        }
-        base = mergedMenu;
-      }
+      else base = menu;
     }
     if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
       return base
@@ -753,7 +704,7 @@ export default function DashboardLayout({
         .filter((group) => group.items.length > 0);
     }
     return base;
-  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user, customModules]);
+  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user]);
   const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : isExamCell ? examCellSearchIndex : searchIndex);
   const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
