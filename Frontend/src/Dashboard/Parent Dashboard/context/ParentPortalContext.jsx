@@ -6,11 +6,15 @@ import {
   getStudentById,
   getStudentFeeDetails,
   getStudentResults,
+  getStudentMarks,
   getStudentResultMemo,
   getStudentAttendanceOverview,
   getStudentTimetable,
   getStudentAttendanceSubjects,
   getStudentDailyAttendanceLogs,
+  getStudentExaminations,
+  getExaminationSchedules,
+  getSubjectsByGroup,
   resolveStudentPhotoUrl,
 } from "@/api/parentApi.js";
 import {
@@ -473,10 +477,13 @@ export function ParentPortalProvider({ children }) {
   const [detailedStudentMap, setDetailedStudentMap] = useState({});
   const [feeMap, setFeeMap] = useState({});
   const [resultsMap, setResultsMap] = useState({});
+  const [marksMap, setMarksMap] = useState({});
   const [memoMap, setMemoMap] = useState({});
   const [attendanceMap, setAttendanceMap] = useState({});
   const [subjectAttendanceMap, setSubjectAttendanceMap] = useState({});
   const [timetableMap, setTimetableMap] = useState({});
+  const [examinationsMap, setExaminationsMap] = useState({});
+  const [curriculumSubjectsMap, setCurriculumSubjectsMap] = useState({});
 
   // 1. Fetch children enrolled under parent from GET /api/v1/students/my-children
   const fetchChildren = useCallback(async () => {
@@ -497,10 +504,10 @@ export function ParentPortalProvider({ children }) {
         level: "Intermediate 1st Year",
         semester: "Year 1",
         board: "Board of Intermediate Education",
-        mentor: "Dr. Anitha Rao",
-        mentorDesignation: "Professor & Class Teacher",
+        mentor: "Geetha Bhavani",
+        mentorDesignation: "Faculty In-Charge",
         mentorMobile: "+91 98480 12345",
-        mentorEmail: "anitha.rao@college.edu",
+        mentorEmail: "geetha.b@college.edu",
         avatar: resolveStudentPhotoUrl(c.photoUrl) || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.studentName || "Student")}&background=0D8ABC&color=fff&size=128`,
         attendance: {
           overall: typeof c.attendancePercentage === "number" ? Math.round(c.attendancePercentage) : 0,
@@ -510,19 +517,19 @@ export function ParentPortalProvider({ children }) {
           status: "—",
         },
         academics: {
-          sgpa: "8.8",
-          cgpa: "8.9",
+          sgpa: "9.0",
+          cgpa: "9.0",
           grade: "A+",
-          rank: "3rd in Class",
+          rank: "1st in Class",
           totalCredits: 24,
           performanceTrend: "+4.2% from last term",
         },
         fees: {
           total: 70000,
-          paid: 70000,
-          pending: 0,
-          status: "Paid",
-          dueDate: "—",
+          paid: 0,
+          pending: 70000,
+          status: "Pending",
+          dueDate: "30 Sep 2026",
         },
       }));
 
@@ -535,17 +542,17 @@ export function ParentPortalProvider({ children }) {
         id: String(c.id || c.studentId),
         studentId: c.studentId || c.id,
         status: c.status || "Active",
-        mentor: c.mentor || (c.group === "BiPC" ? "Mrs. Lakshmi Devi" : "Dr. Anitha Rao"),
-        mentorDesignation: c.mentorDesignation || (c.group === "BiPC" ? "Senior Lecturer & Class Teacher" : "Professor & Class Teacher"),
-        mentorMobile: c.mentorMobile || (c.group === "BiPC" ? "+91 98480 34567" : "+91 98480 12345"),
-        mentorEmail: c.mentorEmail || (c.group === "BiPC" ? "lakshmi.d@college.edu" : "anitha.rao@college.edu"),
+        mentor: c.mentor || "Geetha Bhavani",
+        mentorDesignation: c.mentorDesignation || "Faculty In-Charge",
+        mentorMobile: c.mentorMobile || "+91 98480 12345",
+        mentorEmail: c.mentorEmail || "geetha.b@college.edu",
       }));
 
       const finalChildren = (mapped && mapped.length > 0)
         ? mapped
         : (mappedFallback && mappedFallback.length > 0
             ? mappedFallback
-            : initialChildren.filter((c) => c.parentId === "parent-001"));
+            : initialChildren.filter((c) => c.parentId === "parent-001" || c.parentId === "859"));
 
       setChildrenList(finalChildren);
       if (finalChildren.length > 0) {
@@ -556,7 +563,7 @@ export function ParentPortalProvider({ children }) {
       const parentChildren = getParentChildren(loggedParent);
       const fallbackChildren = (parentChildren && parentChildren.length > 0)
         ? parentChildren
-        : initialChildren.filter((c) => c.parentId === "parent-001");
+        : initialChildren.filter((c) => c.parentId === "859" || c.parentId === "parent-001");
       setChildrenList(fallbackChildren);
       if (fallbackChildren.length > 0) {
         setActiveChildId(fallbackChildren[0].id);
@@ -570,29 +577,49 @@ export function ParentPortalProvider({ children }) {
     fetchChildren();
   }, [fetchChildren]);
 
-  // 2. Fetch active child detailed record, fees, results, attendance, and timetable
+  // 2. Fetch active child detailed record, fees, results, attendance, timetable, examinations & curriculum
   const fetchActiveChildData = useCallback(async (studentId) => {
     if (!studentId) return;
     const isBackendStudent = Boolean(studentId) && Number.isInteger(Number(studentId)) && Number(studentId) > 0 && !String(studentId).startsWith("stu-");
 
     if (isBackendStudent) {
       try {
-        // Parallel fetch for speed: student details, fee details, results, attendance overview, timetable, subject attendance
-        const [studentRes, feeRes, resultsRes, attendanceRes, timetableRes, subjectAttendanceRes] = await Promise.allSettled([
-          getStudentById(studentId),
+        // Fetch detailed student profile first or in parallel
+        let studentRecord = detailedStudentMap[studentId];
+        if (!studentRecord) {
+          studentRecord = await getStudentById(studentId);
+          if (studentRecord) {
+            setDetailedStudentMap((prev) => ({
+              ...prev,
+              [studentId]: studentRecord,
+            }));
+          }
+        }
+
+        const sectionId = studentRecord?.sectionId || 30;
+        const groupId = studentRecord?.groupId || 37;
+        const campusId = studentRecord?.campusId || 1;
+
+        // Parallel fetch for speed: student details, fee details, results, marks, attendance, timetable, subject attendance, exams, curriculum
+        const [
+          feeRes,
+          resultsRes,
+          marksRes,
+          attendanceRes,
+          timetableRes,
+          subjectAttendanceRes,
+          examsRes,
+          curriculumRes,
+        ] = await Promise.allSettled([
           getStudentFeeDetails(studentId),
           getStudentResults(studentId),
+          getStudentMarks(studentId),
           getStudentAttendanceOverview(studentId),
-          getStudentTimetable(studentId),
+          getStudentTimetable(studentId, sectionId),
           getStudentAttendanceSubjects(studentId),
+          getStudentExaminations(campusId, groupId),
+          getSubjectsByGroup(groupId),
         ]);
-
-        if (studentRes.status === "fulfilled" && studentRes.value) {
-          setDetailedStudentMap((prev) => ({
-            ...prev,
-            [studentId]: studentRes.value,
-          }));
-        }
 
         if (feeRes.status === "fulfilled" && feeRes.value) {
           setFeeMap((prev) => ({
@@ -605,6 +632,13 @@ export function ParentPortalProvider({ children }) {
           setResultsMap((prev) => ({
             ...prev,
             [studentId]: resultsRes.value,
+          }));
+        }
+
+        if (marksRes.status === "fulfilled" && Array.isArray(marksRes.value)) {
+          setMarksMap((prev) => ({
+            ...prev,
+            [studentId]: marksRes.value,
           }));
         }
 
@@ -628,11 +662,43 @@ export function ParentPortalProvider({ children }) {
             [studentId]: timetableRes.value,
           }));
         }
+
+        if (curriculumRes.status === "fulfilled" && Array.isArray(curriculumRes.value)) {
+          setCurriculumSubjectsMap((prev) => ({
+            ...prev,
+            [studentId]: curriculumRes.value,
+          }));
+        }
+
+        if (examsRes.status === "fulfilled" && Array.isArray(examsRes.value) && examsRes.value.length > 0) {
+          const rawExams = examsRes.value;
+          // Retrieve schedules for scheduled or active exams in parallel
+          const examsWithSchedules = await Promise.all(
+            rawExams.slice(0, 10).map(async (exam) => {
+              const examId = exam.examinationId || exam.examId;
+              try {
+                const scheds = await getExaminationSchedules(examId);
+                return {
+                  ...exam,
+                  examinationId: examId,
+                  examId,
+                  schedules: Array.isArray(scheds) ? scheds : [],
+                };
+              } catch {
+                return { ...exam, examinationId: examId, examId, schedules: [] };
+              }
+            })
+          );
+          setExaminationsMap((prev) => ({
+            ...prev,
+            [studentId]: examsWithSchedules,
+          }));
+        }
       } catch {
         // Silent recovery
       }
     }
-  }, []);
+  }, [detailedStudentMap]);
 
   useEffect(() => {
     if (activeChildId) {
@@ -651,7 +717,7 @@ export function ParentPortalProvider({ children }) {
 
     try {
       const memo = await getStudentResultMemo(examinationId, activeChildId);
-      if (memo) {
+      if (memo && Array.isArray(memo.subjects) && memo.subjects.length > 0) {
         setMemoMap((prev) => ({
           ...prev,
           [cacheKey]: memo,
@@ -659,10 +725,50 @@ export function ParentPortalProvider({ children }) {
         return memo;
       }
     } catch {
-      // Silent recovery
+      // Fall through to marksMap
+    }
+
+    // Complementary fallback from student marks
+    const studentMarks = marksMap[activeChildId] || [];
+    const examMarks = studentMarks.filter((m) => String(m.examinationId) === String(examinationId));
+    if (examMarks.length > 0) {
+      const first = examMarks[0];
+      const subjects = examMarks.map((m) => ({
+        subjectId: m.subjectId,
+        subjectCode: m.subjectCode || `SUB-${m.subjectId}`,
+        subjectName: m.subjectName || `Subject ${m.subjectId}`,
+        maxMarks: m.passingMarks === 35 ? 100 : (m.passingMarks ? m.passingMarks * 2 : 100),
+        passingMarks: m.passingMarks || 35,
+        internalMarks: m.internalMarks || 0,
+        practicalMarks: m.practicalMarks || 0,
+        theoryMarks: m.theoryMarks ?? m.totalMarks ?? 0,
+        totalMarks: m.totalMarks ?? m.theoryMarks ?? 0,
+        resultStatus: m.isPass ? "PASS" : "FAIL",
+      }));
+      const totalMarks = subjects.reduce((sum, s) => sum + (s.totalMarks || 0), 0);
+      const maxTotalMarks = subjects.reduce((sum, s) => sum + (s.maxMarks || 0), 0);
+      const percentage = maxTotalMarks > 0 ? Math.round((totalMarks / maxTotalMarks) * 1000) / 10 : 0;
+      const constructed = {
+        studentId: Number(activeChildId),
+        rollNo: first.rollNo || "",
+        studentName: first.studentName || "",
+        examinationName: first.examinationName || `Examination #${examinationId}`,
+        examCode: first.examCode || "EXM",
+        academicYear: first.academicYearName || "2026-2027",
+        courseName: first.group || "MPC",
+        sectionName: first.sectionName || "REG-1",
+        totalMarks,
+        maxTotalMarks,
+        percentage,
+        grade: percentage >= 85 ? "A+" : percentage >= 75 ? "A" : percentage >= 60 ? "B" : "Pass",
+        resultStatus: subjects.every((s) => s.resultStatus === "PASS") ? "PASS" : "FAIL",
+        subjects,
+      };
+      setMemoMap((prev) => ({ ...prev, [cacheKey]: constructed }));
+      return constructed;
     }
     return null;
-  }, [activeChildId, memoMap]);
+  }, [activeChildId, memoMap, marksMap]);
 
   // Active base summary child
   const activeBaseChild = useMemo(() => {
@@ -816,6 +922,37 @@ export function ParentPortalProvider({ children }) {
     return attendanceMap[activeBaseChild.id] || null;
   }, [activeBaseChild, attendanceMap]);
 
+  // Active child live examinations & schedules
+  const examinations = useMemo(() => {
+    if (!activeBaseChild) return [];
+    return examinationsMap[activeBaseChild.id] || [];
+  }, [activeBaseChild, examinationsMap]);
+
+  // Active child curriculum subjects
+  const curriculumSubjects = useMemo(() => {
+    if (!activeBaseChild) return [];
+    const list = curriculumSubjectsMap[activeBaseChild.id] || [];
+    if (Array.isArray(list) && list.length > 0) {
+      return list.map((sub, idx) => ({
+        id: String(sub.subjectId || sub.id || idx + 1),
+        subjectId: sub.subjectId || sub.id,
+        code: sub.subjectCode || `SUB-${sub.subjectId || idx + 1}`,
+        name: sub.subjectName || `Subject ${idx + 1}`,
+        subject: sub.subjectName || `Subject ${idx + 1}`,
+        type: sub.subjectType || "Theory",
+        credits: sub.credits || (sub.totalMarks ? Math.round(sub.totalMarks / 25) : 4),
+        totalMarks: sub.totalMarks || 100,
+        passingMarks: sub.passingMarks || 35,
+        internalMarks: sub.internalMarks || 0,
+        weeklyLectures: sub.weeklyLectures || sub.weeklyPeriods || 4,
+        description: sub.description || `${sub.subjectName} curriculum for Intermediate ${sub.academicLevelName || '1st Year'}.`,
+        syllabusProgress: 85,
+        faculty: "Geetha Bhavani",
+      }));
+    }
+    return [];
+  }, [activeBaseChild, curriculumSubjectsMap]);
+
   // Dynamic Parent Profile derived from student record & auth user
   const parentUser = useMemo(() => {
     const loggedParent = getLoggedInParent();
@@ -860,6 +997,9 @@ export function ParentPortalProvider({ children }) {
     child,
     childFee,
     results,
+    examinations,
+    curriculumSubjects,
+    marksMap,
     childTimetable,
     timetableSchedule: childTimetable,
     rawTimetable,
@@ -894,6 +1034,9 @@ export function ParentPortalProvider({ children }) {
     child,
     childFee,
     results,
+    examinations,
+    curriculumSubjects,
+    marksMap,
     childTimetable,
     rawTimetable,
     childAttendance,

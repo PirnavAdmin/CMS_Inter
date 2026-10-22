@@ -29,6 +29,24 @@ export const initialParentSettings = {
 };
 
 export const initialParentProfiles = {
+  "859": {
+    id: "859",
+    name: "Naveen Ponnapula",
+    relation: "Father",
+    email: "naveenponnapula0@gmail.com",
+    altEmail: "parent@cms.com",
+    mobile: "8765445678",
+    altMobile: "+91 87654 45678",
+    occupation: "Business Executive",
+    company: "Private Organization",
+    motherName: "Prasad",
+    motherOccupation: "Homemaker",
+    motherMobile: "—",
+    address: "12/134, Hyderabad City, KVRangareddy, Telangana, 500018",
+    emergencyContact: "8765445678",
+    bloodGroup: "O+",
+    aadhaarMasked: "XXXX-XXXX-4243",
+  },
   "parent-001": {
     id: "parent-001",
     name: "Suresh Kumar",
@@ -85,9 +103,117 @@ export const initialParentProfiles = {
   },
 };
 
-export const initialParentProfile = initialParentProfiles["parent-001"];
+export const initialParentProfile = initialParentProfiles["859"];
 
 export const initialChildren = [
+  {
+    id: "860",
+    studentId: 860,
+    name: "niharika",
+    admissionNo: "ADM-57",
+    dob: "2002-06-12",
+    gender: "Female",
+    bloodGroup: "O-",
+    mobile: "9123456780",
+    email: "namratha@gmail.com",
+    course: "Intermediate",
+    department: "Mathematics & Physical Sciences",
+    group: "MPC",
+    programme: "MPC (Maths, Physics, Chemistry)",
+    level: "Intermediate 1st Year",
+    semester: "Semester 1",
+    section: "Section REG-1",
+    sectionId: 30,
+    groupId: 37,
+    campusId: 1,
+    roll: "2",
+    academicYear: "2026-2027",
+    board: "Board of Intermediate Education, Andhra Pradesh",
+    mentor: "Geetha Bhavani",
+    mentorDesignation: "Faculty In-Charge",
+    mentorMobile: "+91 98480 12345",
+    mentorEmail: "geetha.b@college.edu",
+    avatar: "https://ui-avatars.com/api/?name=niharika&background=0D8ABC&color=fff&size=128",
+    parentId: "859",
+    parentEmail: "naveenponnapula0@gmail.com",
+    parentMobile: "8765445678",
+    attendance: {
+      overall: 83.33,
+      presentDays: 5,
+      absentDays: 1,
+      totalWorkingDays: 6,
+      status: "Good",
+    },
+    academics: {
+      sgpa: "9.0",
+      cgpa: "9.0",
+      rank: "1st in Class",
+      totalCredits: 24,
+      grade: "A+",
+      performanceTrend: "Excellent",
+    },
+    fees: {
+      total: 70000,
+      paid: 0,
+      pending: 70000,
+      status: "Pending",
+      dueDate: "30 Sep 2026",
+    },
+  },
+  {
+    id: "863",
+    studentId: 863,
+    name: "Neha K",
+    admissionNo: "ADM-58",
+    dob: "2000-03-14",
+    gender: "Female",
+    bloodGroup: "B+",
+    mobile: "9283479283",
+    email: "neha.k@example.com",
+    course: "Intermediate",
+    department: "Mathematics & Physical Sciences",
+    group: "MPC",
+    programme: "MPC (Maths, Physics, Chemistry)",
+    level: "Intermediate 1st Year",
+    semester: "Semester 1",
+    section: "Section REG-1",
+    sectionId: 30,
+    groupId: 37,
+    campusId: 1,
+    roll: "1",
+    academicYear: "2026-2027",
+    board: "Board of Intermediate Education, Andhra Pradesh",
+    mentor: "Geetha Bhavani",
+    mentorDesignation: "Faculty In-Charge",
+    mentorMobile: "+91 98480 12345",
+    mentorEmail: "geetha.b@college.edu",
+    avatar: "https://ui-avatars.com/api/?name=Neha+K&background=0D8ABC&color=fff&size=128",
+    parentId: "859",
+    parentEmail: "naveenponnapula0@gmail.com",
+    parentMobile: "8765445678",
+    attendance: {
+      overall: 85,
+      presentDays: 5,
+      absentDays: 1,
+      totalWorkingDays: 6,
+      status: "Good",
+    },
+    academics: {
+      sgpa: "8.5",
+      cgpa: "8.5",
+      rank: "2nd in Class",
+      totalCredits: 24,
+      grade: "A",
+      performanceTrend: "Good",
+    },
+    fees: {
+      total: 70000,
+      paid: 0,
+      pending: 70000,
+      status: "Pending",
+      dueDate: "30 Sep 2026",
+    },
+  },
   {
     id: "stu-001",
     studentId: "STU2026001",
@@ -573,15 +699,15 @@ export const getLoggedInParent = () => {
     if (mobileMatch) return mobileMatch;
     const role = String(authUser.role || "").toLowerCase();
     if (role === "parent" || role.includes("parent")) {
-      return initialParentProfiles["parent-001"];
+      return initialParentProfiles["859"];
     }
   }
-  return initialParentProfiles["parent-001"];
+  return initialParentProfiles["859"];
 };
 
 export const getParentChildren = (parent) => {
   const p = typeof parent === "object" ? parent : (typeof parent === "string" ? { id: parent } : getLoggedInParent());
-  if (!p) return initialChildren.filter((c) => c.parentId === "parent-001");
+  if (!p) return initialChildren.filter((c) => c.parentId === "859");
   const pId = p.id;
   const pEmail = String(p.email || "").toLowerCase();
   const pMobile = String(p.mobile || "").replace(/\D/g, "");
@@ -593,7 +719,7 @@ export const getParentChildren = (parent) => {
     return false;
   });
 
-  return matched.length ? matched : initialChildren.filter((c) => c.parentId === "parent-001");
+  return matched.length ? matched : initialChildren.filter((c) => c.parentId === "859");
 };
 
 export const normalizeAcademicYear = (year) => {

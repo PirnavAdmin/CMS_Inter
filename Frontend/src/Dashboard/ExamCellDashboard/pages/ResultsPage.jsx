@@ -525,6 +525,9 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
             headers: {
               ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
             },
+          }).catch((e) => {
+            console.warn("Could not fetch academic-years from server:", e?.message);
+            return { data: { data: [] } };
           }),
           apiClient.get(`/api/v1/academic-levels`, {
             params: {
@@ -536,6 +539,9 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
             headers: {
               ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
             },
+          }).catch((e) => {
+            console.warn("Could not fetch academic-levels from server:", e?.message);
+            return { data: { data: [] } };
           }),
           apiClient.get(`/api/v1/groups`, {
             params: {
@@ -547,24 +553,30 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
             headers: {
               ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
             },
+          }).catch((e) => {
+            console.warn("Could not fetch groups from server:", e?.message);
+            return { data: { data: [] } };
           }),
         ]);
 
-        const yearsData = yearsRes.data?.data || yearsRes.data?.items || yearsRes.data || [];
-        const levelsData = levelsRes.data?.data || levelsRes.data?.items || levelsRes.data || [];
-        const groupsData = groupsRes.data?.items || groupsRes.data || [];
+        const yearsData = yearsRes?.data?.data || yearsRes?.data?.items || yearsRes?.data || [];
+        const levelsData = levelsRes?.data?.data || levelsRes?.data?.items || levelsRes?.data || [];
+        const groupsData = groupsRes?.data?.items || groupsRes?.data?.data || groupsRes?.data || [];
 
         // STRICT FILTER: Filter active years belonging strictly to the selected board
         const rawYearsList = Array.isArray(yearsData) ? yearsData : [];
-        const activeYears = rawYearsList
+        let activeYears = rawYearsList
           .filter((y) => y.isActive !== false && y.status !== false && y.status !== "Inactive")
           .filter((y) => !String(y.academicYearName || y.name || "").includes("2028") && !String(y.academicYearName || y.name || "").includes("2029"))
           .filter((y) => !y.campusId || String(y.campusId) === String(effectiveCampusId))
           .filter((y) => isYearForBoard(y, filters.board, targetBoardObj));
 
+        const resolvedLevels = Array.isArray(levelsData) ? levelsData : [];
+        const resolvedGroups = Array.isArray(groupsData) ? groupsData.filter((g) => g.isActive === true || g.status === "Active") : [];
+
         setAcademicYears(activeYears);
-        setAcademicLevels(levelsData);
-        setGroups(groupsData.filter((g) => g.isActive === true || g.status === "Active"));
+        setAcademicLevels(resolvedLevels);
+        setGroups(resolvedGroups);
 
         // Auto-select active year matched from navbar or first active
         const matchedYear = activeYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) ||
@@ -575,7 +587,7 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
           setFilters((f) => ({ ...f, year: String(selectedAcademicYearId || selectedAcademicYear.id || "") }));
         }
       } catch (err) {
-        showToast("Failed to load board academic hierarchy.", "error");
+        console.warn("Could not completely refresh board dependencies:", err);
       }
     };
     fetchBoardDependencies();
