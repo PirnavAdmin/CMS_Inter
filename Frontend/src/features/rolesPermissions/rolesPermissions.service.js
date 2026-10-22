@@ -24,7 +24,14 @@ const clone = (value) => {
 const apiResult = (data, source = "api") => ({ data: clone(data), meta: { source } });
 
 const notifyRolesUpdated = () => {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("roles-updated"));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("roles-updated"));
+    try {
+      localStorage.setItem("cms_permissions_updated_at", String(Date.now()));
+    } catch {
+      // ignore
+    }
+  }
 };
 
 const ROLE_CODE_TO_ID = {

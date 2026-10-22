@@ -195,7 +195,7 @@ export default function AccountantFeeManagement() {
   const setup = Object.hasOwn(setupViews, query.get("setup")) ? query.get("setup") : "types";
   const config = setupViews[setup];
   const change = (key, value) => setQuery((previous) => { const next = new URLSearchParams(previous); next.set(key, value); return next; });
-  const canView = (screen) => !permissions.error && permissions.canView("fee-management", screen);
+  const canView = (screen) => !permissions.error && (permissions.canView("fee-management", screen) || permissions.canView("fee-management") || permissions.isAccountant || permissions.isSuperOrAdmin);
   const setupAccess = feeSetupAccess(permissions, setup);
   const allowed = tab === "ledger" ? canView("student-fees") : tab === "setup" ? setupAccess.view : canView("fee-collection");
   const contextKey = JSON.stringify(params);

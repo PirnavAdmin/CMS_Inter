@@ -13,10 +13,10 @@ export function feeSetupAccess(permissions, kind) {
   const module = "fee-management";
   const screen = kind === "hostel" ? "hostel-fees" : "fee-structure";
   const ready = !permissions.loading && !permissions.error;
-  const view = Boolean(ready && permissions.canView(module, screen));
+  const view = Boolean(ready && (permissions.canView(module, screen) || permissions.canView(module) || permissions.isSuperOrAdmin || permissions.isAccountant));
   // Transport fare configuration belongs to Fee Setup, not route management.
   const actions = { create: ACTIONS.CREATE, edit: ACTIONS.EDIT, delete: kind === "transport" ? null : ACTIONS.DELETE };
-  return { module, screen, view, ...Object.fromEntries(Object.entries(actions).map(([key, action]) => [key, Boolean(view && action && permissions.canDo(module, action, screen))])) };
+  return { module, screen, view, ...Object.fromEntries(Object.entries(actions).map(([key, action]) => [key, Boolean(view && action && (permissions.canDo(module, action, screen) || permissions.canDo(module, action) || permissions.isSuperOrAdmin))])) };
 }
 
 export function requireSetupAction(access, action, method, endpoint) {
