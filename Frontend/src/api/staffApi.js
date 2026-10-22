@@ -156,7 +156,7 @@ export const leaveApi = {
 };
 
 // ==================== REIMBURSEMENT APIs ====================
-const REIMBURSEMENT_BASE_URL = "/api/v1/staff-reimbursements";
+const REIMBURSEMENT_BASE_URL = "/api/v1/reimbursements";
 
 export const reimbursementApi = {
   createReimbursement: async (data) => {

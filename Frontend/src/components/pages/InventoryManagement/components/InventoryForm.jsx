@@ -13,6 +13,8 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
   const [touched, setTouched] = useState({});
   const [saving, setSaving] = useState(false);
   const lock = useRef(false);
+  const receiptInput = useRef(null);
+  const receiptVersion = useRef(0);
   useDialogFocus(onClose);
   const sections = formSections(kind, state, values);
   const errors = validateRecord(
@@ -32,6 +34,11 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
   const change = (name, value) => {
     setTouched((t) => ({ ...t, [name]: true }));
     setValues((current) => {
+      if (name === "paymentMethod") {
+        receiptVersion.current += 1;
+        if (receiptInput.current) receiptInput.current.value = "";
+        return { ...current, paymentMethod: value, number: "", cashReceipt: null };
+      }
       if (name === "itemId") {
         const selected = state.items.find((i) => i.id === value);
         return {
@@ -72,16 +79,74 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
           <fieldset key={section.title}>
             <legend>{section.title}</legend>
             <div className="cms-form-grid">
-              {section.fields.map((field) => (
-                <Field
-                  key={field.name}
-                  field={field}
-                  value={values[field.name]}
-                  error={touched[field.name] ? errors[field.name] : ""}
-                  onChange={change}
-                  onBlur={(name) => setTouched((t) => ({ ...t, [name]: true }))}
-                />
-              ))}
+              {section.fields.map((field) =>
+                field.name === "cashReceipt" ? (
+                  <div className="inventory-cash-receipt" key={field.name}>
+                    <label htmlFor="inventory-cash-receipt">Cash Receipt Image (Optional)</label>
+                    <input
+                      ref={receiptInput}
+                      id="inventory-cash-receipt"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={saving}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        const version = ++receiptVersion.current;
+                        change("cashReceipt", null);
+                        if (!file) return;
+                        if (
+                          !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+                          file.size > 5 * 1024 * 1024
+                        ) {
+                          setSaveError("Choose a JPG, PNG, or WebP image up to 5 MB.");
+                          event.target.value = "";
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          if (receiptVersion.current === version)
+                            change("cashReceipt", {
+                              name: file.name,
+                              dataUrl: reader.result,
+                              ...(state.serverBacked ? { file } : {}),
+                            });
+                        };
+                        reader.onerror = () => {
+                          if (receiptVersion.current === version)
+                            setSaveError("Unable to read this image. Please choose it again.");
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    {values.cashReceipt && (
+                      <div className="inventory-receipt-preview">
+                        <img src={values.cashReceipt.dataUrl} alt="Selected cash receipt" />
+                        <span>{values.cashReceipt.name}</span>
+                        <button
+                          type="button"
+                          className="cms-btn cms-btn-ghost"
+                          onClick={() => {
+                            receiptVersion.current += 1;
+                            change("cashReceipt", null);
+                            if (receiptInput.current) receiptInput.current.value = "";
+                          }}
+                        >
+                          Remove Image
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Field
+                    key={field.name}
+                    field={field}
+                    value={values[field.name]}
+                    error={touched[field.name] ? errors[field.name] : ""}
+                    onChange={change}
+                    onBlur={(name) => setTouched((t) => ({ ...t, [name]: true }))}
+                  />
+                ),
+              )}
             </div>
             {section.title === "Item Information" && movement && (
               <div className="inventory-note">
@@ -147,6 +212,9 @@ export default function InventoryForm({ kind, record, itemId, state, user, onClo
             className="cms-btn cms-btn-ghost"
             onClick={() => {
               setValues(initial);
+              receiptVersion.current += 1;
+              if (receiptInput.current) receiptInput.current.value = "";
+              setSaveError("");
               setTouched({});
             }}
             disabled={saving}

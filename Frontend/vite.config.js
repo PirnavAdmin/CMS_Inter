@@ -6,13 +6,66 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+function hostelDevMockPlugin() {
+  return {
+    name: "vite-hostel-dev-mock",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const rawUrl = req.url || "";
+        const pathname = rawUrl.split("?")[0];
+        if (!pathname.startsWith("/api/v1/hostel")) {
+          return next();
+        }
+
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+        if (req.method === "OPTIONS") {
+          res.statusCode = 204;
+          return res.end();
+        }
+
+        const successJson = (data) => {
+          res.statusCode = 200;
+          res.end(JSON.stringify({ success: true, data, message: "OK" }));
+        };
+
+        if (req.method === "POST" || req.method === "PUT" || req.method === "DELETE") {
+          return successJson({ id: `item-${Date.now()}` });
+        }
+
+        if (pathname.includes("/dashboard")) {
+          return successJson({
+            totalHostels: 7,
+            totalCapacity: 138,
+            occupiedBeds: 5,
+            vacantBeds: 133,
+            occupancyRate: 4,
+            occupancyPercentage: 4,
+            availableBeds: 133,
+            hostellers: 5,
+            monthlyRevenue: 34500,
+            activeWardens: 4,
+            blocks: [],
+          });
+        }
+
+        return successJson([]);
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiBaseUrl = env.VITE_API_BASE_URL || "https://whiff-lyrics-debug.ngrok-free.dev";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
+  const useHostelMock = env.VITE_USE_MOCK_DATA === "true";
 
   return {
-    plugins: [react()],
+    plugins: [react(), ...(useHostelMock ? [hostelDevMockPlugin()] : [])],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

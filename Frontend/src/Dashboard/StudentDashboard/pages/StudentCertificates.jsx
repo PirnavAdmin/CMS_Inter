@@ -75,6 +75,27 @@ export default function StudentCertificates() {
     };
   }, [load, profileLoading]);
 
+  useEffect(() => {
+    let channel;
+    try {
+      channel = new BroadcastChannel("cms_notifications");
+      channel.onmessage = (event) => {
+        const data = event.data;
+        if (data?.type === "CERTIFICATE_STATUS_UPDATED") {
+          const studentAdm = String(student?.admissionNo || "").trim().toLowerCase();
+          const msgAdm = String(data?.admissionNo || "").trim().toLowerCase();
+          if (studentAdm && msgAdm && studentAdm === msgAdm) {
+            setSuccess(`Your ${data.certificateType} certificate has been ${String(data.status).toLowerCase()} by administration.`);
+            load(false);
+          }
+        }
+      };
+    } catch {}
+    return () => {
+      try { channel?.close(); } catch {}
+    };
+  }, [student?.admissionNo, load]);
+
   const submit = async (event) => {
     event.preventDefault();
     if (saving) return;
@@ -84,6 +105,20 @@ export default function StudentCertificates() {
     setSaving(true); setRequestError("");
     try {
       await apiClient.post(studentApiEndpoints.certificates.studentRequest, { admissionNo, certificateType: form.type, purpose: form.purpose.trim(), remarks: form.notes.trim() || null, requestDate: new Date().toISOString() });
+      try {
+        const channel = new BroadcastChannel('cms_notifications');
+        channel.postMessage({
+          type: 'NEW_CERTIFICATE_REQUEST',
+          admissionNo,
+          studentName: student?.name || student?.studentName || admissionNo,
+          certificateType: form.type,
+          purpose: form.purpose.trim(),
+          timestamp: new Date().toISOString()
+        });
+        channel.close();
+      } catch {
+        // Fallback if BroadcastChannel unavailable
+      }
       setOpen(false); setForm({ type: "", purpose: "", notes: "" }); setSuccess("Certificate request submitted successfully."); await load();
     } catch (failure) { setRequestError(getApiErrorMessage(failure)); }
     finally { setSaving(false); }

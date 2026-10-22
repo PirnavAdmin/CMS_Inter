@@ -7,6 +7,7 @@ import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx"
 import { SkeletonPage, StatusBadge } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getHostelBlocks } from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import "./StudentManagementPage.css";
 import "./StudentAdmissionPage.css";
@@ -69,6 +70,7 @@ const residentialAllocation = (record = {}) => {
     route: read(route, "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber", "routeCode", "RouteCode") ?? readAny("busRouteName", "BusRouteName", "routeName", "RouteName", "busRoute", "BusRoute"),
     pickupPoint: read(pickup, "stopName", "StopName", "pickupPointName", "PickupPointName", "pickupName", "PickupName", "name", "Name") ?? readAny("pickupPointName", "PickupPointName", "pickupName", "PickupName", "pickupPoint", "PickupPoint"),
     hostelBlock: read(block, "hostelName", "HostelName", "name", "Name", "hostelCode", "HostelCode") ?? readAny("hostelBlockName", "HostelBlockName", "hostelName", "HostelName", "hostelBlock", "HostelBlock"),
+    hostelId: read(block, "hostelId", "HostelId", "id", "Id") ?? readAny("hostelId", "HostelId"),
     hostelRoom: read(room, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification", "name", "Name") ?? readAny("hostelRoomName", "HostelRoomName", "roomTypeName", "RoomTypeName", "hostelRoom", "HostelRoom"),
   };
 };
@@ -99,10 +101,11 @@ export default function StudentProfilePage({ id }) {
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
       const admissionNo = String(read(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim();
       const studentId = String(read(record, "studentId", "StudentId", "id", "Id") ?? id);
-      const [studentsResult, admissionsResult, sectionsResult] = await Promise.allSettled([
+      const [studentsResult, admissionsResult, sectionsResult, hostelBlocksResult] = await Promise.allSettled([
         apiClient.get(apiEndpoints.students.getAll),
         apiClient.get(apiEndpoints.admissions.getAll),
         apiClient.get(apiEndpoints.sections.list),
+        getHostelBlocks(),
       ]);
       const studentRows = studentsResult.status === "fulfilled" ? rows(studentsResult.value.data) : [];
       const admissionRows = admissionsResult.status === "fulfilled" ? rows(admissionsResult.value.data) : [];
@@ -127,14 +130,34 @@ export default function StudentProfilePage({ id }) {
       Object.entries(admission || {}).forEach(([key, value]) => {
         if (value != null && value !== "") source[key] = value;
       });
+      // Admission records keep their original placement after a student moves.
+      // Prefer current student values when displaying an edited placement.
+      const currentAcademic = [record.student ?? record.Student ?? record.profile ?? record.Profile,
+        record.academicDetails ?? record.AcademicDetails ?? record.academic ?? record.Academic, record, studentSummary].filter(Boolean);
+      ["campusId", "boardId", "boardName", "academicYearId", "academicYearName", "academicLevelId", "academicLevelName", "levelName", "groupId", "groupName", "programId", "programName", "programmeName", "sectionId", "sectionName"].forEach((key) => {
+        const keys = [key, key[0].toUpperCase() + key.slice(1)];
+        const current = currentAcademic.find((entry) => keys.some((alias) => entry?.[alias] != null));
+        if (current) keys.forEach((alias) => { source[alias] = current[keys[0]] ?? current[keys[1]]; });
+      });
       // Admission is historical; select the current student allocation as a whole
       // so cleared facility fields cannot be repopulated from the admission.
       const currentAllocation = [record.student ?? record.Student ?? record.profile ?? record.Profile, record, studentSummary, admission]
         .filter(Boolean).map(residentialAllocation).find((item) => item.studentType);
+      if (currentAllocation?.studentType === "Residential") {
+        const blocks = hostelBlocksResult.status === "fulfilled" ? rows(hostelBlocksResult.value.data) : [];
+        const normalize = (value) => typeof value === "string" || typeof value === "number" ? String(value).trim().toLowerCase() : "";
+        const saved = [currentAllocation.hostelId, currentAllocation.hostelBlock].map(normalize).filter((value) => value && value !== "0");
+        const block = blocks.find((item) => [read(item, "hostelId", "HostelId", "id", "Id"), read(item, "hostelCode", "HostelCode", "code", "Code"), read(item, "hostelName", "HostelName", "name", "Name")].some((value) => value != null && saved.includes(normalize(value))));
+        const blockName = read(block, "hostelName", "HostelName", "name", "Name");
+        if (blockName) currentAllocation.hostelBlock = blockName;
+        else if (typeof currentAllocation.hostelBlock !== "string" || !currentAllocation.hostelBlock.trim() || /^\d+$/.test(currentAllocation.hostelBlock)) {
+          currentAllocation.hostelBlock = saved.length ? "Saved hostel block unavailable" : "Hostel block not saved";
+        }
+      }
       const sectionValue = read(source, "section", "Section", "allocatedSection", "AllocatedSection", "assignedSection", "AssignedSection", "sectionDetails", "SectionDetails");
       const sectionId = read(source, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId") ?? read(sectionValue, "sectionId", "SectionId", "id", "Id");
       let sectionRecord = sectionRows.find((item) => String(read(item, "sectionId", "SectionId", "id", "Id")) === String(sectionId));
-      if (!sectionRecord && sectionId != null) {
+      if (!sectionRecord && Number(sectionId) > 0) {
         try {
           const sectionDetail = await apiClient.get(apiEndpoints.sections.getById(sectionId));
           sectionRecord = sectionDetail.data?.data ?? sectionDetail.data?.Data ?? sectionDetail.data;

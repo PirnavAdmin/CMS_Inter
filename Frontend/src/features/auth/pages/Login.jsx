@@ -4,14 +4,32 @@ import AuthLayout from "@/layouts/AuthLayout.jsx";
 import { Field, useForm } from "@/components/common/Ui.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { clearPasswordResetContext, loginUser } from "@/features/auth/services/authService.js";
+import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import { clearAuthSession, saveAuthSession } from "@/features/authStorage.js";
 import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../campusImages.js";
 import { getCampusContent } from "../../campusContent.js";
 
 const fields = [
-  { name: "email", label: "Email or Mobile", type: "text", required: true, placeholder: "Admin@CMS.com", autoComplete: "username", full: true },
-  { name: "password", label: "Password", type: "password", required: true, placeholder: "Password", autoComplete: "current-password", full: true },
+  {
+    name: "email",
+    label: "Email or Mobile",
+    type: "text",
+    required: true,
+    placeholder: "Admin@CMS.com",
+    autoComplete: "username",
+    full: true,
+  },
+  {
+    name: "password",
+    label: "Password",
+    type: "password",
+    required: true,
+    placeholder: "Password",
+    autoComplete: "current-password",
+    full: true,
+  },
 ];
 
 const REMEMBER_KEY = "pirnav-remember-credentials";
@@ -82,30 +100,74 @@ export default function Login() {
       const result = await loginUser({ emailOrMobile, password });
       if (!result.token) throw new Error("The login response did not include an access token.");
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
+      try {
+        const permsRes = await getCurrentUserPermissions();
+        if (permsRes?.data && Array.isArray(permsRes.data) && permsRes.data.length > 0) {
+          result.user.permissions = permsRes.data;
+          saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
+        }
+      } catch (e) {
+        console.warn("Could not load user permissions at login:", e?.message);
+      }
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
+<<<<<<< HEAD
       const userRole = String(result.user.role || "").toLowerCase();
       const isExamCell = isExamCellRole(userRole) || result.roleType === "examcell";
       const isPrincipal = userRole === "principal" || userRole.includes("principal");
+=======
+      const isWarden =
+        isWardenRole(result.user?.role, result.user) ||
+        result.roleType === "warden" ||
+        String(result.user?.role || "").toLowerCase().includes("warden") ||
+        String(result.user?.designation || "").toLowerCase().includes("warden");
+      const userRole = String(result.user?.role || "").toLowerCase();
+      const isExamCell = !isWarden && isExamCellRole(userRole);
+      const isPrincipal = !isWarden && (userRole === "principal" || userRole.includes("principal"));
+      const isNonTeaching =
+        !isWarden &&
+        !isExamCell &&
+        (userRole === "non_teaching_staff" ||
+          userRole === "non-teaching" ||
+          userRole === "non-teaching-staff" ||
+          userRole === "nonteaching" ||
+          result.roleType === "non_teaching" ||
+          String(result.user?.staffType || "").toLowerCase() === "non-teaching");
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       const isFacultyOrStaff =
-        userRole === "faculty" ||
+        !isWarden &&
+        !isNonTeaching &&
+        (userRole === "faculty" ||
         userRole === "teacher" ||
         userRole === "staff" ||
         userRole === "hod" ||
         userRole.includes("faculty") ||
         userRole.includes("teacher") ||
         userRole.includes("staff") ||
-        userRole.includes("lecturer");
+        userRole.includes("lecturer"));
       const isParent =
-        userRole === "parent" ||
+        !isWarden &&
+        (userRole === "parent" ||
         userRole.includes("parent") ||
-        result.roleType === "parent";
-      const isAccountant = userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier";
+        result.roleType === "parent");
+      const isAccountant =
+        !isWarden &&
+        (userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier");
 
-      if (isExamCell) {
+      if (isWarden) {
+        navigate("/warden-dashboard", { replace: true });
+      } else if (isNonTeaching) {
+        navigate("/non-teaching-dashboard", { replace: true });
+      } else if (isExamCell) {
         navigate("/exam-cell-dashboard", { replace: true });
       } else if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
+      } else if (
+        userRole.includes("inventory") ||
+        userRole === "store manager" ||
+        userRole === "storekeeper"
+      ) {
+        navigate("/inventory-dashboard", { replace: true });
       } else if (isPrincipal) {
         navigate("/principal-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
@@ -134,20 +196,42 @@ export default function Login() {
 
   return (
     <AuthLayout title={content.loginHeading} subtitle={content.loginDescription}>
-      <form className={busy ? "auth-login-form is-busy" : "auth-login-form"} onSubmit={submit} noValidate autoComplete="on" aria-busy={busy}>
-        {error ? <div className="cms-alert-error" role="alert">{error}</div> : null}
+      <form
+        className={busy ? "auth-login-form is-busy" : "auth-login-form"}
+        onSubmit={submit}
+        noValidate
+        autoComplete="on"
+        aria-busy={busy}
+      >
+        {error ? (
+          <div className="cms-alert-error" role="alert">
+            {error}
+          </div>
+        ) : null}
         <fieldset className="auth-login-fieldset" disabled={busy}>
           <div className="cms-form-grid">
             {fields.map((f) => (
-              <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
+              <Field
+                key={f.name}
+                field={f}
+                value={values[f.name]}
+                error={errors[f.name]}
+                onChange={setValue}
+              />
             ))}
           </div>
           <div className="cms-auth-row">
             <label className="cms-check" htmlFor="remember-me">
-              <input id="remember-me" name="remember" type="checkbox" checked={remember} onChange={(e) => {
-                setRemember(e.target.checked);
-                if (!e.target.checked) saveRememberedCredentials(null);
-              }} />
+              <input
+                id="remember-me"
+                name="remember"
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => {
+                  setRemember(e.target.checked);
+                  if (!e.target.checked) saveRememberedCredentials(null);
+                }}
+              />
               <span>Remember me</span>
             </label>
             <Link
@@ -157,10 +241,15 @@ export default function Login() {
               aria-disabled={busy}
               tabIndex={busy ? -1 : undefined}
               onClick={(event) => {
-                if (busy) { event.preventDefault(); return; }
+                if (busy) {
+                  event.preventDefault();
+                  return;
+                }
                 clearPasswordResetContext();
               }}
-            >Forgot password?</Link>
+            >
+              Forgot password?
+            </Link>
           </div>
           <button type="submit" className="cms-btn cms-btn-primary auth-submit-btn" disabled={busy}>
             {busy ? "Signing in..." : content.loginButton}

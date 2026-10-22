@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Navigate, useLocation } from "react-router-dom";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -16,7 +16,6 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, Toast } from "@/components/common/Ui.jsx";
 import { getAuthUser } from "@/features/authStorage.js";
-import { createDemoState } from "./data/inventoryMockData.js";
 import {
   deactivateRecord,
   deleteItem,
@@ -84,8 +83,6 @@ export default function InventoryManagementPage() {
   );
   const [modal, setModal] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
-  const [revision, setRevision] = useState(0);
-  const navigate = useNavigate();
   const location = useLocation();
   const tab = location.pathname.slice(BASE.length).replace(/^\/+|\/+$/g, "");
   const active = TABS.find(([slug]) => slug === tab);
@@ -99,8 +96,6 @@ export default function InventoryManagementPage() {
     const canonical = record && stateRef.current[kind]?.find((value) => value.id === record.id);
     setModal({ kind, record: canonical || record, itemId });
   };
-  const go = (slug, scope) =>
-    navigate(`${BASE}${slug ? `/${slug}` : ""}${scope ? `?scope=${scope}` : ""}`);
   const commit = (operation, message) => {
     try {
       const next = operation(stateRef.current);
@@ -212,19 +207,12 @@ export default function InventoryManagementPage() {
         closeConfirmation();
       },
     });
-  const resetDemo = () =>
-    setConfirmation({
-      title: "Reset Demo Data?",
-      message:
-        "All inventory demo edits will be replaced with the original sample items, suppliers, categories and movements. Authentication storage is unaffected.",
-      confirmLabel: "Reset Demo Data",
-      danger: true,
-      onConfirm: () => {
-        commit(() => createDemoState(), "Original inventory demo dataset restored.");
-        closeConfirmation();
-        setRevision((value) => value + 1);
-      },
-    });
+  const resetDemo = () => {
+    const loaded = loadInventory();
+    stateRef.current = loaded.state;
+    setState(loaded.state);
+    notify(loaded.warning || "Inventory reloaded from local storage.", loaded.warning ? "warning" : "success");
+  };
   if (!active) return <Navigate to={BASE} replace />;
   const shared = { state, open, refresh };
   return (
@@ -237,24 +225,24 @@ export default function InventoryManagementPage() {
         ...(tab ? [{ label: active[1] }] : []),
       ]}
       actions={
-        <>
+        !tab ? <>
           <button className="cms-btn cms-btn-ghost" onClick={refresh}>
             <RefreshCw size={15} /> Refresh Dashboard
           </button>
           <button className="cms-btn cms-btn-primary" onClick={() => open("items")}>
             <Plus size={16} /> Add Item
           </button>
-        </>
+        </> : null
       }
     >
       <div className="inventory-module">
         <div className="inventory-demo-banner">
           <span>
-            <Boxes size={18} /> Local demo · Changes saved in this browser · Weighted-average
+            <Boxes size={18} /> Demo inventory · Changes saved locally · Weighted-average
             valuation
           </span>
           <button className="cms-btn cms-btn-ghost" onClick={resetDemo}>
-            <RotateCcw size={15} /> Reset Demo Data
+            <RotateCcw size={15} /> Reload Inventory
           </button>
         </div>
         <nav className="inventory-tabs" aria-label="Inventory sections">
@@ -270,8 +258,8 @@ export default function InventoryManagementPage() {
             </NavLink>
           ))}
         </nav>
-        <div key={`${tab}-${revision}`}>
-          {!tab && <InventoryDashboard {...shared} navigate={go} />}
+        <div key={tab}>
+          {!tab && <InventoryDashboard {...shared} />}
           {tab === "items" && <InventoryItems {...shared} remove={remove} />}
           {(tab === "stock-in" || tab === "stock-out") && (
             <InventoryMovements

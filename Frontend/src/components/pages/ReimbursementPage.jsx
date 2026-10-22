@@ -44,6 +44,8 @@ import {
   calculateFinancialMetrics,
   exportClaimsToCsv,
   requestClarification,
+  fetchClaims as apiFetchClaims,
+  fetchMyClaims as apiFetchMyClaims,
 } from "@/services/reimbursementService.js";
 import "./ReimbursementPage.css";
 
@@ -73,6 +75,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   // Allow switching view between "Finance & Admin Review", "Claims", and "My Claims"
   const [activePortalTab, setActivePortalTab] = useState("all-claims");
 
+<<<<<<< HEAD
   // ── Live Claims & Account Entries State (API v1 Integration) ───────────
   const [claims, setClaims] = useState([]);
   const [dedicatedAccountEntries, setDedicatedAccountEntries] = useState([]);
@@ -125,6 +128,36 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     }
   }, [activePortalTab, campusId]);
 
+=======
+  // ── Live Claims & Account Entries State ─────────────────────────────
+  const [claims, setClaims] = useState([]);
+  const [accountEntries, setAccountEntries] = useState([]);
+  const [isLoadingClaims, setIsLoadingClaims] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  // Fetch claims from the real API (database-backed)
+  const refreshData = useCallback(async () => {
+    setIsLoadingClaims(true);
+    try {
+      if (isFacultyUser) {
+        // Faculty: load only their own claims
+        const myClaims = await apiFetchMyClaims();
+        setClaims(myClaims || []);
+      } else {
+        // Admin / Finance / Accountant: load all claims
+        const allClaims = await apiFetchClaims();
+        setClaims(allClaims || []);
+      }
+    } catch (err) {
+      console.warn("[Reimbursement] Failed to load claims from API:", err?.message || err);
+      setClaims([]);
+    } finally {
+      setIsLoadingClaims(false);
+    }
+  }, [isFacultyUser]);
+
+  // Load data on mount
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
   useEffect(() => {
     refreshData();
   }, [refreshData]);
@@ -283,6 +316,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
         size: file.size,
         type: file.type,
         dataUrl: reader.result,
+        rawFile: file,
         uploadedAt: new Date().toISOString(),
       });
       setFormErrors((prev) => ({ ...prev, file: null, proof: null }));

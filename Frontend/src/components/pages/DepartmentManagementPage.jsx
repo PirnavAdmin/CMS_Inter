@@ -232,32 +232,11 @@ export const DEFAULT_NON_TEACHING_DESIGNATIONS = [
   { id: 115, designationId: 115, name: "Hostel Warden", designationName: "Hostel Warden", code: "DES_WARDEN", designationCode: "DES_WARDEN", staffType: "Non-Teaching", status: "Active", isActive: true },
 ];
 
-export const DEPARTMENTS_STORAGE_KEY = "cms_cached_departments";
-export const DESIGNATIONS_STORAGE_KEY = "cms_cached_designations";
-
 export const loadCachedDepartments = () => {
-  try {
-    const raw = localStorage.getItem(DEPARTMENTS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    // Ignore storage parse errors
-  }
   return [...DEFAULT_TEACHING_DEPARTMENTS, ...DEFAULT_NON_TEACHING_DEPARTMENTS];
 };
 
 export const loadCachedDesignations = () => {
-  try {
-    const raw = localStorage.getItem(DESIGNATIONS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    // Ignore storage parse errors
-  }
   return [...DEFAULT_TEACHING_DESIGNATIONS, ...DEFAULT_NON_TEACHING_DESIGNATIONS];
 };
 
@@ -908,11 +887,6 @@ export default function DepartmentManagementPage() {
         const rows = unwrapRows(deptRes.data).map(normalizeDepartment).filter((d) => d.name);
         if (rows.length > 0) {
           setDepartments(rows);
-          try {
-            localStorage.setItem(DEPARTMENTS_STORAGE_KEY, JSON.stringify(rows));
-          } catch (e) {
-            // Ignore storage error
-          }
         }
         deptSuccess = true;
       }
@@ -941,11 +915,6 @@ export default function DepartmentManagementPage() {
         const rows = unwrapRows(desigRes.data).map(normalizeDesignation).filter((d) => d.name);
         if (rows.length > 0) {
           setDesignations(rows);
-          try {
-            localStorage.setItem(DESIGNATIONS_STORAGE_KEY, JSON.stringify(rows));
-          } catch (e) {
-            // Ignore storage error
-          }
         }
         desigSuccess = true;
       }
@@ -1113,24 +1082,12 @@ export default function DepartmentManagementPage() {
     try {
       await apiClient.delete(apiEndpoints.departments.delete(pendingDeleteDept.id));
       setToast(`Department "${pendingDeleteDept.name}" deleted successfully.`);
-      setDepartments((prev) => {
-        const next = prev.filter((d) => d.id !== pendingDeleteDept.id);
-        try {
-          localStorage.setItem(DEPARTMENTS_STORAGE_KEY, JSON.stringify(next));
-        } catch (e) {}
-        return next;
-      });
+      setDepartments((prev) => prev.filter((d) => d.id !== pendingDeleteDept.id));
     } catch (error) {
       const status = error?.response?.status;
       if (status === 404) {
         setToast("Department was not found on the server.");
-        setDepartments((prev) => {
-          const next = prev.filter((d) => d.id !== pendingDeleteDept.id);
-          try {
-            localStorage.setItem(DEPARTMENTS_STORAGE_KEY, JSON.stringify(next));
-          } catch (e) {}
-          return next;
-        });
+        setDepartments((prev) => prev.filter((d) => d.id !== pendingDeleteDept.id));
       } else {
         const msg = getApiErrorMessage(
           error,
@@ -1151,24 +1108,12 @@ export default function DepartmentManagementPage() {
     try {
       await apiClient.delete(apiEndpoints.designations.delete(pendingDeleteDesig.id));
       setToast({ message: `Designation "${pendingDeleteDesig.name}" deleted successfully.`, type: "success" });
-      setDesignations((prev) => {
-        const next = prev.filter((d) => d.id !== pendingDeleteDesig.id);
-        try {
-          localStorage.setItem(DESIGNATIONS_STORAGE_KEY, JSON.stringify(next));
-        } catch (e) {}
-        return next;
-      });
+      setDesignations((prev) => prev.filter((d) => d.id !== pendingDeleteDesig.id));
     } catch (error) {
       const status = error?.response?.status;
       if (status === 404) {
         setToast({ message: "Designation was not found on the server.", type: "warning" });
-        setDesignations((prev) => {
-          const next = prev.filter((d) => d.id !== pendingDeleteDesig.id);
-          try {
-            localStorage.setItem(DESIGNATIONS_STORAGE_KEY, JSON.stringify(next));
-          } catch (e) {}
-          return next;
-        });
+        setDesignations((prev) => prev.filter((d) => d.id !== pendingDeleteDesig.id));
       } else {
         const msg = getApiErrorMessage(
           error,
@@ -1559,21 +1504,9 @@ export default function DepartmentManagementPage() {
             setToast(msg);
             if (newItem) {
               if (createKind === "department") {
-                setDepartments((prev) => {
-                  const next = [newItem, ...prev];
-                  try {
-                    localStorage.setItem(DEPARTMENTS_STORAGE_KEY, JSON.stringify(next));
-                  } catch (e) {}
-                  return next;
-                });
+                setDepartments((prev) => [newItem, ...prev]);
               } else {
-                setDesignations((prev) => {
-                  const next = [newItem, ...prev];
-                  try {
-                    localStorage.setItem(DESIGNATIONS_STORAGE_KEY, JSON.stringify(next));
-                  } catch (e) {}
-                  return next;
-                });
+                setDesignations((prev) => [newItem, ...prev]);
               }
             }
           }}
@@ -1648,9 +1581,6 @@ export function DepartmentDetailsPage() {
         const allDesigs = unwrapRows(res.data).map(normalizeDesignation);
         if (allDesigs.length > 0) {
           setDesignations(allDesigs);
-          try {
-            localStorage.setItem(DESIGNATIONS_STORAGE_KEY, JSON.stringify(allDesigs));
-          } catch (e) {}
         }
       })
       .catch((err) => {

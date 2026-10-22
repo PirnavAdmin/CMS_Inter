@@ -1,4 +1,13 @@
 export const apiEndpoints = {
+  dashboard: {
+    summary: "/api/v1/dashboard/summary",
+    principal: "/api/v1/dashboard/principal",
+    studentAttendance: "/api/v1/dashboard/students-attendance-today",
+    staffAttendance: "/api/v1/dashboard/staff-attendance-today",
+    upcomingExaminations: "/api/v1/dashboard/upcoming-examinations",
+    highlights: "/api/v1/dashboard/todays-highlights",
+    recentActivity: "/api/v1/dashboard/recent-activity",
+  },
   auth: {
     login: "/api/Auth/login",
     register: "/api/Auth/register",
@@ -175,6 +184,7 @@ export const apiEndpoints = {
     getStudentFee: (studentFeeId) => `/api/v1/fees/student-fees/${encodeURIComponent(studentFeeId)}`,
     studentFeeDetails: (studentFeeId) => `/api/v1/fees/student-fees/${encodeURIComponent(studentFeeId)}`,
     studentFeeDetailsByStudent: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-details`,
+    bulkStudentFeeDetails: "/api/v1/fees/students/bulk-fee-details",
     ledger: "/api/v1/fees/ledger",
     getStudentFees: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-ledger`,
     studentLedger: (studentId) => `/api/v1/fees/students/${encodeURIComponent(studentId)}/fee-ledger`,
@@ -352,8 +362,18 @@ export const apiEndpoints = {
     yearlyOverview: (staffId, academicYearId) => `/api/v1/staff-attendance/staff/${staffId}/yearly-overview?academicYearId=${academicYearId}`,
     leave: "/api/v1/staff-attendance/leave",
     leaveAction: (id) => `/api/v1/staff-attendance/leave/${id}/action`,
+    myLeaveHistory: "/api/v1/staff-attendance/leave/my-history",
+    staffLeaveHistory: (staffId) => `/api/v1/staff-attendance/leave/history/staff/${staffId}`,
     importTemplate: "/api/v1/staff-attendance/import/template",
     importExcel: "/api/v1/staff-attendance/import/excel",
+    // Self-Service My Attendance
+    myToday: "/api/v1/staff-attendance/my-today",
+    punchIn: "/api/v1/staff-attendance/punch-in",
+    punchOut: "/api/v1/staff-attendance/punch-out",
+    myHistory: (period) => `/api/v1/staff-attendance/my-history?period=${encodeURIComponent(period || "week")}`,
+    regularize: "/api/v1/staff-attendance/regularize",
+    regularizations: "/api/v1/staff-attendance/regularizations",
+    reviewRegularization: (id) => `/api/v1/staff-attendance/regularizations/${id}/review`,
   },
   attendanceTimingConfig: {
     list: "/api/v1/attendance-timing-config",
@@ -649,6 +669,8 @@ export const apiEndpoints = {
     },
   },
   hostel: {
+    fees: "/api/v1/hostel/fees",
+    feeById: (id) => `/api/v1/hostel/fees/${encodeURIComponent(id)}`,
     blocks: "/api/v1/hostel/blocks",
     blockById: (id) => `/api/v1/hostel/blocks/${encodeURIComponent(id)}`,
     roomTypes: "/api/v1/hostel/room-types",

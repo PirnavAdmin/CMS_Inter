@@ -104,27 +104,7 @@ function useCampusParams() {
   return useMemo(() => selectedCampusId ? { campusId: Number(selectedCampusId) || selectedCampusId } : {}, [selectedCampusId]);
 }
 
-export function AccountantFees() {
-  const campusParams = useCampusParams();
-  const load = useCallback(async () => {
-    const [ledger, due, dashboard] = await Promise.all([
-      apiClient.get(apiEndpoints.fee.ledger, { params: campusParams }),
-      apiClient.get(apiEndpoints.fee.due, { params: campusParams }),
-      apiClient.get(apiEndpoints.fee.dashboard, { params: campusParams }),
-    ]);
-    return { ledger: getRows(ledger.data), due: getRows(due.data), dashboard: dashboard.data };
-  }, [campusParams]);
-  const state = useFinancePage(load, [load]);
-  const rows = (state.data?.ledger || state.data?.due || []).map(normalizeDue).filter((row) => row.amount > 0);
-  return <>
-    <StudentPageHeader title="Fee Management" subtitle="Review student ledgers, outstanding balances, installments, and collection status." action={<Link className="sp-btn" to="payments">Payment history</Link>} />
-    <PageState {...state} />
-    {!state.loading && !state.error ? <StudentCard title="Student Fee Ledger" subtitle={`${rows.length} outstanding records`}>
-      <div className="sp-toolbar"><div className="sp-search"><Search size={15} /><input aria-label="Search fee ledger" placeholder="Search by student or admission number" onChange={(event) => { const term = event.target.value.toLowerCase(); event.currentTarget.closest(".sp-card").querySelectorAll("tbody tr").forEach((row) => { row.hidden = term && !row.textContent.toLowerCase().includes(term); }); }} /></div></div>
-      <StudentDataTable columns={["Student", "Admission No", "Amount", "Due Date", "Status"]} statusColumns={[4]} rows={rows.map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": formatDate(row.dueDate), Status: row.status }))} empty="No outstanding fee records available." />
-    </StudentCard> : null}
-  </>;
-}
+export { default as AccountantFees } from "./AccountantFeeManagement.jsx";
 
 export function AccountantPayments() {
   const campusParams = useCampusParams();
@@ -153,6 +133,10 @@ export function AccountantPayments() {
             department: c.department,
             category: c.category,
             approvedAmount: c.approvedAmount || c.amount,
+<<<<<<< HEAD
+=======
+            approvalDate: c.approvedDate || c.date || "—",
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
             paymentStatus: c.status === "Paid" ? "Paid / Disbursed" : "Payable (Awaiting Disbursement)",
             disbursedDate: c.disbursedDate,
             paymentRef: c.paymentReference,
@@ -252,8 +236,13 @@ export function AccountantPayments() {
         subtitle="Manage student fee transactions, faculty reimbursement payables, and bank disbursements."
         action={
           <div className="sp-actions" style={{ display: "flex", gap: "8px" }}>
+<<<<<<< HEAD
             <Link className="sp-btn" to="fees">Fee ledger</Link>
             <Link className="sp-btn primary" to="/accountant-dashboard/reimbursement">
+=======
+            <Link className="sp-btn" to="/accountant-dashboard/fees?tab=ledger">Fee ledger</Link>
+            <Link className="sp-btn primary" to="/accountant-dashboard/reimbursements">
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
               <img src={reimbursementIcon} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /> Reimbursement Portal
             </Link>
           </div>
@@ -612,7 +601,7 @@ export function AccountantPayroll() {
   const summary = state.data?.summary || {};
   const total = getNumber(summary, ["totalNetSalary", "TotalNetSalary", "totalPayroll", "TotalPayroll", "netSalary", "NetSalary"]) ?? (state.data?.payslips || []).reduce((sum, row) => sum + row.amount, 0);
   return <>
-    <StudentPageHeader title="Payroll" subtitle="Financial payroll visibility for salary amounts, payslips, and processing status." action={<Link className="sp-btn" to="attendance-impact"><CalendarCheck size={15} /> Attendance impact</Link>} />
+    <StudentPageHeader title="Payroll" subtitle="Financial payroll visibility for salary amounts, payslips, and processing status." action={<Link className="sp-btn" to="/accountant-dashboard/payroll/attendance-impact"><CalendarCheck size={15} /> Attendance impact</Link>} />
     <PageState {...state} />
     {!state.loading && !state.error ? <>
       <section className="sp-summary-grid four">
@@ -634,7 +623,7 @@ export function AccountantAttendanceImpact() {
   const state = useFinancePage(load, [load]);
   const rows = state.data || [];
   return <>
-    <StudentPageHeader title="Attendance Impact" subtitle="Review staff attendance figures that may affect payroll calculations." action={<Link className="sp-btn" to="payroll"><span className="accountant-btn-generated-icon" style={{ backgroundImage: `url(${adminIconAssets.payroll.src})`, backgroundPosition: adminIconAssets.payroll.position }} aria-hidden="true" /> Payroll</Link>} />
+    <StudentPageHeader title="Attendance Impact" subtitle="Review staff attendance figures that may affect payroll calculations." action={<Link className="sp-btn" to="/accountant-dashboard/payroll"><span className="accountant-btn-generated-icon" style={{ backgroundImage: `url(${adminIconAssets.payroll.src})`, backgroundPosition: adminIconAssets.payroll.position }} aria-hidden="true" /> Payroll</Link>} />
     <PageState {...state} />
     {!state.loading && !state.error ? <StudentCard title="Monthly Attendance Impact" subtitle="The backend determines the available attendance and deduction fields.">
       <StudentDataTable columns={["Staff Member", "Present Days", "Absent Days", "Leave", "Deduction", "Payroll Impact"]} rows={rows.map((row) => ({ "Staff Member": getText(row, ["staffName", "StaffName", "employeeName", "EmployeeName", "name", "Name"]), "Present Days": getNumber(row, ["presentDays", "PresentDays", "present", "Present"]) ?? "-", "Absent Days": getNumber(row, ["absentDays", "AbsentDays", "absent", "Absent"]) ?? "-", Leave: getNumber(row, ["leaveDays", "LeaveDays", "leave", "Leave"]) ?? "-", Deduction: formatMoney(getNumber(row, ["deduction", "Deduction", "deductionAmount", "DeductionAmount"]) || 0), "Payroll Impact": formatMoney(getNumber(row, ["payrollImpact", "PayrollImpact", "impactAmount", "ImpactAmount"]) || 0) }))} empty="No attendance impact records available." />

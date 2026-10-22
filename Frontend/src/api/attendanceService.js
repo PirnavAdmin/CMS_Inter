@@ -124,4 +124,45 @@ export const attendanceService = {
     const response = await apiClient.post(apiEndpoints.staffAttendance.leaveAction(id), actionData);
     return response.data;
   },
+
+  getMyLeaveHistory: async () => {
+    const response = await apiClient.get(apiEndpoints.staffAttendance.myLeaveHistory);
+    return response.data;
+  },
+
+  // Self-Service My Attendance
+  getMyTodayStatus: async () => {
+    const response = await apiClient.get(apiEndpoints.staffAttendance.myToday);
+    return response.data;
+  },
+
+  punchIn: async (data = {}) => {
+    const response = await apiClient.post(apiEndpoints.staffAttendance.punchIn, data);
+    return response.data;
+  },
+
+  punchOut: async (data = {}) => {
+    const response = await apiClient.post(apiEndpoints.staffAttendance.punchOut, data);
+    return response.data;
+  },
+
+  getMyAttendanceHistory: async (period = "week") => {
+    const response = await apiClient.get(apiEndpoints.staffAttendance.myHistory(period));
+    return response.data;
+  },
+
+  submitRegularization: async (data) => {
+    const response = await apiClient.post(apiEndpoints.staffAttendance.regularize, data);
+    return response.data;
+  },
+
+  getRegularizations: async (params) => {
+    const response = await apiClient.get(apiEndpoints.staffAttendance.regularizations, { params });
+    return response.data;
+  },
+
+  reviewRegularization: async (id, data) => {
+    const response = await apiClient.put(apiEndpoints.staffAttendance.reviewRegularization(id), data);
+    return response.data;
+  },
 };

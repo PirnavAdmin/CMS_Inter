@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
 import * as campusApi from "../api/campusApi.js";
-import { getAuthToken } from "../features/authStorage.js";
+import { getAuthToken, getAuthUser, saveAuthSession } from "../features/authStorage.js";
+import apiClient from "../api/axios.js";
+import { apiEndpoints } from "../api/apiEndpoints.js";
 
 const CampusContext = createContext(null);
 
@@ -40,6 +42,50 @@ export function CampusProvider({ children }) {
     }
     return DEFAULT_CAMPUSES[0]?.id || "";
   });
+
+  // For Principal role, track their assigned campus IDs
+  const [principalAssignedCampusIds, setPrincipalAssignedCampusIds] = useState(() => {
+    const u = getAuthUser();
+    if (Array.isArray(u?.assignedCampusIds) && u.assignedCampusIds.length > 0) {
+      return u.assignedCampusIds.map(Number);
+    }
+    return null;
+  });
+
+  // Keep principal assigned campuses updated on auth change or fetch from profile if missing
+  useEffect(() => {
+    const u = getAuthUser();
+    if (!u) return;
+
+    const isPrincipal =
+      String(u.role || "").trim().toLowerCase() === "principal" ||
+      String(u.designation || "").trim().toLowerCase() === "principal";
+
+    if (isPrincipal) {
+      if (Array.isArray(u.assignedCampusIds) && u.assignedCampusIds.length > 0) {
+        setPrincipalAssignedCampusIds(u.assignedCampusIds.map(Number));
+      } else {
+        const targetStaffId = u.staffId || u.id;
+        if (targetStaffId) {
+          apiClient.get(apiEndpoints.faculty.getById(targetStaffId))
+            .then((res) => {
+              const data = res?.data?.data || res?.data;
+              if (data) {
+                const ids = Array.isArray(data.assignedCampusIds) && data.assignedCampusIds.length > 0
+                  ? data.assignedCampusIds.map(Number)
+                  : (data.campusId ? [Number(data.campusId)] : []);
+                if (ids.length > 0) {
+                  setPrincipalAssignedCampusIds(ids);
+                  const token = getAuthToken();
+                  saveAuthSession({ token, user: { ...u, assignedCampusIds: ids, assignedBoardIds: data.assignedBoardIds || [] }, role: u.role }, true);
+                }
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    }
+  }, []);
 
   // Fetch live campuses from backend
   const fetchCampuses = useCallback(async () => {
@@ -91,14 +137,35 @@ export function CampusProvider({ children }) {
   // Derived active campuses for header/navbar selection
   const activeCampuses = useMemo(() => {
     if (!Array.isArray(campuses)) return [];
-    return campuses.filter((c) => {
+    const allActive = campuses.filter((c) => {
       if (!c) return false;
       if (c.isActive === false) return false;
       const statusStr = String(c.status || "").toLowerCase();
       if (statusStr === "inactive") return false;
       return true;
     });
-  }, [campuses]);
+
+    const u = getAuthUser();
+    const isPrincipal =
+      u &&
+      (String(u.role || "").trim().toLowerCase() === "principal" ||
+       String(u.designation || "").trim().toLowerCase() === "principal");
+
+    const assignedIds = principalAssignedCampusIds || (Array.isArray(u?.assignedCampusIds) && u.assignedCampusIds.length > 0 ? u.assignedCampusIds.map(Number) : null);
+
+    if (isPrincipal && Array.isArray(assignedIds) && assignedIds.length > 0) {
+      const allowedSet = new Set(assignedIds);
+      const filtered = allActive.filter((c) => {
+        const cId = Number(c.id ?? c.campusId);
+        return allowedSet.has(cId);
+      });
+      if (filtered.length > 0) {
+        return filtered;
+      }
+    }
+
+    return allActive;
+  }, [campuses, principalAssignedCampusIds]);
 
   // Derived selectedCampus object
   const selectedCampus = useMemo(() => {
@@ -112,6 +179,16 @@ export function CampusProvider({ children }) {
       null
     );
   }, [activeCampuses, campuses, selectedCampusId]);
+
+  // Auto-sync selectedCampusId if the active list changes and current selection is not in active campuses
+  useEffect(() => {
+    if (activeCampuses.length > 0) {
+      const exists = activeCampuses.some((c) => String(c.id) === String(selectedCampusId) || String(c.campusId) === String(selectedCampusId));
+      if (!exists && selectedCampus) {
+        setSelectedCampusId(String(selectedCampus.id ?? selectedCampus.campusId));
+      }
+    }
+  }, [activeCampuses, selectedCampus, selectedCampusId]);
 
   // Setter for selected campus (supports object or ID string/number)
   const handleSetSelectedCampus = useCallback((campusOrId) => {

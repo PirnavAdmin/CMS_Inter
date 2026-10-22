@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { FaArrowsRotate, FaAward, FaBan, FaCheck, FaChevronDown, FaClipboardCheck, FaDownload, FaEraser, FaEye, FaFileCirclePlus, FaFileLines, FaFilter, FaPaperPlane, FaPlus, FaPrint, FaRotateLeft, FaTrash, FaUsers, FaXmark } from "react-icons/fa6";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -65,6 +66,10 @@ const CERTIFICATE_API = {
   download: (id) => `${CERTIFICATE_BASE}/download/${encodeURIComponent(id)}`,
   exportExcel: `${CERTIFICATE_BASE}/export/excel`,
   exportPdf: `${CERTIFICATE_BASE}/export/pdf`,
+  base: CERTIFICATE_BASE,
+  generateFromRequest: (id) => `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/generate`,
+  updateFeeClearance: (id) => `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/fee-clearance`,
+  grantFeeExemption: (id) => `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/fee-exemption`,
 };
 
 const getIssuedBy = () => {
@@ -182,7 +187,8 @@ const toDisplayStatus = (value) => {
   const raw = String(value || "").trim();
   if (!raw) return "Generated";
   const key = raw.toLowerCase();
-  if (["generated", "draft", "pending", "requested"].includes(key)) return "Generated";
+  if (["requested"].includes(key)) return "Requested";
+  if (["generated", "draft", "pending"].includes(key)) return "Generated";
   if (["reviewed", "inreview", "in-review", "review"].includes(key)) return "Reviewed";
   if (["approved", "authorize", "authorized"].includes(key)) return "Approved";
   if (["issued", "completed", "active"].includes(key)) return "Issued";
@@ -481,6 +487,11 @@ const normalizeCertificate = (raw) => {
     issuedBy: pick(raw, ["issuedBy", "IssuedBy"]) || "",
     isActive: pick(raw, ["isActive", "IsActive"]),
     signature: getSignatureValue(raw) || getBackendPrincipalSignatureUrl(),
+    feeClearanceStatus: pick(raw, ["feeClearanceStatus", "FeeClearanceStatus"]) || "Cleared",
+    feeDueAmount: Number(pick(raw, ["feeDueAmount", "FeeDueAmount"])) || 0,
+    feeClearedBy: pick(raw, ["feeClearedBy", "FeeClearedBy"]) || "",
+    feeClearedAt: maybeIsoDate(pick(raw, ["feeClearedAt", "FeeClearedAt"])) || "",
+    feeExemptionReason: pick(raw, ["feeExemptionReason", "FeeExemptionReason"]) || "",
   };
 };
 
@@ -1047,6 +1058,22 @@ export function renderTemplateWithRecord(text, record = {}) {
     Religion: religion,
     caste: caste,
     Caste: caste,
+    caste_category: record.casteCategory || record.CasteCategory || caste || "General / OC",
+    CasteCategory: record.casteCategory || record.CasteCategory || caste || "General / OC",
+    mother_tongue: record.motherTongue || record.MotherTongue || "Telugu",
+    MotherTongue: record.motherTongue || record.MotherTongue || "Telugu",
+    dob_words: record.dobWords || record.DobWords || "Fourteenth August Two Thousand Eight",
+    DobWords: record.dobWords || record.DobWords || "Fourteenth August Two Thousand Eight",
+    second_language: record.secondLanguage || record.SecondLanguage || "Sanskrit",
+    SecondLanguage: record.secondLanguage || record.SecondLanguage || "Sanskrit",
+    class_leaving: record.classLeaving || record.ClassLeaving || (record.academicLevel ? `${record.academicLevel} (${record.groupName || "MPC"})` : "Senior Intermediate (2nd Year MPC)"),
+    ClassLeaving: record.classLeaving || record.ClassLeaving || (record.academicLevel ? `${record.academicLevel} (${record.groupName || "MPC"})` : "Senior Intermediate (2nd Year MPC)"),
+    qualified_for_promotion: record.qualifiedForPromotion || record.QualifiedForPromotion || "Yes, Qualified for University / Higher Studies Admission",
+    QualifiedForPromotion: record.qualifiedForPromotion || record.QualifiedForPromotion || "Yes, Qualified for University / Higher Studies Admission",
+    scholarship_concession: record.scholarshipConcession || record.ScholarshipConcession || "No (All Dues Cleared)",
+    ScholarshipConcession: record.scholarshipConcession || record.ScholarshipConcession || "No (All Dues Cleared)",
+    identification_marks: record.identificationMarks || record.IdentificationMarks || "1. A mole on the left cheek; 2. A scar on right index finger",
+    IdentificationMarks: record.identificationMarks || record.IdentificationMarks || "1. A mole on the left cheek; 2. A scar on right index finger",
     college_name: "Pirnav College",
     CollegeName: "Pirnav College",
     college_address: "D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh",
@@ -1184,6 +1211,21 @@ function getCertificateTemplate(type, record) {
   const academicYear = record?.academicYear || "2026-2027";
   const boardName = record?.boardName || record?.board || "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
 
+  const motherName = record?.motherName || record?.mother || "Parent";
+  const motherTongue = record?.motherTongue || record?.MotherTongue || "Telugu";
+  const casteCategory = record?.casteCategory || record?.CasteCategory || record?.caste || "General / OC";
+  const dobStr = record?.dob || record?.dateOfBirth || "14 August 2008";
+  const dobWords = record?.dobWords || record?.DobWords || "Fourteenth August Two Thousand Eight";
+  const secondLanguage = record?.secondLanguage || record?.SecondLanguage || "Sanskrit";
+  const medium = record?.medium || record?.Medium || "English";
+  const identificationMarks = record?.identificationMarks || record?.IdentificationMarks || "1. A mole on the left cheek; 2. A scar on right index finger";
+  const qualifiedForPromotion = record?.qualifiedForPromotion || record?.QualifiedForPromotion || "Yes, Qualified for Higher Studies";
+  const scholarshipConcession = record?.scholarshipConcession || record?.ScholarshipConcession || "No (All Dues Cleared)";
+  const reasonForLeaving = record?.reasonForLeaving || record?.ReasonForLeaving || "Completed Course";
+  const conductRating = record?.conductRating || record?.conduct || "Good";
+  const duesCleared = record?.duesCleared || record?.DuesCleared || "YES";
+  const leavingDate = record?.leavingDate || record?.LeavingDate || record?.issueDate || (record?.date ? String(record.date) : "Present Date");
+
   if (target.includes("bonafide") || presentation?.template === "bonafide") {
     return {
       heading: "Bonafide Certificate",
@@ -1213,7 +1255,7 @@ function getCertificateTemplate(type, record) {
   if (target.includes("transfer") || target.includes("tc") || presentation?.template === "transfer") {
     return {
       heading: "Transfer Certificate (TC)",
-      paragraphOne: `This is to certify that Mr./Ms. ${studentName} (S/o / D/o ${fatherName}) bearing Student ID ${studentIdStr} and Admission Number ${admissionNo} has studied in this college from June 2025 to May 2027 in ${group} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. All dues to the college have been cleared (YES).\nWe wish him/her all the best for his/her future endeavours.`,
+      paragraphOne: `This is to certify that Mr./Ms. ${studentName} (S/o / D/o ${fatherName}, Mother: ${motherName}) bearing Student ID ${studentIdStr}, Admission Number ${admissionNo} and Roll No ${record?.rollNo || record?.rollNumber || "-"} was a bonafide student of this college in ${group} Group (${medium} Medium, Second Language: ${secondLanguage}).\nDate of Birth as per admission register: ${dobStr} (in words: ${dobWords}).\nMother Tongue: ${motherTongue} | Social Category / Caste: ${casteCategory}.\nPersonal Marks of Identification: ${identificationMarks}.\nClass in which studying at the time of leaving: ${year} (${group}) on ${leavingDate}.\nQualified for promotion to Higher Education / Degree: ${qualifiedForPromotion}.\nAll college dues have been cleared (${duesCleared}). Receipt of scholarship / fee concession: ${scholarshipConcession}.\nReason for leaving: ${reasonForLeaving}. General conduct and character have been ${conductRating}.`,
       paragraphTwo: `This certificate is issued for the purpose of ${safePurpose}.`,
       borderColor: "#b45309",
       badgeBgColor: "#b45309",
@@ -1675,13 +1717,41 @@ export default function CertificatesPage() {
   const [toDate, setToDate] = useState("");
   const [showRecordFilters, setShowRecordFilters] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("generate");
+  const [searchParams] = useSearchParams();
+  const urlStatus = searchParams?.get("status");
+  const urlTab = searchParams?.get("tab");
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const s = sp.get("status");
+      const t = sp.get("tab");
+      if (t === "actions" || t === "review" || s === "Requested") return "actions";
+      if (t === "certificates" || t === "records") return "certificates";
+    } catch {
+      /* ignore */
+    }
+    return "generate";
+  });
   const [page, setPage] = useState(1);
-  const [workflowStatusFilter, setWorkflowStatusFilter] = useState("All");
+  const [workflowStatusFilter, setWorkflowStatusFilter] = useState(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const s = sp.get("status");
+      if (s && ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(s)) return s;
+    } catch {
+      /* ignore */
+    }
+    return "All";
+  });
+  const [fromRequestMeta, setFromRequestMeta] = useState(null);
+  const [liveAlert, setLiveAlert] = useState(null);
   const [workflowQuery, setWorkflowQuery] = useState("");
   const [actionPage, setActionPage] = useState(1);
   const [printPreview, setPrintPreview] = useState(null);
   const [toast, setToast] = useState("");
+  const [inspectingFeeRow, setInspectingFeeRow] = useState(null);
+  const [feeExemptionNote, setFeeExemptionNote] = useState("");
+  const [savingFeeClearance, setSavingFeeClearance] = useState(false);
   const admissionLookupRef = useRef(0);
   const listRequestRef = useRef(0);
   const studentRequestRef = useRef(0);
@@ -1760,18 +1830,7 @@ export default function CertificatesPage() {
       return true;
     } catch (error) {
       if (requestId !== listRequestRef.current) return false;
-      let fallbackList = [];
-      try {
-        const cached = localStorage.getItem("cms_certificates");
-        if (cached) {
-          fallbackList = JSON.parse(cached);
-        }
-      } catch {
-        // Ignore cache parse error
-      }
-      if (!fallbackList.length) {
-        fallbackList = mockCertificates.map(normalizeCertificate);
-      }
+      const fallbackList = mockCertificates.map(normalizeCertificate);
       let filtered = fallbackList;
       if (query.trim()) {
         const q = query.trim().toLowerCase();
@@ -1814,15 +1873,7 @@ export default function CertificatesPage() {
         cancelledCount: Number(pick(data, ["cancelledCount", "CancelledCount"])) || 0,
       });
     } catch (error) {
-      let list = rowsForStats;
-      if (!list || !list.length) {
-        try {
-          const cached = localStorage.getItem("cms_certificates");
-          list = cached ? JSON.parse(cached) : mockCertificates.map(normalizeCertificate);
-        } catch {
-          list = mockCertificates.map(normalizeCertificate);
-        }
-      }
+      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : mockCertificates.map(normalizeCertificate);
       setWorkflowStats({
         totalCount: list.length,
         requestedCount: list.filter((r) => r.status === "Requested").length,
@@ -1989,6 +2040,54 @@ export default function CertificatesPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Real-time listener for incoming student certificate requests
+  useEffect(() => {
+    let channel = null;
+    try {
+      channel = new BroadcastChannel("cms_notifications");
+      channel.onmessage = (event) => {
+        if (event.data?.type === "NEW_CERTIFICATE_REQUEST") {
+          setLiveAlert({
+            admissionNo: event.data.admissionNo || "Student",
+            studentName: event.data.studentName || event.data.admissionNo || "Student",
+            certificateType: event.data.certificateType || "Certificate",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          });
+          loadWorkflowStats();
+          loadCertificates({ showLoader: false });
+        }
+      };
+    } catch {
+      // Fallback if BroadcastChannel unavailable
+    }
+
+    const polling = setInterval(() => {
+      loadWorkflowStats();
+    }, 30000);
+
+    return () => {
+      if (channel) channel.close();
+      clearInterval(polling);
+    };
+  }, []);
+
+  useEffect(() => {
+    const statusParam = searchParams?.get("status");
+    const tabParam = searchParams?.get("tab");
+    if (tabParam === "actions" || tabParam === "review" || statusParam === "Requested") {
+      setActiveTab("actions");
+    } else if (tabParam === "certificates" || tabParam === "records") {
+      setActiveTab("certificates");
+    } else if (tabParam === "generate") {
+      setActiveTab("generate");
+    }
+
+    if (statusParam && ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(statusParam)) {
+      setWorkflowStatusFilter(statusParam);
+      setActionPage(1);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!filtersReadyRef.current) return undefined;
@@ -2229,6 +2328,7 @@ export default function CertificatesPage() {
       group: "",
       section: "",
     });
+    setFromRequestMeta(null);
     setErrors({});
   };
 
@@ -2244,7 +2344,6 @@ export default function CertificatesPage() {
     if (creating) return;
 
     const admissionNo = String(form.admissionNo || "").trim();
-    const selectedType = String(form.type || "").trim();
     const purpose = normalizeText(form.purpose);
     const requestDate = String(form.requestDate || "").trim();
     const remarks = normalizeText(form.remarks);
@@ -2253,15 +2352,67 @@ export default function CertificatesPage() {
       setToast("Unsupported certificate type.");
       return;
     }
+<<<<<<< HEAD
     const matchedStudent = findStudentByAdmission(admissionNo) ||
       mockStudents.find((s) => String(s.admissionNo).trim().toLowerCase() === admissionNo.toLowerCase()) ||
       null;
 
     const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo || "MADM-0068";
     const studentName = matchedStudent?.name || form.student || "Student";
+=======
+    const matchedStudent = findStudentByAdmission(admissionNo);
+    if (!matchedStudent && !fromRequestMeta) {
+      setErrors((prev) => ({ ...prev, admissionNo: "Select a valid student from the admissions list." }));
+      return;
+    }
+
+    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo;
+
+    if (fromRequestMeta?.feeClearanceStatus === "Dues Pending" && Number(fromRequestMeta.feeDueAmount) > 0) {
+      const proceed = await confirm({
+        title: "Fee Due Clearance Notice",
+        message: `Student "${fromRequestMeta.student || canonicalAdmissionNo}" has pending fee dues of ₹${Number(fromRequestMeta.feeDueAmount).toLocaleString('en-IN')}.\n\nDo you want to generate certificate under Principal Permission?`,
+        confirmLabel: "Proceed & Generate",
+        cancelLabel: "Cancel & Inspect Dues",
+      });
+      if (!proceed) {
+        if (fromRequestMeta.rawRow) openFeeInspector(fromRequestMeta.rawRow);
+        return;
+      }
+    }
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
 
     setCreating(true);
     try {
+      if (fromRequestMeta?.id) {
+        try {
+          const actionId = await resolveServerCertificateId({ backendId: fromRequestMeta.id, id: fromRequestMeta.id });
+          await apiClient.patch(CERTIFICATE_API.generateFromRequest(actionId || fromRequestMeta.id));
+          try {
+            const channel = new BroadcastChannel("cms_notifications");
+            channel.postMessage({
+              type: "CERTIFICATE_STATUS_UPDATED",
+              admissionNo: canonicalAdmissionNo,
+              certificateType: certificateRequest.type,
+              status: "Generated",
+            });
+            channel.close();
+          } catch {
+            // Ignore channel error
+          }
+          setToast(`Certificate for ${fromRequestMeta.student || canonicalAdmissionNo} (${certificateRequest.type}) generated successfully.`);
+          setFromRequestMeta(null);
+          resetForm();
+          await refreshCertificateData({ showLoader: false });
+          setActiveTab("actions");
+          setWorkflowStatusFilter("Generated");
+          setActionPage(1);
+          return;
+        } catch (patchErr) {
+          console.warn("generateFromRequest failed, falling back to standard generate", patchErr);
+        }
+      }
+
       const normalizedRequestDate = toApiDateTime(requestDate) || `${todayIso()}T00:00:00.000Z`;
       const specializedPayload = {
         admissionNo: canonicalAdmissionNo,
@@ -2280,6 +2431,7 @@ export default function CertificatesPage() {
       } catch (apiError) {
         console.warn("Server generation offline/fallback:", apiError);
       }
+<<<<<<< HEAD
 
       if (!createdCertificate) {
         const certCount = rows.length + 1;
@@ -2345,6 +2497,31 @@ export default function CertificatesPage() {
         requestedCount: (prev.requestedCount || 0) + 1,
       }));
 
+=======
+      if (createdCertificate) {
+        setRows((currentRows) => [
+          createdCertificate,
+          ...currentRows.filter((row) => (
+            String(row.backendId || row.id) !== String(createdCertificate.backendId || createdCertificate.id)
+            && String(row.number) !== String(createdCertificate.number)
+          )),
+        ]);
+      }
+      try {
+        const channel = new BroadcastChannel("cms_notifications");
+        channel.postMessage({
+          type: "CERTIFICATE_STATUS_UPDATED",
+          admissionNo: canonicalAdmissionNo,
+          certificateType: certificateRequest.type,
+          status: "Generated",
+        });
+        channel.close();
+      } catch {
+        // Ignore channel error
+      }
+      setFromRequestMeta(null);
+      await refreshCertificateData({ showLoader: false });
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       resetForm();
       setActiveTab("certificates");
       setPage(1);
@@ -2432,15 +2609,7 @@ export default function CertificatesPage() {
             signature: getBackendPrincipalSignatureUrl(),
           };
         });
-        setRows((currentRows) => {
-          const next = [...newRows, ...currentRows];
-          try {
-            localStorage.setItem("cms_certificates", JSON.stringify(next));
-          } catch {
-            // Ignore storage write error
-          }
-          return next;
-        });
+        setRows((currentRows) => [...newRows, ...currentRows]);
       }
 
       const generatedCount = selectedAdmissionNos.length;
@@ -2456,16 +2625,165 @@ export default function CertificatesPage() {
     }
   };
 
-  
+  const openFeeInspector = (row) => {
+    setInspectingFeeRow(row);
+    setFeeExemptionNote(row?.feeExemptionReason || "");
+  };
+
+  const handleGrantPrincipalPermission = async () => {
+    if (!inspectingFeeRow) return;
+    try {
+      setSavingFeeClearance(true);
+      const actionId = await resolveServerCertificateId(inspectingFeeRow);
+      const targetId = actionId || inspectingFeeRow.id;
+      const note = feeExemptionNote.trim() || "Principal verbal / management permission granted";
+      await apiClient.patch(CERTIFICATE_API.grantFeeExemption(targetId), {
+        status: "Principal Permitted",
+        dueAmount: inspectingFeeRow.feeDueAmount || 0,
+        exemptionReason: note,
+        clearedBy: getIssuedBy() || "Principal / Admin",
+      });
+      setToast(`Principal permission recorded for ${inspectingFeeRow.student}. Certificate clearance updated.`);
+      setInspectingFeeRow(null);
+      await refreshCertificateData({ showLoader: false });
+    } catch (err) {
+      setToast(getFriendlyErrorMessage(err, "Failed to record Principal permission."));
+    } finally {
+      setSavingFeeClearance(false);
+    }
+  };
+
+  const handleMarkFeeCleared = async () => {
+    if (!inspectingFeeRow) return;
+    try {
+      setSavingFeeClearance(true);
+      const actionId = await resolveServerCertificateId(inspectingFeeRow);
+      const targetId = actionId || inspectingFeeRow.id;
+      await apiClient.patch(CERTIFICATE_API.updateFeeClearance(targetId), {
+        status: "Cleared",
+        dueAmount: 0,
+        clearedBy: getIssuedBy() || "Accounts Desk / Admin",
+        exemptionReason: "Cleared / No Dues Verified",
+      });
+      setToast(`Fee status for ${inspectingFeeRow.student} marked as Cleared (No Dues).`);
+      setInspectingFeeRow(null);
+      await refreshCertificateData({ showLoader: false });
+    } catch (err) {
+      setToast(getFriendlyErrorMessage(err, "Failed to update fee clearance status."));
+    } finally {
+      setSavingFeeClearance(false);
+    }
+  };
+
+  const renderFeeClearanceBadge = (row) => {
+    const status = row.feeClearanceStatus || "Cleared";
+    const due = Number(row.feeDueAmount) || 0;
+
+    if (status === "Principal Permitted" || status === "Exempted") {
+      return (
+        <button
+          type="button"
+          className="cert-fee-badge cert-fee-permitted"
+          onClick={() => openFeeInspector(row)}
+          title={row.feeExemptionReason ? `Principal Permitted: ${row.feeExemptionReason}` : "Permitted by Principal"}
+        >
+          <span className="cert-fee-dot"></span>
+          <span>Principal Permitted</span>
+          {due > 0 ? <small className="cert-fee-subamt">₹{due.toLocaleString("en-IN")}</small> : null}
+        </button>
+      );
+    }
+
+    if (status === "Dues Pending" || due > 0) {
+      return (
+        <button
+          type="button"
+          className="cert-fee-badge cert-fee-pending"
+          onClick={() => openFeeInspector(row)}
+          title={`Fee Dues Pending: ₹${due.toLocaleString("en-IN")}. Click to inspect or grant Principal Permission.`}
+        >
+          <span className="cert-fee-dot"></span>
+          <span>Dues: ₹{due.toLocaleString("en-IN")}</span>
+        </button>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        className="cert-fee-badge cert-fee-cleared"
+        onClick={() => openFeeInspector(row)}
+        title="Fee Cleared / No Dues Pending"
+      >
+        <span className="cert-fee-dot"></span>
+        <span>Cleared (₹0 Dues)</span>
+      </button>
+    );
+  };
+
+  const handleCreateFromRequest = (row) => {
+    if (!row) return;
+
+    const admissionNo = String(row.admissionNo || "").trim();
+    const matchedStudent = findStudentByAdmission(admissionNo);
+
+    setForm({
+      admissionNo: matchedStudent?.admissionNo || admissionNo,
+      student: matchedStudent?.name || row.student || "",
+      group: matchedStudent?.group || row.group || "",
+      level: matchedStudent?.level || row.level || "",
+      academicYear: matchedStudent?.academicYear || row.academicYear || "",
+      rollNo: matchedStudent?.rollNo || row.rollNo || "",
+      section: matchedStudent?.section || row.section || "",
+      type: row.type || "Bonafide Certificate",
+      customType: "",
+      orientation: "portrait",
+      purpose: row.purpose || "Official Purpose",
+      requestDate: row.requestDate ? String(row.requestDate).slice(0, 10) : todayIso(),
+      remarks: row.remarks || "",
+    });
+
+    setErrors({});
+    setFromRequestMeta({
+      id: row.backendId || row.id,
+      number: row.number,
+      student: row.student || matchedStudent?.name || admissionNo,
+      admissionNo,
+      type: row.type,
+      purpose: row.purpose,
+      feeClearanceStatus: row.feeClearanceStatus,
+      feeDueAmount: row.feeDueAmount,
+      rawRow: row,
+    });
+    setGenerationMode("single");
+    setActiveTab("generate");
+    setToast(`Loaded request for ${row.student || admissionNo} (${row.type}). Review details and click Generate.`);
+  };
+
   const handleGenerateFromRequest = async (row) => {
     if (!row || !row.id) return;
+
+    if (row.feeClearanceStatus === "Dues Pending" && Number(row.feeDueAmount) > 0) {
+      const proceed = await confirm({
+        title: "Fee Due Clearance Notice",
+        message: `Student "${row.student || row.admissionNo}" has pending fee dues of ₹${Number(row.feeDueAmount).toLocaleString('en-IN')}.\n\nDo you want to generate certificate from request under Principal Permission?`,
+        confirmLabel: "Proceed & Generate",
+        cancelLabel: "Cancel & Inspect Dues",
+      });
+      if (!proceed) {
+        openFeeInspector(row);
+        return;
+      }
+    }
+
     try {
       setBusyAction({ id: row.id, action: "generate" });
-      await apiClient.patch(CERTIFICATE_API.base + `/${row.id}/generate`);
+      const actionId = await resolveServerCertificateId(row);
+      await apiClient.patch(CERTIFICATE_API.generateFromRequest(actionId || row.id));
       setToast(`Certificate ${row.number || row.type} successfully generated from request.`);
-      await fetchCertificates();
+      await refreshCertificateData({ showLoader: false });
     } catch (err) {
-      alert(`Error generating certificate: ${err.message || "Unknown error"}`);
+      setToast(getFriendlyErrorMessage(err, "Failed to generate certificate from request."));
     } finally {
       setBusyAction({ id: null, action: null });
     }
@@ -2481,6 +2799,19 @@ export default function CertificatesPage() {
     const selected = actionMap[action];
     if (!selected) return;
     if (!canMoveTo(row.status, selected.nextStatus)) return;
+
+    if ((action === "approve" || action === "issue") && row.feeClearanceStatus === "Dues Pending" && Number(row.feeDueAmount) > 0) {
+      const proceed = await confirm({
+        title: "Fee Due Clearance Notice",
+        message: `Student "${row.student || row.admissionNo}" has pending fee dues of ₹${Number(row.feeDueAmount).toLocaleString('en-IN')}.\n\nDo you want to proceed with certificate ${action.toUpperCase()} under Principal Permission / Administrative Override?`,
+        confirmLabel: `Proceed & ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+        cancelLabel: "Cancel & Inspect Dues",
+      });
+      if (!proceed) {
+        openFeeInspector(row);
+        return;
+      }
+    }
 
     setBusyAction({ id: row.id, type: action });
 
@@ -2498,8 +2829,8 @@ export default function CertificatesPage() {
         }
       }
 
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (String(r.id) === String(row.id) || (row.backendId && String(r.backendId) === String(row.backendId)) || (row.number && r.number === row.number)) {
             return {
               ...r,
@@ -2508,20 +2839,32 @@ export default function CertificatesPage() {
             };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
 
       await refreshCertificateData({ showLoader: false });
       if (action === "review") {
         setPrintPreview(null);
         setActiveTab("actions");
         setActionPage(1);
+      }
+      if (action === "approve" || action === "issue") {
+        try {
+          const channel = new BroadcastChannel("cms_notifications");
+          channel.postMessage({
+            type: "CERTIFICATE_STATUS_UPDATED",
+            action,
+            status: selected.nextStatus,
+            certificateId: actionId || row.id || row.backendId,
+            certificateNumber: row.number,
+            admissionNo: row.admissionNo,
+            studentName: row.student,
+            certificateType: row.type,
+            issuedBy: action === "issue" ? getIssuedBy() : undefined,
+            timestamp: new Date().toISOString(),
+          });
+          channel.close();
+        } catch {}
       }
       setToast(`Certificate ${row.number || ""} ${selected.success}`);
     } catch (error) {
@@ -2568,8 +2911,8 @@ export default function CertificatesPage() {
         }
       }
 
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (r.status === selected.currentStatus) {
             return {
               ...r,
@@ -2578,17 +2921,31 @@ export default function CertificatesPage() {
             };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
 
       const completedCount = eligibleRows.length;
       await refreshCertificateData({ showLoader: false });
+      if (action === "approve" || action === "issue") {
+        try {
+          const channel = new BroadcastChannel("cms_notifications");
+          eligibleRows.forEach((r) => {
+            channel.postMessage({
+              type: "CERTIFICATE_STATUS_UPDATED",
+              action,
+              status: selected.nextStatus,
+              certificateId: r.id || r.backendId,
+              certificateNumber: r.number,
+              admissionNo: r.admissionNo,
+              studentName: r.student,
+              certificateType: r.type,
+              issuedBy: action === "issue" ? getIssuedBy() : undefined,
+              timestamp: new Date().toISOString(),
+            });
+          });
+          channel.close();
+        } catch {}
+      }
       setToast(`${completedCount} eligible certificate${completedCount === 1 ? "" : "s"} ${selected.label}.`);
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, `Failed to bulk ${action} certificates.`));
@@ -2618,20 +2975,14 @@ export default function CertificatesPage() {
           // Graceful fallback to local update
         }
       }
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (String(r.id) === String(row.id) || (row.backendId && String(r.backendId) === String(row.backendId)) || (row.number && r.number === row.number)) {
             return { ...r, status: "Cancelled" };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
       await refreshCertificateData({ showLoader: false });
       setToast(`Certificate ${row.number || ""} cancelled`);
     } catch (error) {
@@ -2687,15 +3038,7 @@ export default function CertificatesPage() {
           // Graceful fallback to local deletion
         }
       }
-      setRows((prev) => {
-        const next = prev.filter((r) => r.id !== row.id && r.number !== row.number);
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+      setRows((prev) => prev.filter((r) => r.id !== row.id && r.number !== row.number));
       setPrintPreview(null);
       loadWorkflowStats();
       setToast(`Certificate ${row.number || ""} deleted successfully.`);
@@ -3231,6 +3574,60 @@ export default function CertificatesPage() {
               </div>
             </div>
             <div className="cms-card-body">
+              {fromRequestMeta ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    marginBottom: "16px",
+                    background: "rgba(124, 58, 237, 0.08)",
+                    border: "1px solid rgba(124, 58, 237, 0.25)",
+                    borderRadius: "8px",
+                    color: "var(--color-text, #1e293b)",
+                    fontSize: "13px"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <FaAward size={20} color="#7c3aed" />
+                    <div>
+                      <div>
+                        <strong>Fulfilling Student Request:</strong>{" "}
+                        <span style={{ color: "#7c3aed", fontWeight: "700" }}>{fromRequestMeta.student}</span>{" "}
+                        <span>({fromRequestMeta.admissionNo})</span> —{" "}
+                        <span className="cert-status-pill cert-status-requested" style={{ fontSize: "11px", padding: "2px 8px" }}>{fromRequestMeta.type}</span>
+                      </div>
+                      {fromRequestMeta.purpose ? (
+                        <div style={{ fontSize: "12px", color: "#64748b", marginTop: "3px" }}>
+                          <strong>Requested Purpose:</strong> {fromRequestMeta.purpose}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFromRequestMeta(null);
+                      resetForm();
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#64748b",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "12px",
+                      padding: "4px 8px"
+                    }}
+                    title="Clear request mode and reset form"
+                  >
+                    <FaXmark size={14} /> Clear Request
+                  </button>
+                </div>
+              ) : null}
               {generationMode === "bulk" ? (
                 <section className={`cert-bulk-students ${errors.bulkStudents ? "has-error" : ""}`}>
                   <div className="cert-bulk-students-head">
@@ -3598,6 +3995,7 @@ export default function CertificatesPage() {
                 <th>Admission Number</th>
                 <th>Student</th>
                 <th>Type</th>
+                <th>Fee Clearance</th>
                 <th>Request Date</th>
                 <th>Issue Date</th>
                 <th>Status</th>
@@ -3606,10 +4004,10 @@ export default function CertificatesPage() {
             </thead>
             <tbody>
               {loadingList ? (
-                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />)
               ) : !pageRows.length ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="cert-empty-state">
                       <div className="cert-empty-icon"><FaAward size={24} aria-hidden="true" /></div>
                       <h4>No certificates found</h4>
@@ -3623,6 +4021,7 @@ export default function CertificatesPage() {
                   <td title={row.admissionNo || "-"}>{row.admissionNo || "-"}</td>
                   <td title={[row.student, row.level].filter(Boolean).join(" · ")}><strong>{row.student}</strong>{row.level ? <small className="cert-student-meta">{row.level}</small> : null}</td>
                   <td title={row.type}>{row.type}</td>
+                  <td>{renderFeeClearanceBadge(row)}</td>
                   <td>{formatDateDdMmYyyy(row.requestDate)}</td>
                   <td>{formatDateDdMmYyyy(row.issue)}</td>
                   <td><span className={`cert-status-pill ${certStatusClass(row.status)}`}>{row.status}</span></td>
@@ -3692,6 +4091,65 @@ export default function CertificatesPage() {
                 </button>
               </div>
             </div>
+            {liveAlert && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "12px 18px",
+                  marginBottom: "16px",
+                  borderRadius: "10px",
+                  background: "linear-gradient(135deg, rgba(234, 88, 12, 0.12) 0%, rgba(249, 115, 22, 0.06) 100%)",
+                  border: "1px solid rgba(234, 88, 12, 0.35)",
+                  boxShadow: "0 4px 12px rgba(234, 88, 12, 0.08)"
+                }}
+                role="alert"
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ fontSize: "22px" }}>🔔</span>
+                  <div>
+                    <strong style={{ color: "#c2410c", fontSize: "14px" }}>
+                      New Student Certificate Request Received ({liveAlert.time})
+                    </strong>
+                    <p style={{ margin: "2px 0 0", fontSize: "13px", color: "var(--color-text, #374151)" }}>
+                      Student <strong>{liveAlert.studentName}</strong> ({liveAlert.admissionNo}) requested a <strong>{liveAlert.certificateType}</strong>.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="cms-btn primary"
+                    style={{ fontSize: "12px", padding: "6px 14px", fontWeight: "600" }}
+                    onClick={() => {
+                      setActiveTab("actions");
+                      setWorkflowStatusFilter("Requested");
+                      setActionPage(1);
+                      setLiveAlert(null);
+                    }}
+                  >
+                    View Requested ({workflowStats.requestedCount})
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "6px 8px",
+                      color: "#6b7280",
+                      fontSize: "14px",
+                      fontWeight: "bold"
+                    }}
+                    onClick={() => setLiveAlert(null)}
+                    title="Dismiss alert"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="cert-workflow-summary" aria-label="Certificate workflow summary">
               {[
                 ["Requested", `${workflowStats.requestedCount} Request${workflowStats.requestedCount === 1 ? "" : "s"}`],
@@ -3740,6 +4198,7 @@ export default function CertificatesPage() {
                     <th>Admission Number</th>
                     <th>Student</th>
                     <th>Type</th>
+                    <th>Fee Due Clearance</th>
                     <th>Status</th>
                     <th>Request Date</th>
                     <th className="cert-actions-header">Actions</th>
@@ -3747,30 +4206,57 @@ export default function CertificatesPage() {
                 </thead>
                 <tbody>
                   {loadingList ? (
-                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
                   ) : !actionPageRows.length ? (
-                    <tr><td colSpan={7}><div className="cert-empty-state"><div className="cert-empty-icon"><FaAward size={24} aria-hidden="true" /></div><h4>No matching certificates found</h4><p>{workflowQuery.trim() ? "Try a different certificate number, admission number, student, type, status, or date." : workflowStatusFilter === "All" ? "Certificate requests will appear here as they move through the workflow." : `There are no certificates with ${workflowStatusFilter.toLowerCase()} status.`}</p></div></td></tr>
+                    <tr><td colSpan={8}><div className="cert-empty-state"><div className="cert-empty-icon"><FaAward size={24} aria-hidden="true" /></div><h4>No matching certificates found</h4><p>{workflowQuery.trim() ? "Try a different certificate number, admission number, student, type, status, or date." : workflowStatusFilter === "All" ? "Certificate requests will appear here as they move through the workflow." : `There are no certificates with ${workflowStatusFilter.toLowerCase()} status.`}</p></div></td></tr>
                   ) : actionPageRows.map((row, index) => (
                     <tr key={row.backendId ? `action-row-${row.backendId}-${index}` : `action-row-${row.id || "c"}-${row.number || index}-${index}`}>
                       <td className="cms-strong" title={row.number}>{row.number}</td>
                       <td title={row.admissionNo || "-"}>{row.admissionNo || "-"}</td>
                       <td title={row.student}>{row.student}</td>
                       <td title={row.type}>{row.type}</td>
+                      <td>{renderFeeClearanceBadge(row)}</td>
                       <td><span className={`cert-status-pill ${certStatusClass(row.status)}`}>{row.status}</span></td>
                       <td>{formatDateDdMmYyyy(row.requestDate)}</td>
                       <td>
                         <div className="cms-actions cert-actions-right cert-action-buttons">
-                          <button
-                            type="button"
-                            className="cms-action-btn cert-workflow-step"
-                            style={workflowButtonStyle("approve", ["Generated", "Reviewed"].includes(row.status) && hasServerCertificateId(row) && !isRowBusy(row.id))}
-                            onClick={() => row.status === "Requested" ? handleGenerateFromRequest(row) : handleWorkflowChange(row, row.status === "Generated" ? "review" : "approve")}
-                            disabled={!(["Generated", "Reviewed"].includes(row.status)) || !hasServerCertificateId(row) || isRowBusy(row.id)}
-                            title={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
-                            aria-label={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
-                          >
-                            <FaCheck size={12} aria-hidden="true" />
-                          </button>
+                          {row.status === "Requested" ? (
+                            <button
+                              type="button"
+                              className="cms-action-btn cert-workflow-step cert-create-action"
+                              style={{
+                                background: "#7c3aed",
+                                color: "#ffffff",
+                                borderColor: "#6d28d9",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                padding: "4px 10px",
+                                fontSize: "12px",
+                                fontWeight: "600",
+                                borderRadius: "6px",
+                                cursor: "pointer"
+                              }}
+                              onClick={() => handleCreateFromRequest(row)}
+                              title="Create certificate from this student request"
+                              aria-label={`Create certificate for ${row.student || row.admissionNo}`}
+                            >
+                              <FaFileCirclePlus size={13} aria-hidden="true" />
+                              <span>Create</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="cms-action-btn cert-workflow-step"
+                              style={workflowButtonStyle("approve", ["Generated", "Reviewed"].includes(row.status) && hasServerCertificateId(row) && !isRowBusy(row.id))}
+                              onClick={() => handleWorkflowChange(row, row.status === "Generated" ? "review" : "approve")}
+                              disabled={!(["Generated", "Reviewed"].includes(row.status)) || !hasServerCertificateId(row) || isRowBusy(row.id)}
+                              title={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
+                              aria-label={row.status === "Generated" ? "Mark as Reviewed" : "Approve Certificate"}
+                            >
+                              <FaCheck size={12} aria-hidden="true" />
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="cms-action-btn cert-workflow-step cert-workflow-issue"
@@ -3935,6 +4421,136 @@ export default function CertificatesPage() {
                   </footer>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {inspectingFeeRow ? (
+        <div
+          className="cert-fee-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !savingFeeClearance) setInspectingFeeRow(null);
+          }}
+        >
+          <div className="cert-fee-modal-card">
+            <div className="cert-fee-modal-header">
+              <div>
+                <span className="cert-fee-modal-eyebrow">Collegiate Accounts Clearance Desk</span>
+                <h3 className="cert-fee-modal-title">Fee Due Clearance (No-Dues Verification)</h3>
+              </div>
+              <button
+                type="button"
+                className="cert-fee-modal-close"
+                onClick={() => setInspectingFeeRow(null)}
+                disabled={savingFeeClearance}
+                aria-label="Close modal"
+              >
+                <FaXmark size={18} />
+              </button>
+            </div>
+
+            <div className="cert-fee-modal-body">
+              {/* Student Summary */}
+              <div className="cert-fee-student-summary">
+                <div className="cert-fee-summary-item">
+                  <span className="cert-fee-summary-label">Student Name</span>
+                  <strong className="cert-fee-summary-val">{inspectingFeeRow.student}</strong>
+                </div>
+                <div className="cert-fee-summary-item">
+                  <span className="cert-fee-summary-label">Admission No</span>
+                  <span className="cert-fee-summary-val">{inspectingFeeRow.admissionNo || "—"}</span>
+                </div>
+                <div className="cert-fee-summary-item">
+                  <span className="cert-fee-summary-label">Certificate Type</span>
+                  <span className="cert-fee-summary-val">{inspectingFeeRow.type}</span>
+                </div>
+                <div className="cert-fee-summary-item">
+                  <span className="cert-fee-summary-label">Certificate No</span>
+                  <span className="cert-fee-summary-val cms-strong">{inspectingFeeRow.number}</span>
+                </div>
+              </div>
+
+              {/* Status Grid */}
+              <div className="cert-fee-status-grid">
+                <div className="cert-fee-status-box">
+                  <span className="cert-fee-box-title">Clearance Status</span>
+                  <div className="cert-fee-status-chip-wrap">
+                    {renderFeeClearanceBadge(inspectingFeeRow)}
+                  </div>
+                </div>
+
+                <div className="cert-fee-status-box">
+                  <span className="cert-fee-box-title">Total Outstanding Dues</span>
+                  <div className={`cert-fee-amount-display ${Number(inspectingFeeRow.feeDueAmount) > 0 ? "has-dues" : "no-dues"}`}>
+                    ₹{Number(inspectingFeeRow.feeDueAmount || 0).toLocaleString("en-IN")}
+                  </div>
+                </div>
+
+                <div className="cert-fee-status-box">
+                  <span className="cert-fee-box-title">Verified Authority</span>
+                  <div className="cert-fee-authority">
+                    {inspectingFeeRow.feeClearedBy || "Collegiate Accounts Section"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Principal Exemption Note */}
+              <div className="cert-fee-exemption-panel">
+                <div className="cert-fee-panel-title">
+                  <div className="cert-fee-panel-badge">
+                    <FaAward size={13} /> Principal Permission / Zero Hard-Locking
+                  </div>
+                  <p className="cert-fee-panel-desc">
+                    If this student has pending fee dues but received verbal or written approval from the Principal or Management (e.g. Govt fee reimbursement pending, concession approved, or emergency issuance), record the permission note below to issue without blocking.
+                  </p>
+                </div>
+
+                <label className="cert-fee-note-label">
+                  <span>Principal Permission Reason / Audit Note</span>
+                  <textarea
+                    className="cms-textarea cert-fee-note-input"
+                    rows={3}
+                    value={feeExemptionNote}
+                    onChange={(e) => setFeeExemptionNote(e.target.value)}
+                    placeholder="e.g. Principal verbally approved - Govt scholarship fee reimbursement pending."
+                    disabled={savingFeeClearance}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="cert-fee-modal-footer">
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                onClick={() => setInspectingFeeRow(null)}
+                disabled={savingFeeClearance}
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                className="cms-btn cms-btn-secondary"
+                onClick={handleMarkFeeCleared}
+                disabled={savingFeeClearance}
+                title="Mark student fee as fully cleared (No Dues)"
+              >
+                <FaCheck size={13} /> Mark Cleared (No Dues)
+              </button>
+
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary cert-btn-grant-permission"
+                onClick={handleGrantPrincipalPermission}
+                disabled={savingFeeClearance}
+                title="Grant Principal Permission with Audit Note"
+              >
+                <FaAward size={13} /> {savingFeeClearance ? "Saving..." : "Grant Principal Permission"}
+              </button>
             </div>
           </div>
         </div>

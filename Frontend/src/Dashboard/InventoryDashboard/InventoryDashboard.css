@@ -1,0 +1,472 @@
+.ip-shell {
+  --cms-primary: #788b00;
+  --cms-primary-soft: #eef2d9;
+  --cms-surface: #fff;
+  --cms-text: #22291b;
+  --cms-muted: #78816d;
+  --cms-border: #dce2ce;
+  --cms-subtle: #f4f6e9;
+  --cms-hover: #f5f7ed;
+  --cms-shadow: 0 5px 20px #3944000a;
+  display: flex;
+  height: 100dvh;
+  background: linear-gradient(120deg, #f3f5e9, #e3eacb);
+  color: var(--cms-text);
+  font-family: inherit;
+  overflow: hidden;
+}
+.ip-sidebar {
+  width: 250px;
+  flex-shrink: 0;
+  background: #e2eab7;
+  border-right: 1px solid #d2dba7;
+  display: flex;
+  flex-direction: column;
+}
+.ip-brand {
+  height: 86px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ip-brand img {
+  width: 146px;
+  max-height: 65px;
+  object-fit: contain;
+}
+.ip-portal {
+  display: flex;
+  gap: 10px;
+  padding: 15px 20px;
+  background: #d8e2a6;
+  color: #526000;
+}
+.ip-portal strong {
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.ip-portal small,
+.ip-sidebar-foot small {
+  display: block;
+  font-size: 11px;
+  color: #6e7854;
+  margin-top: 4px;
+}
+.ip-sidebar nav {
+  padding: 14px 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+.ip-sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin: 3px 0;
+  border-radius: 10px;
+  color: #2a331f;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ip-sidebar nav a:hover {
+  background: #d8e1ae;
+}
+.ip-sidebar nav a.active {
+  background: #829700;
+  color: white;
+}
+.ip-sidebar-foot {
+  padding: 18px;
+  border-top: 1px solid #ccd69f;
+}
+.ip-sidebar-foot button {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  background: none;
+  color: #d14636;
+  padding: 15px 0 0;
+  cursor: pointer;
+}
+.ip-workspace {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.ip-topbar {
+  min-height: 76px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  background: #dfe8b8;
+  padding: 14px 24px;
+  border-bottom: 1px solid #d2dab6;
+}
+.ip-topbar > strong {
+  font-size: 14px;
+}
+.ip-topbar > strong span {
+  color: #687300;
+  font-weight: 500;
+}
+.ip-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.ip-date {
+  font-size: 12px;
+  color: #707c5c;
+}
+.ip-topbar-right > a {
+  position: relative;
+  color: #617000;
+  text-decoration: none;
+}
+.ip-topbar-right > a > b {
+  position: absolute;
+  right: -9px;
+  top: -10px;
+  background: #dd4646;
+  border-radius: 20px;
+  color: white;
+  font-size: 10px;
+  padding: 2px 5px;
+}
+.ip-user {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: white;
+  border-radius: 30px;
+  padding: 6px 14px 6px 6px;
+}
+.ip-user > span {
+  background: #829700;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+.ip-user strong {
+  font-size: 12px;
+}
+.ip-user small {
+  display: block;
+  font-size: 10px;
+}
+.ip-content {
+  overflow-y: auto;
+  padding: 24px;
+  flex: 1;
+  min-width: 0;
+}
+.ip-demo {
+  color: #687353;
+  font-size: 12px;
+  border: 1px solid #d8dfc3;
+  border-radius: 10px;
+  background: #f5f7eb;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+.ip-page-head {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+.ip-page-head h1 {
+  margin: 0;
+  font-size: 27px;
+  font-weight: 800;
+}
+.ip-page-head p {
+  margin: 6px 0 0;
+  color: var(--cms-muted);
+  font-size: 13px;
+}
+.ip-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.ip-kpis article {
+  background: #fff;
+  border: 1px solid var(--cms-border);
+  padding: 20px;
+  border-radius: 15px;
+}
+.ip-kpis svg {
+  float: right;
+  color: #829700;
+}
+.ip-kpis p {
+  font-size: 13px;
+  color: var(--cms-muted);
+  margin: 0 0 12px;
+}
+.ip-kpis strong {
+  font-size: 26px;
+}
+.ip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.ip-card {
+  border: 1px solid var(--cms-border);
+  background: #fff;
+  border-radius: 15px;
+  padding: 22px;
+  margin-bottom: 22px;
+  box-shadow: var(--cms-shadow);
+}
+.ip-card h2,
+.ip-content > h2 {
+  font-size: 18px;
+  margin: 0 0 16px;
+}
+.ip-quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.ip-quick a {
+  background: #f2f5e4;
+  color: #657500;
+  padding: 15px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ip-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--cms-border);
+  padding: 12px 0;
+  font-size: 13px;
+}
+.ip-list-row:last-child {
+  border-bottom: 0;
+}
+.ip-list-row small {
+  display: block;
+  color: var(--cms-muted);
+  margin-top: 5px;
+}
+.ip-list-row p {
+  color: var(--cms-muted);
+}
+.ip-actions {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.ip-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.ip-form label,
+.ip-actions label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ip-form input,
+.ip-form select,
+.ip-actions input,
+.ip-actions select {
+  background: white;
+  border: 1px solid var(--cms-border);
+  border-radius: 9px;
+  padding: 11px;
+  color: var(--cms-text);
+  min-width: 0;
+  max-width: 100%;
+}
+.ip-detail {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  padding: 10px;
+}
+.ip-detail dt {
+  text-transform: capitalize;
+  color: var(--cms-muted);
+  font-size: 12px;
+}
+.ip-detail dd {
+  margin: 6px 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.ip-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--cms-border);
+}
+.ip-setting input {
+  accent-color: #829700;
+}
+.ip-toast {
+  padding: 12px 16px;
+  border: 1px solid #b8d4a9;
+  background: #edf8e7;
+  border-radius: 9px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.ip-toast button,
+.ip-mobile {
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ip-error {
+  background: #fff0ed;
+  border: 1px solid #f1c6bd;
+  color: #a13022;
+  padding: 12px;
+  border-radius: 9px;
+}
+.ip-mobile {
+  display: none;
+}
+.ip-shell .cms-card {
+  overflow: visible !important;
+  margin-bottom: 20px;
+}
+.ip-shell .cms-toolbar {
+  position: relative;
+  z-index: 10;
+}
+.ip-shell .cms-table-wrap {
+  position: relative;
+  z-index: 0;
+}
+.ip-shell .cms-export-menu {
+  background: #fff !important;
+}
+.ip-shell .cms-table th,
+.ip-shell .cms-table td {
+  text-align: center;
+  white-space: nowrap;
+}
+.ip-shell .cms-actions-heading {
+  text-align: center !important;
+}
+.ip-shell .cms-actions {
+  justify-content: center;
+}
+.ip-shell .cms-btn-primary {
+  background: #829700;
+  color: white;
+}
+.ip-shell .cms-toolbar-right {
+  align-items: center;
+}
+.ip-shell :is(button, a, input, select):focus-visible {
+  outline: 2px solid #788b00;
+  outline-offset: 3px;
+}
+@media (max-width: 1100px) {
+  .ip-sidebar {
+    width: 220px;
+  }
+  .ip-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ip-topbar > strong span {
+    display: none;
+  }
+  .ip-date {
+    display: none;
+  }
+  .ip-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .ip-mobile {
+    display: block;
+  }
+  .ip-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1100;
+    transform: translateX(-100%);
+    transition: transform 0.2s;
+  }
+  .ip-sidebar.is-open {
+    transform: translateX(0);
+  }
+  .ip-backdrop {
+    position: fixed;
+    inset: 0;
+    background: #0006;
+    border: 0;
+    z-index: 1099;
+  }
+  .ip-topbar {
+    padding: 12px;
+    gap: 8px;
+  }
+  .ip-topbar > strong {
+    font-size: 12px;
+  }
+  .ip-user > div {
+    display: none;
+  }
+  .ip-content {
+    padding: 16px;
+  }
+  .ip-page-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .ip-page-head h1 {
+    font-size: 24px;
+  }
+  .ip-kpis {
+    gap: 10px;
+  }
+  .ip-kpis article {
+    padding: 15px;
+  }
+  .ip-kpis strong {
+    font-size: 21px;
+  }
+  .ip-form,
+  .ip-detail {
+    grid-template-columns: 1fr;
+  }
+  .ip-shell .cms-toolbar {
+    flex-wrap: wrap;
+  }
+  .ip-quick {
+    grid-template-columns: 1fr;
+  }
+}

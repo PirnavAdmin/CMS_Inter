@@ -936,19 +936,21 @@ const normalizeReceiptBreakdownRows = (rows) => rows
     return {
       id: String(read(item, "id", "Id", "feeTypeId", "FeeTypeId") ?? `receipt-fee-${index + 1}`),
       feeType: textValue(item, "feeTypeName", "FeeTypeName", "name", "Name", "type", "Type")
-        || textValue(feeType, "feeTypeName", "FeeTypeName", "name", "Name", "type", "Type")
-        || "Fee",
+        || (typeof feeType === "string" ? feeType : textValue(feeType, "feeTypeName", "FeeTypeName", "name", "Name", "type", "Type"))
+        || "",
       amount: amount ?? 0,
       discount: optionalNumberValue(item, "discount", "Discount", "discountAmount", "DiscountAmount", "concession", "Concession", "concessionAmount", "ConcessionAmount") ?? 0,
-      paidAmount: paidAmount ?? amount ?? 0,
+      paidAmount: paidAmount ?? null,
     };
   })
   .filter((item) => item.feeType || item.amount || item.discount || item.paidAmount);
 
 const amountToWords = (amount) => {
-  const value = Math.round(Number(amount || 0));
-  if (!Number.isFinite(value) || value < 0) return "";
-  if (value === 0) return "Rupees Zero Only";
+  const totalPaise = Math.round(Number(amount || 0) * 100);
+  if (!Number.isSafeInteger(totalPaise) || totalPaise < 0 || totalPaise >= 1000000000000) return "";
+  const value = Math.floor(totalPaise / 100);
+  const paise = totalPaise % 100;
+  if (totalPaise === 0) return "Rupees Zero Only";
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
   const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
   const belowHundred = (num) => (num < 20 ? ones[num] : `${tens[Math.floor(num / 10)]}${num % 10 ? ` ${ones[num % 10]}` : ""}`);
@@ -971,7 +973,7 @@ const amountToWords = (amount) => {
     words.push(`${belowThousand(count)}${label ? ` ${label}` : ""}`);
     remaining %= unit;
   });
-  return `Rupees ${words.join(" ")} Only`;
+  return `Rupees ${words.join(" ") || "Zero"}${paise ? ` and ${belowHundred(paise)} Paise` : ""} Only`;
 };
 
 const normalizeReceipt = (payload, fallback = {}) => {
@@ -998,6 +1000,13 @@ const normalizeReceipt = (payload, fallback = {}) => {
     ?? row?.amount;
   return {
     ...(row || fallback),
+    receiptNo: textValue(data, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || fallback.receiptNo || "-",
+    amount: optionalNumberValue(data, "amount", "Amount", "paidAmount", "PaidAmount", "paymentAmount", "PaymentAmount") ?? fallback.amount ?? row?.amount,
+    date: textValue(data, "receiptDate", "ReceiptDate", "paymentDate", "PaymentDate", "paidDate", "PaidDate", "date", "Date", "createdAt", "CreatedAt") || fallback.date || "",
+    method: textValue(data, "paymentMethod", "PaymentMethod", "paymentMode", "PaymentMode", "method", "Method") || fallback.method || row?.method,
+    reference: textValue(data, "transactionReference", "TransactionReference", "transactionNumber", "TransactionNumber", "reference", "Reference") || fallback.reference || "",
+    collegeName: textValue(merged, "collegeName", "CollegeName", "institutionName", "InstitutionName") || COLLEGE_NAME,
+    campusName: textValue(merged, "campusName", "CampusName") || textValue(read(merged, "campus", "Campus"), "campusName", "CampusName", "name", "Name"),
     type: paymentType || feeSchedule || (row?.type && normalizeKey(row.type) !== normalizeKey(rawMethod) ? row.type : "Fee Payment"),
     feeSchedule,
     originalAmount,
@@ -1026,7 +1035,7 @@ const normalizeReceipt = (payload, fallback = {}) => {
     collegePhone: textValue(merged, "collegePhone", "CollegePhone", "collegeMobile", "CollegeMobile", "institutionPhone", "InstitutionPhone", "institutionMobile", "InstitutionMobile"),
     collegeEmail: textValue(merged, "collegeEmail", "CollegeEmail", "institutionEmail", "InstitutionEmail"),
     collegeWebsite: textValue(merged, "collegeWebsite", "CollegeWebsite", "institutionWebsite", "InstitutionWebsite", "websiteUrl", "WebsiteUrl"),
-    amountInWords: amountToWords(row?.amount),
+    amountInWords: amountToWords(optionalNumberValue(data, "amount", "Amount", "paidAmount", "PaidAmount", "paymentAmount", "PaymentAmount") ?? fallback.amount ?? row?.amount),
     breakdown,
   };
 };
@@ -1221,93 +1230,100 @@ const printFeeTarget = (target) => {
   }, 50);
 };
 
-const printReceiptElement = async (receiptElement) => {
-  if (!receiptElement) {
-    printFeeTarget("receipt");
-    return;
-  }
-
+const printReceiptElement = async (receiptElement, signal) => {
+  if (!receiptElement) throw new Error("The selected payment receipt is not ready.");
   const iframe = document.createElement("iframe");
-  iframe.title = "Payment Receipt";
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  iframe.style.opacity = "0";
+  iframe.title = "Fee Payment Receipt";
+  iframe.setAttribute("aria-hidden", "true");
+  Object.assign(iframe.style, { position: "fixed", left: "-10000px", top: "0", width: "794px", height: "1123px", border: "0", opacity: "0" });
   document.body.appendChild(iframe);
-
   const printWindow = iframe.contentWindow;
   const printDocument = printWindow?.document;
-  if (!printWindow || !printDocument) {
-    iframe.remove();
-    printFeeTarget("receipt");
-    return;
-  }
-
-  const pageStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-    .map((node) => {
-      if (node.tagName.toLowerCase() === "link") {
-        return `<link rel="stylesheet" href="${node.href}">`;
-      }
-      return `<style>${node.textContent || ""}</style>`;
-    })
-    .join("");
-
-  printDocument.open();
-  printDocument.write(`<!doctype html>
-    <html>
-      <head>
-        <title>Payment Receipt</title>
-        ${pageStyles}
-        <style>
-          @page { size: A4; margin: 14mm; }
-          html, body { margin: 0; background: #fff; }
-          body { color: #1C2416; }
-          .cms-fee-receipt {
-            width: 100%;
-            max-width: none;
-            margin: 0;
-            border: 0;
-            box-shadow: none;
-          }
-        </style>
-      </head>
-      <body>${receiptElement.outerHTML}</body>
-    </html>`);
-  printDocument.close();
-
-  const waitForImages = Promise.all(Array.from(printDocument.images).map((image) => {
-    if (image.complete) return Promise.resolve();
-    return new Promise((resolve) => {
-      image.onload = resolve;
-      image.onerror = resolve;
-    });
-  }));
-  const waitForStyles = Promise.all(Array.from(printDocument.querySelectorAll('link[rel="stylesheet"]')).map((link) => (
-    new Promise((resolve) => {
-      if (link.sheet) {
-        resolve();
-        return;
-      }
-      link.onload = resolve;
-      link.onerror = resolve;
-      window.setTimeout(resolve, 1000);
-    })
-  )));
-  const waitForFonts = printDocument.fonts?.ready || Promise.resolve();
-
-  await Promise.all([waitForStyles, waitForImages, waitForFonts]);
-  await new Promise((resolve) => printWindow.requestAnimationFrame(() => resolve()));
-
-  const cleanup = () => {
-    printWindow.removeEventListener("afterprint", cleanup);
-    window.setTimeout(() => iframe.remove(), 300);
+  let timer;
+  let cancelReadiness;
+  const onAbort = () => {
+    cleanup();
+    cancelReadiness?.(new DOMException("Print cancelled", "AbortError"));
   };
-  printWindow.addEventListener("afterprint", cleanup);
-  printWindow.focus();
-  printWindow.print();
+  const cleanup = () => {
+    window.clearTimeout(timer);
+    printWindow?.removeEventListener("afterprint", cleanup);
+    signal?.removeEventListener("abort", onAbort);
+    iframe.remove();
+  };
+  try {
+    if (!printWindow || !printDocument) throw new Error("The browser could not prepare the receipt for printing.");
+    if (signal?.aborted) throw new DOMException("Print cancelled", "AbortError");
+    signal?.addEventListener("abort", onAbort, { once: true });
+    printDocument.open();
+    printDocument.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fee Payment Receipt</title></head><body class="cms-fee-print-receipt cms-fee-receipt-document"></body></html>');
+    printDocument.close();
+    const base = printDocument.createElement("base");
+    base.href = document.baseURI;
+    printDocument.head.appendChild(base);
+    const stylesReady = Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).map((node) => {
+      const clone = printDocument.importNode(node, true);
+      if (node.tagName.toLowerCase() !== "link") {
+        printDocument.head.appendChild(clone);
+        return Promise.resolve();
+      }
+      clone.href = node.href;
+      return new Promise((resolve, reject) => {
+        clone.onload = resolve;
+        clone.onerror = () => reject(new Error("Receipt styles could not be loaded."));
+        printDocument.head.appendChild(clone);
+        if (clone.sheet) resolve();
+      });
+    });
+    // Loaded modules include global print rules; isolate this receipt document.
+    const receiptPrintStyles = printDocument.createElement("style");
+    receiptPrintStyles.textContent = `
+      @media print {
+        @page { size: A4 portrait; margin: 14mm; }
+        html, body.cms-fee-receipt-document {
+          height: auto !important;
+          overflow: visible !important;
+        }
+        body.cms-fee-receipt-document > .cms-fee-receipt-print {
+          display: block !important;
+          position: static !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          transform: none !important;
+        }
+        body.cms-fee-receipt-document > .cms-fee-receipt-print * {
+          visibility: visible !important;
+        }
+      }
+    `;
+    printDocument.head.appendChild(receiptPrintStyles);
+    printDocument.body.appendChild(printDocument.importNode(receiptElement, true));
+    const imagesReady = Array.from(printDocument.images).map((image) => {
+      if (image.complete) return image.naturalWidth ? Promise.resolve() : Promise.reject(new Error("The receipt logo could not be loaded."));
+      return new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error("The receipt logo could not be loaded."));
+      });
+    });
+    const ready = async () => {
+      await Promise.all([...stylesReady, ...imagesReady]);
+      if (printDocument.fonts?.ready) await printDocument.fonts.ready;
+      printDocument.body.getBoundingClientRect();
+    };
+    await Promise.race([
+      ready(),
+      new Promise((_, reject) => { timer = window.setTimeout(() => reject(new Error("Receipt assets are taking too long to load. Please try printing again.")), 10000); }),
+      new Promise((_, reject) => { cancelReadiness = reject; }),
+    ]);
+    window.clearTimeout(timer);
+    if (signal?.aborted) throw new DOMException("Print cancelled", "AbortError");
+    printWindow.addEventListener("afterprint", cleanup, { once: true });
+    printWindow.focus();
+    printWindow.print();
+  } catch (error) {
+    cleanup();
+    throw error;
+  }
 };
 
 const printStudentFeeAccountElement = async (accountElement) => {
@@ -2081,128 +2097,92 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
 /* ------------------------------- Receipt -------------------------------- */
 function ReceiptModal({ receipt, onClose }) {
   const receiptRef = useRef(null);
-  const visibleRows = (rows) => rows.filter(([, value]) => value !== undefined && value !== null && value !== "" && value !== "-");
-  const studentRows = visibleRows([
-    ["Student Name", receipt.studentName],
-    ["Admission Number", receipt.admissionNo],
-    ["Academic Year", receipt.academicYear],
-    ["Board", receipt.board],
-    ["Academic Level", receipt.academicLevel],
-    ["Group", receipt.group],
-    ["Program", receipt.program],
-    ["Section", receipt.section],
-    ["Roll Number", receipt.rollNumber],
-  ]);
-  const paymentRows = visibleRows([
-    ["Payment Type", feeScheduleLabel(receipt.type)],
-    ["Fee / Schedule", receipt.feeSchedule ? feeScheduleLabel(receipt.feeSchedule) : ""],
-    ["Original Amount", formatCurrency(receipt.originalAmount ?? receipt.baseAmount ?? receipt.amount)],
-    ["Discount / Concession", formatCurrency(receipt.discount || 0)],
-    ["Fine", formatCurrency(receipt.fine || 0)],
-    ["Amount Paid", formatCurrency(receipt.amount)],
-    ["Payment Method", receipt.method],
-    ["Transaction / Reference Number", receipt.reference],
-    ["Payment Date", formatDate(receipt.date)],
-    ["Remaining Balance", receipt.balance !== undefined ? formatCurrency(receipt.balance) : ""],
-    ["Payment Status", receipt.status],
-  ]);
-  const collegeContact = [
-    receipt.collegeAddress,
-    receipt.collegePhone ? `Phone: ${receipt.collegePhone}` : "",
-    receipt.collegeEmail ? `Email: ${receipt.collegeEmail}` : "",
-    receipt.collegeWebsite ? `Website: ${receipt.collegeWebsite}` : "",
-  ].filter(Boolean);
+  const printControllerRef = useRef(null);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState("");
+  useEffect(() => {
+    setPrintError("");
+    setPrinting(false);
+    return () => { printControllerRef.current?.abort(); printControllerRef.current = null; };
+  }, [receipt]);
+
+  const printReceipt = async () => {
+    if (printControllerRef.current) return;
+    const controller = new AbortController();
+    printControllerRef.current = controller;
+    setPrinting(true);
+    setPrintError("");
+    try {
+      await printReceiptElement(receiptRef.current, controller.signal);
+    } catch (error) {
+      if (!controller.signal.aborted) setPrintError(error.message || "The receipt could not be printed. Please try again.");
+    } finally {
+      if (printControllerRef.current === controller) {
+        printControllerRef.current = null;
+        setPrinting(false);
+      }
+    }
+  };
+
+  const paidAmount = receipt.amount === null || receipt.amount === undefined || receipt.amount === "" ? NaN : Number(receipt.amount);
+  const money = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value))
+    ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))
+    : "-";
+  const availableBreakdown = (receipt.breakdown || []).filter((item) => item.feeType && item.paidAmount !== null && item.paidAmount !== undefined && Number.isFinite(Number(item.paidAmount)) && Number(item.paidAmount) >= 0);
+  const breakdownTotal = availableBreakdown.reduce((sum, item) => sum + Number(item.paidAmount), 0);
+  const paymentItems = availableBreakdown.length && Number.isFinite(paidAmount) && Math.abs(breakdownTotal - paidAmount) < 0.005
+    ? availableBreakdown
+    : [{ id: "payment", feeType: "Fee Payment", paidAmount: receipt.amount }];
+  const words = Number.isFinite(paidAmount) ? amountToWords(paidAmount) : "";
+  const institutionName = receipt.collegeName || COLLEGE_NAME;
+  const studentRows = [
+    ["Student Name", receipt.studentName], ["Admission Number", receipt.admissionNo],
+    ["Group / Course", receipt.group], ["Program", receipt.program],
+    ["Section", receipt.section], ["Academic Year", receipt.academicYear], ["Campus", receipt.campusName],
+  ];
+  const contact = [receipt.collegeAddress, receipt.collegePhone ? 'Phone: ' + receipt.collegePhone : "", receipt.collegeEmail ? 'Email: ' + receipt.collegeEmail : ""].filter(Boolean);
 
   return (
-    <Modal
-      title="Payment Receipt"
-      onClose={onClose}
-      footer={(
-        <>
-          <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
-          <button className="cms-btn cms-btn-primary" onClick={() => printReceiptElement(receiptRef.current)}><Printer size={14} /> Print Receipt</button>
-        </>
-      )}
-    >
+    <Modal title="Payment Receipt" onClose={onClose} footer={<>
+      <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
+      <button className="cms-btn cms-btn-primary" onClick={printReceipt} disabled={printing}><Printer size={14} />{printing ? "Preparing Receipt..." : "Print Receipt"}</button>
+    </>}>
+      {printError ? <p className="cms-error" role="alert">{printError}</p> : null}
       <div ref={receiptRef} className="cms-fee-receipt cms-fee-receipt-print">
-        <div className="cms-fee-receipt-head">
-          <img src={collegeLogo} alt="Pirnav College logo" />
-          <div>
-            <strong>{COLLEGE_NAME}</strong>
-            {collegeContact.map((line) => <span key={line}>{line}</span>)}
-          </div>
-        </div>
-        <div className="cms-fee-receipt-title">Intermediate College Fee Receipt</div>
+        <header className="cms-fee-receipt-head">
+          <img src={collegeLogo} alt={institutionName + " logo"} />
+          <div><strong>{institutionName}</strong>{contact.map((line) => <span key={line}>{line}</span>)}</div>
+        </header>
+        <h3 className="cms-fee-receipt-title">FEE PAYMENT RECEIPT</h3>
         <div className="cms-fee-receipt-meta">
-          <span><b>Receipt Number</b> {receipt.receiptNo}</span>
-          <span><b>Receipt Date</b> {formatDate(receipt.date)}</span>
+          <span><b>Receipt Number</b> {receipt.receiptNo || "-"}</span>
+          <span><b>Payment Date</b> {receipt.date ? formatDate(receipt.date) : "-"}</span>
+          <span><b>Payment Status</b> {receipt.status || "-"}</span>
+          <span><b>Transaction Reference</b> {receipt.reference || "-"}</span>
         </div>
         <section className="cms-fee-receipt-section">
-          <h4>Student Details</h4>
-          <table className="cms-fee-receipt-info-table">
-            <tbody>
-              {studentRows.map(([label, value]) => (
-                <tr key={label}>
-                  <th>{label}</th>
-                  <td>{value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h4>Student Information</h4>
+          <table className="cms-fee-receipt-info-table"><tbody>
+            {studentRows.map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value || "-"}</td></tr>)}
+          </tbody></table>
         </section>
-        <section className="cms-fee-receipt-section">
+        <section className="cms-fee-receipt-section cms-fee-receipt-payment-section">
           <h4>Payment Details</h4>
-          <table className="cms-fee-receipt-info-table">
-            <tbody>
-              {paymentRows.map(([label, value]) => (
-                <tr key={label}>
-                  <th>{label}</th>
-                  <td>{value}</td>
-                </tr>
-              ))}
-            </tbody>
+          <table className="cms-fee-receipt-payment-table">
+            <colgroup><col style={{ width: "10%" }} /><col style={{ width: "60%" }} /><col style={{ width: "30%" }} /></colgroup>
+            <thead><tr><th scope="col">S.No</th><th scope="col">Fee Particulars</th><th scope="col" className="num">Amount (INR)</th></tr></thead>
+            <tbody>{paymentItems.map((item, index) => <tr key={item.id + "-" + index}><td>{index + 1}</td><td>{item.feeType}</td><td className="num">{money(item.paidAmount)}</td></tr>)}</tbody>
+            <tfoot><tr><th colSpan={2} scope="row">Total Paid</th><td className="num">{money(receipt.amount)}</td></tr></tfoot>
           </table>
         </section>
-        {receipt.breakdown?.length ? (
-          <section className="cms-fee-receipt-section">
-            <h4>Fee-wise Breakdown</h4>
-            <table className="cms-fee-receipt-breakdown">
-              <thead>
-                <tr>
-                  <th>Fee Type</th>
-                  <th>Amount</th>
-                  <th>Discount</th>
-                  <th>Paid Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receipt.breakdown.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.feeType}</td>
-                    <td>{formatCurrency(item.amount)}</td>
-                    <td>{formatCurrency(item.discount || 0)}</td>
-                    <td>{formatCurrency(item.paidAmount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        ) : null}
-        <div className="cms-fee-receipt-total">
-          <span>Amount Paid</span>
-          <strong>{formatCurrency(receipt.amount)}</strong>
+        <div className="cms-fee-receipt-payment-summary">
+          <div><span>Payment Mode</span><strong>{receipt.method || "-"}</strong></div>
+          {receipt.reference ? <div><span>Transaction Reference</span><strong>{receipt.reference}</strong></div> : null}
         </div>
-        {receipt.amountInWords ? (
-          <div className="cms-fee-receipt-words">
-            <span>Amount Paid in Words</span>
-            <strong>{receipt.amountInWords}</strong>
-          </div>
-        ) : null}
-        <div className="cms-fee-signature">
-          <span>Student / Parent Signature</span>
-          <span>Received By / Authorized Signatory</span>
-        </div>
-        <p className="cms-fee-receipt-note">This is a computer-generated receipt.</p>
+        <div className="cms-fee-receipt-total"><span>Total Amount Paid</span><strong>{money(receipt.amount)}</strong></div>
+        {words ? <div className="cms-fee-receipt-words"><span>Amount in Words</span><strong>{words}</strong></div> : null}
+        <div className="cms-fee-signature"><span>Student / Parent Signature</span><span>Received By / Authorized Signatory</span></div>
+        <p className="cms-fee-receipt-note">This is a computer-generated fee payment receipt.<br />Thank you for your payment.</p>
       </div>
     </Modal>
   );
@@ -3541,7 +3521,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
 
 function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
   const [editing, setEditing] = useState(null);
-  const [yearFeeMode, setYearFeeMode] = useState("");
+  const [yearFeeMode, setYearFeeMode] = useState("same");
   const [yearIncrementType, setYearIncrementType] = useState("percentage");
   const [yearIncrementValue, setYearIncrementValue] = useState("");
   const [yearIncrementError, setYearIncrementError] = useState("");
@@ -3628,7 +3608,9 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   };
 
   const openAddStructure = () => {
-    if (!yearFeeMode) return;
+    if (!yearFeeMode) {
+      setYearFeeMode("same");
+    }
     setFirstYearTotal(0);
     setIsAdding(true);
     setEditing({});
@@ -3638,7 +3620,9 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
     <>
       <section className="cms-fee-year-config cms-fee-year-page" aria-labelledby="fs-year-config-title">
         <h4 id="fs-year-config-title">Fee Configuration by Year</h4>
-        <p className="cms-fee-year-warning" role="alert">Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.</p>
+        {!yearFeeMode ? (
+          <p className="cms-fee-year-warning" role="alert">Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.</p>
+        ) : null}
         <fieldset className="cms-fee-year-options">
           <legend className="cms-sr-only">Year fee configuration</legend>
           {[ ["same", "Same Fees for 1st and 2nd Year"], ["different", "Different Fees for 1st and 2nd Year"] ].map(([mode, label]) => (
@@ -4529,7 +4513,8 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         && (account.studentId || account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId)
       ));
       const detailRequests = new Map();
-      unresolvedAccounts.forEach((account) => {
+      // Cap initial pre-fetch to at most 6 accounts to prevent exhausting DB connections; full details load on demand when account is opened
+      unresolvedAccounts.slice(0, 6).forEach((account) => {
         const endpoint = account.studentId
           ? apiEndpoints.fee.studentFeeDetailsByStudent(account.studentId)
           : apiEndpoints.fee.studentFeeDetails(account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId);

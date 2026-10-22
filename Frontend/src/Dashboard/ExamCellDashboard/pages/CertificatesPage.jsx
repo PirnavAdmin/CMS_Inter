@@ -1754,6 +1754,7 @@ export default function CertificatesPage({ initialTab = "generate" }) {
       if (query.trim()) params.search = query.trim();
       if (status !== "All") params.status = status;
       if (typeFilter !== "All") params.certificateType = typeFilter;
+<<<<<<< HEAD
       
       let serverMapped = [];
       try {
@@ -1789,6 +1790,17 @@ export default function CertificatesPage({ initialTab = "generate" }) {
       if (requestId !== listRequestRef.current) return false;
 
       let filtered = allRecords;
+=======
+      const response = await apiClient.get(CERTIFICATE_API.list, { params, skipGlobalLoader: true });
+      const mapped = unwrapListPayload(response?.data).map(normalizeCertificate);
+      if (requestId !== listRequestRef.current) return false;
+      setRows(mapped);
+      return true;
+    } catch (error) {
+      if (requestId !== listRequestRef.current) return false;
+      const fallbackList = mockCertificates.map(normalizeCertificate);
+      let filtered = fallbackList;
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       if (query.trim()) {
         const q = query.trim().toLowerCase();
         filtered = filtered.filter((r) =>
@@ -1840,15 +1852,7 @@ export default function CertificatesPage({ initialTab = "generate" }) {
         cancelledCount: Number(pick(data, ["cancelledCount", "CancelledCount"])) || 0,
       });
     } catch (error) {
-      let list = rowsForStats;
-      if (!list || !list.length) {
-        try {
-          const cached = localStorage.getItem("cms_certificates");
-          list = cached ? JSON.parse(cached) : mockCertificates.map(normalizeCertificate);
-        } catch {
-          list = mockCertificates.map(normalizeCertificate);
-        }
-      }
+      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : mockCertificates.map(normalizeCertificate);
       setWorkflowStats({
         totalCount: list.length,
         requestedCount: list.filter((r) => r.status === "Requested").length,
@@ -2306,6 +2310,7 @@ export default function CertificatesPage({ initialTab = "generate" }) {
       } catch (apiError) {
         console.warn("Server generation offline/fallback:", apiError);
       }
+<<<<<<< HEAD
 
       if (!createdCertificate) {
         const certCount = rows.length + 1;
@@ -2340,6 +2345,16 @@ export default function CertificatesPage({ initialTab = "generate" }) {
           remarks: remarks || "",
           signature: getBackendPrincipalSignatureUrl(),
         };
+=======
+      if (createdCertificate) {
+        setRows((currentRows) => [
+          createdCertificate,
+          ...currentRows.filter((row) => (
+            String(row.backendId || row.id) !== String(createdCertificate.backendId || createdCertificate.id)
+            && String(row.number) !== String(createdCertificate.number)
+          )),
+        ]);
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       }
 
       setRows((currentRows) => {
@@ -2458,15 +2473,7 @@ export default function CertificatesPage({ initialTab = "generate" }) {
             signature: getBackendPrincipalSignatureUrl(),
           };
         });
-        setRows((currentRows) => {
-          const next = [...newRows, ...currentRows];
-          try {
-            localStorage.setItem("cms_certificates", JSON.stringify(next));
-          } catch {
-            // Ignore storage write error
-          }
-          return next;
-        });
+        setRows((currentRows) => [...newRows, ...currentRows]);
       }
 
       const generatedCount = selectedAdmissionNos.length;
@@ -2525,8 +2532,8 @@ export default function CertificatesPage({ initialTab = "generate" }) {
         }
       }
 
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (String(r.id) === String(row.id) || (row.backendId && String(r.backendId) === String(row.backendId)) || (row.number && r.number === row.number)) {
             return {
               ...r,
@@ -2535,20 +2542,32 @@ export default function CertificatesPage({ initialTab = "generate" }) {
             };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
 
       await refreshCertificateData({ showLoader: false });
       if (action === "review") {
         setPrintPreview(null);
         setActiveTab("actions");
         setActionPage(1);
+      }
+      if (action === "approve" || action === "issue") {
+        try {
+          const channel = new BroadcastChannel("cms_notifications");
+          channel.postMessage({
+            type: "CERTIFICATE_STATUS_UPDATED",
+            action,
+            status: selected.nextStatus,
+            certificateId: actionId || row.id || row.backendId,
+            certificateNumber: row.number,
+            admissionNo: row.admissionNo,
+            studentName: row.student,
+            certificateType: row.type,
+            issuedBy: action === "issue" ? getIssuedBy() : undefined,
+            timestamp: new Date().toISOString(),
+          });
+          channel.close();
+        } catch {}
       }
       setToast(`Certificate ${row.number || ""} ${selected.success}`);
     } catch (error) {
@@ -2595,8 +2614,8 @@ export default function CertificatesPage({ initialTab = "generate" }) {
         }
       }
 
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (r.status === selected.currentStatus) {
             return {
               ...r,
@@ -2605,17 +2624,31 @@ export default function CertificatesPage({ initialTab = "generate" }) {
             };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
 
       const completedCount = eligibleRows.length;
       await refreshCertificateData({ showLoader: false });
+      if (action === "approve" || action === "issue") {
+        try {
+          const channel = new BroadcastChannel("cms_notifications");
+          eligibleRows.forEach((r) => {
+            channel.postMessage({
+              type: "CERTIFICATE_STATUS_UPDATED",
+              action,
+              status: selected.nextStatus,
+              certificateId: r.id || r.backendId,
+              certificateNumber: r.number,
+              admissionNo: r.admissionNo,
+              studentName: r.student,
+              certificateType: r.type,
+              issuedBy: action === "issue" ? getIssuedBy() : undefined,
+              timestamp: new Date().toISOString(),
+            });
+          });
+          channel.close();
+        } catch {}
+      }
       setToast(`${completedCount} eligible certificate${completedCount === 1 ? "" : "s"} ${selected.label}.`);
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, `Failed to bulk ${action} certificates.`));
@@ -2645,20 +2678,14 @@ export default function CertificatesPage({ initialTab = "generate" }) {
           // Graceful fallback to local update
         }
       }
-      setRows((currentRows) => {
-        const next = currentRows.map((r) => {
+      setRows((currentRows) =>
+        currentRows.map((r) => {
           if (String(r.id) === String(row.id) || (row.backendId && String(r.backendId) === String(row.backendId)) || (row.number && r.number === row.number)) {
             return { ...r, status: "Cancelled" };
           }
           return r;
-        });
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+        })
+      );
       await refreshCertificateData({ showLoader: false });
       setToast(`Certificate ${row.number || ""} cancelled`);
     } catch (error) {
@@ -2714,15 +2741,7 @@ export default function CertificatesPage({ initialTab = "generate" }) {
           // Graceful fallback to local deletion
         }
       }
-      setRows((prev) => {
-        const next = prev.filter((r) => r.id !== row.id && r.number !== row.number);
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
-        return next;
-      });
+      setRows((prev) => prev.filter((r) => r.id !== row.id && r.number !== row.number));
       setPrintPreview(null);
       loadWorkflowStats();
       setToast(`Certificate ${row.number || ""} deleted successfully.`);

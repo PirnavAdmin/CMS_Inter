@@ -56,7 +56,11 @@ export function formInitial(kind, state, record, itemId, user) {
   const item = state.items.find((i) => i.id === itemId);
   return {
     date: today(),
-    number: `INV-TXN-${String(state.nextId).padStart(6, "0")}`,
+    paymentMethod: "",
+    cashReceipt: null,
+    number: state.serverBacked
+      ? ""
+      : `INV-TXN-${String(state.nextId).padStart(6, "0")}`,
     itemId: item?.id || "",
     quantity: "",
     unitCost: item?.unitCost ?? 0,
@@ -176,7 +180,10 @@ export function formSections(kind, state, values) {
     {
       title: "Transaction Information",
       fields: [
-        { ...text("number", "Transaction Number"), disabled: true },
+        select("paymentMethod", "Payment Method", ["Online Transaction", "Cash"]),
+        ...(values.paymentMethod === "Cash"
+          ? [text("cashReceipt", "Cash Receipt Image (Optional)", false, "file")]
+          : [{ ...text("number", "Transaction Number"), disabled: values.paymentMethod !== "Online Transaction" }]),
         date("date", isIn ? "Transaction Date" : "Issue Date", true),
         text("reference", "Reference Number"),
         ...(isIn

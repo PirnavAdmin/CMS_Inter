@@ -77,6 +77,10 @@ export const getApiErrorMessage = (error) => {
     const messages = flattenMessages(data.Errors).filter(Boolean);
     if (messages.length) return messages.join(" ");
   }
+  if (data?.details && typeof data.details === "string" && (!data?.message || data.message === "An unexpected server error occurred.")) return data.details;
+  if (data?.Message && data.Message !== "An unexpected server error occurred.") return data.Message;
+  if (data?.message && data.message !== "An unexpected server error occurred.") return data.message;
+  if (data?.details && typeof data.details === "string") return data.details;
   if (data?.Message) return data.Message;
   if (data?.message) return data.message;
   if (data?.Error) return data.Error;
@@ -144,6 +148,7 @@ apiClient.interceptors.request.use(
       typeof window !== "undefined" &&
       window.location?.pathname?.includes("exam-cell-dashboard");
 
+<<<<<<< HEAD
     const isMockSession =
       isOffline ||
       isExamModuleRequest ||
@@ -151,6 +156,32 @@ apiClient.interceptors.request.use(
       Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("parent-auth-token-")));
 
     if (isMockSession && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+=======
+    // Clean up any stale offline flags so real APIs are never blocked
+    try {
+      if (typeof window !== "undefined") {
+        if (window.localStorage?.getItem("cms_backend_offline")) {
+          window.localStorage.removeItem("cms_backend_offline");
+        }
+        window.localStorage?.setItem("cms_backend_online", "true");
+      }
+    } catch (_e) {
+      // ignore storage errors
+    }
+
+    // Only route through mock adapter if explicitly configured or using a synthetic mock token
+    const isExplicitMockToken = Boolean(
+      token &&
+        (token.startsWith("mock-") ||
+          token.startsWith("demo-") ||
+          token.startsWith("non-teaching-") ||
+          token.startsWith("warden-") ||
+          token.startsWith("parent-"))
+    );
+    const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
+
+    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       config.adapter = handleMockApiRequest;
     }
 
@@ -201,12 +232,11 @@ apiClient.interceptors.response.use(
     const errText = `${error?.message || ""} ${typeof error?.response?.data === "string" ? error.response.data : JSON.stringify(error?.response?.data || "")}`;
     const isNgrokOffline = /ERR_NGROK|is offline/i.test(errText);
 
-    if (isNgrokOffline && typeof window !== "undefined") {
-      try {
-        window.localStorage?.setItem("cms_backend_offline", "true");
-      } catch {}
-    }
+    const token = getStoredAccessToken();
+    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
+    const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
+<<<<<<< HEAD
     // Automatic fallback to mock adapter for missing endpoints (404), offline backend (ERR_NGROK), 502/503/504 proxy errors, Network Errors, or HTML error pages
     const isProxyOrBackendFailure =
       error.response?.status === 404 ||
@@ -220,11 +250,17 @@ apiClient.interceptors.response.use(
       isHtmlResponse(error.response?.data);
 
     if (isProxyOrBackendFailure && originalRequest && !originalRequest._isMockFallback && !originalRequest.url?.includes("/Auth/refresh-token")) {
+=======
+    // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
+    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);
         if (mockRes) return mockRes;
-      } catch (_) {}
+      } catch (_e) {
+        // ignore mock adapter fallback errors
+      }
     }
 
 
@@ -237,9 +273,13 @@ apiClient.interceptors.response.use(
       !originalRequest?.skipAuthRedirect &&
       !originalRequest?.silentAuth &&
       !originalRequest?.optionalAuth &&
+<<<<<<< HEAD
       error.response?.status !== 401 &&
       error.response?.status !== 404 &&
       error.response?.status !== 403;
+=======
+      !originalRequest?.url?.includes("/api/v1/hostel");
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
 
     if (shouldLogDevError) {
       if (!error.response) {
@@ -271,8 +311,21 @@ apiClient.interceptors.response.use(
     // Handle standard session expiration refresh if 401 persists
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
       const currentToken = getStoredAccessToken();
+<<<<<<< HEAD
       const isParentSession = Boolean(typeof window !== "undefined" && window.location?.pathname?.startsWith("/parent-dashboard"));
       if (isParentSession) {
+=======
+      const isMockToken = Boolean(
+        currentToken &&
+          (currentToken.startsWith("mock-") ||
+            currentToken.startsWith("demo-") ||
+            currentToken.startsWith("non-teaching-") ||
+            currentToken.startsWith("warden-") ||
+            currentToken.startsWith("parent-"))
+      );
+      if (isMockToken) {
+        // Mock token sessions must NEVER be logged out or redirected by backend 401 errors
+>>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
         return Promise.reject(error);
       }
 

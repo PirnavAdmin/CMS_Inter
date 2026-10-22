@@ -15,6 +15,7 @@ import FacultyLeave from "./pages/FacultyLeave.jsx";
 import FacultyPayslips from "./pages/FacultyPayslips.jsx";
 import FacultyHolidays from "./pages/FacultyHolidays.jsx";
 import FacultySettings from "./pages/FacultySettings.jsx";
+import FacultyReimbursement from "./pages/FacultyReimbursement.jsx";
 
 const modulePageMap = {
   dashboard: FacultyDashboardHome,
@@ -29,6 +30,7 @@ const modulePageMap = {
   salary: FacultyPayslips,
   holidays: FacultyHolidays,
   settings: FacultySettings,
+  reimbursements: FacultyReimbursement,
 };
 
 function FacultyDashboardInner() {

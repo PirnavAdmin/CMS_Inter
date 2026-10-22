@@ -618,13 +618,13 @@
   align-items: flex-end;
   gap: 16px;
   flex: 1;
-  max-width: 720px;
+  max-width: 860px;
 }
 
 .cms-entry-selects .cms-field-group {
   flex: 1;
   min-width: 220px;
-  max-width: 350px;
+  max-width: 440px;
 }
 
 .cms-entry-select-compact {
@@ -1381,6 +1381,13 @@
 
   .cms-entry-selects {
     flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .cms-entry-selects .cms-field-group {
+    max-width: 100%;
+    min-width: 0;
     width: 100%;
   }
 
