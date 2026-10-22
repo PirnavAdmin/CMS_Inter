@@ -13,7 +13,7 @@ import {
   FileText,
   Loader2,
 } from "lucide-react";
-import "./AccountantMyAttendance.css";
+import "../AccountantMyAttendance.css";
 import { Skeleton } from "@/components/common/Ui.jsx";
 import { getApiErrorMessage } from "@/api/apiClient.js";
 import { attendanceService } from "../../../api/attendanceService.js";

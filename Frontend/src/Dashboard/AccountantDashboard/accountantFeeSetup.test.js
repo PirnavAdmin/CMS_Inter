@@ -4,7 +4,7 @@ import { createServer } from "vite";
 
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => server.close());
-const setup = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantFeeSetup.js");
+const setup = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/accountantFeeSetup.js");
 const { can } = await server.ssrLoadModule("/src/features/rolesPermissions/permissionUtils.jsx");
 const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
 const permissions = (matrix) => ({ loading: false, error: "", canView: (module, screen) => can(module, "view", matrix, { role: "Accountant" }, screen), canDo: (module, action, screen) => can(module, action, matrix, { role: "Accountant" }, screen) });

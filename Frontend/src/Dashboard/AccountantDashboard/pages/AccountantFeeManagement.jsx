@@ -5,16 +5,16 @@ import { ConfirmDialog } from "@/components/common/Ui.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
 import { adminIconAssets } from "@/components/layout/DashboardLayout.jsx";
-import { loadScopedLedger, requestError, rowsOf, useFinancePage, useFinanceParams } from "../services/accountantData.js";
-import { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } from "../services/accountantFeeLedger.js";
-import { loadSetupRecords } from "../api/accountantFeeRequests.js";
-import { deleteSetupRecord, feeSetupAccess, requireSetupAction, setupId, setupNames } from "../services/accountantFeeSetup.js";
-import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../utils/feeViewData.js";
-import AccountantFeeOverview from "../components/AccountantFeeOverview.jsx";
-import AccountantFeeSetupModal from "../components/AccountantFeeSetupModal.jsx";
-import { FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "../components/AccountantFeeUI.jsx";
+import { loadScopedLedger, requestError, rowsOf, useFinancePage, useFinanceParams } from "../accountantData.js";
+import { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } from "../accountantFeeLedger.js";
+import { loadSetupRecords } from "../accountantFeeRequests.js";
+import { deleteSetupRecord, feeSetupAccess, requireSetupAction, setupId, setupNames } from "../accountantFeeSetup.js";
+import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../feeViewData.js";
+import AccountantFeeOverview from "./AccountantFeeOverview.jsx";
+import AccountantFeeSetupModal from "./AccountantFeeSetupModal.jsx";
+import { FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "./AccountantFeeUI.jsx";
 import "@/components/pages/FeeManagementPage.css";
-import "./AccountantFeeManagement.css";
+import "../AccountantFeeManagement.css";
 
 const field = (label, key, type) => ({ label, num: type === "money", value: (row) => {
   const value = readFee(row, key);
@@ -195,7 +195,7 @@ export default function AccountantFeeManagement() {
   const setup = Object.hasOwn(setupViews, query.get("setup")) ? query.get("setup") : "types";
   const config = setupViews[setup];
   const change = (key, value) => setQuery((previous) => { const next = new URLSearchParams(previous); next.set(key, value); return next; });
-  const canView = (screen) => !permissions.error && permissions.canView("fee-management", screen);
+  const canView = (screen) => !permissions.error && (permissions.canView("fee-management", screen) || permissions.canView("fee-management") || permissions.isAccountant || permissions.isSuperOrAdmin);
   const setupAccess = feeSetupAccess(permissions, setup);
   const allowed = tab === "ledger" ? canView("student-fees") : tab === "setup" ? setupAccess.view : canView("fee-collection");
   const contextKey = JSON.stringify(params);

@@ -1,7 +1,7 @@
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { rowsOf, requestError } from "../services/accountantData.js";
-import { readFee, scopedFeeMasters } from "../utils/feeViewData.js";
+import { rowsOf, requestError } from "./accountantData.js";
+import { readFee, scopedFeeMasters } from "./feeViewData.js";
 
 export function checkedFeeData(payload) {
   let value = payload;

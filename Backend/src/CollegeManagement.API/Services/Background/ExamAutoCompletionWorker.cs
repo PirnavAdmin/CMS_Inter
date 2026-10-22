@@ -20,42 +20,18 @@ namespace CollegeManagement.API.Services.Background
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<ExamAutoCompletionWorker> _logger;
-        private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
-        private readonly Microsoft.Extensions.Hosting.IHostEnvironment _environment;
 
         public ExamAutoCompletionWorker(
             IServiceProvider serviceProvider,
-            ILogger<ExamAutoCompletionWorker> logger,
-            Microsoft.Extensions.Configuration.IConfiguration configuration,
-            Microsoft.Extensions.Hosting.IHostEnvironment environment)
+            ILogger<ExamAutoCompletionWorker> logger)
         {
             _serviceProvider = serviceProvider;
             _logger = logger;
-            _configuration = configuration;
-            _environment = environment;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var isEnabled = _configuration.GetValue<bool>("BackgroundWorkers:ExamAutoCompletion:Enabled", !_environment.IsDevelopment());
-            var intervalMinutes = _configuration.GetValue<int>("BackgroundWorkers:ExamAutoCompletion:PollingIntervalMinutes", _environment.IsDevelopment() ? 60 : 1);
-            if (intervalMinutes < 1) intervalMinutes = 1;
-
-            if (!isEnabled)
-            {
-                _logger.LogInformation("ExamAutoCompletionWorker is disabled by configuration in {Environment} environment.", _environment.EnvironmentName);
-                try
-                {
-                    await Task.Delay(Timeout.Infinite, stoppingToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Graceful shutdown when host stops
-                }
-                return;
-            }
-
-            _logger.LogInformation("ExamAutoCompletionWorker started with IST timezone evaluation (Interval: {Interval}m).", intervalMinutes);
+            _logger.LogInformation("ExamAutoCompletionWorker started with IST timezone evaluation.");
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -68,7 +44,8 @@ namespace CollegeManagement.API.Services.Background
                     _logger.LogError(ex, "Error in ExamAutoCompletionWorker cycle.");
                 }
 
-                await Task.Delay(TimeSpan.FromMinutes(intervalMinutes), stoppingToken);
+                // Check every 1 minute for responsive status transitions in IST
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }
 

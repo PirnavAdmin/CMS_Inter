@@ -121,8 +121,7 @@ export const toPermissionMap = (permissions = []) => {
   }
 
   permissions.forEach((item) => {
-    const rawMod = String(getPermissionModuleKey(item) || "").trim().toLowerCase();
-    const modKey = normalizeModuleKey(rawMod);
+    const modKey = normalizeModuleKey(getPermissionModuleKey(item));
     if (!modKey) return;
 
     // Module-level actions
@@ -286,8 +285,30 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     return true;
   }
 
+  // Baseline view access for specific native portal roles
+  if (normAct === ACTIONS.VIEW) {
+    if (hasRole("ADMIN", user)) return true;
+    if (hasRole("ACCOUNTANT", user) && ["fee-management", "payroll", "reports", "reports-analytics", "reimbursement", "staff-reimbursements", "staff-leave-management", "staff-attendance"].includes(normMod)) {
+      return true;
+    }
+    if (hasRole("FACULTY", user) && ["timetable", "subject-management", "attendance", "marks-evaluation", "examinations", "staff-attendance", "staff-leave-management", "payroll", "holiday-management", "reimbursement"].includes(normMod)) {
+      return true;
+    }
+    if (hasRole("EXAMINATION_CELL", user) && ["examination", "examinations", "marks-evaluation", "results", "certificates", "student-attendance", "attendance", "promotion"].includes(normMod)) {
+      return true;
+    }
+    if (hasRole("HOSTEL_WARDEN", user) && ["hostel-management", "hostel", "student-management", "attendance"].includes(normMod)) {
+      return true;
+    }
+    if (hasRole("BUS_DRIVER", user) && ["transport", "staff-attendance"].includes(normMod)) {
+      return true;
+    }
+    if (hasRole("STUDENT", user) && ["timetable", "attendance", "examination", "results", "fee-management", "transport", "hostel-management", "certificates", "holiday-management"].includes(normMod)) {
+      return true;
+    }
+  }
   const source = permissions ?? user?.permissions ?? user?.rolePermissions;
-  if (!source || (Array.isArray(source) && source.length === 0)) {
+  if (!source) {
     if (hasRole("ADMIN", user)) return true;
     return false;
   }
@@ -300,16 +321,18 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     normMod = "settings";
   }
 
+  // Check specific screen permission first
   if (normScr) {
     const screenLookupKey = `${normMod}:${normScr}`;
-    if (Array.isArray(permissionMap[screenLookupKey])) {
-      return permissionMap[screenLookupKey].includes(normAct);
+    if (Array.isArray(permissionMap[screenLookupKey]) && permissionMap[screenLookupKey].includes(normAct)) {
+      return true;
     }
-    if (Array.isArray(permissionMap[normScr])) {
-      return permissionMap[normScr].includes(normAct);
+    if (Array.isArray(permissionMap[normScr]) && permissionMap[normScr].includes(normAct)) {
+      return true;
     }
   }
 
+  // Fallback to module-level permission
   const moduleActions = permissionMap[normMod];
   if (Array.isArray(moduleActions) && moduleActions.includes(normAct)) {
     return true;
