@@ -1,9 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import { Modal } from "@/components/common/Ui.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { useFinancePage, requestError } from "../accountantData.js";
-import { feeMoney, feeStatus, feeText, readFee, scopedFeeMasters } from "../feeViewData.js";
-import { loadFeeOptions, loadSetupEditor, saveSetupRecord, setupDraft, setupNames, structureDraftPreview, validateSetupDraft } from "../accountantFeeSetup.js";
+import { useFinancePage, requestError } from "../services/accountantData.js";
+import { feeMoney, feeStatus, feeText, readFee, scopedFeeMasters } from "../utils/feeViewData.js";
+import { loadFeeOptions, loadSetupEditor, saveSetupRecord, setupDraft, setupNames, structureDraftPreview, validateSetupDraft } from "../services/accountantFeeSetup.js";
 import { FeeLoadState, FeeNotice, FeeTable } from "./AccountantFeeUI.jsx";
 
 const categories = ["Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous"];
