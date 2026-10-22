@@ -719,16 +719,30 @@ export default function HostelPage() {
       const shouldFetchAdmissions = canAccessAdminEndpoints;
       const shouldFetchAllStudents = canAccessAdminEndpoints;
 
-      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, hostelStaffRes, staffRes, staffDropRes, admRes, certStudentsRes, allStudentsRes, attRes] = await Promise.allSettled([
-        hostelApi.getHostelBlocks().catch(() => null),
-        hostelApi.getRoomTypes().catch(() => null),
-        hostelApi.getRooms().catch(() => null),
-        hostelApi.getBeds().catch(() => null),
-        hostelApi.getWardens().catch(() => null),
-        hostelApi.getStudentAllocations().catch(() => null),
-        hostelApi.getOutpassLeave().catch(() => null),
-        hostelApi.getTransferVacate().catch(() => null),
-        hostelApi.getHostelDashboard().catch(() => null),
+      const [blocksRes, catsRes, roomsRes, bedsRes] = await Promise.allSettled([
+        hostelApi.getHostelBlocks(),
+        hostelApi.getRoomTypes(),
+        hostelApi.getRooms(),
+        hostelApi.getBeds(),
+      ]);
+
+      if (roomsRes.status === "rejected") {
+        throw roomsRes.reason;
+      }
+      if (blocksRes.status === "rejected") {
+        throw blocksRes.reason;
+      }
+
+      const [wardensRes, allocsRes, outpassRes, transferRes, dashRes, attRes] = await Promise.allSettled([
+        hostelApi.getWardens(),
+        hostelApi.getStudentAllocations(),
+        hostelApi.getOutpassLeave(),
+        hostelApi.getTransferVacate(),
+        hostelApi.getHostelDashboard(),
+        hostelApi.getAttendance(),
+      ]);
+
+      const [hostelStaffRes, staffRes, staffDropRes, admRes, certStudentsRes, allStudentsRes] = await Promise.allSettled([
         shouldFetchStaff
           ? apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
               .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null))
@@ -750,7 +764,6 @@ export default function HostelPage() {
           ? apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true })
               .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true, skipErrorLog: true }).catch(() => null))
           : Promise.resolve(null),
-        hostelApi.getAttendance().catch(() => null),
       ]);
 
       let uniqueBlocks = [];
@@ -5144,7 +5157,31 @@ export default function HostelPage() {
         </div>
 
         {/* Rooms Table */}
-        {filtered.length === 0 ? (
+        {isLoading && rooms.length === 0 ? (
+          <div
+            className="cms-card"
+            style={{
+              padding: "48px 20px",
+              borderRadius: 20,
+              textAlign: "center",
+              color: "var(--cms-muted)",
+              fontSize: 13,
+            }}
+          >
+            <div
+              style={{
+                margin: "0 auto 12px",
+                width: 28,
+                height: 28,
+                border: "3px solid #e2e8f0",
+                borderTopColor: "var(--cms-primary, #4361ee)",
+                borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+              }}
+            />
+            <p style={{ margin: 0, fontWeight: 600 }}>Loading rooms and bed allocation data from backend...</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div
             className="cms-card"
             style={{
@@ -8508,6 +8545,56 @@ export default function HostelPage() {
             type={toast.type}
             onClose={() => setToast({ message: "", type: "success" })}
           />
+        )}
+
+        {/* Actionable API Error Banner */}
+        {apiError && (
+          <div
+            className="cms-hostel-api-error-banner"
+            role="alert"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "12px 18px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: "10px",
+              color: "#991b1b",
+              marginBottom: "16px",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <AlertCircle size={20} style={{ color: "#dc2626", flexShrink: 0 }} />
+              <div>
+                <strong style={{ display: "block", fontSize: "14px" }}>Backend API Communication Error</strong>
+                <span style={{ fontSize: "13px", color: "#b91c1c" }}>{apiError}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="cms-btn"
+              onClick={() => fetchHostelData()}
+              disabled={isLoading}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "#dc2626",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "6px",
+                padding: "6px 14px",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: isLoading ? "not-allowed" : "pointer",
+              }}
+            >
+              <RotateCcw size={14} className={isLoading ? "spin" : ""} />
+              {isLoading ? "Retrying..." : "Retry"}
+            </button>
+          </div>
         )}
 
         {/* If viewing a dedicated sidebar field (like Warden portal routes), render ONLY that view */}

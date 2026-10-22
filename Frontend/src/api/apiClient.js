@@ -77,6 +77,8 @@ export const getApiErrorMessage = (error) => {
     const messages = flattenMessages(data.Errors).filter(Boolean);
     if (messages.length) return messages.join(" ");
   }
+  if (data?.details) return data.message ? `${data.message} (${data.details})` : data.details;
+  if (data?.Details) return data.Message ? `${data.Message} (${data.Details})` : data.Details;
   if (data?.Message) return data.Message;
   if (data?.message) return data.message;
   if (data?.Error) return data.Error;
@@ -151,8 +153,13 @@ apiClient.interceptors.request.use(
           token.startsWith("parent-"))
     );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
+    const isHostelEndpoint = /\/api\/v1\/hostel/i.test(config.url || "");
 
-    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+    if (
+      (isExplicitMockToken || isExplicitMockForced) &&
+      !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
+      (!isHostelEndpoint || isExplicitMockForced)
+    ) {
       config.adapter = handleMockApiRequest;
     }
 
@@ -207,7 +214,13 @@ apiClient.interceptors.response.use(
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
     // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
-    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
+    const isHostelReq = /\/api\/v1\/hostel/i.test(originalRequest?.url || "");
+    if (
+      (isExplicitMockToken || isExplicitMockForced) &&
+      originalRequest &&
+      !originalRequest._isMockFallback &&
+      (!isHostelReq || isExplicitMockForced)
+    ) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);

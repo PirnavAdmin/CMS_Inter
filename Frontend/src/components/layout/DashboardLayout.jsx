@@ -14,7 +14,7 @@ import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
-import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
+import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
@@ -94,6 +94,7 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
+  { path: "/non-teaching-dashboard/payslip", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/reimbursement", icon: reimbursementIcon },
   { path: "/dashboard/finance/reimbursement", icon: reimbursementIcon },
   { path: "/dashboard/inventory-management", icon: Boxes },
@@ -191,6 +192,7 @@ export const menu = [
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance" },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management" },
       { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll, moduleKey: "reimbursement" },
+      { to: "/non-teaching-dashboard/announcements", label: "Staff Announcements", icon: reportsAnalyticsIcon, moduleKey: "staff-management" },
     ],
   },
   {
@@ -477,6 +479,9 @@ export default function DashboardLayout({
   profilePath,
   settingsPath,
   showSettingsAction = true,
+  showCampusSelector = true,
+  showBoardSelector = true,
+  showAcademicYearSelector = true,
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -519,6 +524,10 @@ export default function DashboardLayout({
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
+  const isNonTeaching = !isWarden && !isParent && (isNonTeachingRole(user?.role, user) || pathname.startsWith("/non-teaching"));
+  const shouldShowCampusSelector = Boolean(showCampusSelector);
+  const shouldShowBoardSelector = Boolean(showBoardSelector && !isNonTeaching);
+  const shouldShowAcademicYearSelector = Boolean(showAcademicYearSelector && !isNonTeaching);
   const activeMenu = useMemo(() => {
     let base = menuOverride;
     if (!base) {
@@ -909,9 +918,11 @@ export default function DashboardLayout({
           </div>
 
           <div className="cms-top-actions" ref={actionsRef}>
-            <div className="cms-academic-selectors">
-              {/* Campus Selector */}
-              <div className="cms-academic-dropdown-wrap" ref={campusRef}>
+            {(shouldShowCampusSelector || shouldShowBoardSelector || shouldShowAcademicYearSelector) && (
+              <div className="cms-academic-selectors">
+                {/* Campus Selector */}
+                {shouldShowCampusSelector && (
+                  <div className="cms-academic-dropdown-wrap" ref={campusRef}>
                 <button
                   type="button"
                   className={`cms-academic-btn ${campusOpen ? "is-open" : ""}`}
@@ -985,9 +996,11 @@ export default function DashboardLayout({
                   </div>
                 )}
               </div>
+                )}
 
-              {/* Board Selector */}
-              <div className="cms-academic-dropdown-wrap" ref={boardRef}>
+                {/* Board Selector */}
+                {shouldShowBoardSelector && (
+                  <div className="cms-academic-dropdown-wrap" ref={boardRef}>
                 {isParent || isWarden ? (
                   <div
                     className="cms-academic-btn"
@@ -1072,9 +1085,11 @@ export default function DashboardLayout({
                   </div>
                 )}
               </div>
+                )}
 
-              {/* Academic Year Selector */}
-              <div className="cms-academic-dropdown-wrap" ref={yearRef}>
+                {/* Academic Year Selector */}
+                {shouldShowAcademicYearSelector && (
+                  <div className="cms-academic-dropdown-wrap" ref={yearRef}>
                 <button
                   type="button"
                   className={`cms-academic-btn ${yearOpen ? "is-open" : ""}`}
@@ -1141,7 +1156,9 @@ export default function DashboardLayout({
                   </div>
                 )}
               </div>
-            </div>
+                )}
+              </div>
+            )}
             <ThemeToggle variant="dashboard" />
             {isParent ? (
               <Link

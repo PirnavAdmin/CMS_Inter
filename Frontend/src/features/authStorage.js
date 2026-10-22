@@ -12,9 +12,49 @@ export const getAuthItem = (key) => {
 
 export const getAuthToken = () => getAuthItem("token") || "";
 
+export const cleanUserObject = (user) => {
+  if (!user || typeof user !== "object") return user;
+  const cleaned = { ...user };
+  if (typeof cleaned.name === "string") {
+    cleaned.name = cleaned.name.replace(/\bDemo\s*/gi, "").trim();
+  }
+  if (typeof cleaned.fullName === "string") {
+    cleaned.fullName = cleaned.fullName.replace(/\bDemo\s*/gi, "").trim();
+  }
+  if (typeof cleaned.displayName === "string") {
+    cleaned.displayName = cleaned.displayName.replace(/\bDemo\s*/gi, "").trim();
+  }
+  return cleaned;
+};
+
 export const getAuthUser = () => {
-  try { return JSON.parse(getAuthItem("user") || "null"); }
-  catch { return null; }
+  try {
+    const raw = getAuthItem("user");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const cleaned = cleanUserObject(parsed);
+    // Persist cleaned version if 'Demo' was present in stored session
+    if (
+      parsed &&
+      ((parsed.name && /\bDemo\b/i.test(parsed.name)) ||
+        (parsed.fullName && /\bDemo\b/i.test(parsed.fullName)) ||
+        (parsed.displayName && /\bDemo\b/i.test(parsed.displayName)))
+    ) {
+      try {
+        if (typeof window !== "undefined") {
+          if (window.localStorage.getItem("user")) {
+            window.localStorage.setItem("user", JSON.stringify(cleaned));
+          }
+          if (window.sessionStorage.getItem("user")) {
+            window.sessionStorage.setItem("user", JSON.stringify(cleaned));
+          }
+        }
+      } catch {}
+    }
+    return cleaned;
+  } catch {
+    return null;
+  }
 };
 
 export const clearAuthSession = () => {
@@ -44,9 +84,10 @@ export const saveAuthSession = ({ token, user, role }, persistent) => {
   clearAuthSession();
   if (!token || typeof window === "undefined") return;
   const storage = persistent ? window.localStorage : window.sessionStorage;
+  const cleanedUser = cleanUserObject(user);
   storage.setItem("token", String(token));
-  storage.setItem("user", JSON.stringify(user));
-  storage.setItem("role", String(role ?? user?.role ?? ""));
+  storage.setItem("user", JSON.stringify(cleanedUser));
+  storage.setItem("role", String(role ?? cleanedUser?.role ?? ""));
 };
 
 export const updateAuthToken = (token) => {
