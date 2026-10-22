@@ -14,6 +14,20 @@ namespace CollegeManagement.API.DTOs.Roles
         public DateTime? CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
 
+        private string? _staffType;
+        public string StaffType
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(_staffType)) return _staffType;
+                var r = RoleName?.Trim().ToLowerInvariant() ?? "";
+                if (r == "faculty" || r == "teacher" || r == "hod" || r.Contains("faculty") || r.Contains("teacher"))
+                    return "Teaching";
+                return "NonTeaching";
+            }
+            set => _staffType = value;
+        }
+
         // Frontend compatibility properties
         public string Id => RoleId.ToString();
         public string Name => RoleName;

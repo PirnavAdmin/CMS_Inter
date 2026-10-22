@@ -40,7 +40,8 @@ namespace CollegeManagement.API.Services.Implementations
                     UserCount = c.UserCount,
                     PermissionsCount = c.PermissionsCount,
                     CreatedAt = c.CreatedAt,
-                    UpdatedAt = c.UpdatedAt
+                    UpdatedAt = c.UpdatedAt,
+                    StaffType = c.StaffType
                 }).ToList();
             }
 

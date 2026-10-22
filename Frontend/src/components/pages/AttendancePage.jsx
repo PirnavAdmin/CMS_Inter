@@ -245,17 +245,22 @@ export default function AttendancePage() {
   const staff = area === "staff";
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
-  const [activeStaffTab, setActiveStaffTabState] = useState(() => {
-    if (tabFromUrl === "staff-attendance" || tabFromUrl === "my-attendance") return tabFromUrl;
+  const normalizeStaffTab = (t) => {
+    if (!t) return "my-attendance";
+    const clean = String(t).trim().toLowerCase().replace(/\s+|_/g, "-");
+    if (clean === "staff-attendance" || clean === "staff") return "staff-attendance";
+    if (clean === "my-attendance" || clean === "my") return "my-attendance";
     return "my-attendance";
-  });
+  };
+  const [activeStaffTab, setActiveStaffTabState] = useState(() => normalizeStaffTab(tabFromUrl));
 
   const setActiveStaffTab = (tab) => {
-    setActiveStaffTabState(tab);
+    const normalized = normalizeStaffTab(tab);
+    setActiveStaffTabState(normalized);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.set("tab", tab);
+        next.set("tab", normalized);
         return next;
       },
       { replace: true }
@@ -263,8 +268,9 @@ export default function AttendancePage() {
   };
 
   useEffect(() => {
-    if (tabFromUrl && (tabFromUrl === "staff-attendance" || tabFromUrl === "my-attendance") && tabFromUrl !== activeStaffTab) {
-      setActiveStaffTabState(tabFromUrl);
+    const normalized = normalizeStaffTab(tabFromUrl);
+    if (tabFromUrl && normalized !== activeStaffTab) {
+      setActiveStaffTabState(normalized);
     }
   }, [tabFromUrl, activeStaffTab]);
 

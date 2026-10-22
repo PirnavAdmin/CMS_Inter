@@ -48,6 +48,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_CampusId", campusId);
             parameters.Add("p_BoardId", boardId);
             parameters.Add("p_AcademicYearId", academicYearId);
+            parameters.Add("p_IncludeInactive", 0);
 
             var result = await conn.QueryAsync<RoleCardDto>(
                 "sp_GetRoleCards",

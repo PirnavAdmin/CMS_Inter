@@ -281,6 +281,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             return true;
         }
 
+        public async Task<bool> UpdateRoleByStaffIdAsync(int staffId, int roleId, IDbConnection? connection = null, IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? Connection;
+            const string sql = "UPDATE `Users` SET `RoleId` = @RoleId, `UpdatedAt` = UTC_TIMESTAMP() WHERE `StaffId` = @StaffId;";
+            await conn.ExecuteAsync(sql, new { StaffId = staffId, RoleId = roleId }, transaction: transaction);
+            return true;
+        }
+
         public async Task<bool> UpdateStatusByStudentIdAsync(int studentId, bool isActive, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
