@@ -4848,11 +4848,7 @@ export function handleMockApiRequest(config) {
   });
 }
 
-<<<<<<< HEAD
 // Native browser fetch is preserved without interception
 if (typeof window !== "undefined") {
   window.__mockStore = mockStore;
 }
-
-=======
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402

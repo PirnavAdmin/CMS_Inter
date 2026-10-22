@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-<<<<<<< HEAD
-import { Award, BookOpenCheck, CalendarClock, IndianRupee, CheckCircle2, XCircle, Clock3, GraduationCap, Users, FileText, Sun } from "lucide-react";
-=======
-import { Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, X } from "lucide-react";
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
+import { Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, XCircle, Clock3, GraduationCap, Users, FileText, Sun, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -122,9 +118,12 @@ const normalizeFeeSummary = (detailsPayload, ledgerPayload) => {
 };
 
 export default function StudentDashboard() {
-<<<<<<< HEAD
-  const { profile, loading, error } = useStudentProfile();
-=======
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 17) return "Good Afternoon";
+    return "Good Evening";
+  };
   const [greeting, setGreeting] = useState(getGreeting);
   useEffect(() => {
     const updateGreeting = () => setGreeting(getGreeting());
@@ -136,7 +135,6 @@ export default function StudentDashboard() {
     };
   }, []);
   const { profile, loading, error, activeAlerts = [], markAsRead, dismissNotification } = useStudentProfile() || {};
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
   const [examinations, setExaminations] = useState([]);
   const [examsLoading, setExamsLoading] = useState(true);
   const [examsError, setExamsError] = useState("");
@@ -224,17 +222,9 @@ export default function StudentDashboard() {
     : [];
   return (
     <div className="sp-page sp-dashboard-page">
-<<<<<<< HEAD
-      <div className="sp-dashboard-greeting"><Sun size={42} aria-hidden="true" />
-      <StudentPageHeader
-        title={`Good Morning, ${studentName.split(" ")[0]}`}
-        subtitle="Welcome back! Here's what's happening with your academics today."
-      />
-=======
       <div className="sp-dashboard-greeting">
         <h1 className="sp-dashboard-greeting-title"><span className="sp-dashboard-greeting-emoji" aria-hidden="true">{greeting === "Good Morning" ? "🌅" : greeting === "Good Afternoon" ? "☀️" : "🌙"}</span> {greeting}, {studentName.split(" ")[0]}!</h1>
         <p className="sp-dashboard-greeting-sub">Welcome back! Here's what's happening with your academics today.</p>
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       </div>
       {activeAlerts?.length > 0 && (
         <div className={`sp-cert-alert-card is-${String(activeAlerts[0].status).toLowerCase()}`} role="alert">
@@ -280,13 +270,8 @@ export default function StudentDashboard() {
       <section className="sp-summary-grid four">
         <StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={attendanceData ? `${attendance.percentage}%` : "—"} note={attendanceError ? "Unable to load" : `${attendance.present} present · ${attendance.absent} absent`} />
         <StudentSummaryCard icon={IndianRupee} label="Fee Due" value={feeValue("due")} note={feeError ? "Unable to load fee data" : `Due ${feeDate}`} tone="orange" />
-<<<<<<< HEAD
-        <StudentSummaryCard icon={CalendarClock} label="Upcoming Exams" value={upcomingSchedules.length} note={upcomingSchedules[0] ? `Next on ${formatExamDate(upcomingSchedules[0].schedule.examDate)}` : "No upcoming exams"} tone="purple" />
-        <StudentSummaryCard icon={Award} label="Latest Result" value={latestResult ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : latestResult ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
-=======
         <StudentSummaryCard icon={CalendarClock} label="Upcoming Exams" value={upcomingExams.length} note={upcomingExams[0] ? `Next on ${formatExamDate(upcomingExams[0].nextDate)}` : "No upcoming exams"} tone="purple" />
-        <StudentSummaryCard icon={Award} label="Latest Result" value={resultPublished ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : resultPublished ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
+        <StudentSummaryCard icon={Award} label="Latest Result" value={latestResult ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : latestResult ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
       </section>
       <StudentCard title="Quick Actions" className="sp-dashboard-quick-actions">
         <div className="sp-dashboard-action-grid">
@@ -301,26 +286,12 @@ export default function StudentDashboard() {
           ].map(([title, description, route, icon, tone]) => <Link key={route} className={`sp-dashboard-action tone-${tone}`} to={route} state={route === "certificates" ? { openRequestCertificate: true } : undefined}><img src={icon} alt="" aria-hidden="true" /><strong>{title}</strong><small>{description}</small></Link>)}
         </div>
       </StudentCard>
-<<<<<<< HEAD
-      <div className="sp-dashboard-grid">
-        <StudentCard title="Attendance Overview" action={<Link className="sp-text-link" to="attendance">View Details →</Link>}>
-          <div className="sp-metric-list">
-            {[["Overall", `${attendance.percentage}%`, Users, "green"], ["Present", attendance.present, CheckCircle2, "green"], ["Absent", attendance.absent, XCircle, "red"], ["Working Days", attendance.workingDays, Clock3, "orange"]].map(([label, value, Icon, tone]) => <div key={label} className={`tone-${tone}`}><Icon size={28} aria-hidden="true" /><div><span>{label}</span><strong>{value}</strong></div></div>)}
-          </div>
-        </StudentCard>
-        <StudentCard title="Upcoming Exams" action={<Link className="sp-text-link" to="examinations">View All →</Link>}>
-          {examsError ? <div className="sp-empty">{examsError}</div> : <StudentDataTable columns={["Subject", "Date", "Time"]} rows={upcomingSchedules.slice(0, 5).map(({ schedule }) => [schedule.subjectName, formatExamDate(schedule.examDate), `${formatExamTime(schedule.startTime)} - ${formatExamTime(schedule.endTime)}`])} empty="No upcoming examinations." />}
-        </StudentCard>
-        <StudentCard title="Recent Results" action={<Link className="sp-text-link" to="results">View All →</Link>}>
-          <StudentDataTable columns={["Exam", "Percentage", "Grade", "Status"]} rows={resultRows} statusColumns={[3]} empty={resultError || "No published results available."} />
-=======
       <StudentDashboardHighlights student={profile} upcomingExams={upcomingExams} examsError={examsError} formatExamDate={formatExamDate} />
       <div className="sp-dashboard-grid">
         <StudentCard className="sp-dashboard-results" title="Recent Results" action={<Link className="sp-text-link" to="results">View All →</Link>}>
           <div className="sp-dashboard-results-scroll" role="region" aria-label="Recent results" tabIndex={0}>
             <StudentDataTable columns={["Exam", "Percentage", "Grade", "Status"]} rows={resultRows} statusColumns={[3]} empty={resultError || "No published results available."} />
           </div>
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
         </StudentCard>
         <StudentCard className="sp-dashboard-fees" title="Fee Summary" action={<Link className="sp-text-link" to="fees">View Details →</Link>}>
           <div className="sp-fee-overview">

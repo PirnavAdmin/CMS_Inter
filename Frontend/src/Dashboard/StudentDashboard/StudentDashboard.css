@@ -3726,7 +3726,6 @@
 }
 
 /* Compact dashboard presentation; other student pages retain their layout. */
-<<<<<<< HEAD
 .sp-dashboard-page{gap:12px}
 .sp-dashboard-greeting{display:flex;align-items:center;gap:18px}
 .sp-dashboard-greeting>svg{flex-shrink:0;color:#f4a000;fill:color-mix(in srgb,#f4a000 25%,transparent)}
@@ -3777,7 +3776,6 @@
 @media(max-width:1200px){.sp-dashboard-action-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.sp-dashboard-page .sp-student-strip{flex-wrap:wrap}.sp-dashboard-page .sp-student-detail{flex-basis:20%}}
 @media(max-width:900px){.sp-dashboard-page .sp-summary-grid.four{grid-template-columns:repeat(2,minmax(0,1fr))}.sp-dashboard-page .sp-dashboard-grid{grid-template-columns:minmax(0,1fr)}.sp-dashboard-page .sp-student-detail{flex-basis:30%;padding-left:10px}}
 @media(max-width:620px){.sp-dashboard-page .sp-summary-grid.four{grid-template-columns:minmax(0,1fr)}.sp-dashboard-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.sp-dashboard-page .sp-student-name{flex-basis:calc(100% - 80px)}.sp-dashboard-page .sp-student-detail{flex-basis:100%;border-left:0;padding-left:0}.sp-dashboard-greeting{gap:10px}.sp-dashboard-greeting>svg{width:30px}.sp-dashboard-page .sp-page-header h1{font-size:20px}.sp-dashboard-page .sp-fee-overview{gap:6px}.sp-dashboard-page .sp-fee-overview>div{padding:9px}.sp-dashboard-page .sp-fee-overview strong{font-size:16px}}
-=======
 .sp-dashboard-page {
   gap: 6px
 }
@@ -4383,7 +4381,6 @@
     font-size: 16px
   }
 }
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
 
 /* Selected-day attendance presentation; calendar styles remain unchanged. */
 .sp-my-attendance-page .sp-selected-attendance,

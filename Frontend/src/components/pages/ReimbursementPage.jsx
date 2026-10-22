@@ -75,7 +75,6 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   // Allow switching view between "Finance & Admin Review", "Claims", and "My Claims"
   const [activePortalTab, setActivePortalTab] = useState("all-claims");
 
-<<<<<<< HEAD
   // ── Live Claims & Account Entries State (API v1 Integration) ───────────
   const [claims, setClaims] = useState([]);
   const [dedicatedAccountEntries, setDedicatedAccountEntries] = useState([]);
@@ -88,18 +87,12 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   const refreshData = useCallback(async () => {
     setIsLoadingClaims(true);
     try {
-      // 1. Fetch claims based on active tab:
-      // Endpoint 2: GET /api/v1/reimbursements (all claims)
-      // Endpoint 3: GET /api/v1/reimbursements/my-claims (logged-in faculty's claims)
       const fetchPromise =
-        activePortalTab === "my-claims"
+        isFacultyUser || activePortalTab === "my-claims"
           ? reimbursementService.fetchMyClaims({ campusId })
           : reimbursementService.fetchClaims({ campusId });
 
-      // Endpoint 1: GET /api/v1/reimbursements/summary
       const summaryPromise = reimbursementService.fetchReimbursementSummary({ campusId });
-
-      // Endpoint 5: GET /api/v1/reimbursements/account-entries (Dedicated Account Ledger modal list)
       const accountEntriesPromise = reimbursementService.fetchAccountEntries({ campusId });
 
       const [claimsResult, summaryResult, accountEntriesResult] = await Promise.allSettled([
@@ -126,38 +119,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     } finally {
       setIsLoadingClaims(false);
     }
-  }, [activePortalTab, campusId]);
-
-=======
-  // ── Live Claims & Account Entries State ─────────────────────────────
-  const [claims, setClaims] = useState([]);
-  const [accountEntries, setAccountEntries] = useState([]);
-  const [isLoadingClaims, setIsLoadingClaims] = useState(false);
-  const [toast, setToast] = useState(null);
-
-  // Fetch claims from the real API (database-backed)
-  const refreshData = useCallback(async () => {
-    setIsLoadingClaims(true);
-    try {
-      if (isFacultyUser) {
-        // Faculty: load only their own claims
-        const myClaims = await apiFetchMyClaims();
-        setClaims(myClaims || []);
-      } else {
-        // Admin / Finance / Accountant: load all claims
-        const allClaims = await apiFetchClaims();
-        setClaims(allClaims || []);
-      }
-    } catch (err) {
-      console.warn("[Reimbursement] Failed to load claims from API:", err?.message || err);
-      setClaims([]);
-    } finally {
-      setIsLoadingClaims(false);
-    }
-  }, [isFacultyUser]);
-
-  // Load data on mount
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
+  }, [activePortalTab, campusId, isFacultyUser]);
   useEffect(() => {
     refreshData();
   }, [refreshData]);

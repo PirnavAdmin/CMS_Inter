@@ -159,7 +159,7 @@ const createEmptyPayrollStore = () => ({
   apiSummary: null,
 });
 
-export default function PayrollPage({ mode = "payroll" }) {
+export default function PayrollPage({ mode = "payroll", layout = true, menuOverride }) {
   const navigate = useNavigate();
   const { id, month, staffId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -635,6 +635,8 @@ export default function PayrollPage({ mode = "payroll" }) {
   return (
     <AuthoritativePayrollScreen
       mode={mode}
+      layout={layout}
+      menuOverride={menuOverride}
       store={store}
       setStore={setStore}
       kpiData={kpiData}
@@ -654,6 +656,8 @@ export default function PayrollPage({ mode = "payroll" }) {
 // ----------------------------------------------------------------------
 function AuthoritativePayrollScreen({
   mode,
+  layout = true,
+  menuOverride,
   store,
   setStore,
   kpiData,
@@ -769,13 +773,8 @@ function AuthoritativePayrollScreen({
     return null;
   };
 
-  return (
-    <DashboardLayout
-      title="Payroll"
-      subtitle="Authoritative staff payroll, salary structures, payslip generation, and payroll history."
-      breadcrumb={["Home", "Finance", "Payroll"]}
-      actions={getHeaderActions()}
-    >
+  const pageContent = (
+    <>
       <main className="salary-page-container">
         {/* 4 PRIMARY TOP NAVIGATION TABS */}
         <div className="payroll-top-tabs-bar" role="tablist" aria-label="Payroll Navigation Tabs">
@@ -890,6 +889,40 @@ function AuthoritativePayrollScreen({
           setToast={setToast}
         />
       )}
+    </>
+  );
+
+  if (layout === false) {
+    return (
+      <div className="payroll-standalone-wrap" style={{ width: "100%" }}>
+        <div className="cms-page-head" style={{ marginBottom: 16 }}>
+          <div className="cms-page-title-wrap">
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <img src={feeManagement3d} alt="Payroll" width={32} height={32} />
+              <div>
+                <h1 className="cms-page-title" style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>Payroll</h1>
+                <p className="cms-page-subtitle" style={{ margin: "2px 0 0", color: "var(--cms-muted)", fontSize: 13 }}>
+                  Authoritative staff payroll, salary structures, payslip generation, and payroll history.
+                </p>
+              </div>
+            </div>
+          </div>
+          {getHeaderActions()}
+        </div>
+        {pageContent}
+      </div>
+    );
+  }
+
+  return (
+    <DashboardLayout
+      title="Payroll"
+      subtitle="Authoritative staff payroll, salary structures, payslip generation, and payroll history."
+      breadcrumb={["Home", "Finance", "Payroll"]}
+      actions={getHeaderActions()}
+      menuOverride={menuOverride}
+    >
+      {pageContent}
     </DashboardLayout>
   );
 }

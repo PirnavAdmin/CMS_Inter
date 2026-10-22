@@ -2352,21 +2352,15 @@ export default function CertificatesPage() {
       setToast("Unsupported certificate type.");
       return;
     }
-<<<<<<< HEAD
     const matchedStudent = findStudentByAdmission(admissionNo) ||
-      mockStudents.find((s) => String(s.admissionNo).trim().toLowerCase() === admissionNo.toLowerCase()) ||
-      null;
-
-    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo || "MADM-0068";
-    const studentName = matchedStudent?.name || form.student || "Student";
-=======
-    const matchedStudent = findStudentByAdmission(admissionNo);
+      (mockStudents?.find ? mockStudents.find((s) => String(s.admissionNo).trim().toLowerCase() === String(admissionNo).toLowerCase()) : null);
     if (!matchedStudent && !fromRequestMeta) {
       setErrors((prev) => ({ ...prev, admissionNo: "Select a valid student from the admissions list." }));
       return;
     }
 
-    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo;
+    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo || "MADM-0068";
+    const studentName = matchedStudent?.name || form.student || "Student";
 
     if (fromRequestMeta?.feeClearanceStatus === "Dues Pending" && Number(fromRequestMeta.feeDueAmount) > 0) {
       const proceed = await confirm({
@@ -2380,7 +2374,6 @@ export default function CertificatesPage() {
         return;
       }
     }
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
 
     setCreating(true);
     try {
@@ -2431,8 +2424,6 @@ export default function CertificatesPage() {
       } catch (apiError) {
         console.warn("Server generation offline/fallback:", apiError);
       }
-<<<<<<< HEAD
-
       if (!createdCertificate) {
         const certCount = rows.length + 1;
         const certNumber = `CERT-${new Date().getFullYear()}-${String(certCount).padStart(3, "0")}`;
@@ -2497,7 +2488,6 @@ export default function CertificatesPage() {
         requestedCount: (prev.requestedCount || 0) + 1,
       }));
 
-=======
       if (createdCertificate) {
         setRows((currentRows) => [
           createdCertificate,
@@ -2521,7 +2511,6 @@ export default function CertificatesPage() {
       }
       setFromRequestMeta(null);
       await refreshCertificateData({ showLoader: false });
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       resetForm();
       setActiveTab("certificates");
       setPage(1);

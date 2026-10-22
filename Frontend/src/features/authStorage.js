@@ -51,29 +51,56 @@ export const getAuthToken = () => {
   return token;
 };
 
+export const cleanUserObject = (user) => {
+  if (!user || typeof user !== "object") return user;
+  const cleaned = { ...user };
+  for (const key of ["name", "fullName", "displayName"]) {
+    if (typeof cleaned[key] === "string") {
+      cleaned[key] = cleaned[key].replace(/\bDemo\s*/gi, "").trim();
+    }
+  }
+  return cleaned;
+};
+
 export const getAuthUser = () => {
   try {
-    const raw = JSON.parse(getAuthItem("user") || "null");
-    if (raw && (raw.role === "parent" || raw.role === "Parent")) {
-      // Ensure real parent mapping for User 859
-      if (raw.id === "parent-001" || !raw.userId) {
-        return {
-          ...raw,
-          id: "859",
-          userId: 859,
-          name: raw.name || "Naveen Ponnapula",
-          fullName: "Parent / Guardian",
-          email: "naveenponnapula0@gmail.com",
-          mobile: "8765445678",
-          role: "Parent",
-          studentId: "860",
-          studentName: "niharika",
-        };
+    const parsed = JSON.parse(getAuthItem("user") || "null");
+    if (!parsed || typeof parsed !== "object") return parsed;
+
+    const cleaned = cleanUserObject(parsed);
+    const hasDemoName = ["name", "fullName", "displayName"].some(
+      (key) => typeof parsed[key] === "string" && /\bDemo\b/i.test(parsed[key]),
+    );
+    if (hasDemoName && typeof window !== "undefined") {
+      try {
+        for (const storage of [window.localStorage, window.sessionStorage]) {
+          if (storage.getItem("user")) storage.setItem("user", JSON.stringify(cleaned));
+        }
+      } catch {
+        // Storage may be unavailable in restricted browser contexts.
       }
     }
-    return raw;
+
+    if (String(cleaned.role || "").toLowerCase() === "parent" && (cleaned.id === "parent-001" || !cleaned.userId)) {
+      // Keep the existing demo parent account mapping for the seeded parent session.
+      return {
+        ...cleaned,
+        id: "859",
+        userId: 859,
+        name: cleaned.name || "Naveen Ponnapula",
+        fullName: "Parent / Guardian",
+        email: "naveenponnapula0@gmail.com",
+        mobile: "8765445678",
+        role: "Parent",
+        studentId: "860",
+        studentName: "niharika",
+      };
+    }
+
+    return cleaned;
+  } catch {
+    return null;
   }
-  catch { return null; }
 };
 
 export const clearAuthSession = () => {
@@ -104,8 +131,9 @@ export const saveAuthSession = ({ token, user, role }, persistent) => {
   if (!token || typeof window === "undefined") return;
   const storage = persistent ? window.localStorage : window.sessionStorage;
   storage.setItem("token", String(token));
-  storage.setItem("user", JSON.stringify(user));
-  storage.setItem("role", String(role ?? user?.role ?? ""));
+  const cleanedUser = cleanUserObject(user);
+  storage.setItem("user", JSON.stringify(cleanedUser));
+  storage.setItem("role", String(role ?? cleanedUser?.role ?? ""));
 };
 
 export const updateAuthToken = (token) => {

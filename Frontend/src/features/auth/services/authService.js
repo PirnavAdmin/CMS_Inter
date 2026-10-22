@@ -23,9 +23,6 @@ export const loginUser = async (credentials) => {
   const emailOrMobile = String(credentials.emailOrMobile || credentials.email || "").trim();
   const password = credentials.password;
 
-<<<<<<< HEAD
-  // Direct authentication for integrated Parent accounts
-=======
   // 1. Isolated development mock authentication for Non-Teaching Staff
   const nonTeachingAccount = findNonTeachingAccount(emailOrMobile, password);
   if (nonTeachingAccount) {
@@ -48,8 +45,7 @@ export const loginUser = async (credentials) => {
     };
   }
 
-  // 3. Development mock authentication for Parents
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
+  // 3. Direct authentication for integrated Parent accounts
   const parentAccount = findParentAccount(emailOrMobile);
   if (parentAccount && password) {
     let valid = true;
@@ -59,13 +55,8 @@ export const loginUser = async (credentials) => {
       if (savedPass && password !== savedPass) {
         valid = false;
       }
-<<<<<<< HEAD
-    } catch {
-      /* storage unavailable */
-=======
     } catch (_e) {
       // storage unavailable
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
     }
     if (!valid) {
       const err = new Error("Invalid username or password.");
@@ -73,18 +64,13 @@ export const loginUser = async (credentials) => {
       throw err;
     }
     return {
-<<<<<<< HEAD
       token: BACKEND_PARENT_JWT,
-=======
-      token: `mock-parent-auth-token-${Date.now()}`,
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       user: parentAccount,
       roleType: "parent",
       message: "Login successful.",
     };
   }
 
-<<<<<<< HEAD
   // Direct login if admin or exam cell candidate and backend was already known to be offline
   const normInput = emailOrMobile.toLowerCase();
   const isAdminCandidate =
@@ -135,16 +121,24 @@ export const loginUser = async (credentials) => {
       message: "Exam Cell login successful.",
     };
   }
-
-=======
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
   logLoginSelection(apiEndpoints.auth.login, emailOrMobile);
   try {
     const response = await userLogin({ emailOrMobile, password });
     logLoginResponse(response.status);
     return normalizeLoginResponse(response.data, emailOrMobile);
   } catch (authError) {
-<<<<<<< HEAD
+    // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
+    if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
+      try {
+        logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
+        const fallbackResponse = await adminLogin({ email: emailOrMobile, password });
+        logLoginResponse(fallbackResponse.status);
+        return normalizeLoginResponse(fallbackResponse.data, emailOrMobile, "admin");
+      } catch (_adminError) {
+        // Continue to offline fallback
+      }
+    }
+
     if (isAdminCandidate && password) {
       return {
         token: BACKEND_ADMIN_JWT,
@@ -178,38 +172,6 @@ export const loginUser = async (credentials) => {
         },
         roleType: "examcell",
         message: "Exam Cell login successful.",
-=======
-    // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
-    if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
-      try {
-        logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
-        const fallbackResponse = await adminLogin({ email: emailOrMobile, password });
-        logLoginResponse(fallbackResponse.status);
-        return normalizeLoginResponse(fallbackResponse.data, emailOrMobile, "admin");
-      } catch (_adminError) {
-        // Continue to offline fallback
-      }
-    }
-
-    // If backend tunnel is offline, provide mock fallback for Admin demo
-    const lower = emailOrMobile.toLowerCase();
-    if (
-      (lower === "admin@cms.com" || lower === "admin" || lower === "administrator") &&
-      password
-    ) {
-      return {
-        token: `mock-admin-auth-token-${Date.now()}`,
-        user: {
-          id: "admin-001",
-          name: "CMS Admin",
-          fullName: "CMS Admin",
-          email: "Admin@CMS.com",
-          role: "ADMIN",
-          isAdmin: true,
-        },
-        roleType: "admin",
-        message: "Login successful.",
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
       };
     }
 
@@ -534,9 +496,9 @@ export function findNonTeachingAccount(input, password) {
     id: "nts-001",
     staffId: 901,
     employeeId: "NTS001",
-    name: "Demo Non-Teaching Staff",
-    fullName: "Demo Non-Teaching Staff",
-    displayName: "Demo Non-Teaching Staff",
+    name: "Non-Teaching Staff",
+    fullName: "Non-Teaching Staff",
+    displayName: "Non-Teaching Staff",
     email: val.includes("@") ? val : "nts001@cms.com",
     role: "NON_TEACHING_STAFF",
     department: "Administration",
@@ -618,13 +580,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   if (expectedAccountType === "admin" && !isAdmin) {
     throw new Error("Authentication failed because the server returned an invalid admin response.");
   }
-<<<<<<< HEAD
-  const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
-  const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
   const isExamCell = isExamCellRole(normalizedRole) || normalizedRole.includes("exam");
-
-=======
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
   const staffId = data.StaffId || data.staffId || payload.StaffId || payload.staffId || jwtClaims.StaffId || jwtClaims.staffId || null;
   const employeeId = data.EmployeeId || data.employeeId || payload.EmployeeId || payload.employeeId || jwtClaims.EmployeeId || jwtClaims.employeeId || null;
   const designation =
@@ -690,11 +646,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   return {
     token,
     user,
-<<<<<<< HEAD
-    roleType: isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
-=======
-    roleType: isWarden ? "warden" : isAdmin ? "admin" : isFaculty ? "faculty" : isParent ? "parent" : "student",
->>>>>>> 3b18ecc3b23a3cb2390d6d311d6b17d68d7f6402
+    roleType: isWarden ? "warden" : isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
     message: getMessage(payload, data, "Login successful."),
   };
 }
