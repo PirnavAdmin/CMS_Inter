@@ -5,7 +5,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { loadAccountantHolidays, overlapsMonth } from "../services/accountantHolidayData.js";
+import { loadAccountantHolidays, overlapsMonth } from "../services/accountantService.js";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
 import nationalHolidaysIcon from "@/assets/sidebar-3d/holiday-national.svg";

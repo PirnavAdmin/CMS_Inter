@@ -51,3 +51,10 @@ export function FeeFilter({ label, value, options, onChange }) {
 export function FeeTabs({ items, value, onChange, label, secondary = false }) {
   return <nav className={`cms-fee-tabs ${secondary ? "cms-fee-subtabs" : ""}`} aria-label={label}>{items.map(([key, title]) => <button key={key} type="button" className={`cms-fee-tab ${key === value ? "is-active" : ""}`} aria-current={key === value ? "page" : undefined} onClick={() => onChange(key)}>{title}</button>)}</nav>;
 }
+
+export function PageState({ loading, error, onRetry }) {
+  if (loading) return <div className="sp-api-state">Loading finance data...</div>;
+  if (error) return <div className="sp-api-state is-error"><AlertCircle size={15} /> {error} {onRetry ? <button type="button" className="sp-btn" onClick={onRetry}><RefreshCw size={14} /> Retry</button> : null}</div>;
+  return null;
+}
+
