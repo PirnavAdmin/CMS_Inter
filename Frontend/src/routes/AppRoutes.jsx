@@ -46,6 +46,7 @@ import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
 import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
+import CustomModulePage from "@/components/pages/CustomModulePage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
@@ -486,6 +487,10 @@ export default function AppRoutes() {
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-add`} path={`/dashboard/${slug}/add`} element={<ModuleFormRoute slug={slug} />} />)}
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-edit`} path={`/dashboard/${slug}/:id/edit`} element={<ModuleFormRoute slug={slug} />} />)}
         <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />
+
+        {/* Dynamic Custom Modules & Custom Screens */}
+        <Route path="/dashboard/custom/:moduleCode" element={<CustomModulePage />} />
+        <Route path="/dashboard/custom/:moduleCode/:screenCode" element={<CustomModulePage />} />
       </Route>
 
       <Route element={<ProtectedRoute requireStudent />}>

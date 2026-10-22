@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CollegeManagement.API.Controllers.V1
 {
     [Route("api/v1/roles")]
+    [Route("api/v1/role-management")]
     [ApiController]
     [Authorize(Roles = "Super Admin,Admin")]
     public class RoleManagementController : ControllerBase
@@ -77,6 +78,98 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var modules = _roleManagementService.GetModulesMetadata();
             return Ok(new { success = true, data = modules });
+        }
+
+        /// <summary>
+        /// Creates a new custom module.
+        /// </summary>
+        [HttpPost("modules")]
+        [Authorize(Roles = "Super Admin,Admin")]
+        public async Task<IActionResult> AddCustomModule([FromBody] CreateCustomModuleRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Name))
+            {
+                return BadRequest(new { success = false, message = "Module Name is required." });
+            }
+
+            try
+            {
+                var created = await _roleManagementService.AddCustomModuleAsync(request);
+                return Ok(new { success = true, data = created, message = "Custom module created successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Creates a new custom screen under an existing module.
+        /// </summary>
+        [HttpPost("modules/{moduleId}/screens")]
+        [Authorize(Roles = "Super Admin,Admin")]
+        public async Task<IActionResult> AddCustomScreen(string moduleId, [FromBody] CreateCustomScreenRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(moduleId) || request == null || string.IsNullOrWhiteSpace(request.Name))
+            {
+                return BadRequest(new { success = false, message = "Module ID and Screen Name are required." });
+            }
+
+            try
+            {
+                var created = await _roleManagementService.AddCustomScreenAsync(moduleId, request);
+                return Ok(new { success = true, data = created, message = "Custom screen added successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Deletes a custom module.
+        /// </summary>
+        [HttpDelete("modules/{moduleId}")]
+        [Authorize(Roles = "Super Admin,Admin")]
+        public async Task<IActionResult> DeleteCustomModule(string moduleId)
+        {
+            try
+            {
+                var success = await _roleManagementService.DeleteCustomModuleAsync(moduleId);
+                if (!success) return NotFound(new { success = false, message = "Module not found or cannot be deleted." });
+                return Ok(new { success = true, message = "Module deleted successfully." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Deletes a custom screen from a module.
+        /// </summary>
+        [HttpDelete("modules/{moduleId}/screens/{screenId}")]
+        [Authorize(Roles = "Super Admin,Admin")]
+        public async Task<IActionResult> DeleteCustomScreen(string moduleId, string screenId)
+        {
+            try
+            {
+                var success = await _roleManagementService.DeleteCustomScreenAsync(moduleId, screenId);
+                if (!success) return NotFound(new { success = false, message = "Screen not found or cannot be deleted." });
+                return Ok(new { success = true, message = "Screen deleted successfully." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
         }
 
         /// <summary>

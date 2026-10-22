@@ -319,6 +319,39 @@ export async function addScreen(moduleId, screenData) {
   return apiResult(screenData, "api");
 }
 
+export async function deleteModule(moduleId) {
+  try {
+    await apiClient.delete(apiEndpoints.roles.deleteModule ? apiEndpoints.roles.deleteModule(moduleId) : `${apiEndpoints.roles.modules}/${moduleId}`);
+  } catch (err) {
+    console.warn("Backend deleteModule failed:", err?.message);
+  }
+  const custom = getCustomModules();
+  const filtered = custom.filter((m) => m.id !== moduleId);
+  localStorage.setItem(CUSTOM_MODULES_KEY, JSON.stringify(filtered));
+
+  const customScreens = getCustomScreens();
+  delete customScreens[moduleId];
+  localStorage.setItem(CUSTOM_SCREENS_KEY, JSON.stringify(customScreens));
+
+  notifyRolesUpdated();
+  return apiResult(true, "api");
+}
+
+export async function deleteScreen(moduleId, screenId) {
+  try {
+    await apiClient.delete(apiEndpoints.roles.moduleScreen ? apiEndpoints.roles.moduleScreen(moduleId, screenId) : `${apiEndpoints.roles.modules}/${moduleId}/screens/${screenId}`);
+  } catch (err) {
+    console.warn("Backend deleteScreen failed:", err?.message);
+  }
+  const customScreens = getCustomScreens();
+  if (customScreens[moduleId]) {
+    customScreens[moduleId] = customScreens[moduleId].filter((s) => s.id !== screenId);
+    localStorage.setItem(CUSTOM_SCREENS_KEY, JSON.stringify(customScreens));
+  }
+  notifyRolesUpdated();
+  return apiResult(true, "api");
+}
+
 export async function getModulesAndPermissions() {
   const customModules = getCustomModules();
   const customScreens = getCustomScreens();

@@ -121,7 +121,8 @@ export const toPermissionMap = (permissions = []) => {
   }
 
   permissions.forEach((item) => {
-    const modKey = normalizeModuleKey(getPermissionModuleKey(item));
+    const rawMod = String(getPermissionModuleKey(item) || "").trim().toLowerCase();
+    const modKey = normalizeModuleKey(rawMod);
     if (!modKey) return;
 
     // Module-level actions

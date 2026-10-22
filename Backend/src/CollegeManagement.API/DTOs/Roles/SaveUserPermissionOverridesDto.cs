@@ -39,50 +39,7 @@ namespace CollegeManagement.API.DTOs.Roles
 
         private static string MapModuleIdToSubModule(string moduleId)
         {
-            if (string.IsNullOrWhiteSpace(moduleId)) return string.Empty;
-            var clean = moduleId.Trim().ToLowerInvariant();
-
-            var map = new Dictionary<string, string>
-            {
-                { "dashboard", "Dashboard" },
-                { "board-academic-year", "Board & Academic Year" },
-                { "group-management", "Group Management" },
-                { "subject-management", "Subject Management" },
-                { "section-room", "Section & Room" },
-                { "timetable", "Timetable" },
-                { "holiday-management", "Holiday Management" },
-                { "student-admission", "Student Admission" },
-                { "student-management", "Student Management" },
-                { "section-allocation", "Section Allocation" },
-                { "attendance", "Attendance" },
-                { "promotion", "Promotion" },
-                { "transport", "Transport" },
-                { "staff-management", "Staff Management" },
-                { "department-designation", "Department & Designation" },
-                { "staff-attendance", "Staff Attendance" },
-                { "staff-leave-management", "Staff Leave Management" },
-                { "reimbursement", "Staff Reimbursements" },
-                { "reimbursements", "Staff Reimbursements" },
-                { "staff-reimbursement", "Staff Reimbursements" },
-                { "staff-reimbursements", "Staff Reimbursements" },
-                { "reports", "Reports & Analytics" },
-                { "board-academic-years", "Board & Academic Year" },
-                { "courses", "Group Management" },
-                { "examination", "Examination" },
-                { "marks-evaluation", "Marks Evaluation" },
-                { "results", "Results" },
-                { "fee-management", "Fee Management" },
-                { "payroll", "Payroll" },
-                { "certificates", "Certificates" },
-                { "reports-analytics", "Reports & Analytics" },
-                { "hostel-management", "Hostel Management" },
-                { "settings", "Settings" },
-                { "roles-permissions", "Roles & Permissions" },
-                { "inventory-management", "Inventory Management" },
-                { "inventory", "Inventory Management" }
-            };
-
-            return map.TryGetValue(clean, out var subModule) ? subModule : moduleId;
+            return UpdateRolePermissionsRequest.MapModuleIdToSubModule(moduleId);
         }
     }
 }
