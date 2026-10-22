@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { getAuthUser } from "@/features/authStorage.js";
 import { can } from "@/features/rolesPermissions/permissionUtils.jsx";
+import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 
 const PermissionContext = createContext({
   permissions: [],
@@ -31,15 +32,60 @@ const LEGACY_PERMISSION_MAP = {
 
 export function PermissionProvider({ children, permissions: permissionsProp }) {
   const user = getAuthUser();
-  const permissions = useMemo(() => {
+  const [livePermissions, setLivePermissions] = useState(() => {
     if (permissionsProp !== undefined) return permissionsProp;
     return user?.permissions || user?.rolePermissions || [];
-  }, [permissionsProp, user?.permissions, user?.rolePermissions]);
+  });
+
+  // Dynamically load user permissions on mount and when role permissions change
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchPermissions = async () => {
+      try {
+        const res = await getCurrentUserPermissions();
+        if (isMounted && res?.data && Array.isArray(res.data) && res.data.length > 0) {
+          setLivePermissions(res.data);
+          const current = getAuthUser();
+          if (current) {
+            const updated = { ...current, permissions: res.data };
+            try {
+              window.localStorage.setItem("user", JSON.stringify(updated));
+              window.sessionStorage.setItem("user", JSON.stringify(updated));
+            } catch (e) {
+              // Ignore storage quota
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load dynamic user permissions in Faculty Portal:", err?.message);
+      }
+    };
+
+    fetchPermissions();
+
+    const onRolesUpdated = () => fetchPermissions();
+    window.addEventListener("roles-updated", onRolesUpdated);
+    window.addEventListener("storage", onRolesUpdated);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("roles-updated", onRolesUpdated);
+      window.removeEventListener("storage", onRolesUpdated);
+    };
+  }, []);
+
+  const permissions = useMemo(() => {
+    if (permissionsProp !== undefined) return permissionsProp;
+    return livePermissions;
+  }, [livePermissions, permissionsProp]);
 
   const value = useMemo(() => {
     const canAccess = (moduleKey, actionKey = "view", screenKey = null) => {
-      // Profile is the personal user profile; always viewable by logged-in faculty
+      // Profile is personal user profile; always viewable by logged-in faculty
       if (moduleKey === "profile") return true;
+      // Main dashboard overview is always accessible by logged-in faculty
+      if (moduleKey === "dashboard" && actionKey === "view") return true;
       return can(moduleKey, actionKey, permissions, user, screenKey);
     };
 
@@ -50,7 +96,7 @@ export function PermissionProvider({ children, permissions: permissionsProp }) {
     // Backwards compatibility for code that calls permissions.includes(...)
     const includes = (permString) => {
       if (!permString) return true;
-      if (permString === "VIEW_PROFILE") return true;
+      if (permString === "VIEW_PROFILE" || permString === "VIEW_DASHBOARD") return true;
       const mapped = LEGACY_PERMISSION_MAP[permString];
       if (mapped) {
         return canAccess(mapped.module, mapped.action);

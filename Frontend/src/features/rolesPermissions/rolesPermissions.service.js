@@ -66,12 +66,15 @@ const normalizeRole = (role = {}) => {
   const count = Number(role.assignedUserCount ?? role.userCount ?? role.usersCount ?? 0);
   const code = normalizeRoleCode(role.code || role.roleCode || role.roleName || role.name);
   const matchedSeed = ROLE_SEEDS.find(
-    (s) => s.code === code || s.roleId === (role.roleId ?? role.id) || s.id === role.id
+    (s) => s.code === code || s.roleId === Number(role.roleId ?? role.id) || s.id === role.id
   );
+  const roleId = Number(role.roleId ?? role.id) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined;
+  const id = roleId ? String(roleId) : String(role.id ?? role.roleId ?? role.code ?? role.name);
+
   return {
     ...role,
-    id: String(role.id ?? role.roleId ?? role.code ?? role.name),
-    roleId: Number(role.roleId ?? role.id) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
+    id,
+    roleId,
     code,
     name: role.name || role.roleName || matchedSeed?.name || (code === "ACCOUNTANT" ? "Accountant" : code),
     description: role.description || matchedSeed?.description || "",
@@ -446,6 +449,7 @@ export async function updateRolePermissions(roleId, payload) {
       mod.screens.forEach((scr) => {
         permissionsInput.push({
           module: mod.module,
+          moduleId: mod.module,
           screenId: scr.screenId,
           screenName: scr.screenName || scr.screenId,
           actions: scr.actions,
@@ -453,14 +457,16 @@ export async function updateRolePermissions(roleId, payload) {
       });
       // Also include module-level summary record so module-level permissions are preserved in DB
       permissionsInput.push({
-        module: mod.module,
+          module: mod.module,
+          moduleId: mod.module,
         screenId: "",
         screenName: "",
         actions: mod.actions,
       });
     } else {
       permissionsInput.push({
-        module: mod.module,
+          module: mod.module,
+          moduleId: mod.module,
         screenId: "",
         screenName: "",
         actions: mod.actions,
@@ -482,10 +488,35 @@ export async function updateRolePermissions(roleId, payload) {
   }
 }
 
+const NON_ACADEMIC_ROLES = new Set([
+  "SUPER_ADMIN",
+  "ADMIN",
+  "ACCOUNTANT",
+  "ACCOUNTS",
+  "EXAMINATION_CELL",
+  "LIBRARIAN",
+  "HOSTEL_WARDEN",
+  "BUS_DRIVER",
+  "DRIVER",
+  "ATTENDANT",
+  "OFFICE_STAFF",
+  "INVENTORY_MANAGER",
+  "INVENTORY",
+  "UNASSIGNED",
+]);
+
 export async function getRoleMembers(roleId, roleCode, filters = {}) {
   const targetId = resolveRoleIdParam(roleId, roleCode);
+  const normalizedCode = normalizeRoleCode(roleCode || roleId);
+  const isNonAcademic = NON_ACADEMIC_ROLES.has(normalizedCode);
+
+  // For non-academic / operational staff, board and academic year do not apply
+  const effectiveFilters = isNonAcademic
+    ? (filters.campusId ? { campusId: filters.campusId } : {})
+    : filters;
+
   try {
-    const response = await apiClient.get(apiEndpoints.roles.members(targetId), { params: filters });
+    const response = await apiClient.get(apiEndpoints.roles.members(targetId), { params: effectiveFilters });
     const members = response?.data?.data || response?.data;
     if (Array.isArray(members)) {
       return apiResult(members.map(normalizeUserAssignment), "api");
@@ -493,7 +524,6 @@ export async function getRoleMembers(roleId, roleCode, filters = {}) {
   } catch (err) {
     console.warn("Live getRoleMembers failed, using fallback:", err?.message);
   }
-  const normalizedCode = normalizeRoleCode(roleCode || roleId);
   return apiResult(mockAssignments.filter((user) => (user.roleCodes || []).includes(normalizedCode)), "fallback");
 }
 
@@ -532,6 +562,7 @@ export async function updateUserPermissions(userId, payload) {
       mod.screens.forEach((scr) => {
         permissionsInput.push({
           module: mod.module,
+          moduleId: mod.module,
           screenId: scr.screenId,
           screenName: scr.screenName || scr.screenId,
           actions: scr.actions,
@@ -539,14 +570,16 @@ export async function updateUserPermissions(userId, payload) {
       });
       // Also include module-level summary record so module-level permissions are preserved in DB
       permissionsInput.push({
-        module: mod.module,
+          module: mod.module,
+          moduleId: mod.module,
         screenId: "",
         screenName: "",
         actions: mod.actions,
       });
     } else {
       permissionsInput.push({
-        module: mod.module,
+          module: mod.module,
+          moduleId: mod.module,
         screenId: "",
         screenName: "",
         actions: mod.actions,
