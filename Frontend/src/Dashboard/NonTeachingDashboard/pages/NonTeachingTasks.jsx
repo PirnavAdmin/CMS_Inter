@@ -1,17 +1,13 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   ListTodo,
   Plus,
   Search,
-  Filter,
   CheckCircle2,
   Clock,
   AlertCircle,
-  Calendar,
-  Tag,
   X,
   Send,
-  UserCheck,
 } from "lucide-react";
 import { nonTeachingService } from "../services/nonTeachingService.js";
 
@@ -35,35 +31,50 @@ export default function NonTeachingTasks() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const loadTasks = useCallback(async () => {
+    try {
+      const data = await nonTeachingService.fetchTasks();
+      if (Array.isArray(data)) {
+        setTasks(data);
+      }
+    } catch {
+      // Fallback to local
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       const matchStatus =
         statusFilter === "all" ||
-        t.status.toLowerCase().replace(/\s+/g, "") === statusFilter.toLowerCase().replace(/\s+/g, "");
+        t.status.toLowerCase().replace(/\s+/g, "") === statusFilter.toLowerCase().replace(/[-\s]+/g, "");
       const matchPriority =
         priorityFilter === "all" || t.priority.toLowerCase() === priorityFilter.toLowerCase();
       const matchSearch =
         !searchQuery ||
         t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.category.toLowerCase().includes(searchQuery.toLowerCase());
+        (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (t.category && t.category.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchStatus && matchPriority && matchSearch;
     });
   }, [tasks, statusFilter, priorityFilter, searchQuery]);
 
-  const handleUpdateStatus = (taskId, newStatus) => {
-    const updated = nonTeachingService.updateTaskStatus(taskId, newStatus);
+  const handleUpdateStatus = async (taskId, newStatus) => {
+    const updated = await nonTeachingService.updateTaskStatus(taskId, newStatus);
     setTasks(updated);
     showToast(`Task status updated to ${newStatus}.`);
   };
 
-  const handleCreateTask = (e) => {
+  const handleCreateTask = async (e) => {
     e.preventDefault();
     if (!newTask.title.trim()) {
       showToast("Please provide a task title.");
       return;
     }
-    nonTeachingService.addTask(newTask);
+    await nonTeachingService.addTask(newTask);
     setTasks(nonTeachingService.getTasks());
     setShowAddModal(false);
     setNewTask({
@@ -83,12 +94,16 @@ export default function NonTeachingTasks() {
   return (
     <>
       {toastMessage && (
-        <div className="cms-toast-banner cms-toast-success" role="alert" style={{ position: "fixed", top: 16, right: 16, zIndex: 9999 }}>
+        <div
+          className="cms-toast-banner cms-toast-success"
+          role="alert"
+          style={{ position: "fixed", top: 16, right: 16, zIndex: 9999 }}
+        >
           <CheckCircle2 size={16} /> {toastMessage}
         </div>
       )}
 
-      {/* KPI Counts Strip */}
+      {/* KPI Counts Strip (Screens 6 & 8) */}
       <section className="nts-kpi-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
         <div className="nts-kpi nts-kpi-purple">
           <div className="nts-kpi-top">
@@ -98,7 +113,7 @@ export default function NonTeachingTasks() {
               <span className="nts-kpi-val">{tasks.length} Tasks</span>
             </div>
           </div>
-          <span className="nts-kpi-sub">All active & finished</span>
+          <span className="nts-kpi-sub">All active &amp; finished</span>
         </div>
 
         <div className="nts-kpi nts-kpi-amber">
@@ -131,22 +146,22 @@ export default function NonTeachingTasks() {
               <span className="nts-kpi-val">{completedCount} Tasks</span>
             </div>
           </div>
-          <span className="nts-kpi-sub">Verified & closed</span>
+          <span className="nts-kpi-sub">Verified &amp; closed</span>
         </div>
       </section>
 
-      {/* Filter & Search Bar */}
+      {/* Filter and Action Bar */}
       <section className="nts-filter-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flex: 1 }}>
           <div className="nts-tabs-strip">
-            {["all", "pending", "inprogress", "completed"].map((tab) => (
+            {["all", "pending", "in-progress", "completed"].map((st) => (
               <button
-                key={tab}
+                key={st}
                 type="button"
-                className={`nts-tab-btn ${statusFilter === tab ? "active" : ""}`}
-                onClick={() => setStatusFilter(tab)}
+                className={`nts-tab-btn ${statusFilter === st ? "active" : ""}`}
+                onClick={() => setStatusFilter(st)}
               >
-                {tab === "inprogress" ? "In Progress" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {st === "all" ? "All" : st === "in-progress" ? "In Progress" : st.charAt(0).toUpperCase() + st.slice(1)}
               </button>
             ))}
           </div>
@@ -162,8 +177,15 @@ export default function NonTeachingTasks() {
           </div>
 
           <select
-            className="nts-form-control"
-            style={{ padding: "6px 10px", fontSize: 12 }}
+            className="nts-action-btn"
+            style={{
+              backgroundColor: "var(--nts-surface)",
+              color: "var(--nts-text)",
+              border: "1px solid var(--nts-border)",
+              padding: "7px 12px",
+              borderRadius: 8,
+              fontSize: 12.5,
+            }}
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
           >
@@ -180,43 +202,45 @@ export default function NonTeachingTasks() {
           className="nts-refresh-btn"
           onClick={() => setShowAddModal(true)}
         >
-          <Plus size={14} /> Add Task / Reminder
+          <Plus size={15} /> Add Task / Reminder
         </button>
       </section>
 
-      {/* Tasks List Card */}
+      {/* Tasks List / Empty State (Screen 8) */}
       <section className="nts-card">
         <div className="nts-card-head">
           <h3>
-            <ListTodo size={16} style={{ color: "var(--nts-primary)" }} /> Assigned Duties & Work Orders ({filteredTasks.length})
+            <ListTodo size={16} style={{ color: "var(--nts-primary, #5c7c2f)" }} /> Assigned Duties &amp; Work Orders ({filteredTasks.length})
           </h3>
         </div>
         <div className="nts-card-body" style={{ gap: 10 }}>
           {filteredTasks.map((task) => (
             <div key={task.id} className={`nts-task-item ${task.status === "Completed" ? "completed" : ""}`}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                  <span className={`nts-pill-priority ${task.priority.toLowerCase()}`}>
-                    {task.priority}
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--nts-muted)" }}>#{task.id}</span>
-                  <span style={{ fontSize: 11, color: "var(--nts-muted)" }}>• Category: <strong>{task.category}</strong></span>
-                </div>
                 <div className="nts-task-title">{task.title}</div>
-                <div className="nts-task-desc">{task.description}</div>
+                {task.description && <div className="nts-task-desc">{task.description}</div>}
                 <div className="nts-task-meta">
-                  <span>Assigned By: <strong>{task.assignedBy}</strong></span>
-                  <span>Assigned: <strong>{task.assignedDate}</strong></span>
+                  <span className={`nts-pill-priority ${(task.priority || "Medium").toLowerCase()}`}>
+                    {task.priority || "Medium"}
+                  </span>
+                  <span>Category: <strong>{task.category || "General"}</strong></span>
                   <span>Due: <strong>{task.dueDate}</strong></span>
                 </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <select
-                  className="nts-form-control"
-                  style={{ fontSize: 12, padding: "4px 8px", fontWeight: 700 }}
+                  className="nts-status-select"
                   value={task.status}
                   onChange={(e) => handleUpdateStatus(task.id, e.target.value)}
+                  style={{
+                    fontSize: 12,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--nts-border)",
+                    background: "var(--nts-surface)",
+                    color: "var(--nts-text)",
+                  }}
                 >
                   <option value="Pending">Pending</option>
                   <option value="In Progress">In Progress</option>
@@ -235,7 +259,7 @@ export default function NonTeachingTasks() {
         </div>
       </section>
 
-      {/* Add Task Modal */}
+      {/* Add Task Modal (Screen 6) */}
       {showAddModal && (
         <div className="nts-modal-backdrop">
           <div className="nts-modal-container">
@@ -284,10 +308,10 @@ export default function NonTeachingTasks() {
                     >
                       <option value="Office Administration">Office Administration</option>
                       <option value="Examination Support">Examination Support</option>
-                      <option value="Documentation">Documentation & Records</option>
+                      <option value="Documentation">Documentation &amp; Records</option>
                       <option value="Student Support">Student Support</option>
-                      <option value="Facility & Maintenance">Facility & Maintenance</option>
-                      <option value="Stores & Inventory">Stores & Inventory</option>
+                      <option value="Facility & Maintenance">Facility &amp; Maintenance</option>
+                      <option value="Stores & Inventory">Stores &amp; Inventory</option>
                     </select>
                   </div>
                   <div className="nts-form-group">
@@ -297,7 +321,7 @@ export default function NonTeachingTasks() {
                       value={newTask.priority}
                       onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
                     >
-                      <option value="Urgent">Urgent (Immediate)</option>
+                      <option value="Urgent">Urgent</option>
                       <option value="High">High</option>
                       <option value="Medium">Medium</option>
                       <option value="Low">Low</option>

@@ -1,6 +1,6 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT } from "@/features/authStorage.js";
+import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT, BACKEND_NON_TEACHING_JWT } from "@/features/authStorage.js";
 import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 
 
@@ -27,7 +27,7 @@ export const loginUser = async (credentials) => {
   const nonTeachingAccount = findNonTeachingAccount(emailOrMobile, password);
   if (nonTeachingAccount) {
     return {
-      token: `mock-non-teaching-auth-token-${Date.now()}`,
+      token: BACKEND_NON_TEACHING_JWT,
       user: nonTeachingAccount,
       roleType: "non_teaching",
       message: "Login successful.",
@@ -428,8 +428,9 @@ export function findNonTeachingAccount(input, password) {
   }
 
   return {
-    id: "nts-001",
-    staffId: 901,
+    id: "1122",
+    staffId: 1122,
+    userId: 1122,
     employeeId: "NTS001",
     name: "Non-Teaching Staff",
     fullName: "Non-Teaching Staff",
