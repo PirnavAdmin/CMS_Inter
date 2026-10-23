@@ -1,3 +1,5 @@
+const NUMBER_SERIES_STORAGE_KEY = "pirnav_number_series_settings_v4";
+
 export const FIXED_NUMBER_SERIES = [
   {
     id: "teaching-staff-id",
@@ -103,6 +105,27 @@ export const FIXED_NUMBER_SERIES = [
       { format: "EXAM-{YEAR}-{SEQ}", example: "EXAM-2026-0001" },
     ],
   },
+  {
+    id: "certificate-number",
+    key: "certificate-number",
+    seriesCode: "CERTIFICATE_NUMBER",
+    name: "Certificate Number",
+    category: "Certificates & Degrees",
+    prefix: "CND",
+    format: "CND-{YEAR}-{RANDOM}",
+    numberLength: 6,
+    startNumber: 1,
+    currentNumber: 439,
+    totalGenerated: 439,
+    currentExample: "CND-2026-82FC40",
+    description: "Configure certificate number format for generated certificates.",
+    status: "Active",
+    allowedTokens: ["{CERT}", "{TYPE}", "{YEAR}", "{SEQ}", "{RANDOM}"],
+    sampleFormats: [
+      { format: "CND-{YEAR}-{RANDOM}", example: "CND-2026-82FC40" },
+      { format: "CERT-{YEAR}-{SEQ}", example: "CERT-2026-000001" },
+    ],
+  },
 
   {
     id: "receipt-no",
@@ -186,11 +209,17 @@ export function isSeriesRemoved(item) {
   if (!item) return false;
   const key = String(item.id || item.key || item.seriesCode || item.slug || "").toLowerCase().trim();
   const name = String(item.name || item.seriesName || "").toLowerCase().trim();
-  
 
+  try {
+    const deletedRaw = localStorage.getItem('NumberSeries_Deleted');
+    if (deletedRaw) {
+      const deletedList = JSON.parse(deletedRaw);
+      if (Array.isArray(deletedList) && deletedList.includes(key)) {
+        return true;
+      }
+    }
+  } catch (e) {}
 
-  
-  // Controlled strictly by database active/deleted status, not local browser storage
   if (item.isDeleted === true) return true;
   return false;
 }
@@ -263,18 +292,55 @@ export const MOCK_CONFIG_HISTORY = {
 
 // --- HELPER STORAGE READ / WRITE ---
 export function readNumberSeriesSettings() {
-  return FIXED_NUMBER_SERIES.map((fixed) => ({ ...fixed }));
+  try {
+    const raw = localStorage.getItem(NUMBER_SERIES_STORAGE_KEY) || sessionStorage.getItem(NUMBER_SERIES_STORAGE_KEY);
+    if (!raw) return FIXED_NUMBER_SERIES;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return FIXED_NUMBER_SERIES;
+    
+    // Filter out removed series
+    const cleanParsed = parsed.filter((p) => !isSeriesRemoved(p));
+    
+    // Map parsed array onto FIXED_NUMBER_SERIES to ensure all valid cards are always present
+    const result = FIXED_NUMBER_SERIES.map((fixed) => {
+      const found = cleanParsed.find((p) => p.id === fixed.id || p.key === fixed.key || p.seriesCode === fixed.seriesCode);
+      if (!found) return fixed;
+      return { ...fixed, ...found };
+    });
+    
+    // Append any custom series that are not in FIXED_NUMBER_SERIES
+    cleanParsed.forEach((p) => {
+      if (!FIXED_NUMBER_SERIES.some((fixed) => fixed.id === p.id || fixed.key === p.key || (p.seriesCode && fixed.seriesCode === p.seriesCode))) {
+        result.push(p);
+      }
+    });
+    
+    return result;
+  } catch {
+    return FIXED_NUMBER_SERIES;
+  }
 }
 
 export function writeNumberSeriesSettings(list) {
-  // Database API is the single source of truth; no local storage caching
+  try {
+    const cleanList = (Array.isArray(list) ? list : []).filter((item) => !isSeriesRemoved(item));
+    const json = JSON.stringify(cleanList);
+    localStorage.setItem(NUMBER_SERIES_STORAGE_KEY, json);
+    sessionStorage.setItem(NUMBER_SERIES_STORAGE_KEY, json);
+  } catch (err) {
+    console.error("Failed to save number series settings", err);
+  }
 }
 
 // --- HELPER READ / WRITE CONFIG HISTORY ---
-const inMemoryConfigHistory = { ...MOCK_CONFIG_HISTORY };
-
 export function readConfigHistory(seriesId) {
-  return inMemoryConfigHistory[seriesId] || [];
+  try {
+    const raw = localStorage.getItem(`pirnav_config_hist_${seriesId}`);
+    if (!raw) return MOCK_CONFIG_HISTORY[seriesId] || [];
+    return JSON.parse(raw);
+  } catch {
+    return MOCK_CONFIG_HISTORY[seriesId] || [];
+  }
 }
 
 export function appendConfigHistory(seriesId, newConfig) {
@@ -294,7 +360,9 @@ export function appendConfigHistory(seriesId, newConfig) {
     status: "Active",
   };
   const newList = [newRow, ...updatedPrevious];
-  inMemoryConfigHistory[seriesId] = newList;
+  try {
+    localStorage.setItem(`pirnav_config_hist_${seriesId}`, JSON.stringify(newList));
+  } catch {}
   return newList;
 }
 

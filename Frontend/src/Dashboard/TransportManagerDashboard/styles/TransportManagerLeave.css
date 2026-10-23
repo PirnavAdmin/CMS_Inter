@@ -1,0 +1,40 @@
+/* Transport Manager Leave Styles */
+
+.tm-leave-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tm-leave-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.tm-leave-card {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tm-leave-card__title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--cms-text-secondary, #64748b);
+}
+
+.tm-leave-card__val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--cms-text-primary, #0f172a);
+}
+
+.tm-leave-card__sub {
+  font-size: 0.75rem;
+  color: var(--cms-text-secondary, #94a3b8);
+}

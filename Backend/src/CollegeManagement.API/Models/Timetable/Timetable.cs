@@ -28,8 +28,6 @@ namespace CollegeManagement.API.Models.Timetable
         [Required]
         public int SectionId { get; set; }
 
-        public string SlotType { get; set; } = "Teaching";
-
         public int? ProgramId { get; set; }
 
         [Required]
@@ -39,11 +37,14 @@ namespace CollegeManagement.API.Models.Timetable
         [Required]
         public int PeriodId { get; set; }
 
-        public int? SubjectId { get; set; }
+        [Required]
+        public int SubjectId { get; set; }
 
-        public int? StaffId { get; set; }
+        [Required]
+        public int StaffId { get; set; }
 
-        public int? RoomId { get; set; }
+        [Required]
+        public int RoomId { get; set; }
 
         public bool IsPublished { get; set; } = false;
 

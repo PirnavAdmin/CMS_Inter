@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, RefreshCw } from "lucide-react";
 import DataTable from "@/components/common/DataTable.jsx";
 import { Field, StatusBadge } from "@/components/common/Ui.jsx";
 import { DEPARTMENTS } from "../data/inventoryMockData.js";
@@ -111,7 +110,7 @@ export function InventoryTable({
   onView,
   onEdit,
   onDelete,
-  onRefresh,
+  toolbarExtra,
   exportable = true,
 }) {
   const [query, setQuery] = useState("");
@@ -144,24 +143,8 @@ export function InventoryTable({
       enableExport={exportable}
       enablePdfExport={exportable}
       enableTablePrint={exportable}
+      toolbarExtra={toolbarExtra}
       emptyMessage="No matching inventory records. Change the filters or add a record."
-      toolbarExtra={
-        <>
-          {exportable && (
-            <button
-              className="cms-btn cms-btn-ghost"
-              onClick={() => downloadCsv(title, columns, visible)}
-            >
-              <Download size={15} /> Export CSV
-            </button>
-          )}
-          {onRefresh && (
-            <button className="cms-btn cms-btn-ghost" onClick={onRefresh}>
-              <RefreshCw size={15} /> Refresh
-            </button>
-          )}
-        </>
-      }
     />
   );
 }

@@ -34,6 +34,10 @@ using CollegeManagement.API.Services.Implementations.Inventory;
 using CollegeManagement.API.Services.Interfaces.Transport;
 using CollegeManagement.API.Services.Implementations.Transport;
 using CollegeManagement.API.Services.Location;
+using CollegeManagement.API.Repositories.Interfaces.LopConfiguration;
+using CollegeManagement.API.Repositories.Implementations.LopConfiguration;
+using CollegeManagement.API.Services.Interfaces.LopConfiguration;
+using CollegeManagement.API.Services.Implementations.LopConfiguration;
 using CollegeManagement.API.Validators.StaffValidators;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -105,8 +109,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         mySqlOptions => mySqlOptions
             .CommandTimeout(120)
             .EnableRetryOnFailure(
-                maxRetryCount: 3,
-                maxRetryDelay: TimeSpan.FromSeconds(2),
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(3),
                 errorNumbersToAdd: null)));
 
 builder.Services.AddSingleton<DatabaseContext>();
@@ -211,6 +215,7 @@ builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 
 // Inventory Repository
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
+builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
 #endregion
 
 #region Services
@@ -236,7 +241,6 @@ builder.Services.AddScoped<IDesignationService, DesignationService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IFeeService, FeeService>();
-builder.Services.AddScoped<IFacilityTransitionService, FacilityTransitionService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<CollegeManagement.API.Services.IProgramService, CollegeManagement.API.Services.ProgramService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
@@ -311,6 +315,7 @@ builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 
 // Inventory Service
 builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
@@ -481,18 +486,6 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseStaticFiles();
-
-var uploadsDir = Path.Combine(builder.Environment.ContentRootPath, "Uploads");
-if (!Directory.Exists(uploadsDir))
-{
-    Directory.CreateDirectory(uploadsDir);
-}
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
-    RequestPath = "/Uploads"
-});
-
 app.UseAuthentication();
 
 #region Legacy Route Rewrite Middleware
@@ -584,6 +577,7 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
+app.MapHub<CollegeManagement.API.Hubs.NotificationHub>("/hubs/notifications");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
@@ -719,7 +713,7 @@ try
 }
 catch (Exception ex)
 {
-    app.Logger.LogWarning(ex, "Failed to run startup migration checks.");
+    app.Logger.LogWarning(ex, "Failed to run startup NumberSeriesConfigurations migration check.");
 }
 
 app.Run();

@@ -21,9 +21,9 @@ const LEGACY_PERMISSION_MAP = {
   ENTER_MARKS: { module: "marks-evaluation", action: "view" },
   VIEW_MARKS: { module: "marks-evaluation", action: "view" },
   VIEW_EXAM_DUTIES: { module: "examinations", action: "view" },
-  VIEW_SELF_ATTENDANCE: { module: "staff-attendance", action: "view" },
-  APPLY_LEAVE: { module: "staff-leave-management", action: "view" },
-  VIEW_LEAVE: { module: "staff-leave-management", action: "view" },
+  VIEW_SELF_ATTENDANCE: { module: "staff-attendance", action: "view", screen: "my-attendance" },
+  APPLY_LEAVE: { module: "staff-leave-management", action: "view", screen: "staff-leave" },
+  VIEW_LEAVE: { module: "staff-leave-management", action: "view", screen: "staff-leave" },
   VIEW_PAYSLIPS: { module: "payroll", action: "view" },
   VIEW_HOLIDAYS: { module: "holiday-management", action: "view" },
   VIEW_REIMBURSEMENTS: { module: "reimbursement", action: "view" },
@@ -31,61 +31,60 @@ const LEGACY_PERMISSION_MAP = {
 };
 
 export function PermissionProvider({ children, permissions: permissionsProp }) {
-  const user = getAuthUser();
+  const [user, setUser] = useState(() => getAuthUser());
   const [livePermissions, setLivePermissions] = useState(() => {
     if (permissionsProp !== undefined) return permissionsProp;
-    return user?.permissions || user?.rolePermissions || [];
+    const u = getAuthUser();
+    return u?.permissions || u?.rolePermissions || [];
   });
 
-  // Dynamically load user permissions on mount and when role permissions change
   useEffect(() => {
     let isMounted = true;
 
-    const fetchPermissions = async () => {
+    const syncPermissions = async () => {
       try {
         const res = await getCurrentUserPermissions();
-        if (isMounted && res?.data && Array.isArray(res.data) && res.data.length > 0) {
+        if (isMounted && res?.data && Array.isArray(res.data)) {
           setLivePermissions(res.data);
-          const current = getAuthUser();
-          if (current) {
-            const updated = { ...current, permissions: res.data };
+          const currentUser = getAuthUser();
+          if (currentUser) {
+            const updated = { ...currentUser, permissions: res.data };
+            setUser(updated);
             try {
-              window.localStorage.setItem("user", JSON.stringify(updated));
-              window.sessionStorage.setItem("user", JSON.stringify(updated));
-            } catch (e) {
-              // Ignore storage quota
+              for (const storage of [window.localStorage, window.sessionStorage]) {
+                if (storage.getItem("user")) storage.setItem("user", JSON.stringify(updated));
+              }
+            } catch {
+              // ignore
             }
           }
         }
       } catch (err) {
-        console.warn("Could not load dynamic user permissions in Faculty Portal:", err?.message);
+        console.warn("Could not load faculty live permissions:", err);
       }
     };
 
-    fetchPermissions();
+    syncPermissions();
 
-    const onRolesUpdated = () => fetchPermissions();
-    window.addEventListener("roles-updated", onRolesUpdated);
-    window.addEventListener("storage", onRolesUpdated);
-
+    const handleUpdate = () => syncPermissions();
+    window.addEventListener("roles-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
     return () => {
       isMounted = false;
-      window.removeEventListener("roles-updated", onRolesUpdated);
-      window.removeEventListener("storage", onRolesUpdated);
+      window.removeEventListener("roles-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
     };
   }, []);
 
   const permissions = useMemo(() => {
     if (permissionsProp !== undefined) return permissionsProp;
     return livePermissions;
-  }, [livePermissions, permissionsProp]);
+  }, [permissionsProp, livePermissions]);
 
   const value = useMemo(() => {
     const canAccess = (moduleKey, actionKey = "view", screenKey = null) => {
-      // Profile is personal user profile; always viewable by logged-in faculty
+      // Profile is the personal user profile; always viewable by logged-in faculty
       if (moduleKey === "profile") return true;
-      // Main dashboard overview is always accessible by logged-in faculty
-      if (moduleKey === "dashboard" && actionKey === "view") return true;
       return can(moduleKey, actionKey, permissions, user, screenKey);
     };
 
@@ -96,10 +95,10 @@ export function PermissionProvider({ children, permissions: permissionsProp }) {
     // Backwards compatibility for code that calls permissions.includes(...)
     const includes = (permString) => {
       if (!permString) return true;
-      if (permString === "VIEW_PROFILE" || permString === "VIEW_DASHBOARD") return true;
+      if (permString === "VIEW_PROFILE") return true;
       const mapped = LEGACY_PERMISSION_MAP[permString];
       if (mapped) {
-        return canAccess(mapped.module, mapped.action);
+        return canAccess(mapped.module, mapped.action, mapped.screen);
       }
       return canAccess(permString, "view");
     };

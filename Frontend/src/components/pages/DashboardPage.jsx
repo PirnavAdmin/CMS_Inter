@@ -36,8 +36,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-import { getStudentOverviewMetrics } from "@/api/studentApi.js";
+import axios from "axios";
+import sharedApiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getStudentOverviewMetrics as loadStudentOverviewMetrics } from "@/api/studentApi.js";
+import { getAuthToken } from "@/features/authStorage.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -56,6 +59,29 @@ import markAttendanceIcon from "@/assets/dashboard-3d/mark-attendance.png";
 import "./DashboardPage.css";
 
 const GROUP_COLORS = ["#2563eb", "#7c3aed", "#f59e0b", "#16a34a", "#e11d48", "#0891b2", "#64748b"];
+
+// Keep dashboard requests on the network, including during a demo login.
+// Request transforms run after the shared client's mock adapter selection.
+const serverConfig = (config = {}) => ({
+  ...config,
+  _isMockFallback: true,
+  transformRequest: [
+    ...sharedApiClient.defaults.transformRequest,
+    function requireServer(data) {
+      this.adapter = axios.getAdapter(["xhr", "http", "fetch"]);
+      return data;
+    },
+  ],
+});
+const apiClient = {
+  get: (url, config) => sharedApiClient.get(url, serverConfig(config)),
+  post: (url, data, config) => sharedApiClient.post(url, data, serverConfig(config)),
+};
+const getStudentOverviewMetrics = (params) => {
+  const mockSession = /^(mock-|demo-|non-teaching-|warden-|parent-)/.test(getAuthToken());
+  if (mockSession || import.meta.env.VITE_USE_MOCK_DATA === "true") return Promise.resolve(null);
+  return loadStudentOverviewMetrics(params);
+};
 
 const DASHBOARD_API = {
   filters: "/api/v1/dashboard/filters",
@@ -424,7 +450,7 @@ export default function DashboardPage() {
       
       const [res, staffRes, studentMetrics] = await Promise.all([
         apiClient.get(DASHBOARD_API.summary, { params }),
-        apiClient.get("/api/v1/staff", { params: staffParams }).catch(() => ({ data: { items: [] } })),
+        apiClient.get("/api/v1/staff", { params: staffParams }),
         studentMetricsPromise,
       ]);
 
@@ -473,112 +499,101 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 2. GET /api/v1/dashboard/students-overview & GET /api/v1/dashboard/admission-trend & getStudentOverviewMetrics
+  // 2. Admission Overview (All admissions irrespective of section/roll no allocation)
   const fetchStudentsOverview = useCallback(async () => {
     const seq = ++overviewSeq.current;
     setOverviewState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const params = {
-        ...(academicYearId ? { academicYearId } : {}),
-        ...(boardId ? { boardId } : {}),
-        ...(campusId ? { campusId } : {}),
-        date: todayDate,
-      };
-      const trendParams = {
-        ...(academicYearId ? { academicYearId } : {}),
-        ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
       };
 
-      const studentMetricsPromise = getStudentOverviewMetrics({
-        campusId,
-        boardId,
-        academicYearId,
-      }).catch((e) => {
-        console.warn("Failed to load placed student metrics for overview:", e);
-        return null;
+      const url = apiEndpoints?.studentAdmissions?.getAll || "/api/v1/student-admissions";
+      const res = await apiClient.get(url, { params }).catch(async () => {
+        return apiClient.get("/api/v1/student-admissions", { params });
       });
 
-      const [overviewRes, trendRes, studentMetricsRes] = await Promise.allSettled([
-        apiClient.get(DASHBOARD_API.studentsOverview, { params }),
-        apiClient.get(DASHBOARD_API.admissionTrend, { params: trendParams }),
-        studentMetricsPromise,
-      ]);
-
       if (overviewSeq.current === seq) {
-        const overviewData = overviewRes.status === "fulfilled" ? unwrap(overviewRes.value?.data) : null;
-        const trendData = trendRes.status === "fulfilled" ? unwrap(trendRes.value?.data) : null;
-        const studentMetrics = studentMetricsRes.status === "fulfilled" ? studentMetricsRes.value : null;
+        const rawAdmissions = unwrap(res.data) || [];
+        const admissionsList = Array.isArray(rawAdmissions) ? rawAdmissions : (rawAdmissions.items || rawAdmissions.records || rawAdmissions.data || []);
 
-        if (overviewRes.status === "rejected" && trendRes.status === "rejected" && !studentMetrics) {
-          setOverviewState({ loading: false, error: getApiErrorMessage(overviewRes.reason, "Failed to load students overview"), data: null });
-          return;
+        // Filter by the 3 dashboard header parameters: campusId, boardId, academicYearId
+        const filteredAdmissions = admissionsList.filter((item) => {
+          if (campusId && Number(item.campusId ?? item.sourceCampusId) !== Number(campusId)) return false;
+          if (boardId && Number(item.boardId) !== Number(boardId)) return false;
+          if (academicYearId && Number(item.academicYearId) !== Number(academicYearId)) return false;
+          return true;
+        });
+
+        const isMale = (g) => ["male", "m", "boy", "boys"].includes(String(g || "").trim().toLowerCase());
+        const isFemale = (g) => ["female", "f", "girl", "girls"].includes(String(g || "").trim().toLowerCase());
+
+        const totalAdmissions = filteredAdmissions.length;
+        let boysCount = filteredAdmissions.filter((a) => isMale(a.gender)).length;
+        let girlsCount = filteredAdmissions.filter((a) => isFemale(a.gender)).length;
+        const unassigned = totalAdmissions - (boysCount + girlsCount);
+        if (unassigned > 0) {
+          girlsCount += unassigned;
         }
 
-        let calculatedTrend = overviewData?.monthlyTrend || trendData?.monthlyTrend || trendData?.trend || trendData?.items || trendData?.admissionTrend || overviewData?.trend || overviewData?.items || [];
-
-        // Derive monthly admission trend directly from placed student records to maintain exact 1:1 parity with Total Students
-        if (studentMetrics?.records && Array.isArray(studentMetrics.records) && studentMetrics.records.length > 0) {
-          const monthMap = new Map();
-          studentMetrics.records.forEach((r) => {
-            const rawDate = r.admissionDate || r.AdmissionDate || r.createdAt || r.CreatedAt;
-            if (rawDate) {
-              const d = new Date(rawDate);
-              if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-                monthMap.set(key, (monthMap.get(key) || 0) + 1);
-              }
+        const monthMap = new Map();
+        filteredAdmissions.forEach((a) => {
+          const rawDate = a.admissionDate || a.createdAt;
+          if (rawDate) {
+            const d = new Date(rawDate);
+            if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
+              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+              const entry = monthMap.get(key) || { total: 0, boys: 0, girls: 0 };
+              entry.total += 1;
+              if (isMale(a.gender)) entry.boys += 1;
+              else entry.girls += 1;
+              monthMap.set(key, entry);
             }
-          });
-          if (monthMap.size > 0) {
-            calculatedTrend = Array.from(monthMap.entries())
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([key, count]) => {
-                const [y, m] = key.split("-");
-                const dt = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
-                return {
-                  period: dt.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
-                  month: dt.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
-                  studentsJoined: count,
-                  count,
-                  value: count,
-                  sortDate: key,
-                };
-              });
           }
+        });
+
+        let calculatedTrend = [];
+        if (monthMap.size > 0) {
+          calculatedTrend = Array.from(monthMap.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, item]) => {
+              const [y, m] = key.split("-");
+              const dt = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+              return {
+                period: dt.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+                month: dt.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+                studentsJoined: item.total,
+                count: item.total,
+                value: item.total,
+                boys: item.boys,
+                girls: item.girls,
+                sortDate: key,
+              };
+            });
         }
 
         const mergedData = {
-          ...(overviewData && typeof overviewData === "object" ? overviewData : {}),
+          totalAdmissions,
+          totalStudents: totalAdmissions,
+          totalCount: totalAdmissions,
+          boys: boysCount,
+          boysCount,
+          girls: girlsCount,
+          girlsCount,
           trend: calculatedTrend,
           monthlyTrend: calculatedTrend,
-          ...(studentMetrics ? {
-            totalStudents: studentMetrics.totalStudents,
-            totalCount: studentMetrics.totalStudents,
-            activeStudents: studentMetrics.totalStudents,
-            boys: studentMetrics.boys,
-            boysCount: studentMetrics.boysCount,
-            maleStudents: studentMetrics.maleStudents,
-            maleCount: studentMetrics.maleStudents,
-            girls: studentMetrics.girls,
-            girlsCount: studentMetrics.girlsCount,
-            femaleStudents: studentMetrics.femaleStudents,
-            femaleCount: studentMetrics.femaleStudents,
-            malePercentage: studentMetrics.malePercentage,
-            femalePercentage: studentMetrics.femalePercentage,
-            genderDistribution: studentMetrics.genderDistribution,
-          } : {}),
         };
+
         setOverviewState({ loading: false, error: null, data: mergedData });
       }
     } catch (err) {
       if (overviewSeq.current === seq) {
-        setOverviewState({ loading: false, error: getApiErrorMessage(err, "Failed to load students overview"), data: null });
+        setOverviewState({ loading: false, error: getApiErrorMessage(err, "Failed to load admission overview"), data: null });
       }
     }
-  }, [campusId, boardId, academicYearId, todayDate]);
+  }, [campusId, boardId, academicYearId]);
 
-  // 3. GET /api/v1/dashboard/group-distribution & getStudentOverviewMetrics
+  // 3. GET /api/v1/dashboard/group-distribution & getStudentOverviewMetrics (Shows ALL groups)
   const fetchGroupDistribution = useCallback(async () => {
     const seq = ++groupSeq.current;
     setGroupState((prev) => ({ ...prev, loading: true, error: null }));
@@ -588,36 +603,98 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
       };
-      const [res, studentMetrics] = await Promise.all([
-        apiClient.get(DASHBOARD_API.groupDistribution, { params }).catch(() => ({ data: null })),
+      const [res, studentMetrics, allGroupsRes] = await Promise.all([
+        apiClient.get(DASHBOARD_API.groupDistribution, { params }),
         getStudentOverviewMetrics({ campusId, boardId, academicYearId }).catch(() => null),
+        apiClient.get("/api/v1/groups", { params: { ...(boardId ? { boardId } : {}), ...(academicYearId ? { academicYearId } : {}) } }).catch(() => ({ data: null })),
       ]);
       if (groupSeq.current === seq) {
         let groupData = unwrap(res.data) || {};
-        if (studentMetrics?.groupCounts && Object.keys(studentMetrics.groupCounts).length > 0) {
-          const rawItems = groupData?.items || groupData?.groups || (Array.isArray(groupData) ? groupData : []);
-          if (Array.isArray(rawItems) && rawItems.length > 0) {
-            const updatedItems = rawItems.map((item) => {
-              const name = String(item.name || item.groupName || item.code || "").toUpperCase();
-              let matchedCount = null;
-              for (const [gName, count] of Object.entries(studentMetrics.groupCounts)) {
-                if (name === gName.toUpperCase() || name.includes(gName.toUpperCase()) || gName.toUpperCase().includes(name)) {
-                  matchedCount = count;
-                  break;
-                }
-              }
-              return {
-                ...item,
-                value: matchedCount !== null ? matchedCount : Number(item.value ?? item.studentCount ?? item.count ?? 0),
-                studentCount: matchedCount !== null ? matchedCount : Number(item.studentCount ?? item.value ?? item.count ?? 0),
-                count: matchedCount !== null ? matchedCount : Number(item.count ?? item.value ?? item.studentCount ?? 0),
-              };
-            });
-            if (groupData?.items) groupData.items = updatedItems;
-            else if (groupData?.groups) groupData.groups = updatedItems;
-            else if (Array.isArray(groupData)) groupData = updatedItems;
-          }
+        const rawItems = groupData?.items || groupData?.groups || (Array.isArray(groupData) ? groupData : []);
+        const rawAllGroups = unwrap(allGroupsRes?.data) || [];
+        const configuredGroups = Array.isArray(rawAllGroups) ? rawAllGroups : (rawAllGroups.items || rawAllGroups.data || []);
+
+        const normalizedCounts = {};
+        if (studentMetrics?.groupCounts) {
+          Object.entries(studentMetrics.groupCounts).forEach(([k, v]) => {
+            normalizedCounts[k.trim().toUpperCase()] = v;
+          });
         }
+
+        // Map containing all unique groups to display
+        const groupsMap = new Map();
+
+        // 1. Seed from configured groups endpoint if available
+        if (Array.isArray(configuredGroups) && configuredGroups.length > 0) {
+          configuredGroups.forEach((g) => {
+            const gName = String(g.groupName || g.groupCode || g.name || "").trim();
+            if (gName) {
+              const upper = gName.toUpperCase();
+              groupsMap.set(upper, {
+                id: g.groupId || g.id,
+                name: gName,
+                groupName: gName,
+                value: normalizedCounts[upper] ?? 0,
+                studentCount: normalizedCounts[upper] ?? 0,
+                count: normalizedCounts[upper] ?? 0,
+              });
+            }
+          });
+        }
+
+        // 2. Add or merge from groupDistribution API
+        if (Array.isArray(rawItems) && rawItems.length > 0) {
+          rawItems.forEach((item) => {
+            const gName = String(item.groupName || item.name || item.groupCode || item.code || "").trim();
+            if (gName) {
+              const upper = gName.toUpperCase();
+              const existing = groupsMap.get(upper);
+              const cnt = normalizedCounts[upper] ?? Number(item.totalStudents ?? item.studentCount ?? item.value ?? item.count ?? 0);
+              groupsMap.set(upper, {
+                ...item,
+                ...existing,
+                name: existing?.name || gName,
+                groupName: existing?.groupName || gName,
+                value: cnt,
+                studentCount: cnt,
+                count: cnt,
+              });
+            }
+          });
+        }
+
+        // 3. Ensure any groups from studentMetrics are also present
+        if (studentMetrics?.groupCounts) {
+          Object.entries(studentMetrics.groupCounts).forEach(([gName, gCount]) => {
+            const trimmed = String(gName).trim();
+            const upper = trimmed.toUpperCase();
+            if (trimmed && upper !== "UNKNOWN") {
+              const existing = groupsMap.get(upper);
+              if (existing) {
+                existing.value = gCount;
+                existing.studentCount = gCount;
+                existing.count = gCount;
+              } else {
+                groupsMap.set(upper, {
+                  name: trimmed,
+                  groupName: trimmed,
+                  value: gCount,
+                  studentCount: gCount,
+                  count: gCount,
+                });
+              }
+            }
+          });
+        }
+
+        // Keep ALL groups (including 0 students) so all groups configured in the system appear
+        const finalItems = Array.from(groupsMap.values());
+        finalItems.sort((a, b) => (b.value - a.value) || a.name.localeCompare(b.name));
+
+        if (groupData?.items) groupData.items = finalItems;
+        else if (groupData?.groups) groupData.groups = finalItems;
+        else groupData = finalItems;
+
         setGroupState({ loading: false, error: null, data: groupData });
       }
     } catch (err) {
@@ -1301,15 +1378,15 @@ export default function DashboardPage() {
 
         {/* Second Row Grid: Students Overview | Students by Group | Student Attendance Today */}
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Main Analytics">
-          {/* Card 1: Students Overview */}
+          {/* Card 1: Admission Overview */}
           <article className="dashboard-card dashboard-students-overview-card">
-            <CardHeader title="Students Overview" action={<Link to="/dashboard/students" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>} />
+            <CardHeader title="Admission Overview" action={<Link to="/dashboard/admission" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>} />
             {overviewState.loading ? (
               <LoadingState label="Loading overview..." />
             ) : overviewState.error ? (
               <ErrorState message={overviewState.error} onRetry={fetchStudentsOverview} />
             ) : overviewChartData.length === 0 ? (
-              <EmptyState message="No students overview data available." />
+              <EmptyState message="No admission overview data available." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-area-chart-container">
@@ -1368,7 +1445,7 @@ export default function DashboardPage() {
                             padding={{ left: 20, right: 20 }}
                           />
                           <YAxis hide domain={[0, yMax]} ticks={yTicks} />
-                          <Tooltip formatter={(val) => [formatNumber(val), "Students"]} />
+                          <Tooltip formatter={(val) => [formatNumber(val), "Students Admitted"]} />
                           <Area
                             type="monotone"
                             dataKey="studentsJoined"
@@ -1386,21 +1463,21 @@ export default function DashboardPage() {
                   <div className="dashboard-student-chip chip-total">
                     <span className="chip-icon"><Users size={15} /></span>
                     <div>
-                      <strong>{formatNumber(metric(overviewState.data, ["totalStudents", "totalCount"]) ?? studentsKpi.value)}</strong>
-                      <small>Total Students</small>
+                      <strong>{formatNumber(overviewState.data?.totalAdmissions ?? overviewState.data?.totalStudents ?? 0)}</strong>
+                      <small>Total Admissions</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-boys">
                     <span className="chip-icon"><Users size={15} /></span>
                     <div>
-                      <strong>{formatNumber(metric(overviewState.data, ["boys", "boysCount", "male", "maleCount"]))}</strong>
+                      <strong>{formatNumber(overviewState.data?.boysCount ?? 0)}</strong>
                       <small>Boys</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-girls">
                     <span className="chip-icon"><Users size={15} /></span>
                     <div>
-                      <strong>{formatNumber(metric(overviewState.data, ["girls", "girlsCount", "female", "femaleCount"]))}</strong>
+                      <strong>{formatNumber(overviewState.data?.girlsCount ?? 0)}</strong>
                       <small>Girls</small>
                     </div>
                   </div>
@@ -1441,7 +1518,7 @@ export default function DashboardPage() {
 
           {/* Card 3: Students Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-attendance-today-card">
-            <CardHeader title="Students Attendance Overview (Today)" />
+            <CardHeader title="Students Attendance Overview (Today)" action={<Link to="/dashboard/attendance/student" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>} />
 
             {studentAttState.loading ? (
               <LoadingState label="Updating attendance..." />
@@ -1513,26 +1590,26 @@ export default function DashboardPage() {
 
                       {/* 5 Summary KPI Chips */}
                       <div className="dashboard-attendance-kpi-row">
-                        <div className="att-kpi-chip">
+                        <Link to="/dashboard/attendance/student" className="att-kpi-chip">
                           <small>Marked Students</small>
                           <strong>{formatNumber(studentAttData.total)}</strong>
-                        </div>
-                        <div className="att-kpi-chip text-present">
+                        </Link>
+                        <Link to="/dashboard/attendance/student" className="att-kpi-chip text-present">
                           <small>Present</small>
                           <strong>{formatNumber(studentAttData.present)}</strong>
-                        </div>
-                        <div className="att-kpi-chip text-absent">
+                        </Link>
+                        <Link to="/dashboard/attendance/student" className="att-kpi-chip text-absent">
                           <small>Absent</small>
                           <strong>{formatNumber(studentAttData.absent)}</strong>
-                        </div>
-                        <div className="att-kpi-chip text-halfday text-late">
+                        </Link>
+                        <Link to="/dashboard/attendance/student" className="att-kpi-chip text-halfday text-late">
                           <small>Half-day</small>
                           <strong>{formatNumber(studentAttData.halfDay)}</strong>
-                        </div>
-                        <div className="att-kpi-chip">
+                        </Link>
+                        <Link to="/dashboard/attendance/student" className="att-kpi-chip">
                           <small>Attendance</small>
                           <strong>{formatNumber(studentAttData.percentage)}%</strong>
-                        </div>
+                        </Link>
                       </div>
                     </>
                   )}
@@ -1540,7 +1617,7 @@ export default function DashboardPage() {
                 {/* Footer */}
                 <div className="dashboard-card-footer">
 
-                  <Link to="/dashboard/attendance/student?view=details" className="dashboard-footer-btn">
+                  <Link to="/dashboard/attendance/student" className="dashboard-footer-btn">
                     View Attendance Details <ChevronRight size={14} />
                   </Link>
                 </div>
@@ -1553,7 +1630,7 @@ export default function DashboardPage() {
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Secondary Analytics">
           {/* Card 1: Staff Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-staff-attendance-card">
-            <CardHeader title="Staff Attendance Overview (Today)" />
+            <CardHeader title="Staff Attendance Overview (Today)" action={<Link to="/dashboard/attendance/staff?tab=staff-attendance" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>} />
 
             {staffAttState.loading ? (
               <LoadingState label="Updating staff attendance..." />
@@ -1629,26 +1706,26 @@ export default function DashboardPage() {
                 {/* Staff Summary Metrics & Split Note */}
                 <div className="dashboard-staff-kpi-wrap">
                   <div className="dashboard-staff-kpis">
-                    <div className="staff-chip">
+                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip">
                       <small>Total Staff</small>
                       <strong>{formatNumber(staffAttData.total)}</strong>
-                    </div>
-                    <div className="staff-chip text-present">
+                    </Link>
+                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip text-present">
                       <small>Present</small>
                       <strong>{formatNumber(staffAttData.present)}</strong>
-                    </div>
-                    <div className="staff-chip text-absent">
+                    </Link>
+                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip text-absent">
                       <small>Absent</small>
                       <strong>{formatNumber(staffAttData.absent)}</strong>
-                    </div>
-                    <div className="staff-chip text-late">
+                    </Link>
+                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip text-late">
                       <small>Late</small>
                       <strong>{formatNumber(staffAttData.late)}</strong>
-                    </div>
-                    <div className="staff-chip text-leave">
+                    </Link>
+                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip text-leave">
                       <small>On Leave</small>
                       <strong>{formatNumber(staffAttData.onLeave)}</strong>
-                    </div>
+                    </Link>
                   </div>
 
                   {(staffAttData.teachingCount !== undefined || staffAttData.nonTeachingCount !== undefined) ? (
@@ -1663,7 +1740,7 @@ export default function DashboardPage() {
                 {/* Footer */}
                 <div className="dashboard-card-footer">
 
-                  <Link to="/dashboard/attendance/staff" className="dashboard-footer-btn">
+                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="dashboard-footer-btn">
                     View Staff Attendance <ChevronRight size={14} />
                   </Link>
                 </div>

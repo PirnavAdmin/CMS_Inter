@@ -86,20 +86,20 @@ export function FacultyPortalContent() {
     <ErrorBoundary>
       <Routes>
         <Route path="/" element={<FacultyDashboard />}>
-          <Route index element={<PermissionRoute permission={routePermissions[""]}><FacultyDashboardHome /></PermissionRoute>} />
-          <Route path="profile" element={<PermissionRoute permission={routePermissions["profile"]}><FacultyProfile /></PermissionRoute>} />
-          <Route path="timetable" element={<PermissionRoute permission={routePermissions["timetable"]}><FacultyTimetable /></PermissionRoute>} />
-          <Route path="classes" element={<PermissionRoute permission={routePermissions["classes"]}><FacultyClasses /></PermissionRoute>} />
-          <Route path="attendance" element={<PermissionRoute permission={routePermissions["attendance"]}><FacultyStudentAttendance /></PermissionRoute>} />
-          <Route path="monthly-report" element={<PermissionRoute permission={routePermissions["monthly-report"]}><FacultyStudentAttendance initialView="monthly" /></PermissionRoute>} />
-          <Route path="marks" element={<PermissionRoute permission={routePermissions["marks"]}><FacultyMarks /></PermissionRoute>} />
-          <Route path="exam-duties" element={<PermissionRoute permission={routePermissions["exam-duties"]}><FacultyExamDuties /></PermissionRoute>} />
-          <Route path="my-attendance" element={<PermissionRoute permission={routePermissions["my-attendance"]}><FacultyMyAttendance /></PermissionRoute>} />
-          <Route path="leave" element={<PermissionRoute permission={routePermissions["leave"]}><FacultyLeave /></PermissionRoute>} />
-          <Route path="payslips" element={<PermissionRoute permission={routePermissions["payslips"]}><FacultyPayslips /></PermissionRoute>} />
-          <Route path="holidays" element={<PermissionRoute permission={routePermissions["holidays"]}><FacultyHolidays /></PermissionRoute>} />
-          <Route path="settings" element={<PermissionRoute permission={routePermissions["settings"]}><FacultySettings /></PermissionRoute>} />
-          <Route path="reimbursements" element={<PermissionRoute permission={routePermissions["reimbursements"]}><FacultyReimbursement /></PermissionRoute>} />
+          <Route index element={<PermissionRoute permission={routePermissions[""]} moduleName="Faculty Dashboard"><FacultyDashboardHome /></PermissionRoute>} />
+          <Route path="profile" element={<PermissionRoute permission={routePermissions["profile"]} moduleName="My Profile"><FacultyProfile /></PermissionRoute>} />
+          <Route path="timetable" element={<PermissionRoute permission={routePermissions["timetable"]} moduleName="Timetable"><FacultyTimetable /></PermissionRoute>} />
+          <Route path="classes" element={<PermissionRoute permission={routePermissions["classes"]} moduleName="My Classes"><FacultyClasses /></PermissionRoute>} />
+          <Route path="attendance" element={<PermissionRoute permission={routePermissions["attendance"]} moduleName="Student Attendance"><FacultyStudentAttendance /></PermissionRoute>} />
+          <Route path="monthly-report" element={<PermissionRoute permission={routePermissions["monthly-report"]} moduleName="Attendance Monthly Report"><FacultyStudentAttendance initialView="monthly" /></PermissionRoute>} />
+          <Route path="marks" element={<PermissionRoute permission={routePermissions["marks"]} moduleName="Marks Entry"><FacultyMarks /></PermissionRoute>} />
+          <Route path="exam-duties" element={<PermissionRoute permission={routePermissions["exam-duties"]} moduleName="Exam Duties"><FacultyExamDuties /></PermissionRoute>} />
+          <Route path="my-attendance" element={<PermissionRoute permission={routePermissions["my-attendance"]} moduleName="My Attendance"><FacultyMyAttendance /></PermissionRoute>} />
+          <Route path="leave" element={<PermissionRoute permission={routePermissions["leave"]} moduleName="Staff Leave"><FacultyLeave /></PermissionRoute>} />
+          <Route path="payslips" element={<PermissionRoute permission={routePermissions["payslips"]} moduleName="Salary & Payslips"><FacultyPayslips /></PermissionRoute>} />
+          <Route path="holidays" element={<PermissionRoute permission={routePermissions["holidays"]} moduleName="Holidays"><FacultyHolidays /></PermissionRoute>} />
+          <Route path="settings" element={<PermissionRoute permission={routePermissions["settings"]} moduleName="Settings"><FacultySettings /></PermissionRoute>} />
+          <Route path="reimbursements" element={<PermissionRoute permission={routePermissions["reimbursements"]} moduleName="Reimbursements"><FacultyReimbursement /></PermissionRoute>} />
           <Route path="*" element={<Navigate to="/faculty-dashboard" replace />} />
         </Route>
       </Routes>
@@ -118,4 +118,3 @@ export default function FacultyPortalRoutes() {
     </ProtectedRoute>
   );
 }
-

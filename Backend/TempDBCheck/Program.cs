@@ -11,154 +11,117 @@ class Program
         {
             try {
                 conn.Open();
-                var sql = @"
-DROP PROCEDURE IF EXISTS `sp_GetDashboardStudentAttendance`;
-CREATE PROCEDURE `sp_GetDashboardStudentAttendance`(
-    IN p_BoardId INT,
-    IN p_AcademicYearId INT,
-    IN p_TargetDate DATE,
-    IN p_ViewBy VARCHAR(50),
-    IN p_CampusId INT
-)
-BEGIN
-    DECLARE v_TargetDate DATE;
-    DECLARE v_TotalStudents INT DEFAULT 0;
-    DECLARE v_Present INT DEFAULT 0;
-    DECLARE v_Absent INT DEFAULT 0;
-    DECLARE v_HalfDay INT DEFAULT 0;
-    DECLARE v_AttPct DECIMAL(5,1) DEFAULT 0.0;
-    DECLARE v_LatestAttTime DATETIME DEFAULT NULL;
+                Console.WriteLine("=== STEP 1: IDEMPOTENT DATABASE SEED ===");
 
-    SET v_TargetDate = COALESCE(p_TargetDate, CURDATE());
-
-    SELECT COUNT(*) INTO v_TotalStudents
-    FROM `Students` s
-    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-      AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
-      AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
-      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId);
-
-    IF v_TotalStudents = 0 THEN
-        SELECT COUNT(*) INTO v_TotalStudents
-        FROM `StudentAdmissions` sa
-        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
-          AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
-          AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
-          AND (p_CampusId IS NULL OR sa.CampusId = p_CampusId);
-    END IF;
-
-    SELECT 
-        COALESCE(SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END), 0),
-        COALESCE(SUM(CASE WHEN a.Status IN (3, 4) THEN 1 ELSE 0 END), 0)
-    INTO v_Present, v_HalfDay
-    FROM `Attendances` a
-    INNER JOIN `Students` s ON a.StudentId = s.StudentId
-    WHERE (
-        DATE(a.AttendanceDate) = v_TargetDate
-        OR DATE(DATE_ADD(a.AttendanceDate, INTERVAL 330 MINUTE)) = v_TargetDate
-        OR DATE(a.CreatedAt) = v_TargetDate
-        OR DATE(DATE_ADD(a.CreatedAt, INTERVAL 330 MINUTE)) = v_TargetDate
-    )
-      AND (a.IsActive = 1 OR a.IsActive IS NULL)
-      AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
-      AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
-      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId);
-
-    SELECT MAX(COALESCE(a.UpdatedAt, a.CreatedAt)) INTO v_LatestAttTime
-    FROM `Attendances` a
-    INNER JOIN `Students` s ON a.StudentId = s.StudentId
-    WHERE (
-        DATE(a.AttendanceDate) = v_TargetDate
-        OR DATE(DATE_ADD(a.AttendanceDate, INTERVAL 330 MINUTE)) = v_TargetDate
-        OR DATE(a.CreatedAt) = v_TargetDate
-        OR DATE(DATE_ADD(a.CreatedAt, INTERVAL 330 MINUTE)) = v_TargetDate
-    )
-      AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
-      AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
-      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId);
-
-    SET v_Absent = GREATEST(0, v_TotalStudents - v_Present - v_HalfDay);
-
-    IF v_TotalStudents > 0 THEN
-        SET v_AttPct = ROUND((v_Present + 0.5 * v_HalfDay) * 100.0 / v_TotalStudents, 1);
-    END IF;
-
-    SELECT 
-        p_ViewBy AS ViewBy,
-        v_TotalStudents AS TotalStudents,
-        v_Present AS Present,
-        v_Absent AS Absent,
-        v_HalfDay AS HalfDayCount,
-        v_AttPct AS AttendancePercentage,
-        DATE_FORMAT(v_TargetDate, '%Y-%m-%d') AS AttendanceDate,
-        DATE_FORMAT(NOW(), '%d %b %Y, %h:%i %p') AS LastUpdatedFormatted;
-
-    IF p_ViewBy = 'Academic Level' THEN
-        SELECT 
-            COALESCE(al.Name, 'Unknown') AS CategoryName,
-            COUNT(s.StudentId) AS TotalStudents,
-            SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END) AS Present,
-            GREATEST(0, COUNT(s.StudentId) - SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END) - SUM(CASE WHEN a.Status IN (3,4) THEN 1 ELSE 0 END)) AS Absent,
-            SUM(CASE WHEN a.Status IN (3,4) THEN 1 ELSE 0 END) AS HalfDay
-        FROM `Students` s
-        LEFT JOIN `AcademicLevels` al ON s.AcademicLevelId = al.Id
-        LEFT JOIN `Attendances` a ON s.StudentId = a.StudentId 
-             AND (DATE(a.AttendanceDate) = v_TargetDate OR DATE(a.CreatedAt) = v_TargetDate)
-             AND (a.IsActive = 1 OR a.IsActive IS NULL)
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-          AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
-          AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
-          AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
-        GROUP BY al.Name;
-    ELSEIF p_ViewBy = 'Group' THEN
-        SELECT 
-            COALESCE(g.Name, 'Unknown') AS CategoryName,
-            COUNT(s.StudentId) AS TotalStudents,
-            SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END) AS Present,
-            GREATEST(0, COUNT(s.StudentId) - SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END) - SUM(CASE WHEN a.Status IN (3,4) THEN 1 ELSE 0 END)) AS Absent,
-            SUM(CASE WHEN a.Status IN (3,4) THEN 1 ELSE 0 END) AS HalfDay
-        FROM `Students` s
-        LEFT JOIN `Groups` g ON s.GroupId = g.Id
-        LEFT JOIN `Attendances` a ON s.StudentId = a.StudentId 
-             AND (DATE(a.AttendanceDate) = v_TargetDate OR DATE(a.CreatedAt) = v_TargetDate)
-             AND (a.IsActive = 1 OR a.IsActive IS NULL)
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-          AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
-          AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
-          AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
-        GROUP BY g.Name;
-    ELSEIF p_ViewBy = 'Section' THEN
-        SELECT 
-            COALESCE(sec.Name, 'Unknown') AS CategoryName,
-            COUNT(s.StudentId) AS TotalStudents,
-            SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END) AS Present,
-            GREATEST(0, COUNT(s.StudentId) - SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END) - SUM(CASE WHEN a.Status IN (3,4) THEN 1 ELSE 0 END)) AS Absent,
-            SUM(CASE WHEN a.Status IN (3,4) THEN 1 ELSE 0 END) AS HalfDay
-        FROM `Students` s
-        LEFT JOIN `Sections` sec ON s.SectionId = sec.Id
-        LEFT JOIN `Attendances` a ON s.StudentId = a.StudentId 
-             AND (DATE(a.AttendanceDate) = v_TargetDate OR DATE(a.CreatedAt) = v_TargetDate)
-             AND (a.IsActive = 1 OR a.IsActive IS NULL)
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-          AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
-          AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
-          AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
-        GROUP BY sec.Name;
-    ELSE
-        SELECT 'All Students' AS CategoryName, 
-               v_TotalStudents AS TotalStudents, 
-               v_Present AS Present, 
-               v_Absent AS Absent, 
-               v_HalfDay AS HalfDay;
-    END IF;
-END;
-";
-                using (var cmd = new MySqlCommand(sql, conn))
+                // 1. Roles: Ensure Role 16 (Inventory Manager) is active
+                int inventoryRoleId = 0;
+                using (var cmd = new MySqlCommand("SELECT RoleId, RoleName, IsActive FROM `Roles` WHERE RoleName = 'Inventory Manager' LIMIT 1;", conn))
+                using (var reader = cmd.ExecuteReader())
                 {
-                    cmd.ExecuteNonQuery();
-                    Console.WriteLine("SP updated successfully.");
+                    if (reader.Read())
+                    {
+                        inventoryRoleId = Convert.ToInt32(reader["RoleId"]);
+                        Console.WriteLine($"Found existing 'Inventory Manager' role with RoleId: {inventoryRoleId}, IsActive: {reader["IsActive"]}");
+                    }
                 }
-            } catch(Exception ex) { Console.WriteLine(ex.Message); }
+
+                if (inventoryRoleId == 0)
+                {
+                    using (var cmd = new MySqlCommand(@"
+INSERT INTO `Roles` (`RoleName`, `Description`, `IsSystemRole`, `IsActive`)
+VALUES ('Inventory Manager', 'Stores and inventory stock operations', 0, 1);
+SELECT LAST_INSERT_ID();", conn))
+                    {
+                        inventoryRoleId = Convert.ToInt32(cmd.ExecuteScalar());
+                        Console.WriteLine($"Created new 'Inventory Manager' role with RoleId: {inventoryRoleId}");
+                    }
+                }
+                else
+                {
+                    using (var cmd = new MySqlCommand("UPDATE `Roles` SET `IsActive` = 1, `Description` = 'Stores and inventory stock operations' WHERE `RoleId` = @id;", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@id", inventoryRoleId);
+                        cmd.ExecuteNonQuery();
+                        Console.WriteLine($"Updated 'Inventory Manager' role {inventoryRoleId} to active.");
+                    }
+                }
+
+                // 2. Department: Stores & Inventory
+                int departmentId = 0;
+                using (var cmd = new MySqlCommand("SELECT DepartmentId, DepartmentName FROM `Departments` WHERE DepartmentName = 'Stores & Inventory' LIMIT 1;", conn))
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        departmentId = Convert.ToInt32(reader["DepartmentId"]);
+                        Console.WriteLine($"Found existing 'Stores & Inventory' DepartmentId: {departmentId}");
+                    }
+                }
+
+                if (departmentId == 0)
+                {
+                    using (var cmd = new MySqlCommand(@"
+INSERT INTO `Departments` (`DepartmentName`, `DepartmentCode`, `StaffType`, `Description`, `IsActive`, `CreatedAt`)
+VALUES ('Stores & Inventory', 'DEP_STORES_INV', 'Non-Teaching', 'Central stores, warehouse and asset management', 1, UTC_TIMESTAMP());
+SELECT LAST_INSERT_ID();", conn))
+                    {
+                        departmentId = Convert.ToInt32(cmd.ExecuteScalar());
+                        Console.WriteLine($"Created new 'Stores & Inventory' Department with DepartmentId: {departmentId}");
+                    }
+                }
+                else
+                {
+                    using (var cmd = new MySqlCommand("UPDATE `Departments` SET `IsActive` = 1, `StaffType` = 'Non-Teaching' WHERE `DepartmentId` = @id;", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@id", departmentId);
+                        cmd.ExecuteNonQuery();
+                        Console.WriteLine($"Ensured Department {departmentId} is Active and Non-Teaching.");
+                    }
+                }
+
+                // 3. Designation: Inventory Manager linked to Stores & Inventory
+                int designationId = 0;
+                using (var cmd = new MySqlCommand("SELECT Id, Name, DepartmentId FROM `Designations` WHERE Name = 'Inventory Manager' LIMIT 1;", conn))
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        designationId = Convert.ToInt32(reader["Id"]);
+                        Console.WriteLine($"Found existing 'Inventory Manager' Designation with Id: {designationId}, DeptId: {reader["DepartmentId"]}");
+                    }
+                }
+
+                if (designationId == 0)
+                {
+                    using (var cmd = new MySqlCommand(@"
+INSERT INTO `Designations` (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `CreatedAt`)
+VALUES ('Inventory Manager', @deptId, 'Non-Teaching', 1, UTC_TIMESTAMP());
+SELECT LAST_INSERT_ID();", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@deptId", departmentId);
+                        designationId = Convert.ToInt32(cmd.ExecuteScalar());
+                        Console.WriteLine($"Created new 'Inventory Manager' Designation with Id: {designationId} linked to DepartmentId: {departmentId}");
+                    }
+                }
+                else
+                {
+                    using (var cmd = new MySqlCommand("UPDATE `Designations` SET `DepartmentId` = @deptId, `StaffType` = 'Non-Teaching', `IsActive` = 1 WHERE `Id` = @id;", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@deptId", departmentId);
+                        cmd.Parameters.AddWithValue("@id", designationId);
+                        cmd.ExecuteNonQuery();
+                        Console.WriteLine($"Updated Designation {designationId} to link to DepartmentId: {departmentId}.");
+                    }
+                }
+
+                Console.WriteLine("\n=== SEED SUMMARY ===");
+                Console.WriteLine($"RoleId: {inventoryRoleId} (Inventory Manager)");
+                Console.WriteLine($"DepartmentId: {departmentId} (Stores & Inventory)");
+                Console.WriteLine($"DesignationId: {designationId} (Inventory Manager)");
+
+            } catch(Exception ex) {
+                Console.WriteLine("ERROR: " + ex.ToString());
+            }
         }
     }
 }

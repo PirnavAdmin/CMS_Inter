@@ -19,5 +19,6 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public string? Remarks { get; set; }
         public bool IsLate { get; set; }
         public bool IsEarlyCheckout { get; set; }
+        public StaffType StaffType { get; set; } = StaffType.Teaching;
     }
 }

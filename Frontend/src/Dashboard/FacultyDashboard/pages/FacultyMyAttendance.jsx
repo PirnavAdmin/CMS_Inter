@@ -158,24 +158,20 @@ export default function FacultyMyAttendance() {
   const syncGlobalPunchState = useCallback(
     (status, inTime, outTime) => {
       const setPunchState = contextRef.current?.setPunchState;
+      const isPunchedIn = status === "punched_in";
+      const next = {
+        isPunchedIn,
+        inTime: inTime,
+        outTime: outTime,
+        hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunchedIn) : "--",
+      };
       if (typeof setPunchState === "function") {
-        const isPunchedIn = status === "punched_in";
-        setPunchState((prev) => {
-          if (
-            prev?.isPunchedIn === isPunchedIn &&
-            prev?.inTime === inTime &&
-            prev?.outTime === outTime
-          ) {
-            return prev;
-          }
-          return {
-            isPunchedIn,
-            inTime: inTime,
-            outTime: outTime,
-            hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunchedIn) : "--",
-          };
-        });
+        setPunchState(next);
       }
+      try {
+        localStorage.setItem("staff_punch_state", JSON.stringify(next));
+        window.dispatchEvent(new Event("storage"));
+      } catch {}
     },
     []
   );
@@ -485,10 +481,13 @@ export default function FacultyMyAttendance() {
           <div className="sp-punch-twin-grid">
             {/* Check In Panel */}
             <div className="sp-twin-panel checkin-panel">
-              <div className="sp-twin-icon-box checkin">
-                <LogIn size={16} />
+              {/* Check In Header: Icon beside Title */}
+              <div className="sp-twin-header">
+                <div className="sp-twin-icon-box checkin">
+                  <LogIn size={15} />
+                </div>
+                <div className="sp-twin-title checkin">CHECK IN</div>
               </div>
-              <div className="sp-twin-title checkin">CHECK IN</div>
 
               {/* Modern Digital Clock & Status Badge */}
               <div className="sp-digital-display checkin">
@@ -521,10 +520,13 @@ export default function FacultyMyAttendance() {
 
             {/* Check Out Panel */}
             <div className="sp-twin-panel checkout-panel">
-              <div className="sp-twin-icon-box checkout">
-                <LogOut size={16} />
+              {/* Check Out Header: Icon beside Title */}
+              <div className="sp-twin-header">
+                <div className="sp-twin-icon-box checkout">
+                  <LogOut size={15} />
+                </div>
+                <div className="sp-twin-title checkout">CHECK OUT</div>
               </div>
-              <div className="sp-twin-title checkout">CHECK OUT</div>
 
               {/* Modern Digital Clock & Status Badge */}
               <div className="sp-digital-display checkout">

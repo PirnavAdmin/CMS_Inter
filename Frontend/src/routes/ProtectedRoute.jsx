@@ -199,8 +199,9 @@ export default function ProtectedRoute({
 }) {
   // Discard sessions created by the removed local preview login.
   const storedToken = getAuthToken();
-  if (storedToken === "exam-cell-local-preview") clearAuthSession();
-  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
+  const isPreview = storedToken === "exam-cell-local-preview" || /^(demo-|mock-)/.test(storedToken);
+  if (isPreview) clearAuthSession();
+  const token = isPreview ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenExpired = Boolean(tokenState?.isJwt && tokenState?.isExpired);
 
@@ -211,6 +212,10 @@ export default function ProtectedRoute({
 
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
+  if (!user && !role) {
+    clearAuthSession();
+    return <Navigate to="/login" replace />;
+  }
   const isWarden = isWardenRole(role, user);
   const isNonTeaching = !isWarden && isNonTeachingRole(role, user);
   const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden && !isNonTeaching;
@@ -266,7 +271,7 @@ export default function ProtectedRoute({
     return <Navigate to="/warden-dashboard" replace />;
   }
 
-  if (requireExamCell && !isExamCell) {
+  if (requireExamCell && !isExamCell && !isAdmin && !isPrincipal) {
     const destination = isWarden
       ? "/warden-dashboard"
       : isAdmin
@@ -307,11 +312,15 @@ export default function ProtectedRoute({
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
   }
-  if (requireStudent && isWarden) return <Navigate to="/warden-dashboard" replace />;
-  if (requireStudent && (isAdmin || isPrincipal)) return <Navigate to={isPrincipal ? "/principal-dashboard" : "/dashboard"} replace />;
-  if (requireStudent && isAccountant) return <Navigate to="/accountant-dashboard" replace />;
-  if (requireStudent && isFaculty) return <Navigate to="/faculty-dashboard" replace />;
-  if (requireStudent && isParent) return <Navigate to="/parent-dashboard" replace />;
+  if (requireStudent && !isStudent) {
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
+    if (isAdmin || isPrincipal) return <Navigate to={isPrincipal ? "/principal-dashboard" : "/dashboard"} replace />;
+    if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
+    if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
+    if (isParent) return <Navigate to="/parent-dashboard" replace />;
+    if (isExamCell) return <Navigate to="/exam-cell-dashboard" replace />;
+    return <Navigate to="/login" replace />;
+  }
 
   if (requireParent && !isParent && !isAdmin) {
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;
@@ -341,8 +350,9 @@ export default function ProtectedRoute({
 export function PublicOnlyRoute({ children }) {
   // Discard sessions created by the removed local preview login.
   const storedToken = getAuthToken();
-  if (storedToken === "exam-cell-local-preview") clearAuthSession();
-  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
+  const isPreview = storedToken === "exam-cell-local-preview" || /^(demo-|mock-)/.test(storedToken);
+  if (isPreview) clearAuthSession();
+  const token = isPreview ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenValid = Boolean(token && (!tokenState?.isJwt || !tokenState?.isExpired));
 
@@ -357,7 +367,7 @@ export function PublicOnlyRoute({ children }) {
   const isAccountant = !isWarden && isAccountantRole(role);
   const isStudent = isStudentRole(role);
 
-  if (isTokenValid) {
+  if (isTokenValid && (user || role)) {
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isNonTeaching) return <Navigate to="/non-teaching-dashboard" replace />;
     if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;

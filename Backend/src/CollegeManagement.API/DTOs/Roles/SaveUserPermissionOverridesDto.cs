@@ -25,8 +25,6 @@ namespace CollegeManagement.API.DTOs.Roles
                 return Permissions.Select(p => new ModulePermissionUpdateItem
                 {
                     SubModule = MapModuleIdToSubModule(p.Module),
-                    ScreenId = p.ScreenId ?? string.Empty,
-                    ScreenName = p.ScreenName ?? string.Empty,
                     CanView = p.Actions.Any(a => a.Equals("view", StringComparison.OrdinalIgnoreCase)),
                     CanAdd = p.Actions.Any(a => a.Equals("create", StringComparison.OrdinalIgnoreCase) || a.Equals("add", StringComparison.OrdinalIgnoreCase)),
                     CanEdit = p.Actions.Any(a => a.Equals("edit", StringComparison.OrdinalIgnoreCase)),
@@ -39,7 +37,43 @@ namespace CollegeManagement.API.DTOs.Roles
 
         private static string MapModuleIdToSubModule(string moduleId)
         {
-            return UpdateRolePermissionsRequest.MapModuleIdToSubModule(moduleId);
+            if (string.IsNullOrWhiteSpace(moduleId)) return string.Empty;
+            var clean = moduleId.Trim().ToLowerInvariant();
+
+            var map = new Dictionary<string, string>
+            {
+                { "dashboard", "Dashboard" },
+                { "group-management", "Group Management" },
+                { "subject-management", "Subject Management" },
+                { "section-room", "Section & Room" },
+                { "timetable", "Timetable" },
+                { "holiday-management", "Holiday Management" },
+                { "student-admission", "Student Admission" },
+                { "student-management", "Student Management" },
+                { "section-allocation", "Section Allocation" },
+                { "attendance", "Attendance" },
+                { "promotion", "Promotion" },
+                { "transport", "Transport" },
+                { "staff-management", "Staff Management" },
+                { "department-designation", "Department & Designation" },
+                { "staff-attendance", "Staff Attendance" },
+                { "staff-leave-management", "Staff Leave Management" },
+                { "examination", "Examination" },
+                { "examinations", "Examination" },
+                { "marks-evaluation", "Marks Evaluation" },
+                { "results", "Results" },
+                { "fee-management", "Fee Management" },
+                { "payroll", "Payroll" },
+                { "certificates", "Certificates" },
+                { "reports-analytics", "Reports & Analytics" },
+                { "hostel-management", "Hostel Management" },
+                { "settings", "Settings" },
+                { "roles-permissions", "Roles & Permissions" },
+                { "inventory-management", "Inventory Management" },
+                { "inventory", "Inventory Management" }
+            };
+
+            return map.TryGetValue(clean, out var subModule) ? subModule : moduleId;
         }
     }
 }

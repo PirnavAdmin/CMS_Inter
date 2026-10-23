@@ -125,6 +125,7 @@ export default function DriverGpsPage() {
   useEffect(() => {
     if (!isTracking) return;
     const fetchGps = async () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       try {
         const res = await getGps();
         const data = res.data || res;
@@ -136,7 +137,20 @@ export default function DriverGpsPage() {
     };
     fetchGps();
     const interval = setInterval(fetchGps, 5000);
-    return () => clearInterval(interval);
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchGps();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+    };
   }, [isTracking]);
 
   const stops = routeDetails?.stops || [];

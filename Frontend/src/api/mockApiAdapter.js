@@ -31,7 +31,7 @@ import {
 } from "../data/mockData.js";
 
 // Storage helpers for session persistence
-const STORAGE_PREFIX = "cms_mock_store_";
+const STORAGE_PREFIX = "cms_mock_store_v4_";
 
 function getStored(key, defaultVal) {
   try {
@@ -1021,16 +1021,16 @@ const initialAttendanceTimingConfigs = [
 
 const initialStaffAttendance = [
   {
-    id: 1,
-    facultyId: 101,
-    staffId: 101,
+    id: 1109,
+    facultyId: 1109,
+    staffId: 1109,
     employeeId: "MNT0043",
     staffName: "Preethi Y",
     name: "Preethi Y",
     designation: "Examination Incharge",
     department: "Examinations",
-    attendanceDate: "2026-10-21",
-    date: "2026-10-21",
+    attendanceDate: "2026-10-23",
+    date: "2026-10-23",
     inTime: "08:52 AM",
     outTime: "05:04 PM",
     status: 1,
@@ -1041,7 +1041,7 @@ const initialStaffAttendance = [
     academicYearId: 6,
   },
   {
-    id: 2,
+    id: 102,
     facultyId: 102,
     staffId: 102,
     employeeId: "EMP-H102",
@@ -1049,8 +1049,8 @@ const initialStaffAttendance = [
     name: "Mrs. P. Lakshmi",
     designation: "Associate Professor",
     department: "Physics",
-    attendanceDate: "2026-10-21",
-    date: "2026-10-21",
+    attendanceDate: "2026-10-23",
+    date: "2026-10-23",
     inTime: "09:05 AM",
     outTime: "04:55 PM",
     status: 1,
@@ -1080,8 +1080,12 @@ const initialStudentAttendance = [
     levelName: "Intermediate 1st Year",
     boardId: 1,
     academicYearId: 6,
+    campusId: 1,
     morningStatus: "Present",
     afternoonStatus: "Present",
+    attendanceStatus: "Present",
+    status: "Present",
+    isAttendanceMarked: true,
     attendancePercentage: "95.5%",
     percentage: 95.5,
     totalWorkingDays: 100,
@@ -1105,8 +1109,12 @@ const initialStudentAttendance = [
     levelName: "Intermediate 1st Year",
     boardId: 1,
     academicYearId: 6,
+    campusId: 1,
     morningStatus: "Present",
     afternoonStatus: "Present",
+    attendanceStatus: "Present",
+    status: "Present",
+    isAttendanceMarked: true,
     attendancePercentage: "92.0%",
     percentage: 92.0,
     totalWorkingDays: 100,
@@ -1130,8 +1138,12 @@ const initialStudentAttendance = [
     levelName: "Intermediate 1st Year",
     boardId: 1,
     academicYearId: 6,
+    campusId: 1,
     morningStatus: "Present",
     afternoonStatus: "Absent",
+    attendanceStatus: "Half Day",
+    status: "Half Day",
+    isAttendanceMarked: true,
     attendancePercentage: "88.0%",
     percentage: 88.0,
     totalWorkingDays: 100,
@@ -1155,8 +1167,12 @@ const initialStudentAttendance = [
     levelName: "Intermediate 1st Year",
     boardId: 1,
     academicYearId: 6,
+    campusId: 1,
     morningStatus: "Absent",
     afternoonStatus: "Absent",
+    attendanceStatus: "Absent",
+    status: "Absent",
+    isAttendanceMarked: true,
     attendancePercentage: "68.0%",
     percentage: 68.0,
     totalWorkingDays: 100,
@@ -1180,13 +1196,46 @@ const initialStudentAttendance = [
     levelName: "Intermediate 1st Year",
     boardId: 1,
     academicYearId: 6,
+    campusId: 1,
     morningStatus: "Present",
     afternoonStatus: "Present",
+    attendanceStatus: "Present",
+    status: "Present",
+    isAttendanceMarked: true,
     attendancePercentage: "91.0%",
     percentage: 91.0,
     totalWorkingDays: 100,
     presentDays: 91,
     absentDays: 9,
+  },
+  {
+    studentId: 106,
+    id: 106,
+    studentName: "Sneha Patel",
+    name: "Sneha Patel",
+    rollNo: "260106",
+    rollNumber: "260106",
+    admissionNo: "ADM202606",
+    admissionNumber: "ADM202606",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    groupId: 1,
+    groupName: "MPC",
+    academicLevelId: 1,
+    levelName: "Intermediate 1st Year",
+    boardId: 1,
+    academicYearId: 6,
+    campusId: 1,
+    morningStatus: "Absent",
+    afternoonStatus: "Present",
+    attendanceStatus: "Half Day",
+    status: "Half Day",
+    isAttendanceMarked: true,
+    attendancePercentage: "71.0%",
+    percentage: 71.0,
+    totalWorkingDays: 100,
+    presentDays: 71,
+    absentDays: 29,
   },
 ];
 
@@ -1307,12 +1356,45 @@ const initialEvaluations = [
     rowVersion: 1,
   },
   {
+    evaluationId: "eval-4-1-2",
+    id: "eval-4-1-2",
+    examinationId: 4,
+    examId: 4,
+    examinationName: "Pre-Final Examination 2026-27",
+    examCode: "PFE-2026",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    subjectId: 2,
+    subjectName: "Chemistry - I",
+    subjectCode: "CHE101",
+    groupId: 1,
+    groupName: "MPC",
+    academicLevelId: 1,
+    academicYearId: 6,
+    boardId: 1,
+    campusId: 1,
+    facultyId: 103,
+    facultyName: "Dr. M. K. Rao",
+    totalStudents: 4,
+    evaluatedCount: 4,
+    maxMarks: 100,
+    internalMax: 20,
+    theoryMax: 80,
+    practicalMax: 0,
+    passPercentage: 35,
+    status: "APPROVED",
+    evaluationStatus: "APPROVED",
+    isApproved: true,
+    rowVersion: 1,
+  },
+  {
     evaluationId: "eval-4-1-3",
     id: "eval-4-1-3",
     examinationId: 4,
     examId: 4,
     examinationName: "Pre-Final Examination 2026-27",
     examCode: "PFE-2026",
+    examTitle: "Pre-Final Examination 2026-27",
     sectionId: 1,
     sectionName: "MPC - Section A",
     subjectId: 3,
@@ -1338,6 +1420,166 @@ const initialEvaluations = [
     isApproved: true,
     rowVersion: 1,
   },
+  {
+    evaluationId: "eval-4-1-4",
+    id: "eval-4-1-4",
+    examinationId: 4,
+    examId: 4,
+    examinationName: "Pre-Final Examination 2026-27",
+    examCode: "PFE-2026",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    subjectId: 4,
+    subjectName: "English - I",
+    subjectCode: "ENG101",
+    groupId: 1,
+    groupName: "MPC",
+    academicLevelId: 1,
+    academicYearId: 6,
+    boardId: 1,
+    campusId: 1,
+    facultyId: 104,
+    facultyName: "Mr. B. Raman",
+    totalStudents: 4,
+    evaluatedCount: 4,
+    maxMarks: 100,
+    internalMax: 20,
+    theoryMax: 80,
+    practicalMax: 0,
+    passPercentage: 35,
+    status: "APPROVED",
+    evaluationStatus: "APPROVED",
+    isApproved: true,
+    rowVersion: 1,
+  },
+  {
+    evaluationId: "eval-1-1-1",
+    id: "eval-1-1-1",
+    examinationId: 1,
+    examId: 1,
+    examinationName: "Quarterly Examination 2026-27",
+    examCode: "QTR-2026",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    subjectId: 1,
+    subjectName: "Mathematics - IA",
+    subjectCode: "MAT101",
+    groupId: 1,
+    groupName: "MPC",
+    academicLevelId: 1,
+    academicYearId: 6,
+    boardId: 1,
+    campusId: 1,
+    facultyId: 101,
+    facultyName: "Dr. K. Srinivas",
+    totalStudents: 4,
+    evaluatedCount: 4,
+    maxMarks: 100,
+    internalMax: 20,
+    theoryMax: 80,
+    practicalMax: 0,
+    passPercentage: 35,
+    status: "SUBMITTED",
+    evaluationStatus: "SUBMITTED",
+    isApproved: false,
+    rowVersion: 1,
+  },
+  {
+    evaluationId: "eval-1-1-2",
+    id: "eval-1-1-2",
+    examinationId: 1,
+    examId: 1,
+    examinationName: "Quarterly Examination 2026-27",
+    examCode: "QTR-2026",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    subjectId: 3,
+    subjectName: "Physics - I",
+    subjectCode: "PHY101",
+    groupId: 1,
+    groupName: "MPC",
+    academicLevelId: 1,
+    academicYearId: 6,
+    boardId: 1,
+    campusId: 1,
+    facultyId: 102,
+    facultyName: "Mrs. P. Lakshmi",
+    totalStudents: 4,
+    evaluatedCount: 4,
+    maxMarks: 100,
+    internalMax: 20,
+    theoryMax: 80,
+    practicalMax: 0,
+    passPercentage: 35,
+    status: "VERIFIED",
+    evaluationStatus: "VERIFIED",
+    isApproved: false,
+    rowVersion: 1,
+  },
+  {
+    evaluationId: "eval-1-1-3",
+    id: "eval-1-1-3",
+    examinationId: 1,
+    examId: 1,
+    examinationName: "Quarterly Examination 2026-27",
+    examCode: "QTR-2026",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    subjectId: 2,
+    subjectName: "Chemistry - I",
+    subjectCode: "CHE101",
+    groupId: 1,
+    groupName: "MPC",
+    academicLevelId: 1,
+    academicYearId: 6,
+    boardId: 1,
+    campusId: 1,
+    facultyId: 103,
+    facultyName: "Dr. M. K. Rao",
+    totalStudents: 4,
+    evaluatedCount: 0,
+    maxMarks: 100,
+    internalMax: 20,
+    theoryMax: 80,
+    practicalMax: 0,
+    passPercentage: 35,
+    status: "DRAFT",
+    evaluationStatus: "DRAFT",
+    isApproved: false,
+    rowVersion: 1,
+  },
+  {
+    evaluationId: "eval-1-1-4",
+    id: "eval-1-1-4",
+    examinationId: 1,
+    examId: 1,
+    examinationName: "Quarterly Examination 2026-27",
+    examCode: "QTR-2026",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    subjectId: 4,
+    subjectName: "English - I",
+    subjectCode: "ENG101",
+    groupId: 1,
+    groupName: "MPC",
+    academicLevelId: 1,
+    academicYearId: 6,
+    boardId: 1,
+    campusId: 1,
+    facultyId: 104,
+    facultyName: "Mr. B. Raman",
+    totalStudents: 4,
+    evaluatedCount: 4,
+    maxMarks: 100,
+    internalMax: 20,
+    theoryMax: 80,
+    practicalMax: 0,
+    passPercentage: 35,
+    status: "SUBMITTED",
+    evaluationStatus: "SUBMITTED",
+    isApproved: false,
+    rowVersion: 1,
+  },
 ];
 
 const initialStudentMarks = [
@@ -1345,8 +1587,10 @@ const initialStudentMarks = [
     markId: 1,
     evaluationId: "eval-4-1-1",
     examinationId: 4,
+    examId: 4,
     sectionId: 1,
     subjectId: 1,
+    subjectName: "Mathematics - IA",
     studentId: 101,
     studentName: "Rahul Sharma",
     rollNo: "260101",
@@ -1354,8 +1598,10 @@ const initialStudentMarks = [
     practicalMarks: 0,
     theoryMarks: 76,
     obtainedMarks: 96,
+    marksObtained: 96,
     totalMarks: 96,
     maxMarks: 100,
+    passMarks: 35,
     status: "PRESENT",
     isAbsent: false,
   },
@@ -1363,8 +1609,10 @@ const initialStudentMarks = [
     markId: 2,
     evaluationId: "eval-4-1-1",
     examinationId: 4,
+    examId: 4,
     sectionId: 1,
     subjectId: 1,
+    subjectName: "Mathematics - IA",
     studentId: 102,
     studentName: "Priya Varma",
     rollNo: "260102",
@@ -1372,8 +1620,10 @@ const initialStudentMarks = [
     practicalMarks: 0,
     theoryMarks: 74,
     obtainedMarks: 93,
+    marksObtained: 93,
     totalMarks: 93,
     maxMarks: 100,
+    passMarks: 35,
     status: "PRESENT",
     isAbsent: false,
   },
@@ -1381,8 +1631,10 @@ const initialStudentMarks = [
     markId: 3,
     evaluationId: "eval-4-1-1",
     examinationId: 4,
+    examId: 4,
     sectionId: 1,
     subjectId: 1,
+    subjectName: "Mathematics - IA",
     studentId: 103,
     studentName: "Venkata Sai",
     rollNo: "260103",
@@ -1390,8 +1642,10 @@ const initialStudentMarks = [
     practicalMarks: 0,
     theoryMarks: 68,
     obtainedMarks: 86,
+    marksObtained: 86,
     totalMarks: 86,
     maxMarks: 100,
+    passMarks: 35,
     status: "PRESENT",
     isAbsent: false,
   },
@@ -1399,8 +1653,10 @@ const initialStudentMarks = [
     markId: 4,
     evaluationId: "eval-4-1-1",
     examinationId: 4,
+    examId: 4,
     sectionId: 1,
     subjectId: 1,
+    subjectName: "Mathematics - IA",
     studentId: 104,
     studentName: "Ananya Reddy",
     rollNo: "260104",
@@ -1408,8 +1664,120 @@ const initialStudentMarks = [
     practicalMarks: 0,
     theoryMarks: 62,
     obtainedMarks: 79,
+    marksObtained: 79,
     totalMarks: 79,
     maxMarks: 100,
+    passMarks: 35,
+    status: "PRESENT",
+    isAbsent: false,
+  },
+  {
+    markId: 5,
+    evaluationId: "eval-4-1-2",
+    examinationId: 4,
+    examId: 4,
+    sectionId: 1,
+    subjectId: 2,
+    subjectName: "Chemistry - I",
+    studentId: 101,
+    studentName: "Rahul Sharma",
+    rollNo: "260101",
+    internalMarks: 19,
+    practicalMarks: 0,
+    theoryMarks: 75,
+    obtainedMarks: 94,
+    marksObtained: 94,
+    totalMarks: 94,
+    maxMarks: 100,
+    passMarks: 35,
+    status: "PRESENT",
+    isAbsent: false,
+  },
+  {
+    markId: 6,
+    evaluationId: "eval-4-1-3",
+    examinationId: 4,
+    examId: 4,
+    sectionId: 1,
+    subjectId: 3,
+    subjectName: "Physics - I",
+    studentId: 101,
+    studentName: "Rahul Sharma",
+    rollNo: "260101",
+    internalMarks: 20,
+    practicalMarks: 0,
+    theoryMarks: 76,
+    obtainedMarks: 96,
+    marksObtained: 96,
+    totalMarks: 96,
+    maxMarks: 100,
+    passMarks: 35,
+    status: "PRESENT",
+    isAbsent: false,
+  },
+  {
+    markId: 7,
+    evaluationId: "eval-4-1-4",
+    examinationId: 4,
+    examId: 4,
+    sectionId: 1,
+    subjectId: 4,
+    subjectName: "English - I",
+    studentId: 101,
+    studentName: "Rahul Sharma",
+    rollNo: "260101",
+    internalMarks: 19,
+    practicalMarks: 0,
+    theoryMarks: 76,
+    obtainedMarks: 95,
+    marksObtained: 95,
+    totalMarks: 95,
+    maxMarks: 100,
+    passMarks: 35,
+    status: "PRESENT",
+    isAbsent: false,
+  },
+  {
+    markId: 8,
+    evaluationId: "eval-1-1-1",
+    examinationId: 1,
+    examId: 1,
+    sectionId: 1,
+    subjectId: 1,
+    subjectName: "Mathematics - IA",
+    studentId: 101,
+    studentName: "Rahul Sharma",
+    rollNo: "260101",
+    internalMarks: 18,
+    practicalMarks: 0,
+    theoryMarks: 74,
+    obtainedMarks: 92,
+    marksObtained: 92,
+    totalMarks: 92,
+    maxMarks: 100,
+    passMarks: 35,
+    status: "PRESENT",
+    isAbsent: false,
+  },
+  {
+    markId: 9,
+    evaluationId: "eval-1-1-1",
+    examinationId: 1,
+    examId: 1,
+    sectionId: 1,
+    subjectId: 1,
+    subjectName: "Mathematics - IA",
+    studentId: 102,
+    studentName: "Priya Varma",
+    rollNo: "260102",
+    internalMarks: 17,
+    practicalMarks: 0,
+    theoryMarks: 72,
+    obtainedMarks: 89,
+    marksObtained: 89,
+    totalMarks: 89,
+    maxMarks: 100,
+    passMarks: 35,
     status: "PRESENT",
     isAbsent: false,
   },
@@ -1422,11 +1790,19 @@ const initialPublishedResults = [
     examId: 4,
     examName: "Pre-Final Examination 2026-27",
     examCode: "PFE-2026",
+    campusId: 1,
     boardId: 1,
     academicYearId: 6,
     groupId: 1,
     groupName: "MPC",
     academicLevelId: 1,
+    isPublished: true,
+    status: "PUBLISHED",
+    publishedDate: "2026-10-15",
+    totalStudents: 4,
+    passedStudents: 4,
+    failedStudents: 0,
+    passPercentage: 100,
     sections: [
       {
         sectionId: 1,
@@ -1439,12 +1815,13 @@ const initialPublishedResults = [
         highestPercentage: 96.0,
         lowestPercentage: 79.0,
         isPublished: true,
+        status: "PUBLISHED",
         publishedDate: "2026-10-15",
         students: [
-          { studentId: 101, studentName: "Rahul Sharma", rollNo: "260101", total: 188, maximum: 200, percentage: 94.0, result: "PASS", grade: "A+" },
-          { studentId: 102, studentName: "Priya Varma", rollNo: "260102", total: 182, maximum: 200, percentage: 91.0, result: "PASS", grade: "A+" },
-          { studentId: 103, studentName: "Venkata Sai", rollNo: "260103", total: 170, maximum: 200, percentage: 85.0, result: "PASS", grade: "A" },
-          { studentId: 104, studentName: "Ananya Reddy", rollNo: "260104", total: 154, maximum: 200, percentage: 77.0, result: "PASS", grade: "B+" },
+          { studentId: 101, studentName: "Rahul Sharma", rollNo: "260101", total: 379, maximum: 400, percentage: 94.75, result: "PASS", grade: "A+" },
+          { studentId: 102, studentName: "Priya Varma", rollNo: "260102", total: 365, maximum: 400, percentage: 91.25, result: "PASS", grade: "A+" },
+          { studentId: 103, studentName: "Venkata Sai", rollNo: "260103", total: 345, maximum: 400, percentage: 86.25, result: "PASS", grade: "A" },
+          { studentId: 104, studentName: "Ananya Reddy", rollNo: "260104", total: 312, maximum: 400, percentage: 78.0, result: "PASS", grade: "B+" },
         ],
       },
     ],
@@ -1469,6 +1846,9 @@ const initialPromotions = [
     programName: "General",
     sectionId: 1,
     sectionName: "MPC - Section A",
+    campusId: 1,
+    boardId: 1,
+    academicYearId: 6,
     attendancePercentage: 95.5,
     academicScore: 94.0,
     feeDue: 0,
@@ -1494,6 +1874,9 @@ const initialPromotions = [
     programName: "General",
     sectionId: 1,
     sectionName: "MPC - Section A",
+    campusId: 1,
+    boardId: 1,
+    academicYearId: 6,
     attendancePercentage: 92.0,
     academicScore: 91.0,
     feeDue: 0,
@@ -1519,6 +1902,9 @@ const initialPromotions = [
     programName: "General",
     sectionId: 1,
     sectionName: "MPC - Section A",
+    campusId: 1,
+    boardId: 1,
+    academicYearId: 6,
     attendancePercentage: 88.0,
     academicScore: 85.0,
     feeDue: 0,
@@ -1558,6 +1944,93 @@ const initialCampusTransfers = [
     requestDate: "2026-10-10",
     status: "Pending",
     reason: "Relocation",
+  },
+];
+
+const initialHallTickets = [
+  {
+    id: "ht-4-101",
+    hallTicketId: "ht-4-101",
+    hallTicketNumber: "HT-2026-0101",
+    examId: 4,
+    examinationId: 4,
+    examName: "Pre-Final Examination 2026-27",
+    examCode: "PFE-2026",
+    studentId: 101,
+    studentName: "Rahul Sharma",
+    admissionNo: "ADM202601",
+    rollNumber: "260101",
+    fatherName: "J. Sharma",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    groupName: "MPC",
+    academicLevelName: "Intermediate 1st Year",
+    hallNumber: "Hall-1",
+    status: "Active",
+    generatedAt: "2026-10-18T09:00:00.000Z",
+  },
+  {
+    id: "ht-4-102",
+    hallTicketId: "ht-4-102",
+    hallTicketNumber: "HT-2026-0102",
+    examId: 4,
+    examinationId: 4,
+    examName: "Pre-Final Examination 2026-27",
+    examCode: "PFE-2026",
+    studentId: 102,
+    studentName: "Priya Varma",
+    admissionNo: "ADM202602",
+    rollNumber: "260102",
+    fatherName: "K. Varma",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    groupName: "MPC",
+    academicLevelName: "Intermediate 1st Year",
+    hallNumber: "Hall-1",
+    status: "Active",
+    generatedAt: "2026-10-18T09:00:00.000Z",
+  },
+  {
+    id: "ht-4-103",
+    hallTicketId: "ht-4-103",
+    hallTicketNumber: "HT-2026-0103",
+    examId: 4,
+    examinationId: 4,
+    examName: "Pre-Final Examination 2026-27",
+    examCode: "PFE-2026",
+    studentId: 103,
+    studentName: "Venkata Sai",
+    admissionNo: "ADM202603",
+    rollNumber: "260103",
+    fatherName: "M. Sai",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    groupName: "MPC",
+    academicLevelName: "Intermediate 1st Year",
+    hallNumber: "Hall-1",
+    status: "Active",
+    generatedAt: "2026-10-18T09:00:00.000Z",
+  },
+  {
+    id: "ht-4-104",
+    hallTicketId: "ht-4-104",
+    hallTicketNumber: "HT-2026-0104",
+    examId: 4,
+    examinationId: 4,
+    examName: "Pre-Final Examination 2026-27",
+    examCode: "PFE-2026",
+    studentId: 104,
+    studentName: "Ananya Reddy",
+    admissionNo: "ADM202604",
+    rollNumber: "260104",
+    fatherName: "P. Reddy",
+    sectionId: 1,
+    sectionName: "MPC - Section A",
+    groupName: "MPC",
+    academicLevelName: "Intermediate 1st Year",
+    hallNumber: "Hall-1",
+    status: "Active",
+    generatedAt: "2026-10-18T09:00:00.000Z",
   },
 ];
 
@@ -1726,7 +2199,7 @@ class MockDataStore {
     this.examinations = getStored("examinations", rawExaminations);
     this.examSchedules = getStored("exam_schedules", rawExamSchedule);
     this.certificates = getStored("certificates", initialCertificates);
-    this.hallTickets = getStored("hall_tickets", []);
+    this.hallTickets = getStored("hall_tickets", initialHallTickets);
     this.attendanceTimingConfigs = getStored("attendance_timing_configs", initialAttendanceTimingConfigs);
     this.staffAttendance = getStored("staff_attendance", initialStaffAttendance);
     this.studentAttendance = getStored("student_attendance", initialStudentAttendance);
@@ -1800,7 +2273,7 @@ class MockDataStore {
     this.examinations = JSON.parse(JSON.stringify(rawExaminations));
     this.examSchedules = JSON.parse(JSON.stringify(rawExamSchedule));
     this.certificates = JSON.parse(JSON.stringify(initialCertificates));
-    this.hallTickets = [];
+    this.hallTickets = JSON.parse(JSON.stringify(initialHallTickets));
     this.attendanceTimingConfigs = JSON.parse(JSON.stringify(initialAttendanceTimingConfigs));
     this.staffAttendance = JSON.parse(JSON.stringify(initialStaffAttendance));
     this.studentAttendance = JSON.parse(JSON.stringify(initialStudentAttendance));
@@ -1980,17 +2453,31 @@ if (typeof window !== "undefined") {
 // ──────────────────────────────────────────────────────────────────────────
 
 function ok(config, data) {
+  let responseData = data;
+  if (config?.responseType === "blob") {
+    responseData = new Blob(
+      [typeof data === "string" ? data : JSON.stringify(data)],
+      { type: "application/pdf" }
+    );
+  }
   return Promise.resolve({
-    data,
+    data: responseData,
     status: 200,
     statusText: "OK",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": config?.responseType === "blob" ? "application/pdf" : "application/json" },
     config,
   });
 }
 
 function parseUrl(urlStr, configParams = {}) {
-  const [pathname, search] = String(urlStr || "").split("?");
+  let raw = String(urlStr || "");
+  try {
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      const parsed = new URL(raw);
+      raw = parsed.pathname + (parsed.search || "");
+    }
+  } catch {}
+  const [pathname, search] = raw.split("?");
   const params = new URLSearchParams(search || "");
   if (configParams && typeof configParams === "object") {
     Object.entries(configParams).forEach(([k, v]) => {
@@ -2011,6 +2498,106 @@ export function handleMockApiRequest(config) {
   const method = String(config.method || "get").toLowerCase();
   const { path, params } = parseUrl(config.url, config.params);
   const body = config.data ? (typeof config.data === "string" ? JSON.parse(config.data || "{}") : config.data) : {};
+
+  // 0. AUTH CHANGE PASSWORD (/api/Auth/change-password, /api/Admin/change-password)
+  const normPath = path.toLowerCase();
+  if (method === "post" && (normPath.endsWith("/api/auth/change-password") || normPath.endsWith("/api/admin/change-password"))) {
+    const oldPassword = body.oldPassword || body.currentPassword || body.OldPassword || body.CurrentPassword || "";
+    const newPassword = body.newPassword || body.NewPassword || "";
+    const confirmPassword = body.confirmNewPassword || body.confirmPassword || body.ConfirmNewPassword || body.ConfirmPassword || "";
+
+    if (!oldPassword) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "Current password is required." },
+        },
+      });
+    }
+
+    if (!newPassword) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "New password is required." },
+        },
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "New password must be at least 6 characters." },
+        },
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "New password and confirmation password do not match." },
+        },
+      });
+    }
+
+    if (oldPassword === newPassword) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "New password cannot be the same as the old password." },
+        },
+      });
+    }
+
+    // Determine authenticated user identity from token/headers
+    let userKey = "examcell";
+    try {
+      const authHeader = config.headers?.Authorization || "";
+      if (authHeader.includes(".")) {
+        const payloadBase64 = authHeader.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
+        if (payloadBase64) {
+          const parsed = JSON.parse(atob(payloadBase64.padEnd(Math.ceil(payloadBase64.length / 4) * 4, "=")));
+          userKey = parsed.email || parsed.sub || parsed.nameid || parsed.UserId || "examcell";
+        }
+      }
+    } catch (_e) {}
+
+    // Check saved password if any
+    let savedPass = "";
+    try {
+      const passMap = JSON.parse(typeof window !== "undefined" ? window.localStorage?.getItem("cms_user_passwords") || "{}" : "{}");
+      savedPass = passMap[userKey] || passMap[userKey.toLowerCase()] || "";
+    } catch (_e) {}
+
+    // If a saved password exists and user entered wrong old password, reject
+    if (savedPass && oldPassword !== savedPass) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "Old password is incorrect." },
+        },
+      });
+    }
+
+    // Save new password
+    try {
+      if (typeof window !== "undefined") {
+        const passMap = JSON.parse(window.localStorage?.getItem("cms_user_passwords") || "{}");
+        passMap[userKey] = newPassword;
+        passMap[userKey.toLowerCase()] = newPassword;
+        passMap["anusha987r@gmail.com"] = newPassword;
+        passMap["examcell"] = newPassword;
+        window.localStorage?.setItem("cms_user_passwords", JSON.stringify(passMap));
+      }
+    } catch (_e) {}
+
+    return ok(config, {
+      status: true,
+      message: "Password changed successfully.",
+    });
+  }
 
   // 0. DASHBOARD METRICS & OVERVIEW (/api/v1/dashboard/*)
   if (path.startsWith("/api/v1/dashboard/")) {
@@ -3333,14 +3920,13 @@ export function handleMockApiRequest(config) {
 
   // 27. HALL TICKETS
   if (path.startsWith("/api/v1/examinations/halltickets")) {
-    const isGenerate = path.endsWith("/generate");
     const isBatchDownload = path.endsWith("/batch-download");
 
-    if (method === "post" && isGenerate) {
-      const examId = Number(body.examId || body.examinationId);
-      const ex = mockStore.examinations.find((e) => Number(e.id || e.examinationId) === examId) || mockStore.examinations[0];
-      const exSchedules = mockStore.examSchedules.filter((s) => Number(s.examId || s.examinationId) === examId);
-      const sampleStudents = mockStore.students.slice(0, 5);
+    if (method === "post" && !isBatchDownload) {
+      const examId = Number(body.examId || body.examinationId || params.get("examinationId") || params.get("examId") || 4);
+      const ex = (mockStore.examinations || []).find((e) => Number(e.id || e.examinationId) === examId) || mockStore.examinations[0] || {};
+      const exSchedules = (mockStore.examSchedules || []).filter((s) => Number(s.examId || s.examinationId) === examId);
+      const sampleStudents = (mockStore.students || []).slice(0, 10);
 
       const generatedTickets = sampleStudents.map((st, i) => ({
         id: `ht-${examId}-${st.id}`,
@@ -3348,22 +3934,33 @@ export function handleMockApiRequest(config) {
         hallTicketNumber: `HT-${new Date().getFullYear()}-${String(st.id).padStart(4, "0")}`,
         examId: examId,
         examinationId: examId,
-        examName: ex.name,
-        examCode: ex.code,
+        examName: ex.name || ex.examName || "Examination",
+        examCode: ex.code || ex.examCode || "EXM",
         studentId: st.id,
-        studentName: st.name,
-        admissionNo: st.admissionNo,
-        rollNumber: st.roll || `26010${i + 1}`,
-        groupName: st.group || "MPC",
-        academicLevelName: st.level || "1st Year",
+        studentName: st.name || st.studentName || `Student ${st.id}`,
+        admissionNo: st.admissionNo || st.admissionNumber || `ADM20260${i + 1}`,
+        rollNumber: st.rollNo || st.rollNumber || st.roll || `26010${i + 1}`,
+        fatherName: st.fatherName || st.father || "Parent / Guardian",
+        sectionId: st.sectionId || 1,
+        sectionName: st.sectionName || "MPC - Section A",
+        groupName: st.group || st.groupName || "MPC",
+        academicLevelName: st.level || st.levelName || "Intermediate 1st Year",
+        hallNumber: (exSchedules[0]?.hallAssignments?.[0]?.roomName) || `Hall-${(i % 3) + 1}`,
         schedules: exSchedules,
-        status: "Generated",
+        timetable: exSchedules,
+        status: "Active",
         generatedAt: new Date().toISOString(),
       }));
 
-      mockStore.hallTickets = generatedTickets;
+      const existingOther = (mockStore.hallTickets || []).filter((t) => Number(t.examId || t.examinationId) !== examId);
+      mockStore.hallTickets = [...existingOther, ...generatedTickets];
       mockStore.save("hall_tickets");
-      return ok(config, { success: true, message: "Hall tickets generated successfully.", data: generatedTickets, items: generatedTickets });
+      return ok(config, {
+        success: true,
+        message: "Hall tickets generated successfully.",
+        data: generatedTickets,
+        items: generatedTickets,
+      });
     }
 
     if (method === "post" && isBatchDownload) {
@@ -3625,7 +4222,10 @@ export function handleMockApiRequest(config) {
     return ok(config, {
       success: true,
       data: {
-        eligibleSections: [{ id: 1, sectionId: 1, name: "Section A", sectionName: "Section A" }],
+        eligibleSections: [
+          { id: 1, sectionId: 1, name: "Section A", sectionName: "Section A", groupId: 1, groupName: "MPC" },
+          { id: 2, sectionId: 2, name: "Section B", sectionName: "Section B", groupId: 1, groupName: "MPC" },
+        ],
         activeStudentsCount: 60,
         requiredCapacity: 60,
       },
@@ -4394,10 +4994,68 @@ export function handleMockApiRequest(config) {
   }
 
   if (path === "/api/v1/attendance/student-monthly-report") {
+    const month = parseInt(params.get("month") || String(new Date().getMonth() + 1), 10);
+    const year = parseInt(params.get("year") || String(new Date().getFullYear()), 10);
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => {
+      const d = new Date(year, month - 1, i + 1);
+      const dayStr = String(i + 1).padStart(2, "0");
+      const monthStr = String(month).padStart(2, "0");
+      return {
+        date: `${year}-${monthStr}-${dayStr}`,
+        Date: `${year}-${monthStr}-${dayStr}`,
+        dayNumber: i + 1,
+        dayName: d.toLocaleDateString("en-US", { weekday: "short" }),
+      };
+    });
+
+    const students = mockStore.studentAttendance || [];
+    const studentRows = students.map((st, sIdx) => {
+      const dailyStatus = dayHeaders.map((dh, dIdx) => {
+        const d = new Date(year, month - 1, dIdx + 1);
+        if (d.getDay() === 0) return "H";
+        if (sIdx === 3 && (dIdx === 2 || dIdx === 8 || dIdx === 14 || dIdx === 20)) return "A";
+        if (sIdx === 5 && (dIdx === 4 || dIdx === 11 || dIdx === 18)) return "A";
+        if (sIdx === 2 && dIdx === 5) return "HD";
+        return "P";
+      });
+
+      const present = dailyStatus.filter((s) => s === "P").length;
+      const absent = dailyStatus.filter((s) => s === "A").length;
+      const halfDays = dailyStatus.filter((s) => s === "HD").length;
+      const holidays = dailyStatus.filter((s) => s === "H").length;
+      const workingDays = daysInMonth - holidays;
+      const attendancePercentage = workingDays > 0 ? Math.round(((present + 0.5 * halfDays) / workingDays) * 100) : 100;
+
+      return {
+        ...st,
+        dailyStatus,
+        statuses: dailyStatus,
+        present,
+        presentCount: present,
+        absent,
+        absentCount: absent,
+        halfDays,
+        halfDayCount: halfDays,
+        workingDays,
+        attendancePercentage,
+      };
+    });
+
+    const reportObj = {
+      dayHeaders,
+      headers: dayHeaders,
+      studentRows,
+      rows: studentRows,
+      totalStudents: studentRows.length,
+      daysInMonth,
+    };
+
     return ok(config, {
       success: true,
-      data: mockStore.studentAttendance || [],
-      items: mockStore.studentAttendance || [],
+      data: reportObj,
+      ...reportObj,
     });
   }
 
@@ -4427,14 +5085,31 @@ export function handleMockApiRequest(config) {
   const studentOverviewMatch = path.match(/^\/api\/v1\/attendance\/student\/([^/]+)\/yearly-overview$/);
   if (studentOverviewMatch) {
     const stId = studentOverviewMatch[1];
+    const months = ["Jun", "Jul", "Aug", "Sep", "Oct"];
+    const monthlyRecords = months.map((m, idx) => ({
+      month: m,
+      monthName: m,
+      workingDays: 24,
+      presentDays: 22 + (idx % 2),
+      absentDays: 2 - (idx % 2),
+      attendancePercentage: Math.round(((22 + (idx % 2)) / 24) * 1000) / 10,
+    }));
     return ok(config, {
       success: true,
       data: {
         studentId: stId,
         totalWorkingDays: 200,
         presentDays: 188,
-        absentDays: 12,
+        totalPresent: 188,
+        absentDays: 10,
+        totalAbsent: 10,
+        totalLeave: 2,
+        totalLate: 2,
+        totalHalfDays: 1,
         attendancePercentage: 94.0,
+        overallAttendancePercentage: 94.0,
+        overall: 94.0,
+        monthlyRecords,
       },
     });
   }
@@ -4469,10 +5144,61 @@ export function handleMockApiRequest(config) {
   }
 
   if (path === "/api/v1/staff-attendance/monthly-report") {
+    const month = parseInt(params.get("month") || String(new Date().getMonth() + 1), 10);
+    const year = parseInt(params.get("year") || String(new Date().getFullYear()), 10);
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => {
+      const d = new Date(year, month - 1, i + 1);
+      const dayStr = String(i + 1).padStart(2, "0");
+      const monthStr = String(month).padStart(2, "0");
+      return {
+        date: `${year}-${monthStr}-${dayStr}`,
+        Date: `${year}-${monthStr}-${dayStr}`,
+        dayNumber: i + 1,
+        dayName: d.toLocaleDateString("en-US", { weekday: "short" }),
+      };
+    });
+
+    const staffList = mockStore.staffAttendance || [];
+    const staffRows = staffList.map((st) => {
+      const dailyStatus = dayHeaders.map((dh, dIdx) => {
+        const d = new Date(year, month - 1, dIdx + 1);
+        if (d.getDay() === 0) return "H";
+        if (dIdx === 5) return "LT";
+        return "P";
+      });
+
+      const presentDays = dailyStatus.filter((s) => s === "P" || s === "LT").length;
+      const absentDays = dailyStatus.filter((s) => s === "A").length;
+      const leavesTaken = dailyStatus.filter((s) => s === "L").length;
+      const lateDays = dailyStatus.filter((s) => s === "LT").length;
+
+      return {
+        ...st,
+        dailyStatus,
+        statuses: dailyStatus,
+        presentDays,
+        absentDays,
+        leavesTaken,
+        lateDays,
+        attendancePercentage: 96.6,
+      };
+    });
+
+    const reportObj = {
+      dayHeaders,
+      headers: dayHeaders,
+      staffRows,
+      rows: staffRows,
+      totalStaff: staffRows.length,
+      daysInMonth,
+    };
+
     return ok(config, {
       success: true,
-      data: mockStore.staffAttendance || [],
-      items: mockStore.staffAttendance || [],
+      data: reportObj,
+      ...reportObj,
     });
   }
 
@@ -4490,9 +5216,13 @@ export function handleMockApiRequest(config) {
       data: {
         totalWorkingDays: 240,
         presentDays: 232,
+        totalPresent: 232,
         leavesTaken: 6,
+        totalLeave: 6,
         lateDays: 2,
+        totalLate: 2,
         percentage: 96.6,
+        overallAttendancePercentage: 96.6,
       },
     });
   }
@@ -4811,9 +5541,16 @@ export function handleMockApiRequest(config) {
       name: "Rahul Sharma",
       studentName: "Rahul Sharma",
       rollNo: "260101",
+      rollNumber: "260101",
       admissionNo: "ADM202601",
+      admissionNumber: "ADM202601",
       group: "MPC",
+      groupName: "MPC",
       level: "Intermediate 1st Year",
+      levelName: "Intermediate 1st Year",
+      academicLevelName: "Intermediate 1st Year",
+      sectionName: "Section A",
+      programName: "General",
       academicYear: "2026-2027",
       status: "Active",
     };
@@ -4852,4 +5589,3 @@ export function handleMockApiRequest(config) {
 if (typeof window !== "undefined") {
   window.__mockStore = mockStore;
 }
-

@@ -21,6 +21,8 @@ const MODULE_ALIASES = Object.freeze({
   "inventory-management": "inventory-management",
   "courses": "group-management",
   "course-management": "group-management",
+  "examinations": "examination",
+  "examination": "examination",
 });
 
 export const normalizeModuleKey = (value = "") => {
@@ -121,8 +123,7 @@ export const toPermissionMap = (permissions = []) => {
   }
 
   permissions.forEach((item) => {
-    const rawMod = String(getPermissionModuleKey(item) || "").trim().toLowerCase();
-    const modKey = normalizeModuleKey(rawMod);
+    const modKey = normalizeModuleKey(getPermissionModuleKey(item));
     if (!modKey) return;
 
     // Module-level actions
@@ -186,7 +187,12 @@ export const toPermissionMap = (permissions = []) => {
     map["salary"] = map["payroll"];
     map["payslips"] = map["payroll"];
   }
-  if (map["examinations"]) {
+  if (map["examination"]) {
+    map["examinations"] = map["examination"];
+    map["examduties"] = map["examination"];
+    map["exam-duties"] = map["examination"];
+  } else if (map["examinations"]) {
+    map["examination"] = map["examinations"];
     map["examduties"] = map["examinations"];
     map["exam-duties"] = map["examinations"];
   }
@@ -286,9 +292,12 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     return true;
   }
 
-  const source = permissions ?? user?.permissions ?? user?.rolePermissions;
-  if (!source || (Array.isArray(source) && source.length === 0)) {
+
+  const rawSource = permissions ?? user?.permissions ?? user?.rolePermissions;
+  const source = Array.isArray(rawSource) && rawSource.length === 0 ? null : rawSource;
+  if (!source) {
     if (hasRole("ADMIN", user)) return true;
+    if (normAct === ACTIONS.VIEW) return true;
     return false;
   }
 
@@ -300,6 +309,12 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     normMod = "settings";
   }
 
+  // Admin always has authoritative access to administrative and settings management
+  if (hasRole("ADMIN", user) && (normMod === "settings" || normMod === "roles-permissions" || SETTINGS_SCREENS.includes(normMod) || normScr === "role-management")) {
+    return true;
+  }
+
+  // Check specific screen permission first if requested
   if (normScr) {
     const screenLookupKey = `${normMod}:${normScr}`;
     if (Array.isArray(permissionMap[screenLookupKey])) {
@@ -310,12 +325,13 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     }
   }
 
+  // Fallback to module-level permission
   const moduleActions = permissionMap[normMod];
   if (Array.isArray(moduleActions) && moduleActions.includes(normAct)) {
     return true;
   }
 
-  if (hasRole("ADMIN", user) && (normMod === "settings" || normMod === "roles-permissions" || SETTINGS_SCREENS.includes(normMod))) {
+  if (hasRole("ADMIN", user)) {
     return true;
   }
 

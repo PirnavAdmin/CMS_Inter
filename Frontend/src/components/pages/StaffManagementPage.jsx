@@ -92,6 +92,7 @@ const STORE = "pjc-mock-staff-records",
   ACTIVITY_STORE = "pjc-mock-staff-activities";
 
 export const NON_TEACHING_DEPARTMENTS_SET = new Set([
+  "stores & inventory",
   "administration",
   "accounts",
   "accounts & finance",
@@ -121,6 +122,8 @@ export const NON_TEACHING_DEPARTMENTS_SET = new Set([
 ]);
 
 export const NON_TEACHING_DESIGNATIONS_SET = new Set([
+  "transport manager",
+  "inventory manager",
   "administrator",
   "administrative officer",
   "office administrator",
@@ -199,6 +202,7 @@ export const teachingDepartments = [
 ];
 
 export const nonTeachingDepartments = [
+  "Stores & Inventory",
   "Accounts & Finance",
   "Administration",
   "Admissions",
@@ -233,6 +237,8 @@ export const teachingDesignations = [
 ];
 
 export const nonTeachingDesignations = [
+  "Transport Manager",
+  "Inventory Manager",
   "Accountant",
   "Administrative Officer",
   "Office Administrator",
@@ -282,6 +288,7 @@ export const teachingDesignationMap = {
 };
 
 export const nonTeachingDesignationMap = {
+  "Stores & Inventory": ["Inventory Manager"],
   Administration: ["Administrative Officer", "Office Administrator", "Office Assistant", "Clerk", "Attender / Peon", "Data Entry Operator"],
   "Accounts & Finance": ["Accountant", "Senior Accountant", "Junior Accountant", "Finance Executive", "Accounts Executive", "Cashier", "Office Assistant"],
   Accounts: ["Accountant", "Senior Accountant", "Junior Accountant", "Finance Executive", "Accounts Executive", "Cashier", "Office Assistant"],
@@ -289,8 +296,8 @@ export const nonTeachingDesignationMap = {
   Library: ["Librarian", "Assistant Librarian", "Library Assistant", "Attender"],
   "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
   Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
-  Transport: ["Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
-  Transportation: ["Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
   Security: ["Security Officer", "Security Supervisor", "Security Guard", "Watchman"],
   "Human Resources": ["HR Manager", "HR Executive", "Office Assistant"],
   HR: ["HR Manager", "HR Executive", "Office Assistant"],
@@ -696,7 +703,9 @@ export const TEACHING_ROLE_NAMES = [
 ];
 
 export const NON_TEACHING_ROLE_NAMES = [
+  "Transport Manager",
   "Accountant",
+  "Inventory Manager",
   "Examination Cell",
   "Library / Librarian",
   "Hostel Warden",
@@ -2273,6 +2282,40 @@ function useStaffTypeOptions(staffType) {
         desigOpts = isTeaching ? teachingDesignations : nonTeachingDesignations;
       }
 
+      if (!isTeaching) {
+        for (const departmentName of ["Transport", "Transportation"]) {
+          const hasTransportManager = desigOpts.some((designation) =>
+            typeof designation === "object" &&
+            String(designation.name || designation.designationName || "").trim().toLowerCase() === "transport manager" &&
+            String(designation.departmentName || "").trim().toLowerCase() === departmentName.toLowerCase()
+          );
+          if (!hasTransportManager) {
+            desigOpts = [...desigOpts, {
+              name: "Transport Manager",
+              designationName: "Transport Manager",
+              departmentName,
+              staffType: "NonTeaching",
+            }];
+          }
+        }
+        if (!deptOpts.some((name) => String(name).trim().toLowerCase() === "stores & inventory")) {
+          deptOpts = [...deptOpts, "Stores & Inventory"];
+        }
+        const hasInventoryManager = desigOpts.some((d) =>
+          typeof d === "object" &&
+          String(d.name || d.designationName || "").trim().toLowerCase() === "inventory manager" &&
+          String(d.departmentName || "").trim().toLowerCase() === "stores & inventory"
+        );
+        if (!hasInventoryManager) {
+          desigOpts = [...desigOpts, {
+            name: "Inventory Manager",
+            designationName: "Inventory Manager",
+            departmentName: "Stores & Inventory",
+            staffType: "NonTeaching",
+          }];
+        }
+      }
+
       if (isMounted) {
         setDepartments(Array.from(new Set(deptOpts)));
         setDesignations(desigOpts);
@@ -2726,7 +2769,7 @@ function Field({
               if (typeof r === "object") {
                 const roleName = r.roleName || r.name;
                 const isAccountantAlias = value === "Accountant" && roleName === "Accounts";
-                return roleName === value || isAccountantAlias || String(r.roleId || r.id) === String(value);
+                return String(roleName || "").toLowerCase().replace(/[-_\s]/g, "") === String(value).toLowerCase().replace(/[-_\s]/g, "") || isAccountantAlias || String(r.roleId || r.id) === String(value);
               }
               return r === value;
             })
@@ -2736,7 +2779,7 @@ function Field({
             ...prev,
             role: value,
             roleName: value,
-            ...(roleIdVal ? { roleId: Number(roleIdVal) } : {}),
+            roleId: roleIdVal ? Number(roleIdVal) : undefined,
           };
         }
         if (name === "department") {
@@ -5145,7 +5188,16 @@ function NonTeachingForm({ records, setRecords, existing }) {
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
-    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Accountant" ? 7 : values.role === "Cleaner" ? 13 : values.role === "Driver" || values.role === "Bus Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
+    const isInventoryManager = String(values.role || "").toLowerCase().replace(/[-_\s]/g, "") === "inventorymanager";
+    const inventoryRole = isInventoryManager ? apiRoleObjects.find((r) => String(r.roleName || r.name || "").toLowerCase().replace(/[-_\s]/g, "") === "inventorymanager") : null;
+    const inventoryRoleId = inventoryRole?.roleId || inventoryRole?.id || values.roleId;
+    if (isInventoryManager && !Number(inventoryRoleId)) {
+      setErrors({ role: "Inventory Manager must be configured in the server roles list before saving." });
+      setToast("Unable to resolve the Inventory Manager role from the server. Please reload the role list or configure this role first.");
+      setStep(0);
+      return;
+    }
+    const resolvedRoleId = isInventoryManager ? inventoryRoleId : values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Accountant" ? 7 : values.role === "Cleaner" ? 13 : values.role === "Driver" || values.role === "Bus Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
 
     const payload = {
       ...values,
@@ -5159,7 +5211,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
       email: values.email?.trim() ? values.email.trim() : null,
       qualification: values.qualification?.trim() ? values.qualification.trim() : null,
       role: values.role || "Cleaner",
-      roleName: values.roleName || values.role || "Cleaner",
+      roleName: values.role || "Cleaner",
       roleId: Number(resolvedRoleId),
       fullName,
       staffType: "Non-Teaching",

@@ -18,6 +18,7 @@ import StudentManagementPage, { pageConfig as studentManagementConfig } from "@/
 import SectionAllocationPage from "@/components/pages/SectionAllocationPage.jsx";
 import TimetablePage from "@/components/pages/TimetablePage.jsx";
 import HolidayManagementPage from "@/components/pages/HolidayManagementPage.jsx";
+import AcademicCalendarPage from "@/components/pages/AcademicCalendarPage.jsx";
 import AttendancePage from "@/components/pages/AttendancePage.jsx";
 import AttendanceOverviewPage from "@/components/pages/AttendanceOverviewPage.jsx";
 import LeaveManagementPage from "@/components/pages/LeaveManagementPage.jsx";
@@ -46,7 +47,6 @@ import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
 import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
-import CustomModulePage from "@/components/pages/CustomModulePage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
@@ -57,6 +57,7 @@ import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPo
 import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
 import NonTeachingPortalRoutes from "@/Dashboard/NonTeachingDashboard/NonTeachingPortalRoutes.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
+import TransportManagerRoutes from "@/Dashboard/TransportManagerDashboard/TransportManagerRoutes.jsx";
 import InventoryDashboard from "@/Dashboard/InventoryDashboard/InventoryDashboard.jsx";
 import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
 import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
@@ -166,6 +167,7 @@ export default function AppRoutes() {
 
       <Route element={<ProtectedRoute requireAdmin />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard/academic-calendar" element={<AcademicCalendarPage />} />
         {/* Board & Academic Year */}
         <Route element={<ProtectedRoute requiredModule="board-academic-year" />}>
           <Route path="/dashboard/board-academic-year" element={<BoardAcademicYearManagementPage />} />
@@ -487,10 +489,6 @@ export default function AppRoutes() {
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-add`} path={`/dashboard/${slug}/add`} element={<ModuleFormRoute slug={slug} />} />)}
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-edit`} path={`/dashboard/${slug}/:id/edit`} element={<ModuleFormRoute slug={slug} />} />)}
         <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />
-
-        {/* Dynamic Custom Modules & Custom Screens */}
-        <Route path="/dashboard/custom/:moduleCode" element={<CustomModulePage />} />
-        <Route path="/dashboard/custom/:moduleCode/:screenCode" element={<CustomModulePage />} />
       </Route>
 
       <Route element={<ProtectedRoute requireStudent />}>
@@ -537,6 +535,9 @@ export default function AppRoutes() {
         <Route path="/non-teaching/*" element={<Navigate to="/non-teaching-dashboard" replace />} />
         <Route path="/non-teaching" element={<Navigate to="/non-teaching-dashboard" replace />} />
       </Route>
+      {/* Transport Manager Module Routes */}
+      <Route path="/transport-manager" element={<Navigate to="/transport-manager/overview" replace />} />
+      <Route path="/transport-manager/*" element={<TransportManagerRoutes />} />
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/inventory-dashboard/*" element={<InventoryDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />

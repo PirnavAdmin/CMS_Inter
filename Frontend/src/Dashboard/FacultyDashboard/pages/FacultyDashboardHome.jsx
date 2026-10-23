@@ -180,7 +180,46 @@ function evaluateStudentAttendance(student) {
   return "Unmarked";
 }
 
+function extractSectionsFromSlots(slots, profile) {
+  const sectionMap = new Map();
+  (slots || []).forEach((slot) => {
+    const secId = slot.sectionId ?? slot.section_id;
+    const secName = slot.sectionName ?? slot.section_name ?? slot.section;
+    if (secId && !sectionMap.has(Number(secId))) {
+      sectionMap.set(Number(secId), {
+        sectionId: Number(secId),
+        sectionName: String(secName || `Section ${secId}`).trim(),
+        boardId: slot.boardId,
+        academicYearId: slot.academicYearId,
+        academicLevelId: slot.academicLevelId,
+        groupId: slot.groupId,
+        programId: slot.programId,
+        campusId: slot.campusId,
+      });
+    }
+  });
 
+  if (sectionMap.size === 0 && Array.isArray(profile?.assignedSections)) {
+    profile.assignedSections.forEach((sec) => {
+      const secId = sec.sectionId ?? sec.id;
+      const secName = sec.sectionName ?? sec.name;
+      if (secId && !sectionMap.has(Number(secId))) {
+        sectionMap.set(Number(secId), {
+          sectionId: Number(secId),
+          sectionName: String(secName || `Section ${secId}`).trim(),
+          boardId: sec.boardId,
+          academicYearId: sec.academicYearId,
+          academicLevelId: sec.academicLevelId,
+          groupId: sec.groupId,
+          programId: sec.programId,
+          campusId: sec.campusId,
+        });
+      }
+    });
+  }
+
+  return Array.from(sectionMap.values());
+}
 
 const QUICK_ACTIONS = [
   { label: "Mark Attendance", moduleId: "attendance", icon: markAttendanceIcon, tone: "green" },
@@ -275,6 +314,23 @@ function KpiCard({ label, value, subtext, badge, tone, icon, tooltip, onClick, l
   );
 }
 
+// Module-level cache for Faculty Dashboard to retain loaded cards across module navigation
+const facultyDashboardCache = {
+  facultyId: null,
+  timetableSlots: null,
+  sectionAttendanceMap: null,
+  myAttToday: null,
+  myAttMetrics: null,
+  holidayData: null,
+  examData: null,
+  liveExamDuties: null,
+  liveMarksEvals: null,
+  lastUpdated: null,
+  timestamp: 0,
+};
+
+const DASHBOARD_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
 export default function FacultyDashboardHome() {
   const { profileData, punchState, setPunchState, setActiveModule, notify } = useFaculty();
   const authUser = getAuthUser();
@@ -287,17 +343,73 @@ export default function FacultyDashboardHome() {
 
   const facultyId = useMemo(() => resolveFacultyId(profileData, authUser), [profileData, authUser]);
 
+  const isCacheValid = Boolean(
+    facultyDashboardCache.facultyId === facultyId &&
+    facultyDashboardCache.timetableSlots !== null &&
+    (Date.now() - facultyDashboardCache.timestamp < DASHBOARD_CACHE_TTL_MS)
+  );
+
   const [studentAttView, setStudentAttView] = useState("all");
+  const [isInitialLoading, setIsInitialLoading] = useState(() => !isCacheValid);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(() => formattedTimestamp());
-  const [timetableSlots, setTimetableSlots] = useState([]);
-  const [timetableLoading, setTimetableLoading] = useState(true);
+  const showSkeleton = isInitialLoading || isRefreshing;
+  const [lastUpdated, setLastUpdated] = useState(() =>
+    isCacheValid && facultyDashboardCache.lastUpdated ? facultyDashboardCache.lastUpdated : formattedTimestamp()
+  );
+  const [timetableSlots, setTimetableSlots] = useState(() =>
+    isCacheValid && facultyDashboardCache.timetableSlots ? facultyDashboardCache.timetableSlots : []
+  );
+  const [timetableLoading, setTimetableLoading] = useState(() => !isCacheValid);
 
   // Live Upcoming Holidays & Examinations States
-  const [holidayState, setHolidayState] = useState({ loading: false, error: null, data: null });
-  const [examState, setExamState] = useState({ loading: false, error: null, data: null });
+  const [holidayState, setHolidayState] = useState(() => ({
+    loading: !isCacheValid,
+    error: null,
+    data: isCacheValid ? facultyDashboardCache.holidayData : null,
+  }));
+  const [examState, setExamState] = useState(() => ({
+    loading: !isCacheValid,
+    error: null,
+    data: isCacheValid ? facultyDashboardCache.examData : null,
+  }));
   const holidaySeq = useRef(0);
   const examSeq = useRef(0);
+
+  // Chart scroll and horizontal drag refs
+  const chartScrollRef = useRef(null);
+  const isDraggingChartRef = useRef(false);
+  const chartStartXRef = useRef(0);
+  const chartScrollStartRef = useRef(0);
+
+  const handleChartMouseDown = (e) => {
+    if (!chartScrollRef.current) return;
+    isDraggingChartRef.current = true;
+    chartStartXRef.current = e.pageX - chartScrollRef.current.offsetLeft;
+    chartScrollStartRef.current = chartScrollRef.current.scrollLeft;
+  };
+
+  const handleChartMouseMove = (e) => {
+    if (!isDraggingChartRef.current || !chartScrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - chartScrollRef.current.offsetLeft;
+    const walk = (x - chartStartXRef.current) * 1.2;
+    chartScrollRef.current.scrollLeft = chartScrollStartRef.current - walk;
+  };
+
+  const handleChartMouseUp = () => {
+    isDraggingChartRef.current = false;
+  };
+
+  const handleChartMouseLeave = () => {
+    isDraggingChartRef.current = false;
+  };
+
+  const handleChartWheel = (e) => {
+    if (!chartScrollRef.current) return;
+    if (e.deltaY !== 0) {
+      chartScrollRef.current.scrollLeft += e.deltaY;
+    }
+  };
 
   const fetchUpcomingHolidays = useCallback(async () => {
     const seq = ++holidaySeq.current;
@@ -318,6 +430,7 @@ export default function FacultyDashboardHome() {
       if (holidaySeq.current === seq) {
         const payload = res?.data?.data !== undefined ? res.data.data : res?.data;
         setHolidayState({ loading: false, error: null, data: payload });
+        facultyDashboardCache.holidayData = payload;
       }
     } catch (err) {
       if (holidaySeq.current === seq) {
@@ -339,6 +452,7 @@ export default function FacultyDashboardHome() {
       if (examSeq.current === seq) {
         const payload = res?.data?.data !== undefined ? res.data.data : res?.data;
         setExamState({ loading: false, error: null, data: payload });
+        facultyDashboardCache.examData = payload;
       }
     } catch (err) {
       if (examSeq.current === seq) {
@@ -347,32 +461,34 @@ export default function FacultyDashboardHome() {
     }
   }, [campusId, boardId, academicYearId]);
 
-  // Fetch upcoming holidays & examinations on mount and when filter context changes
-  useEffect(() => {
-    fetchUpcomingHolidays();
-    fetchUpcomingExaminations();
-  }, [fetchUpcomingHolidays, fetchUpcomingExaminations]);
-
   // Live Faculty My Attendance State
-  const [myAttLoading, setMyAttLoading] = useState(true);
-  const [myAttToday, setMyAttToday] = useState({
-    status: "not_punched",
-    inTime: null,
-    outTime: null,
-    shiftStartTime: "09:00 AM",
-    shiftEndTime: "04:30 PM",
-    shiftName: "Morning (09:00 AM – 04:30 PM)",
-  });
-  const [myAttMetrics, setMyAttMetrics] = useState({
-    workingDays: 0,
-    presentDays: 0,
-    leaves: 0,
-    holidays: 0,
-    absentDays: 0,
-    leaveBalance: 15,
-    monthLabel: "",
-    rate: 100,
-  });
+  const [myAttLoading, setMyAttLoading] = useState(() => !isCacheValid);
+  const [myAttToday, setMyAttToday] = useState(() =>
+    isCacheValid && facultyDashboardCache.myAttToday
+      ? facultyDashboardCache.myAttToday
+      : {
+          status: "not_punched",
+          inTime: null,
+          outTime: null,
+          shiftStartTime: "09:00 AM",
+          shiftEndTime: "04:30 PM",
+          shiftName: "Morning (09:00 AM – 04:30 PM)",
+        }
+  );
+  const [myAttMetrics, setMyAttMetrics] = useState(() =>
+    isCacheValid && facultyDashboardCache.myAttMetrics
+      ? facultyDashboardCache.myAttMetrics
+      : {
+          workingDays: 0,
+          presentDays: 0,
+          leaves: 0,
+          holidays: 0,
+          absentDays: 0,
+          leaveBalance: 15,
+          monthLabel: "",
+          rate: 100,
+        }
+  );
   const myAttSeq = useRef(0);
 
   const fetchMyAttendanceData = useCallback(async () => {
@@ -389,12 +505,17 @@ export default function FacultyDashboardHome() {
         return null;
       });
 
-      const effectiveStaffId = facultyId;
-      const leavePromise = effectiveStaffId
-        ? apiClient.get(`/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`).catch(() => null)
-        : Promise.resolve(null);
+      // Fast non-blocking leave balance fetch via self-service endpoint
+      const leavePromise = attendanceService.getMyLeaveHistory().catch(() => null);
 
-      const [todayRes, histRes, leaveRes] = await Promise.all([todayPromise, historyPromise, leavePromise]);
+      const [todayRes, histRes, leaveRes] = await Promise.all([
+        todayPromise,
+        historyPromise,
+        Promise.race([
+          leavePromise,
+          new Promise((resolve) => setTimeout(() => resolve(null), 1200)),
+        ]),
+      ]);
 
       if (myAttSeq.current !== seq) return;
 
@@ -477,16 +598,18 @@ export default function FacultyDashboardHome() {
       }
 
       let leaveBalance = 15;
-      const leaveData = leaveRes?.data?.data || leaveRes?.data?.Data;
+      const leaveData = leaveRes?.data?.data || leaveRes?.data?.Data || leaveRes?.data || leaveRes?.Data;
       if (leaveData?.balance?.remaining != null) {
         leaveBalance = Number(leaveData.balance.remaining);
       } else if (leaveData?.balance?.totalAvailable != null) {
         leaveBalance = Number(leaveData.balance.totalAvailable);
       } else if (leaveData?.balance?.total != null) {
         leaveBalance = Math.max(0, Number(leaveData.balance.total) - (Number(leaveData.balance.used) || 0));
+      } else if (leaveData?.remaining != null) {
+        leaveBalance = Number(leaveData.remaining);
       }
 
-      setMyAttMetrics({
+      const metricsObj = {
         workingDays,
         presentDays,
         leaves,
@@ -495,7 +618,10 @@ export default function FacultyDashboardHome() {
         leaveBalance,
         monthLabel,
         rate,
-      });
+      };
+      setMyAttMetrics(metricsObj);
+      facultyDashboardCache.myAttToday = normalizedToday;
+      facultyDashboardCache.myAttMetrics = metricsObj;
     } catch (err) {
       console.warn("Failed to load my attendance data for dashboard:", err);
     } finally {
@@ -505,9 +631,39 @@ export default function FacultyDashboardHome() {
     }
   }, [facultyId, setPunchState]);
 
+  // Live reactive synchronization: whenever punchState updates in FacultyContext, immediately reflect status & inTime without refresh
   useEffect(() => {
-    fetchMyAttendanceData();
-  }, [fetchMyAttendanceData]);
+    if (!punchState) return;
+    const isPunchedIn = Boolean(punchState.isPunchedIn);
+    const inTime = punchState.inTime || null;
+    const outTime = punchState.outTime || null;
+    const newStatus = isPunchedIn ? "punched_in" : outTime ? "punched_out" : "not_punched";
+
+    setMyAttToday((prev) => {
+      if (prev.status === newStatus && prev.inTime === inTime && prev.outTime === outTime) {
+        return prev;
+      }
+      const updated = {
+        ...prev,
+        status: newStatus,
+        inTime: inTime ?? prev.inTime,
+        outTime: outTime ?? prev.outTime,
+      };
+      if (facultyDashboardCache) {
+        facultyDashboardCache.myAttToday = updated;
+      }
+      return updated;
+    });
+  }, [punchState]);
+
+  // Background refresh of monthly attendance metrics when staff punches in
+  const prevPunchedInRef = useRef(punchState?.isPunchedIn);
+  useEffect(() => {
+    if (punchState?.isPunchedIn && !prevPunchedInRef.current) {
+      fetchMyAttendanceData();
+    }
+    prevPunchedInRef.current = punchState?.isPunchedIn;
+  }, [punchState?.isPunchedIn, fetchMyAttendanceData]);
 
   const facultyDonutData = useMemo(() => {
     const p = myAttMetrics.presentDays || 0;
@@ -635,19 +791,25 @@ export default function FacultyDashboardHome() {
       }
 
       setTimetableSlots(data);
+      facultyDashboardCache.timetableSlots = data;
+      facultyDashboardCache.facultyId = facultyId;
+      facultyDashboardCache.timestamp = Date.now();
+      facultyDashboardCache.lastUpdated = formattedTimestamp();
+      return data;
     } catch (err) {
       console.warn("Failed to load today timetable in dashboard:", err);
+      return [];
     } finally {
       setTimetableLoading(false);
     }
   }, [facultyId, selectedCampusId, selectedAcademicYearId]);
 
-  useEffect(() => {
-    fetchTimetableData();
-  }, [fetchTimetableData]);
-
-  const [liveExamDuties, setLiveExamDuties] = useState([]);
-  const [liveMarksEvals, setLiveMarksEvals] = useState([]);
+  const [liveExamDuties, setLiveExamDuties] = useState(() =>
+    isCacheValid && facultyDashboardCache.liveExamDuties ? facultyDashboardCache.liveExamDuties : []
+  );
+  const [liveMarksEvals, setLiveMarksEvals] = useState(() =>
+    isCacheValid && facultyDashboardCache.liveMarksEvals ? facultyDashboardCache.liveMarksEvals : []
+  );
 
   const fetchDutiesAndEvals = useCallback(async () => {
     if (!facultyId) return;
@@ -658,18 +820,18 @@ export default function FacultyDashboardHome() {
       ]);
       if (dutiesRes.status === "fulfilled" && dutiesRes.value?.data) {
         const raw = dutiesRes.value.data?.data || dutiesRes.value.data || [];
-        setLiveExamDuties(Array.isArray(raw) ? raw : []);
+        const duties = Array.isArray(raw) ? raw : [];
+        setLiveExamDuties(duties);
+        facultyDashboardCache.liveExamDuties = duties;
       }
       if (evalsRes.status === "fulfilled" && evalsRes.value?.data) {
         const raw = evalsRes.value.data?.data || evalsRes.value.data || [];
-        setLiveMarksEvals(Array.isArray(raw) ? raw : []);
+        const evals = Array.isArray(raw) ? raw : [];
+        setLiveMarksEvals(evals);
+        facultyDashboardCache.liveMarksEvals = evals;
       }
     } catch {}
   }, [facultyId]);
-
-  useEffect(() => {
-    fetchDutiesAndEvals();
-  }, [fetchDutiesAndEvals]);
 
   const todayDayIndex = new Date().getDay(); // 0: Sunday, 1..6: Mon..Sat
   const dayNames = useMemo(
@@ -710,51 +872,17 @@ export default function FacultyDashboardHome() {
   const greeting = greetingForHour(currentHour);
 
   const facultySections = useMemo(() => {
-    const sectionMap = new Map();
-    (timetableSlots || []).forEach((slot) => {
-      const secId = slot.sectionId ?? slot.section_id;
-      const secName = slot.sectionName ?? slot.section_name ?? slot.section;
-      if (secId && !sectionMap.has(Number(secId))) {
-        sectionMap.set(Number(secId), {
-          sectionId: Number(secId),
-          sectionName: String(secName || `Section ${secId}`).trim(),
-          boardId: slot.boardId,
-          academicYearId: slot.academicYearId,
-          academicLevelId: slot.academicLevelId,
-          groupId: slot.groupId,
-          programId: slot.programId,
-          campusId: slot.campusId,
-        });
-      }
-    });
-
-    if (sectionMap.size === 0 && Array.isArray(profileData?.assignedSections)) {
-      profileData.assignedSections.forEach((sec) => {
-        const secId = sec.sectionId ?? sec.id;
-        const secName = sec.sectionName ?? sec.name;
-        if (secId && !sectionMap.has(Number(secId))) {
-          sectionMap.set(Number(secId), {
-            sectionId: Number(secId),
-            sectionName: String(secName || `Section ${secId}`).trim(),
-            boardId: sec.boardId,
-            academicYearId: sec.academicYearId,
-            academicLevelId: sec.academicLevelId,
-            groupId: sec.groupId,
-            programId: sec.programId,
-            campusId: sec.campusId,
-          });
-        }
-      });
-    }
-
-    return Array.from(sectionMap.values());
+    return extractSectionsFromSlots(timetableSlots, profileData);
   }, [timetableSlots, profileData]);
 
-  const [sectionAttendanceMap, setSectionAttendanceMap] = useState({});
+  const [sectionAttendanceMap, setSectionAttendanceMap] = useState(() =>
+    isCacheValid && facultyDashboardCache.sectionAttendanceMap ? facultyDashboardCache.sectionAttendanceMap : {}
+  );
   const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-  const fetchSectionAttendance = useCallback(async () => {
-    if (!facultySections.length) {
+  const fetchSectionAttendance = useCallback(async (targetSections) => {
+    const sectionsToUse = targetSections && targetSections.length ? targetSections : facultySections;
+    if (!sectionsToUse || !sectionsToUse.length) {
       setSectionAttendanceMap({});
       return;
     }
@@ -763,7 +891,7 @@ export default function FacultyDashboardHome() {
 
     try {
       const results = await Promise.all(
-        facultySections.map(async (sec) => {
+        sectionsToUse.map(async (sec) => {
           try {
             const params = {
               sectionId: sec.sectionId,
@@ -779,6 +907,12 @@ export default function FacultyDashboardHome() {
               const fallbackRes = await apiClient.get(`/api/v1/attendance/admin/students?sectionId=${sec.sectionId}`).catch(() => null);
               const fallbackPayload = fallbackRes?.data?.data ?? fallbackRes?.data?.Data ?? fallbackRes?.data ?? [];
               studentList = Array.isArray(fallbackPayload) ? fallbackPayload : (fallbackPayload?.items ?? fallbackPayload?.Items ?? fallbackPayload?.records ?? []);
+            }
+
+            if (!studentList.length) {
+              const secRes = await apiClient.get(`/api/v1/students/section/${sec.sectionId}`).catch(() => null);
+              const secPayload = secRes?.data?.data ?? secRes?.data?.Data ?? secRes?.data ?? [];
+              studentList = Array.isArray(secPayload) ? secPayload : (secPayload?.items ?? secPayload?.Items ?? secPayload?.records ?? []);
             }
 
             let present = 0;
@@ -840,16 +974,13 @@ export default function FacultyDashboardHome() {
         }
       });
       setSectionAttendanceMap(map);
+      facultyDashboardCache.sectionAttendanceMap = map;
     } catch (err) {
       console.warn("Failed to fetch section attendance in faculty dashboard:", err);
     } finally {
       setAttendanceLoading(false);
     }
-  }, [facultySections, selectedAcademicYearId, selectedCampusId]);
-
-  useEffect(() => {
-    fetchSectionAttendance();
-  }, [fetchSectionAttendance]);
+  }, [facultySections]);
 
   const overallAttendance = useMemo(() => {
     const sections = Object.values(sectionAttendanceMap);
@@ -1026,39 +1157,89 @@ export default function FacultyDashboardHome() {
     return { sectionYMax: ceilMax, sectionYTicks: ticks };
   }, [sectionStudentsData]);
 
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      await Promise.all([
-        Promise.allSettled([
-          fetchTimetableData(),
-          fetchSectionAttendance(),
+  const loadAllDashboardData = useCallback(
+    async (isManualRefresh = false) => {
+      if (isManualRefresh) {
+        facultyDashboardCache.timestamp = 0;
+        setIsRefreshing(true);
+      } else {
+        setIsInitialLoading(true);
+      }
+
+      const startTime = Date.now();
+      const MIN_LOADING_TIME_MS = 2000;
+
+      try {
+        // Step 1: Fetch timetable slots to derive faculty sections immediately
+        const slots = await fetchTimetableData();
+        const derivedSections = extractSectionsFromSlots(slots, profileData);
+
+        // Step 2: Concurrently fetch all remaining dashboard modules
+        await Promise.allSettled([
+          fetchSectionAttendance(derivedSections),
           fetchDutiesAndEvals(),
           fetchUpcomingHolidays(),
           fetchUpcomingExaminations(),
           fetchMyAttendanceData(),
-        ]),
-        new Promise((resolve) => setTimeout(resolve, 450)),
-      ]);
-    } finally {
-      setIsRefreshing(false);
-      const nowStr = formattedTimestamp();
-      setLastUpdated(nowStr);
-      if (notify) {
-        notify(`Faculty dashboard refreshed with latest data (${nowStr})`);
+        ]);
+
+        // Step 3: Enforce strict minimum 2-second loading duration for synchronized reveal
+        const elapsed = Date.now() - startTime;
+        if (elapsed < MIN_LOADING_TIME_MS) {
+          await new Promise((resolve) => setTimeout(resolve, MIN_LOADING_TIME_MS - elapsed));
+        }
+      } catch (err) {
+        console.warn("Failed during synchronized faculty dashboard data fetch:", err);
+      } finally {
+        setIsInitialLoading(false);
+        setIsRefreshing(false);
+        const nowStr = formattedTimestamp();
+        setLastUpdated(nowStr);
+        facultyDashboardCache.lastUpdated = nowStr;
+        facultyDashboardCache.timestamp = Date.now();
+        if (isManualRefresh && notify) {
+          notify(`Faculty dashboard refreshed with latest data (${nowStr})`);
+        }
       }
+    },
+    [
+      profileData,
+      fetchTimetableData,
+      fetchSectionAttendance,
+      fetchDutiesAndEvals,
+      fetchUpcomingHolidays,
+      fetchUpcomingExaminations,
+      fetchMyAttendanceData,
+      notify,
+    ]
+  );
+
+  const handleRefresh = useCallback(() => {
+    loadAllDashboardData(true);
+  }, [loadAllDashboardData]);
+
+  // Master initial loader: triggers on mount if cache is not valid or when facultyId changes
+  const initialLoadTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (isCacheValid) {
+      setIsInitialLoading(false);
+      return;
     }
-  }, [fetchTimetableData, fetchSectionAttendance, fetchDutiesAndEvals, fetchUpcomingHolidays, fetchUpcomingExaminations, fetchMyAttendanceData, notify]);
+    if (!initialLoadTriggeredRef.current && facultyId) {
+      initialLoadTriggeredRef.current = true;
+      loadAllDashboardData(false);
+    }
+  }, [facultyId, isCacheValid, loadAllDashboardData]);
 
   const kpis = [
     {
-      label: "Total Students",
+      label: "My Classes",
       value: String(overallAttendance.total || 0),
       badge: `${facultySections.length} SECTION${facultySections.length === 1 ? "" : "S"}`,
       subtext: facultySections.map((s) => s.sectionName).join(", ") || "No assigned sections",
       tone: "green",
       icon: totalStudentsIcon,
-      tooltip: `${overallAttendance.total || 0} enrolled students across ${facultySections.length} assigned sections`,
+      tooltip: `View your ${facultySections.length} assigned sections and ${overallAttendance.total || 0} enrolled students`,
       onClick: () => setActiveModule("classes"),
     },
     {
@@ -1148,7 +1329,7 @@ export default function FacultyDashboardHome() {
       {/* 5 KPI Cards Row with 3D Icons */}
       <section className="dashboard-kpi-grid" aria-label="Faculty Metrics">
         {kpis.map((item) => (
-          <KpiCard key={item.label} {...item} loading={isRefreshing} />
+          <KpiCard key={item.label} {...item} loading={showSkeleton || (!isCacheValid && timetableLoading)} />
         ))}
       </section>
 
@@ -1174,30 +1355,10 @@ export default function FacultyDashboardHome() {
       {/* Row 1 Grid (3 Cards): Section-wise Student Attendance | Students by Section | Today's Lecture Schedule */}
       <section className="dashboard-grid-row dashboard-row-three" aria-label="Academic Analytics">
         {/* Card 1: Students Attendance Overview (Today) with Section-wise View */}
-        <article className={`dashboard-card dashboard-attendance-today-card ${isRefreshing ? "is-refreshing" : ""}`}>
-          <CardHeader title="Student Attendance (Today)">
-            {!isRefreshing && (
-              <div className="dashboard-header-select-wrap">
-                <span className="dashboard-select-label">View By:</span>
-                <select
-                  className="dashboard-header-dropdown"
-                  value={studentAttView}
-                  onChange={(e) => setStudentAttView(e.target.value)}
-                  aria-label="Select Attendance Section View"
-                >
-                  <option value="all">Overall</option>
-                  {facultySections.length > 0 && <option value="breakdown">Breakdown</option>}
-                  {facultySections.map((sec) => (
-                    <option key={sec.sectionId} value={String(sec.sectionId)}>
-                      {sec.sectionName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </CardHeader>
+        <article className={`dashboard-card dashboard-attendance-today-card ${showSkeleton ? "is-refreshing" : ""}`}>
+          <CardHeader title="Student Attendance (Today)" />
           <div className="dashboard-card-body dashboard-attendance-body">
-            {isRefreshing ? (
+            {showSkeleton || (!isCacheValid && (attendanceLoading || timetableLoading)) ? (
               <>
                 <Skeleton className="dashboard-skeleton-donut" />
                 <div className="dashboard-skeleton-chips">
@@ -1281,23 +1442,58 @@ export default function FacultyDashboardHome() {
 
                 {/* 5 Summary KPI Chips */}
                 <div className="dashboard-attendance-kpi-row">
-                  <div className="att-kpi-chip">
+                  <div
+                    className="att-kpi-chip"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setActiveModule("attendance")}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("attendance")}
+                    title="Click to view student attendance"
+                  >
                     <small>Total</small>
                     <strong>{currentAttData.total}</strong>
                   </div>
-                  <div className="att-kpi-chip text-present">
+                  <div
+                    className="att-kpi-chip text-present"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setActiveModule("attendance")}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("attendance")}
+                    title="Click to view student attendance"
+                  >
                     <small>Present</small>
                     <strong>{currentAttData.present}</strong>
                   </div>
-                  <div className="att-kpi-chip text-absent">
+                  <div
+                    className="att-kpi-chip text-absent"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setActiveModule("attendance")}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("attendance")}
+                    title="Click to view student attendance"
+                  >
                     <small>Absent</small>
                     <strong>{currentAttData.absent}</strong>
                   </div>
-                  <div className="att-kpi-chip text-halfday text-late">
+                  <div
+                    className="att-kpi-chip text-halfday text-late"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setActiveModule("attendance")}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("attendance")}
+                    title="Click to view student attendance"
+                  >
                     <small>Half-day</small>
                     <strong>{currentAttData.halfDay}</strong>
                   </div>
-                  <div className="att-kpi-chip">
+                  <div
+                    className="att-kpi-chip"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setActiveModule("attendance")}
+                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("attendance")}
+                    title="Click to view student attendance"
+                  >
                     <small>Rate</small>
                     <strong>{currentAttData.percentage}%</strong>
                   </div>
@@ -1322,10 +1518,10 @@ export default function FacultyDashboardHome() {
           </div>
         </article>
 
-        {/* Card 2: Students by Assigned Section (Bar Chart) */}
-        <article className={`dashboard-card dashboard-group-card ${isRefreshing ? "is-refreshing" : ""}`}>
+        {/* Card 2: Student Strength by Section (Bar Chart) */}
+        <article className={`dashboard-card dashboard-group-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
-            title="Students by Assigned Section"
+            title="Student Strength by Section"
             action={
               <button
                 type="button"
@@ -1337,9 +1533,9 @@ export default function FacultyDashboardHome() {
             }
           />
           <div className="dashboard-card-body">
-            {isRefreshing ? (
+            {showSkeleton || (!isCacheValid && (attendanceLoading || timetableLoading)) ? (
               <>
-                <Skeleton className="dashboard-skeleton-chart" style={{ height: 145, marginBottom: 14 }} />
+                <Skeleton className="dashboard-skeleton-chart" style={{ height: 165, marginBottom: 8 }} />
                 <div className="dashboard-students-chips">
                   {Array.from({ length: 3 }, (_, index) => (
                     <Skeleton key={index} style={{ height: 38, borderRadius: 6 }} />
@@ -1348,34 +1544,81 @@ export default function FacultyDashboardHome() {
               </>
             ) : (
               <>
-                <div className="dashboard-chart dashboard-bar-chart-wrap" style={{ height: 145 }}>
-                  <ResponsiveContainer width="100%" height={145}>
-                    <BarChart data={sectionStudentsData} margin={{ top: 12, right: 10, left: -18, bottom: 12 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
-                      <XAxis
-                        dataKey="name"
-                        tickLine={false}
-                        axisLine={false}
-                        height={24}
-                        dy={6}
-                        tick={{ fontSize: 10, fontWeight: 700, fill: "var(--cms-text-secondary, #64748b)" }}
-                      />
-                      <YAxis
-                        domain={[0, sectionYMax]}
-                        ticks={sectionYTicks}
-                        allowDecimals={false}
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 10, fill: "var(--cms-text-secondary, #64748b)" }}
-                      />
-                      <Tooltip content={<CustomBarTooltip />} />
-                      <Bar dataKey="students" maxBarSize={44} radius={[4, 4, 0, 0]}>
-                        {sectionStudentsData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="faculty-section-chart-container">
+                  {/* Fixed Y-Axis column (pinned on the left) */}
+                  <div
+                    className="faculty-section-chart-yaxis"
+                    style={{
+                      width: sectionYMax >= 1000 ? 38 : sectionYMax >= 100 ? 32 : 26,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ResponsiveContainer width="100%" height={165}>
+                      <BarChart
+                        data={sectionStudentsData}
+                        margin={{ top: 8, right: 2, left: 0, bottom: 20 }}
+                      >
+                        <YAxis
+                          width={sectionYMax >= 1000 ? 34 : sectionYMax >= 100 ? 28 : 22}
+                          domain={[0, sectionYMax]}
+                          ticks={sectionYTicks}
+                          allowDecimals={false}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fontSize: 10, fill: "#475569" }}
+                        />
+                        <XAxis height={24} tick={false} axisLine={false} tickLine={false} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Scrollable Bar Chart Area */}
+                  <div
+                    ref={chartScrollRef}
+                    className="faculty-section-chart-wrap"
+                    onMouseDown={handleChartMouseDown}
+                    onMouseMove={handleChartMouseMove}
+                    onMouseUp={handleChartMouseUp}
+                    onMouseLeave={handleChartMouseLeave}
+                    onWheel={handleChartWheel}
+                  >
+                    <div
+                      style={{
+                        width:
+                          sectionStudentsData.length > 4
+                            ? `${Math.max(100, Math.round((sectionStudentsData.length / 4) * 100))}%`
+                            : "100%",
+                        minWidth: "100%",
+                        height: 165,
+                        position: "relative",
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height={165}>
+                        <BarChart
+                          data={sectionStudentsData}
+                          margin={{ top: 8, right: 12, left: 8, bottom: 20 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
+                          <XAxis
+                            dataKey="name"
+                            tickLine={false}
+                            axisLine={false}
+                            height={24}
+                            dy={4}
+                            tick={{ fontSize: 10, fontWeight: 700, fill: "#475569" }}
+                            interval={0}
+                          />
+                          <YAxis hide domain={[0, sectionYMax]} ticks={sectionYTicks} />
+                          <Tooltip content={<CustomBarTooltip />} />
+                          <Bar dataKey="students" minPointSize={3} maxBarSize={40} radius={[4, 4, 0, 0]}>
+                            {sectionStudentsData.map((entry) => (
+                              <Cell key={entry.name} fill={entry.fill} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
                 <div className="dashboard-students-chips">
                   <div className="dashboard-student-chip chip-total">
@@ -1419,7 +1662,7 @@ export default function FacultyDashboardHome() {
         </article>
 
         {/* Card 3: Today's Lecture Schedule */}
-        <article className={`dashboard-card dashboard-schedule-card ${isRefreshing ? "is-refreshing" : ""}`}>
+        <article className={`dashboard-card dashboard-schedule-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
             title={`Today's Lecture Schedule (${todayLectures.length})`}
             action={
@@ -1433,7 +1676,7 @@ export default function FacultyDashboardHome() {
             }
           />
           <div className="dashboard-card-body">
-            {isRefreshing || (timetableLoading && todayLectures.length === 0) ? (
+            {showSkeleton || (!isCacheValid && timetableLoading) ? (
               <>
                 <div className="dashboard-skeleton-list">
                   {Array.from({ length: 3 }, (_, index) => (
@@ -1565,12 +1808,12 @@ export default function FacultyDashboardHome() {
       {/* Row 2 Grid (3 Cards): Faculty Biometric Attendance | Upcoming Holidays | Upcoming Examinations */}
       <section className="dashboard-grid-row dashboard-row-three" aria-label="Operations and Schedule">
         {/* Card 4: My Attendance Overview */}
-        <article className={`dashboard-card dashboard-staff-attendance-card ${isRefreshing ? "is-refreshing" : ""}`}>
+        <article className={`dashboard-card dashboard-staff-attendance-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
             title={`My Attendance (${myAttMetrics.monthLabel || new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date())})`}
           />
           <div className="dashboard-card-body dashboard-attendance-body">
-            {isRefreshing || (myAttLoading && !myAttMetrics.monthLabel) ? (
+            {showSkeleton || (!isCacheValid && myAttLoading) ? (
               <>
                 <Skeleton className="dashboard-skeleton-donut" />
                 <div className="dashboard-skeleton-chips" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
@@ -1641,23 +1884,58 @@ export default function FacultyDashboardHome() {
                 {/* Summary Chips */}
                 <div className="dashboard-staff-kpi-wrap">
                   <div className="dashboard-staff-kpis">
-                    <div className="staff-chip">
+                    <div
+                      className="staff-chip"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setActiveModule("myattendance")}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("myattendance")}
+                      title="Click to view My Attendance"
+                    >
                       <small>Working</small>
                       <strong>{myAttMetrics.workingDays} Days</strong>
                     </div>
-                    <div className="staff-chip text-present">
+                    <div
+                      className="staff-chip text-present"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setActiveModule("myattendance")}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("myattendance")}
+                      title="Click to view My Attendance"
+                    >
                       <small>Present</small>
                       <strong>{myAttMetrics.presentDays} Days</strong>
                     </div>
-                    <div className="staff-chip text-late">
+                    <div
+                      className="staff-chip text-late"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setActiveModule("myattendance")}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("myattendance")}
+                      title="Click to view My Attendance"
+                    >
                       <small>Leave</small>
                       <strong>{myAttMetrics.leaves} {myAttMetrics.leaves === 1 ? "Day" : "Days"}</strong>
                     </div>
-                    <div className="staff-chip">
+                    <div
+                      className="staff-chip"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setActiveModule("myattendance")}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("myattendance")}
+                      title="Click to view My Attendance"
+                    >
                       <small>Holidays</small>
                       <strong>{myAttMetrics.holidays} Days</strong>
                     </div>
-                    <div className="staff-chip text-leave">
+                    <div
+                      className="staff-chip text-leave"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setActiveModule("myattendance")}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setActiveModule("myattendance")}
+                      title="Click to view My Attendance"
+                    >
                       <small>Balance</small>
                       <strong>{myAttMetrics.leaveBalance} Days</strong>
                     </div>
@@ -1705,7 +1983,7 @@ export default function FacultyDashboardHome() {
         </article>
 
         {/* Card 5: Upcoming Holidays */}
-        <article className={`dashboard-card dashboard-holiday-card ${isRefreshing ? "is-refreshing" : ""}`}>
+        <article className={`dashboard-card dashboard-holiday-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
             title={`Upcoming Holidays (${holidaysList.length})`}
             action={
@@ -1718,7 +1996,7 @@ export default function FacultyDashboardHome() {
               </button>
             }
           />
-          {isRefreshing || (holidayState.loading && !holidayState.data) ? (
+          {showSkeleton || (holidayState.loading && !holidayState.data) ? (
             <div className="dashboard-card-body">
               <div className="dashboard-skeleton-list">
                 {Array.from({ length: 4 }, (_, index) => (
@@ -1782,7 +2060,7 @@ export default function FacultyDashboardHome() {
         </article>
 
         {/* Card 6: Upcoming Examinations */}
-        <article className={`dashboard-card dashboard-exams-card ${isRefreshing ? "is-refreshing" : ""}`}>
+        <article className={`dashboard-card dashboard-exams-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
             title={`Upcoming Examinations (${examsList.length})`}
             action={
@@ -1795,7 +2073,7 @@ export default function FacultyDashboardHome() {
               </button>
             }
           />
-          {isRefreshing || (examState.loading && !examState.data) ? (
+          {showSkeleton || (examState.loading && !examState.data) ? (
             <div className="dashboard-card-body">
               <div className="dashboard-skeleton-list">
                 {Array.from({ length: 4 }, (_, index) => (

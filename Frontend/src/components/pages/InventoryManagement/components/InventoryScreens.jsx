@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { BarChart3, Boxes, CircleAlert, IndianRupee, ShoppingCart, Eye, Pencil, Trash2 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Boxes, CircleAlert, IndianRupee, ShoppingCart } from "lucide-react";
 import {
   actionColumn,
   Action,
@@ -65,17 +64,6 @@ export function InventoryDashboard({ state, open, refresh }) {
     .reverse()
     .slice(0, 8)
     .map((m) => enrichMovement(state, m));
-  const categoryData = state.categories
-    .map((c) => {
-      const records = items.filter((i) => i.categoryId === c.id);
-      return {
-        id: c.id,
-        name: c.name,
-        count: records.length,
-        value: records.reduce((total, item) => total + stockValue(item), 0),
-      };
-    })
-    .filter((c) => c.count);
   const stats = [
     ["Total Items", items.length, Boxes, "Distinct item records"],
     [
@@ -92,9 +80,9 @@ export function InventoryDashboard({ state, open, refresh }) {
     ],
     [
       "Pending Orders",
-      state.orders.filter((o) => o.status === "Pending").length,
+      state.serverBacked ? (state.dashboardKpis?.pendingOrdersCount ?? "Unavailable") : state.orders.filter((o) => o.status === "Pending").length,
       ShoppingCart,
-      state.orders.length ? "Local demo purchase orders" : "No purchase orders in this demo",
+      "Purchase orders",
     ],
   ];
   return (
@@ -152,74 +140,13 @@ export function InventoryDashboard({ state, open, refresh }) {
         ]}
         exportable={false}
       />
-      <div className="inventory-two-columns">
-        <section className="cms-card inventory-panel">
-          <h2>
-            <BarChart3 size={18} /> Inventory by Category
-          </h2>
-          <div className="inventory-chart">
-            <ResponsiveContainer width="100%" height={330}>
-              <BarChart data={categoryData} layout="vertical" margin={{ left: 6, right: 20 }}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  horizontal={false}
-                  stroke="var(--cms-border)"
-                />
-                <XAxis type="number" allowDecimals={false} stroke="var(--cms-muted)" />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={145}
-                  tick={{ fontSize: 10 }}
-                  stroke="var(--cms-muted)"
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--cms-surface)",
-                    color: "var(--cms-text)",
-                    borderColor: "var(--cms-border)",
-                  }}
-                />
-                <Bar dataKey="count" name="Items" fill="var(--cms-primary)" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-        <section className="cms-card inventory-panel">
-          <h2>Inventory Value Summary</h2>
-          {categoryData.map((c) => (
-            <div className="inventory-value-row" key={c.id}>
-              <span>{c.name}</span>
-              <strong>{money(c.value)}</strong>
-            </div>
-          ))}
-        </section>
-      </div>
-      <section className="cms-card inventory-panel">
-        <h2>Recent Activity</h2>
-        <ul className="inventory-activity">
-          {state.activities.slice(0, 8).map((a) => (
-            <li key={a.id}>
-              <time>{a.date}</time>
-              <span>{a.text}</span>
-            </li>
-          ))}
-          {recent.slice(0, 5).map((m) => (
-            <li key={`activity-${m.id}`}>
-              <time>{m.date}</time>
-              <span>
-                {m.type}: {m.quantity} {m.unit} · {m.item} · {m.performedBy}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
     </>
   );
 }
 
 export function InventoryItems({ state, open, remove, refresh }) {
   const { filters, change, reset } = useFilters();
+  const departments = [...new Set(state.items.map((item) => item.department).filter(Boolean))].sort();
   const rows = filterItems(state, filters).map((item, index) => ({ ...item, index: index + 1 }));
   const columns = [
     ...ITEM_COLUMNS,
@@ -242,10 +169,31 @@ export function InventoryItems({ state, open, remove, refresh }) {
   ];
   return (
     <>
-      <InventoryFilters state={state} values={filters} onChange={change} />
       <InventoryTable
         key={reset}
         title="Inventory Items"
+        toolbarExtra={
+          <>
+            <select
+              className="cms-select"
+              aria-label="Filter items by category"
+              value={filters.categoryId || ""}
+              onChange={(event) => change("categoryId", state.categories.find((category) => String(category.id) === event.target.value)?.id ?? "")}
+            >
+              <option value="">All Categories</option>
+              {state.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
+            <select
+              className="cms-select"
+              aria-label="Filter items by department"
+              value={filters.department || ""}
+              onChange={(event) => change("department", event.target.value)}
+            >
+              <option value="">All Departments</option>
+              {departments.map((department) => <option key={department} value={department}>{department}</option>)}
+            </select>
+          </>
+        }
         rows={rows}
         columns={columns}
         onAdd={() => open("items")}
@@ -258,6 +206,7 @@ export function InventoryItems({ state, open, remove, refresh }) {
 
 export function InventoryMovements({ state, type, all, open, correct, returnItem, refresh }) {
   const { filters, change, reset } = useFilters();
+  const departments = [...new Set([...state.items, ...state.movements].map((record) => record.department).filter(Boolean))].sort();
   const scope = { ...filters, type: filters.type || (all ? "" : type) };
   const rows = filterMovements(state, scope).reverse();
   const columns = [
@@ -319,10 +268,31 @@ export function InventoryMovements({ state, type, all, open, correct, returnItem
         are immutable. Reverse the latest movement for an item to correct it; the correction stays
         in the ledger.
       </p>
-      <InventoryFilters state={state} values={scope} onChange={change} mode="movements" />
       <InventoryTable
         key={reset}
         title={all ? "Stock Movement History" : type}
+        toolbarExtra={
+          <>
+            <select
+              className="cms-select"
+              aria-label="Filter movements by category"
+              value={filters.categoryId || ""}
+              onChange={(event) => change("categoryId", state.categories.find((category) => String(category.id) === event.target.value)?.id ?? "")}
+            >
+              <option value="">All Categories</option>
+              {state.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </select>
+            <select
+              className="cms-select"
+              aria-label="Filter movements by department"
+              value={filters.department || ""}
+              onChange={(event) => change("department", event.target.value)}
+            >
+              <option value="">All Departments</option>
+              {departments.map((department) => <option key={department} value={department}>{department}</option>)}
+            </select>
+          </>
+        }
         rows={rows}
         columns={columns}
         onAdd={() => open(type === "Stock In" ? "stock-in" : "stock-out")}

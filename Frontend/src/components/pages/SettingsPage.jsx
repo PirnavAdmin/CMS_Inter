@@ -107,16 +107,6 @@ export default function SettingsPage() {
       primary: true,
     },
     {
-      id: "audit",
-      title: "Audit Logs",
-      description: "View system audit trail, security events and administrator activity logs.",
-      icon: ShieldCheck,
-      image: auditLogsImage,
-      to: "/dashboard/settings/audit-logs",
-      buttonText: "View Audit Logs",
-      primary: false,
-    },
-    {
       id: "lop-configuration",
       title: "LOP Configuration",
       description: "Assign staff unpaid leave days and preview salary deductions for additional leave.",
@@ -125,6 +115,16 @@ export default function SettingsPage() {
       to: "/dashboard/settings/lop-configuration",
       buttonText: "Configure LOP",
       primary: true,
+    },
+    {
+      id: "audit",
+      title: "Audit Logs",
+      description: "View system audit trail, security events and administrator activity logs.",
+      icon: ShieldCheck,
+      image: auditLogsImage,
+      to: "/dashboard/settings/audit-logs",
+      buttonText: "View Audit Logs",
+      primary: false,
     },
   ];
 

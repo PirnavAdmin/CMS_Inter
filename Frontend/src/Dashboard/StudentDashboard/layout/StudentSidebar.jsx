@@ -12,54 +12,66 @@ import certificateIcon from "@/assets/sidebar-3d/certificates.png";
 import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
+import { usePermissions } from "@/features/rolesPermissions/permissionUtils.jsx";
 
 // Shared by the Student sidebar and its navbar search.
 export const studentMenuGroups = [
-  ["OVERVIEW", [["Dashboard", "", dashboardIcon]]],
+  ["OVERVIEW", [["Dashboard", "", dashboardIcon, "dashboard"]]],
   ["ACADEMICS", [
-    ["My Profile", "profile", profileIcon],
-    ["My Timetable", "timetable", timetableIcon],
-    ["My Attendance", "attendance", attendanceIcon],
-    ["Examinations", "examinations", examinationIcon],
-    ["Results", "results", resultsIcon],
+    ["My Profile", "profile", profileIcon, "profile"],
+    ["My Timetable", "timetable", timetableIcon, "timetable"],
+    ["My Attendance", "attendance", attendanceIcon, "attendance"],
+    ["Examinations", "examinations", examinationIcon, "examinations"],
+    ["Results", "results", resultsIcon, "results"],
   ]],
-  ["FINANCE", [["Fees", "fees", feeIcon]]],
+  ["FINANCE", [["Fees", "fees", feeIcon, "fee-management"]]],
   ["STUDENT SERVICES", [
-    ["Transport", "transport", transportIcon],
-    ["Hostel", "hostel", hostelIcon],
-    ["Certificates", "certificates", certificateIcon],
+    ["Transport", "transport", transportIcon, "transport"],
+    ["Hostel", "hostel", hostelIcon, "hostel-management"],
+    ["Certificates", "certificates", certificateIcon, "certificates"],
   ]],
   ["INFORMATION", [
-    ["Holidays", "holidays", holidayIcon],
+    ["Holidays", "holidays", holidayIcon, "holiday-management"],
   ]],
 ];
 
 export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
+  const { canView } = usePermissions();
+
   return (
     <aside id="sp-student-sidebar" className={`sp-sidebar ${open ? "is-open" : ""}`} inert={mobile && !open ? true : undefined}>
       <div className="sp-brand">
         <CampusBrandImage src={logo} alt="Pirnav Colleges"  />
       </div>
       <nav aria-label="Student Portal pages">
-        {studentMenuGroups.map(([heading, links]) => (
-          <section key={heading}>
-            <h2>{heading}</h2>
-            {links.map(([label, path, icon]) => (
-              <NavLink
-                key={label}
-                end={!path}
-                to={`/student-dashboard${path ? `/${path}` : ""}`}
-                onClick={onClose}
-                aria-label={label}
-                title={collapsed && !mobile ? label : undefined}
-                className={({ isActive }) => isActive ? "is-active" : ""}
-              >
-                <img className="sp-nav-3d-icon" src={icon} alt="" aria-hidden="true" />
-                <span>{label}</span>
-              </NavLink>
-            ))}
-          </section>
-        ))}
+        {studentMenuGroups.map(([heading, links]) => {
+          const visibleLinks = links.filter(([label, path, icon, moduleKey]) => {
+            if (!moduleKey || moduleKey === "dashboard" || moduleKey === "profile") return true;
+            return canView(moduleKey);
+          });
+
+          if (!visibleLinks.length) return null;
+
+          return (
+            <section key={heading}>
+              <h2>{heading}</h2>
+              {visibleLinks.map(([label, path, icon]) => (
+                <NavLink
+                  key={label}
+                  end={!path}
+                  to={`/student-dashboard${path ? `/${path}` : ""}`}
+                  onClick={onClose}
+                  aria-label={label}
+                  title={collapsed && !mobile ? label : undefined}
+                  className={({ isActive }) => isActive ? "is-active" : ""}
+                >
+                  <img className="sp-nav-3d-icon" src={icon} alt="" aria-hidden="true" />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </section>
+          );
+        })}
       </nav>
     </aside>
   );

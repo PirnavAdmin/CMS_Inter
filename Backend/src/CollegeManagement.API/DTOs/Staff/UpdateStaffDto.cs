@@ -99,6 +99,14 @@ namespace CollegeManagement.API.DTOs.Staff
 
         public int? DesignationId { get; set; }
 
+        public int? RoleId { get; set; }
+        public string? RoleName { get; set; }
+        public string? Role
+        {
+            get => RoleName;
+            set => RoleName = value;
+        }
+
         [StringLength(20)]
         public string StaffType { get; set; } = "Teaching";
         public string FacultyType => StaffType;

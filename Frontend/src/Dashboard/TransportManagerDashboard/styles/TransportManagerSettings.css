@@ -1,0 +1,33 @@
+/* Transport Manager Settings Styles */
+@import "../../FacultyDashboard/styles/FacultySettings.css";
+
+.tm-settings-container {
+  padding: 8px 4px 24px;
+  width: 100%;
+}
+
+/* Ensure consistent button & badge themes */
+.tm-settings-container .faculty-settings-card.is-featured {
+  border-color: var(--cms-primary-border, #a3c267);
+  background: linear-gradient(180deg, var(--cms-primary-soft, #f7f9ea) 0%, var(--cms-surface, #ffffff) 100%);
+}
+
+.tm-settings-container .faculty-settings-card-footer .cms-btn-primary {
+  background: var(--cms-primary, #6F8400);
+  border-color: var(--cms-primary, #6F8400);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tm-settings-container .faculty-settings-card-footer .cms-btn-primary:hover {
+  background: var(--cms-primary-dark, #576700);
+  border-color: var(--cms-primary-dark, #576700);
+}

@@ -1,11 +1,11 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Threading.Tasks;
 using System.Linq;
 
 namespace CollegeManagement.API.Hubs
 {
-    [Authorize]
+    [Authorize(Roles = "Driver,Bus Driver")]
     public class DriverNotificationHub : Hub
     {
         public override async Task OnConnectedAsync()

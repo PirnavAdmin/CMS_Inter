@@ -20,6 +20,8 @@ import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getDashboard } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../components/common/Ui.jsx";
+import { useDriverData } from "../DriverDataContext.jsx";
+import { unwrapDriverData } from "../data/driverData.js";
 
 export default function DriverHomePage({
   onNavigateTab,
@@ -27,6 +29,7 @@ export default function DriverHomePage({
   studentsList = [],
 }) {
   const [dashboardData, setDashboardData] = useState(null);
+  const { driverProfile } = useDriverData();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -37,7 +40,7 @@ export default function DriverHomePage({
         setIsLoading(true);
         const res = await getDashboard();
         if (isMounted) {
-          setDashboardData(res.data);
+          setDashboardData(unwrapDriverData(res));
           setError(null);
         }
       } catch (err) {
@@ -80,7 +83,6 @@ export default function DriverHomePage({
     );
   }
 
-  const driverProfile = dashboardData?.driverProfile || {};
   const todaySchedule = dashboardData?.todaySchedule || [];
   const routeDetails = dashboardData?.routeDetails || { stops: [] };
 

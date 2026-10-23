@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [Route("api/v1/users")]
     [ApiController]
-    [Authorize]
+    [Authorize(Roles = "Super Admin,Admin")]
     public class UserManagementController : ControllerBase
     {
         private readonly IUserManagementService _userManagementService;

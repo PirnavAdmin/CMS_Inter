@@ -127,16 +127,13 @@ namespace CollegeManagement.API.Repositories.Implementations
                         TemplateCode = "TRANSFER_CERT",
                         Title = "Transfer Certificate",
                         Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}, Mother: {{mother_name}}), bearing Admission No: {{admission_no}} and Roll No: {{roll_no}}, was a bonafide student of this college in {{group_name}} Group ({{medium}} Medium, Second Language: {{second_language}}).\nDate of Birth as per admission register: {{dob}} (in words: {{dob_words}}).\nMother Tongue: {{mother_tongue}} | Social Category / Caste: {{caste_category}}.\nPersonal Marks of Identification: {{identification_marks}}.\nClass in which studying at the time of leaving: {{class_leaving}} on {{leaving_date}}.\nQualified for promotion to Higher Education / University Admission: {{qualified_for_promotion}}.\nAll college dues have been cleared ({{dues_cleared}}). Fee concession / scholarship receipt: {{scholarship_concession}}.\nReason for leaving: {{reason_for_leaving}}. General conduct and character have been {{conduct_rating}}.",
+                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} (Section {{section}}).\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
                         PlaceholdersJson = JsonSerializer.Serialize(new List<string>
                         {
-                            "{{student_name}}", "{{admission_no}}", "{{roll_no}}", "{{father_name}}",
-                            "{{mother_name}}", "{{dob}}", "{{dob_words}}", "{{mother_tongue}}",
-                            "{{caste_category}}", "{{second_language}}", "{{medium}}", "{{group_name}}",
-                            "{{date_of_admission}}", "{{study_from}}", "{{study_to}}", "{{class_leaving}}",
-                            "{{qualified_for_promotion}}", "{{leaving_date}}", "{{reason_for_leaving}}",
-                            "{{dues_cleared}}", "{{scholarship_concession}}", "{{identification_marks}}",
-                            "{{conduct_rating}}", "{{certificate_number}}", "{{issue_date}}", "{{place}}"
+                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
+                            "{{mother_name}}", "{{dob}}", "{{date_of_admission}}", "{{study_from}}",
+                            "{{study_to}}", "{{reason_for_leaving}}", "{{dues_cleared}}", "{{section}}",
+                            "{{certificate_number}}", "{{issue_date}}", "{{place}}"
                         }),
                         IsActive = true,
                         Version = "1",

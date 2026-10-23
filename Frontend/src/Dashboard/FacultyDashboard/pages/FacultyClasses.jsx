@@ -187,11 +187,23 @@ export default function FacultyClasses() {
   const totalWeeklyHours = workload?.totalWeeklyHours ?? mergedClasses.reduce((sum, c) => sum + (c.maxWeeklyHours || 0), 0);
   const activeSections = useMemo(() => {
     const s = new Set();
+    // 1. Collect distinct sections from actual scheduled timetable slots
+    (timetableSlots || []).forEach((slot) => {
+      const name = slot.sectionName || slot.section;
+      if (name) s.add(String(name).trim());
+    });
+    // 2. Collect distinct sections from merged class rows (handling comma-separated names)
     mergedClasses.forEach((c) => {
-      if (c.sectionName) s.add(c.sectionName);
+      if (c.sectionName) {
+        String(c.sectionName)
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .forEach((name) => s.add(name));
+      }
     });
     return s.size;
-  }, [mergedClasses]);
+  }, [mergedClasses, timetableSlots]);
 
   return (
     <div className="faculty-classes-container">

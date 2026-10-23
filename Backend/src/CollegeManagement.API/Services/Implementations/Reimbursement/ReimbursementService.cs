@@ -3,19 +3,25 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Reimbursement;
+using CollegeManagement.API.Hubs;
 using CollegeManagement.API.Repositories.Interfaces.Reimbursement;
 using CollegeManagement.API.Services.Interfaces.Reimbursement;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.SignalR;
 
 namespace CollegeManagement.API.Services.Implementations.Reimbursement
 {
     public class ReimbursementService : IReimbursementService
     {
         private readonly IReimbursementRepository _repository;
+        private readonly IHubContext<NotificationHub>? _hubContext;
 
-        public ReimbursementService(IReimbursementRepository repository)
+        public ReimbursementService(
+            IReimbursementRepository repository,
+            IHubContext<NotificationHub>? hubContext = null)
         {
             _repository = repository;
+            _hubContext = hubContext;
         }
 
         public async Task<CreateClaimResponseDto> CreateClaimAsync(CreateReimbursementClaimRequest request)
@@ -35,7 +41,14 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
                 throw new ArgumentException("Purpose / description is required.");
             }
 
-            return await _repository.CreateClaimAsync(request);
+            var created = await _repository.CreateClaimAsync(request);
+            try
+            {
+                await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "NEW_REIMBURSEMENT", campusId = request.CampusId });
+            }
+            catch { }
+
+            return created;
         }
 
         public async Task<IEnumerable<ReimbursementClaimDto>> GetAllClaimsAsync(int? campusId, string? status, string? category, string? search)
@@ -166,7 +179,16 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
 
             decimal approvedAmount = request.ApprovedAmount ?? existing.Amount;
             var reviewNotes = request.ReviewNotes ?? request.Notes;
-            return await _repository.VerifyClaimAsync(id, approvedAmount, reviewNotes, reviewedBy);
+            var verifyResult = await _repository.VerifyClaimAsync(id, approvedAmount, reviewNotes, reviewedBy);
+            if (verifyResult.Success)
+            {
+                try
+                {
+                    await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "REIMBURSEMENT_STATUS_UPDATED", campusId = existing.CampusId });
+                }
+                catch { }
+            }
+            return verifyResult;
         }
 
         public async Task<bool> RequestClarificationAsync(int id, RequestClarificationRequest request, int reviewedBy)
@@ -190,7 +212,16 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             }
 
             var noteText = request.RejectNotes ?? request.Notes;
-            return await _repository.RejectClaimAsync(id, noteText, reviewedBy);
+            var rejectResult = await _repository.RejectClaimAsync(id, noteText, reviewedBy);
+            if (rejectResult)
+            {
+                try
+                {
+                    await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "REIMBURSEMENT_STATUS_UPDATED", campusId = existing.CampusId });
+                }
+                catch { }
+            }
+            return rejectResult;
         }
 
         public async Task<bool> MarkPaidAsync(int id, MarkPaidClaimRequest request, int paidBy)
@@ -202,7 +233,16 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             }
 
             var paymentRef = request.PaymentReference ?? request.PaymentRef ?? request.Remarks;
-            return await _repository.MarkPaidAsync(id, paymentRef, paidBy);
+            var paidResult = await _repository.MarkPaidAsync(id, paymentRef, paidBy);
+            if (paidResult)
+            {
+                try
+                {
+                    await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "REIMBURSEMENT_STATUS_UPDATED", campusId = existing.CampusId });
+                }
+                catch { }
+            }
+            return paidResult;
         }
 
         public async Task<string> UploadProofAsync(int id, IFormFile file)

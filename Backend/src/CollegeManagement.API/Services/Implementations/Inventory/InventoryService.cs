@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Inventory;
-using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Repositories.Interfaces.Inventory;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Inventory;
@@ -239,25 +238,6 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
             if (request.MovementType == "Stock Out" && request.IsReturnable && (!request.ExpectedReturnDate.HasValue || request.ExpectedReturnDate.Value.Date < request.TransactionDate.Date))
                 throw new ArgumentException("Expected return date cannot precede issue date.");
 
-            if (!string.IsNullOrWhiteSpace(request.PaymentMethod))
-            {
-                var pm = request.PaymentMethod.Trim();
-                if (pm.Equals("online", StringComparison.OrdinalIgnoreCase) || 
-                    pm.Equals("online transaction", StringComparison.OrdinalIgnoreCase) ||
-                    pm.Equals("online_transaction", StringComparison.OrdinalIgnoreCase))
-                {
-                    request.PaymentMethod = "Online Transaction";
-                }
-                else if (pm.Equals("cash", StringComparison.OrdinalIgnoreCase))
-                {
-                    request.PaymentMethod = "Cash";
-                }
-            }
-            else
-            {
-                request.PaymentMethod = "Cash";
-            }
-
             var movement = await _repository.PostMovementAsync(request, userId, performedBy);
 
             await _auditLoggingService.LogAsync(
@@ -276,11 +256,6 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
         {
             var target = await _repository.GetMovementByIdAsync(transactionId);
             if (target == null) throw new KeyNotFoundException("Movement not found.");
-
-            if (!target.CanReverse && !string.IsNullOrWhiteSpace(target.ReverseBlockedReason))
-            {
-                throw new MovementNotReversibleException(target.ReverseBlockedReason);
-            }
 
             var correction = await _repository.ReverseMovementAsync(transactionId, userId, performedBy);
 

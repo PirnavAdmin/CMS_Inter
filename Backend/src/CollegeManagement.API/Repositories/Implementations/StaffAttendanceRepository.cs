@@ -119,12 +119,20 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 bool isLate = false;
                 bool isEarlyCheckout = false;
-                if (timingConfig != null && markedEntry?.InTime != null)
+                if (markedEntry != null)
+                {
+                    isLate = markedEntry.Status == AttendanceStatus.Late;
+                    if (timingConfig != null && markedEntry.OutTime.HasValue)
+                    {
+                        isEarlyCheckout = markedEntry.OutTime.Value < timingConfig.EarlyCheckoutThreshold;
+                    }
+                }
+                else if (timingConfig != null && markedEntry?.InTime != null)
                 {
                     var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
                     isLate = markedEntry.InTime.Value > lateThreshold;
                 }
-                if (timingConfig != null && markedEntry?.OutTime != null)
+                if (timingConfig != null && markedEntry?.OutTime != null && markedEntry == null)
                 {
                     isEarlyCheckout = markedEntry.OutTime.Value < timingConfig.EarlyCheckoutThreshold;
                 }
@@ -175,7 +183,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     VerificationMethod = markedEntry?.VerificationMethod ?? VerificationMethod.Manual,
                     Remarks = remarks,
                     IsLate = isLate,
-                    IsEarlyCheckout = isEarlyCheckout
+                    IsEarlyCheckout = isEarlyCheckout,
+                    StaffType = (f.StaffType != null && (f.StaffType.Equals("Non-Teaching", StringComparison.OrdinalIgnoreCase) || f.StaffType.Equals("NonTeaching", StringComparison.OrdinalIgnoreCase))) ? StaffType.NonTeaching : StaffType.Teaching
                 });
             }
 
@@ -345,15 +354,6 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 if (timingConfig != null)
                 {
-                    if (request.InTime.HasValue)
-                    {
-                        var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
-                        if (request.InTime.Value > lateThreshold && effectiveStatus == AttendanceStatus.Present)
-                        {
-                            effectiveStatus = AttendanceStatus.Late;
-                        }
-                    }
-
                     if (request.OutTime.HasValue && request.OutTime.Value < timingConfig.EarlyCheckoutThreshold)
                     {
                         if (string.IsNullOrWhiteSpace(effectiveRemarks))
@@ -449,15 +449,6 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 if (timingConfig != null)
                 {
-                    if (request.InTime.HasValue)
-                    {
-                        var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
-                        if (request.InTime.Value > lateThreshold && effectiveStatus == AttendanceStatus.Present)
-                        {
-                            effectiveStatus = AttendanceStatus.Late;
-                        }
-                    }
-
                     if (request.OutTime.HasValue && request.OutTime.Value < timingConfig.EarlyCheckoutThreshold)
                     {
                         if (string.IsNullOrWhiteSpace(effectiveRemarks))
@@ -844,13 +835,21 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     todayStatus = "Present";
                 }
-                else if (attendance.Status == AttendanceStatus.Late || isLate)
+                else if (attendance.Status == AttendanceStatus.Late)
                 {
                     todayStatus = "Late";
                 }
                 else if (attendance.Status == AttendanceStatus.HalfDay)
                 {
                     todayStatus = "Half Day";
+                }
+                else if (attendance.Status == AttendanceStatus.Present)
+                {
+                    todayStatus = "Present";
+                }
+                else if (isLate)
+                {
+                    todayStatus = "Late";
                 }
                 else
                 {

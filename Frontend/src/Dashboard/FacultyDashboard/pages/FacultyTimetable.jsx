@@ -253,32 +253,88 @@ export default function FacultyTimetable() {
   // Permanent fixed 8-period timetable rows (Fixed schema structure; data populates dynamically)
   const periodRows = FIXED_COLLEGE_PERIODS;
 
-  // Lookup class slot for a given day and fixed period row
+  // Pre-calculate clean 1-to-1 slot mapping: dayIndex -> periodKey -> slot
+  // Guarantees zero duplicate card renders and 100% accurate time-slot alignment
+  const timetableMatrix = useMemo(() => {
+    const matrix = {}; // { [dayIndex]: { [periodKey]: slot } }
+    const assignedSlotIds = new Set();
+
+    SHORT_DAYS.forEach((d, dayIdx) => {
+      matrix[dayIdx] = {};
+
+      // All slots for this day
+      const daySlots = (timetableSlots || []).filter((s) => {
+        const slotDay = String(s.dayName || "").trim().toLowerCase();
+        return slotDay === d.full.toLowerCase() || s.dayOfWeek === d.dayOfWeek;
+      });
+
+      // Pass 1: Exact start-time match (e.g. "09:00", "10:00", "11:15", "12:40", "13:20", "14:00", "15:00", "16:00")
+      daySlots.forEach((slot) => {
+        if (!slot.startTime || assignedSlotIds.has(slot.id)) return;
+        const slotStart = String(slot.startTime).slice(0, 5);
+
+        const matchedPeriod = periodRows.find((p) => {
+          if (matrix[dayIdx][p.key]) return false;
+          const pStart = String(p.startTime).slice(0, 5);
+          return slotStart === pStart;
+        });
+
+        if (matchedPeriod) {
+          matrix[dayIdx][matchedPeriod.key] = slot;
+          assignedSlotIds.add(slot.id);
+        }
+      });
+
+      // Pass 2: Overlapping / closest start time within 60 minutes for custom period timing
+      daySlots.forEach((slot) => {
+        if (!slot.startTime || assignedSlotIds.has(slot.id)) return;
+        const [h, m] = String(slot.startTime).split(":").map(Number);
+        const slotMins = (h || 0) * 60 + (m || 0);
+
+        let bestPeriod = null;
+        let minDiff = Infinity;
+
+        periodRows.forEach((p) => {
+          if (matrix[dayIdx][p.key]) return;
+          const [ph, pm] = String(p.startTime).split(":").map(Number);
+          const pMins = (ph || 0) * 60 + (pm || 0);
+          const diff = Math.abs(slotMins - pMins);
+          if (diff < minDiff && diff < 60) {
+            minDiff = diff;
+            bestPeriod = p;
+          }
+        });
+
+        if (bestPeriod) {
+          matrix[dayIdx][bestPeriod.key] = slot;
+          assignedSlotIds.add(slot.id);
+        }
+      });
+
+      // Pass 3: Fallback match by periodNumber if slot has not yet been placed
+      daySlots.forEach((slot) => {
+        if (assignedSlotIds.has(slot.id)) return;
+        const matchedPeriod = periodRows.find((p) => {
+          if (matrix[dayIdx][p.key]) return false;
+          return p.periodNumber === slot.periodNumber;
+        });
+
+        if (matchedPeriod) {
+          matrix[dayIdx][matchedPeriod.key] = slot;
+          assignedSlotIds.add(slot.id);
+        }
+      });
+    });
+
+    return matrix;
+  }, [timetableSlots, periodRows]);
+
+  // Lookup class slot for a given day and fixed period row (1-to-1 unique mapping)
   const getSlotForDayAndPeriod = useCallback(
     (dayName, period, dayIndex) => {
-      return timetableSlots.find((s) => {
-        const dayMatches =
-          String(s.dayName || "").trim().toLowerCase() === dayName.toLowerCase() ||
-          s.dayOfWeek === dayIndex + 1;
-
-        if (!dayMatches) return false;
-
-        // Match by exact start time (e.g. "09:00", "10:00", "11:15", "12:40", "13:20", "14:00", "15:00", "16:00")
-        if (s.startTime && period.startTime) {
-          const slotStart = String(s.startTime).slice(0, 5);
-          const periodStart = String(period.startTime).slice(0, 5);
-          if (slotStart === periodStart) return true;
-        }
-
-        // Match by period number if explicitly aligned
-        if (s.periodNumber && s.periodNumber === period.periodNumber) {
-          return true;
-        }
-
-        return false;
-      });
+      return timetableMatrix[dayIndex]?.[period.key] || null;
     },
-    [timetableSlots]
+    [timetableMatrix]
   );
 
   // Statistics & aggregation

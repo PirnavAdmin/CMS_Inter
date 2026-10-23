@@ -69,17 +69,57 @@ export default function NonTeachingDashboardHome() {
     return unsub;
   }, []);
 
-  const handleRefresh = () => {
+  useEffect(() => {
+    let active = true;
+    nonTeachingService.fetchProfile().then((p) => {
+      if (active && p) setProfile(p);
+    }).catch(() => {});
+
+    nonTeachingService.fetchTasks().then((t) => {
+      if (active && Array.isArray(t)) setTasks(t);
+    }).catch(() => {});
+
+    if (typeof nonTeachingService.fetchLeaveData === "function") {
+      nonTeachingService.fetchLeaveData().then((ld) => {
+        if (active && ld) {
+          if (ld.balances) setLeaveBalances(ld.balances);
+          if (ld.history) setLeaveHistory(ld.history);
+        }
+      }).catch(() => {});
+    }
+
+    if (typeof nonTeachingService.fetchAttendanceSummary === "function") {
+      nonTeachingService.fetchAttendanceSummary().then((s) => {
+        if (active && s) setAttendanceSummary(s);
+      }).catch(() => {});
+    }
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setProfile(nonTeachingService.getProfile());
-      setTasks(nonTeachingService.getTasks());
-      setLeaveBalances(nonTeachingService.getLeaveBalances());
-      setLeaveHistory(nonTeachingService.getLeaveHistory());
-      setAttendanceSummary(nonTeachingService.getAttendanceSummary());
-      setRefreshing(false);
-      showToast("Dashboard synchronized with server.");
-    }, 400);
+    try {
+      const p = await nonTeachingService.fetchProfile();
+      if (p) setProfile(p);
+      const t = await nonTeachingService.fetchTasks();
+      if (Array.isArray(t)) setTasks(t);
+      if (typeof nonTeachingService.fetchLeaveData === "function") {
+        const ld = await nonTeachingService.fetchLeaveData();
+        if (ld) {
+          if (ld.balances) setLeaveBalances(ld.balances);
+          if (ld.history) setLeaveHistory(ld.history);
+        }
+      }
+      if (typeof nonTeachingService.fetchAttendanceSummary === "function") {
+        const s = await nonTeachingService.fetchAttendanceSummary();
+        if (s) setAttendanceSummary(s);
+      }
+    } catch {}
+    setRefreshing(false);
+    showToast("Dashboard synchronized with server.");
   };
 
   const showToast = (text) => {
@@ -138,7 +178,7 @@ export default function NonTeachingDashboardHome() {
   const activeTasksCount = tasks.filter((t) => t.status !== "Completed").length;
   const completedTasksCount = tasks.filter((t) => t.status === "Completed").length;
   const pendingTasksCount = tasks.filter((t) => t.status === "Pending").length;
-  const totalLeaveDaysRemaining = leaveBalances.reduce((sum, b) => sum + b.remaining, 0);
+  const totalLeaveDaysRemaining = leaveBalances.reduce((sum, b) => sum + Number(b.remaining || b.available || b.total || 0), 0);
 
   return (
     <>
@@ -215,7 +255,7 @@ export default function NonTeachingDashboardHome() {
           </div>
           <span className="nts-kpi-sub">
             {leaveBalances.length > 0
-              ? leaveBalances.map((b) => `${b.code || b.type.slice(0, 2)}: ${b.remaining}`).join(" • ")
+              ? leaveBalances.map((b) => `${b.code || b.categoryCode || (b.type || b.categoryName || "LV").slice(0, 2)}: ${b.remaining ?? b.available ?? b.total ?? 0}`).join(" • ")
               : "No active leave quotas"}
           </span>
         </div>
@@ -391,14 +431,18 @@ export default function NonTeachingDashboardHome() {
             </div>
             <div className="nts-card-body" style={{ gap: 12 }}>
               {leaveBalances.length > 0 ? (
-                leaveBalances.map((leave) => {
-                  const percent = Math.round((leave.remaining / leave.total) * 100);
-                  const barColor = leave.tone === "blue" ? "#2563eb" : leave.tone === "green" ? "#16a34a" : leave.tone === "purple" ? "#7c3aed" : "#d97706";
+                leaveBalances.map((leave, idx) => {
+                  const avail = Number(leave.remaining ?? leave.available ?? leave.total ?? 0);
+                  const tot = Number(leave.total || 12);
+                  const percent = tot > 0 ? Math.min(100, Math.round((avail / tot) * 100)) : 0;
+                  const tones = ["#2563eb", "#16a34a", "#7c3aed", "#d97706"];
+                  const barColor = leave.tone === "blue" ? "#2563eb" : leave.tone === "green" ? "#16a34a" : leave.tone === "purple" ? "#7c3aed" : leave.tone === "amber" ? "#d97706" : tones[idx % tones.length];
+                  const label = leave.type || leave.categoryName || leave.title || leave.code || "Leave";
                   return (
-                    <div key={leave.code} className="nts-progress-wrap">
+                    <div key={leave.code || leave.categoryCode || idx} className="nts-progress-wrap">
                       <div className="nts-progress-labels">
-                        <span>{leave.type}</span>
-                        <span>{leave.remaining} / {leave.total} Days Left</span>
+                        <span>{label}</span>
+                        <span>{avail} / {tot} Days Left</span>
                       </div>
                       <div className="nts-progress-track">
                         <div className="nts-progress-fill" style={{ width: `${percent}%`, backgroundColor: barColor }} />
@@ -449,7 +493,7 @@ export default function NonTeachingDashboardHome() {
                       {notice.title}
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--nts-muted)", lineHeight: 1.35 }}>
-                      {notice.content.slice(0, 110)}...
+                      {notice.content ? (notice.content.length > 110 ? `${notice.content.slice(0, 110)}...` : notice.content) : "No description provided."}
                     </div>
                   </div>
                 ))}

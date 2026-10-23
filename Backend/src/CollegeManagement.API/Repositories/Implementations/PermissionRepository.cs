@@ -48,6 +48,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_CampusId", campusId);
             parameters.Add("p_BoardId", boardId);
             parameters.Add("p_AcademicYearId", academicYearId);
+            parameters.Add("p_IncludeInactive", 0);
 
             var result = await conn.QueryAsync<RoleCardDto>(
                 "sp_GetRoleCards",
@@ -80,8 +81,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             var payload = modules.Select(m => new
             {
                 SubModule = m.SubModule,
-                ScreenId = m.ScreenId ?? string.Empty,
-                ScreenName = m.ScreenName ?? string.Empty,
                 CanView = m.CanView ? 1 : 0,
                 CanAdd = m.CanAdd ? 1 : 0,
                 CanEdit = m.CanEdit ? 1 : 0,
@@ -235,8 +234,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             var payload = overrides.Select(m => new
             {
                 SubModule = m.SubModule,
-                ScreenId = m.ScreenId ?? string.Empty,
-                ScreenName = m.ScreenName ?? string.Empty,
                 CanView = m.CanView ? 1 : 0,
                 CanAdd = m.CanAdd ? 1 : 0,
                 CanEdit = m.CanEdit ? 1 : 0,
@@ -317,7 +314,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             var allKnownModules = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "dashboard", "Dashboard" },
-                { "board-academic-year", "Board & Academic Year" },
                 { "group-management", "Group Management" },
                 { "subject-management", "Subject Management" },
                 { "section-room", "Section & Room" },
@@ -333,14 +329,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 { "department-designation", "Department & Designation" },
                 { "staff-attendance", "Staff Attendance" },
                 { "staff-leave-management", "Staff Leave Management" },
-                { "reimbursement", "Staff Reimbursements" },
-                { "reimbursements", "Staff Reimbursements" },
-                { "staff-reimbursement", "Staff Reimbursements" },
-                { "staff-reimbursements", "Staff Reimbursements" },
-                { "reports", "Reports & Analytics" },
-                { "board-academic-years", "Board & Academic Year" },
-                { "courses", "Group Management" },
                 { "examination", "Examination" },
+                { "examinations", "Examination" },
                 { "marks-evaluation", "Marks Evaluation" },
                 { "results", "Results" },
                 { "fee-management", "Fee Management" },
@@ -381,32 +371,13 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<bool> HasModulePermissionAsync(int userId, string moduleIdentifier, string action)
         {
-            string normalizedModule = moduleIdentifier;
-            if (string.Equals(moduleIdentifier, "reimbursement", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(moduleIdentifier, "reimbursements", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(moduleIdentifier, "staff-reimbursement", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(moduleIdentifier, "staff-reimbursements", StringComparison.OrdinalIgnoreCase))
-            {
-                normalizedModule = "Staff Reimbursements";
-            }
-            else if (string.Equals(moduleIdentifier, "reports", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(moduleIdentifier, "reports-analytics", StringComparison.OrdinalIgnoreCase))
-            {
-                normalizedModule = "Reports & Analytics";
-            }
-            else if (string.Equals(moduleIdentifier, "inventory", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(moduleIdentifier, "inventory-management", StringComparison.OrdinalIgnoreCase))
-            {
-                normalizedModule = "Inventory Management";
-            }
-
             var conn = await GetOpenConnectionAsync();
             var result = await conn.ExecuteScalarAsync<int?>(
                 "sp_CheckUserModuleAction",
                 new
                 {
                     p_UserId = userId,
-                    p_ModuleIdentifier = normalizedModule,
+                    p_ModuleIdentifier = moduleIdentifier,
                     p_Action = action ?? "View"
                 },
                 commandType: CommandType.StoredProcedure);
