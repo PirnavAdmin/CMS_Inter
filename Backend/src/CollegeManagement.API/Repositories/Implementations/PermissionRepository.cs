@@ -342,6 +342,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 { "board-academic-years", "Board & Academic Year" },
                 { "courses", "Group Management" },
                 { "examination", "Examination" },
+                { "examinations", "Examination" },
                 { "marks-evaluation", "Marks Evaluation" },
                 { "results", "Results" },
                 { "fee-management", "Fee Management" },

@@ -225,7 +225,7 @@ export const menu = [
   {
     section: "Examinations",
     items: [
-      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon, moduleKey: "examinations" },
+      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon, moduleKey: "examination" },
       { to: "/dashboard/marks-entry", label: "Marks Evaluation", icon: marksEvaluationIcon, moduleKey: "marks-evaluation" },
       { to: "/dashboard/results", label: "Results", icon: resultsIcon, moduleKey: "results" },
     ],
