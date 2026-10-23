@@ -35,6 +35,7 @@ function record(kind, value) {
     if (r[key] != null) next[key] = String(r[key]);
   if (r.categoryIds) next.categoryIds = r.categoryIds.map(String);
   if (kind === "items") next.openingQty = r.openingQuantity ?? r.openingQty ?? 0;
+  if (kind === "suppliers") next.contact = r.contactPerson ?? r.contact;
   if (kind === "movements")
     Object.assign(next, {
       number: r.transactionNumber,
@@ -48,6 +49,8 @@ function record(kind, value) {
       batch: r.batchNumber,
       recipient: r.recipientName,
       returnable: r.isReturnable,
+      correctionOf: r.correctionOfId == null ? null : String(r.correctionOfId),
+      returnOf: r.returnOfId == null ? null : String(r.returnOfId),
     });
   return next;
 }
@@ -67,7 +70,17 @@ export async function loadInventoryApi() {
       rows(unwrapInventory(responses[index])).map((r) => record(kind, r)),
     ]),
   );
-  return { ...state, orders: [], activities: [], serverBacked: true };
+  const dashboard = camel(unwrapInventory(await api.get(`${BASE}/dashboard`)));
+  const activities = rows(dashboard.recentActivities || []).map((value) => {
+    const r = camel(value);
+    return {
+      ...r,
+      id: String(r.activityId),
+      date: r.activityDate?.slice(0, 10),
+      text: r.activityText,
+    };
+  });
+  return { ...state, orders: [], activities, dashboardKpis: camel(dashboard.kpis), serverBacked: true };
 }
 
 export async function saveInventoryApi(kind, values) {
@@ -84,7 +97,7 @@ export async function saveInventoryApi(kind, values) {
         returnable: "isReturnable",
         number: "paymentTransactionNumber",
       }
-    : { openingQty: "openingQuantity" };
+    : { openingQty: "openingQuantity", contact: "contactPerson" };
   for (const [source, target] of Object.entries(aliases)) {
     if (source in payload) payload[target] = payload[source];
     delete payload[source];
@@ -92,6 +105,16 @@ export async function saveInventoryApi(kind, values) {
   for (const key of ["categoryId", "supplierId", "itemId"])
     if (key in payload) payload[key] = payload[key] === "" ? null : Number(payload[key]);
   if (payload.categoryIds) payload.categoryIds = payload.categoryIds.map(Number);
+  if (movement && payload.cashReceipt?.dataUrl) {
+    const receipt = payload.cashReceipt;
+    const blob = await (await fetch(receipt.dataUrl)).blob();
+    const form = new FormData();
+    form.append("file", blob, receipt.name || "receipt.png");
+    const uploaded = unwrapInventory(await api.post(`${BASE}/movements/upload-receipt`, form));
+    payload.cashReceiptPath = uploaded.url || uploaded.filePath || uploaded.fileUrl;
+    if (!payload.cashReceiptPath) throw new Error("Receipt upload did not return a file path.");
+  }
+  delete payload.cashReceipt;
   for (const key of ["purchaseDate", "warrantyDate", "expiryDate", "expectedReturnDate"])
     if (payload[key] === "") payload[key] = null;
   delete payload.id;

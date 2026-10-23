@@ -8,6 +8,12 @@ import DriverStudentsPage from "./pages/DriverStudentsPage.jsx";
 import DriverGpsPage from "./pages/DriverGpsPage.jsx";
 import DriverReportsPage from "./pages/DriverReportsPage.jsx";
 import DriverProfilePage from "./pages/DriverProfilePage.jsx";
+import DriverPayslipsPage from "./pages/DriverPayslipsPage.jsx";
+import DriverLeavePage from "./pages/DriverLeavePage.jsx";
+import DriverAttendancePage from "./pages/DriverAttendancePage.jsx";
+import DriverHolidaysPage from "./pages/DriverHolidaysPage.jsx";
+import DriverSettingsPage from "./pages/DriverSettingsPage.jsx";
+import { DriverDataProvider } from "./DriverDataContext.jsx";
 import "./DriverDashboard.css";
 import { clearAuthSession, getAuthUser } from "../../features/authStorage.js";
 
@@ -18,6 +24,11 @@ export default function DriverDashboard() {
   // Active Tab state synced with URL pathname if present
   const getTabFromPath = () => {
     const path = location.pathname.toLowerCase();
+    if (path.includes("/payslip")) return "payslips";
+    if (path.includes("/leave")) return "leave";
+    if (path.includes("/attendance")) return "attendance";
+    if (path.includes("/holiday")) return "holidays";
+    if (path.includes("/settings")) return "settings";
     if (path.includes("/route")) return "route";
     if (path.includes("/trips") || path.includes("/trip")) return "trips";
     if (path.includes("/students") || path.includes("/student")) return "students";
@@ -105,6 +116,7 @@ export default function DriverDashboard() {
   };
 
   return (
+    <DriverDataProvider>
     <DriverLayout
       activeTab={activeTab}
       onSelectTab={handleSelectTab}
@@ -147,7 +159,13 @@ export default function DriverDashboard() {
       {activeTab === "reports" && <DriverReportsPage />}
 
       {activeTab === "profile" && <DriverProfilePage />}
+      {activeTab === "payslips" && <DriverPayslipsPage />}
+      {activeTab === "leave" && <DriverLeavePage />}
+      {activeTab === "attendance" && <DriverAttendancePage />}
+      {activeTab === "holidays" && <DriverHolidaysPage />}
+      {activeTab === "settings" && <DriverSettingsPage />}
     </DriverLayout>
+    </DriverDataProvider>
   );
 }
 

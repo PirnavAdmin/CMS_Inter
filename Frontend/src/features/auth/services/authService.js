@@ -79,35 +79,10 @@ export const loginUser = async (credentials) => {
   } catch (authError) {
     // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
     if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
-      try {
-        logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
-        const fallbackResponse = await adminLogin({ email: emailOrMobile, password });
-        logLoginResponse(fallbackResponse.status);
-        return normalizeLoginResponse(fallbackResponse.data, emailOrMobile, "admin");
-      } catch (_adminError) {
-        // Continue to offline fallback
-      }
-    }
-
-    // If backend tunnel is offline, provide mock fallback for Admin demo
-    const lower = emailOrMobile.toLowerCase();
-    if (
-      (lower === "admin@cms.com" || lower === "admin" || lower === "administrator") &&
-      password
-    ) {
-      return {
-        token: `mock-admin-auth-token-${Date.now()}`,
-        user: {
-          id: "admin-001",
-          name: "CMS Admin",
-          fullName: "CMS Admin",
-          email: "Admin@CMS.com",
-          role: "ADMIN",
-          isAdmin: true,
-        },
-        roleType: "admin",
-        message: "Login successful.",
-      };
+      logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
+      const response = await adminLogin({ email: emailOrMobile, password });
+      logLoginResponse(response.status);
+      return normalizeLoginResponse(response.data, emailOrMobile, "admin");
     }
 
     throw authError;

@@ -158,6 +158,7 @@ apiClient.interceptors.request.use(
     if (
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
+      !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(config.url || "") &&
       (!isHostelEndpoint || isExplicitMockForced)
     ) {
       config.adapter = handleMockApiRequest;
@@ -214,14 +215,8 @@ apiClient.interceptors.response.use(
     const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("non-teaching-") || token.startsWith("warden-") || token.startsWith("parent-")));
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
-    const isHostelRequest = /\/api\/v1\/hostel/i.test(originalRequest?.url || "");
-    if (
-      (isExplicitMockToken || isExplicitMockForced) &&
-      originalRequest &&
-      !originalRequest._isMockFallback &&
-      !originalRequest.url?.includes("/Auth/refresh-token") &&
-      (!isHostelRequest || isExplicitMockForced)
-    ) {
+    // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
+    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") && !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(originalRequest.url || "") && !originalRequest._isMockFallback) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);
