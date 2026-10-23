@@ -166,8 +166,14 @@ apiClient.interceptors.request.use(
     );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
     const isBackendOfflineKnown = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
+    const isHostelEndpoint = /\/api\/v1\/hostel/i.test(config.url || "");
 
-    if ((isExplicitMockToken || isExplicitMockForced || isBackendOfflineKnown) && !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(config.url || "") && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+    if (
+      (isExplicitMockToken || isExplicitMockForced || isBackendOfflineKnown) &&
+      !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
+      !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(config.url || "") &&
+      (!isHostelEndpoint || isExplicitMockForced)
+    ) {
       config.adapter = handleMockApiRequest;
     }
 
