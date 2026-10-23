@@ -199,8 +199,9 @@ export default function ProtectedRoute({
 }) {
   // Discard sessions created by the removed local preview login.
   const storedToken = getAuthToken();
-  if (storedToken === "exam-cell-local-preview") clearAuthSession();
-  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
+  const isPreview = storedToken === "exam-cell-local-preview" || /^(demo-|mock-)/.test(storedToken);
+  if (isPreview) clearAuthSession();
+  const token = isPreview ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenExpired = Boolean(tokenState?.isJwt && tokenState?.isExpired);
 
@@ -349,8 +350,9 @@ export default function ProtectedRoute({
 export function PublicOnlyRoute({ children }) {
   // Discard sessions created by the removed local preview login.
   const storedToken = getAuthToken();
-  if (storedToken === "exam-cell-local-preview") clearAuthSession();
-  const token = storedToken === "exam-cell-local-preview" ? "" : storedToken;
+  const isPreview = storedToken === "exam-cell-local-preview" || /^(demo-|mock-)/.test(storedToken);
+  if (isPreview) clearAuthSession();
+  const token = isPreview ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenValid = Boolean(token && (!tokenState?.isJwt || !tokenState?.isExpired));
 

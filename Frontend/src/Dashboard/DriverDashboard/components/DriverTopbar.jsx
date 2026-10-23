@@ -13,7 +13,7 @@ import {
   AlertTriangle,
   Info,
 } from "lucide-react";
-import { driverProfile, notificationsList } from "../data/driverMockData.js";
+import { useDriverData } from "../DriverDataContext.jsx";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
 import { isPayslipNotification } from "../data/driverPayslipNotifications.js";
 
@@ -29,7 +29,8 @@ export default function DriverTopbar({
   const [campusOpen, setCampusOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
-  const [notifications, setNotifications] = useState(notificationsList);
+  const { driverProfile, notifications: serverNotifications, markAllRead } = useDriverData();
+  const notifications = serverNotifications.map((item) => ({ ...item, unread: !item.isRead }));
   const campusRef = useRef(null);
   const { activeCampuses, campuses, selectedCampus, setSelectedCampus } = useCampusContext();
   const campusOptions = activeCampuses?.length ? activeCampuses : campuses || [];
@@ -75,7 +76,7 @@ export default function DriverTopbar({
   };
 
   const handleMarkAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+    markAllRead();
   };
 
   return (

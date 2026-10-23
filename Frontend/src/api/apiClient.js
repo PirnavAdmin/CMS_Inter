@@ -158,7 +158,7 @@ apiClient.interceptors.request.use(
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
     const isBackendOfflineKnown = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
 
-    if ((isExplicitMockToken || isExplicitMockForced || isBackendOfflineKnown) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+    if ((isExplicitMockToken || isExplicitMockForced || isBackendOfflineKnown) && !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(config.url || "") && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
       config.adapter = handleMockApiRequest;
     }
 
@@ -231,7 +231,13 @@ apiClient.interceptors.response.use(
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
     // Automatic fallback to mock adapter when explicit mock sessions, forced mock, or backend is unavailable
-    if ((isExplicitMockToken || isExplicitMockForced || isBackendUnavailable) && originalRequest && !originalRequest._isMockFallback) {
+    if (
+      (isExplicitMockToken || isExplicitMockForced || isBackendUnavailable) &&
+      originalRequest &&
+      !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&
+      !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(originalRequest.url || "") &&
+      !originalRequest._isMockFallback
+    ) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);

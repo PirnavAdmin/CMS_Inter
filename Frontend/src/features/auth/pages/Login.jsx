@@ -56,6 +56,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+
   useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(REMEMBER_KEY) || "null");
@@ -117,6 +118,7 @@ export default function Login() {
         String(result.user?.role || "").toLowerCase().includes("warden") ||
         String(result.user?.designation || "").toLowerCase().includes("warden");
       const userRole = String(result.user?.role || "").toLowerCase();
+      const isInventory = userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper";
       const isExamCell = !isWarden && (isExamCellRole(userRole) || result.roleType === "examcell");
       const isPrincipal = !isWarden && (userRole === "principal" || userRole.includes("principal"));
       const isNonTeaching =
@@ -150,18 +152,16 @@ export default function Login() {
 
       if (isWarden) {
         navigate("/warden-dashboard", { replace: true });
+      } else if (isInventory) {
+        navigate("/inventory-dashboard", { replace: true });
+      } else if (userRole.includes("driver")) {
+        navigate("/driver", { replace: true });
       } else if (isNonTeaching) {
         navigate("/non-teaching-dashboard", { replace: true });
       } else if (isExamCell) {
         navigate("/exam-cell-dashboard", { replace: true });
       } else if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
-      } else if (
-        userRole.includes("inventory") ||
-        userRole === "store manager" ||
-        userRole === "storekeeper"
-      ) {
-        navigate("/inventory-dashboard", { replace: true });
       } else if (isPrincipal) {
         navigate("/principal-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
@@ -170,8 +170,6 @@ export default function Login() {
         navigate("/parent-dashboard", { replace: true });
       } else if (isAccountant) {
         navigate("/accountant-dashboard", { replace: true });
-      } else if (userRole.includes("driver")) {
-        navigate("/driver", { replace: true });
       } else {
         navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
       }
