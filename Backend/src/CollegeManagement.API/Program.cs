@@ -675,9 +675,13 @@ try
         END;");
         try
         {
-            await dbContext.Database.ExecuteSqlRawAsync(@"
-                ALTER TABLE `FeePaymentPlans` ADD COLUMN IF NOT EXISTS `UpdatedAt` datetime(6) NULL;
-            ");
+            var colExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+                WHERE table_schema = DATABASE() AND table_name = 'FeePaymentPlans' AND column_name = 'UpdatedAt'").FirstOrDefaultAsync();
+            if (colExists == 0)
+            {
+                await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeePaymentPlans` ADD COLUMN `UpdatedAt` datetime(6) NULL;");
+            }
             await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE TABLE IF NOT EXISTS `facility_transition_histories` (
                     `TransitionId` INT NOT NULL AUTO_INCREMENT,
