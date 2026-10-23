@@ -271,7 +271,7 @@ export default function ProtectedRoute({
     return <Navigate to="/warden-dashboard" replace />;
   }
 
-  if (requireExamCell && !isExamCell) {
+  if (requireExamCell && !isExamCell && !isAdmin && !isPrincipal) {
     const destination = isWarden
       ? "/warden-dashboard"
       : isAdmin
