@@ -151,6 +151,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [Authorize(Roles = "Admin,Teacher,Student,Parent")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
+        [BypassPermission]
         public async Task<IActionResult> GetByStudent([FromRoute] int studentId)
         {
             try
@@ -178,6 +179,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("section/{sectionId:int}")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [BypassPermission]
         public async Task<IActionResult> GetBySection(int sectionId, [FromQuery] int? academicYearId = null, [FromQuery] bool? isPublished = null, [FromQuery] int? campusId = null)
         {
             var result = await _timetableService.GetSectionTimetableAsync(sectionId, academicYearId, isPublished, campusId);

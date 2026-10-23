@@ -179,6 +179,8 @@ namespace CollegeManagement.API.Controllers
         /// Retrieves subjects for a specific academic context (Board + Group + Academic Level).
         /// </summary>
         [HttpGet("context")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [BypassPermission]
         public async Task<IActionResult> GetByContext(
             [FromQuery] int boardId,
             [FromQuery] int groupId,
@@ -259,6 +261,8 @@ namespace CollegeManagement.API.Controllers
         /// Retrieves subjects associated with a specific academic group identifier.
         /// </summary>
         [HttpGet("group/{groupId:int}")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [BypassPermission]
         public async Task<IActionResult> GetSubjectsByGroupId(int groupId)
         {
             if (groupId <= 0)

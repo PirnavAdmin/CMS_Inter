@@ -83,6 +83,9 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("student/{studentId:int}")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [CollegeManagement.API.Filters.ParentStudentAuthorization]
+        [BypassPermission]
         public async Task<IActionResult> GetMarksByStudent(int studentId) => Ok(await _marksService.GetMarksByStudentAsync(studentId));
 
         [HttpGet("subject/{subjectId:int}")]

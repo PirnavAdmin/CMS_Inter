@@ -17,6 +17,7 @@ import { clearAuthSession, getAuthUser, getAuthToken } from "@/features/authStor
 import { env } from "@/config/env.js";
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
+import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
@@ -407,6 +408,8 @@ const wardenSearchIndex = [
   { to: "/warden-dashboard/profile", label: "My Profile", section: "Account" },
 ];
 
+const examCellSearchIndex = createSearchIndex(examCellMenu);
+
 const breadcrumbLinkForLabel = (label) =>
   searchIndex.find((item) => item.label.toLowerCase() === String(label).toLowerCase())?.to;
 
@@ -446,6 +449,8 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
     ? principalMenu
     : pathname.startsWith("/warden")
     ? wardenMenu
+    : pathname.startsWith("/exam-cell-dashboard")
+    ? examCellMenu
     : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
@@ -606,12 +611,14 @@ export default function DashboardLayout({
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
+  const isExamCell = !isWarden && (isExamCellRole(user?.role) || pathname.startsWith("/exam-cell-dashboard"));
   const activeMenu = useMemo(() => {
     let base = menuOverride;
     if (!base) {
       if (isWarden) base = wardenMenu;
       else if (isParent) base = parentMenu;
       else if (isPrincipal) base = principalMenu;
+      else if (isExamCell) base = examCellMenu;
       else base = menu;
     }
     if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
@@ -626,10 +633,10 @@ export default function DashboardLayout({
         .filter((group) => group.items.length > 0);
     }
     return base;
-  }, [isWarden, isParent, isPrincipal, menuOverride, user]);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : searchIndex);
-  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
-  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user]);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : isExamCell ? examCellSearchIndex : searchIndex);
+  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/dashboard/settings/my-profile");
+  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
   const canManageAcademicContext = !isParent && !isWarden && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;

@@ -246,6 +246,9 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [CollegeManagement.API.Filters.ParentStudentAuthorization]
+        [BypassPermission]
         public async Task<IActionResult> GetById(int studentId)
         {
             var student = await _service.GetByIdAsync(studentId);
