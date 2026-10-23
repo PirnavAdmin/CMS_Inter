@@ -1396,6 +1396,9 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     return normalizeId(rawId || "1");
   }, [effectiveCampus, selectedCampus, selectedCampusId]);
 
+  // Initial Master Boards (Loaded once on mount)
+  const [allBoards, setAllBoards] = useState([]);
+
   const effectiveBoardId = useMemo(() => {
     return normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId ?? (allBoards[0]?.id || ""));
   }, [selectedBoardId, selectedBoard, allBoards]);
@@ -1412,8 +1415,6 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     else if (initialTab && initialTab !== tab) setTab(initialTab);
   }, [forcedTab, initialTab]);
 
-  // Initial Master Boards (Loaded once on mount)
-  const [allBoards, setAllBoards] = useState([]);
 
   // Shared UI Notifications and Unsaved Modals
   const [toast, setToast] = useState(null);

@@ -135,28 +135,28 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    const isOffline = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
-    const isExamModuleRequest = Boolean(
-      config.url && (
-        /\/api\/v1\/(examinations|exam-schedules|rooms|periods)/i.test(config.url) ||
-        /\/api\/v1\/(settings\/)?number-series/i.test(config.url) ||
-        config.url.includes("/examinations") ||
-        config.url.includes("/exam-schedules")
-      )
-    );
-    const isExamCellRoute =
-      typeof window !== "undefined" &&
-      window.location?.pathname?.includes("exam-cell-dashboard");
+    // Clean up any stale offline flags so real APIs are never blocked
+    try {
+      if (typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true") {
+        window.localStorage.removeItem("cms_backend_offline");
+      }
+    } catch {
+      // Storage may be unavailable
+    }
 
-    const isMockSession =
-      isOffline || isExamModuleRequest || isExamCellRoute || Boolean(token &&
-        (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("non-teaching-") ||
-         token.startsWith("warden-") || token.startsWith("parent-")));
+    const isExplicitMockToken = Boolean(
+      token &&
+        (token.startsWith("mock-") ||
+          token.startsWith("demo-") ||
+          token.startsWith("non-teaching-") ||
+          token.startsWith("warden-") ||
+          token.startsWith("parent-"))
+    );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
     const isHostelEndpoint = /\/api\/v1\/hostel/i.test(config.url || "");
 
     if (
-      (isMockSession || isExplicitMockForced) &&
+      (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
       (!isHostelEndpoint || isExplicitMockForced)
     ) {
