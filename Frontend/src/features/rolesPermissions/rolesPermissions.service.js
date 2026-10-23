@@ -24,7 +24,14 @@ const clone = (value) => {
 const apiResult = (data, source = "api") => ({ data: clone(data), meta: { source } });
 
 const notifyRolesUpdated = () => {
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("roles-updated"));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("roles-updated"));
+    try {
+      localStorage.setItem("cms_permissions_updated_at", String(Date.now()));
+    } catch {
+      // ignore
+    }
+  }
 };
 
 const ROLE_CODE_TO_ID = {
@@ -443,9 +450,8 @@ export async function updateRolePermissions(roleId, payload) {
     notifyRolesUpdated();
     return apiResult(normalized, "api");
   } catch (err) {
-    console.warn("Live updateRolePermissions failed:", err?.message);
-    notifyRolesUpdated();
-    return apiResult(normalized, "fallback");
+    console.error("Live updateRolePermissions failed:", err);
+    throw err;
   }
 }
 
@@ -530,9 +536,8 @@ export async function updateUserPermissions(userId, payload) {
     notifyRolesUpdated();
     return apiResult(normalized, "api");
   } catch (err) {
-    console.warn("Live updateUserPermissions failed:", err?.message);
-    notifyRolesUpdated();
-    return apiResult(normalized, "fallback");
+    console.error("Live updateUserPermissions failed:", err);
+    throw err;
   }
 }
 

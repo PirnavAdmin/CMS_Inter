@@ -13,6 +13,10 @@ export const routePaths = {
   hostelMaster: "/dashboard/hostel/master",
   hostelStudents: "/dashboard/hostel/students",
   hostelReports: "/dashboard/hostel/reports",
+  transportManager: "/transport-manager",
+  examinations: "/dashboard/examinations",
+  marksEntry: "/dashboard/marks-entry",
+  results: "/dashboard/results",
 };
 
 

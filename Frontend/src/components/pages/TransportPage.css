@@ -1630,3 +1630,64 @@
   }
 }
 
+.cms-modal.cms-transport-multi-pickup-modal {
+  width: min(600px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  border-radius: 20px;
+}
+
+.cms-transport-multi-pickup-modal .cms-modal-body { padding: 22px 26px; }
+.cms-transport-multi-pickup-modal .transport-pickup-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.cms-transport-multi-pickup-modal .transport-pickup-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--cms-text, #20271b);
+  font-size: 12px;
+  font-weight: 650;
+}
+.cms-transport-multi-pickup-modal .transport-pickup-label span,
+.cms-transport-multi-pickup-modal .transport-pickup-section-label span,
+.cms-transport-multi-pickup-modal .transport-pickup-error { color: #dc2626; }
+.cms-transport-multi-pickup-modal input,
+.cms-transport-multi-pickup-modal select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--cms-border, #cdd4c0);
+  border-radius: 9px;
+  background: var(--cms-input-bg, #fff);
+  color: var(--cms-text, #20271b);
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.cms-transport-multi-pickup-modal input:focus-visible,
+.cms-transport-multi-pickup-modal select:focus-visible { outline: 2px solid var(--cms-primary, #819900); outline-offset: 2px; }
+.cms-transport-multi-pickup-modal .transport-pickup-section-label { margin: 20px 0 12px; font-size: 13px; font-weight: 650; }
+.cms-transport-multi-pickup-modal .transport-pickup-list { display: grid; gap: 14px; }
+.cms-transport-multi-pickup-modal .transport-pickup-entry { padding: 14px; border: 1px solid var(--cms-border, #e2e6d9); border-radius: 12px; background: var(--cms-bg, #f7f9f3); }
+.cms-transport-multi-pickup-modal .transport-pickup-entry-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cms-transport-multi-pickup-modal .transport-pickup-entry-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; margin-top: 14px; }
+.cms-transport-multi-pickup-modal .transport-pickup-add-field { width: 100%; display: flex; justify-content: center; align-items: center; gap: 7px; margin-top: 16px; padding: 11px; border: 1px dashed var(--cms-primary, #819900); border-radius: 9px; background: transparent; color: var(--cms-primary, #708300); font-weight: 650; cursor: pointer; }
+.cms-transport-multi-pickup-modal .transport-pickup-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--cms-border, #e2e6d9); }
+.cms-transport-multi-pickup-modal fieldset:disabled { opacity: .7; }
+@media (max-width: 520px) {
+  .cms-transport-multi-pickup-modal .cms-modal-body { padding: 16px; }
+  .cms-transport-multi-pickup-modal .transport-pickup-entry-grid { grid-template-columns: 1fr; }
+}
+.cms-transport-multi-pickup-modal .transport-pickup-history {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--cms-border, #dce2d0);
+  border-radius: 12px;
+  background: var(--cms-card-bg, #fff);
+}
+.cms-transport-multi-pickup-modal .transport-pickup-history h4 { margin: 0 0 12px; font-size: 14px; }
+.cms-transport-multi-pickup-modal .transport-pickup-history ol { list-style: none; margin: 0; padding: 0; max-height: 230px; overflow-y: auto; }
+.cms-transport-multi-pickup-modal .transport-pickup-history li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--cms-border, #e2e6d9); }
+.cms-transport-multi-pickup-modal .transport-pickup-history li:last-child { border-bottom: 0; }
+.cms-transport-multi-pickup-modal .transport-pickup-history-sequence { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; min-height: 30px; padding: 0 4px; border-radius: 8px; background: var(--cms-bg, #f0f4e5); color: var(--cms-primary, #708300); font-size: 13px; font-weight: 750; }
+.cms-transport-multi-pickup-modal .transport-pickup-history strong { font-size: 13px; overflow-wrap: anywhere; }
+.cms-transport-multi-pickup-modal .transport-pickup-history p { margin: 5px 0 0; font-size: 12px; color: var(--cms-muted, #737b68); }

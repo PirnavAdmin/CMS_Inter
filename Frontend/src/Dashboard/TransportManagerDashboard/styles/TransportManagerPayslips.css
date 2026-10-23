@@ -1,0 +1,81 @@
+/* Transport Manager Payslips Styles */
+
+.tm-payslips-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tm-payslip-breakdown {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.tm-breakdown-card {
+  background: var(--cms-surface-subtle, #f8fafc);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+.tm-breakdown-card__title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin: 0 0 1rem 0;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0);
+  padding-bottom: 0.5rem;
+}
+
+.tm-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tm-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.tm-breakdown-row__label {
+  color: var(--cms-text-secondary, #64748b);
+}
+
+.tm-breakdown-row__val {
+  font-weight: 600;
+  color: var(--cms-text-primary, #0f172a);
+}
+
+.tm-net-salary-banner {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.5rem;
+}
+
+.tm-net-salary-banner__label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #166534;
+}
+
+.tm-net-salary-banner__value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #15803d;
+}
+
+@media (max-width: 640px) {
+  .tm-payslip-breakdown {
+    grid-template-columns: 1fr;
+  }
+}

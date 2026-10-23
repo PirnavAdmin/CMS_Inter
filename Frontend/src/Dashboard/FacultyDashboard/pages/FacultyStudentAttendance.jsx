@@ -1216,6 +1216,10 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         notify(`Attendance for ${currentSectionName} on ${attDate} successfully persisted to database!`);
       }
     } catch (err) {
+      if (err?.response?.status === 403 || err?.status === 403) {
+        notify("Access Denied: You do not have permission to record attendance.", "error");
+        return;
+      }
       console.error("Failed to bulk save attendance:", err);
       notify("Failed to save attendance records to server.", "error");
     } finally {

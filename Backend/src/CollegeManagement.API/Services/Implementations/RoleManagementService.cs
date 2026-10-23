@@ -535,19 +535,6 @@ namespace CollegeManagement.API.Services.Implementations
                         new { id = "role-management", name = "Role & Permission Matrix", availableActions = actions },
                         new { id = "user-role-assignment", name = "User Role Assignment", availableActions = actions }
                     }
-                },
-                new { id = "library", name = "Library", route = "/dashboard/library", section = "Operations", availableActions = actions,
-                    screens = new[] {
-                        new { id = "book-catalog", name = "Book Catalog & Search", availableActions = actions },
-                        new { id = "circulation", name = "Issue & Return Desk", availableActions = actions },
-                        new { id = "library-members", name = "Student & Staff Cards", availableActions = actions }
-                    }
-                },
-                new { id = "placement", name = "Placement", route = "/dashboard/placement", section = "Operations", availableActions = actions,
-                    screens = new[] {
-                        new { id = "placement-drives", name = "Recruitment Drives", availableActions = actions },
-                        new { id = "student-applications", name = "Applications & Offers", availableActions = actions }
-                    }
                 }
             };
         }

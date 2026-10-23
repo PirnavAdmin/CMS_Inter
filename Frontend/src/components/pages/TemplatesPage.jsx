@@ -1,3 +1,4 @@
+import apiClient from "@/api/axios.js";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
@@ -425,6 +426,41 @@ export function normalizeApiTemplate(apiItem, fallbackPresets = DEFAULT_CERTIFIC
     refPrefix: apiItem.refPrefix || preset.refPrefix || "CERT",
   };
 }
+
+const templateApi = {
+  getTemplateCategories: async () => {
+    try {
+      const res = await apiClient.get("/api/v1/settings/templates/categories");
+      return res?.data?.data || res?.data || [];
+    } catch {
+      return ["Student Certificate", "Academic", "HR", "Finance", "Admission"];
+    }
+  },
+  getTemplates: async (params) => {
+    try {
+      const res = await apiClient.get("/api/v1/settings/templates", { params });
+      return res?.data?.data || res?.data || [];
+    } catch {
+      return [];
+    }
+  },
+  createTemplate: async (data) => {
+    const res = await apiClient.post("/api/v1/settings/templates", data);
+    return res?.data?.data || res?.data;
+  },
+  updateTemplate: async (id, data) => {
+    const res = await apiClient.put(`/api/v1/settings/templates/${id}`, data);
+    return res?.data?.data || res?.data;
+  },
+  toggleTemplateActive: async (id) => {
+    const res = await apiClient.patch(`/api/v1/settings/templates/${id}/toggle-active`);
+    return res?.data?.data || res?.data;
+  },
+  deleteTemplate: async (id) => {
+    const res = await apiClient.delete(`/api/v1/settings/templates/${id}`);
+    return res?.data?.data || res?.data;
+  },
+};
 
 export function getStoredCertificateTemplates() {
   // Pure database mode: Load canonical defaults in memory; live records fetched via templateApi from MySQL

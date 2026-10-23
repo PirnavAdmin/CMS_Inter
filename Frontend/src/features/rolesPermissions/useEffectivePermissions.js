@@ -30,14 +30,23 @@ export function useEffectivePermissions() {
       refresh();
     };
 
+    const handleStorage = (e) => {
+      if (!e || e.key === "cms_permissions_updated_at" || e.key === "user") {
+        refresh();
+      }
+    };
+
     window.addEventListener("roles-updated", handleRolesUpdated);
+    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("roles-updated", handleRolesUpdated);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [refresh]);
 
   const user = getAuthUser();
   const isSuperOrAdmin = useMemo(() => hasRole("SUPER_ADMIN", user) || hasRole("ADMIN", user), [user]);
+  const isAccountant = useMemo(() => hasRole("ACCOUNTANT", user), [user]);
 
   const permissionMap = useMemo(() => toPermissionMap(permissions), [permissions]);
 
@@ -67,5 +76,6 @@ export function useEffectivePermissions() {
     canDo,
     can: (mod, act, scr) => canDo(mod, act, scr),
     isSuperOrAdmin,
-  }), [permissions, permissionMap, loading, error, refresh, canView, canDo, isSuperOrAdmin]);
+    isAccountant,
+  }), [permissions, permissionMap, loading, error, refresh, canView, canDo, isSuperOrAdmin, isAccountant]);
 }

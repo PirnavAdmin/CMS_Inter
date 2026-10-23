@@ -18,6 +18,8 @@ namespace CollegeManagement.API.DTOs.Roles
     public class FrontendPermissionInputItem
     {
         public string Module { get; set; } = string.Empty;
+        public string? ModuleId { get; set; }
+        public string ResolvedModule => !string.IsNullOrWhiteSpace(ModuleId) ? ModuleId : Module;
         public string? ScreenId { get; set; } = string.Empty;
         public string? ScreenName { get; set; } = string.Empty;
         public List<string> Actions { get; set; } = new();
@@ -43,7 +45,7 @@ namespace CollegeManagement.API.DTOs.Roles
             {
                 return Permissions.Select(p => new ModulePermissionUpdateItem
                 {
-                    SubModule = MapModuleIdToSubModule(p.Module),
+                    SubModule = MapModuleIdToSubModule(p.ResolvedModule),
                     ScreenId = p.ScreenId ?? string.Empty,
                     ScreenName = p.ScreenName ?? string.Empty,
                     CanView = p.Actions.Any(a => a.Equals("view", StringComparison.OrdinalIgnoreCase)),
@@ -95,8 +97,6 @@ namespace CollegeManagement.API.DTOs.Roles
                 { "certificates", "Certificates" },
                 { "reports-analytics", "Reports & Analytics" },
                 { "hostel-management", "Hostel Management" },
-                { "library", "Library" },
-                { "placement", "Placement" },
                 { "settings", "Settings" },
                 { "roles-permissions", "Roles & Permissions" },
                 { "inventory-management", "Inventory Management" },

@@ -2,6 +2,9 @@ import React from "react";
 import { useOutlet } from "react-router-dom";
 import FacultyLayout from "./layout/FacultyLayout.jsx";
 import { FacultyProvider, useFacultySafe, useFaculty } from "./FacultyContext.jsx";
+import { useFacultyPermissions } from "./PermissionContext.jsx";
+import { AccessDeniedNotice } from "./FacultyPortalRoutes.jsx";
+import { permissionByModule } from "./layout/FacultySidebar.jsx";
 
 import FacultyDashboardHome from "./pages/FacultyDashboardHome.jsx";
 import FacultyProfile from "./pages/FacultyProfile.jsx";

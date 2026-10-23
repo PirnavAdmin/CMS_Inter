@@ -45,7 +45,7 @@ these isolated implementations in sync.
 - Profile: authenticated staff/employee lookup; personal, bank, address and
   experience section drafts, document upload and submission for review. Editing
   requires a linked staff identity from the login response.
-- Check-in/check-out: isolated Faculty-style mock preview with live clock, punch actions, sample history, period filters and local regularization requests. No backend attendance records are changed.
+- Check-in/check-out: live integration with staff attendance API (`/api/v1/staff-attendance/load`, `/api/v1/staff-attendance/update`, `/api/v1/staff-attendance/monthly-report`, `/api/v1/attendance-timing-config/effective`, `/api/v1/staff-attendance/leave`). Real punches persist, show timing & grace calculations, and reflect directly in staff attendance records.
 - Notifications: unavailable until an existing notification integration is provided.
 
 ## Validation

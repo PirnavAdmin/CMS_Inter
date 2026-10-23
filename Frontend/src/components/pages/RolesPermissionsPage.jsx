@@ -801,19 +801,21 @@ function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole,
 
   return (
     <section className="rbac-panel rbac-role-panel">
-      <div className="rbac-panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2>Roles</h2>
-        <button
-          type="button"
-          className="cms-btn cms-btn-primary cms-btn-sm"
-          onClick={onNewRole}
-          style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", padding: "4px 10px", height: "30px" }}
-          title="Create a new custom role"
-        >
-          <Plus size={14} /> New Role
-        </button>
+      <div className="rbac-role-panel-header">
+        <div className="rbac-panel-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2>Roles</h2>
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary cms-btn-sm"
+            onClick={onNewRole}
+            style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", padding: "4px 10px", height: "30px" }}
+            title="Create a new custom role"
+          >
+            <Plus size={14} /> New Role
+          </button>
+        </div>
+        <SearchBox value={query} onChange={onQuery} placeholder="Search roles..." label="Search roles" />
       </div>
-      <SearchBox value={query} onChange={onQuery} placeholder="Search roles..." label="Search roles" />
       <div className="rbac-role-list">
         {filteredRoles.length ? filteredRoles.map((role) => {
           const selected = String(role.id) === String(selectedRoleId);
@@ -1312,13 +1314,14 @@ function PermissionMatrix({
 
                     let isChecked = false;
                     let isIndeterminate = false;
+                    let enabledCount = 0;
 
                     if (selectedRole?.isProtected) {
                       isChecked = true;
                     } else if (screens.length === 0) {
                       isChecked = Boolean(modData?.actions?.has(action.key));
                     } else if (supportedScreens.length > 0) {
-                      const enabledCount = supportedScreens.filter((s) => {
+                      enabledCount = supportedScreens.filter((s) => {
                         const sActions = modData?.screens?.get(s.id);
                         if (sActions) return sActions.has(action.key);
                         return Boolean(modData?.actions?.has(action.key));
@@ -1334,7 +1337,7 @@ function PermissionMatrix({
                           indeterminate={isIndeterminate}
                           disabled={restriction.disabled || !isSupported}
                           disabledReason={!isSupported ? "Action not applicable for this module" : restriction.reason}
-                          label={`${action.label} ${module.name} (All Screens)`}
+                          label={isIndeterminate ? `${action.label} ${module.name} (${enabledCount} of ${supportedScreens.length} screens)` : `${action.label} ${module.name} (All Screens)`}
                           onChange={(next) => {
                             if (!restriction.disabled && isSupported) {
                               onToggle({
@@ -2545,7 +2548,7 @@ export default function RolesPermissionsPage() {
           >
             <UserPlus size={16} /> User Role Assignment
           </button>
-          <span className="rbac-route-note"><Check size={14} /> {routeNote}</span>
+          {routeNote ? <span className="rbac-route-note"><Check size={14} /> {routeNote}</span> : null}
         </div>
 
         {loading ? <div className="rbac-loading-card"><Loader label="Loading roles and permissions..." /></div> : null}

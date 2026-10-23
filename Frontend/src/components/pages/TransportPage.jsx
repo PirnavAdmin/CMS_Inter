@@ -421,6 +421,104 @@ function TableSection({
   );
 }
 
+function AddPickupPointsModal({ routes, pickupPoints, isSaving, onCancel, onSave }) {
+  const nextKey = useRef(1);
+  const [routeId, setRouteId] = useState("");
+  const [savedCount, setSavedCount] = useState(0);
+  const [savedPoints, setSavedPoints] = useState([]);
+  const [error, setError] = useState("");
+  const blankPoint = () => ({ key: nextKey.current++, pickupName: "", distanceKm: "", monthlyFee: "", pickupTime: "", dropTime: "", status: "Active" });
+  const [points, setPoints] = useState(() => [blankPoint()]);
+  const routeHistory = pickupPoints.filter((point) => routeId && String(point.routeId) === String(routeId));
+  const history = [...routeHistory, ...savedPoints].sort((a, b) => Number(a.sequenceNumber) - Number(b.sequenceNumber));
+  const firstSequence = Math.max(0, ...routeHistory.map((point) => Number(point.sequenceNumber) || 0)) + 1;
+  const updatePoint = (key, name, value) => setPoints((current) => current.map((point) => point.key === key ? { ...point, [name]: value } : point));
+  const submit = (event) => {
+    event.preventDefault();
+    if (isSaving || !points.length) return;
+    const names = points.map((point) => point.pickupName.trim().toLowerCase());
+    if (names.some((name) => !name) || new Set(names).size !== names.length) {
+      setError("Enter a unique pickup point name for each stop.");
+      return;
+    }
+    setError("");
+    onSave({
+      pickupRows: points.map((point, index) => ({ ...point, pickupName: point.pickupName.trim(), routeId, sequenceNumber: firstSequence + savedCount + index })),
+      onPickupSaved: (key) => {
+        const index = points.findIndex((point) => point.key === key);
+        if (index >= 0) setSavedPoints((current) => [...current, { ...points[index], sequenceNumber: firstSequence + savedCount + index }]);
+        setPoints((current) => current.filter((point) => point.key !== key));
+        setSavedCount((count) => count + 1);
+      },
+    });
+  };
+  return (
+    <Modal title="Add Pickup Points" className="cms-transport-form-modal cms-transport-multi-pickup-modal" onClose={() => { if (!isSaving) onCancel(savedCount > 0); }}>
+      <form onSubmit={submit}>
+        <fieldset disabled={isSaving} className="transport-pickup-fieldset">
+          <label className="transport-pickup-label" htmlFor="transport-pickup-route">Select Route <span>*</span></label>
+          <select id="transport-pickup-route" required value={routeId} disabled={savedCount > 0} onChange={(event) => setRouteId(event.target.value)}>
+            <option value="">Select Route</option>
+            {routes.map((route) => <option key={route.id} value={route.id}>{route.routeName}{route.routeCode ? ` (${route.routeCode})` : ""}</option>)}
+          </select>
+          {routeId && (
+            <section className="transport-pickup-history" aria-label="Pickup point history">
+              <h4>Pickup Point History</h4>
+              {history.length ? (
+                <ol>
+                  {history.map((point) => (
+                    <li key={point.id ?? `saved-${point.key}`}>
+                      <span className="transport-pickup-history-sequence">#{point.sequenceNumber}</span>
+                      <div>
+                        <strong>{point.pickupName}</strong>
+                        <p>{point.distanceKm} km <span> · Pickup: {point.pickupTime || "--"} · Drop: {point.dropTime || "--"}</span></p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : <p>No pickup points added to this route yet.</p>}
+            </section>
+          )}
+          <p className="transport-pickup-section-label">Pickup Points, Distances &amp; Timings <span>*</span></p>
+          {error && <p role="alert" className="transport-pickup-error">{error}</p>}
+          {savedCount > 0 && <p role="status">{savedCount} pickup point(s) saved. Only the remaining points will be submitted.</p>}
+          <div className="transport-pickup-list">
+            {points.map((point, index) => (
+              <section className="transport-pickup-entry" key={point.key}>
+                <div className="transport-pickup-entry-head">
+                  <label className="transport-pickup-label" htmlFor={`pickup-name-${point.key}`}>Pickup Point Name #{firstSequence + savedCount + index} <span>*</span></label>
+                  {points.length > 1 && <button type="button" className="cms-action-btn" aria-label={`Remove pickup point ${index + 1}`} onClick={() => setPoints((current) => current.filter((item) => item.key !== point.key))}><Trash2 size={15} /></button>}
+                </div>
+                <input id={`pickup-name-${point.key}`} required value={point.pickupName} placeholder="Enter pickup point name..." onChange={(event) => updatePoint(point.key, "pickupName", event.target.value)} />
+                <div className="transport-pickup-entry-grid">
+                  {[
+                    { name: "distanceKm", label: "Distance (KM)", type: "number", required: true, placeholder: "e.g. 5.0" },
+                    { name: "pickupTime", label: "Morning Pickup", type: "time" },
+                    { name: "dropTime", label: "Evening Drop", type: "time" },
+                    { name: "monthlyFee", label: "Monthly Fare", type: "number", required: true, placeholder: "e.g. 1500" },
+                  ].map((field) => <div key={field.name}>
+                    <label className="transport-pickup-label" htmlFor={`${field.name}-${point.key}`}>{field.label} {field.required && <span>*</span>}</label>
+                    <input id={`${field.name}-${point.key}`} type={field.type} required={field.required} min={field.type === "number" ? 0 : undefined} step={field.type === "number" ? "any" : undefined} placeholder={field.placeholder} value={point[field.name]} onChange={(event) => updatePoint(point.key, field.name, event.target.value)} />
+                  </div>)}
+                  <div>
+                    <label className="transport-pickup-label" htmlFor={`pickup-status-${point.key}`}>Status <span>*</span></label>
+                    <select id={`pickup-status-${point.key}`} required value={point.status} onChange={(event) => updatePoint(point.key, "status", event.target.value)}><option>Active</option><option>Inactive</option></select>
+                  </div>
+                </div>
+              </section>
+            ))}
+          </div>
+          <button type="button" className="transport-pickup-add-field" onClick={() => setPoints((current) => [...current, blankPoint()])}><Plus size={16} /> Add Pickup Point Field</button>
+        </fieldset>
+        <div className="transport-pickup-footer">
+          <button type="button" className="cms-btn cms-btn-ghost" disabled={isSaving} onClick={() => onCancel(savedCount > 0)}>Cancel</button>
+          <button type="submit" className="cms-btn cms-btn-primary" disabled={isSaving || !points.length}>{isSaving ? "Saving..." : "Save"}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
   const [values, setValues] = useState({
     staffId: "",
@@ -1003,6 +1101,7 @@ export default function TransportPage() {
         setRoutes(
           items.map((r) => ({
             id: r.routeId || r.id,
+            createdAt: r.createdAt ?? r.CreatedAt ?? r.createdOn ?? r.CreatedOn ?? r.createdDate ?? r.CreatedDate,
             routeCode: r.routeCode || "",
             routeName: r.routeName || "",
             routeStart: r.startLocation || r.routeStart || "",
@@ -1044,11 +1143,12 @@ export default function TransportPage() {
         setPickupPoints(
           items.map((p) => ({
             id: p.pickupPointId ?? p.PickupPointId ?? p.id,
+            createdAt: p.createdAt ?? p.CreatedAt ?? p.createdOn ?? p.CreatedOn ?? p.createdDate ?? p.CreatedDate,
             routeId: p.routeId ?? p.RouteId ?? "",
             routeName: p.routeName || p.RouteName || routeItems.find((route) => String(route.routeId ?? route.RouteId ?? route.id) === String(p.routeId ?? p.RouteId))?.routeName || "-",
             pickupName: p.pickupPointName || p.stopName || p.pickupName || "",
             landmark: p.landmark || p.stopAddress || "",
-            sequenceNumber: p.sequenceNo || p.sequenceNumber || p.stopOrder || 1,
+            sequenceNumber: p.sequenceNo ?? p.SequenceNo ?? p.sequenceNumber ?? p.SequenceNumber ?? p.stopOrder ?? 1,
             pickupTime: toTimeInputValue(p.pickupTime ?? p.PickupTime ?? p.morningPickupTime ?? p.MorningPickupTime),
             dropTime: toTimeInputValue(p.dropTime ?? p.DropTime ?? p.eveningDropTime ?? p.EveningDropTime),
             distanceKm: Number(p.distanceFromStart ?? p.DistanceFromStart ?? p.distanceFromSchool ?? p.DistanceFromSchool ?? p.distanceKm ?? 0),
@@ -1592,37 +1692,40 @@ export default function TransportPage() {
           await apiClient.post(apiEndpoints.transport.routes, payload);
         }
       } else if (key === "pickupPoints") {
-        const payload = {
-          routeId: Number(values.routeId),
-          pickupPointName: values.pickupName,
-          landmark: values.landmark || "Main Landmark",
-          sequenceNo: Number(values.sequenceNumber) || 1,
-          pickupTime: values.pickupTime ? (values.pickupTime.length === 5 ? `${values.pickupTime}:00` : values.pickupTime) : "07:30:00",
-          dropTime: values.dropTime ? (values.dropTime.length === 5 ? `${values.dropTime}:00` : values.dropTime) : "16:15:00",
-          distanceFromStart: Number(values.distanceKm) || 0,
-          monthlyFee: Number(values.monthlyFee) || 1200,
-          status: values.status === "Active",
-        };
-        if (isEdit) {
-          await apiClient.put(apiEndpoints.transport.pickupPointById(numericId), payload);
-        } else {
-          const normalizedPickupName = String(payload.pickupPointName || "").trim().toLowerCase();
-          let existingPickupPoints = pickupPoints;
-          if (!existingPickupPoints.some((point) => String(point.routeId) === String(payload.routeId) && String(point.pickupName || "").trim().toLowerCase() === normalizedPickupName)) {
-            const existingResponse = await apiClient.get(`${apiEndpoints.transport.lookups.pickupPoints}?routeId=${encodeURIComponent(payload.routeId)}`);
-            existingPickupPoints = extractList(existingResponse.data).map((point) => ({
-              routeId: point.routeId ?? point.RouteId ?? payload.routeId,
-              pickupName: point.pickupPointName ?? point.PickupPointName ?? point.stopName ?? point.pickupName,
-            }));
+        for (const pickupValues of values.pickupRows || [values]) {
+          const payload = {
+            routeId: Number(pickupValues.routeId),
+            pickupPointName: pickupValues.pickupName,
+            landmark: pickupValues.landmark || "Main Landmark",
+            sequenceNo: Number(pickupValues.sequenceNumber) || 1,
+            pickupTime: pickupValues.pickupTime ? (pickupValues.pickupTime.length === 5 ? `${pickupValues.pickupTime}:00` : pickupValues.pickupTime) : "07:30:00",
+            dropTime: pickupValues.dropTime ? (pickupValues.dropTime.length === 5 ? `${pickupValues.dropTime}:00` : pickupValues.dropTime) : "16:15:00",
+            distanceFromStart: Number(pickupValues.distanceKm) || 0,
+            monthlyFee: Number(pickupValues.monthlyFee) || 1200,
+            status: pickupValues.status === "Active",
+          };
+          if (isEdit) {
+            await apiClient.put(apiEndpoints.transport.pickupPointById(numericId), payload);
+          } else {
+            const normalizedPickupName = String(payload.pickupPointName || "").trim().toLowerCase();
+            let existingPickupPoints = pickupPoints;
+            if (!existingPickupPoints.some((point) => String(point.routeId) === String(payload.routeId) && String(point.pickupName || "").trim().toLowerCase() === normalizedPickupName)) {
+              const existingResponse = await apiClient.get(`${apiEndpoints.transport.lookups.pickupPoints}?routeId=${encodeURIComponent(payload.routeId)}`);
+              existingPickupPoints = extractList(existingResponse.data).map((point) => ({
+                routeId: point.routeId ?? point.RouteId ?? payload.routeId,
+                pickupName: point.pickupPointName ?? point.PickupPointName ?? point.stopName ?? point.pickupName,
+              }));
+            }
+            const duplicateExists = existingPickupPoints.some((point) =>
+              String(point.routeId) === String(payload.routeId)
+              && String(point.pickupName || "").trim().toLowerCase() === normalizedPickupName
+            );
+            if (duplicateExists) {
+              throw new Error("Pickup point already exists for this route.");
+            }
+            await apiClient.post(apiEndpoints.transport.pickupPoints, payload);
           }
-          const duplicateExists = existingPickupPoints.some((point) =>
-            String(point.routeId) === String(payload.routeId)
-            && String(point.pickupName || "").trim().toLowerCase() === normalizedPickupName
-          );
-          if (duplicateExists) {
-            throw new Error("Pickup point already exists for this route.");
-          }
-          await apiClient.post(apiEndpoints.transport.pickupPoints, payload);
+          if (!isEdit) values.onPickupSaved?.(pickupValues.key);
         }
       } else if (key === "vehicles") {
         const payload = {
@@ -2075,7 +2178,16 @@ export default function TransportPage() {
     routes: {
       title: "Route Master",
       subtitle: "Manage transport route distance, timing and fare rules.",
-      rows: routes,
+      rows: [...routes].reverse().sort((a, b) => {
+        const aCreated = Date.parse(a.createdAt);
+        const bCreated = Date.parse(b.createdAt);
+        if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+          return bCreated - aCreated;
+        }
+        const aId = Number(a.id);
+        const bId = Number(b.id);
+        return Number.isFinite(aId) && Number.isFinite(bId) ? bId - aId : 0;
+      }),
       fields: routeFields,
       addLabel: "Add Route",
       columns: [
@@ -2091,7 +2203,16 @@ export default function TransportPage() {
     pickupPoints: {
       title: "Pickup Points",
       subtitle: "Maintain ordered pickup and drop timings route-wise.",
-      rows: pickupPoints,
+      rows: [...pickupPoints].reverse().sort((a, b) => {
+        const aCreated = Date.parse(a.createdAt);
+        const bCreated = Date.parse(b.createdAt);
+        if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+          return bCreated - aCreated;
+        }
+        const aId = Number(a.id);
+        const bId = Number(b.id);
+        return Number.isFinite(aId) && Number.isFinite(bId) ? bId - aId : 0;
+      }),
       fields: pickupFields,
       addLabel: "Add Pickup",
       columns: [
@@ -2923,7 +3044,15 @@ export default function TransportPage() {
         {renderActiveSection()}
       </div>
 
-      {formConfig ? (
+      {formConfig?.key === "pickupPoints" && !formConfig.record?.id ? (
+        <AddPickupPointsModal
+          routes={routes}
+          pickupPoints={pickupPoints}
+          isSaving={isFormSubmitting}
+          onCancel={(hasSaved) => { if (!isFormSubmitting) { setFormConfig(null); if (hasSaved) fetchTransportData(); } }}
+          onSave={saveForm}
+        />
+      ) : formConfig ? (
         <FormModal
           title={formConfig.title}
           fields={formConfig.fields}
