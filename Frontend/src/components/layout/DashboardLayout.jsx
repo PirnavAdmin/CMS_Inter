@@ -4,8 +4,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
-  ReceiptIndianRupee, Boxes,
+  ReceiptIndianRupee, Boxes, KeyRound,
 } from "lucide-react";
+import ChangePasswordModal from "@/Dashboard/ExamCellDashboard/components/ChangePasswordModal.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -17,6 +18,7 @@ import { clearAuthSession, getAuthUser, getAuthToken } from "@/features/authStor
 import { env } from "@/config/env.js";
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
+import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
@@ -111,6 +113,23 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/warden-dashboard/reports", icon: reportsAnalyticsIcon },
   { path: "/warden-dashboard/profile", icon: staffIcon },
   { path: "/warden-dashboard", icon: dashboardIcon },
+  { path: "/exam-cell-dashboard/exams", icon: examinationIcon },
+  { path: "/exam-cell-dashboard/exam-timetable", icon: timetableIcon },
+  { path: "/exam-cell-dashboard/hall-allocation", icon: sectionsIcon },
+  { path: "/exam-cell-dashboard/hall-tickets", icon: certificatesIcon },
+  { path: "/exam-cell-dashboard/marks-entry", icon: marksEvaluationIcon },
+  { path: "/exam-cell-dashboard/marks-verification", icon: reportsAnalyticsIcon },
+  { path: "/exam-cell-dashboard/results", icon: resultsIcon },
+  { path: "/exam-cell-dashboard/publish-results", icon: promotionIcon },
+  { path: "/exam-cell-dashboard/attendance", icon: attendanceIcon },
+  { path: "/exam-cell-dashboard/check-in-out", icon: generatedSidebarIcons.staffAttendance },
+  { path: "/exam-cell-dashboard/my-attendance", icon: generatedSidebarIcons.staffAttendance },
+  { path: "/exam-cell-dashboard/certificates", icon: certificatesIcon },
+  { path: "/exam-cell-dashboard/promotions", icon: promotionIcon },
+  { path: "/exam-cell-dashboard/holidays", icon: holidayManagementIcon },
+  { path: "/exam-cell-dashboard/reports", icon: reportsAnalyticsIcon },
+  { path: "/exam-cell-dashboard/profile", icon: staffIcon },
+  { path: "/exam-cell-dashboard", icon: dashboardIcon },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -333,6 +352,8 @@ export const examCellMenu = [
   },
 ];
 
+export { isExamCellRole };
+
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
@@ -407,6 +428,8 @@ const wardenSearchIndex = [
   { to: "/warden-dashboard/profile", label: "My Profile", section: "Account" },
 ];
 
+const examCellSearchIndex = createSearchIndex(examCellMenu);
+
 const breadcrumbLinkForLabel = (label) =>
   searchIndex.find((item) => item.label.toLowerCase() === String(label).toLowerCase())?.to;
 
@@ -446,6 +469,8 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
     ? principalMenu
     : pathname.startsWith("/warden")
     ? wardenMenu
+    : pathname.startsWith("/exam-cell-dashboard")
+    ? examCellMenu
     : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
@@ -550,6 +575,7 @@ export default function DashboardLayout({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [campusOpen, setCampusOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
@@ -606,15 +632,17 @@ export default function DashboardLayout({
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
+  const isExamCell = !isWarden && (isExamCellRole(user?.role) || pathname.startsWith("/exam-cell-dashboard"));
   const activeMenu = useMemo(() => {
     let base = menuOverride;
     if (!base) {
       if (isWarden) base = wardenMenu;
       else if (isParent) base = parentMenu;
       else if (isPrincipal) base = principalMenu;
+      else if (isExamCell) base = examCellMenu;
       else base = menu;
     }
-    if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
+    if (user && !hasRole("SUPER_ADMIN", user) && !isExamCell && (user.permissions || user.rolePermissions)) {
       return base
         .map((group) => ({
           ...group,
@@ -626,11 +654,11 @@ export default function DashboardLayout({
         .filter((group) => group.items.length > 0);
     }
     return base;
-  }, [isWarden, isParent, isPrincipal, menuOverride, user]);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : searchIndex);
-  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
-  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
-  const canManageAcademicContext = !isParent && !isWarden && !menuOverride;
+  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user]);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : isExamCell ? examCellSearchIndex : searchIndex);
+  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/dashboard/settings/my-profile");
+  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  const canManageAcademicContext = !isParent && !isWarden && !isExamCell && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
   const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
@@ -800,8 +828,8 @@ export default function DashboardLayout({
 
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
-  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : "CMS Admin"));
-  const profileRole = isWarden ? (user?.designation || "Hostel Warden") : (user?.designation || user?.role || "admin");
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : isExamCell ? "Exam Cell" : "CMS Admin"));
+  const profileRole = isWarden ? (user?.designation || "Hostel Warden") : isExamCell ? (user?.designation || "Exam Cell") : (user?.designation || user?.role || "admin");
   
   const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
   const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
@@ -834,7 +862,13 @@ export default function DashboardLayout({
     if (pathname.startsWith("/dashboard/faculty")) setFacultyOpen(true);
   }, [pathname, setFacultyOpen]);
   useEffect(() => {
-    if (pathname.startsWith("/dashboard/attendance/")) setAttendanceOpen(true);
+    if (
+      pathname.startsWith("/dashboard/attendance/") ||
+      pathname.startsWith("/exam-cell-dashboard/attendance") ||
+      pathname.startsWith("/exam-cell-dashboard/check-in-out")
+    ) {
+      setAttendanceOpen(true);
+    }
   }, [pathname]);
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
@@ -908,12 +942,43 @@ export default function DashboardLayout({
     if (basePath === "/dashboard") return pathname === "/dashboard";
     if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
+    if (basePath === "/exam-cell-dashboard") return pathname === "/exam-cell-dashboard";
     if (basePath === "/non-teaching-dashboard") return pathname === "/non-teaching-dashboard" || pathname === "/non-teaching-dashboard/";
     if (basePath === "/dashboard/settings") {
       return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
     }
     if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
       return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
+    }
+    if (to === "/exam-cell-dashboard/exams") {
+      return (
+        pathname === "/exam-cell-dashboard/exams" ||
+        pathname.startsWith("/exam-cell-dashboard/exams/") ||
+        pathname === "/exam-cell-dashboard/exam-timetable"
+      );
+    }
+    if (to === "/exam-cell-dashboard/marks-entry") {
+      return (
+        pathname === "/exam-cell-dashboard/marks-entry" ||
+        pathname.startsWith("/exam-cell-dashboard/marks-entry/") ||
+        pathname === "/exam-cell-dashboard/marks-verification"
+      );
+    }
+    if (to === "/exam-cell-dashboard/results") {
+      return (
+        pathname === "/exam-cell-dashboard/results" ||
+        pathname.startsWith("/exam-cell-dashboard/results/") ||
+        pathname === "/exam-cell-dashboard/publish-results"
+      );
+    }
+    if (to === "/exam-cell-dashboard/attendance") {
+      return (
+        pathname === "/exam-cell-dashboard/attendance" ||
+        pathname.startsWith("/exam-cell-dashboard/attendance/")
+      );
+    }
+    if (to === "/exam-cell-dashboard/check-in-out") {
+      return pathname === "/exam-cell-dashboard/check-in-out" || pathname === "/exam-cell-dashboard/my-attendance";
     }
     if (searchStr && !location.search.includes(searchStr)) return false;
 
@@ -969,7 +1034,7 @@ export default function DashboardLayout({
                 }
                 if (item.children) {
                   const isFacultyMenu = item.to === "/dashboard/faculty";
-                  const isAttendanceMenu = item.to === "/dashboard/attendance";
+                  const isAttendanceMenu = item.to === "/dashboard/attendance" || item.to === "/exam-cell-dashboard/attendance" || item.to.includes("attendance");
                   const isSettingsMenu = item.to === "/dashboard/settings";
                   const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : false;
                   const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : () => {};
@@ -983,8 +1048,16 @@ export default function DashboardLayout({
                           className={`cms-nav-link ${active || item.children.some(childIsActive) ? "is-active" : ""}`}
                           onClick={(event) => {
                             if (isAttendanceMenu) {
-                              event.preventDefault();
-                              setOpen((v) => !v);
+                              if (item.to === "/dashboard/attendance") {
+                                event.preventDefault();
+                                setOpen((v) => !v);
+                              } else {
+                                if (pathname === item.to) {
+                                  setOpen((v) => !v);
+                                } else {
+                                  setOpen(true);
+                                }
+                              }
                             } else {
                               setAttendanceOpen(false);
                             }
@@ -1385,6 +1458,19 @@ export default function DashboardLayout({
                 >
                   <User size={15} /> My Profile
                 </button>
+                {isExamCell ? (
+                  <button
+                    type="button"
+                    className="cms-dropdown-item"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      closeOnMobile();
+                      setChangePasswordOpen(true);
+                    }}
+                  >
+                    <KeyRound size={15} /> Change Password
+                  </button>
+                ) : null}
                 {showSettingsAction && resolvedSettingsPath ? <button
                   type="button"
                   className="cms-dropdown-item"
@@ -1425,6 +1511,13 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+
+      {changePasswordOpen && (
+        <ChangePasswordModal
+          isOpen={changePasswordOpen}
+          onClose={() => setChangePasswordOpen(false)}
+        />
+      )}
     </div>
   );
 }

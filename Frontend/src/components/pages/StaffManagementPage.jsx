@@ -122,6 +122,7 @@ export const NON_TEACHING_DEPARTMENTS_SET = new Set([
 ]);
 
 export const NON_TEACHING_DESIGNATIONS_SET = new Set([
+  "transport manager",
   "inventory manager",
   "administrator",
   "administrative officer",
@@ -236,6 +237,7 @@ export const teachingDesignations = [
 ];
 
 export const nonTeachingDesignations = [
+  "Transport Manager",
   "Inventory Manager",
   "Accountant",
   "Administrative Officer",
@@ -294,8 +296,8 @@ export const nonTeachingDesignationMap = {
   Library: ["Librarian", "Assistant Librarian", "Library Assistant", "Attender"],
   "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
   Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
-  Transport: ["Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
-  Transportation: ["Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
   Security: ["Security Officer", "Security Supervisor", "Security Guard", "Watchman"],
   "Human Resources": ["HR Manager", "HR Executive", "Office Assistant"],
   HR: ["HR Manager", "HR Executive", "Office Assistant"],
@@ -701,6 +703,7 @@ export const TEACHING_ROLE_NAMES = [
 ];
 
 export const NON_TEACHING_ROLE_NAMES = [
+  "Transport Manager",
   "Accountant",
   "Inventory Manager",
   "Examination Cell",
@@ -2280,6 +2283,21 @@ function useStaffTypeOptions(staffType) {
       }
 
       if (!isTeaching) {
+        for (const departmentName of ["Transport", "Transportation"]) {
+          const hasTransportManager = desigOpts.some((designation) =>
+            typeof designation === "object" &&
+            String(designation.name || designation.designationName || "").trim().toLowerCase() === "transport manager" &&
+            String(designation.departmentName || "").trim().toLowerCase() === departmentName.toLowerCase()
+          );
+          if (!hasTransportManager) {
+            desigOpts = [...desigOpts, {
+              name: "Transport Manager",
+              designationName: "Transport Manager",
+              departmentName,
+              staffType: "NonTeaching",
+            }];
+          }
+        }
         if (!deptOpts.some((name) => String(name).trim().toLowerCase() === "stores & inventory")) {
           deptOpts = [...deptOpts, "Stores & Inventory"];
         }

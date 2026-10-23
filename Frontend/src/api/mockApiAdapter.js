@@ -2470,7 +2470,14 @@ function ok(config, data) {
 }
 
 function parseUrl(urlStr, configParams = {}) {
-  const [pathname, search] = String(urlStr || "").split("?");
+  let raw = String(urlStr || "");
+  try {
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      const parsed = new URL(raw);
+      raw = parsed.pathname + (parsed.search || "");
+    }
+  } catch {}
+  const [pathname, search] = raw.split("?");
   const params = new URLSearchParams(search || "");
   if (configParams && typeof configParams === "object") {
     Object.entries(configParams).forEach(([k, v]) => {
@@ -2491,6 +2498,106 @@ export function handleMockApiRequest(config) {
   const method = String(config.method || "get").toLowerCase();
   const { path, params } = parseUrl(config.url, config.params);
   const body = config.data ? (typeof config.data === "string" ? JSON.parse(config.data || "{}") : config.data) : {};
+
+  // 0. AUTH CHANGE PASSWORD (/api/Auth/change-password, /api/Admin/change-password)
+  const normPath = path.toLowerCase();
+  if (method === "post" && (normPath.endsWith("/api/auth/change-password") || normPath.endsWith("/api/admin/change-password"))) {
+    const oldPassword = body.oldPassword || body.currentPassword || body.OldPassword || body.CurrentPassword || "";
+    const newPassword = body.newPassword || body.NewPassword || "";
+    const confirmPassword = body.confirmNewPassword || body.confirmPassword || body.ConfirmNewPassword || body.ConfirmPassword || "";
+
+    if (!oldPassword) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "Current password is required." },
+        },
+      });
+    }
+
+    if (!newPassword) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "New password is required." },
+        },
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "New password must be at least 6 characters." },
+        },
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "New password and confirmation password do not match." },
+        },
+      });
+    }
+
+    if (oldPassword === newPassword) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "New password cannot be the same as the old password." },
+        },
+      });
+    }
+
+    // Determine authenticated user identity from token/headers
+    let userKey = "examcell";
+    try {
+      const authHeader = config.headers?.Authorization || "";
+      if (authHeader.includes(".")) {
+        const payloadBase64 = authHeader.split(".")[1]?.replace(/-/g, "+").replace(/_/g, "/");
+        if (payloadBase64) {
+          const parsed = JSON.parse(atob(payloadBase64.padEnd(Math.ceil(payloadBase64.length / 4) * 4, "=")));
+          userKey = parsed.email || parsed.sub || parsed.nameid || parsed.UserId || "examcell";
+        }
+      }
+    } catch (_e) {}
+
+    // Check saved password if any
+    let savedPass = "";
+    try {
+      const passMap = JSON.parse(typeof window !== "undefined" ? window.localStorage?.getItem("cms_user_passwords") || "{}" : "{}");
+      savedPass = passMap[userKey] || passMap[userKey.toLowerCase()] || "";
+    } catch (_e) {}
+
+    // If a saved password exists and user entered wrong old password, reject
+    if (savedPass && oldPassword !== savedPass) {
+      return Promise.reject({
+        response: {
+          status: 400,
+          data: { status: false, message: "Old password is incorrect." },
+        },
+      });
+    }
+
+    // Save new password
+    try {
+      if (typeof window !== "undefined") {
+        const passMap = JSON.parse(window.localStorage?.getItem("cms_user_passwords") || "{}");
+        passMap[userKey] = newPassword;
+        passMap[userKey.toLowerCase()] = newPassword;
+        passMap["anusha987r@gmail.com"] = newPassword;
+        passMap["examcell"] = newPassword;
+        window.localStorage?.setItem("cms_user_passwords", JSON.stringify(passMap));
+      }
+    } catch (_e) {}
+
+    return ok(config, {
+      status: true,
+      message: "Password changed successfully.",
+    });
+  }
 
   // 0. DASHBOARD METRICS & OVERVIEW (/api/v1/dashboard/*)
   if (path.startsWith("/api/v1/dashboard/")) {
