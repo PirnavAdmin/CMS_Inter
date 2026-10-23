@@ -98,7 +98,7 @@ export async function generateNextNumber(seriesCode, context = {}, campusId, cam
   const resolvedCampusId = context.campusId ?? campusId;
   const resolvedCampusCode = context.campusCode ?? campusCode;
   const scopeKeys = ["campusId", "boardId", "academicYearId", "groupId", "programId"];
-  if (seriesCode === "ROLL_NO" && scopeKeys.some((key) => !Number.isInteger(Number(key === "campusId" ? resolvedCampusId : context[key])) || Number(key === "campusId" ? resolvedCampusId : context[key]) <= 0)) {
+  if (context.strictScope && seriesCode === "ROLL_NO" && scopeKeys.some((key) => !Number.isInteger(Number(key === "campusId" ? resolvedCampusId : context[key])) || Number(key === "campusId" ? resolvedCampusId : context[key]) <= 0)) {
     throw new Error("Campus, Board, Academic Year, Group and Program are required for Roll Number generation.");
   }
   const payload = {
@@ -129,7 +129,6 @@ export async function generateNextNumber(seriesCode, context = {}, campusId, cam
     const response = await apiClient.post(apiEndpoints.numberSeries.generateNext(seriesCode), payload, requestConfig);
     return response.data;
   } catch (err) {
-    if (seriesCode === "ROLL_NO") throw err;
     try {
       const fallbackRes = await apiClient.post(`/api/v1/number-series/${encodeURIComponent(seriesCode)}/generate-next`, payload, requestConfig);
       return fallbackRes.data;
