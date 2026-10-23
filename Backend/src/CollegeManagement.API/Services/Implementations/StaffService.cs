@@ -120,7 +120,14 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            return _mapper.Map<StaffResponseDto>(staff);
+            var dto = _mapper.Map<StaffResponseDto>(staff);
+            var linkedUser = await _userRepository.GetByStaffIdAsync(id);
+            if (linkedUser != null && linkedUser.RoleId > 0)
+            {
+                dto.RoleId = linkedUser.RoleId;
+                dto.RoleName = linkedUser.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(linkedUser.RoleId))?.RoleName;
+            }
+            return dto;
         }
 
         public async Task<StaffResponseDto?> GetStaffByEmployeeIdAsync(string employeeId)
@@ -129,7 +136,14 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with Employee ID {employeeId} not found.");
 
-            return _mapper.Map<StaffResponseDto>(staff);
+            var dto = _mapper.Map<StaffResponseDto>(staff);
+            var linkedUser = await _userRepository.GetByStaffIdAsync(staff.Id);
+            if (linkedUser != null && linkedUser.RoleId > 0)
+            {
+                dto.RoleId = linkedUser.RoleId;
+                dto.RoleName = linkedUser.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(linkedUser.RoleId))?.RoleName;
+            }
+            return dto;
         }
 
         public async Task<StaffProfileFullDto> GetStaffProfileFullAsync(int id)
@@ -138,7 +152,14 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            return MapToFullProfileDto(staff);
+            var dto = MapToFullProfileDto(staff);
+            var linkedUser = await _userRepository.GetByStaffIdAsync(id);
+            if (linkedUser != null && linkedUser.RoleId > 0)
+            {
+                dto.RoleId = linkedUser.RoleId;
+                dto.RoleName = linkedUser.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(linkedUser.RoleId))?.RoleName;
+            }
+            return dto;
         }
 
         public async Task<StaffProfileFullDto> GetStaffProfileByEmployeeIdAsync(string employeeId)
@@ -389,30 +410,30 @@ namespace CollegeManagement.API.Services.Implementations
             staff.CampusId = dto.CampusId;
             
             // Multi-Campus / Multi-Board Assignments
-            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any(c => c > 0))
             {
-                foreach (var cId in dto.AssignedCampusIds.Distinct())
+                foreach (var cId in dto.AssignedCampusIds.Where(c => c > 0).Distinct())
                 {
                     staff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId });
                 }
                 // Also set the primary CampusId if it's not set
-                if (!staff.CampusId.HasValue) staff.CampusId = dto.AssignedCampusIds.First();
+                if (!staff.CampusId.HasValue || staff.CampusId <= 0) staff.CampusId = dto.AssignedCampusIds.First(c => c > 0);
             }
-            else if (dto.CampusId.HasValue)
+            else if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
             {
                 staff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = dto.CampusId.Value });
             }
 
-            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any(b => b > 0))
             {
-                foreach (var bId in dto.AssignedBoardIds.Distinct())
+                foreach (var bId in dto.AssignedBoardIds.Where(b => b > 0).Distinct())
                 {
                     staff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId });
                 }
                 // Also set primary BoardId if not set
-                if (!staff.BoardId.HasValue) staff.BoardId = dto.AssignedBoardIds.First();
+                if (!staff.BoardId.HasValue || staff.BoardId <= 0) staff.BoardId = dto.AssignedBoardIds.First(b => b > 0);
             }
-            else if (resolvedBoardId.HasValue)
+            else if (resolvedBoardId.HasValue && resolvedBoardId.Value > 0)
             {
                 staff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = resolvedBoardId.Value });
             }
@@ -476,10 +497,25 @@ namespace CollegeManagement.API.Services.Implementations
                 if (dto.RoleId.HasValue && dto.RoleId.Value > 0)
                 {
                     assignedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value, connection, dbTransaction);
-                    if (assignedRole == null)
+                    if (assignedRole == null || !assignedRole.IsActive)
                     {
                         await transaction.RollbackAsync();
-                        throw new ValidationException($"Role with ID '{dto.RoleId.Value}' was not found in Roles table.");
+                        throw new ValidationException($"The selected role with ID '{dto.RoleId.Value}' does not exist or is inactive.");
+                    }
+                    if (!string.IsNullOrWhiteSpace(dto.RoleName) &&
+                        !string.Equals(assignedRole.RoleName.Trim(), dto.RoleName.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        await transaction.RollbackAsync();
+                        throw new ValidationException($"Submitted role name '{dto.RoleName}' does not match role ID '{dto.RoleId.Value}'.");
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(dto.RoleName))
+                {
+                    assignedRole = await _userRepository.GetRoleByNameAsync(dto.RoleName.Trim(), connection, dbTransaction);
+                    if (assignedRole == null || !assignedRole.IsActive)
+                    {
+                        await transaction.RollbackAsync();
+                        throw new ValidationException($"The selected role '{dto.RoleName}' does not exist or is inactive.");
                     }
                 }
                 else
@@ -573,7 +609,13 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var refreshedStaff = await _staffRepository.GetByIdAsync(staff.Id) ?? staff;
-            return _mapper.Map<StaffResponseDto>(refreshedStaff);
+            var responseDto = _mapper.Map<StaffResponseDto>(refreshedStaff);
+            if (assignedRole != null)
+            {
+                responseDto.RoleId = assignedRole.RoleId;
+                responseDto.RoleName = assignedRole.RoleName;
+            }
+            return responseDto;
         }
 
         public async Task<StaffResponseDto> UpdateStaffAsync(int id, UpdateStaffDto dto)
@@ -696,36 +738,76 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             // Multi-Campus / Multi-Board Assignments Update
-            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any(c => c > 0))
             {
-                existingStaff.StaffCampusAssignments.Clear();
-                foreach (var cId in dto.AssignedCampusIds.Distinct())
+                var currentCampusIds = existingStaff.StaffCampusAssignments.Select(a => a.CampusId).ToList();
+                var desiredCampusIds = dto.AssignedCampusIds.Where(c => c > 0).Distinct().ToList();
+
+                var toRemove = existingStaff.StaffCampusAssignments.Where(a => !desiredCampusIds.Contains(a.CampusId)).ToList();
+                foreach (var rem in toRemove)
+                {
+                    existingStaff.StaffCampusAssignments.Remove(rem);
+                    _context.StaffCampusAssignments.Remove(rem);
+                }
+
+                foreach (var cId in desiredCampusIds.Where(id => !currentCampusIds.Contains(id)))
                 {
                     existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId, StaffId = existingStaff.Id });
                 }
-                if (!existingStaff.CampusId.HasValue || existingStaff.CampusId <= 0)
-                    existingStaff.CampusId = dto.AssignedCampusIds.First();
+
+                if (!existingStaff.CampusId.HasValue || existingStaff.CampusId <= 0 || !desiredCampusIds.Contains(existingStaff.CampusId.Value))
+                    existingStaff.CampusId = desiredCampusIds.First();
             }
-            else if (dto.CampusId.HasValue)
+            else if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
             {
-                existingStaff.StaffCampusAssignments.Clear();
-                existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = dto.CampusId.Value, StaffId = existingStaff.Id });
+                var desiredCampusId = dto.CampusId.Value;
+                var toRemove = existingStaff.StaffCampusAssignments.Where(a => a.CampusId != desiredCampusId).ToList();
+                foreach (var rem in toRemove)
+                {
+                    existingStaff.StaffCampusAssignments.Remove(rem);
+                    _context.StaffCampusAssignments.Remove(rem);
+                }
+                if (!existingStaff.StaffCampusAssignments.Any(a => a.CampusId == desiredCampusId))
+                {
+                    existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = desiredCampusId, StaffId = existingStaff.Id });
+                }
+                existingStaff.CampusId = desiredCampusId;
             }
 
-            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any(b => b > 0))
             {
-                existingStaff.StaffBoardAssignments.Clear();
-                foreach (var bId in dto.AssignedBoardIds.Distinct())
+                var currentBoardIds = existingStaff.StaffBoardAssignments.Select(b => b.BoardId).ToList();
+                var desiredBoardIds = dto.AssignedBoardIds.Where(b => b > 0).Distinct().ToList();
+
+                var boardsToRemove = existingStaff.StaffBoardAssignments.Where(b => !desiredBoardIds.Contains(b.BoardId)).ToList();
+                foreach (var rem in boardsToRemove)
+                {
+                    existingStaff.StaffBoardAssignments.Remove(rem);
+                    _context.StaffBoardAssignments.Remove(rem);
+                }
+
+                foreach (var bId in desiredBoardIds.Where(id => !currentBoardIds.Contains(id)))
                 {
                     existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId, StaffId = existingStaff.Id });
                 }
-                if (!existingStaff.BoardId.HasValue || existingStaff.BoardId <= 0)
-                    existingStaff.BoardId = dto.AssignedBoardIds.First();
+
+                if (!existingStaff.BoardId.HasValue || existingStaff.BoardId <= 0 || !desiredBoardIds.Contains(existingStaff.BoardId.Value))
+                    existingStaff.BoardId = desiredBoardIds.First();
             }
-            else if (resolvedBoardId.HasValue)
+            else if (resolvedBoardId.HasValue && resolvedBoardId.Value > 0)
             {
-                existingStaff.StaffBoardAssignments.Clear();
-                existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = resolvedBoardId.Value, StaffId = existingStaff.Id });
+                var desiredBoardId = resolvedBoardId.Value;
+                var boardsToRemove = existingStaff.StaffBoardAssignments.Where(b => b.BoardId != desiredBoardId).ToList();
+                foreach (var rem in boardsToRemove)
+                {
+                    existingStaff.StaffBoardAssignments.Remove(rem);
+                    _context.StaffBoardAssignments.Remove(rem);
+                }
+                if (!existingStaff.StaffBoardAssignments.Any(b => b.BoardId == desiredBoardId))
+                {
+                    existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = desiredBoardId, StaffId = existingStaff.Id });
+                }
+                existingStaff.BoardId = desiredBoardId;
             }
 
             if (dto.JoiningDate.HasValue || dto.DateOfJoining.HasValue)
@@ -768,6 +850,39 @@ namespace CollegeManagement.API.Services.Implementations
                 existingStaff.DrivingLicenseExpiryDate = expParsed2;
             }
 
+            // Role resolution & validation for update
+            Role? updatedRole = null;
+            if (dto.RoleId.HasValue && dto.RoleId.Value > 0)
+            {
+                updatedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value);
+                if (updatedRole == null || !updatedRole.IsActive)
+                {
+                    throw new ValidationException($"The selected role with ID '{dto.RoleId.Value}' does not exist or is inactive.");
+                }
+                if (!string.IsNullOrWhiteSpace(dto.RoleName) &&
+                    !string.Equals(updatedRole.RoleName.Trim(), dto.RoleName.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ValidationException($"Submitted role name '{dto.RoleName}' does not match role ID '{dto.RoleId.Value}'.");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.RoleName))
+            {
+                updatedRole = await _userRepository.GetRoleByNameAsync(dto.RoleName.Trim());
+                if (updatedRole == null || !updatedRole.IsActive)
+                {
+                    throw new ValidationException($"The selected role '{dto.RoleName}' does not exist or is inactive.");
+                }
+            }
+
+            if (updatedRole != null)
+            {
+                var nonStaffRoles = new[] { "Super Admin", "Admin", "Student", "Parent" };
+                if (nonStaffRoles.Any(r => string.Equals(r, updatedRole.RoleName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new ValidationException($"Role '{updatedRole.RoleName}' (RoleId: {updatedRole.RoleId}) cannot be assigned to a Staff account.");
+                }
+            }
+
             // Transactional update: Staff domain + Users sync
             var updateStrategy = _context.Database.CreateExecutionStrategy();
             await updateStrategy.ExecuteAsync(async () =>
@@ -791,6 +906,11 @@ namespace CollegeManagement.API.Services.Implementations
                     await _userRepository.UpdateStatusByStaffIdAsync(id, newIsActive, connection, dbTransaction);
                 }
 
+                if (updatedRole != null)
+                {
+                    await _userRepository.UpdateRoleByStaffIdAsync(id, updatedRole.RoleId, connection, dbTransaction);
+                }
+
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;
                 if (subNames != null)
                 {
@@ -801,7 +921,22 @@ namespace CollegeManagement.API.Services.Implementations
             });
 
             var refreshedStaff = await _staffRepository.GetByIdAsync(existingStaff.Id) ?? existingStaff;
-            return _mapper.Map<StaffResponseDto>(refreshedStaff);
+            var responseDto = _mapper.Map<StaffResponseDto>(refreshedStaff);
+            if (updatedRole != null)
+            {
+                responseDto.RoleId = updatedRole.RoleId;
+                responseDto.RoleName = updatedRole.RoleName;
+            }
+            else
+            {
+                var linkedUser = await _userRepository.GetByStaffIdAsync(id);
+                if (linkedUser != null && linkedUser.RoleId > 0)
+                {
+                    responseDto.RoleId = linkedUser.RoleId;
+                    responseDto.RoleName = linkedUser.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(linkedUser.RoleId))?.RoleName;
+                }
+            }
+            return responseDto;
         }
 
         public async Task<bool> DeleteStaffAsync(int id)

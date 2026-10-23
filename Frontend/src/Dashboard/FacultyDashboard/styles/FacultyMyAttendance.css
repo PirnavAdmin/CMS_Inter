@@ -354,14 +354,22 @@
   border-color: rgba(249, 115, 22, 0.2) !important;
 }
 
+.sp-twin-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
 .sp-twin-icon-box {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 2px;
+  flex-shrink: 0;
 }
 
 .sp-twin-icon-box.checkin {
@@ -416,80 +424,74 @@
   color: #fdba74 !important;
 }
 
-/* Dotted Arc Gauge - Compact */
-.sp-arc-gauge-container {
-  position: relative;
-  width: 95px;
-  height: 40px;
-  margin: 1px auto 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sp-arc-svg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.sp-arc-svg.checkin-arc {
-  color: #94d394;
-}
-
-[data-theme="dark"] .sp-arc-svg.checkin-arc,
-:root[data-theme="dark"] .sp-arc-svg.checkin-arc,
-.dark-theme .sp-arc-svg.checkin-arc {
-  color: #4ade80 !important;
-}
-
-.sp-arc-svg.checkout-arc {
-  color: #fed7aa;
-}
-
-[data-theme="dark"] .sp-arc-svg.checkout-arc,
-:root[data-theme="dark"] .sp-arc-svg.checkout-arc,
-.dark-theme .sp-arc-svg.checkout-arc {
-  color: #fb923c !important;
-}
-
-.sp-gauge-center {
-  position: relative;
-  z-index: 2;
-  margin-top: 10px;
+/* Modern Digital Clock & Status Badge */
+.sp-digital-display {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin: 3px auto 4px;
+  width: 100%;
 }
 
-.sp-gauge-time {
-  font-size: 13.5px;
+.sp-digital-time {
+  font-size: 15px;
   font-weight: 800;
   color: var(--cms-text, #171d15);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
 }
 
-[data-theme="dark"] .sp-gauge-time,
-:root[data-theme="dark"] .sp-gauge-time,
-.dark-theme .sp-gauge-time {
+[data-theme="dark"] .sp-digital-time,
+:root[data-theme="dark"] .sp-digital-time,
+.dark-theme .sp-digital-time {
   color: #f8fafc !important;
 }
 
-.sp-gauge-sub {
+.sp-digital-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1.5px 8px;
+  border-radius: 999px;
   font-size: 9.5px;
-  font-weight: 600;
-  color: var(--cms-muted, #7b8275);
-  margin-top: 1px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
 }
 
-[data-theme="dark"] .sp-gauge-sub,
-:root[data-theme="dark"] .sp-gauge-sub,
-.dark-theme .sp-gauge-sub {
+.sp-digital-status-pill .sp-status-dot {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.sp-digital-status-pill.pending {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .sp-digital-status-pill.pending,
+:root[data-theme="dark"] .sp-digital-status-pill.pending,
+.dark-theme .sp-digital-status-pill.pending {
+  background: rgba(148, 163, 184, 0.14) !important;
   color: #94a3b8 !important;
+  border-color: rgba(148, 163, 184, 0.3) !important;
+}
+
+.sp-digital-status-pill.checked {
+  background: #eaf7ec;
+  color: #1e7e34;
+  border: 1px solid #bce6c4;
+}
+
+[data-theme="dark"] .sp-digital-status-pill.checked,
+:root[data-theme="dark"] .sp-digital-status-pill.checked,
+.dark-theme .sp-digital-status-pill.checked {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #86efac !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
 }
 
 /* Twin Action Pill Buttons - Compact & Responsive */
@@ -520,18 +522,24 @@
   transform: translateY(-1px);
 }
 
+.sp-punch-pill-btn.checkin.inactive,
 .sp-punch-pill-btn.checkin.disabled {
-  background: #e8ecde;
-  color: #8c9384;
+  background: #f4eedf;
+  color: #5c5242;
+  border: 1px solid #e8dfcb;
   cursor: not-allowed;
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
+[data-theme="dark"] .sp-punch-pill-btn.checkin.inactive,
 [data-theme="dark"] .sp-punch-pill-btn.checkin.disabled,
+:root[data-theme="dark"] .sp-punch-pill-btn.checkin.inactive,
 :root[data-theme="dark"] .sp-punch-pill-btn.checkin.disabled,
+.dark-theme .sp-punch-pill-btn.checkin.inactive,
 .dark-theme .sp-punch-pill-btn.checkin.disabled {
-  background: rgba(255, 255, 255, 0.1) !important;
-  color: #64748b !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 /* Check Out Button */
@@ -917,6 +925,11 @@
   background: rgba(255, 255, 255, 0.02) !important;
 }
 
+.sp-att-skeleton-row td {
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
 .sp-day-name {
   font-size: 13px;
   font-weight: 700;
@@ -1083,6 +1096,45 @@
   background: rgba(148, 163, 184, 0.16) !important;
   color: #cbd5e1 !important;
   border-color: rgba(148, 163, 184, 0.35) !important;
+}
+
+.sp-status-badge.weekly-off {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .sp-status-badge.weekly-off,
+:root[data-theme="dark"] .sp-status-badge.weekly-off,
+.dark-theme .sp-status-badge.weekly-off {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #94a3b8 !important;
+  border-color: rgba(148, 163, 184, 0.3) !important;
+}
+
+.sp-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.sp-holiday-name-subtext {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.1;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .sp-holiday-name-subtext,
+:root[data-theme="dark"] .sp-holiday-name-subtext,
+.dark-theme .sp-holiday-name-subtext {
+  color: #94a3b8 !important;
 }
 
 .sp-status-badge.empty {

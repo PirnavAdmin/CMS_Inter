@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
 import {
   ArrowLeft,
@@ -1465,7 +1465,8 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
 
 
 function getCampusSafeKey(c) {
-  if (!c) return "";
+  if (c == null || c === "") return "";
+  if (typeof c === "string" || typeof c === "number") return String(c).trim().toLowerCase();
   const id = c.id ?? c.campusId ?? c.campus_id ?? c.value;
   if (id != null && id !== "" && String(id) !== "undefined") return String(id);
   const name = c.name ?? c.campusName ?? c.label ?? "";
@@ -1860,40 +1861,96 @@ export function PrincipalCampusBoardAssignment({
     ];
   }, [allBoards]);
 
-  // Initial State Load
-  const [assignments, setAssignments] = useState(() => {
+  const buildInitialAssignments = useCallback(() => {
     try {
       if (values.campusBoardAssignmentsJson) {
         const parsed = JSON.parse(values.campusBoardAssignmentsJson);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some(p => p.campusId || p.campusName)) {
+          return parsed.map(p => {
+            const cId = p.campusId ? Number(p.campusId) : null;
+            const cObj = campusList.find(cl => Number(cl.id || cl.campusId) === cId) || {};
+            return {
+              id: p.id || Date.now() + Math.random(),
+              campusId: cId || cObj.id || cObj.campusId || null,
+              campusName: p.campusName || cObj.name || cObj.campusName || "",
+              boardIds: Array.isArray(p.boardIds) ? p.boardIds.map(Number) : [],
+              boardNames: Array.isArray(p.boardNames) ? p.boardNames : []
+            };
+          });
+        }
       }
     } catch (e) {}
 
-    // Legacy fallback
-    if (values.assignedCampuses && values.assignedCampuses.length > 0) {
-      return values.assignedCampuses.map(c => {
-        const cObj = campusList.find(cl => getCampusSafeKey(cl) === getCampusSafeKey(c)) || c;
+    // Check assignedCampuses
+    if (Array.isArray(values.assignedCampuses) && values.assignedCampuses.length > 0) {
+      const rows = values.assignedCampuses.map((c, idx) => {
+        const cId = typeof c === "object" && c !== null ? (c.id || c.campusId) : (typeof c === "number" ? c : null);
+        const cName = typeof c === "object" && c !== null ? (c.name || c.campusName) : (typeof c === "string" ? c : "");
+        const cObj = campusList.find(cl => (cId && Number(cl.id || cl.campusId) === Number(cId)) || (cName && String(cl.name || cl.campusName).trim().toLowerCase() === String(cName).trim().toLowerCase())) || {};
         return {
-          id: Date.now() + Math.random(),
-          campusId: cObj.id || cObj.campusId,
-          campusName: cObj.name || cObj.campusName,
-          boardIds: values.assignedBoardIds || [],
-          boardNames: values.assignedBoards || []
+          id: Date.now() + idx + Math.random(),
+          campusId: cId ? Number(cId) : (cObj.id || cObj.campusId ? Number(cObj.id || cObj.campusId) : null),
+          campusName: cName || cObj.name || cObj.campusName || "",
+          boardIds: Array.isArray(values.assignedBoardIds) ? values.assignedBoardIds.map(Number) : [],
+          boardNames: Array.isArray(values.assignedBoards) ? values.assignedBoards.map(b => typeof b === "object" ? (b.name || b.boardName) : String(b)) : []
+        };
+      }).filter(r => r.campusId || r.campusName);
+      if (rows.length > 0) return rows;
+    }
+
+    // Check assignedCampusIds
+    if (Array.isArray(values.assignedCampusIds) && values.assignedCampusIds.length > 0) {
+      const rows = values.assignedCampusIds.map((cid, idx) => {
+        const cObj = campusList.find(cl => Number(cl.id || cl.campusId) === Number(cid)) || {};
+        return {
+          id: Date.now() + idx + Math.random(),
+          campusId: Number(cid),
+          campusName: cObj.name || cObj.campusName || `Campus #${cid}`,
+          boardIds: Array.isArray(values.assignedBoardIds) ? values.assignedBoardIds.map(Number) : [],
+          boardNames: Array.isArray(values.assignedBoards) ? values.assignedBoards.map(b => typeof b === "object" ? (b.name || b.boardName) : String(b)) : []
         };
       });
+      if (rows.length > 0) return rows;
+    }
+
+    // Single campusId fallback
+    if (values.campusId) {
+      const cObj = campusList.find(cl => Number(cl.id || cl.campusId) === Number(values.campusId)) || {};
+      return [{
+        id: Date.now(),
+        campusId: Number(values.campusId),
+        campusName: values.campusName || cObj.name || cObj.campusName || "Main Campus (HQ)",
+        boardIds: Array.isArray(values.assignedBoardIds) && values.assignedBoardIds.length > 0 ? values.assignedBoardIds.map(Number) : (values.boardId ? [Number(values.boardId)] : []),
+        boardNames: Array.isArray(values.assignedBoards) && values.assignedBoards.length > 0 ? values.assignedBoards.map(b => typeof b === "object" ? (b.name || b.boardName) : String(b)) : (values.boardName ? [values.boardName] : [])
+      }];
     }
 
     return [{ id: Date.now(), campusId: null, campusName: "", boardIds: [], boardNames: [] }];
-  });
+  }, [values, campusList]);
+
+  // Initial State Load
+  const [assignments, setAssignments] = useState(buildInitialAssignments);
+
+  // If initial state was empty and values load later (e.g. edit mode async fetch), update rows
+  useEffect(() => {
+    const hasAssignments = assignments.some(a => a.campusId || a.campusName);
+    if (!hasAssignments) {
+      const next = buildInitialAssignments();
+      if (next.some(a => a.campusId || a.campusName)) {
+        setAssignments(next);
+      }
+    }
+  }, [buildInitialAssignments, assignments]);
 
   // Sync to Form Values
   useEffect(() => {
     const jsonStr = JSON.stringify(assignments);
     if (values.campusBoardAssignmentsJson !== jsonStr) {
-      const allCampuses = assignments.filter(a => a.campusName).map(a => a.campusName);
-      const allCampusIds = assignments.filter(a => a.campusId).map(a => Number(a.campusId));
-      const allBoards = [...new Set(assignments.flatMap(a => a.boardNames))];
-      const allBoardIds = [...new Set(assignments.flatMap(a => a.boardIds).map(Number))];
+      const validAssignments = assignments.filter(a => a.campusId || a.campusName);
+      const allCampusIds = [...new Set(validAssignments.map(a => Number(a.campusId)).filter(Boolean))];
+      const allCampuses = validAssignments.map(a => a.campusName).filter(Boolean);
+      const allBoards = [...new Set(validAssignments.flatMap(a => a.boardNames || []).filter(Boolean))];
+      const allBoardIds = [...new Set(validAssignments.flatMap(a => a.boardIds || []).map(Number).filter(Boolean))];
       
       setValues(prev => ({
         ...prev,
@@ -1911,7 +1968,7 @@ export function PrincipalCampusBoardAssignment({
   }, [assignments, setValues, values.campusBoardAssignmentsJson]);
 
   const addAssignmentRow = () => {
-    setAssignments(prev => [...prev, { id: Date.now(), campusId: null, campusName: "", boardIds: [], boardNames: [] }]);
+    setAssignments(prev => [...prev, { id: Date.now() + Math.random(), campusId: null, campusName: "", boardIds: [], boardNames: [] }]);
   };
 
   const removeAssignmentRow = (id) => {
@@ -1924,7 +1981,7 @@ export function PrincipalCampusBoardAssignment({
       if (a.id === id) {
         return {
           ...a,
-          campusId: campusObj.id || campusObj.campusId,
+          campusId: Number(campusObj.id || campusObj.campusId),
           campusName: campusObj.name || campusObj.campusName,
           // Reset boards when campus changes
           boardIds: [],
@@ -2009,9 +2066,15 @@ export function PrincipalCampusBoardAssignment({
                 style={{ height: "38px", width: "100%", borderRadius: "6px", border: "1px solid #d1d5db", padding: "0 10px" }}
               >
                 <option value="" disabled>-- Select Campus --</option>
-                {campusList.map(c => (
-                  <option key={getCampusSafeKey(c)} value={c.id || c.campusId}>{getCampusDisplayName(c)}</option>
-                ))}
+                {campusList.map(c => {
+                  const cVal = String(c.id || c.campusId);
+                  const isAlreadySelected = assignments.some(a => a.id !== assignment.id && String(a.campusId) === cVal);
+                  return (
+                    <option key={getCampusSafeKey(c)} value={cVal} disabled={isAlreadySelected}>
+                      {getCampusDisplayName(c)}{isAlreadySelected ? " (Already Selected)" : ""}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -4673,7 +4736,12 @@ function TeachingForm({ records, setRecords, existing }) {
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const isPrincipal = String(values.role || values.roleName || "").trim().toLowerCase() === "principal";
+  const isPrincipal =
+    String(values.role || "").trim().toLowerCase() === "principal" ||
+    String(values.roleName || "").trim().toLowerCase() === "principal" ||
+    String(values.designation || "").trim().toLowerCase() === "principal" ||
+    Number(values.roleId) === 15 ||
+    Number(values.roleId) === 2;
 
   useEffect(() => {
     if (!existing) {
@@ -4716,20 +4784,34 @@ function TeachingForm({ records, setRecords, existing }) {
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
 
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
-    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Faculty" ? 4 : values.role === "HOD" ? 3 : values.role === "Accounts" ? 7 : values.role === "Examination Cell" ? 8 : values.role === "Library" ? 9 : values.role === "Placement Officer" ? 11 : 4));
+    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (isPrincipal ? 15 : (values.role === "Faculty" ? 4 : values.role === "HOD" ? 3 : values.role === "Accounts" ? 7 : values.role === "Examination Cell" ? 8 : values.role === "Library" ? 9 : values.role === "Placement Officer" ? 11 : 4)));
+
+    const finalAssignedCampusIds = isPrincipal && Array.isArray(values.assignedCampusIds) && values.assignedCampusIds.length > 0
+      ? [...new Set(values.assignedCampusIds.map(Number).filter(Boolean))]
+      : (values.campusId ? [Number(values.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []));
+
+    const finalAssignedBoardIds = isPrincipal && Array.isArray(values.assignedBoardIds) && values.assignedBoardIds.length > 0
+      ? [...new Set(values.assignedBoardIds.map(Number).filter(Boolean))]
+      : (values.boardId ? [Number(values.boardId)] : (activeBoardId ? [Number(activeBoardId)] : []));
 
     const payload = {
       ...values,
-      campusId: values.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+      campusId: values.campusId || finalAssignedCampusIds[0] || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
       campusName: values.campusName || activeCampusName,
       campusCode: values.campusCode || activeCampusCode,
+      assignedCampusIds: finalAssignedCampusIds,
+      assignedCampuses: values.assignedCampuses || [],
+      assignedBoardIds: finalAssignedBoardIds,
+      assignedBoards: values.assignedBoards || [],
+      campusBoardAssignmentsJson: values.campusBoardAssignmentsJson || "",
       board: values.board || activeBoardName,
       boardName: values.boardName || activeBoardName,
       boardCode: resolvedCode !== "—" ? resolvedCode : (values.boardCode || activeBoardCode),
-      boardId: values.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
-      role: values.role || "Faculty",
-      roleName: values.roleName || values.role || "Faculty",
-      roleId: Number(resolvedRoleId),
+      boardId: values.boardId || finalAssignedBoardIds[0] || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
+      role: values.role || (isPrincipal ? "Principal" : "Faculty"),
+      roleName: values.roleName || values.role || (isPrincipal ? "Principal" : "Faculty"),
+      roleId: Number(resolvedRoleId) || (isPrincipal ? 15 : 4),
+      designation: isPrincipal && !values.designation ? "Principal" : (values.designation || (isPrincipal ? "Principal" : "Assistant Professor")),
       fullName,
       staffType: "Teaching",
       profileStatus: existing?.profileStatus || "Link Sent",
@@ -4750,7 +4832,16 @@ function TeachingForm({ records, setRecords, existing }) {
         const res = await apiClient.post(apiEndpoints.faculty.create, payload);
         targetId = res.data?.id || res.data?.staffId;
       }
-      const record = { ...payload, id: targetId, profileCompletion: existing?.profileCompletion || 30, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
+      const record = {
+        ...payload,
+        id: targetId,
+        assignedCampusIds: finalAssignedCampusIds,
+        assignedCampuses: values.assignedCampuses || [],
+        assignedBoardIds: finalAssignedBoardIds,
+        assignedBoards: values.assignedBoards || [],
+        profileCompletion: existing?.profileCompletion || 30,
+        addedOn: existing?.addedOn || new Date().toISOString().split("T")[0]
+      };
       if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
       window.dispatchEvent(new Event("staff-records-updated"));
@@ -6192,18 +6283,42 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       String(record?.role || "").trim().toLowerCase() === "principal" ||
       String(record?.roleName || "").trim().toLowerCase() === "principal" ||
       String(record?.designation || "").trim().toLowerCase() === "principal" ||
-      Number(record?.roleId) === 2
+      Number(record?.roleId) === 2 ||
+      Number(record?.roleId) === 15
     );
   }, [record]);
 
   const resolvedCampusList = useMemo(() => {
+    // 1. Try campusBoardAssignmentsJson
+    try {
+      if (record?.campusBoardAssignmentsJson) {
+        const parsed = JSON.parse(record.campusBoardAssignmentsJson);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter(p => p.campusId || p.campusName);
+          if (valid.length > 0) {
+            return valid.map(p => {
+              const matched = (campuses || []).find(cp => Number(cp.id ?? cp.campusId) === Number(p.campusId));
+              return {
+                id: p.campusId || matched?.id || matched?.campusId,
+                name: p.campusName || matched?.name || matched?.campusName || `Campus #${p.campusId}`,
+                code: matched?.code || matched?.campusCode || "",
+              };
+            });
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Try assignedCampuses
     if (Array.isArray(record?.assignedCampuses) && record.assignedCampuses.length > 0) {
       return record.assignedCampuses.map((c) => {
         if (typeof c === "object" && c !== null) {
+          const cid = c.id ?? c.campusId;
+          const matched = (campuses || []).find((cp) => (cid && Number(cp.id ?? cp.campusId) === Number(cid)) || (c.name && cp.name === c.name));
           return {
-            id: c.id ?? c.campusId,
-            name: c.name || c.campusName || "Campus",
-            code: c.code || c.campusCode || "",
+            id: cid || matched?.id || matched?.campusId,
+            name: c.name || c.campusName || matched?.name || matched?.campusName || `Campus #${cid}`,
+            code: c.code || c.campusCode || matched?.code || matched?.campusCode || "",
           };
         }
         const matched = (campuses || []).find((cp) => String(cp.id) === String(c) || String(cp.campusId) === String(c) || cp.name === c);
@@ -6215,6 +6330,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       });
     }
 
+    // 3. Try assignedCampusIds
     if (Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0) {
       return record.assignedCampusIds.map((cid) => {
         const matched = (campuses || []).find((cp) => Number(cp.id ?? cp.campusId) === Number(cid));
@@ -6227,10 +6343,11 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     }
 
     if (record?.campusName || record?.campusId) {
+      const matched = (campuses || []).find((cp) => Number(cp.id ?? cp.campusId) === Number(record.campusId));
       return [{
         id: record.campusId || 1,
-        name: record.campusName || "Main Campus (HQ)",
-        code: record.campusCode || "MAIN",
+        name: record.campusName || matched?.name || matched?.campusName || "Main Campus (HQ)",
+        code: record.campusCode || matched?.code || matched?.campusCode || "MAIN",
       }];
     }
 
@@ -6282,7 +6399,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         ["fullName", "Full Name"],
         ["employeeId", "Employee ID"],
         ["board", "Board Name"],
-        ["campusName", "Assigned Campus"],
+        [isPrincipalRecord ? "assignedCampusesDisplay" : "campusName", isPrincipalRecord ? "Assigned Campuses" : "Assigned Campus"],
         ["dateOfBirth", "Date of Birth"],
         ["gender", "Gender"],
         ["status", "Status"],
@@ -6498,7 +6615,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
 
   // Helper for masking sensitive values
   const formatDisplayValue = (key, rawVal) => {
-    if (key === "assignedCampusesDisplay") {
+    if (key === "assignedCampusesDisplay" || (key === "campusName" && isPrincipalRecord)) {
       if (resolvedCampusList && resolvedCampusList.length > 0) {
         return resolvedCampusList.map((c) => c.name + (c.code ? ` (${c.code})` : "")).join(", ");
       }
@@ -6751,6 +6868,29 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                           ) : (
                             "—"
                           )
+                        ) : (key === "assignedCampusesDisplay" || (key === "campusName" && isPrincipalRecord)) && resolvedCampusList.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
+                            {resolvedCampusList.map((c, i) => (
+                              <span
+                                key={c.id || i}
+                                className="campus-badge"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  background: "var(--cms-primary-soft, #edf7e2)",
+                                  color: "var(--cms-primary, #355e3b)",
+                                  fontSize: "11px",
+                                  fontWeight: "600",
+                                  border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                                }}
+                              >
+                                <Building2 size={12} /> {c.name}{c.code ? ` (${c.code})` : ""}
+                              </span>
+                            ))}
+                          </div>
                         ) : (
                           formatDisplayValue(key, record[key])
                         )}

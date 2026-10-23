@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.DTOs.StaffAttendance.Responses;
+using CollegeManagement.API.Enums;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -66,7 +67,15 @@ namespace CollegeManagement.API.Services.Implementations
             int validStaffId = request.StaffId;
             if (validStaffId <= 0 || !await _context.Staffs.AnyAsync(s => s.Id == validStaffId))
             {
-                validStaffId = await _context.Staffs.Select(s => s.Id).FirstOrDefaultAsync();
+                var callingUser = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+                if (callingUser?.StaffId.HasValue == true && await _context.Staffs.AnyAsync(s => s.Id == callingUser.StaffId.Value))
+                {
+                    validStaffId = callingUser.StaffId.Value;
+                }
+                else
+                {
+                    validStaffId = await _context.Staffs.Select(s => s.Id).FirstOrDefaultAsync();
+                }
             }
 
             // 2. Resolve CreatedByUserId defensively
@@ -121,6 +130,29 @@ namespace CollegeManagement.API.Services.Implementations
                     throw new CollegeManagement.API.Exceptions.ValidationException("Selected leave category does not exist or is inactive.");
                 }
                 validCategoryId = cat.LeaveCategoryId;
+
+                // Align LeaveType enum with category if default or Other or mismatched
+                if (request.LeaveType == LeaveType.Other || request.LeaveType == LeaveType.Casual)
+                {
+                    var catCode = (cat.CategoryCode ?? string.Empty).Trim().ToUpper();
+                    var catName = (cat.CategoryName ?? string.Empty).ToLowerInvariant();
+                    if (catCode == "SL" || catName.Contains("sick") || catName.Contains("medical"))
+                    {
+                        request.LeaveType = LeaveType.Sick;
+                    }
+                    else if (catCode == "CL" || catName.Contains("casual"))
+                    {
+                        request.LeaveType = LeaveType.Casual;
+                    }
+                    else if (catCode == "EL" || catName.Contains("earned") || catName.Contains("privilege"))
+                    {
+                        request.LeaveType = LeaveType.Earned;
+                    }
+                    else if (catCode == "ML" || catName.Contains("maternity"))
+                    {
+                        request.LeaveType = LeaveType.Maternity;
+                    }
+                }
             }
             else
             {
@@ -547,7 +579,7 @@ namespace CollegeManagement.API.Services.Implementations
             int yearId = currentYear?.AcademicYearId ?? 0;
 
             var rawRequests = await _context.StaffLeaveRequests
-                .Where(r => r.StaffId == staffId && r.AcademicYearId == yearId && r.IsActive)
+                .Where(r => r.StaffId == staffId && r.IsActive && (yearId == 0 || r.AcademicYearId == null || r.AcademicYearId == 0 || r.AcademicYearId == yearId))
                 .OrderByDescending(r => r.CreatedAt)
                 .Include(l => l.ApprovedByUser)
                 .ToListAsync();
@@ -556,13 +588,14 @@ namespace CollegeManagement.API.Services.Implementations
                 .Where(h => !h.IsDeleted && h.Status == "Active" && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"))
                 .ToListAsync();
 
+            var defaultDept = staff.StaffType == "Non-Teaching" ? "Administration" : "General";
             var requests = rawRequests.Select(l => new StaffLeaveResponse
             {
                 StaffLeaveRequestId = l.StaffLeaveRequestId,
                 StaffId = l.StaffId,
                 StaffName = $"{staff.FirstName} {staff.LastName}".Trim(),
-                Department = staff.DepartmentRef?.DepartmentName ?? "Mathematics",
-                StaffType = staff.StaffType == "Teaching" ? "Teaching Staff" : (staff.StaffType ?? "Teaching Staff"),
+                Department = staff.DepartmentRef?.DepartmentName ?? defaultDept,
+                StaffType = staff.StaffType == "Teaching" ? "Teaching Staff" : (staff.StaffType ?? "Non-Teaching Staff"),
                 LeaveType = l.LeaveType,
                 StartDate = l.StartDate,
                 EndDate = l.EndDate,
@@ -577,25 +610,36 @@ namespace CollegeManagement.API.Services.Implementations
             }).ToList();
 
             var balances = await _context.StaffLeaveBalances
-                .Where(b => b.StaffId == staffId && b.AcademicYearId == yearId)
+                .Where(b => b.StaffId == staffId && (yearId == 0 || b.AcademicYearId == yearId))
                 .ToListAsync();
+
+            if (!balances.Any())
+            {
+                balances = await _context.StaffLeaveBalances
+                    .Where(b => b.StaffId == staffId)
+                    .ToListAsync();
+            }
+
+            decimal totalDays = balances.Any() ? balances.Sum(b => b.TotalDays) : 35m;
+            decimal usedDays = balances.Any() ? balances.Sum(b => b.UsedDays) : (decimal)requests.Count(r => r.Status == CollegeManagement.API.Enums.LeaveStatus.Approved);
+            decimal remainingDays = balances.Any() ? balances.Sum(b => b.RemainingDays) : Math.Max(0m, totalDays - usedDays);
 
             return new StaffLeaveHistoryDto
             {
                 StaffId = staff.Id,
                 StaffName = $"{staff.FirstName} {staff.LastName}".Trim(),
                 StaffCode = staff.EmployeeId,
-                Department = staff.DepartmentRef != null ? staff.DepartmentRef.DepartmentName : "Mathematics",
-                StaffType = staff.StaffType == "Teaching" ? "Teaching Staff" : (staff.StaffType ?? "Teaching Staff"),
+                Department = staff.DepartmentRef != null ? staff.DepartmentRef.DepartmentName : defaultDept,
+                StaffType = staff.StaffType == "Teaching" ? "Teaching Staff" : (staff.StaffType ?? "Non-Teaching Staff"),
                 TotalRequests = requests.Count,
                 Approved = requests.Count(r => r.Status == CollegeManagement.API.Enums.LeaveStatus.Approved),
                 Pending = requests.Count(r => r.Status == CollegeManagement.API.Enums.LeaveStatus.Pending),
                 Rejected = requests.Count(r => r.Status == CollegeManagement.API.Enums.LeaveStatus.Rejected),
                 Balance = new LeaveBalanceDto
                 {
-                    Total = balances.Sum(b => b.TotalDays),
-                    Used = balances.Sum(b => b.UsedDays),
-                    Remaining = balances.Sum(b => b.RemainingDays)
+                    Total = totalDays,
+                    Used = usedDays,
+                    Remaining = remainingDays
                 },
                 History = requests
             };

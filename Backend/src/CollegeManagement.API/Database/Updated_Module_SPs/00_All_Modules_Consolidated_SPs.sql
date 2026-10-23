@@ -1470,7 +1470,8 @@ DROP PROCEDURE IF EXISTS `sp_GetDashboardTodaysHighlights` //
 CREATE PROCEDURE `sp_GetDashboardTodaysHighlights`(
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
-    IN p_TargetDate DATE
+    IN p_TargetDate DATE,
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_TargetDate DATE;

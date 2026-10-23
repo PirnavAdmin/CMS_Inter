@@ -41,6 +41,7 @@ export default function ParentExaminationsPage() {
     setActiveChildId,
     child,
     results,
+    examinations: contextExaminations,
     dataKey,
     currentAcademicYear,
     loading,
@@ -53,23 +54,68 @@ export default function ParentExaminationsPage() {
     setHallTicketOpen(false);
   }, [currentAcademicYear, activeChildId]);
 
+  // Find the primary scheduled or active examination from live backend
+  const activeExam = useMemo(() => {
+    if (!contextExaminations || contextExaminations.length === 0) return null;
+    return (
+      contextExaminations.find((e) => e.schedules && e.schedules.length > 0 && String(e.status).toUpperCase() === "SCHEDULED") ||
+      contextExaminations.find((e) => e.schedules && e.schedules.length > 0) ||
+      contextExaminations[0]
+    );
+  }, [contextExaminations]);
+
   const exams = useMemo(() => {
+    // 1. Live exam schedules directly from backend
+    if (activeExam?.schedules?.length > 0) {
+      return activeExam.schedules.map((s, idx) => ({
+        id: String(s.examScheduleId || s.id || `sched-${idx}`),
+        subject: s.subjectName || `Subject ${idx + 1}`,
+        code: s.subjectCode || `SUB-${s.subjectId || idx + 1}`,
+        date: s.examDate ? new Date(s.examDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Scheduled",
+        time: s.startTime && s.endTime ? `${s.startTime.slice(0, 5)} - ${s.endTime.slice(0, 5)}` : "09:00 AM - 12:00 PM",
+        hall: s.hall || s.roomNumber ? `Hall ${s.hall || s.roomNumber}` : "Main Campus Examination Block",
+        seat: `Seat #${child?.roll || "02"}`,
+        invigilator: s.invigilatorName || s.invigilator || "Faculty In-Charge",
+        maxMarks: s.maxMarks || 100,
+        passingMarks: s.passingMarks || 35,
+        syllabus: `Official intermediate curriculum for ${s.subjectName} (${s.subjectCode || "MPC"}). Examination Mode: ${s.examMode || "Written"}. Maximum Marks: ${s.maxMarks || 100}.`,
+      }));
+    }
+
+    // 2. Completed results fallback
     if (results && results.length > 0) {
       return results.map((r, idx) => ({
         id: String(r.examinationId || r.resultId || `ex-${idx}`),
         subject: r.examName,
         code: r.examCode,
         date: r.publishedAt || "Academic Session",
-        time: "10:00 AM - 01:00 PM",
+        time: "09:00 AM - 12:00 PM",
         hall: "Main Campus Examination Center",
-        seat: `Seat ${r.classRank || "A-12"}`,
+        seat: `Seat #${child?.roll || "02"}`,
+        invigilator: "Campus Examination Branch",
+        maxMarks: r.maxMarks || 100,
+        passingMarks: 35,
         syllabus: `Official curriculum for ${r.examName}. Maximum Total Marks: ${r.maxMarks}. Grade: ${r.grade}.`,
       }));
     }
-    return child ? (upcomingExamsData[dataKey] || upcomingExamsData[child.id] || upcomingExamsData["860"] || upcomingExamsData["stu-001"] || []) : [];
-  }, [results, child, dataKey]);
 
-  const examMeta = getExamMetaForYear(currentAcademicYear);
+    return child ? (upcomingExamsData[dataKey] || upcomingExamsData[child.id] || upcomingExamsData["860"] || []) : [];
+  }, [activeExam, results, child, dataKey]);
+
+  const examMeta = useMemo(() => {
+    if (activeExam) {
+      const title = activeExam.examName || activeExam.examinationName || "College Examinations 2026";
+      const start = activeExam.startDate ? new Date(activeExam.startDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "01 December 2026";
+      return {
+        title,
+        subtitle: `${activeExam.examPattern || "Regular Academic"} • Center: Campus Examination Block • Academic Year ${currentAcademicYear}`,
+        startDate: start,
+        admitCardTitle: `${title.toUpperCase()} ADMIT CARD — ${currentAcademicYear}`,
+        hallTicketPrefix: `HT${child?.admissionNo ? child.admissionNo.replace(/\D/g, "") : "2026"}`,
+      };
+    }
+    return getExamMetaForYear(currentAcademicYear);
+  }, [activeExam, currentAcademicYear, child]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);

@@ -33,13 +33,15 @@ const mapLeaveStatus = (status) => {
 
 const mapLeaveRequest = (req) => {
     if (!req) return req;
+    const rawCreatedAt = req.createdAt || req.CreatedAt;
     return {
         ...req,
         leaveType: req.leaveCategoryName || mapLeaveType(req.leaveType),
         status: mapLeaveStatus(req.status),
         fromDate: req.startDate ? req.startDate.split('T')[0] : null,
         toDate: req.endDate ? req.endDate.split('T')[0] : null,
-        days: req.totalDays
+        days: req.totalDays,
+        appliedDate: rawCreatedAt ? String(rawCreatedAt).split('T')[0] : null
     };
 };
 
@@ -128,6 +130,24 @@ export const getLeaveHistory = async (staffId) => {
         return data;
     } catch (error) {
         console.error(`Error fetching leave history for staff ID ${staffId}:`, error);
+        throw error;
+    }
+};
+
+export const getMyLeaveHistory = async () => {
+    try {
+        const response = await apiClient.get('/api/v1/staff-attendance/leave/my-history');
+        const data = response.data?.data || response.data?.Data;
+        if (data) {
+            const rawList = data.history || data.History || [];
+            return {
+                ...data,
+                history: rawList.map(mapLeaveRequest)
+            };
+        }
+        return data;
+    } catch (error) {
+        console.error('Error fetching personal leave history:', error);
         throw error;
     }
 };

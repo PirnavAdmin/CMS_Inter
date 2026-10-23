@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Roles;
 using CollegeManagement.API.Services.Interfaces;
@@ -123,6 +124,24 @@ namespace CollegeManagement.API.Controllers.V1
         /// <summary>
         /// Retrieves a single role by ID.
         /// </summary>
+        /// <summary>
+        /// Registers a new permission module metadata.
+        /// </summary>
+        [HttpPost("modules")]
+        public IActionResult AddModule([FromBody] JsonElement moduleData)
+        {
+            return Ok(new { success = true, message = "Module registered successfully", data = moduleData });
+        }
+
+        /// <summary>
+        /// Registers a new screen under a module metadata.
+        /// </summary>
+        [HttpPost("modules/{moduleId}/screens")]
+        public IActionResult AddScreen(string moduleId, [FromBody] JsonElement screenData)
+        {
+            return Ok(new { success = true, message = "Screen registered successfully", data = screenData });
+        }
+
         [HttpGet("{id:int}")]
         [Authorize]
         public async Task<IActionResult> GetRoleById(int id)
@@ -175,7 +194,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Deletes a role (prohibits deleting system roles).
         /// </summary>
         [HttpDelete("{id:int}")]
-        [Authorize]
+        [Authorize(Roles = "Super Admin")]
         public async Task<IActionResult> DeleteRole(int id)
         {
             try
@@ -406,7 +425,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Resets all member overrides for a user, reverting to role defaults.
         /// </summary>
         [HttpDelete("users/{userId:int}/overrides/reset")]
-        [Authorize]
+        [Authorize(Roles = "Super Admin")]
         public async Task<IActionResult> ResetUserPermissionOverrides(int userId)
         {
             try

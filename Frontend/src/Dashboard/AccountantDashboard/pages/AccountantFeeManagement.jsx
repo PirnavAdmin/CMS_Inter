@@ -2,19 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronLeft, ChevronRight, Eye, History, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/common/Ui.jsx";
-import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
 import { adminIconAssets } from "@/components/layout/DashboardLayout.jsx";
-import { loadScopedLedger, requestError, rowsOf, unwrap, useFinancePage, useFinanceParams } from "../accountantData.js";
-import { loadSetupRecords } from "../accountantFeeRequests.js";
-import { deleteSetupRecord, feeSetupAccess, requireSetupAction, setupId, setupNames } from "../accountantFeeSetup.js";
-import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../feeViewData.js";
-import AccountantFeeOverview from "./AccountantFeeOverview.jsx";
-import AccountantFeeSetupModal from "./AccountantFeeSetupModal.jsx";
-import { FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "./AccountantFeeUI.jsx";
+import { loadScopedLedger, requestError, rowsOf, useFinancePage, useFinanceParams } from "../services/accountantService.js";
+import { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } from "../services/accountantService.js";
+import { loadSetupRecords } from "../services/accountantService.js";
+import { deleteSetupRecord, feeSetupAccess, requireSetupAction, setupId, setupNames } from "../services/accountantService.js";
+import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../utils/feeViewData.js";
+import AccountantFeeOverview from "../components/AccountantFeeOverview.jsx";
+import AccountantFeeSetupModal from "../components/AccountantFeeSetupModal.jsx";
+import { FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "../components/AccountantUI.jsx";
 import "@/components/pages/FeeManagementPage.css";
-import "../AccountantFeeManagement.css";
+import "./AccountantFeeManagement.css";
 
 const field = (label, key, type) => ({ label, num: type === "money", value: (row) => {
   const value = readFee(row, key);
@@ -58,34 +58,55 @@ export function AccountantPagination({ page, onPage }) {
   </nav>;
 }
 
-function FeeDetails({ id, onClose }) {
-  const load = useCallback(async (signal) => unwrap(await apiClient.get(apiEndpoints.fee.getStudentFee(id), { signal })), [id]);
+function FeeDetails({ row, onClose }) {
+  const load = useCallback((signal) => loadLedgerDetails(row, signal), [row]);
   const state = useFinancePage(load);
-  return <FeeCard title="Student Fee Details" action={<button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}><ArrowLeft size={14} /> Back to ledger</button>} bodyClass="cms-fee-stack">
+  return <section className="cms-card cms-fee-account-screen accountant-student-fee-details">
+    <header className="cms-card-head cms-fee-account-head">
+      <div><h3>{!state.loading && !state.error && state.data ? feeText(state.data, "studentName") : "Student Fee Details"}</h3>
+        {!state.loading && !state.error && state.data ? <span>{feeText(state.data, "admissionNumber")} &middot; {feeText(state.data, "groupName")} / {feeText(state.data, "sectionName")}</span> : null}</div>
+      <div className="cms-fee-drawer-actions"><button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}><ArrowLeft size={14} /> Back to ledger</button></div>
+    </header>
+    <div className="cms-card-body cms-fee-drawer-body">
     <FeeLoadState state={state} />{!state.loading && !state.error && state.data ? <>
-      <p>{feeText(state.data, "studentName")} / {feeText(state.data, "admissionNumber")}</p>
-      <section className="cms-fee-block"><h3>Fee Breakdown</h3><FeeTable rows={rowsOf(readFee(state.data, "components"))} columns={[field("Fee Type", "feeTypeName"), field("Payable", "payableAmount", "money"), field("Paid", "paidAmount", "money"), field("Balance", "balanceAmount", "money"), field("Status", "status", "status")]} /></section>
-      <section className="cms-fee-block"><h3>Fee Schedules</h3><FeeTable rows={rowsOf(readFee(state.data, "schedules"))} columns={[field("Schedule", "feeSchedule"), field("Due Date", "dueDate", "date"), field("Amount", "amount", "money"), field("Paid", "paidAmount", "money"), field("Status", "status", "status")]} /></section>
-      <Link className="cms-btn cms-btn-ghost" to="/accountant-dashboard/payments"><History size={14} /> Payment history</Link>
+      <section className="cms-fee-block"><h3>Student Information</h3><div className="cms-fee-kv">
+        {[["Name", "studentName"], ["Admission Number", "admissionNumber"], ["Roll Number", "rollNumber"], ["Group", "groupName"], ["Section", "sectionName"], ["Academic Level", "academicLevelName"], ["Academic Year", "academicYearName"]].map(([label, key]) => <div key={key}><span>{label}</span><strong>{feeText(state.data, key)}</strong></div>)}
+        <div><span>Admission Date</span><strong>{feeDate(readFee(state.data, "admissionDate"))}</strong></div>
+      </div></section>
+      <section className="cms-fee-block"><h3>Fee Summary</h3><div className="cms-fee-kv">
+        {[["Original Fee", "originalFee"], ["Concession", "concession"], ["Scheduled Fees", "scheduledFees"], ["Total Payable", "totalPayable"], ["Total Paid", "totalPaid"], ["Outstanding Balance", "outstandingBalance"]].map(([label, key]) => <div key={key}><span>{label}</span><strong>{feeMoney(readFee(state.data, key))}</strong></div>)}
+        <div><span>Payment Plan</span><strong>{feeText(state.data, "paymentPlan")}</strong></div><div><span>Fee Status</span><strong><FeeBadge status={readFee(state.data, "feeStatus")} /></strong></div>
+      </div></section>
+      <section className="cms-fee-block"><h3>Applicable Fee Breakdown</h3><div className="cms-table-wrap"><table className="cms-table cms-fee-breakdown-table">
+        <colgroup><col className="cms-fee-breakdown-type-col" /><col className="cms-fee-breakdown-money-col" /><col className="cms-fee-breakdown-concession-col" /><col className="cms-fee-breakdown-money-col" /><col className="cms-fee-breakdown-money-col" /></colgroup>
+        <thead><tr><th>Fee Type</th><th className="num">Amount</th><th>Concession / Scheme</th><th className="num">Discount</th><th className="num">Payable</th></tr></thead>
+        <tbody>{rowsOf(readFee(state.data, "breakdown")).length ? rowsOf(readFee(state.data, "breakdown")).map((item, index) => <tr key={index}><td><strong>{feeText(item, "feeType")}</strong></td><td className="num">{feeMoney(readFee(item, "amount"))}</td><td>{feeText(item, "concessionScheme")}</td><td className="num">{feeMoney(readFee(item, "discount"))}</td><td className="num"><strong>{feeMoney(readFee(item, "payable"))}</strong></td></tr>) : <tr><td colSpan={5} className="cms-fee-empty-row">No records available.</td></tr>}</tbody>
+      </table></div></section>
+      <section className="cms-fee-block"><h3>Fee Schedule</h3><FeeTable rows={rowsOf(readFee(state.data, "schedules"))} columns={[field("Fee Schedule", "feeSchedule"), field("Due Date", "dueDate", "date"), field("Amount", "amount", "money"), field("Paid", "paidAmount", "money"), field("Balance", "balanceAmount", "money"), field("Status", "status", "status")]} /></section>
+      <div className="cms-fee-drawer-actions"><Link className="cms-btn cms-btn-ghost" to="/accountant-dashboard/payments"><History size={14} /> Payment history</Link></div>
     </> : null}
-  </FeeCard>;
+    </div>
+  </section>;
 }
 
 function FeeLedger({ params }) {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ groupName: "", sectionName: "", paymentPlan: "", status: "" });
   const [pageNumber, setPageNumber] = useState(1);
-  const [detailId, setDetailId] = useState(null);
+  const [detailRow, setDetailRow] = useState(null);
   const load = useCallback((signal) => loadScopedLedger(params, signal), [params]);
   const state = useFinancePage(load);
   const all = state.data || [];
-  const filtered = all.filter((row) => Object.entries(filters).every(([key, value]) => !value || String(readFee(row, key)) === value));
-  const page = pageOf(filtered, pageNumber, search);
+  const page = ledgerPage(all, pageNumber, search, filters);
   const changeFilter = (key, value) => { setFilters((previous) => ({ ...previous, [key]: value, ...(key === "groupName" ? { sectionName: "" } : {}) })); setPageNumber(1); };
-  if (detailId) return <FeeDetails id={detailId} onClose={() => setDetailId(null)} />;
+  if (detailRow) return <FeeDetails key={ledgerDetailEndpoint(detailRow)} row={detailRow} onClose={() => setDetailRow(null)} />;
   const columns = [field("Admission No", "admissionNumber", "name"), field("Student Name", "studentName"), field("Group", "groupName"), field("Section", "sectionName"), field("Payment Plan", "paymentPlan"), field("Total Payable", "totalPayable", "money"), field("Total Paid", "totalPaid", "money"), field("Balance", "balance", "money"), field("Next Due Date", "nextDueDate", "date"),
     { label: "Fee Status", value: (row) => <FeeBadge status={readFee(row, "status")} /> },
-    { label: "Actions", value: (row) => <div className="cms-actions"><button type="button" className="cms-action-btn" title="View fee account" aria-label={`View fees for ${feeText(row, "studentName")}`} disabled={!readFee(row, "studentFeeId")} onClick={() => setDetailId(readFee(row, "studentFeeId"))}><Eye size={15} /></button></div> },
+    { label: "Actions", value: (row) => {
+      let valid = true;
+      try { ledgerDetailEndpoint(row); } catch { valid = false; }
+      return <div className="cms-actions"><button type="button" className="cms-action-btn" title={valid ? "View fee account" : "No valid student or fee record ID"} aria-label={`View fees for ${feeText(row, "studentName")}`} disabled={!valid} onClick={() => setDetailRow(row)}><Eye size={15} /></button></div>;
+    } },
   ];
   return <FeeCard title="Student Fee Ledger" action={<span className="cms-badge cms-badge-info">{page.total} of {all.length} students</span>} bodyClass="accountant-fee-ledger-body">
     <div className="cms-fee-toolbar cms-fee-controls cms-card-body"><FeeSearch value={search} label="Search fee ledger" onChange={(value) => { setSearch(value); setPageNumber(1); }} />
@@ -174,7 +195,7 @@ export default function AccountantFeeManagement() {
   const setup = Object.hasOwn(setupViews, query.get("setup")) ? query.get("setup") : "types";
   const config = setupViews[setup];
   const change = (key, value) => setQuery((previous) => { const next = new URLSearchParams(previous); next.set(key, value); return next; });
-  const canView = (screen) => !permissions.error && permissions.canView("fee-management", screen);
+  const canView = (screen) => !permissions.error && (permissions.canView("fee-management", screen) || permissions.canView("fee-management") || permissions.isAccountant || permissions.isSuperOrAdmin);
   const setupAccess = feeSetupAccess(permissions, setup);
   const allowed = tab === "ledger" ? canView("student-fees") : tab === "setup" ? setupAccess.view : canView("fee-collection");
   const contextKey = JSON.stringify(params);

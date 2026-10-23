@@ -12,36 +12,61 @@ import {
   RefreshCw,
   ArrowRight,
   ShieldCheck,
-  Building,
   UserCheck,
   Megaphone,
-  HelpCircle,
   Briefcase,
   Sparkles,
 } from "lucide-react";
 import { nonTeachingService } from "../services/nonTeachingService.js";
+import { attendanceService } from "@/api/attendanceService.js";
+import { announcementService } from "@/services/announcementService.js";
 
 export default function NonTeachingDashboardHome() {
   const [profile, setProfile] = useState(() => nonTeachingService.getProfile());
   const [tasks, setTasks] = useState(() => nonTeachingService.getTasks());
   const [leaveBalances, setLeaveBalances] = useState(() => nonTeachingService.getLeaveBalances());
   const [leaveHistory, setLeaveHistory] = useState(() => nonTeachingService.getLeaveHistory());
-  const [announcements] = useState(() => nonTeachingService.getAnnouncements());
+  const [announcements, setAnnouncements] = useState(() => nonTeachingService.getAnnouncements());
   const [attendanceSummary, setAttendanceSummary] = useState(() => nonTeachingService.getAttendanceSummary());
-  const [punchState, setPunchState] = useState({ status: "punched_in", inTime: "09:04 AM", outTime: null });
+  const [punchState, setPunchState] = useState({ status: "not_punched", inTime: null, outTime: null });
   const [liveClock, setLiveClock] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
   );
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
   useEffect(() => {
+    let active = true;
+    attendanceService.getMyTodayStatus()
+      .then((res) => {
+        if (active && res?.Data) {
+          setPunchState({
+            status: res.Data.Status || res.Data.status || "not_punched",
+            inTime: res.Data.InTime || res.Data.inTime || null,
+            outTime: res.Data.OutTime || res.Data.outTime || null,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       setLiveClock(
-        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
       );
     }, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const unsub = announcementService.subscribeAnnouncements(() => {
+      setAnnouncements(nonTeachingService.getAnnouncements());
+    });
+    return unsub;
   }, []);
 
   const handleRefresh = () => {
@@ -62,7 +87,24 @@ export default function NonTeachingDashboardHome() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handlePunch = (action) => {
+  const handlePunch = async (action) => {
+    try {
+      if (action === "in") {
+        const res = await attendanceService.punchIn({ deviceId: "Web Portal", remarks: "Non-Teaching Web Punch In" });
+        if (res?.Data) {
+          setPunchState({ status: "punched_in", inTime: res.Data.InTime, outTime: null });
+          showToast(`Punched In successfully at ${res.Data.InTime}`);
+          return;
+        }
+      } else {
+        const res = await attendanceService.punchOut({ deviceId: "Web Portal", remarks: "Non-Teaching Web Punch Out" });
+        if (res?.Data) {
+          setPunchState((prev) => ({ ...prev, status: "punched_out", outTime: res.Data.OutTime }));
+          showToast(`Punched Out successfully at ${res.Data.OutTime}`);
+          return;
+        }
+      }
+    } catch {}
     const res = nonTeachingService.recordPunch(action);
     if (action === "in") {
       setPunchState({ status: "punched_in", inTime: res.timeStr, outTime: null });
@@ -111,7 +153,7 @@ export default function NonTeachingDashboardHome() {
         <div>
           <h2 className="nts-greeting-title">
             <Sparkles size={20} style={{ color: "var(--nts-primary)" }} />
-            {greeting}, {profile.displayName || profile.name}
+            {greeting}, {(profile.displayName || profile.name || "Non-Teaching Staff").replace(/\bDemo\s*/gi, "").trim()}
           </h2>
           <div className="nts-greeting-sub">
             <span className="nts-badge-pill active">
@@ -171,7 +213,11 @@ export default function NonTeachingDashboardHome() {
               <span className="nts-kpi-val">{totalLeaveDaysRemaining} Days</span>
             </div>
           </div>
-          <span className="nts-kpi-sub">CL: 6 • SL: 5 • EL: 3</span>
+          <span className="nts-kpi-sub">
+            {leaveBalances.length > 0
+              ? leaveBalances.map((b) => `${b.code || b.type.slice(0, 2)}: ${b.remaining}`).join(" • ")
+              : "No active leave quotas"}
+          </span>
         </div>
 
         {/* 3. Pending Leave Requests */}
@@ -231,25 +277,7 @@ export default function NonTeachingDashboardHome() {
         </div>
       </section>
 
-      {/* Quick Action Navigation Strip */}
-      <section className="nts-quick-actions-strip">
-        <span className="nts-quick-title">Quick Actions:</span>
-        <Link to="/non-teaching-dashboard/attendance" className="nts-action-btn">
-          <UserCheck size={14} style={{ color: "var(--nts-primary)" }} /> View Attendance
-        </Link>
-        <Link to="/non-teaching-dashboard/leave" className="nts-action-btn">
-          <CalendarDays size={14} style={{ color: "#2563eb" }} /> Apply for Leave
-        </Link>
-        <Link to="/non-teaching-dashboard/tasks" className="nts-action-btn">
-          <ListTodo size={14} style={{ color: "#7c3aed" }} /> View My Tasks
-        </Link>
-        <Link to="/non-teaching-dashboard/department" className="nts-action-btn">
-          <Building size={14} style={{ color: "#0891b2" }} /> Department Operations
-        </Link>
-        <Link to="/non-teaching-dashboard/support" className="nts-action-btn">
-          <HelpCircle size={14} style={{ color: "#ea580c" }} /> Help & Support
-        </Link>
-      </section>
+
 
       {/* Two-Column Overview Content */}
       <div className="nts-two-col">
@@ -312,32 +340,39 @@ export default function NonTeachingDashboardHome() {
               </Link>
             </div>
             <div className="nts-card-body" style={{ gap: 8 }}>
-              {tasks.slice(0, 4).map((task) => (
-                <div key={task.id} className={`nts-task-item ${task.status === "Completed" ? "completed" : ""}`}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="nts-task-title">{task.title}</div>
-                    <div className="nts-task-desc">{task.description}</div>
-                    <div className="nts-task-meta">
-                      <span className={`nts-pill-priority ${task.priority.toLowerCase()}`}>
-                        {task.priority}
-                      </span>
-                      <span>Category: <strong>{task.category}</strong></span>
-                      <span>Due: <strong>{task.dueDate}</strong></span>
+              {tasks.length > 0 ? (
+                tasks.slice(0, 4).map((task) => (
+                  <div key={task.id} className={`nts-task-item ${task.status === "Completed" ? "completed" : ""}`}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="nts-task-title">{task.title}</div>
+                      <div className="nts-task-desc">{task.description}</div>
+                      <div className="nts-task-meta">
+                        <span className={`nts-pill-priority ${task.priority.toLowerCase()}`}>
+                          {task.priority}
+                        </span>
+                        <span>Category: <strong>{task.category}</strong></span>
+                        <span>Due: <strong>{task.dueDate}</strong></span>
+                      </div>
                     </div>
-                  </div>
 
-                  <button
-                    type="button"
-                    className={`nts-status-badge ${task.status === "Completed" ? "completed" : task.status === "In Progress" ? "in-progress" : "pending"}`}
-                    style={{ cursor: "pointer", border: "none" }}
-                    onClick={() => handleToggleTaskStatus(task.id, task.status)}
-                    title="Click to advance status"
-                  >
-                    {task.status === "Completed" ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                    {task.status}
-                  </button>
+                    <button
+                      type="button"
+                      className={`nts-status-badge ${task.status === "Completed" ? "completed" : task.status === "In Progress" ? "in-progress" : "pending"}`}
+                      style={{ cursor: "pointer", border: "none" }}
+                      onClick={() => handleToggleTaskStatus(task.id, task.status)}
+                      title="Click to advance status"
+                    >
+                      {task.status === "Completed" ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                      {task.status}
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div style={{ textAlign: "center", padding: "24px 12px", color: "var(--nts-muted)", fontSize: 12.5 }}>
+                  <ListTodo size={24} style={{ margin: "0 auto 6px", opacity: 0.4, display: "block" }} />
+                  No assigned tasks found.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -355,58 +390,72 @@ export default function NonTeachingDashboardHome() {
               </Link>
             </div>
             <div className="nts-card-body" style={{ gap: 12 }}>
-              {leaveBalances.map((leave) => {
-                const percent = Math.round((leave.remaining / leave.total) * 100);
-                const barColor = leave.tone === "blue" ? "#2563eb" : leave.tone === "green" ? "#16a34a" : leave.tone === "purple" ? "#7c3aed" : "#d97706";
-                return (
-                  <div key={leave.code} className="nts-progress-wrap">
-                    <div className="nts-progress-labels">
-                      <span>{leave.type}</span>
-                      <span>{leave.remaining} / {leave.total} Days Left</span>
+              {leaveBalances.length > 0 ? (
+                leaveBalances.map((leave) => {
+                  const percent = Math.round((leave.remaining / leave.total) * 100);
+                  const barColor = leave.tone === "blue" ? "#2563eb" : leave.tone === "green" ? "#16a34a" : leave.tone === "purple" ? "#7c3aed" : "#d97706";
+                  return (
+                    <div key={leave.code} className="nts-progress-wrap">
+                      <div className="nts-progress-labels">
+                        <span>{leave.type}</span>
+                        <span>{leave.remaining} / {leave.total} Days Left</span>
+                      </div>
+                      <div className="nts-progress-track">
+                        <div className="nts-progress-fill" style={{ width: `${percent}%`, backgroundColor: barColor }} />
+                      </div>
                     </div>
-                    <div className="nts-progress-track">
-                      <div className="nts-progress-fill" style={{ width: `${percent}%`, backgroundColor: barColor }} />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: "center", padding: "18px 12px", color: "var(--nts-muted)", fontSize: 12.5 }}>
+                  No leave quotas or balances recorded.
+                </div>
+              )}
 
-              <div style={{ marginTop: 4, padding: "8px 12px", background: "var(--nts-subtle)", borderRadius: 8, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span>Latest Request: <strong>{leaveHistory[0]?.type}</strong></span>
-                <span className={`nts-status-badge ${leaveHistory[0]?.status.toLowerCase()}`}>
-                  {leaveHistory[0]?.status}
-                </span>
-              </div>
+              {leaveHistory.length > 0 ? (
+                <div style={{ marginTop: 4, padding: "8px 12px", background: "var(--nts-subtle)", borderRadius: 8, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span>Latest Request: <strong>{leaveHistory[0]?.type}</strong></span>
+                  <span className={`nts-status-badge ${leaveHistory[0]?.status.toLowerCase()}`}>
+                    {leaveHistory[0]?.status}
+                  </span>
+                </div>
+              ) : (
+                <div style={{ marginTop: 4, padding: "8px 12px", background: "var(--nts-subtle)", borderRadius: 8, fontSize: 12, color: "var(--nts-muted)", textAlign: "center" }}>
+                  No leave requests submitted.
+                </div>
+              )}
             </div>
           </div>
 
           {/* Department Announcements */}
-          <div className="nts-card">
-            <div className="nts-card-head">
-              <h3>
-                <Megaphone size={16} style={{ color: "#ea580c" }} /> Announcements & Notices
-              </h3>
-              <Link to="/non-teaching-dashboard/announcements" className="nts-card-action">
-                All Notices <ArrowRight size={13} />
-              </Link>
+          {announcements.length > 0 && (
+            <div className="nts-card">
+              <div className="nts-card-head">
+                <h3>
+                  <Megaphone size={16} style={{ color: "#ea580c" }} /> Announcements & Notices
+                </h3>
+                <Link to="/non-teaching-dashboard/announcements" className="nts-card-action">
+                  All Notices <ArrowRight size={13} />
+                </Link>
+              </div>
+              <div className="nts-card-body" style={{ gap: 10 }}>
+                {announcements.slice(0, 3).map((notice) => (
+                  <div key={notice.id} style={{ padding: "8px 10px", border: "1px solid var(--nts-border)", borderRadius: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--nts-primary)" }}>{notice.category}</span>
+                      <span style={{ fontSize: 10.5, color: "var(--nts-muted)" }}>{notice.date}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, fontWeight: 750, color: "var(--nts-text)", marginBottom: 4 }}>
+                      {notice.title}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--nts-muted)", lineHeight: 1.35 }}>
+                      {notice.content.slice(0, 110)}...
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="nts-card-body" style={{ gap: 10 }}>
-              {announcements.slice(0, 3).map((notice) => (
-                <div key={notice.id} style={{ padding: "8px 10px", border: "1px solid var(--nts-border)", borderRadius: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--nts-primary)" }}>{notice.category}</span>
-                    <span style={{ fontSize: 10.5, color: "var(--nts-muted)" }}>{notice.date}</span>
-                  </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 750, color: "var(--nts-text)", marginBottom: 4 }}>
-                    {notice.title}
-                  </div>
-                  <div style={{ fontSize: 11.5, color: "var(--nts-muted)", lineHeight: 1.35 }}>
-                    {notice.content.slice(0, 110)}...
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </>

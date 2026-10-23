@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
   RefreshCw,
@@ -34,6 +34,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { attendanceService } from "@/api/attendanceService.js";
 import { getAuthUser } from "@/features/authStorage.js";
 import totalStudentsIcon from "@/assets/dashboard-3d/total-students.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -47,6 +48,7 @@ import createSectionIcon from "@/assets/dashboard-3d/create-section.png";
 import createExamIcon from "@/assets/dashboard-3d/create-exam.png";
 import markAttendanceIcon from "@/assets/dashboard-3d/mark-attendance.png";
 import "../styles/FacultyDashboardHome.css";
+import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonText } from "@/components/common/Ui.jsx";
 
 function formatTime12h(timeStr) {
   if (!timeStr) return "";
@@ -59,6 +61,41 @@ function formatTime12h(timeStr) {
   if (hour === 0) hour = 12;
   const padHour = String(hour).padStart(2, "0");
   return `${padHour}:${min} ${ampm}`;
+}
+
+function parseTimeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const match = String(timeStr).trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const ampm = match[3]?.toUpperCase();
+  if (ampm === "PM" && hours < 12) hours += 12;
+  if (ampm === "AM" && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+}
+
+function calculateDurationStr(inTime, outTime, isActive = false) {
+  if (!inTime || inTime === "--") return "0h 0m";
+  const inMins = parseTimeToMinutes(inTime);
+  if (inMins === null) return "0h 0m";
+
+  let targetMins;
+  if (outTime && outTime !== "--") {
+    targetMins = parseTimeToMinutes(outTime);
+  } else if (isActive) {
+    const now = new Date();
+    targetMins = now.getHours() * 60 + now.getMinutes();
+  } else {
+    return "0h 0m";
+  }
+
+  if (targetMins === null) return "0h 0m";
+  let diff = targetMins - inMins;
+  if (diff < 0) diff += 24 * 60;
+  const hours = Math.floor(diff / 60);
+  const mins = diff % 60;
+  return `${hours}h ${mins}m`;
 }
 
 function resolveFacultyId(profile, auth) {
@@ -144,83 +181,6 @@ function evaluateStudentAttendance(student) {
 }
 
 
-const FACULTY_ATTENDANCE_DONUT = [
-  { name: "Present", value: 21, color: "#22a447" },
-  { name: "Leave", value: 1, color: "#f59e0b" },
-  { name: "Holidays / Sundays", value: 8, color: "#94a3b8" },
-];
-
-const UPCOMING_HOLIDAYS = [
-  {
-    id: 1,
-    name: "Gandhi Jayanti",
-    type: "National Holiday",
-    dateText: "02 Oct 2026",
-    dayOfWeek: "Friday",
-    durationText: "1 Day",
-    badge: "In 2 Days",
-    tone: "green",
-  },
-  {
-    id: 2,
-    name: "Dasara Holidays",
-    type: "Festival Holiday",
-    dateText: "19 Oct – 24 Oct 2026",
-    dayOfWeek: "Mon – Sat",
-    durationText: "6 Days",
-    badge: "In 12 Days",
-    tone: "violet",
-  },
-  {
-    id: 3,
-    name: "Diwali",
-    type: "Festival Holiday",
-    dateText: "08 Nov 2026",
-    dayOfWeek: "Sunday",
-    durationText: "1 Day",
-    badge: "In 32 Days",
-    tone: "violet",
-  },
-];
-
-const UPCOMING_EXAMINATIONS = [
-  {
-    id: 1,
-    name: "BIEAP IPE Board Theory Exam 2026",
-    examCode: "BIEAP-IPE-2026",
-    role: "Invigilator (Hall Supt.)",
-    context: "Math I-A • Hall 204 • 09:00 AM – 12:00 PM",
-    badge: "In 12 Days",
-    tone: "blue",
-  },
-  {
-    id: 2,
-    name: "BIEAP Intermediate Practical Exam",
-    examCode: "PRAC-PHY-2026",
-    role: "External Examiner",
-    context: "Physics Lab 102 • Batch 01 • 09:00 AM",
-    badge: "In 15 Days",
-    tone: "violet",
-  },
-  {
-    id: 3,
-    name: "College Pre-Final Examination 2026",
-    examCode: "PRE-FINAL-2026",
-    role: "Chief Invigilator",
-    context: "Auditorium Hall A • MPC & BiPC • 02:00 PM",
-    badge: "In 19 Days",
-    tone: "orange",
-  },
-  {
-    id: 4,
-    name: "Unit Test II Evaluation Camp",
-    examCode: "UT-II-EVAL",
-    role: "Paper Evaluator",
-    context: "Evaluation Cell Room 305 • 90 Scripts",
-    badge: "In 25 Days",
-    tone: "green",
-  },
-];
 
 const QUICK_ACTIONS = [
   { label: "Mark Attendance", moduleId: "attendance", icon: markAttendanceIcon, tone: "green" },
@@ -273,7 +233,22 @@ function CustomBarTooltip({ active, payload }) {
   return null;
 }
 
-function KpiCard({ label, value, subtext, badge, tone, icon, tooltip, onClick }) {
+function KpiCard({ label, value, subtext, badge, tone, icon, tooltip, onClick, loading }) {
+  if (loading) {
+    return (
+      <article className={`dashboard-kpi dashboard-kpi-${tone}`} aria-hidden="true">
+        <div className="dashboard-kpi-top">
+          <Skeleton style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0 }} />
+          <div className="dashboard-kpi-title-wrap" style={{ flex: 1, minWidth: 0 }}>
+            <Skeleton style={{ width: "70%", height: 11 }} />
+            <Skeleton style={{ width: "45%", height: 16, marginTop: 4 }} />
+            <Skeleton style={{ width: "85%", height: 9, marginTop: 4 }} />
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article
       className={`dashboard-kpi dashboard-kpi-${tone}`}
@@ -301,10 +276,14 @@ function KpiCard({ label, value, subtext, badge, tone, icon, tooltip, onClick })
 }
 
 export default function FacultyDashboardHome() {
-  const { profileData, punchState, setActiveModule, notify } = useFaculty();
+  const { profileData, punchState, setPunchState, setActiveModule, notify } = useFaculty();
   const authUser = getAuthUser();
-  const { selectedCampusId } = useCampusContext?.() || {};
-  const { selectedAcademicYearId } = useAcademicContext?.() || {};
+  const { selectedCampus, selectedCampusId } = useCampusContext?.() || {};
+  const { selectedBoard, selectedAcademicYear, selectedAcademicYearId } = useAcademicContext?.() || {};
+
+  const campusId = selectedCampus?.id ?? selectedCampus?.campusId ?? selectedCampusId;
+  const boardId = selectedBoard?.id ?? selectedBoard?.boardId;
+  const academicYearId = selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? selectedAcademicYearId;
 
   const facultyId = useMemo(() => resolveFacultyId(profileData, authUser), [profileData, authUser]);
 
@@ -313,6 +292,310 @@ export default function FacultyDashboardHome() {
   const [lastUpdated, setLastUpdated] = useState(() => formattedTimestamp());
   const [timetableSlots, setTimetableSlots] = useState([]);
   const [timetableLoading, setTimetableLoading] = useState(true);
+
+  // Live Upcoming Holidays & Examinations States
+  const [holidayState, setHolidayState] = useState({ loading: false, error: null, data: null });
+  const [examState, setExamState] = useState({ loading: false, error: null, data: null });
+  const holidaySeq = useRef(0);
+  const examSeq = useRef(0);
+
+  const fetchUpcomingHolidays = useCallback(async () => {
+    const seq = ++holidaySeq.current;
+    setHolidayState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const params = {
+        ...(academicYearId ? { academicYearId } : {}),
+        ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
+        limit: 20,
+      };
+      let res;
+      try {
+        res = await apiClient.get("/api/v1/dashboard/upcoming-holidays", { params });
+      } catch {
+        res = await apiClient.get("/api/v1/holidays", { params: { ...params, pageSize: 20, status: "Active" } });
+      }
+      if (holidaySeq.current === seq) {
+        const payload = res?.data?.data !== undefined ? res.data.data : res?.data;
+        setHolidayState({ loading: false, error: null, data: payload });
+      }
+    } catch (err) {
+      if (holidaySeq.current === seq) {
+        setHolidayState({ loading: false, error: "Failed to load upcoming holidays", data: null });
+      }
+    }
+  }, [campusId, boardId, academicYearId]);
+
+  const fetchUpcomingExaminations = useCallback(async () => {
+    const seq = ++examSeq.current;
+    setExamState((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const params = {
+        ...(academicYearId ? { academicYearId } : {}),
+        ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
+      };
+      const res = await apiClient.get("/api/v1/dashboard/upcoming-examinations", { params });
+      if (examSeq.current === seq) {
+        const payload = res?.data?.data !== undefined ? res.data.data : res?.data;
+        setExamState({ loading: false, error: null, data: payload });
+      }
+    } catch (err) {
+      if (examSeq.current === seq) {
+        setExamState({ loading: false, error: "Failed to load upcoming examinations", data: null });
+      }
+    }
+  }, [campusId, boardId, academicYearId]);
+
+  // Fetch upcoming holidays & examinations on mount and when filter context changes
+  useEffect(() => {
+    fetchUpcomingHolidays();
+    fetchUpcomingExaminations();
+  }, [fetchUpcomingHolidays, fetchUpcomingExaminations]);
+
+  // Live Faculty My Attendance State
+  const [myAttLoading, setMyAttLoading] = useState(true);
+  const [myAttToday, setMyAttToday] = useState({
+    status: "not_punched",
+    inTime: null,
+    outTime: null,
+    shiftStartTime: "09:00 AM",
+    shiftEndTime: "04:30 PM",
+    shiftName: "Morning (09:00 AM – 04:30 PM)",
+  });
+  const [myAttMetrics, setMyAttMetrics] = useState({
+    workingDays: 0,
+    presentDays: 0,
+    leaves: 0,
+    holidays: 0,
+    absentDays: 0,
+    leaveBalance: 15,
+    monthLabel: "",
+    rate: 100,
+  });
+  const myAttSeq = useRef(0);
+
+  const fetchMyAttendanceData = useCallback(async () => {
+    const seq = ++myAttSeq.current;
+    setMyAttLoading(true);
+    try {
+      const todayPromise = attendanceService.getMyTodayStatus().catch((err) => {
+        console.warn("Could not fetch today punch status:", err);
+        return null;
+      });
+
+      const historyPromise = attendanceService.getMyAttendanceHistory("month").catch((err) => {
+        console.warn("Could not fetch monthly attendance history:", err);
+        return null;
+      });
+
+      const effectiveStaffId = facultyId;
+      const leavePromise = effectiveStaffId
+        ? apiClient.get(`/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`).catch(() => null)
+        : Promise.resolve(null);
+
+      const [todayRes, histRes, leaveRes] = await Promise.all([todayPromise, historyPromise, leavePromise]);
+
+      if (myAttSeq.current !== seq) return;
+
+      // Process Today status
+      let normalizedToday = {
+        status: "not_punched",
+        inTime: null,
+        outTime: null,
+        shiftStartTime: "09:00 AM",
+        shiftEndTime: "04:30 PM",
+        shiftName: "Morning (09:00 AM – 04:30 PM)",
+      };
+
+      const todayPayload = todayRes?.data || todayRes?.Data || (todayRes?.status ? todayRes : null);
+      if (todayPayload) {
+        normalizedToday = {
+          status: todayPayload.status || todayPayload.Status || "not_punched",
+          inTime: todayPayload.inTime || todayPayload.InTime || null,
+          outTime: todayPayload.outTime || todayPayload.OutTime || null,
+          shiftStartTime: todayPayload.shiftStartTime || todayPayload.ShiftStartTime || "09:00 AM",
+          shiftEndTime: todayPayload.shiftEndTime || todayPayload.ShiftEndTime || "04:30 PM",
+          shiftName: todayPayload.shiftName || todayPayload.ShiftName || "Morning (09:00 AM – 04:30 PM)",
+        };
+        setMyAttToday(normalizedToday);
+
+        if (setPunchState) {
+          const isPunched = normalizedToday.status === "punched_in";
+          const hoursWorked = normalizedToday.inTime
+            ? calculateDurationStr(normalizedToday.inTime, normalizedToday.outTime, isPunched)
+            : "--";
+          setPunchState({
+            isPunchedIn: isPunched,
+            inTime: normalizedToday.inTime,
+            outTime: normalizedToday.outTime,
+            hoursWorked: hoursWorked,
+          });
+        }
+      }
+
+      // Process Monthly History & Analytics Metrics
+      const histPayload = histRes?.data || histRes?.Data || (histRes?.status ? histRes : null);
+      const rawMetrics = histPayload?.metrics || histPayload?.Metrics || {};
+      const rawLogs = histPayload?.logs || histPayload?.Logs || [];
+
+      const workingDays = parseInt(rawMetrics.workingDays || rawMetrics.WorkingDays, 10) || 0;
+      const presentDays = parseInt(rawMetrics.presentDays || rawMetrics.PresentDays, 10) || 0;
+      const leaves = parseInt(rawMetrics.leaves || rawMetrics.Leaves, 10) || 0;
+      const absentDays = parseInt(rawMetrics.absentDays || rawMetrics.AbsentDays, 10) || 0;
+
+      let holidays = 0;
+      if (Array.isArray(rawLogs) && rawLogs.length > 0) {
+        holidays = rawLogs.filter((l) => {
+          const st = (l.status || l.Status || "").toLowerCase();
+          return st.includes("holiday") || st.includes("off") || st.includes("sunday") || Boolean(l.holidayName || l.HolidayName);
+        }).length;
+      } else {
+        const now = new Date();
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        let sundays = 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+          if (new Date(now.getFullYear(), now.getMonth(), d).getDay() === 0) sundays++;
+        }
+        holidays = sundays;
+      }
+
+      let monthLabel = rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "";
+      if (monthLabel) {
+        monthLabel = monthLabel.replace(/\s*Total\s*$/i, "").trim();
+      }
+      if (!monthLabel) {
+        monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
+      }
+
+      let rate = 100;
+      const elapsedDays = presentDays + leaves + absentDays;
+      if (elapsedDays > 0) {
+        rate = Math.round((presentDays / elapsedDays) * 1000) / 10;
+      } else if (workingDays > 0) {
+        rate = Math.round((presentDays / workingDays) * 1000) / 10;
+      }
+
+      let leaveBalance = 15;
+      const leaveData = leaveRes?.data?.data || leaveRes?.data?.Data;
+      if (leaveData?.balance?.remaining != null) {
+        leaveBalance = Number(leaveData.balance.remaining);
+      } else if (leaveData?.balance?.totalAvailable != null) {
+        leaveBalance = Number(leaveData.balance.totalAvailable);
+      } else if (leaveData?.balance?.total != null) {
+        leaveBalance = Math.max(0, Number(leaveData.balance.total) - (Number(leaveData.balance.used) || 0));
+      }
+
+      setMyAttMetrics({
+        workingDays,
+        presentDays,
+        leaves,
+        holidays,
+        absentDays,
+        leaveBalance,
+        monthLabel,
+        rate,
+      });
+    } catch (err) {
+      console.warn("Failed to load my attendance data for dashboard:", err);
+    } finally {
+      if (myAttSeq.current === seq) {
+        setMyAttLoading(false);
+      }
+    }
+  }, [facultyId, setPunchState]);
+
+  useEffect(() => {
+    fetchMyAttendanceData();
+  }, [fetchMyAttendanceData]);
+
+  const facultyDonutData = useMemo(() => {
+    const p = myAttMetrics.presentDays || 0;
+    const l = myAttMetrics.leaves || 0;
+    const h = myAttMetrics.holidays || 0;
+    const a = myAttMetrics.absentDays || 0;
+
+    const items = [];
+    if (p > 0) items.push({ name: "Present", value: p, color: "#22a447" });
+    if (l > 0) items.push({ name: "Leave", value: l, color: "#f59e0b" });
+    if (h > 0) items.push({ name: "Holidays / Sundays", value: h, color: "#94a3b8" });
+    if (a > 0) items.push({ name: "Absent", value: a, color: "#ef4444" });
+
+    if (items.length === 0) {
+      return [{ name: "No Data", value: 1, color: "#cbd5e1" }];
+    }
+    return items;
+  }, [myAttMetrics]);
+
+  // Normalized Upcoming Holidays List matching Admin Dashboard
+  const holidaysList = useMemo(() => {
+    const raw = holidayState.data?.items || holidayState.data?.holidays || (Array.isArray(holidayState.data) ? holidayState.data : []);
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => {
+      const name = item.holidayName || item.name || item.title || "College Holiday";
+      const type = item.holidayType || item.type || "Festival Holiday";
+      const dateRangeText = item.formattedDateRange || item.dateRange || item.startDate || "Scheduled";
+      const dayOfWeek = item.dayOfWeek || (item.startDate ? new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${String(item.startDate).split("T")[0]}T00:00:00`)) : "");
+      const durationText = item.durationText || (item.totalDays ? (item.totalDays > 1 ? `${item.totalDays} Days` : "1 Day") : "1 Day");
+      const badge = item.countdownText || item.badge || item.lifecycleStatus || "Upcoming";
+
+      let tone = "violet";
+      const lowerType = String(type).toLowerCase();
+      if (lowerType.includes("national") || lowerType.includes("public") || lowerType.includes("gazetted")) tone = "orange";
+      else if (lowerType.includes("festival") || lowerType.includes("religious") || lowerType.includes("cultural")) tone = "violet";
+      else if (lowerType.includes("special") || lowerType.includes("institutional") || lowerType.includes("state") || lowerType.includes("restricted")) tone = "cyan";
+      else if (lowerType.includes("vacation") || lowerType.includes("break") || lowerType.includes("term") || lowerType.includes("semester")) tone = "green";
+      else tone = "blue";
+
+      return {
+        id: item.id || item.holidayCode || idx,
+        name,
+        type,
+        dateRangeText,
+        dayOfWeek,
+        durationText,
+        badge,
+        tone,
+      };
+    });
+  }, [holidayState.data]);
+
+  // Normalized Upcoming Examinations List matching Admin Dashboard
+  const examsList = useMemo(() => {
+    const raw = examState.data?.items || examState.data?.examinations || (Array.isArray(examState.data) ? examState.data : []);
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => {
+      const name = item.examName || item.name || item.title || "Examination";
+      const examCode = item.examCode || item.code || "";
+      const groupName = item.groupName || item.academicLevelName || "";
+      const dateText = item.formattedDate || item.dateRange || item.date || item.startDate || "";
+      const badgeRaw = item.daysRemainingText || item.badge || item.daysLeft || item.status || "Upcoming";
+      
+      const badge = String(badgeRaw).replace(/(\d+)\s+days/i, "$1 Days");
+      const isOngoing = String(badge).toLowerCase().includes("ongoing");
+      const isToday = String(badge).toLowerCase().includes("today");
+
+      let tone = "blue";
+      if (isOngoing || isToday) tone = "green";
+      else if (idx % 2 === 1) tone = "violet";
+      else tone = "blue";
+
+      const typeTag = isOngoing ? "ONGOING EXAM" : (examCode ? examCode : "EXAM");
+      const context = item.context || (groupName && dateText ? `${groupName} • ${dateText}` : dateText || groupName || "Scheduled");
+
+      return {
+        id: item.id || item.examId || idx,
+        name,
+        examCode,
+        typeTag,
+        groupName,
+        dateText,
+        context,
+        badge,
+        tone,
+      };
+    });
+  }, [examState.data]);
 
   const fetchTimetableData = useCallback(async () => {
     if (!facultyId) return;
@@ -371,7 +654,7 @@ export default function FacultyDashboardHome() {
     try {
       const [dutiesRes, evalsRes] = await Promise.allSettled([
         apiClient.get(`/api/v1/examinations/duties?staffId=${facultyId}`),
-        apiClient.get(`/api/v1/marks/evaluations/faculty/${facultyId}`),
+        apiClient.get(`/api/v1/faculty/evaluations?facultyId=${facultyId}`),
       ]);
       if (dutiesRes.status === "fulfilled" && dutiesRes.value?.data) {
         const raw = dutiesRes.value.data?.data || dutiesRes.value.data || [];
@@ -690,30 +973,92 @@ export default function FacultyDashboardHome() {
     return Object.values(sectionAttendanceMap).reduce((sum, s) => sum + (s.girls || 0), 0);
   }, [sectionAttendanceMap]);
 
-  const handleRefresh = useCallback(() => {
+  // Dynamic Y-Axis scale calculation based on assigned student numbers (Admin Dashboard reference)
+  const { sectionYMax, sectionYTicks } = useMemo(() => {
+    if (!sectionStudentsData || sectionStudentsData.length === 0) {
+      return { sectionYMax: 5, sectionYTicks: [0, 1, 2, 3, 4, 5] };
+    }
+
+    const maxCount = Math.max(...sectionStudentsData.map((d) => Number(d.students) || 0), 0);
+
+    if (maxCount <= 5) {
+      return { sectionYMax: 5, sectionYTicks: [0, 1, 2, 3, 4, 5] };
+    }
+    if (maxCount <= 15) {
+      const ceilMax = Math.ceil(maxCount / 5) * 5;
+      const ticks = [];
+      const step = ceilMax <= 10 ? 2 : 5;
+      for (let i = 0; i <= ceilMax; i += step) ticks.push(i);
+      return { sectionYMax: ceilMax, sectionYTicks: ticks };
+    }
+    if (maxCount <= 30) {
+      const ceilMax = Math.ceil(maxCount / 5) * 5;
+      const ticks = [0, 5, 10, 15, 20, 25, 30].filter((t) => t <= ceilMax);
+      if (ticks[ticks.length - 1] < ceilMax) ticks.push(ceilMax);
+      return { sectionYMax: ceilMax, sectionYTicks: ticks };
+    }
+    if (maxCount <= 60) {
+      const ceilMax = Math.ceil(maxCount / 10) * 10;
+      const ticks = [];
+      for (let i = 0; i <= ceilMax; i += 10) ticks.push(i);
+      return { sectionYMax: ceilMax, sectionYTicks: ticks };
+    }
+    if (maxCount <= 120) {
+      const ceilMax = Math.ceil(maxCount / 20) * 20;
+      const ticks = [];
+      for (let i = 0; i <= ceilMax; i += 20) ticks.push(i);
+      return { sectionYMax: ceilMax, sectionYTicks: ticks };
+    }
+
+    // Larger counts (> 120)
+    const roughStep = maxCount / 5;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const normalizedStep = roughStep / magnitude;
+    let step = 1;
+    if (normalizedStep <= 1) step = 1 * magnitude;
+    else if (normalizedStep <= 2) step = 2 * magnitude;
+    else if (normalizedStep <= 5) step = 5 * magnitude;
+    else step = 10 * magnitude;
+
+    const ceilMax = Math.ceil(maxCount / step) * step;
+    const ticks = [];
+    for (let i = 0; i <= ceilMax; i += step) ticks.push(i);
+    return { sectionYMax: ceilMax, sectionYTicks: ticks };
+  }, [sectionStudentsData]);
+
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    fetchTimetableData();
-    fetchSectionAttendance();
-    fetchDutiesAndEvals();
-    setTimeout(() => {
+    try {
+      await Promise.all([
+        Promise.allSettled([
+          fetchTimetableData(),
+          fetchSectionAttendance(),
+          fetchDutiesAndEvals(),
+          fetchUpcomingHolidays(),
+          fetchUpcomingExaminations(),
+          fetchMyAttendanceData(),
+        ]),
+        new Promise((resolve) => setTimeout(resolve, 450)),
+      ]);
+    } finally {
       setIsRefreshing(false);
       const nowStr = formattedTimestamp();
       setLastUpdated(nowStr);
       if (notify) {
         notify(`Faculty dashboard refreshed with latest data (${nowStr})`);
       }
-    }, 600);
-  }, [fetchTimetableData, fetchSectionAttendance, fetchDutiesAndEvals, notify]);
+    }
+  }, [fetchTimetableData, fetchSectionAttendance, fetchDutiesAndEvals, fetchUpcomingHolidays, fetchUpcomingExaminations, fetchMyAttendanceData, notify]);
 
   const kpis = [
     {
-      label: "Total Students",
+      label: "My Classes",
       value: String(overallAttendance.total || 0),
       badge: `${facultySections.length} SECTION${facultySections.length === 1 ? "" : "S"}`,
       subtext: facultySections.map((s) => s.sectionName).join(", ") || "No assigned sections",
       tone: "green",
       icon: totalStudentsIcon,
-      tooltip: `${overallAttendance.total || 0} enrolled students across ${facultySections.length} assigned sections`,
+      tooltip: `View your ${facultySections.length} assigned sections and ${overallAttendance.total || 0} enrolled students`,
       onClick: () => setActiveModule("classes"),
     },
     {
@@ -783,9 +1128,6 @@ export default function FacultyDashboardHome() {
           </p>
         </div>
         <div className="dashboard-header-controls">
-          <span className={`dashboard-biometric-badge ${punchState.isPunchedIn ? "in" : "out"}`}>
-            ● {punchState.isPunchedIn ? `Checked In (${punchState.inTime})` : "Checked Out"} • {punchState.hoursWorked}
-          </span>
           <div className="dashboard-last-updated-badge">
             <Clock size={13} />
             <span>Last updated <strong>{lastUpdated}</strong></span>
@@ -803,21 +1145,10 @@ export default function FacultyDashboardHome() {
         </div>
       </div>
 
-      {/* Global Context Viewing Banner */}
-      <div className="dashboard-viewing-banner">
-        <Info size={15} className="dashboard-banner-icon" />
-        <span>
-          You are viewing data for <strong>Main Campus (HQ)</strong> •{" "}
-          <strong>Board of Intermediate Education, Andhra Pradesh</strong> •{" "}
-          <strong>Academic Year 2026-2027</strong> •{" "}
-          <strong>Department of {profileData?.department || "Mathematics"} ({profileData?.employeeId || "EMP-1042"})</strong>.
-        </span>
-      </div>
-
       {/* 5 KPI Cards Row with 3D Icons */}
       <section className="dashboard-kpi-grid" aria-label="Faculty Metrics">
         {kpis.map((item) => (
-          <KpiCard key={item.label} {...item} />
+          <KpiCard key={item.label} {...item} loading={isRefreshing} />
         ))}
       </section>
 
@@ -843,28 +1174,39 @@ export default function FacultyDashboardHome() {
       {/* Row 1 Grid (3 Cards): Section-wise Student Attendance | Students by Section | Today's Lecture Schedule */}
       <section className="dashboard-grid-row dashboard-row-three" aria-label="Academic Analytics">
         {/* Card 1: Students Attendance Overview (Today) with Section-wise View */}
-        <article className="dashboard-card dashboard-attendance-today-card">
+        <article className={`dashboard-card dashboard-attendance-today-card ${isRefreshing ? "is-refreshing" : ""}`}>
           <CardHeader title="Student Attendance (Today)">
-            <div className="dashboard-header-select-wrap">
-              <span className="dashboard-select-label">View By:</span>
-              <select
-                className="dashboard-header-dropdown"
-                value={studentAttView}
-                onChange={(e) => setStudentAttView(e.target.value)}
-                aria-label="Select Attendance Section View"
-              >
-                <option value="all">Overall</option>
-                {facultySections.length > 0 && <option value="breakdown">Breakdown</option>}
-                {facultySections.map((sec) => (
-                  <option key={sec.sectionId} value={String(sec.sectionId)}>
-                    {sec.sectionName}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!isRefreshing && (
+              <div className="dashboard-header-select-wrap">
+                <span className="dashboard-select-label">View By:</span>
+                <select
+                  className="dashboard-header-dropdown"
+                  value={studentAttView}
+                  onChange={(e) => setStudentAttView(e.target.value)}
+                  aria-label="Select Attendance Section View"
+                >
+                  <option value="all">Overall</option>
+                  {facultySections.length > 0 && <option value="breakdown">Breakdown</option>}
+                  {facultySections.map((sec) => (
+                    <option key={sec.sectionId} value={String(sec.sectionId)}>
+                      {sec.sectionName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </CardHeader>
           <div className="dashboard-card-body dashboard-attendance-body">
-            {studentAttView === "breakdown" ? (
+            {isRefreshing ? (
+              <>
+                <Skeleton className="dashboard-skeleton-donut" />
+                <div className="dashboard-skeleton-chips">
+                  {Array.from({ length: 5 }, (_, index) => (
+                    <Skeleton key={index} />
+                  ))}
+                </div>
+              </>
+            ) : studentAttView === "breakdown" ? (
               <div className="dashboard-attendance-breakdown-list">
                 {sectionBreakdownList.map((sec) => (
                   <div key={sec.id || sec.name} className="att-breakdown-item">
@@ -965,19 +1307,23 @@ export default function FacultyDashboardHome() {
 
             {/* Footer */}
             <div className="dashboard-card-footer">
-              <button
-                type="button"
-                className="dashboard-footer-btn"
-                onClick={() => setActiveModule("attendance")}
-              >
-                View Attendance Details <ChevronRight size={13} />
-              </button>
+              {isRefreshing ? (
+                <Skeleton style={{ width: 140, height: 14, margin: "2px 0" }} />
+              ) : (
+                <button
+                  type="button"
+                  className="dashboard-footer-btn"
+                  onClick={() => setActiveModule("attendance")}
+                >
+                  View Attendance Details <ChevronRight size={13} />
+                </button>
+              )}
             </div>
           </div>
         </article>
 
         {/* Card 2: Students by Assigned Section (Bar Chart) */}
-        <article className="dashboard-card dashboard-group-card">
+        <article className={`dashboard-card dashboard-group-card ${isRefreshing ? "is-refreshing" : ""}`}>
           <CardHeader
             title="Students by Assigned Section"
             action={
@@ -991,58 +1337,89 @@ export default function FacultyDashboardHome() {
             }
           />
           <div className="dashboard-card-body">
-            <div className="dashboard-chart dashboard-bar-chart-wrap" style={{ height: 138 }}>
-              <ResponsiveContainer width="100%" height={138}>
-                <BarChart data={sectionStudentsData} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
-                  <XAxis dataKey="name" tickLine={false} axisLine={false} height={18} tick={{ fontSize: 10, fontWeight: 700 }} />
-                  <YAxis domain={[0, (dataMax) => Math.max(50, Math.ceil(dataMax * 1.15))]} allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
-                  <Tooltip content={<CustomBarTooltip />} />
-                  <Bar dataKey="students" radius={[4, 4, 0, 0]}>
-                    {sectionStudentsData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="dashboard-students-chips">
-              <div className="dashboard-student-chip chip-total">
-                <span className="chip-icon"><Users size={14} /></span>
-                <div>
-                  <strong>{overallAttendance.total || 0}</strong>
-                  <small>Total Students</small>
+            {isRefreshing ? (
+              <>
+                <Skeleton className="dashboard-skeleton-chart" style={{ height: 145, marginBottom: 14 }} />
+                <div className="dashboard-students-chips">
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <Skeleton key={index} style={{ height: 38, borderRadius: 6 }} />
+                  ))}
                 </div>
-              </div>
-              <div className="dashboard-student-chip chip-boys">
-                <span className="chip-icon"><Users size={14} /></span>
-                <div>
-                  <strong>{totalBoys}</strong>
-                  <small>Boys</small>
+              </>
+            ) : (
+              <>
+                <div className="dashboard-chart dashboard-bar-chart-wrap" style={{ height: 145 }}>
+                  <ResponsiveContainer width="100%" height={145}>
+                    <BarChart data={sectionStudentsData} margin={{ top: 12, right: 10, left: -18, bottom: 12 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
+                      <XAxis
+                        dataKey="name"
+                        tickLine={false}
+                        axisLine={false}
+                        height={24}
+                        dy={6}
+                        tick={{ fontSize: 10, fontWeight: 700, fill: "var(--cms-text-secondary, #64748b)" }}
+                      />
+                      <YAxis
+                        domain={[0, sectionYMax]}
+                        ticks={sectionYTicks}
+                        allowDecimals={false}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fontSize: 10, fill: "var(--cms-text-secondary, #64748b)" }}
+                      />
+                      <Tooltip content={<CustomBarTooltip />} />
+                      <Bar dataKey="students" maxBarSize={44} radius={[4, 4, 0, 0]}>
+                        {sectionStudentsData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-              </div>
-              <div className="dashboard-student-chip chip-girls">
-                <span className="chip-icon"><Users size={14} /></span>
-                <div>
-                  <strong>{totalGirls}</strong>
-                  <small>Girls</small>
+                <div className="dashboard-students-chips">
+                  <div className="dashboard-student-chip chip-total">
+                    <span className="chip-icon"><Users size={14} /></span>
+                    <div>
+                      <strong>{overallAttendance.total || 0}</strong>
+                      <small>Total Students</small>
+                    </div>
+                  </div>
+                  <div className="dashboard-student-chip chip-boys">
+                    <span className="chip-icon"><Users size={14} /></span>
+                    <div>
+                      <strong>{totalBoys}</strong>
+                      <small>Boys</small>
+                    </div>
+                  </div>
+                  <div className="dashboard-student-chip chip-girls">
+                    <span className="chip-icon"><Users size={14} /></span>
+                    <div>
+                      <strong>{totalGirls}</strong>
+                      <small>Girls</small>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
             <div className="dashboard-card-footer">
-              <button
-                type="button"
-                className="dashboard-footer-btn"
-                onClick={() => setActiveModule("classes")}
-              >
-                View Section Details <ChevronRight size={13} />
-              </button>
+              {isRefreshing ? (
+                <Skeleton style={{ width: 130, height: 14, margin: "2px 0" }} />
+              ) : (
+                <button
+                  type="button"
+                  className="dashboard-footer-btn"
+                  onClick={() => setActiveModule("classes")}
+                >
+                  View Section Details <ChevronRight size={13} />
+                </button>
+              )}
             </div>
           </div>
         </article>
 
         {/* Card 3: Today's Lecture Schedule */}
-        <article className="dashboard-card dashboard-schedule-card">
+        <article className={`dashboard-card dashboard-schedule-card ${isRefreshing ? "is-refreshing" : ""}`}>
           <CardHeader
             title={`Today's Lecture Schedule (${todayLectures.length})`}
             action={
@@ -1056,24 +1433,20 @@ export default function FacultyDashboardHome() {
             }
           />
           <div className="dashboard-card-body">
-            {timetableLoading ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "28px 12px",
-                  gap: 8,
-                  color: "var(--cms-muted, #64748b)",
-                  fontSize: 11,
-                  flex: 1,
-                  minHeight: 140,
-                }}
-              >
-                <RefreshCw size={18} className="dashboard-spin" color="var(--cms-primary, #6F8400)" />
-                <span>Loading today's schedule...</span>
-              </div>
+            {isRefreshing || (timetableLoading && todayLectures.length === 0) ? (
+              <>
+                <div className="dashboard-skeleton-list">
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <div key={index}>
+                      <Skeleton className="dashboard-skeleton-list-icon" />
+                      <SkeletonText lines={2} widths={["75%", "50%"]} />
+                    </div>
+                  ))}
+                </div>
+                <div className="dashboard-card-footer">
+                  <Skeleton style={{ width: 130, height: 14, margin: "2px 0" }} />
+                </div>
+              </>
             ) : todayLectures.length === 0 ? (
               <div
                 style={{
@@ -1191,105 +1564,150 @@ export default function FacultyDashboardHome() {
 
       {/* Row 2 Grid (3 Cards): Faculty Biometric Attendance | Upcoming Holidays | Upcoming Examinations */}
       <section className="dashboard-grid-row dashboard-row-three" aria-label="Operations and Schedule">
-        {/* Card 4: My Attendance Overview (May 2025) */}
-        <article className="dashboard-card dashboard-staff-attendance-card">
-          <CardHeader title="My Attendance (May 2025)" />
+        {/* Card 4: My Attendance Overview */}
+        <article className={`dashboard-card dashboard-staff-attendance-card ${isRefreshing ? "is-refreshing" : ""}`}>
+          <CardHeader
+            title={`My Attendance (${myAttMetrics.monthLabel || new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date())})`}
+          />
           <div className="dashboard-card-body dashboard-attendance-body">
-            {/* Donut Chart & Side Status Legend */}
-            <div className="dashboard-attendance-donut-row">
-              <div className="dashboard-donut-chart-wrap">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={FACULTY_ATTENDANCE_DONUT}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius="65%"
-                      outerRadius="90%"
-                      paddingAngle={3}
-                      stroke="var(--cms-surface, #ffffff)"
-                      strokeWidth={2}
-                    >
-                      {FACULTY_ATTENDANCE_DONUT.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomDonutTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="dashboard-donut-center">
-                  <strong>95.4%</strong>
-                  <span>Punctual</span>
+            {isRefreshing || (myAttLoading && !myAttMetrics.monthLabel) ? (
+              <>
+                <Skeleton className="dashboard-skeleton-donut" />
+                <div className="dashboard-skeleton-chips" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+                  {Array.from({ length: 5 }, (_, index) => (
+                    <Skeleton key={index} />
+                  ))}
                 </div>
-              </div>
+                <div className="dashboard-card-footer">
+                  <Skeleton style={{ width: 120, height: 14, margin: "2px 0" }} />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Donut Chart & Side Status Legend */}
+                <div className="dashboard-attendance-donut-row">
+                  <div className="dashboard-donut-chart-wrap">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={facultyDonutData}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius="65%"
+                          outerRadius="90%"
+                          paddingAngle={facultyDonutData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
+                          stroke="var(--cms-surface, #ffffff)"
+                          strokeWidth={2}
+                        >
+                          {facultyDonutData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomDonutTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="dashboard-donut-center">
+                      <strong>{myAttMetrics.rate}%</strong>
+                      <span>Punctual</span>
+                    </div>
+                  </div>
 
-              <div className="dashboard-attendance-legend-vertical">
-                <div className="legend-item">
-                  <span className="legend-label">
-                    <span className="dot dot-present" /> Present (21 Days)
-                  </span>
+                  <div className="dashboard-attendance-legend-vertical">
+                    <div className="legend-item">
+                      <span className="legend-label">
+                        <span className="dot dot-present" /> Present ({myAttMetrics.presentDays} {myAttMetrics.presentDays === 1 ? "Day" : "Days"})
+                      </span>
+                    </div>
+                    <div className="legend-item">
+                      <span className="legend-label">
+                        <span className="dot dot-late" /> Leave ({myAttMetrics.leaves} {myAttMetrics.leaves === 1 ? "Day" : "Days"})
+                      </span>
+                    </div>
+                    <div className="legend-item">
+                      <span className="legend-label">
+                        <span className="dot" style={{ background: "#94a3b8" }} /> Holidays ({myAttMetrics.holidays} Days)
+                      </span>
+                    </div>
+                    {myAttMetrics.absentDays > 0 && (
+                      <div className="legend-item">
+                        <span className="legend-label">
+                          <span className="dot dot-absent" /> Absent ({myAttMetrics.absentDays} {myAttMetrics.absentDays === 1 ? "Day" : "Days"})
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="legend-item">
-                  <span className="legend-label">
-                    <span className="dot dot-late" /> Leave (1 Day)
-                  </span>
-                </div>
-                <div className="legend-item">
-                  <span className="legend-label">
-                    <span className="dot" style={{ background: "#94a3b8" }} /> Holidays (8 Days)
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            {/* Summary Chips */}
-            <div className="dashboard-staff-kpi-wrap">
-              <div className="dashboard-staff-kpis">
-                <div className="staff-chip">
-                  <small>Working</small>
-                  <strong>22 Days</strong>
+                {/* Summary Chips */}
+                <div className="dashboard-staff-kpi-wrap">
+                  <div className="dashboard-staff-kpis">
+                    <div className="staff-chip">
+                      <small>Working</small>
+                      <strong>{myAttMetrics.workingDays} Days</strong>
+                    </div>
+                    <div className="staff-chip text-present">
+                      <small>Present</small>
+                      <strong>{myAttMetrics.presentDays} Days</strong>
+                    </div>
+                    <div className="staff-chip text-late">
+                      <small>Leave</small>
+                      <strong>{myAttMetrics.leaves} {myAttMetrics.leaves === 1 ? "Day" : "Days"}</strong>
+                    </div>
+                    <div className="staff-chip">
+                      <small>Holidays</small>
+                      <strong>{myAttMetrics.holidays} Days</strong>
+                    </div>
+                    <div className="staff-chip text-leave">
+                      <small>Balance</small>
+                      <strong>{myAttMetrics.leaveBalance} Days</strong>
+                    </div>
+                  </div>
+                  <div className="dashboard-staff-split-note">
+                    <span>
+                      Shift: <strong>{myAttToday.shiftStartTime} – {myAttToday.shiftEndTime}</strong>
+                    </span>
+                    <span className="split-divider">|</span>
+                    <span>
+                      Status:{" "}
+                      <strong
+                        style={{
+                          color:
+                            myAttToday.status === "punched_in"
+                              ? "#22a447"
+                              : myAttToday.status === "punched_out"
+                              ? "#f59e0b"
+                              : "#64748b",
+                        }}
+                      >
+                        {myAttToday.status === "punched_in"
+                          ? `Checked In (${myAttToday.inTime || "--"})`
+                          : myAttToday.status === "punched_out"
+                          ? `Checked Out (${myAttToday.outTime || "--"})`
+                          : "Not Checked In"}
+                      </strong>
+                    </span>
+                  </div>
                 </div>
-                <div className="staff-chip text-present">
-                  <small>Present</small>
-                  <strong>21 Days</strong>
-                </div>
-                <div className="staff-chip text-late">
-                  <small>Leave</small>
-                  <strong>1 Day</strong>
-                </div>
-                <div className="staff-chip">
-                  <small>Holidays</small>
-                  <strong>8 Days</strong>
-                </div>
-                <div className="staff-chip text-leave">
-                  <small>Balance</small>
-                  <strong>15 Days</strong>
-                </div>
-              </div>
-              <div className="dashboard-staff-split-note">
-                <span>Shift: <strong>09:00 AM – 04:30 PM</strong></span>
-                <span className="split-divider">|</span>
-                <span>Status: <strong style={{ color: "#22a447" }}>Checked In (08:45 AM)</strong></span>
-              </div>
-            </div>
 
-            {/* Footer */}
-            <div className="dashboard-card-footer">
-              <button
-                type="button"
-                className="dashboard-footer-btn"
-                onClick={() => setActiveModule("myattendance")}
-              >
-                View Punch Logs <ChevronRight size={13} />
-              </button>
-            </div>
+                {/* Footer */}
+                <div className="dashboard-card-footer">
+                  <button
+                    type="button"
+                    className="dashboard-footer-btn"
+                    onClick={() => setActiveModule("myattendance")}
+                  >
+                    View Punch Logs <ChevronRight size={13} />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </article>
 
-        {/* Card 5: Upcoming Holidays (3) */}
-        <article className="dashboard-card dashboard-holiday-card">
+        {/* Card 5: Upcoming Holidays */}
+        <article className={`dashboard-card dashboard-holiday-card ${isRefreshing ? "is-refreshing" : ""}`}>
           <CardHeader
-            title={`Upcoming Holidays (${UPCOMING_HOLIDAYS.length})`}
+            title={`Upcoming Holidays (${holidaysList.length})`}
             action={
               <button
                 type="button"
@@ -1300,44 +1718,73 @@ export default function FacultyDashboardHome() {
               </button>
             }
           />
-          <div className="dashboard-card-body">
-            <div className="dashboard-info-list">
-              {UPCOMING_HOLIDAYS.map((item) => (
-                <div key={`holiday-${item.id}`} className="dashboard-info-item dashboard-holiday-item">
-                  <span className={`dashboard-list-icon tone-${item.tone}`}>
-                    <CalendarDays size={14} />
-                  </span>
-                  <div className="dashboard-info-content">
-                    <div className="dashboard-holiday-title-row">
-                      <strong>{item.name}</strong>
-                      <span className={`holiday-type-pill pill-${item.tone}`}>{item.type}</span>
-                    </div>
-                    <small className="dashboard-holiday-meta">
-                      <span>{item.dateText}</span>
-                      {item.dayOfWeek ? <span className="holiday-meta-dot">• {item.dayOfWeek}</span> : null}
-                      <span className="holiday-duration-badge">{item.durationText}</span>
-                    </small>
+          {isRefreshing || (holidayState.loading && !holidayState.data) ? (
+            <div className="dashboard-card-body">
+              <div className="dashboard-skeleton-list">
+                {Array.from({ length: 4 }, (_, index) => (
+                  <div key={index}>
+                    <Skeleton className="dashboard-skeleton-list-icon" />
+                    <SkeletonText lines={2} widths={["72%", "48%"]} />
                   </div>
-                  <span className={`dashboard-days-badge holiday-badge badge-${item.tone}`}>{item.badge}</span>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="dashboard-card-footer">
+                <Skeleton style={{ width: 140, height: 14, margin: "2px 0" }} />
+              </div>
             </div>
-            <div className="dashboard-card-footer">
-              <button
-                type="button"
-                className="dashboard-footer-btn"
-                onClick={() => setActiveModule("holidays")}
-              >
-                View Holiday Calendar <ChevronRight size={13} />
+          ) : holidayState.error ? (
+            <div className="dashboard-card-error">
+              <AlertTriangle size={18} className="dashboard-error-icon" />
+              <span>{holidayState.error}</span>
+              <button type="button" className="dashboard-retry-btn" onClick={fetchUpcomingHolidays}>
+                <RefreshCw size={12} /> Retry
               </button>
             </div>
-          </div>
+          ) : holidaysList.length === 0 ? (
+            <div className="dashboard-card-empty">
+              <Info size={18} className="dashboard-empty-icon" />
+              <span>No upcoming holidays scheduled.</span>
+            </div>
+          ) : (
+            <div className="dashboard-card-body">
+              <div className="dashboard-info-list">
+                {holidaysList.map((item, index) => (
+                  <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
+                    <span className={`dashboard-list-icon tone-${item.tone}`}>
+                      <CalendarDays size={14} />
+                    </span>
+                    <div className="dashboard-info-content">
+                      <div className="dashboard-holiday-title-row">
+                        <strong>{item.name}</strong>
+                        <span className={`holiday-type-pill pill-${item.tone}`}>{item.type}</span>
+                      </div>
+                      <small className="dashboard-holiday-meta">
+                        <span>{item.dateRangeText}</span>
+                        {item.dayOfWeek ? <span className="holiday-meta-dot">• {item.dayOfWeek}</span> : null}
+                        <span className="holiday-duration-badge">{item.durationText}</span>
+                      </small>
+                    </div>
+                    <span className={`dashboard-days-badge holiday-badge badge-${item.tone}`}>{item.badge}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="dashboard-card-footer">
+                <button
+                  type="button"
+                  className="dashboard-footer-btn"
+                  onClick={() => setActiveModule("holidays")}
+                >
+                  View Holiday Calendar <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </article>
 
-        {/* Card 6: Upcoming Examinations & Duties (4) */}
-        <article className="dashboard-card dashboard-exams-card">
+        {/* Card 6: Upcoming Examinations */}
+        <article className={`dashboard-card dashboard-exams-card ${isRefreshing ? "is-refreshing" : ""}`}>
           <CardHeader
-            title={`Upcoming Examinations (${UPCOMING_EXAMINATIONS.length})`}
+            title={`Upcoming Examinations (${examsList.length})`}
             action={
               <button
                 type="button"
@@ -1348,38 +1795,65 @@ export default function FacultyDashboardHome() {
               </button>
             }
           />
-          <div className="dashboard-card-body">
-            <div className="dashboard-info-list">
-              {UPCOMING_EXAMINATIONS.map((item) => (
-                <div key={`exam-${item.id}`} className="dashboard-info-item dashboard-exam-item">
-                  <span className={`dashboard-list-icon tone-${item.tone}`}>
-                    <CalendarDays size={14} />
-                  </span>
-                  <div className="dashboard-info-content">
-                    <div className="dashboard-exam-title-row">
-                      <strong>{item.name}</strong>
-                      <span className={`exam-type-pill pill-${item.tone}`}>{item.examCode}</span>
-                    </div>
-                    <small className="dashboard-exam-meta">
-                      <span className="exam-role-text">{item.role}</span>
-                      <span className="meta-sep">•</span>
-                      <span>{item.context}</span>
-                    </small>
+          {isRefreshing || (examState.loading && !examState.data) ? (
+            <div className="dashboard-card-body">
+              <div className="dashboard-skeleton-list">
+                {Array.from({ length: 4 }, (_, index) => (
+                  <div key={index}>
+                    <Skeleton className="dashboard-skeleton-list-icon" />
+                    <SkeletonText lines={2} widths={["72%", "48%"]} />
                   </div>
-                  <span className={`dashboard-days-badge exam-badge badge-${item.tone}`}>{item.badge}</span>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="dashboard-card-footer">
+                <Skeleton style={{ width: 130, height: 14, margin: "2px 0" }} />
+              </div>
             </div>
-            <div className="dashboard-card-footer">
-              <button
-                type="button"
-                className="dashboard-footer-btn"
-                onClick={() => setActiveModule("examduties")}
-              >
-                View Exam Duties <ChevronRight size={13} />
+          ) : examState.error ? (
+            <div className="dashboard-card-error">
+              <AlertTriangle size={18} className="dashboard-error-icon" />
+              <span>{examState.error}</span>
+              <button type="button" className="dashboard-retry-btn" onClick={fetchUpcomingExaminations}>
+                <RefreshCw size={12} /> Retry
               </button>
             </div>
-          </div>
+          ) : examsList.length === 0 ? (
+            <div className="dashboard-card-empty">
+              <Info size={18} className="dashboard-empty-icon" />
+              <span>No upcoming examinations scheduled.</span>
+            </div>
+          ) : (
+            <div className="dashboard-card-body">
+              <div className="dashboard-info-list">
+                {examsList.map((item, index) => (
+                  <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
+                    <span className={`dashboard-list-icon tone-${item.tone}`}>
+                      <CalendarDays size={14} />
+                    </span>
+                    <div className="dashboard-info-content">
+                      <div className="dashboard-exam-title-row">
+                        <strong>{item.name}</strong>
+                        <span className={`exam-type-pill pill-${item.tone}`}>{item.typeTag}</span>
+                      </div>
+                      <small className="dashboard-exam-meta">
+                        <span>{item.context}</span>
+                      </small>
+                    </div>
+                    <span className={`dashboard-days-badge exam-badge badge-${item.tone}`}>{item.badge}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="dashboard-card-footer">
+                <button
+                  type="button"
+                  className="dashboard-footer-btn"
+                  onClick={() => setActiveModule("examduties")}
+                >
+                  View Exam Duties <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
         </article>
       </section>
     </div>

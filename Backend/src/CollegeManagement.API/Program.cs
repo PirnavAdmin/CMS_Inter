@@ -34,6 +34,10 @@ using CollegeManagement.API.Services.Implementations.Inventory;
 using CollegeManagement.API.Services.Interfaces.Transport;
 using CollegeManagement.API.Services.Implementations.Transport;
 using CollegeManagement.API.Services.Location;
+using CollegeManagement.API.Repositories.Interfaces.LopConfiguration;
+using CollegeManagement.API.Repositories.Implementations.LopConfiguration;
+using CollegeManagement.API.Services.Interfaces.LopConfiguration;
+using CollegeManagement.API.Services.Implementations.LopConfiguration;
 using CollegeManagement.API.Validators.StaffValidators;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -105,8 +109,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         mySqlOptions => mySqlOptions
             .CommandTimeout(120)
             .EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(3),
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(2),
                 errorNumbersToAdd: null)));
 
 builder.Services.AddSingleton<DatabaseContext>();
@@ -211,6 +215,7 @@ builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 
 // Inventory Repository
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
+builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
 #endregion
 
 #region Services
@@ -236,6 +241,7 @@ builder.Services.AddScoped<IDesignationService, DesignationService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IFeeService, FeeService>();
+builder.Services.AddScoped<IFacilityTransitionService, FacilityTransitionService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<CollegeManagement.API.Services.IProgramService, CollegeManagement.API.Services.ProgramService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
@@ -310,6 +316,7 @@ builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 
 // Inventory Service
 builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
@@ -583,6 +590,7 @@ app.Use(async (context, next) =>
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
+app.MapHub<CollegeManagement.API.Hubs.NotificationHub>("/hubs/notifications");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
@@ -610,10 +618,111 @@ try
         dbContext.SaveChanges();
     }
 
+    try
+    {
+        await dbContext.Database.ExecuteSqlRawAsync("DROP PROCEDURE IF EXISTS `sp_GetDashboardTodaysHighlights`;");
+        await dbContext.Database.ExecuteSqlRawAsync(@"CREATE PROCEDURE `sp_GetDashboardTodaysHighlights`(
+            IN p_BoardId INT,
+            IN p_AcademicYearId INT,
+            IN p_TargetDate DATE,
+            IN p_CampusId INT
+        )
+        BEGIN
+            DECLARE v_TargetDate DATE;
+            DECLARE v_AdmissionsToday INT DEFAULT 0;
+            DECLARE v_CertificatesToday INT DEFAULT 0;
+            DECLARE v_ExamsToday INT DEFAULT 0;
+            DECLARE v_BirthdaysToday INT DEFAULT 0;
+
+            SET v_TargetDate = COALESCE(p_TargetDate, CURDATE());
+
+            -- Admissions Today
+            SELECT COUNT(*) INTO v_AdmissionsToday
+            FROM `StudentAdmissions` sa 
+            WHERE (p_CampusId IS NULL OR sa.CampusId = p_CampusId)
+              AND (DATE(sa.AdmissionDate) = v_TargetDate OR DATE(sa.CreatedAt) = v_TargetDate)
+              AND (sa.IsActive = 1 OR sa.IsActive IS NULL)
+              AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
+              AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId);
+
+            -- Certificate Requests Today
+            SELECT COUNT(*) INTO v_CertificatesToday
+            FROM `certificates` c
+            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
+            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
+            WHERE (p_CampusId IS NULL OR sa.CampusId = p_CampusId OR s.CampusId = p_CampusId)
+              AND (DATE(c.RequestDate) = v_TargetDate OR DATE(c.CreatedAt) = v_TargetDate OR DATE(c.GeneratedAt) = v_TargetDate OR DATE(c.IssueDate) = v_TargetDate)
+              AND (c.IsActive = 1 OR c.IsActive IS NULL)
+              AND (p_BoardId IS NULL OR COALESCE(sa.BoardId, s.BoardId) = p_BoardId)
+              AND (p_AcademicYearId IS NULL OR COALESCE(sa.AcademicYearId, s.AcademicYearId) = p_AcademicYearId);
+
+            -- Examinations Today
+            SELECT COUNT(*) INTO v_ExamsToday
+            FROM `Examinations` e 
+            WHERE (p_CampusId IS NULL OR e.CampusId = p_CampusId)
+              AND (e.IsActive = 1 OR e.IsActive IS NULL)
+              AND DATE(e.StartDate) <= v_TargetDate AND DATE(e.EndDate) >= v_TargetDate
+              AND (p_BoardId IS NULL OR e.BoardId = p_BoardId)
+              AND (p_AcademicYearId IS NULL OR e.AcademicYearId = p_AcademicYearId);
+
+            -- Birthdays Today
+            SELECT COUNT(*) INTO v_BirthdaysToday
+            FROM `Students` s
+            WHERE (p_CampusId IS NULL OR s.CampusId = p_CampusId)
+              AND MONTH(s.DateOfBirth) = MONTH(v_TargetDate) AND DAY(s.DateOfBirth) = DAY(v_TargetDate)
+              AND (s.IsActive = 1 OR s.IsActive IS NULL)
+              AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
+              AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId);
+
+            SELECT 
+                v_AdmissionsToday AS AdmissionsToday,
+                v_CertificatesToday AS CertificateRequestsToday,
+                v_ExamsToday AS ExaminationsToday,
+                v_BirthdaysToday AS BirthdaysToday;
+        END;");
+        try
+        {
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                ALTER TABLE `FeePaymentPlans` ADD COLUMN IF NOT EXISTS `UpdatedAt` datetime(6) NULL;
+            ");
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE IF NOT EXISTS `facility_transition_histories` (
+                    `TransitionId` INT NOT NULL AUTO_INCREMENT,
+                    `StudentId` INT NOT NULL,
+                    `FromFacility` VARCHAR(50) NOT NULL,
+                    `ToFacility` VARCHAR(50) NOT NULL,
+                    `TransitionDate` DATETIME(6) NOT NULL,
+                    `MonthsUsedFromFacility` INT NOT NULL,
+                    `ProratedFromFee` DECIMAL(18,2) NOT NULL,
+                    `MonthsUsedToFacility` INT NOT NULL,
+                    `ProratedToFee` DECIMAL(18,2) NOT NULL,
+                    `ExcessCreditTransferred` DECIMAL(18,2) NOT NULL,
+                    `PreviousTotalFee` DECIMAL(18,2) NOT NULL,
+                    `NewTotalFee` DECIMAL(18,2) NOT NULL,
+                    `PreviousBalance` DECIMAL(18,2) NOT NULL,
+                    `NewBalance` DECIMAL(18,2) NOT NULL,
+                    `Remarks` VARCHAR(500) NULL,
+                    `PerformedBy` VARCHAR(100) NULL,
+                    `CreatedAt` DATETIME(6) NOT NULL,
+                    PRIMARY KEY (`TransitionId`),
+                    KEY `IX_facility_transition_histories_StudentId` (`StudentId`),
+                    CONSTRAINT `FK_facility_transition_histories_Students_StudentId` FOREIGN KEY (`StudentId`) REFERENCES `Students` (`StudentId`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+        }
+        catch (Exception fpEx)
+        {
+            app.Logger.LogWarning(fpEx, "Failed to align FeePaymentPlans schema or facility_transition_histories table.");
+        }
+    }
+    catch (Exception spEx)
+    {
+        app.Logger.LogWarning(spEx, "Failed to align sp_GetDashboardTodaysHighlights schema.");
+    }
 }
 catch (Exception ex)
 {
-    app.Logger.LogWarning(ex, "Failed to run startup NumberSeriesConfigurations migration check.");
+    app.Logger.LogWarning(ex, "Failed to run startup migration checks.");
 }
 
 app.Run();

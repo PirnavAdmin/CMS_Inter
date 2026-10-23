@@ -230,6 +230,7 @@ namespace CollegeManagement.API.Services.Implementations
                 // Issue standardized JWT via Phase 6A helper
                 var assignedCampusIds = new List<int>();
                 var assignedBoardIds = new List<int>();
+                dynamic? staffInfo = null;
                 
                 if ((!user.StaffId.HasValue || user.StaffId.Value <= 0) && !string.IsNullOrWhiteSpace(user.Email))
                 {
@@ -246,8 +247,8 @@ namespace CollegeManagement.API.Services.Implementations
 
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
-                    var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Designation, EmployeeId, CampusId, BoardId FROM Staffs WHERE Id = @Id", 
+                    staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType FROM Staffs WHERE Id = @Id", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
@@ -301,6 +302,7 @@ namespace CollegeManagement.API.Services.Implementations
                     Designation = user.Designation,
                     EmployeeId = user.EmployeeId,
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
+                    StaffType = staffInfo?.StaffType ?? (user.StudentId.HasValue ? "Student" : (user.AdminId.HasValue ? "Admin" : "Non-Teaching")),
                     AssignedCampusIds = assignedCampusIds,
                     AssignedBoardIds = assignedBoardIds
                 };
@@ -1160,15 +1162,17 @@ namespace CollegeManagement.API.Services.Implementations
             
             var canonicalRoleName = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? "User";
             
+            string? staffType = null;
             if (user.StaffId.HasValue && user.StaffId.Value > 0)
             {
                 var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                    "SELECT Designation, EmployeeId FROM Staffs WHERE Id = @Id", 
+                    "SELECT Designation, EmployeeId, StaffType FROM Staffs WHERE Id = @Id", 
                     new { Id = user.StaffId.Value });
                 if (staffInfo != null)
                 {
                     user.Designation = staffInfo.Designation;
                     user.EmployeeId = staffInfo.EmployeeId;
+                    staffType = staffInfo.StaffType;
                 }
             }
 
@@ -1183,7 +1187,12 @@ namespace CollegeManagement.API.Services.Implementations
                 AccessToken = newToken,
                 UserId = user.UserId,
                 Name = user.FullName,
+                Email = user.Email,
+                StaffId = user.StaffId,
+                StudentId = user.StudentId,
+                AdminId = user.AdminId,
                 Role = canonicalRoleName,
+                StaffType = staffType ?? (user.StudentId.HasValue ? "Student" : (user.AdminId.HasValue ? "Admin" : "Non-Teaching")),
                 Designation = user.Designation,
                 EmployeeId = user.EmployeeId
             };

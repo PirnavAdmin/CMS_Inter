@@ -8,12 +8,72 @@ const normalizeCode = (value = "") =>
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-const normalizeModuleKey = (value = "") => String(value).trim().toLowerCase();
+const MODULE_ALIASES = Object.freeze({
+  "staff-reimbursements": "reimbursement",
+  "staff-reimbursement": "reimbursement",
+  "staff reimbursements": "reimbursement",
+  "staff reimbursement": "reimbursement",
+  "reimbursements": "reimbursement",
+  "reimbursement": "reimbursement",
+  "reports": "reports-analytics",
+  "reports-analytics": "reports-analytics",
+  "inventory": "inventory-management",
+  "inventory-management": "inventory-management",
+  "courses": "group-management",
+  "course-management": "group-management",
+  "examinations": "examination",
+  "examination": "examination",
+});
 
-const normalizeActionKey = (value = "") => {
+export const normalizeModuleKey = (value = "") => {
+  const raw = String(value).trim().toLowerCase();
+  if (MODULE_ALIASES[raw]) return MODULE_ALIASES[raw];
+  const cleaned = raw.replace(/&/g, "").replace(/\//g, "-").replace(/\s+/g, "-");
+  return MODULE_ALIASES[cleaned] || cleaned;
+};
+
+export const normalizeActionKey = (value = "") => {
   const action = String(value).trim().toLowerCase();
-  if (action === "add") return ACTIONS.CREATE;
-  if (action === "update") return ACTIONS.EDIT;
+  if (
+    action === "add" ||
+    action === "create" ||
+    action === "mark-attendance" ||
+    action === "apply" ||
+    action === "schedule" ||
+    action === "enter-marks" ||
+    action === "collect-payment" ||
+    action === "generate-receipt" ||
+    action === "issue" ||
+    action === "issue-books" ||
+    action === "assign-permissions" ||
+    action === "assign-users" ||
+    action === "allocate-students" ||
+    action === "manage-routes" ||
+    action === "manage-drives" ||
+    action === "manage-applications" ||
+    action === "manage-rooms" ||
+    action === "manage-books" ||
+    action === "assign-driver-vehicle"
+  ) {
+    return ACTIONS.CREATE;
+  }
+  if (
+    action === "update" ||
+    action === "edit" ||
+    action === "edit-attendance" ||
+    action === "edit-marks" ||
+    action === "approve-reject" ||
+    action === "publish" ||
+    action === "return-books"
+  ) {
+    return ACTIONS.EDIT;
+  }
+  if (action === "delete" || action === "remove") {
+    return ACTIONS.DELETE;
+  }
+  if (action === "view" || action === "read") {
+    return ACTIONS.VIEW;
+  }
   return action;
 };
 
@@ -96,12 +156,112 @@ export const toPermissionMap = (permissions = []) => {
     }
   });
 
+  
+  // Mirror aliases so lookups by raw backend slug or canonical ID both resolve
+  if (map["reimbursement"]) {
+    map["staff-reimbursements"] = map["reimbursement"];
+    map["staff-reimbursement"] = map["reimbursement"];
+    map["reimbursements"] = map["reimbursement"];
+  }
+  if (map["reports-analytics"]) {
+    map["reports"] = map["reports-analytics"];
+  }
+  if (map["inventory-management"]) {
+    map["inventory"] = map["inventory-management"];
+  }
+  if (map["marks-evaluation"]) {
+    map["marks"] = map["marks-evaluation"];
+  }
+  if (map["staff-attendance"]) {
+    map["myattendance"] = map["staff-attendance"];
+    map["my-attendance"] = map["staff-attendance"];
+  }
+  if (map["staff-leave-management"]) {
+    map["leave"] = map["staff-leave-management"];
+    map["staff-leave"] = map["staff-leave-management"];
+  }
+  if (map["holiday-management"]) {
+    map["holidays"] = map["holiday-management"];
+  }
+  if (map["payroll"]) {
+    map["salary"] = map["payroll"];
+    map["payslips"] = map["payroll"];
+  }
+  if (map["examination"]) {
+    map["examinations"] = map["examination"];
+    map["examduties"] = map["examination"];
+    map["exam-duties"] = map["examination"];
+  } else if (map["examinations"]) {
+    map["examination"] = map["examinations"];
+    map["examduties"] = map["examinations"];
+    map["exam-duties"] = map["examinations"];
+  }
+  if (map["subject-management"]) {
+    map["classes"] = map["subject-management"];
+  }
+
+  // Mirror settings screens so direct screen-name or module-screen lookups resolve seamlessly
+  const settingsScreens = [
+    "audit-logs", "lop-configuration", "campus-images", "campus-configuration",
+    "leave-types", "attendance-timing", "number-series", "templates",
+    "credentials", "credentials-generator", "landing-configuration", "login-configuration"
+  ];
+  settingsScreens.forEach((scr) => {
+    if (map[`settings:${scr}`]) {
+      map[scr] = map[`settings:${scr}`];
+    } else if (map["settings"]) {
+      map[scr] = map["settings"];
+      map[`settings:${scr}`] = map["settings"];
+    }
+  });
+
   return map;
 };
 
 export function normalizeRoleCode(value = "") {
-  return normalizeCode(value);
+  const code = normalizeCode(value);
+  if (code === "ACCOUNTS" || code === "ACCOUNT" || code === "ACCOUNTING" || code === "FINANCE") return "ACCOUNTANT";
+  if (code.includes("LIBRAR")) return "LIBRARIAN";
+  if (code === "DRIVER") return "BUS_DRIVER";
+  return code;
 }
+export const ROLE_PRIORITY_ORDER = Object.freeze([
+  "SUPER_ADMIN",
+  "ADMIN",
+  "PRINCIPAL",
+  "DEAN",
+  "HOD",
+  "FACULTY",
+  "STUDENT",
+  "PARENT",
+  "ACCOUNTANT",
+  "EXAMINATION_CELL",
+  "LIBRARIAN",
+  "HOSTEL_WARDEN",
+  "PLACEMENT_OFFICER",
+  "BUS_DRIVER",
+  "OFFICE_STAFF",
+  "ADMISSION_STAFF",
+  "TRANSPORT_MANAGER",
+  "LAB_ASSISTANT",
+  "ATTENDANT",
+  "INVENTORY_MANAGER",
+  "UNASSIGNED",
+]);
+
+export function sortRolesByPriority(roles = []) {
+  if (!Array.isArray(roles)) return [];
+  const priorityMap = new Map(ROLE_PRIORITY_ORDER.map((code, index) => [code, index]));
+  return [...roles].sort((a, b) => {
+    const codeA = normalizeRoleCode(a?.code || a?.roleCode || a?.name || a?.roleName);
+    const codeB = normalizeRoleCode(b?.code || b?.roleCode || b?.name || b?.roleName);
+    const pA = priorityMap.has(codeA) ? priorityMap.get(codeA) : 999;
+    const pB = priorityMap.has(codeB) ? priorityMap.get(codeB) : 999;
+    if (pA !== pB) return pA - pB;
+    return (a?.name || "").localeCompare(b?.name || "");
+  });
+}
+
 
 export function hasRole(roleCode, user = getAuthUser()) {
   const expected = normalizeRoleCode(roleCode);
@@ -116,26 +276,61 @@ export function hasRole(roleCode, user = getAuthUser()) {
   return roles.some((role) => normalizeRoleCode(typeof role === "object" ? role.code || role.name : role) === expected);
 }
 
-export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = getAuthUser(), screenKey = null) {
-  if (hasRole("SUPER_ADMIN", user) || hasRole("ADMIN", user)) return true;
-  const source = permissions ?? user?.permissions ?? user?.rolePermissions;
-  if (!source) return true;
+const SETTINGS_SCREENS = Object.freeze([
+  "audit-logs", "lop-configuration", "campus-images", "campus-configuration",
+  "leave-types", "attendance-timing", "number-series", "templates",
+  "credentials", "credentials-generator", "landing-configuration", "login-configuration"
+]);
 
-  const permissionMap = toPermissionMap(source);
-  const normMod = normalizeModuleKey(moduleKey);
+export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = getAuthUser(), screenKey = null) {
+  if (hasRole("SUPER_ADMIN", user)) return true;
+  let normMod = normalizeModuleKey(moduleKey);
   const normAct = normalizeActionKey(actionKey);
 
-  if (screenKey) {
-    const normScr = normalizeModuleKey(screenKey);
+  // Baseline dashboard and profile view access for any authenticated role
+  if (normAct === ACTIONS.VIEW && (normMod === "dashboard" || normMod === "profile")) {
+    return true;
+  }
+
+
+  const source = permissions ?? user?.permissions ?? user?.rolePermissions;
+  if (!source) {
+    if (hasRole("ADMIN", user)) return true;
+    return false;
+  }
+
+  const permissionMap = toPermissionMap(source);
+  let normScr = screenKey ? normalizeModuleKey(screenKey) : null;
+
+  if (SETTINGS_SCREENS.includes(normMod) && !normScr) {
+    normScr = normMod;
+    normMod = "settings";
+  }
+
+  // Check specific screen permission first if requested
+  if (normScr) {
     const screenLookupKey = `${normMod}:${normScr}`;
     if (Array.isArray(permissionMap[screenLookupKey])) {
       return permissionMap[screenLookupKey].includes(normAct);
     }
+    if (Array.isArray(permissionMap[normScr])) {
+      return permissionMap[normScr].includes(normAct);
+    }
+    // If a specific screen was requested but is not in the granted permission map, access is denied
+    return false;
   }
 
+  // Fallback to module-level permission
   const moduleActions = permissionMap[normMod];
-  if (!Array.isArray(moduleActions)) return false;
-  return moduleActions.includes(normAct);
+  if (Array.isArray(moduleActions) && moduleActions.includes(normAct)) {
+    return true;
+  }
+
+  if (hasRole("ADMIN", user) && (normMod === "settings" || normMod === "roles-permissions" || SETTINGS_SCREENS.includes(normMod))) {
+    return true;
+  }
+
+  return false;
 }
 
 export function PermissionGuard({ moduleKey, screenKey = null, actionKey = ACTIONS.VIEW, permissions, fallback = null, children }) {

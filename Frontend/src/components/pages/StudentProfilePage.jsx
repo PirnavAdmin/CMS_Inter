@@ -1,5 +1,6 @@
 import StudentFeeTab from "./StudentFeeTab.jsx";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Bus, ClipboardList, GraduationCap, Eye, IndianRupee, Mail, MapPin, Pencil, School, User, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
@@ -7,6 +8,7 @@ import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx"
 import { SkeletonPage, StatusBadge } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getHostelBlocks } from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import "./StudentManagementPage.css";
 import "./StudentAdmissionPage.css";
@@ -69,6 +71,7 @@ const residentialAllocation = (record = {}) => {
     route: read(route, "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber", "routeCode", "RouteCode") ?? readAny("busRouteName", "BusRouteName", "routeName", "RouteName", "busRoute", "BusRoute"),
     pickupPoint: read(pickup, "stopName", "StopName", "pickupPointName", "PickupPointName", "pickupName", "PickupName", "name", "Name") ?? readAny("pickupPointName", "PickupPointName", "pickupName", "PickupName", "pickupPoint", "PickupPoint"),
     hostelBlock: read(block, "hostelName", "HostelName", "name", "Name", "hostelCode", "HostelCode") ?? readAny("hostelBlockName", "HostelBlockName", "hostelName", "HostelName", "hostelBlock", "HostelBlock"),
+    hostelId: read(block, "hostelId", "HostelId", "id", "Id") ?? readAny("hostelId", "HostelId"),
     hostelRoom: read(room, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification", "name", "Name") ?? readAny("hostelRoomName", "HostelRoomName", "roomTypeName", "RoomTypeName", "hostelRoom", "HostelRoom"),
   };
 };
@@ -99,10 +102,11 @@ export default function StudentProfilePage({ id }) {
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
       const admissionNo = String(read(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim();
       const studentId = String(read(record, "studentId", "StudentId", "id", "Id") ?? id);
-      const [studentsResult, admissionsResult, sectionsResult] = await Promise.allSettled([
+      const [studentsResult, admissionsResult, sectionsResult, hostelBlocksResult] = await Promise.allSettled([
         apiClient.get(apiEndpoints.students.getAll),
         apiClient.get(apiEndpoints.admissions.getAll),
         apiClient.get(apiEndpoints.sections.list),
+        getHostelBlocks(),
       ]);
       const studentRows = studentsResult.status === "fulfilled" ? rows(studentsResult.value.data) : [];
       const admissionRows = admissionsResult.status === "fulfilled" ? rows(admissionsResult.value.data) : [];
@@ -140,6 +144,17 @@ export default function StudentProfilePage({ id }) {
       // so cleared facility fields cannot be repopulated from the admission.
       const currentAllocation = [record.student ?? record.Student ?? record.profile ?? record.Profile, record, studentSummary, admission]
         .filter(Boolean).map(residentialAllocation).find((item) => item.studentType);
+      if (currentAllocation?.studentType === "Residential") {
+        const blocks = hostelBlocksResult.status === "fulfilled" ? rows(hostelBlocksResult.value.data) : [];
+        const normalize = (value) => typeof value === "string" || typeof value === "number" ? String(value).trim().toLowerCase() : "";
+        const saved = [currentAllocation.hostelId, currentAllocation.hostelBlock].map(normalize).filter((value) => value && value !== "0");
+        const block = blocks.find((item) => [read(item, "hostelId", "HostelId", "id", "Id"), read(item, "hostelCode", "HostelCode", "code", "Code"), read(item, "hostelName", "HostelName", "name", "Name")].some((value) => value != null && saved.includes(normalize(value))));
+        const blockName = read(block, "hostelName", "HostelName", "name", "Name");
+        if (blockName) currentAllocation.hostelBlock = blockName;
+        else if (typeof currentAllocation.hostelBlock !== "string" || !currentAllocation.hostelBlock.trim() || /^\d+$/.test(currentAllocation.hostelBlock)) {
+          currentAllocation.hostelBlock = saved.length ? "Saved hostel block unavailable" : "Hostel block not saved";
+        }
+      }
       const sectionValue = read(source, "section", "Section", "allocatedSection", "AllocatedSection", "assignedSection", "AssignedSection", "sectionDetails", "SectionDetails");
       const sectionId = read(source, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId") ?? read(sectionValue, "sectionId", "SectionId", "id", "Id");
       let sectionRecord = sectionRows.find((item) => String(read(item, "sectionId", "SectionId", "id", "Id")) === String(sectionId));
@@ -201,7 +216,7 @@ export default function StudentProfilePage({ id }) {
       <div className="cms-admission-main-tabs student-profile-section-tabs" role="tablist" aria-label="Student sections">
         {profileTabs.map(([key, label, Icon]) => <button key={key} id={`student-${key}-tab`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={key === "fee" ? "student-fee-panel" : "student-section-panel"} disabled={editMode && key === "fee"} className={`cms-admission-main-tab ${activeTab === key ? "is-active" : ""}`} onClick={() => setActiveTab(key)}><Icon size={17} />{label}</button>)}
       </div>
-    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} onValidationError={() => setActiveTab("overview")} onBusyChange={setEditorBusy} /></div> : activeTab === "fee" ? <StudentFeeTab key={student.studentId} student={student} compactContext /> : <div className="student-profile-overview" role="tabpanel" id="student-section-panel" aria-labelledby={`student-${activeTab}-tab`}>
+    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} onValidationError={() => setActiveTab("overview")} onBusyChange={setEditorBusy} /></div> : activeTab === "fee" ? <><FacilitySettlementDetails key={`settlement-${student.studentId}`} studentId={student.studentId} /><StudentFeeTab key={`fees-${student.studentId}`} student={student} compactContext /></> : <div className="student-profile-overview" role="tabpanel" id="student-section-panel" aria-labelledby={`student-${activeTab}-tab`}>
       <ViewSection title="Personal Information" className="student-profile-personal-section"><div className="student-profile-personal-layout"><div className="student-profile-view-photo">{photoObjectUrl && !photoFailed ? <img src={photoObjectUrl} alt={`${student.name}'s profile`} onError={() => setPhotoFailed(true)} /> : initials}</div><ViewDetails items={[["Student Name", student.name], ["Gender", read(student, "gender", "Gender")], ["Date of Birth", formatDisplayDate(read(student, "dateOfBirth", "DateOfBirth", "dob"))], ["Blood Group", read(student, "bloodGroup", "BloodGroup")], ["Nationality", read(student, "nationality", "Nationality")], ["Religion", read(student, "religion", "Religion")], ["Category", read(student, "category", "Category")], ["Aadhaar Number", read(student, "aadhaarNumber", "AadhaarNumber")]]}/></div></ViewSection>
       <ViewSection title="Academic Placement"><ViewDetails items={[["Board", read(student, "boardName", "BoardName", "board")], ["Academic Year", student.academicYear], ["Academic Level", student.level], ["Group", student.group], ["Program", student.programme], ["Section", student.section], ["Medium", read(student, "medium", "Medium")], ["Second Language", read(student, "secondLanguage", "SecondLanguage")]]}/></ViewSection>
       <ViewSection title="Contact Information"><ViewDetails items={[["Email", read(student, "studentEmail", "email", "Email")], ["Mobile Number", read(student, "studentMobileNumber", "mobileNumber", "mobile", "MobileNumber")]]}/></ViewSection>
@@ -215,3 +230,79 @@ export default function StudentProfilePage({ id }) {
   </DashboardLayout>;
 }
 
+
+
+function FacilitySettlementDetails({ studentId }) {
+  const marker = useRef(null);
+  const [target, setTarget] = useState(null);
+  useEffect(() => {
+    const scope = marker.current?.parentElement;
+    if (!scope) return;
+    const slot = document.createElement('div');
+    slot.className = 'facility-settlement-slot';
+    const place = () => {
+      const panel = scope.querySelector('.student-profile-fee');
+      if (!panel) return;
+      const blocks = [...panel.querySelectorAll(':scope > .cms-fee-block')];
+      const facilities = blocks.filter((block) => block.querySelector('h3')?.textContent === 'Applicable Facility Fees');
+      facilities.forEach((block) => block.classList.add('settlement-facility-fees'));
+      const lastFacility = facilities.at(-1);
+      if (lastFacility) {
+        if (lastFacility.nextElementSibling !== slot) lastFacility.after(slot);
+      } else if (panel.firstElementChild !== slot) panel.prepend(slot);
+      setTarget((current) => current === slot ? current : slot);
+    };
+    const observer = new MutationObserver(place);
+    observer.observe(scope, { childList: true, subtree: true });
+    place();
+    return () => { observer.disconnect(); slot.remove(); };
+  }, []);
+  const [state, setState] = useState({ loading: true, records: [], error: "" });
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!studentId) return;
+    let active = true;
+    setState({ loading: true, records: [], error: "" });
+    apiClient.get('/api/v1/facility-transition/history/' + encodeURIComponent(studentId), { headers: { 'Content-Type': 'application/json' }, skipErrorLog: true, validateStatus: (status) => (status >= 200 && status < 300) || status === 404 }).then(({ data, status }) => {
+      if (status === 404) throw new Error('Facility transition history is unavailable on the connected server (404). The backend history endpoint must be deployed and reachable.');
+      let payload = data;
+      for (let i = 0; i < 4 && !Array.isArray(payload); i++) {
+        if (payload?.success === false || payload?.status === false) throw new Error(payload.message || 'Could not load settlement history.');
+        const next = payload?.data ?? payload?.Data ?? payload?.items ?? payload?.Items ?? payload?.records;
+        if (next == null) break;
+        payload = next;
+      }
+      if (!Array.isArray(payload)) throw new Error('Settlement history response is unavailable.');
+      if (payload.some((row) => row.studentId != null && String(row.studentId) !== String(studentId))) throw new Error('Settlement history does not match this student.');
+      const records = [...payload].sort((a,b) => (Date.parse(b.transitionDate) || 0) - (Date.parse(a.transitionDate) || 0));
+      if (active) setState({ loading: false, records, error: '' });
+    }).catch((error) => { if (active) setState({ loading: false, records: [], error: getApiErrorMessage(error) || 'Could not load settlement history.' }); });
+    return () => { active = false; };
+  }, [studentId, retry]);
+  const number = (value) => value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
+  const amount = (value) => number(value) == null ? 'Not provided' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(Number(value));
+  const date = (value) => { const parsed = value ? new Date(value) : null; return parsed && !Number.isNaN(parsed.getTime()) ? parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'Date not provided'; };
+  const duration = (value) => number(value) == null ? 'Not provided' : value + ' Months';
+  const fields = (items) => <dl className="facility-settlement-values">{items.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
+  const card = <section className="cms-fee-block facility-settlement-preview" aria-label="Facility transition and settlement">
+    <h3>Facility Transition &amp; Settlement Details</h3>
+    {state.loading ? <p role="status">Loading settlement history...</p> : state.error ? <div role="alert"><p>{state.error}</p><button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRetry((value) => value + 1)}>Retry</button></div> : !state.records.length ? <p>No facility transition history available.</p> : state.records.map((r, index) => {
+      const original = number(r.originalFacilityFee ?? r.originalAnnualFee);
+      const fromFee = number(r.proratedFromFee), toFee = number(r.proratedToFee), credit = number(r.excessCreditTransferred);
+      const due = toFee != null && credit != null ? Math.max(0, toFee - credit) : null;
+      const remainingCredit = toFee != null && credit != null ? Math.max(0, credit - toFee) : null;
+      const waived = number(r.waivedAmount);
+      const selfTransport = /^self[ -]?transport$/i.test(String(r.toFacility || '').trim());
+      return <article key={r.transitionId ?? index}>
+        <p className="facility-settlement-status">Switched from <strong>{r.fromFacility || 'Not provided'}</strong> to <strong>{r.toFacility || 'Not provided'}</strong> on {date(r.transitionDate)}.</p>
+        <div className="facility-settlement-columns"><section><h4>Previous Facility: {r.fromFacility || 'Not provided'}</h4>{fields([['Duration Used', duration(r.monthsUsedFromFacility)], ['Actual Prorated Fee', amount(fromFee)], ...(original != null ? [['Original Facility Fee', amount(original)], ...(fromFee != null ? [['Saved Amount', amount(original - fromFee)]] : [])] : []), ...(number(r.excessAdvancePaid) != null ? [['Excess Advance Paid', amount(r.excessAdvancePaid)]] : [])])}</section>
+        <section><h4>Current Facility: {r.toFacility || 'Not provided'}</h4>{fields([['Remaining Duration', duration(r.monthsUsedToFacility)], ['Prorated Facility Fee', amount(toFee)], ['Advance Credit Transferred', amount(credit)], ['Net Facility Fee Due', amount(due)], ...(remainingCredit > 0 ? [['Remaining Credit', amount(remainingCredit)]] : [])])}<p className="facility-settlement-note">Net due covers the recorded facility fee and transferred credit only. Other account charges are shown in the fee summary.</p></section></div>
+        {selfTransport && r.waiverConfirmed === true && waived != null && number(r.monthsUsedFromFacility) != null && number(r.monthsUsedToFacility) != null && r.transitionDate && <p className="facility-settlement-status">Your {r.fromFacility} facility was discontinued on {date(r.transitionDate)}. You used the facility for {r.monthsUsedFromFacility} months. The remaining {r.monthsUsedToFacility} months' applicable facility fee of {amount(waived)} has been waived from your total fee.</p>}
+        <h4>Settlement Summary</h4>{fields([['Previous Total Fee', amount(r.previousTotalFee)], ['New Total Fee', amount(r.newTotalFee)], ['Previous Balance', amount(r.previousBalance)], ['New Balance', amount(r.newBalance)]])}
+        {original == null && <p className="facility-settlement-note">Original facility fee and savings are not available in this settlement record.</p>}
+        {r.remarks && <p className="facility-settlement-note"><strong>Remarks:</strong> {r.remarks}</p>}
+      </article>;
+    })}
+  </section>;
+  return <><span ref={marker} hidden />{target ? createPortal(card, target) : card}</>;
+}

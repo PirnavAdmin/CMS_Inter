@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
   LogIn,
@@ -8,7 +8,6 @@ import {
   Briefcase,
   UserX,
   AlertCircle,
-  Fingerprint,
   RotateCw,
   Send,
   X,
@@ -16,6 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import "../styles/FacultyMyAttendance.css";
+import { Skeleton } from "@/components/common/Ui.jsx";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import { attendanceService } from "../../../api/attendanceService.js";
 
@@ -149,19 +149,35 @@ export default function FacultyMyAttendance() {
     [context]
   );
 
+  const contextRef = useRef(context);
+  useEffect(() => {
+    contextRef.current = context;
+  }, [context]);
+
   // Sync punch status with global Faculty context
   const syncGlobalPunchState = useCallback(
     (status, inTime, outTime) => {
-      if (context?.setPunchState) {
-        context.setPunchState({
-          isPunchedIn: status === "punched_in",
-          inTime: inTime,
-          outTime: outTime,
-          hoursWorked: inTime ? calculateDurationStr(inTime, outTime, status === "punched_in") : "--",
+      const setPunchState = contextRef.current?.setPunchState;
+      if (typeof setPunchState === "function") {
+        const isPunchedIn = status === "punched_in";
+        setPunchState((prev) => {
+          if (
+            prev?.isPunchedIn === isPunchedIn &&
+            prev?.inTime === inTime &&
+            prev?.outTime === outTime
+          ) {
+            return prev;
+          }
+          return {
+            isPunchedIn,
+            inTime: inTime,
+            outTime: outTime,
+            hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunchedIn) : "--",
+          };
         });
       }
     },
-    [context]
+    []
   );
 
   // Fetch Today's Attendance Status
@@ -208,6 +224,7 @@ export default function FacultyMyAttendance() {
             canRegularize: Boolean(l.canRegularize ?? l.CanRegularize),
             isToday: Boolean(l.isToday ?? l.IsToday),
             regularizationState: l.regularizationState || l.RegularizationState,
+            holidayName: l.holidayName || l.HolidayName || null,
           })),
           metrics: {
             workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "6 Days",
@@ -228,7 +245,7 @@ export default function FacultyMyAttendance() {
     }
   }, []);
 
-  // Initial load
+  // Initial load once on mount
   useEffect(() => {
     fetchTodayStatus();
   }, [fetchTodayStatus]);
@@ -374,6 +391,8 @@ export default function FacultyMyAttendance() {
         return "absent";
       case "Holiday":
         return "holiday";
+      case "Weekly Off":
+        return "weekly-off";
       case "-":
       case "--":
         return "empty";
@@ -459,41 +478,35 @@ export default function FacultyMyAttendance() {
           <div className="sp-card-header">
             <h3 className="sp-card-title">Check-In / Check-Out</h3>
             <p className="sp-card-desc">
-              Click below to record your campus entry or exit timestamp.<br />
-              Instant biometric verification enabled.
+              Click below to record your campus entry or exit timestamp.
             </p>
           </div>
 
           <div className="sp-punch-twin-grid">
             {/* Check In Panel */}
             <div className="sp-twin-panel checkin-panel">
-              <div className="sp-twin-icon-box checkin">
-                <LogIn size={16} />
-              </div>
-              <div className="sp-twin-title checkin">CHECK IN</div>
-
-              {/* Dotted Arc Gauge */}
-              <div className="sp-arc-gauge-container">
-                <svg viewBox="0 0 160 82" className="sp-arc-svg checkin-arc" fill="none">
-                  <path
-                    d="M 22 72 A 58 58 0 0 1 138 72"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeDasharray="2 7"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="sp-gauge-center">
-                  <span className="sp-gauge-time">{todayData.inTime || "--:-- --"}</span>
-                  <span className="sp-gauge-sub">{todayData.inTime ? "Checked In" : "Not Checked In"}</span>
+              {/* Check In Header: Icon beside Title */}
+              <div className="sp-twin-header">
+                <div className="sp-twin-icon-box checkin">
+                  <LogIn size={15} />
                 </div>
+                <div className="sp-twin-title checkin">CHECK IN</div>
+              </div>
+
+              {/* Modern Digital Clock & Status Badge */}
+              <div className="sp-digital-display checkin">
+                <span className="sp-digital-time">{todayData.inTime || "--:-- --"}</span>
+                <span className={`sp-digital-status-pill ${todayData.inTime ? "checked" : "pending"}`}>
+                  <span className="sp-status-dot">•</span>
+                  {todayData.inTime ? "Checked In" : "Not Checked In"}
+                </span>
               </div>
 
               {/* Check In Button */}
               <button
                 type="button"
                 className={`sp-punch-pill-btn checkin ${
-                  todayData.status === "not_punched" && !actionLoading ? "active" : "disabled"
+                  todayData.status === "not_punched" && !actionLoading ? "active" : "inactive"
                 }`}
                 disabled={todayData.status !== "not_punched" || actionLoading}
                 onClick={handlePunchIn}
@@ -501,7 +514,7 @@ export default function FacultyMyAttendance() {
                 {actionLoading && todayData.status === "not_punched" ? (
                   <Loader2 size={15} className="sp-spin" />
                 ) : (
-                  <Fingerprint size={15} />
+                  <LogIn size={15} />
                 )}
                 <span>Check In</span>
               </button>
@@ -511,26 +524,21 @@ export default function FacultyMyAttendance() {
 
             {/* Check Out Panel */}
             <div className="sp-twin-panel checkout-panel">
-              <div className="sp-twin-icon-box checkout">
-                <LogOut size={16} />
-              </div>
-              <div className="sp-twin-title checkout">CHECK OUT</div>
-
-              {/* Dotted Arc Gauge */}
-              <div className="sp-arc-gauge-container">
-                <svg viewBox="0 0 160 82" className="sp-arc-svg checkout-arc" fill="none">
-                  <path
-                    d="M 22 72 A 58 58 0 0 1 138 72"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeDasharray="2 7"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="sp-gauge-center">
-                  <span className="sp-gauge-time">{todayData.outTime || "--:-- --"}</span>
-                  <span className="sp-gauge-sub">{todayData.outTime ? "Checked Out" : "Not Checked Out"}</span>
+              {/* Check Out Header: Icon beside Title */}
+              <div className="sp-twin-header">
+                <div className="sp-twin-icon-box checkout">
+                  <LogOut size={15} />
                 </div>
+                <div className="sp-twin-title checkout">CHECK OUT</div>
+              </div>
+
+              {/* Modern Digital Clock & Status Badge */}
+              <div className="sp-digital-display checkout">
+                <span className="sp-digital-time">{todayData.outTime || "--:-- --"}</span>
+                <span className={`sp-digital-status-pill ${todayData.outTime ? "checked" : "pending"}`}>
+                  <span className="sp-status-dot">•</span>
+                  {todayData.outTime ? "Checked Out" : "Not Checked Out"}
+                </span>
               </div>
 
               {/* Check Out Button */}
@@ -565,8 +573,17 @@ export default function FacultyMyAttendance() {
           </div>
           <div className="sp-kpi-content">
             <div className="sp-kpi-label">Working Days</div>
-            <div className="sp-kpi-value">{historyData.metrics?.workingDays || historyData.metrics?.WorkingDays || "0 Days"}</div>
-            <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || historyData.metrics?.WorkingDaysSub || "--"}</div>
+            {loadingHistory ? (
+              <>
+                <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
+                <Skeleton style={{ width: 85, height: 11, marginTop: 4 }} />
+              </>
+            ) : (
+              <>
+                <div className="sp-kpi-value">{historyData.metrics?.workingDays || historyData.metrics?.WorkingDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || historyData.metrics?.WorkingDaysSub || "--"}</div>
+              </>
+            )}
           </div>
         </div>
 
@@ -577,8 +594,17 @@ export default function FacultyMyAttendance() {
           </div>
           <div className="sp-kpi-content">
             <div className="sp-kpi-label">Present Days</div>
-            <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || historyData.metrics?.PresentDays || "0 Days"}</div>
-            <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || historyData.metrics?.PresentDaysSub || "--"}</div>
+            {loadingHistory ? (
+              <>
+                <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
+                <Skeleton style={{ width: 95, height: 11, marginTop: 4 }} />
+              </>
+            ) : (
+              <>
+                <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || historyData.metrics?.PresentDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || historyData.metrics?.PresentDaysSub || "--"}</div>
+              </>
+            )}
           </div>
         </div>
 
@@ -589,8 +615,17 @@ export default function FacultyMyAttendance() {
           </div>
           <div className="sp-kpi-content">
             <div className="sp-kpi-label">Approved Leaves</div>
-            <div className="sp-kpi-value">{historyData.metrics?.leaves || historyData.metrics?.Leaves || "0 Days"}</div>
-            <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || historyData.metrics?.LeavesSub || "--"}</div>
+            {loadingHistory ? (
+              <>
+                <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
+                <Skeleton style={{ width: 85, height: 11, marginTop: 4 }} />
+              </>
+            ) : (
+              <>
+                <div className="sp-kpi-value">{historyData.metrics?.leaves || historyData.metrics?.Leaves || "0 Days"}</div>
+                <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || historyData.metrics?.LeavesSub || "--"}</div>
+              </>
+            )}
           </div>
         </div>
 
@@ -601,8 +636,17 @@ export default function FacultyMyAttendance() {
           </div>
           <div className="sp-kpi-content">
             <div className="sp-kpi-label">Absent Days</div>
-            <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || historyData.metrics?.AbsentDays || "0 Days"}</div>
-            <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || historyData.metrics?.AbsentDaysSub || "--"}</div>
+            {loadingHistory ? (
+              <>
+                <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
+                <Skeleton style={{ width: 75, height: 11, marginTop: 4 }} />
+              </>
+            ) : (
+              <>
+                <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || historyData.metrics?.AbsentDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || historyData.metrics?.AbsentDaysSub || "--"}</div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -664,26 +708,42 @@ export default function FacultyMyAttendance() {
         </div>
 
         <div className="cms-table-wrap">
-          {loadingHistory ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "var(--cms-muted)" }}>
-              <RotateCw size={24} className="sp-spin" style={{ margin: "0 auto 10px" }} />
-              <div>Loading attendance records from biometric server...</div>
-            </div>
-          ) : (
-            <table className="sp-attendance-table">
-              <thead>
-                <tr>
-                  <th style={{ width: "16%" }}>DAY</th>
-                  <th style={{ width: "22%" }}>SHIFT</th>
-                  <th style={{ width: "15%" }}>CHECK IN</th>
-                  <th style={{ width: "15%" }}>CHECK OUT</th>
-                  <th style={{ width: "12%" }}>HOURS</th>
-                  <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                  <th style={{ width: "10%", textAlign: "center" }}>ACTION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historyData.logs && historyData.logs.length > 0 ? (
+          <table className="sp-attendance-table">
+            <thead>
+              <tr>
+                <th style={{ width: "16%" }}>DAY</th>
+                <th style={{ width: "22%" }}>SHIFT</th>
+                <th style={{ width: "15%" }}>CHECK IN</th>
+                <th style={{ width: "15%" }}>CHECK OUT</th>
+                <th style={{ width: "12%" }}>HOURS</th>
+                <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
+                <th style={{ width: "10%", textAlign: "center" }}>ACTION</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingHistory ? (
+                Array.from({ length: 6 }, (_, idx) => (
+                  <tr key={`skel-row-${idx}`} className="sp-att-skeleton-row">
+                    <td>
+                      <Skeleton style={{ width: "70%", height: 13 }} />
+                      <Skeleton style={{ width: "45%", height: 10, marginTop: 4 }} />
+                    </td>
+                    <td>
+                      <Skeleton style={{ width: "85%", height: 13 }} />
+                      <Skeleton style={{ width: "60%", height: 10, marginTop: 4 }} />
+                    </td>
+                    <td><Skeleton style={{ width: "55%", height: 13 }} /></td>
+                    <td><Skeleton style={{ width: "55%", height: 13 }} /></td>
+                    <td><Skeleton style={{ width: "45%", height: 13 }} /></td>
+                    <td style={{ textAlign: "center" }}>
+                      <Skeleton style={{ width: 68, height: 20, borderRadius: 12, margin: "0 auto" }} />
+                    </td>
+                    <td style={{ textAlign: "center" }}>
+                      <Skeleton style={{ width: 54, height: 22, borderRadius: 6, margin: "0 auto" }} />
+                    </td>
+                  </tr>
+                ))
+              ) : historyData.logs && historyData.logs.length > 0 ? (
                   historyData.logs.map((log) => {
                     const id = log.id || log.Id;
                     const day = log.day || log.Day;
@@ -695,6 +755,7 @@ export default function FacultyMyAttendance() {
                     const status = log.status || log.Status || "--";
                     const canReg = log.canRegularize ?? log.CanRegularize;
                     const regState = log.regularizationState || log.RegularizationState;
+                    const holidayName = log.holidayName || log.HolidayName;
                     const isUpcoming = status === "-" || status === "--";
 
                     return (
@@ -721,9 +782,16 @@ export default function FacultyMyAttendance() {
                           {isUpcoming ? (
                             <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
                           ) : (
-                            <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
-                              {status}
-                            </span>
+                            <div className="sp-status-cell">
+                              <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
+                                {status}
+                              </span>
+                              {holidayName && (
+                                <span className="sp-holiday-name-subtext" title={holidayName}>
+                                  {holidayName}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
                         <td style={{ textAlign: "center" }}>
@@ -758,7 +826,6 @@ export default function FacultyMyAttendance() {
                 )}
               </tbody>
             </table>
-          )}
         </div>
       </div>
 

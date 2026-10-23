@@ -5,8 +5,17 @@ namespace CollegeManagement.API.DTOs.Roles
 {
     public class UserRoleAssignmentDto
     {
+        private string _fullName = string.Empty;
+        private string _name = string.Empty;
+
         public int UserId { get; set; }
-        public string FullName { get; set; } = string.Empty;
+
+        public string FullName
+        {
+            get => !string.IsNullOrEmpty(_fullName) ? _fullName : _name;
+            set => _fullName = value;
+        }
+
         public string UserCode { get; set; } = string.Empty;
         public string UserType { get; set; } = string.Empty; // Staff, Faculty, Operational
         public string Department { get; set; } = string.Empty;
@@ -18,7 +27,13 @@ namespace CollegeManagement.API.DTOs.Roles
 
         // Frontend compatibility properties
         public string Id => UserId.ToString();
-        public string Name => FullName;
+
+        public string Name
+        {
+            get => !string.IsNullOrEmpty(_name) ? _name : _fullName;
+            set => _name = value;
+        }
+
         public string RoleCode => string.IsNullOrWhiteSpace(RoleName) ? "" : RoleName.ToUpperInvariant().Replace(" ", "_").Replace("/", "_").Replace("-", "_");
         public List<string> RoleCodes => string.IsNullOrWhiteSpace(RoleCode) ? new() : new() { RoleCode };
     }

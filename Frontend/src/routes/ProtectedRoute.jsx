@@ -56,31 +56,20 @@ export function isWardenRole(role, user) {
 }
 
 export function isNonTeachingRole(role, user) {
-  const normalized = String(role || "").trim().toLowerCase();
-  if (
-    normalized === "non_teaching_staff" ||
-    normalized === "non-teaching" ||
-    normalized === "non-teaching-staff" ||
-    normalized === "nonteaching" ||
-    normalized === "non_teaching"
-  ) {
-    return true;
-  }
+  const check = (val) => {
+    if (!val) return false;
+    const s = String(val).trim().toLowerCase();
+    const clean = s.replace(/[-_\s]/g, "");
+    return clean === "nonteaching" || clean === "nonteachingstaff";
+  };
+  if (check(role)) return true;
   if (user && typeof user === "object") {
-    const userRole = String(user.role || "").trim().toLowerCase();
-    if (
-      userRole === "non_teaching_staff" ||
-      userRole === "non-teaching" ||
-      userRole === "non-teaching-staff" ||
-      userRole === "nonteaching" ||
-      userRole === "non_teaching"
-    ) {
-      return true;
-    }
-    const staffType = String(user.staffType || user.type || "").trim().toLowerCase();
-    if (staffType === "non-teaching" || staffType === "nonteaching") {
-      return true;
-    }
+    if (check(user.role)) return true;
+    if (check(user.staffType)) return true;
+    if (check(user.type)) return true;
+    if (check(user.designationType)) return true;
+    if (check(user.roleType)) return true;
+    if (check(user.userType)) return true;
   }
   return false;
 }
@@ -121,6 +110,11 @@ function isAccountantRole(role) {
 function isAdminRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   return normalized === "admin" || normalized.includes("admin");
+}
+
+function isStudentRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "student" || normalized.includes("student");
 }
 
 export function AccessDeniedView({ module, screen, action }) {
@@ -225,11 +219,12 @@ export default function ProtectedRoute({
   const isPrincipal = !isWarden && isPrincipalRole(role);
   const isParent = !isWarden && isParentRole(role);
   const isAccountant = !isWarden && isAccountantRole(role);
+  const isStudent = isStudentRole(role);
 
   const isExamCell = !isWarden && isExamCellRole(role);
 
   // Non-Teaching check
-  if (requireNonTeaching && !isNonTeaching && !isAdmin) {
+  if (requireNonTeaching && !isNonTeaching && !isAdmin && !isPrincipal) {
     const destination = isWarden
       ? "/warden-dashboard"
       : isPrincipal
@@ -334,7 +329,7 @@ export default function ProtectedRoute({
   }
 
   // Fine-grained RBAC Module & Screen permission check
-  if (requiredModule && !isAdmin && !hasRole("SUPER_ADMIN", user)) {
+  if (requiredModule && !hasRole("SUPER_ADMIN", user)) {
     const hasPermission = can(requiredModule, requiredAction, undefined, user, requiredScreen);
     if (!hasPermission) {
       return <AccessDeniedView module={requiredModule} screen={requiredScreen} action={requiredAction} />;
@@ -362,6 +357,7 @@ export function PublicOnlyRoute({ children }) {
   const isPrincipal = !isWarden && isPrincipalRole(role);
   const isParent = !isWarden && isParentRole(role);
   const isAccountant = !isWarden && isAccountantRole(role);
+  const isStudent = isStudentRole(role);
 
   if (isTokenValid) {
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;
@@ -372,8 +368,15 @@ export function PublicOnlyRoute({ children }) {
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
-    return <Navigate to="/student-dashboard" replace />;
+    if (isStudent) return <Navigate to="/student-dashboard" replace />;
+    if (user?.isAdmin) return <Navigate to="/dashboard" replace />;
   }
+
+  // If a valid token exists but there is no user and no role, clear orphan token
+  if (isTokenValid && !user && !role) {
+    clearAuthSession();
+  }
+
   return children || <Outlet />;
 }
 

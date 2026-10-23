@@ -1,10 +1,10 @@
 import React from "react";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, RefreshCw, Home } from "lucide-react";
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, errorInfo: null, showDetails: false };
   }
 
   static getDerivedStateFromError(error) {
@@ -13,10 +13,11 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
+    this.setState({ errorInfo });
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, error: null });
+    this.setState({ hasError: false, error: null, errorInfo: null });
     window.location.reload();
   };
 
@@ -26,20 +27,47 @@ export default class ErrorBoundary extends React.Component {
         return this.props.fallback;
       }
       return (
-        <div style={{ padding: "48px 24px", maxWidth: 600, margin: "60px auto", textAlign: "center", background: "#ffffff", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.06)", border: "1px solid var(--cms-border, #e2e8f0)" }}>
+        <div style={{ padding: "48px 24px", maxWidth: 640, margin: "60px auto", textAlign: "center", background: "#ffffff", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.06)", border: "1px solid var(--cms-border, #e2e8f0)", fontFamily: "inherit" }}>
           <AlertCircle size={52} style={{ color: "#ef4444", margin: "0 auto 16px" }} />
-          <h2 style={{ fontSize: 20, marginBottom: 8, color: "var(--cms-text, #1e293b)" }}>Something went wrong loading this view</h2>
-          <p style={{ fontSize: 14, color: "var(--cms-muted, #64748b)", marginBottom: 20 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: "var(--cms-text, #1e293b)" }}>
+            Something went wrong loading this view
+          </h2>
+          <p style={{ fontSize: 14, color: "var(--cms-muted, #64748b)", marginBottom: 20, lineHeight: 1.6 }}>
             {this.state.error?.message || "An unexpected error occurred while rendering this section."}
           </p>
-          <button
-            type="button"
-            className="cms-btn cms-btn-primary"
-            style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px" }}
-            onClick={this.handleRetry}
-          >
-            <RefreshCw size={16} /> Reload Page
-          </button>
+          <div style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 20 }}>
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", cursor: "pointer", borderRadius: 8 }}
+              onClick={this.handleRetry}
+            >
+              <RefreshCw size={16} /> Reload Page
+            </button>
+            <a
+              href="/dashboard"
+              className="cms-btn"
+              style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", textDecoration: "none", border: "1px solid #cbd5e1", borderRadius: 8, color: "#334155", background: "#f8fafc" }}
+            >
+              <Home size={16} /> Go to Dashboard
+            </a>
+          </div>
+          {this.state.error && (
+            <div style={{ textAlign: "left", marginTop: 24, borderTop: "1px solid #e2e8f0", paddingTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => this.setState((prev) => ({ showDetails: !prev.showDetails }))}
+                style={{ background: "none", border: "none", color: "#64748b", fontSize: 12, cursor: "pointer", textDecoration: "underline", padding: 0 }}
+              >
+                {this.state.showDetails ? "Hide technical details" : "Show technical details"}
+              </button>
+              {this.state.showDetails && (
+                <pre style={{ marginTop: 12, padding: 12, background: "#f1f5f9", borderRadius: 8, fontSize: 11, overflowX: "auto", color: "#dc2626", maxHeight: 200, whiteSpace: "pre-wrap" }}>
+                  {this.state.error.stack || this.state.error.message}
+                </pre>
+              )}
+            </div>
+          )}
         </div>
       );
     }
