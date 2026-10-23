@@ -3,8 +3,8 @@ import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
-import { accountantCategoryEligibility, getAccountantLeaveStats, parseAccountantLeaveCategories } from "../accountantLeaveStats.js";
-import "../AccountantLeave.css";
+import { accountantLeaveCategoryLabel, accountantLeaveTypeForCategory, getAccountantLeaveCategoryStats, getAccountantLeaveTypeLabel, getApplicableAccountantLeaveCategories, parseAccountantLeaveCategories } from "../utils/accountantLeaveStats.js";
+import "./AccountantLeave.css";
 
 const PROFILE_URL = "/api/v1/staff/me";
 const historyUrl = staffId => `/api/v1/staff-attendance/leave/history/staff/${staffId}`;
@@ -22,21 +22,11 @@ const unwrap = response => {
 const apiError = (err, method, url) => `${method} ${url}${err?.response?.status ? ` (HTTP ${err.response.status})` : ""}: ${getApiErrorMessage(err)}`;
 const normalize = (obj, fields) => Object.fromEntries(fields.map(name => [name, field(obj, name)]));
 const leaveFields = ["staffLeaveRequestId", "staffId", "leaveType", "leaveCategoryId", "leaveCategoryName", "startDate", "endDate", "totalDays", "reason", "createdAt", "status", "approvedByUserName"];
-const enumForCategory = category => {
-  const code = String(category.categoryCode || "").toUpperCase();
-  const name = String(category.categoryName || "").toLowerCase();
-  if (code === "CL" || name.includes("casual")) return "Casual";
-  if (code === "SL" || /sick|medical/.test(name)) return "Sick";
-  if (code === "EL" || /earned|privilege/.test(name)) return "Earned";
-  if (code === "ML" || name.includes("maternity")) return "Maternity";
-  return "Other";
-};
 const formatDate = value => {
   if (!value) return "--";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "--" : date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
-const getLeaveTypeName = leave => leave.leaveCategoryName || leave.leaveType || "Leave";
 
 export default function AccountantLeave() {
   const academic = useAcademicContext() || {};
@@ -111,9 +101,8 @@ export default function AccountantLeave() {
       const catalog = parseAccountantLeaveCategories(results[1].value);
       setPolicyCategories(catalog);
       setCategoriesAvailable(true);
-      const available = catalog.filter(category => category.isActive !== false && accountantCategoryEligibility(category, field(profile, "staffType")) === true);
+      const available = id ? getApplicableAccountantLeaveCategories(catalog, field(profile, "staffType")) : [];
       setCategories(available);
-      if (!available.length) errors.push("No applicable leave categories are available for your staff type.");
     } catch (err) { errors.push(apiError(err, "GET", CATEGORY_URL)); }
     setPrerequisitesLoading(false);
     if (!id) {
@@ -164,13 +153,13 @@ export default function AccountantLeave() {
     return () => { document.removeEventListener("keydown", onKey); previous?.focus?.(); };
   }, [showLeaveModal]);
 
-  const categoryStats = Object.fromEntries(["CL", "SL", "EL", "OD"].map(code => [
-    code, getAccountantLeaveStats(policyCategories, leaveList, code, !historyError, { staffType, categoriesAvailable }),
-  ]));
-  const missingQuotas = Object.keys(categoryStats).filter(code => ["quota_unavailable", "eligibility_unknown"].includes(categoryStats[code].state));
-  const hasPolicyQuotas = Object.values(categoryStats).some(stats => stats.state === "policy");
-  const unknownUsage = Object.keys(categoryStats).filter(code => ["policy", "quota_unavailable"].includes(categoryStats[code].state) && categoryStats[code].used === null);
-  const stats = code => loading ? "Loading..." : categoryStats[code].text;
+  const categoryCards = categories.map(category => ({
+    category,
+    stats: getAccountantLeaveCategoryStats(category, policyCategories, leaveList, !historyError),
+  }));
+  const missingQuotas = categoryCards.filter(card => card.stats.quota === null).map(card => accountantLeaveCategoryLabel(card.category));
+  const unknownUsage = categoryCards.filter(card => card.stats.used === null).map(card => accountantLeaveCategoryLabel(card.category));
+  const selectedCategory = categories.find(category => String(category.leaveCategoryId) === String(leaveForm.categoryId));
   const handleOpenModal = () => {
     if (prerequisitesLoading || !staffId || !categories.length) return;
     setLeaveForm(blankForm());
@@ -192,7 +181,7 @@ export default function AccountantLeave() {
     try {
       const payload = {
         staffId,
-        leaveType: enumForCategory(category),
+        leaveType: accountantLeaveTypeForCategory(category),
         leaveCategoryId: Number(category.leaveCategoryId),
         startDate: `${leaveForm.fromDate}T00:00:00.000Z`,
         endDate: `${leaveForm.toDate}T00:00:00.000Z`,
@@ -252,53 +241,29 @@ export default function AccountantLeave() {
         </div>
       )}
 
-      {/* Leave Balances KPI Cards Strip */}
-      <div className="sp-stat-grid" style={{ marginBottom: 16 }}>
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-green">
-            <Calendar size={20} />
+      {/* Cards and dropdown share the same active, eligibility-filtered catalog. */}
+      <div className="sp-stat-grid" aria-label="Leave category policies" style={{ marginBottom: 16, "--accountant-leave-columns": Math.min(Math.max(categories.length, 1), 4), "--accountant-leave-small-columns": Math.min(Math.max(categories.length, 1), 2) }}>
+        {prerequisitesLoading ? (
+          <div className="accountant-leave-category-state" role="status">Loading leave categories...</div>
+        ) : !categoriesAvailable || !staffId ? (
+          <div className="accountant-leave-category-state">Leave categories are unavailable. Please retry using the error banner.</div>
+        ) : !categories.length ? (
+          <div className="accountant-leave-category-state">No active leave categories apply to your staff classification{staffType ? ` (${staffType})` : ""}.</div>
+        ) : categoryCards.map(({ category, stats }, index) => (
+          <div className="cms-stat" key={category.leaveCategoryId}>
+            <div className={`cms-stat-icon tone-${["green", "blue", "amber", "violet"][index % 4]}`}><Calendar size={20} /></div>
+            <div>
+              <div className="cms-stat-label">{accountantLeaveCategoryLabel(category)}</div>
+              <div className="cms-stat-value" title={stats.message}>{loading ? "Loading..." : stats.text}</div>
+            </div>
           </div>
-          <div>
-            <div className="cms-stat-label">Casual Leave (CL)</div>
-            <div className="cms-stat-value" title={categoryStats.CL.message}>{stats("CL")}</div>
-          </div>
-        </div>
-
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-blue">
-            <Calendar size={20} />
-          </div>
-          <div>
-            <div className="cms-stat-label">Sick Leave (SL)</div>
-            <div className="cms-stat-value" title={categoryStats.SL.message}>{stats("SL")}</div>
-          </div>
-        </div>
-
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-amber">
-            <Calendar size={20} />
-          </div>
-          <div>
-            <div className="cms-stat-label">Earned Leave (EL)</div>
-            <div className="cms-stat-value" title={categoryStats.EL.message}>{stats("EL")}</div>
-          </div>
-        </div>
-
-        <div className="cms-stat">
-          <div className="cms-stat-icon tone-violet">
-            <Calendar size={20} />
-          </div>
-          <div>
-            <div className="cms-stat-label">On-Duty (OD)</div>
-            <div className="cms-stat-value" title={categoryStats.OD.message}>{stats("OD")}</div>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {!loading && (hasPolicyQuotas || missingQuotas.length > 0 || (!historyError && unknownUsage.length > 0)) && (
+      {!loading && categories.length > 0 && (
         <p className="accountant-leave-balance-note" role="status">
-          {hasPolicyQuotas && "Values show approved days used / applicable category policy quota, not a verified individual employee allocation. "}
-          {missingQuotas.length > 0 && `Leave policy quotas are unavailable for: ${missingQuotas.join(", ")}.`}
+          Values show approved days used / applicable category policy quota, not a verified individual employee allocation.
+          {missingQuotas.length > 0 && ` Policy quotas are unavailable for: ${missingQuotas.join(", ")}.`}
           {!historyError && unknownUsage.length > 0 && ` Approved usage cannot be determined for: ${unknownUsage.join(", ")}.`}
         </p>
       )}
@@ -349,7 +314,7 @@ export default function AccountantLeave() {
               ) : (
                 leaveList.map((l) => (
                   <tr key={l.staffLeaveRequestId || l.id}>
-                    <td className="cms-strong">{getLeaveTypeName(l)}</td>
+                    <td className="cms-strong">{getAccountantLeaveTypeLabel(l, policyCategories)}</td>
                     <td>{formatDate(l.startDate)}</td>
                     <td>{formatDate(l.endDate)}</td>
                     <td><strong>{l.totalDays}</strong></td>
@@ -414,6 +379,8 @@ export default function AccountantLeave() {
                   <textarea id="accountant-leave-reason" rows={2} required placeholder="State reason clearly..." value={leaveForm.reason} disabled={leaveSubmitting} onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })} />
                 </div>
               </div>
+              {selectedCategory?.requiresProof && <p className="accountant-leave-balance-note">Supporting proof is required by this policy. This form has no document-upload integration; arrange proof with your leave approver.</p>}
+              {selectedCategory && accountantLeaveTypeForCategory(selectedCategory) === "Maternity" && <p className="accountant-leave-balance-note">Staff-type applicability does not confirm individual maternity eligibility. Eligibility remains subject to backend validation and leave approval.</p>}
             </div>
             <div className="cms-modal-foot">
               <button type="button" className="cms-btn cms-btn-ghost" disabled={leaveSubmitting} onClick={closeModal}>Cancel</button>

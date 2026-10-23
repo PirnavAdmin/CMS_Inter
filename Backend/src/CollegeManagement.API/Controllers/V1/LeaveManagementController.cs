@@ -76,7 +76,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves personal leave history and balances for the logged-in staff member or admin.
         /// </summary>
         [HttpGet("leave/my-history")]
-        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyStaffLeaveHistory()
@@ -87,7 +86,6 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("leave")]
-        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]

@@ -5,14 +5,14 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { loadAccountantHolidays, overlapsMonth } from "../accountantHolidayData.js";
+import { loadAccountantHolidays, overlapsMonth } from "../services/accountantService.js";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
 import nationalHolidaysIcon from "@/assets/sidebar-3d/holiday-national.svg";
 import festivalHolidaysIcon from "@/assets/sidebar-3d/holiday-festival.svg";
 import upcomingHolidaysIcon from "@/assets/sidebar-3d/holiday-upcoming.svg";
 import completedHolidaysIcon from "@/assets/sidebar-3d/holiday-completed.svg";
-import "../AccountantHolidays.css";
+import "./AccountantHolidays.css";
 
 const PAGE_SIZE = 5;
 const TYPES = ["National Holiday", "Festival Holiday", "Special Holiday", "Other"];
