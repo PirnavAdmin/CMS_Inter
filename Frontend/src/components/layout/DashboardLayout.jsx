@@ -4,8 +4,9 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
-  ReceiptIndianRupee, Boxes,
+  ReceiptIndianRupee, Boxes, KeyRound,
 } from "lucide-react";
+import ChangePasswordModal from "@/Dashboard/ExamCellDashboard/components/ChangePasswordModal.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -574,6 +575,7 @@ export default function DashboardLayout({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [campusOpen, setCampusOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
@@ -1456,6 +1458,19 @@ export default function DashboardLayout({
                 >
                   <User size={15} /> My Profile
                 </button>
+                {isExamCell ? (
+                  <button
+                    type="button"
+                    className="cms-dropdown-item"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      closeOnMobile();
+                      setChangePasswordOpen(true);
+                    }}
+                  >
+                    <KeyRound size={15} /> Change Password
+                  </button>
+                ) : null}
                 {showSettingsAction && resolvedSettingsPath ? <button
                   type="button"
                   className="cms-dropdown-item"
@@ -1496,6 +1511,13 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+
+      {changePasswordOpen && (
+        <ChangePasswordModal
+          isOpen={changePasswordOpen}
+          onClose={() => setChangePasswordOpen(false)}
+        />
+      )}
     </div>
   );
 }
