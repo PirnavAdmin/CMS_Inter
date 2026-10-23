@@ -156,6 +156,18 @@ export const loginUser = async (credentials) => {
       };
     }
     if (isExamCellCandidate && password) {
+      try {
+        const passMap = JSON.parse(typeof window !== "undefined" ? window.localStorage?.getItem("cms_user_passwords") || "{}" : "{}");
+        const savedPass = passMap["anusha987r@gmail.com"] || passMap["examcell"] || passMap[emailOrMobile.toLowerCase()];
+        if (savedPass && password !== savedPass) {
+          const err = new Error("Invalid username or password.");
+          err.code = "INVALID_CREDENTIALS";
+          throw err;
+        }
+      } catch (e) {
+        if (e.code === "INVALID_CREDENTIALS") throw e;
+      }
+
       return {
         token: BACKEND_EXAM_CELL_JWT,
         user: {
@@ -177,6 +189,19 @@ export const loginUser = async (credentials) => {
 
     throw authError;
   }
+};
+
+export const changePassword = async ({ currentPassword, oldPassword, newPassword, confirmPassword, confirmNewPassword }) => {
+  const actualOldPassword = currentPassword || oldPassword;
+  const actualConfirmPassword = confirmNewPassword || confirmPassword;
+  const payload = {
+    oldPassword: actualOldPassword,
+    currentPassword: actualOldPassword,
+    newPassword,
+    confirmNewPassword: actualConfirmPassword,
+    confirmPassword: actualConfirmPassword,
+  };
+  return apiClient.post(apiEndpoints.auth.changePassword, payload);
 };
 
 export const registerUser = (data) => apiClient.post(apiEndpoints.auth.register, data);
