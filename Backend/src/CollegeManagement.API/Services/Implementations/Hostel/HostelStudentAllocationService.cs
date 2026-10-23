@@ -1,9 +1,7 @@
-using CollegeManagement.API.DTOs.Hostel;
+﻿using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
-using CollegeManagement.API.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Services.Implementations.Hostel
 {
@@ -16,24 +14,12 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
         private readonly IHostelWardenAssignmentRepository
             _wardenRepository;
 
-        private readonly AppDbContext?
-            _context;
-
         public HostelStudentAllocationService(
             IHostelStudentAllocationRepository allocationRepository,
             IHostelWardenAssignmentRepository wardenRepository)
-            : this(allocationRepository, wardenRepository, null)
-        {
-        }
-
-        public HostelStudentAllocationService(
-            IHostelStudentAllocationRepository allocationRepository,
-            IHostelWardenAssignmentRepository wardenRepository,
-            AppDbContext? context)
         {
             _allocationRepository = allocationRepository;
             _wardenRepository = wardenRepository;
-            _context = context;
         }
 
         public async Task<IEnumerable<HostelStudentAllocationResponseDto>>
@@ -179,30 +165,6 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                         "Selected bed is already occupied.",
                         null);
                 }
-
-                // Mutual exclusion: Student must not have active bus transport
-                if (_context != null)
-                {
-                    var student = await _context.Students
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(s => s.StudentId == dto.StudentId);
-
-                    var activeTransport = await _context.StudentTransportAssignments
-                        .AsNoTracking()
-                        .Include(t => t.Route)
-                        .FirstOrDefaultAsync(t => (t.StudentId == dto.StudentId || (student != null && t.AdmissionNo == student.AdmissionNo)) && t.Status && !t.IsDeleted);
-
-                    if (activeTransport != null)
-                    {
-                        string routeName = activeTransport.Route?.RouteName ?? "Bus Route";
-                        return (
-                            false,
-                            $"Student is currently assigned to Bus Transport ({routeName}). " +
-                            "Students assigned to college bus transport cannot be allocated to a hostel. " +
-                            "Please unassign bus transport first before allocating a hostel bed.",
-                            null);
-                    }
-                }
             }
 
             int? wardenAssignmentId =
@@ -276,31 +238,6 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
             var created =
                 await _allocationRepository.GetByIdAsync(
                     allocationId);
-
-            if (_context != null)
-            {
-                var studentToUpdate = await _context.Students.FirstOrDefaultAsync(s => s.StudentId == dto.StudentId);
-                if (studentToUpdate != null)
-                {
-                    studentToUpdate.StudentType = "Hosteller";
-                    studentToUpdate.TransportRequired = false;
-
-                    // Clear transport
-                    studentToUpdate.RouteId = null;
-                    studentToUpdate.BusRoute = null;
-                    studentToUpdate.PickupPointId = null;
-                    studentToUpdate.PickupPoint = null;
-                    studentToUpdate.BusType = null;
-
-                    // Link hostel
-                    studentToUpdate.HostelId = dto.HostelId;
-                    studentToUpdate.RoomId = dto.RoomId;
-                    studentToUpdate.BedId = dto.BedId;
-                    studentToUpdate.UpdatedAt = DateTime.UtcNow;
-
-                    await _context.SaveChangesAsync();
-                }
-            }
 
             return (
                 true,
@@ -432,30 +369,6 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                         "Selected bed is already occupied.",
                         null);
                 }
-
-                // Mutual exclusion: Student must not have active bus transport
-                if (_context != null)
-                {
-                    var student = await _context.Students
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(s => s.StudentId == dto.StudentId);
-
-                    var activeTransport = await _context.StudentTransportAssignments
-                        .AsNoTracking()
-                        .Include(t => t.Route)
-                        .FirstOrDefaultAsync(t => (t.StudentId == dto.StudentId || (student != null && t.AdmissionNo == student.AdmissionNo)) && t.Status && !t.IsDeleted);
-
-                    if (activeTransport != null)
-                    {
-                        string routeName = activeTransport.Route?.RouteName ?? "Bus Route";
-                        return (
-                            false,
-                            $"Student is currently assigned to Bus Transport ({routeName}). " +
-                            "Students assigned to college bus transport cannot be allocated to a hostel. " +
-                            "Please unassign bus transport first before allocating a hostel bed.",
-                            null);
-                    }
-                }
             }
 
             int? wardenAssignmentId =
@@ -534,40 +447,6 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 await _allocationRepository.GetByIdAsync(
                     allocationId);
 
-            if (_context != null)
-            {
-                var studentToUpdate = await _context.Students.FirstOrDefaultAsync(s => s.StudentId == dto.StudentId);
-                if (studentToUpdate != null)
-                {
-                    if (status.Equals("Active", StringComparison.OrdinalIgnoreCase))
-                    {
-                        studentToUpdate.StudentType = "Hosteller";
-                        studentToUpdate.TransportRequired = false;
-                        studentToUpdate.RouteId = null;
-                        studentToUpdate.BusRoute = null;
-                        studentToUpdate.PickupPointId = null;
-                        studentToUpdate.PickupPoint = null;
-                        studentToUpdate.BusType = null;
-                        studentToUpdate.HostelId = dto.HostelId;
-                        studentToUpdate.RoomId = dto.RoomId;
-                        studentToUpdate.BedId = dto.BedId;
-                    }
-                    else
-                    {
-                        // Vacated / Cancelled: No longer hosteller, transitions to Day Scholar without transport
-                        studentToUpdate.StudentType = "Day Scholar";
-                        studentToUpdate.HostelId = null;
-                        studentToUpdate.HostelBlock = null;
-                        studentToUpdate.RoomId = null;
-                        studentToUpdate.HostelRoom = null;
-                        studentToUpdate.BedId = null;
-                        studentToUpdate.HostelBed = null;
-                    }
-                    studentToUpdate.UpdatedAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
-                }
-            }
-
             return (
                 true,
                 "Student hostel allocation updated successfully.",
@@ -587,8 +466,6 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     "Student hostel allocation not found.");
             }
 
-            var existing = await _allocationRepository.GetByIdAsync(allocationId);
-
             var deleted =
                 await _allocationRepository.DeleteAsync(
                     allocationId);
@@ -598,27 +475,6 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 return (
                     false,
                     "Unable to delete student hostel allocation.");
-            }
-
-            if (_context != null && existing != null)
-            {
-                var otherActive = await _allocationRepository.GetActiveByStudentAsync(existing.StudentId);
-                if (otherActive == null)
-                {
-                    var studentToUpdate = await _context.Students.FirstOrDefaultAsync(s => s.StudentId == existing.StudentId);
-                    if (studentToUpdate != null)
-                    {
-                        studentToUpdate.StudentType = "Day Scholar";
-                        studentToUpdate.HostelId = null;
-                        studentToUpdate.HostelBlock = null;
-                        studentToUpdate.RoomId = null;
-                        studentToUpdate.HostelRoom = null;
-                        studentToUpdate.BedId = null;
-                        studentToUpdate.HostelBed = null;
-                        studentToUpdate.UpdatedAt = DateTime.UtcNow;
-                        await _context.SaveChangesAsync();
-                    }
-                }
             }
 
             return (

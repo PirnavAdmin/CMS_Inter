@@ -25,7 +25,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
-        [Authorize]
+        [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD,Driver,Bus Driver")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetAll()
@@ -35,7 +35,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("summary")]
-        [Authorize]
+        [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetSummary()
@@ -45,7 +45,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("{id:int}")]
-        [Authorize]
+        [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -60,7 +60,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost]
-        [Authorize]
+        [Authorize(Roles = "Admin,College Admin,Super Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -72,7 +72,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPut("{id:int}")]
-        [Authorize]
+        [Authorize(Roles = "Admin,College Admin,Super Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -85,7 +85,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpDelete("{id:int}")]
-        [Authorize]
+        [Authorize(Roles = "Admin,College Admin,Super Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -96,7 +96,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("reset")]
-        [Authorize]
+        [Authorize(Roles = "Admin,College Admin,Super Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> ResetDefaults()

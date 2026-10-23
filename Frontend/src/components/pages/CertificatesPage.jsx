@@ -2062,8 +2062,13 @@ export default function CertificatesPage() {
       // Fallback if BroadcastChannel unavailable
     }
 
+    const polling = setInterval(() => {
+      loadWorkflowStats();
+    }, 30000);
+
     return () => {
       if (channel) channel.close();
+      clearInterval(polling);
     };
   }, []);
 
@@ -2347,14 +2352,15 @@ export default function CertificatesPage() {
       setToast("Unsupported certificate type.");
       return;
     }
-    const studentName = findStudentByAdmission(admissionNo)?.name || form.student || "Student";
-    const matchedStudent = findStudentByAdmission(admissionNo);
+    const matchedStudent = findStudentByAdmission(admissionNo) ||
+      (mockStudents?.find ? mockStudents.find((s) => String(s.admissionNo).trim().toLowerCase() === String(admissionNo).toLowerCase()) : null);
     if (!matchedStudent && !fromRequestMeta) {
       setErrors((prev) => ({ ...prev, admissionNo: "Select a valid student from the admissions list." }));
       return;
     }
 
-    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo;
+    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo || "MADM-0068";
+    const studentName = matchedStudent?.name || form.student || "Student";
 
     if (fromRequestMeta?.feeClearanceStatus === "Dues Pending" && Number(fromRequestMeta.feeDueAmount) > 0) {
       const proceed = await confirm({
@@ -2418,7 +2424,6 @@ export default function CertificatesPage() {
       } catch (apiError) {
         console.warn("Server generation offline/fallback:", apiError);
       }
-
       if (!createdCertificate) {
         const certCount = rows.length + 1;
         const certNumber = `CERT-${new Date().getFullYear()}-${String(certCount).padStart(3, "0")}`;
@@ -2483,6 +2488,29 @@ export default function CertificatesPage() {
         requestedCount: (prev.requestedCount || 0) + 1,
       }));
 
+      if (createdCertificate) {
+        setRows((currentRows) => [
+          createdCertificate,
+          ...currentRows.filter((row) => (
+            String(row.backendId || row.id) !== String(createdCertificate.backendId || createdCertificate.id)
+            && String(row.number) !== String(createdCertificate.number)
+          )),
+        ]);
+      }
+      try {
+        const channel = new BroadcastChannel("cms_notifications");
+        channel.postMessage({
+          type: "CERTIFICATE_STATUS_UPDATED",
+          admissionNo: canonicalAdmissionNo,
+          certificateType: certificateRequest.type,
+          status: "Generated",
+        });
+        channel.close();
+      } catch {
+        // Ignore channel error
+      }
+      setFromRequestMeta(null);
+      await refreshCertificateData({ showLoader: false });
       resetForm();
       setActiveTab("certificates");
       setPage(1);

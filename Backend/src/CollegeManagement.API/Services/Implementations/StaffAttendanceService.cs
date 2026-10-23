@@ -411,44 +411,5 @@ namespace CollegeManagement.API.Services.Implementations
 
             return new { total = rows.Count, valid = validCount, errors = errors };
         }
-
-        #region Self-Service My Attendance & Regularization
-
-        public async Task<MyAttendanceTodayResponse> GetMyTodayStatusAsync(int facultyId, DateTime date)
-        {
-            return await _repository.GetMyTodayStatusAsync(facultyId, date);
-        }
-
-        public async Task<MyAttendanceTodayResponse> PunchInAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId)
-        {
-            return await _repository.PunchInAsync(facultyId, request, clientIp, userId);
-        }
-
-        public async Task<MyAttendanceTodayResponse> PunchOutAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId)
-        {
-            return await _repository.PunchOutAsync(facultyId, request, clientIp, userId);
-        }
-
-        public async Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate)
-        {
-            return await _repository.GetMyAttendanceHistoryAsync(facultyId, period, targetDate);
-        }
-
-        public async Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId)
-        {
-            return await _repository.SubmitRegularizationAsync(facultyId, request, userId);
-        }
-
-        public async Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId)
-        {
-            return await _repository.GetRegularizationsAsync(status, departmentId);
-        }
-
-        public async Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId)
-        {
-            return await _repository.ReviewRegularizationAsync(regularizationId, request, reviewerUserId);
-        }
-
-        #endregion
     }
 }

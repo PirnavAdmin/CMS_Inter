@@ -53,16 +53,9 @@ namespace CollegeManagement.API.Filters
 
         public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
-            // AllowAnonymous, BypassPermission, or ParentStudentAuthorization check
+            // AllowAnonymous or BypassPermission check
             if (context.ActionDescriptor.EndpointMetadata.OfType<Microsoft.AspNetCore.Authorization.IAllowAnonymous>().Any()
-                || context.ActionDescriptor.EndpointMetadata.OfType<BypassPermissionAttribute>().Any()
-                || context.ActionDescriptor.EndpointMetadata.OfType<ParentStudentAuthorizationAttribute>().Any())
-            {
-                return;
-            }
-
-            var requestPath = context.HttpContext.Request.Path.Value?.ToLowerInvariant() ?? "";
-            if (requestPath.Contains("/students/me") || requestPath.Contains("/my-children") || requestPath.Contains("/faculty/me") || requestPath.Contains("/staff/me"))
+                || context.ActionDescriptor.EndpointMetadata.OfType<BypassPermissionAttribute>().Any())
             {
                 return;
             }
@@ -82,9 +75,8 @@ namespace CollegeManagement.API.Filters
                 return;
             }
 
-            // 2. Unrestricted bypass for platform Super Admin
-            if (context.HttpContext.User.IsInRole("Super Admin") 
-                || context.HttpContext.User.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && c.Value == "Super Admin"))
+            // 2. Unrestricted bypass for platform Super Admin and Admin
+            if (context.HttpContext.User.IsInRole("Super Admin") || context.HttpContext.User.IsInRole("Admin"))
             {
                 return;
             }
@@ -109,7 +101,7 @@ namespace CollegeManagement.API.Filters
                 return;
             }
 
-            // 4. Resolve action: if "auto", map based on HTTP method and path
+            // Resolve action: if "auto", map based on HTTP method and path
             string resolvedAction = _action;
             if (string.IsNullOrWhiteSpace(resolvedAction) || resolvedAction.Equals("auto", StringComparison.OrdinalIgnoreCase))
             {
@@ -136,7 +128,7 @@ namespace CollegeManagement.API.Filters
 
             try
             {
-                // 5. Verify permission via IPermissionRepository: User -> Role -> RoleModules -> Permissions (with User Overrides)
+                // 4. Verify permission in DB: User -> Role -> RoleModules -> Permissions (with User Overrides)
                 bool hasPermission = await _permissionRepository.HasModulePermissionAsync(userId, _module, resolvedAction);
                 if (!hasPermission)
                 {
@@ -152,7 +144,6 @@ namespace CollegeManagement.API.Filters
                     {
                         StatusCode = StatusCodes.Status403Forbidden
                     };
-                    return;
                 }
             }
             catch (Exception ex)
@@ -167,7 +158,6 @@ namespace CollegeManagement.API.Filters
                 {
                     StatusCode = StatusCodes.Status403Forbidden
                 };
-                return;
             }
         }
     }

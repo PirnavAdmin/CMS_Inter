@@ -63,10 +63,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .Include(s => s.StaffCampusAssignments)
-                    .ThenInclude(sca => sca.Campus)
-                .Include(s => s.StaffBoardAssignments)
-                    .ThenInclude(sba => sba.Board)
                 .FirstOrDefaultAsync(s => s.Email == email.Trim() && !s.IsDeleted);
         }
 
@@ -79,10 +75,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .Include(s => s.StaffCampusAssignments)
-                    .ThenInclude(sca => sca.Campus)
-                .Include(s => s.StaffBoardAssignments)
-                    .ThenInclude(sba => sba.Board)
                 .FirstOrDefaultAsync(s => s.Mobile == mobile.Trim() && !s.IsDeleted);
         }
 
@@ -95,10 +87,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .Include(s => s.StaffCampusAssignments)
-                    .ThenInclude(sca => sca.Campus)
-                .Include(s => s.StaffBoardAssignments)
-                    .ThenInclude(sba => sba.Board)
                 .FirstOrDefaultAsync(s => s.Aadhaar == aadhaar.Trim() && !s.IsDeleted);
         }
 
@@ -111,10 +99,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .Include(s => s.StaffCampusAssignments)
-                    .ThenInclude(sca => sca.Campus)
-                .Include(s => s.StaffBoardAssignments)
-                    .ThenInclude(sba => sba.Board)
                 .FirstOrDefaultAsync(s => s.ProfileLinkToken == token.Trim() && !s.IsDeleted);
         }
 
@@ -176,10 +160,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .Include(s => s.StaffCampusAssignments)
-                    .ThenInclude(sca => sca.Campus)
-                .Include(s => s.StaffBoardAssignments)
-                    .ThenInclude(sba => sba.Board)
                 .Where(s => !s.IsDeleted);
 
             // 1. Search Term (EmployeeId, Name, Email, Mobile, Department, Designation, Board)

@@ -45,7 +45,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Restricted strictly to administrative roles.
         /// </summary>
         [HttpPatch("substitutions/{id:int}/cancel")]
-        [Authorize]
+        [Authorize(Roles = "Admin,Super Admin,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -62,7 +62,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves timetable substitutions for a specific date with optional filters.
         /// </summary>
         [HttpGet("substitutions")]
-        [Authorize]
+        [Authorize(Roles = "Faculty,Admin,Super Admin,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetSubstitutions(
@@ -80,7 +80,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Accessible to Staff, Admins, and Students.
         /// </summary>
         [HttpGet("effective")]
-        [Authorize]
+        [Authorize(Roles = "Faculty,Admin,Super Admin,HOD,Student")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetEffectiveTimetable(
@@ -99,7 +99,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Accessible to Staff, Admins, and Students.
         /// </summary>
         [HttpGet("student/{studentId:int}/daily")]
-        [Authorize]
+        [Authorize(Roles = "Faculty,Admin,Super Admin,HOD,Student")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStudentDailyTimetable(int studentId, [FromQuery] DateTime date, [FromQuery] int? academicYearId)
@@ -113,7 +113,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Accessible to Staff and Admins.
         /// </summary>
         [HttpGet("staff/{staffId:int}/daily")]
-        [Authorize]
+        [Authorize(Roles = "Faculty,Admin,Super Admin,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffDailyTimetable(int staffId, [FromQuery] DateTime date, [FromQuery] int? academicYearId)

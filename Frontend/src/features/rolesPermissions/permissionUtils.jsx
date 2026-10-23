@@ -21,6 +21,8 @@ const MODULE_ALIASES = Object.freeze({
   "inventory-management": "inventory-management",
   "courses": "group-management",
   "course-management": "group-management",
+  "examinations": "examination",
+  "examination": "examination",
 });
 
 export const normalizeModuleKey = (value = "") => {
@@ -185,7 +187,12 @@ export const toPermissionMap = (permissions = []) => {
     map["salary"] = map["payroll"];
     map["payslips"] = map["payroll"];
   }
-  if (map["examinations"]) {
+  if (map["examination"]) {
+    map["examinations"] = map["examination"];
+    map["examduties"] = map["examination"];
+    map["exam-duties"] = map["examination"];
+  } else if (map["examinations"]) {
+    map["examination"] = map["examinations"];
     map["examduties"] = map["examinations"];
     map["exam-duties"] = map["examinations"];
   }

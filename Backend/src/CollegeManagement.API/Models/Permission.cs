@@ -19,12 +19,6 @@ namespace CollegeManagement.API.Models
         [StringLength(100)]
         public string SubModule { get; set; } = string.Empty;
 
-        [StringLength(100)]
-        public string Screen { get; set; } = string.Empty;
-
-        [StringLength(100)]
-        public string ScreenCode { get; set; } = string.Empty;
-
         [Required]
         [StringLength(50)]
         public string Action { get; set; } = string.Empty; // View, Add, Edit, Delete

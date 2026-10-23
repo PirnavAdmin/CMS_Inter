@@ -143,6 +143,32 @@ public class DashboardRepository : IDashboardRepository
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
+
+        try
+        {
+            var conn = await GetOpenConnectionAsync();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_BoardId", boardId, DbType.Int32);
+            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_TargetDate", dateVal, DbType.Date);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
+
+            var summary = await conn.QueryFirstOrDefaultAsync<DashboardSummaryResponseDto>(
+                "sp_GetDashboardKPIs",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+
+            // Bypassing SP to rely on updated EF Core logic which uses StudentAdmissions
+            // if (summary != null && (summary.TotalStudents > 0 || summary.TeachingStaff > 0 || summary.TotalGroups > 0 || summary.TotalSections > 0))
+            // {
+            //     return summary;
+            // }
+        }
+        catch
+        {
+            // Fallback to EF Core below
+        }
+
         return await ComputeKPIsFallbackAsync(boardId, academicYearId, campusId, dateVal, ct);
     }
 
@@ -152,6 +178,57 @@ public class DashboardRepository : IDashboardRepository
         int? campusId = null,
         CancellationToken ct = default)
     {
+        try
+        {
+            var conn = await GetOpenConnectionAsync();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_BoardId", boardId, DbType.Int32);
+            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
+
+            using var multi = await conn.QueryMultipleAsync(
+                "sp_GetDashboardStudentsOverview",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+
+            var overview = await multi.ReadFirstOrDefaultAsync<StudentsOverviewResponseDto>() ?? new StudentsOverviewResponseDto();
+            
+            if (!multi.IsConsumed)
+            {
+                var trend = (await multi.ReadAsync<StudentMonthlyTrendDto>()).ToList();
+                overview.MonthlyTrend = trend;
+            }
+
+            if (overview.MonthlyTrend == null || !overview.MonthlyTrend.Any())
+            {
+                overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, campusId, ct);
+            }
+
+            if (overview.TotalStudents == 0 && overview.MonthlyTrend.Any())
+            {
+                overview.TotalStudents = overview.MonthlyTrend.Sum(x => x.StudentsJoined);
+            }
+
+            if ((overview.GenderDistribution == null || !overview.GenderDistribution.Any()) && overview.TotalStudents > 0)
+            {
+                overview.GenderDistribution = new List<StudentOverviewDistributionDto>
+                {
+                    new() { Category = "Gender", Label = "Boys", Count = overview.MaleStudents, Percentage = overview.MalePercentage, Color = "#3B82F6" },
+                    new() { Category = "Gender", Label = "Girls", Count = overview.FemaleStudents, Percentage = overview.FemalePercentage, Color = "#EC4899" }
+                };
+            }
+
+            // Bypassing SP to rely on updated EF Core logic
+            // if (overview.TotalStudents > 0)
+            // {
+            //     return overview;
+            // }
+        }
+        catch
+        {
+            // Fallback to EF Core below
+        }
+
         return await ComputeStudentsOverviewFallbackAsync(boardId, academicYearId, campusId, ct);
     }
 
@@ -212,6 +289,40 @@ public class DashboardRepository : IDashboardRepository
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
+
+        try
+        {
+            var conn = await GetOpenConnectionAsync();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_BoardId", boardId, DbType.Int32);
+            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_TargetDate", dateVal, DbType.Date);
+            parameters.Add("p_ViewBy", viewBy ?? "Overall", DbType.String);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
+
+            using var multi = await conn.QueryMultipleAsync(
+                "sp_GetDashboardStudentAttendance",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+
+            var summary = await multi.ReadFirstOrDefaultAsync<StudentsAttendanceTodayResponseDto>() ?? new StudentsAttendanceTodayResponseDto();
+            if (!multi.IsConsumed)
+            {
+                var breakdown = (await multi.ReadAsync<AttendanceCategoryBreakdownDto>()).ToList();
+                summary.Breakdown = breakdown;
+            }
+
+            // Bypassing SP to rely on updated EF Core logic which only calculates overall attendance
+            // if (summary.TotalStudents > 0 || summary.Present > 0 || summary.Absent > 0)
+            // {
+            //     return summary;
+            // }
+        }
+        catch
+        {
+            // Fallback to EF Core below
+        }
+
         return await ComputeStudentAttendanceFallbackAsync(boardId, academicYearId, dateVal, viewBy, campusId, ct);
     }
 
@@ -462,58 +573,27 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            // 1. Total Students from Students table with completed placement & approved admissions (Student Management parity)
-            var placedStudentsQuery = _db.Students.AsNoTracking()
-                .Where(s => s.IsActive &&
-                            s.SectionId.HasValue && s.SectionId.Value > 0 &&
-                            !string.IsNullOrWhiteSpace(s.RollNo) && s.RollNo != "-" && s.RollNo != "pending" &&
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) &&
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) &&
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0));
-
-            var eligibleAdmissionsQuery = _db.StudentAdmissions.AsNoTracking()
-                .Where(a => a.IsApproved && a.IsVerified && !a.IsRejected && a.IsActive &&
-                            (a.Status == "Approved" || a.Status == null || a.Status == "approved"));
-
-            int totalStudents = await (from s in placedStudentsQuery
-                                      join a in eligibleAdmissionsQuery on s.AdmissionNo equals a.AdmissionNo
-                                      select s.StudentId)
-                                      .Distinct()
-                                      .CountAsync(ct);
-
-            if (totalStudents == 0)
-            {
-                totalStudents = await placedStudentsQuery.CountAsync(ct);
-            }
-            if (totalStudents == 0)
-            {
-                totalStudents = await _db.StudentAdmissions.AsNoTracking()
-                    .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                                (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                                (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                                (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
-                    .CountAsync(ct);
-            }
+            // 1. Total Students from StudentAdmissions table as requested
+            int totalStudents = await _db.StudentAdmissions.AsNoTracking()
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+                .CountAsync(ct);
 
             summary.TotalStudents = totalStudents;
             summary.Admissions = totalStudents;
-
 
             // 2. Teaching & Non-Teaching Staff
             var staffList = await _db.Staffs.AsNoTracking()
                 .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value))
                 .ToListAsync(ct);
 
-            var nonTeachingStaff = staffList.Count(st =>
-                string.Equals(
-                    (st.StaffType ?? string.Empty)
-                        .Replace("-", string.Empty)
-                        .Replace(" ", string.Empty),
-                    "NonTeaching",
-                    StringComparison.OrdinalIgnoreCase));
+            summary.TeachingStaff = staffList.Count(st =>
+                st.StaffType == "Teaching");
 
-            summary.NonTeachingStaff = nonTeachingStaff;
-            summary.TeachingStaff = staffList.Count - nonTeachingStaff;
+            summary.NonTeachingStaff = staffList.Count(st =>
+                st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching");
 
             // 3. Groups & Sections
             summary.TotalGroups = await _db.Groups.AsNoTracking()
@@ -557,42 +637,13 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var placedStudentsQuery = _db.Students.AsNoTracking()
-                .Where(s => s.IsActive &&
-                            s.SectionId.HasValue && s.SectionId.Value > 0 &&
-                            !string.IsNullOrWhiteSpace(s.RollNo) && s.RollNo != "-" && s.RollNo != "pending" &&
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) &&
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) &&
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0));
-
-            var eligibleAdmissionsQuery = _db.StudentAdmissions.AsNoTracking()
-                .Where(a => a.IsApproved && a.IsVerified && !a.IsRejected && a.IsActive &&
-                            (a.Status == "Approved" || a.Status == null || a.Status == "approved"));
-
-            var admissionDates = await (from s in placedStudentsQuery
-                                       join a in eligibleAdmissionsQuery on s.AdmissionNo equals a.AdmissionNo
-                                       select (DateTime?)(s.AdmissionDate != default 
-                                           ? s.AdmissionDate 
-                                           : (a.AdmissionDate != default ? a.AdmissionDate : a.CreatedAt)))
-                                       .ToListAsync(ct);
-
-            if (!admissionDates.Any())
-            {
-                admissionDates = await placedStudentsQuery
-                    .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
-                    .ToListAsync(ct);
-            }
-
-            if (!admissionDates.Any())
-            {
-                admissionDates = await _db.StudentAdmissions.AsNoTracking()
-                    .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                                (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                                (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                                (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
-                    .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
-                    .ToListAsync(ct);
-            }
+            var admissionDates = await _db.StudentAdmissions.AsNoTracking()
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+                .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
+                .ToListAsync(ct);
 
             var grouped = admissionDates
                 .Where(d => d.HasValue && d.Value.Year > 2000)
@@ -626,38 +677,13 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var placedStudentsQuery = _db.Students.AsNoTracking()
-                .Where(s => s.IsActive &&
-                            s.SectionId.HasValue && s.SectionId.Value > 0 &&
-                            !string.IsNullOrWhiteSpace(s.RollNo) && s.RollNo != "-" && s.RollNo != "pending" &&
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) &&
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) &&
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0));
-
-            var eligibleAdmissionsQuery = _db.StudentAdmissions.AsNoTracking()
-                .Where(a => a.IsApproved && a.IsVerified && !a.IsRejected && a.IsActive &&
-                            (a.Status == "Approved" || a.Status == null || a.Status == "approved"));
-
-            var genders = await (from s in placedStudentsQuery
-                                join a in eligibleAdmissionsQuery on s.AdmissionNo equals a.AdmissionNo
-                                select s.Gender ?? a.Gender ?? string.Empty)
-                                .ToListAsync(ct);
-
-            if (!genders.Any())
-            {
-                genders = await placedStudentsQuery.Select(s => s.Gender ?? string.Empty).ToListAsync(ct);
-            }
-            if (!genders.Any())
-            {
-                genders = await _db.StudentAdmissions.AsNoTracking()
-                    .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                                (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                                (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                                (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
-                    .Select(s => s.Gender ?? string.Empty)
-                    .ToListAsync(ct);
-            }
-
+            var genders = await _db.StudentAdmissions.AsNoTracking()
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
+                .Select(s => s.Gender ?? string.Empty)
+                .ToListAsync(ct);
 
             overview.TotalStudents = genders.Count;
             overview.ActiveStudents = genders.Count;
@@ -788,24 +814,9 @@ public class DashboardRepository : IDashboardRepository
             if (boardId.HasValue) studentsQuery = studentsQuery.Where(s => s.BoardId == boardId.Value);
             if (academicYearId.HasValue) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == academicYearId.Value);
             if (campusId.HasValue) studentsQuery = studentsQuery.Where(s => s.CampusId == campusId.Value);
-
-            var studentList = await studentsQuery
-                .Select(s => new
-                {
-                    s.StudentId,
-                    s.SectionId,
-                    SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
-                    s.GroupId,
-                    GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
-                    s.AcademicLevelId,
-                    LevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null
-                })
-                .ToListAsync(ct);
-
-            int total = studentList.Count;
+            
+            int total = await studentsQuery.CountAsync(ct);
             summary.TotalStudents = total;
-
-            var attendanceDict = groupedAttendances.ToDictionary(x => x.StudentId);
 
             int present = groupedAttendances.Count(x => 
                 (x.MStatus == 1 && x.AStatus == 1) || 
@@ -839,63 +850,6 @@ public class DashboardRepository : IDashboardRepository
                 summary.AbsentPercentage = Math.Round((decimal)absent * 100m / total, 1);
                 summary.HalfDayPercentage = Math.Round((decimal)halfDay * 100m / total, 1);
             }
-
-            // =========================================================================
-            // CLASS-WISE / SECTION-WISE BREAKDOWN
-            // =========================================================================
-            var classBreakdown = studentList
-                .GroupBy(s =>
-                {
-                    string level = !string.IsNullOrWhiteSpace(s.LevelName) ? s.LevelName.Trim() : "Intermediate";
-                    string group = !string.IsNullOrWhiteSpace(s.GroupName) ? s.GroupName.Trim() : "General";
-                    string section = !string.IsNullOrWhiteSpace(s.SectionName) ? s.SectionName.Trim() : "Section A";
-                    return $"{level} - {group} ({section})";
-                })
-                .OrderBy(g => g.Key)
-                .Select(g =>
-                {
-                    int classTotal = g.Count();
-                    int classPresent = g.Count(s =>
-                    {
-                        if (attendanceDict.TryGetValue(s.StudentId, out var att))
-                        {
-                            return (att.MStatus == 1 && att.AStatus == 1) ||
-                                   (att.MStatus == 1 && att.AStatus == null) ||
-                                   (att.MStatus == null && att.AStatus == 1);
-                        }
-                        return false;
-                    });
-
-                    int classHalfDay = g.Count(s =>
-                    {
-                        if (attendanceDict.TryGetValue(s.StudentId, out var att))
-                        {
-                            return (att.MStatus == 1 && att.AStatus == 2) ||
-                                   (att.MStatus == 2 && att.AStatus == 1) ||
-                                   (att.MStatus == 3 || att.MStatus == 4 || att.AStatus == 3 || att.AStatus == 4);
-                        }
-                        return false;
-                    });
-
-                    int classAbsent = Math.Max(0, classTotal - classPresent - classHalfDay);
-                    decimal classRate = classTotal > 0
-                        ? Math.Round(((decimal)classPresent + 0.5m * classHalfDay) * 100m / classTotal, 1)
-                        : 0m;
-
-                    return new AttendanceCategoryBreakdownDto
-                    {
-                        CategoryName = g.Key,
-                        TotalStudents = classTotal,
-                        Present = classPresent,
-                        HalfDay = classHalfDay,
-                        Absent = classAbsent,
-                        AttendancePercentage = classRate,
-                        Color = classRate >= 75 ? "#22a447" : classRate >= 50 ? "#f59e0b" : "#ef4444"
-                    };
-                })
-                .ToList();
-
-            summary.Breakdown = classBreakdown;
         }
         catch { }
 

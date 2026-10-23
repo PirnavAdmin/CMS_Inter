@@ -362,7 +362,6 @@ public class StudentFeeLedgerResponse
     public decimal TotalPaid { get; set; }
     public decimal Balance { get; set; }
     public string Status { get; set; } = string.Empty;
-    public List<FeeScheduleResponse> Installments { get; set; } = new();
 }
 
 public class FeeCollectionResponse
@@ -380,8 +379,6 @@ public class FeeCollectionResponse
     public decimal Balance { get; set; }
     public DateTime? NextDue { get; set; }
     public string Status { get; set; } = string.Empty;
-    public string PaymentPlan { get; set; } = string.Empty;
-    public List<FeeScheduleResponse> Installments { get; set; } = new();
 }
 
 public class FeeDueResponse

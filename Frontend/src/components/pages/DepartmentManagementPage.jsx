@@ -177,60 +177,13 @@ export const isNonTeachingDesigName = (name) => {
   );
 };
 
-export const DEFAULT_TEACHING_DEPARTMENTS = [
-  { id: 1, departmentId: 1, name: "Computer Science and Engineering", departmentName: "Computer Science and Engineering", code: "DEP_CSE", departmentCode: "DEP_CSE", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 2, departmentId: 2, name: "Electronics and Communication Engineering", departmentName: "Electronics and Communication Engineering", code: "DEP_ECE", departmentCode: "DEP_ECE", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 3, departmentId: 3, name: "Electrical and Electronics Engineering", departmentName: "Electrical and Electronics Engineering", code: "DEP_EEE", departmentCode: "DEP_EEE", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 4, departmentId: 4, name: "Mechanical Engineering", departmentName: "Mechanical Engineering", code: "DEP_MEC", departmentCode: "DEP_MEC", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 5, departmentId: 5, name: "Civil Engineering", departmentName: "Civil Engineering", code: "DEP_CIV", departmentCode: "DEP_CIV", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 6, departmentId: 6, name: "Information Technology", departmentName: "Information Technology", code: "DEP_IT", departmentCode: "DEP_IT", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 7, departmentId: 7, name: "Mathematics", departmentName: "Mathematics", code: "DEP_MAT", departmentCode: "DEP_MAT", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 8, departmentId: 8, name: "Physics", departmentName: "Physics", code: "DEP_PHY", departmentCode: "DEP_PHY", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 9, departmentId: 9, name: "Chemistry", departmentName: "Chemistry", code: "DEP_CHE", departmentCode: "DEP_CHE", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 10, departmentId: 10, name: "English", departmentName: "English", code: "DEP_ENG", departmentCode: "DEP_ENG", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 11, departmentId: 11, name: "Management Studies", departmentName: "Management Studies", code: "DEP_MBA", departmentCode: "DEP_MBA", staffType: "Teaching", status: "Active", isActive: true },
-];
+export const DEFAULT_TEACHING_DEPARTMENTS = [];
 
-export const DEFAULT_NON_TEACHING_DEPARTMENTS = [
-  { id: 101, departmentId: 101, name: "Administration", departmentName: "Administration", code: "DEP_ADM", departmentCode: "DEP_ADM", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 102, departmentId: 102, name: "Accounts & Finance", departmentName: "Accounts & Finance", code: "DEP_ACC", departmentCode: "DEP_ACC", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 103, departmentId: 103, name: "Human Resources", departmentName: "Human Resources", code: "DEP_HR", departmentCode: "DEP_HR", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 104, departmentId: 104, name: "Library", departmentName: "Library", code: "DEP_LIB", departmentCode: "DEP_LIB", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 105, departmentId: 105, name: "Transport", departmentName: "Transport", code: "DEP_TRN", departmentCode: "DEP_TRN", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 106, departmentId: 106, name: "Security", departmentName: "Security", code: "DEP_SEC", departmentCode: "DEP_SEC", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 107, departmentId: 107, name: "Maintenance & Facilities", departmentName: "Maintenance & Facilities", code: "DEP_MNT", departmentCode: "DEP_MNT", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 108, departmentId: 108, name: "Examinations Cell", departmentName: "Examinations Cell", code: "DEP_EXM", departmentCode: "DEP_EXM", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 109, departmentId: 109, name: "IT & Systems Support", departmentName: "IT & Systems Support", code: "DEP_ITS", departmentCode: "DEP_ITS", staffType: "Non-Teaching", status: "Active", isActive: true },
-];
+export const DEFAULT_NON_TEACHING_DEPARTMENTS = [];
 
-export const DEFAULT_TEACHING_DESIGNATIONS = [
-  { id: 1, designationId: 1, name: "Professor", designationName: "Professor", code: "DES_PROF", designationCode: "DES_PROF", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 2, designationId: 2, name: "Associate Professor", designationName: "Associate Professor", code: "DES_ASSOC_PROF", designationCode: "DES_ASSOC_PROF", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 3, designationId: 3, name: "Assistant Professor", designationName: "Assistant Professor", code: "DES_ASST_PROF", designationCode: "DES_ASST_PROF", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 4, designationId: 4, name: "Head of Department (HOD)", designationName: "Head of Department (HOD)", code: "DES_HOD", designationCode: "DES_HOD", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 5, designationId: 5, name: "Senior Lecturer", designationName: "Senior Lecturer", code: "DES_SR_LECT", designationCode: "DES_SR_LECT", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 6, designationId: 6, name: "Lecturer", designationName: "Lecturer", code: "DES_LECT", designationCode: "DES_LECT", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 7, designationId: 7, name: "Lab Instructor", designationName: "Lab Instructor", code: "DES_LAB_INST", designationCode: "DES_LAB_INST", staffType: "Teaching", status: "Active", isActive: true },
-  { id: 8, designationId: 8, name: "Dean", designationName: "Dean", code: "DES_DEAN", designationCode: "DES_DEAN", staffType: "Teaching", status: "Active", isActive: true },
-];
+export const DEFAULT_TEACHING_DESIGNATIONS = [];
 
-export const DEFAULT_NON_TEACHING_DESIGNATIONS = [
-  { id: 101, designationId: 101, name: "Administrative Officer", designationName: "Administrative Officer", code: "DES_AO", designationCode: "DES_AO", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 102, designationId: 102, name: "Office Administrator", designationName: "Office Administrator", code: "DES_OFF_ADM", designationCode: "DES_OFF_ADM", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 103, designationId: 103, name: "Accountant", designationName: "Accountant", code: "DES_ACC", designationCode: "DES_ACC", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 104, designationId: 104, name: "Accounts Executive", designationName: "Accounts Executive", code: "DES_ACC_EXEC", designationCode: "DES_ACC_EXEC", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 105, designationId: 105, name: "HR Executive", designationName: "HR Executive", code: "DES_HR_EXEC", designationCode: "DES_HR_EXEC", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 106, designationId: 106, name: "Librarian", designationName: "Librarian", code: "DES_LIB", designationCode: "DES_LIB", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 107, designationId: 107, name: "Assistant Librarian", designationName: "Assistant Librarian", code: "DES_ASST_LIB", designationCode: "DES_ASST_LIB", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 108, designationId: 108, name: "Receptionist", designationName: "Receptionist", code: "DES_RECEP", designationCode: "DES_RECEP", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 109, designationId: 109, name: "Office Assistant", designationName: "Office Assistant", code: "DES_OFF_ASST", designationCode: "DES_OFF_ASST", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 110, designationId: 110, name: "Data Entry Operator", designationName: "Data Entry Operator", code: "DES_DEO", designationCode: "DES_DEO", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 111, designationId: 111, name: "Security Officer", designationName: "Security Officer", code: "DES_SEC_OFF", designationCode: "DES_SEC_OFF", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 112, designationId: 112, name: "Security Guard", designationName: "Security Guard", code: "DES_SEC_GRD", designationCode: "DES_SEC_GRD", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 113, designationId: 113, name: "Driver", designationName: "Driver", code: "DES_DRV", designationCode: "DES_DRV", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 114, designationId: 114, name: "Attender / Peon", designationName: "Attender / Peon", code: "DES_PEON", designationCode: "DES_PEON", staffType: "Non-Teaching", status: "Active", isActive: true },
-  { id: 115, designationId: 115, name: "Hostel Warden", designationName: "Hostel Warden", code: "DES_WARDEN", designationCode: "DES_WARDEN", staffType: "Non-Teaching", status: "Active", isActive: true },
-];
+export const DEFAULT_NON_TEACHING_DESIGNATIONS = [];
 
 export const loadCachedDepartments = () => {
   return [...DEFAULT_TEACHING_DEPARTMENTS, ...DEFAULT_NON_TEACHING_DEPARTMENTS];
@@ -885,15 +838,14 @@ export default function DepartmentManagementPage() {
       });
       if (requestSeqRef.current === currentSeq) {
         const rows = unwrapRows(deptRes.data).map(normalizeDepartment).filter((d) => d.name);
-        if (rows.length > 0) {
-          setDepartments(rows);
-        }
+        setDepartments(rows);
         deptSuccess = true;
       }
     } catch (err) {
-      console.warn("Failed to load departments from API, using cached/fallback:", err);
+      console.warn("Failed to load departments from API:", err);
       if (requestSeqRef.current === currentSeq) {
-        setDepartments((prev) => (prev && prev.length > 0 ? prev : loadCachedDepartments()));
+        setDepartments([]);
+        setToast({ message: `Unable to load departments. ${getApiErrorMessage(err)}`, type: "error" });
       }
     } finally {
       if (requestSeqRef.current === currentSeq) setDepartmentsLoading(false);
@@ -913,15 +865,13 @@ export default function DepartmentManagementPage() {
       });
       if (requestSeqRef.current === currentSeq) {
         const rows = unwrapRows(desigRes.data).map(normalizeDesignation).filter((d) => d.name);
-        if (rows.length > 0) {
-          setDesignations(rows);
-        }
+        setDesignations(rows);
         desigSuccess = true;
       }
     } catch (err) {
-      console.warn("Failed to load designations from API, using cached/fallback:", err);
+      setToast({ message: `Unable to load designations. ${getApiErrorMessage(err)}`, type: "error" });
       if (requestSeqRef.current === currentSeq) {
-        setDesignations((prev) => (prev && prev.length > 0 ? prev : loadCachedDesignations()));
+        setDesignations([]);
       }
     } finally {
       if (requestSeqRef.current === currentSeq) {
@@ -935,7 +885,7 @@ export default function DepartmentManagementPage() {
         setToast("Department and Designation data refreshed successfully.");
       } else {
         setToast({
-          message: "Loaded cached department and designation data.",
+          message: "Unable to refresh department and designation data from the server.",
           type: "info",
         });
       }
@@ -1579,14 +1529,12 @@ export function DepartmentDetailsPage() {
       .then((res) => {
         if (!active) return;
         const allDesigs = unwrapRows(res.data).map(normalizeDesignation);
-        if (allDesigs.length > 0) {
-          setDesignations(allDesigs);
-        }
+        setDesignations(allDesigs);
       })
       .catch((err) => {
-        console.warn("Failed to load designations in dept details, keeping cached:", err);
+        console.warn("Failed to load designations in department details:", err);
         if (active) {
-          setDesignations((prev) => (prev && prev.length > 0 ? prev : loadCachedDesignations()));
+          setDesignations([]);
         }
       })
       .finally(() => {
