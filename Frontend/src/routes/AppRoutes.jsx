@@ -56,6 +56,7 @@ import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPo
 import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
 import NonTeachingPortalRoutes from "@/Dashboard/NonTeachingDashboard/NonTeachingPortalRoutes.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
+import TransportManagerRoutes from "@/Dashboard/TransportManagerDashboard/TransportManagerRoutes.jsx";
 import InventoryDashboard from "@/Dashboard/InventoryDashboard/InventoryDashboard.jsx";
 import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
 import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
@@ -532,6 +533,9 @@ export default function AppRoutes() {
         <Route path="/non-teaching/*" element={<Navigate to="/non-teaching-dashboard" replace />} />
         <Route path="/non-teaching" element={<Navigate to="/non-teaching-dashboard" replace />} />
       </Route>
+      {/* Transport Manager Module Routes */}
+      <Route path="/transport-manager" element={<Navigate to="/transport-manager/overview" replace />} />
+      <Route path="/transport-manager/*" element={<TransportManagerRoutes />} />
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/inventory-dashboard/*" element={<InventoryDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />
