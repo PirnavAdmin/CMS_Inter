@@ -19,11 +19,6 @@ namespace CollegeManagement.API.DTOs.Inventory
         public decimal TotalAmount { get; set; }
         public decimal PreviousUnitCost { get; set; }
         public string Status { get; set; } = "Posted";
-        public string? PaymentMethod { get; set; }
-        public string? PaymentTransactionNumber { get; set; }
-        public string? CashReceiptPath { get; set; }
-        public string? CashReceipt => CashReceiptPath;
-        public string? ReceiptUrl => CashReceiptPath;
         public int? CorrectionOfId { get; set; }
         public string? CorrectionOfNumber { get; set; }
         public int? ReturnOfId { get; set; }
@@ -50,13 +45,7 @@ namespace CollegeManagement.API.DTOs.Inventory
         public string PerformedBy { get; set; } = string.Empty;
         public string? Partner { get; set; }
         public string? Remarks { get; set; }
-        public bool CanReverse { get; set; }
-        public string? ReverseBlockedReason { get; set; }
         public DateTime CreatedAt { get; set; }
-    }
-
-    public class MovementDto : TransactionDto
-    {
     }
 
     public class PostMovementRequest
@@ -102,22 +91,10 @@ namespace CollegeManagement.API.DTOs.Inventory
         public string PerformedBy { get; set; } = string.Empty;
 
         public string? Remarks { get; set; }
-
-        // Payment fields
-        public string? PaymentMethod { get; set; } = "Cash"; // 'Cash', 'Online Transaction'
-        public string? PaymentTransactionNumber { get; set; }
-        public string? TransactionNumber { get; set; } // Frontend alias for online transaction number
-        public string? PaymentReference { get; set; } // Frontend alias
-        public string? OnlineTransactionNumber { get; set; } // Frontend alias
-        public string? CashReceiptPath { get; set; }
-        public string? CashReceipt { get; set; } // Frontend alias
-        public string? ReceiptUrl { get; set; } // Frontend alias
-        public string? ReceiptPath { get; set; } // Frontend alias
     }
 
     public class MovementFilterRequest
     {
-        public int? TransactionId { get; set; }
         public string? Search { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
@@ -127,6 +104,5 @@ namespace CollegeManagement.API.DTOs.Inventory
         public int? SupplierId { get; set; }
         public string? Type { get; set; }
         public string? StockStatus { get; set; }
-        public string? PaymentMethod { get; set; }
     }
 }

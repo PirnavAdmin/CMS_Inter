@@ -83,14 +83,8 @@ const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
   templates: settingsTemplatesIcon,
   "audit logs": settingsAuditLogsIcon,
   "faculty reimbursement": reimbursementIcon,
-  "staff reimbursements": reimbursementIcon,
   reimbursement: reimbursementIcon,
-  reimbursements: reimbursementIcon,
   "inventory management": Boxes,
-  "exam schedule": examinationIcon,
-  "marks evaluation": marksEvaluationIcon,
-  "marks entry": marksEvaluationIcon,
-  "my attendance": generatedSidebarIcons.staffAttendance,
 });
 
 const PAGE_ICON_ROUTE_ALIASES = [
@@ -104,9 +98,7 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/reimbursement", icon: reimbursementIcon },
-  { path: "/dashboard/reimbursements", icon: reimbursementIcon },
   { path: "/dashboard/finance/reimbursement", icon: reimbursementIcon },
-  { path: "/dashboard/finance/reimbursements", icon: reimbursementIcon },
   { path: "/dashboard/inventory-management", icon: Boxes },
   { path: "/dashboard/inventory", icon: Boxes },
   { path: "/warden-dashboard/students", icon: studentsIcon },
@@ -119,23 +111,6 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/warden-dashboard/reports", icon: reportsAnalyticsIcon },
   { path: "/warden-dashboard/profile", icon: staffIcon },
   { path: "/warden-dashboard", icon: dashboardIcon },
-  { path: "/exam-cell-dashboard/exams", icon: examinationIcon },
-  { path: "/exam-cell-dashboard/exam-timetable", icon: timetableIcon },
-  { path: "/exam-cell-dashboard/hall-allocation", icon: sectionsIcon },
-  { path: "/exam-cell-dashboard/hall-tickets", icon: certificatesIcon },
-  { path: "/exam-cell-dashboard/marks-entry", icon: marksEvaluationIcon },
-  { path: "/exam-cell-dashboard/marks-verification", icon: reportsAnalyticsIcon },
-  { path: "/exam-cell-dashboard/results", icon: resultsIcon },
-  { path: "/exam-cell-dashboard/publish-results", icon: promotionIcon },
-  { path: "/exam-cell-dashboard/attendance", icon: attendanceIcon },
-  { path: "/exam-cell-dashboard/check-in-out", icon: generatedSidebarIcons.staffAttendance },
-  { path: "/exam-cell-dashboard/my-attendance", icon: generatedSidebarIcons.staffAttendance },
-  { path: "/exam-cell-dashboard/certificates", icon: certificatesIcon },
-  { path: "/exam-cell-dashboard/promotions", icon: promotionIcon },
-  { path: "/exam-cell-dashboard/holidays", icon: holidayManagementIcon },
-  { path: "/exam-cell-dashboard/reports", icon: reportsAnalyticsIcon },
-  { path: "/exam-cell-dashboard/profile", icon: staffIcon },
-  { path: "/exam-cell-dashboard", icon: dashboardIcon },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -219,13 +194,13 @@ export const menu = [
       { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department, moduleKey: "department-designation" },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance" },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management" },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon, moduleKey: "reimbursement" },
+      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll, moduleKey: "reimbursement" },
     ],
   },
   {
     section: "Examinations",
     items: [
-      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon, moduleKey: "examinations" },
+      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon, moduleKey: "examination" },
       { to: "/dashboard/marks-entry", label: "Marks Evaluation", icon: marksEvaluationIcon, moduleKey: "marks-evaluation" },
       { to: "/dashboard/results", label: "Results", icon: resultsIcon, moduleKey: "results" },
     ],
@@ -287,44 +262,6 @@ export const parentMenu = [
   },
 ];
 
-export const principalMenu = [
-  {
-    section: "Overview",
-    items: [{ to: "/principal-dashboard", label: "Dashboard", icon: dashboardIcon }],
-  },
-  {
-    section: "Academic Management",
-    items: [
-      { to: "/dashboard/students", label: "Students", icon: studentsIcon },
-      { to: "/dashboard/staff", label: "Staff", icon: staffIcon },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: reimbursementIcon },
-      { to: "/dashboard/attendance/student", label: "Student Attendance", icon: attendanceIcon },
-      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
-      { to: "/dashboard/sections", label: "Classes & Sections", icon: sectionsIcon },
-      { to: "/dashboard/subjects", label: "Subjects", icon: subjectsIcon },
-      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
-    ],
-  },
-  {
-    section: "Assessment",
-    items: [
-      { to: "/dashboard/examinations", label: "Examinations", icon: examinationIcon },
-      { to: "/dashboard/results", label: "Results", icon: resultsIcon },
-      { to: "/dashboard/marks-entry", label: "Assignments & Marks", icon: marksEvaluationIcon },
-    ],
-  },
-  {
-    section: "Administration",
-    items: [
-      { to: "/dashboard/admission", label: "Admissions", icon: generatedSidebarIcons.admission },
-      { to: "/dashboard/fee-structure", label: "Fees", icon: feeManagementIcon },
-      { to: "/dashboard/leave-management", label: "Leave Management", icon: generatedSidebarIcons.staffLeave },
-      { to: "/dashboard/reports", label: "Reports", icon: reportsAnalyticsIcon },
-      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
-    ],
-  },
-];
-
 export const wardenMenu = [
   {
     section: "Overview",
@@ -349,6 +286,12 @@ export const wardenMenu = [
     ],
   },
 ];
+
+export const principalMenu = menu.map((group) => (
+  group.section === "Overview"
+    ? { ...group, items: [{ ...group.items[0], to: "/principal-dashboard" }] }
+    : group
+));
 
 export const examCellMenu = [
   {
@@ -399,7 +342,9 @@ const EMPTY_CAMPUS_CONTEXT = Object.freeze({
   selectedCampus: null,
   setSelectedCampus: () => undefined,
 });
-const MOCK_NOTIFICATIONS = [];
+const MOCK_NOTIFICATIONS = [
+  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/dashboard/reimbursements", label: "reimbursements" }
+];
 const PARENT_NOTIFICATIONS = [
   { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
   { id: "pn-2", title: "Upcoming Examinations", count: 5, to: "/parent-dashboard/examinations", label: "exam timetable" },
@@ -437,10 +382,6 @@ const createSearchIndex = (items) => items.flatMap((g) =>
   ]),
 );
 
-const principalSearchIndex = principalMenu.flatMap((g) =>
-  g.items.map((item) => ({ to: item.to, label: item.label, section: g.section })),
-);
-
 const searchIndex = createSearchIndex(menu);
 
 const parentSearchIndex = [
@@ -455,7 +396,6 @@ const parentSearchIndex = [
   { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
 ];
 
-const examCellSearchIndex = createSearchIndex(examCellMenu);
 const wardenSearchIndex = [
   ...wardenMenu.flatMap((g) =>
     g.items.flatMap((item) => [
@@ -482,8 +422,6 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
       matches = pathname === "/dashboard";
     } else if (path === "/parent-dashboard") {
       matches = pathname === "/parent-dashboard";
-    } else if (path === "/exam-cell-dashboard") {
-      matches = pathname === "/exam-cell-dashboard";
     } else if (path === "/dashboard/attendance" || path === "/dashboard/attendance/student") {
       matches =
         !pathname.startsWith("/dashboard/attendance/staff") &&
@@ -494,27 +432,6 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
       matches =
         pathname === "/dashboard/attendance/staff" ||
         pathname.startsWith("/dashboard/attendance/staff/");
-    } else if (path === "/exam-cell-dashboard/exams") {
-      matches =
-        pathname === "/exam-cell-dashboard/exams" ||
-        pathname.startsWith("/exam-cell-dashboard/exams/") ||
-        pathname === "/exam-cell-dashboard/exam-timetable";
-    } else if (path === "/exam-cell-dashboard/marks-entry") {
-      matches =
-        pathname === "/exam-cell-dashboard/marks-entry" ||
-        pathname.startsWith("/exam-cell-dashboard/marks-entry/") ||
-        pathname === "/exam-cell-dashboard/marks-verification";
-    } else if (path === "/exam-cell-dashboard/results") {
-      matches =
-        pathname === "/exam-cell-dashboard/results" ||
-        pathname.startsWith("/exam-cell-dashboard/results/") ||
-        pathname === "/exam-cell-dashboard/publish-results";
-    } else if (path === "/exam-cell-dashboard/attendance") {
-      matches =
-        pathname === "/exam-cell-dashboard/attendance" ||
-        pathname.startsWith("/exam-cell-dashboard/attendance/");
-    } else if (path === "/exam-cell-dashboard/check-in-out") {
-      matches = pathname === "/exam-cell-dashboard/check-in-out" || pathname === "/exam-cell-dashboard/my-attendance";
     } else {
       matches = pathname === path || pathname.startsWith(`${path}/`);
     }
@@ -527,8 +444,6 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
     ? parentMenu
     : pathname.startsWith("/principal-dashboard")
     ? principalMenu
-    : pathname.startsWith("/exam-cell-dashboard")
-    ? examCellMenu
     : pathname.startsWith("/warden")
     ? wardenMenu
     : menu;
@@ -585,12 +500,6 @@ function readUser() {
 function isPrincipalRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   return normalized === "principal" || normalized.includes("principal");
-}
-
-export function isExamCellRole(role) {
-  return /^exam(?:ination)?cell(?:staff|officer|coordinator)?$/.test(
-    String(role || "").replace(/[^a-z]/gi, "").toLowerCase()
-  );
 }
 
 function initials(name = "CMS Admin") {
@@ -668,7 +577,7 @@ export default function DashboardLayout({
     const fetchPerms = () => {
       getCurrentUserPermissions()
         .then((res) => {
-          if (isMounted && res?.data && Array.isArray(res.data)) {
+          if (isMounted && res?.data && Array.isArray(res.data) && res.data.length > 0) {
             const updated = { ...currentUser, permissions: res.data };
             try {
               for (const storage of [window.localStorage, window.sessionStorage]) {
@@ -697,18 +606,12 @@ export default function DashboardLayout({
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
-  const isNonTeaching = !isWarden && !isParent && (isNonTeachingRole(user?.role, user) || pathname.startsWith("/non-teaching"));
-  const isExamCell = !isWarden && !isParent && (isExamCellRole(user?.role) || pathname.startsWith("/exam-cell-dashboard"));
-  const shouldShowCampusSelector = Boolean(showCampusSelector);
-  const shouldShowBoardSelector = Boolean(showBoardSelector && !isNonTeaching);
-  const shouldShowAcademicYearSelector = Boolean(showAcademicYearSelector && !isNonTeaching);
   const activeMenu = useMemo(() => {
     let base = menuOverride;
     if (!base) {
       if (isWarden) base = wardenMenu;
       else if (isParent) base = parentMenu;
       else if (isPrincipal) base = principalMenu;
-      else if (isExamCell) base = examCellMenu;
       else base = menu;
     }
     if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
@@ -723,11 +626,11 @@ export default function DashboardLayout({
         .filter((group) => group.items.length > 0);
     }
     return base;
-  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user]);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : isExamCell ? examCellSearchIndex : searchIndex);
-  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/dashboard/settings/my-profile");
-  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
-  const canManageAcademicContext = !isParent && !isWarden && !isExamCell && !menuOverride;
+  }, [isWarden, isParent, isPrincipal, menuOverride, user]);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : searchIndex);
+  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
+  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  const canManageAcademicContext = !isParent && !isWarden && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
   const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
@@ -931,13 +834,7 @@ export default function DashboardLayout({
     if (pathname.startsWith("/dashboard/faculty")) setFacultyOpen(true);
   }, [pathname, setFacultyOpen]);
   useEffect(() => {
-    if (
-      pathname.startsWith("/dashboard/attendance") ||
-      pathname.startsWith("/exam-cell-dashboard/attendance") ||
-      pathname.startsWith("/exam-cell-dashboard/check-in-out")
-    ) {
-      setAttendanceOpen(true);
-    }
+    if (pathname.startsWith("/dashboard/attendance/")) setAttendanceOpen(true);
   }, [pathname]);
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
@@ -1011,43 +908,12 @@ export default function DashboardLayout({
     if (basePath === "/dashboard") return pathname === "/dashboard";
     if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
-    if (basePath === "/exam-cell-dashboard") return pathname === "/exam-cell-dashboard";
     if (basePath === "/non-teaching-dashboard") return pathname === "/non-teaching-dashboard" || pathname === "/non-teaching-dashboard/";
     if (basePath === "/dashboard/settings") {
       return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
     }
     if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
       return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
-    }
-    if (to === "/exam-cell-dashboard/exams") {
-      return (
-        pathname === "/exam-cell-dashboard/exams" ||
-        pathname.startsWith("/exam-cell-dashboard/exams/") ||
-        pathname === "/exam-cell-dashboard/exam-timetable"
-      );
-    }
-    if (to === "/exam-cell-dashboard/marks-entry") {
-      return (
-        pathname === "/exam-cell-dashboard/marks-entry" ||
-        pathname.startsWith("/exam-cell-dashboard/marks-entry/") ||
-        pathname === "/exam-cell-dashboard/marks-verification"
-      );
-    }
-    if (to === "/exam-cell-dashboard/results") {
-      return (
-        pathname === "/exam-cell-dashboard/results" ||
-        pathname.startsWith("/exam-cell-dashboard/results/") ||
-        pathname === "/exam-cell-dashboard/publish-results"
-      );
-    }
-    if (to === "/exam-cell-dashboard/attendance") {
-      return (
-        pathname === "/exam-cell-dashboard/attendance" ||
-        pathname.startsWith("/exam-cell-dashboard/attendance/")
-      );
-    }
-    if (to === "/exam-cell-dashboard/check-in-out") {
-      return pathname === "/exam-cell-dashboard/check-in-out" || pathname === "/exam-cell-dashboard/my-attendance";
     }
     if (searchStr && !location.search.includes(searchStr)) return false;
 
@@ -1103,7 +969,7 @@ export default function DashboardLayout({
                 }
                 if (item.children) {
                   const isFacultyMenu = item.to === "/dashboard/faculty";
-                  const isAttendanceMenu = item.to === "/dashboard/attendance" || item.to === "/exam-cell-dashboard/attendance" || item.to.includes("attendance");
+                  const isAttendanceMenu = item.to === "/dashboard/attendance";
                   const isSettingsMenu = item.to === "/dashboard/settings";
                   const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : false;
                   const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : () => {};
@@ -1117,16 +983,8 @@ export default function DashboardLayout({
                           className={`cms-nav-link ${active || item.children.some(childIsActive) ? "is-active" : ""}`}
                           onClick={(event) => {
                             if (isAttendanceMenu) {
-                              if (item.to === "/dashboard/attendance") {
-                                event.preventDefault();
-                                setOpen((v) => !v);
-                              } else {
-                                if (pathname === item.to) {
-                                  setOpen((v) => !v);
-                                } else {
-                                  setOpen(true);
-                                }
-                              }
+                              event.preventDefault();
+                              setOpen((v) => !v);
                             } else {
                               setAttendanceOpen(false);
                             }

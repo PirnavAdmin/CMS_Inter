@@ -1,16 +1,12 @@
 using System;
-using System.IO;
-using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Inventory;
-using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces.Inventory;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CollegeManagement.API.Controllers.V1
@@ -300,81 +296,6 @@ namespace CollegeManagement.API.Controllers.V1
             }
         }
 
-        [HttpPost("movements")]
-        public async Task<IActionResult> PostMovement([FromBody] PostMovementRequest request)
-        {
-            if (string.Equals(request.MovementType, "Stock Out", StringComparison.OrdinalIgnoreCase))
-            {
-                return await PostStockOut(request);
-            }
-            return await PostStockIn(request);
-        }
-
-        [HttpPost("movements/upload-receipt")]
-        [HttpPost("upload-receipt")]
-        [HttpPost("receipts/upload")]
-        [HttpPost("upload")]
-        [Consumes("multipart/form-data")]
-        public async Task<IActionResult> UploadReceipt(IFormFile? file)
-        {
-            try
-            {
-                var uploadedFile = file ?? (Request.HasFormContentType && Request.Form.Files.Count > 0 ? Request.Form.Files[0] : null);
-                if (uploadedFile == null || uploadedFile.Length == 0)
-                {
-                    return BadRequest(new { success = false, message = "Please select a valid image or receipt file." });
-                }
-
-                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf" };
-                var extension = Path.GetExtension(uploadedFile.FileName).ToLowerInvariant();
-                if (!allowedExtensions.Contains(extension))
-                {
-                    return BadRequest(new { success = false, message = "Only image (JPG, PNG, WEBP, GIF) and PDF files are supported." });
-                }
-
-                if (uploadedFile.Length > 20 * 1024 * 1024)
-                {
-                    return BadRequest(new { success = false, message = "File size cannot exceed 20MB." });
-                }
-
-                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "Inventory", "Receipts");
-                if (!Directory.Exists(uploadsFolder))
-                {
-                    Directory.CreateDirectory(uploadsFolder);
-                }
-
-                var uniqueFileName = $"receipt_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}{extension}";
-                var filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-                using (var stream = new FileStream(filePath, FileMode.Create))
-                {
-                    await uploadedFile.CopyToAsync(stream);
-                }
-
-                var relativeUrl = $"/Uploads/Inventory/Receipts/{uniqueFileName}";
-                return Ok(new
-                {
-                    success = true,
-                    message = "Receipt uploaded successfully.",
-                    url = relativeUrl,
-                    filePath = relativeUrl,
-                    fileUrl = relativeUrl,
-                    fileName = uniqueFileName,
-                    data = new
-                    {
-                        url = relativeUrl,
-                        filePath = relativeUrl,
-                        fileUrl = relativeUrl,
-                        fileName = uniqueFileName
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
-
         [HttpPost("movements/{id:int}/reverse")]
         public async Task<IActionResult> ReverseMovement(int id)
         {
@@ -388,23 +309,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (KeyNotFoundException ex)
             {
-                return NotFound(new { success = false, code = "MOVEMENT_NOT_FOUND", message = ex.Message });
-            }
-            catch (NotFoundException ex)
-            {
-                return NotFound(new { success = false, code = "MOVEMENT_NOT_FOUND", message = ex.Message });
-            }
-            catch (MovementNotReversibleException ex)
-            {
-                return StatusCode(409, new { success = false, code = ex.Code, message = ex.Message });
-            }
-            catch (ConflictException ex)
-            {
-                return StatusCode(409, new { success = false, code = "MOVEMENT_NOT_REVERSIBLE", message = ex.Message });
+                return NotFound(new { success = false, message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {
-                return StatusCode(409, new { success = false, code = "MOVEMENT_NOT_REVERSIBLE", message = ex.Message });
+                return BadRequest(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -426,14 +335,6 @@ namespace CollegeManagement.API.Controllers.V1
             catch (KeyNotFoundException ex)
             {
                 return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (NotFoundException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (ConflictException ex)
-            {
-                return StatusCode(409, new { success = false, message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {

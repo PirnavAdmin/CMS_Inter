@@ -1,3 +1,18 @@
+.lop-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-primary, #5a6e38);
+  text-decoration: none;
+  margin-bottom: 14px;
+  transition: opacity 0.15s ease;
+}
+.lop-back-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
 .lop-page {
   display: grid;
   gap: 18px;

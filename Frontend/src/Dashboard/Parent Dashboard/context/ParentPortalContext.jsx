@@ -533,41 +533,16 @@ export function ParentPortalProvider({ children }) {
         },
       }));
 
-      // Look up logged in parent profile and their associated children
-      const loggedParent = getLoggedInParent();
-      const parentChildren = getParentChildren(loggedParent);
-
-      const mappedFallback = (parentChildren || []).map((c) => ({
-        ...c,
-        id: String(c.id || c.studentId),
-        studentId: c.studentId || c.id,
-        status: c.status || "Active",
-        mentor: c.mentor || "Geetha Bhavani",
-        mentorDesignation: c.mentorDesignation || "Faculty In-Charge",
-        mentorMobile: c.mentorMobile || "+91 98480 12345",
-        mentorEmail: c.mentorEmail || "geetha.b@college.edu",
-      }));
-
-      const finalChildren = (mapped && mapped.length > 0)
-        ? mapped
-        : (mappedFallback && mappedFallback.length > 0
-            ? mappedFallback
-            : initialChildren.filter((c) => c.parentId === "parent-001" || c.parentId === "859"));
-
-      setChildrenList(finalChildren);
-      if (finalChildren.length > 0) {
-        setActiveChildId((prev) => (finalChildren.some((m) => m.id === prev) ? prev : finalChildren[0].id));
+      if (mapped && mapped.length > 0) {
+        setChildrenList(mapped);
+        setActiveChildId((prev) => (mapped.some((m) => m.id === prev) ? prev : mapped[0].id));
+      } else {
+        setChildrenList([]);
+        setActiveChildId(null);
       }
     } catch {
-      const loggedParent = getLoggedInParent();
-      const parentChildren = getParentChildren(loggedParent);
-      const fallbackChildren = (parentChildren && parentChildren.length > 0)
-        ? parentChildren
-        : initialChildren.filter((c) => c.parentId === "859" || c.parentId === "parent-001");
-      setChildrenList(fallbackChildren);
-      if (fallbackChildren.length > 0) {
-        setActiveChildId(fallbackChildren[0].id);
-      }
+      setChildrenList([]);
+      setActiveChildId(null);
     } finally {
       setLoading(false);
     }

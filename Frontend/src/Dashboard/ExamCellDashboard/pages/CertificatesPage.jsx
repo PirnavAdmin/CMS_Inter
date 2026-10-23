@@ -1754,15 +1754,40 @@ export default function CertificatesPage({ initialTab = "generate" }) {
       if (query.trim()) params.search = query.trim();
       if (status !== "All") params.status = status;
       if (typeFilter !== "All") params.certificateType = typeFilter;
-      const response = await apiClient.get(CERTIFICATE_API.list, { params, skipGlobalLoader: true });
-      const mapped = unwrapListPayload(response?.data).map(normalizeCertificate);
+let serverMapped = [];
+      try {
+        const response = await apiClient.get(CERTIFICATE_API.list, { params, skipGlobalLoader: true });
+        serverMapped = unwrapListPayload(response?.data).map(normalizeCertificate);
+      } catch {
+        // Fallback
+      }
+
+      let cachedList = [];
+      try {
+        const cached = localStorage.getItem("cms_certificates");
+        if (cached) {
+          cachedList = JSON.parse(cached).map(normalizeCertificate);
+        }
+      } catch {}
+
+      if (cachedList.length === 0 && serverMapped.length === 0) {
+        cachedList = mockCertificates.map(normalizeCertificate);
+        try {
+          localStorage.setItem("cms_certificates", JSON.stringify(cachedList));
+        } catch {}
+      }
+
+      // Merge: Local records take precedence for client edits, combined with server records
+      const combinedMap = new Map();
+      mockCertificates.forEach((r) => combinedMap.set(String(r.id || r.number), normalizeCertificate(r)));
+      serverMapped.forEach((r) => combinedMap.set(String(r.id || r.number), r));
+      cachedList.forEach((r) => combinedMap.set(String(r.id || r.number), r));
+
+      let allRecords = Array.from(combinedMap.values());
+
       if (requestId !== listRequestRef.current) return false;
-      setRows(mapped);
-      return true;
-    } catch (error) {
-      if (requestId !== listRequestRef.current) return false;
-      const fallbackList = mockCertificates.map(normalizeCertificate);
-      let filtered = fallbackList;
+
+      let filtered = allRecords;
       if (query.trim()) {
         const q = query.trim().toLowerCase();
         filtered = filtered.filter((r) =>
@@ -2272,8 +2297,7 @@ export default function CertificatesPage({ initialTab = "generate" }) {
       } catch (apiError) {
         console.warn("Server generation offline/fallback:", apiError);
       }
-
-      if (!createdCertificate) {
+if (!createdCertificate) {
         const certCount = rows.length + 1;
         const certNumber = `CERT-${new Date().getFullYear()}-${String(certCount).padStart(3, "0")}`;
         const derivedFather = matchedStudent?.fatherName || deriveFatherNameFromStudent(studentName);

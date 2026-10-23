@@ -110,8 +110,6 @@ public class FeeController : ControllerBase
 
     /// <summary>Get student fee details by student ID.</summary>
     [HttpGet("students/{studentId:int}/fee-details")]
-    [ParentStudentAuthorization]
-    [BypassPermission]
     public async Task<IActionResult> GetStudentFeeDetails(int studentId)
     {
         var result = await _service.GetStudentFeeDetailsByStudentAsync(studentId);
@@ -137,8 +135,6 @@ public class FeeController : ControllerBase
 
     /// <summary>Compatibility route for student-specific fee ledger.</summary>
     [HttpGet("students/{studentId:int}/fee-ledger")]
-    [ParentStudentAuthorization]
-    [BypassPermission]
     public async Task<IActionResult> GetStudentLedger(int studentId) => Ok(await _service.GetStudentFeeDetailsByStudentAsync(studentId));
 
     // ---------------- Concession ----------------
@@ -167,8 +163,6 @@ public class FeeController : ControllerBase
     // ---------------- Payment History / Receipt ----------------
     /// <summary>View payment history for one student.</summary>
     [HttpGet("history/{studentId:int}")]
-    [ParentStudentAuthorization]
-    [BypassPermission]
     public async Task<IActionResult> GetHistory(int studentId) => Ok(await _service.GetFeePaymentsAsync(studentId));
 
     [HttpPost("bulk-history")]
@@ -189,7 +183,6 @@ public class FeeController : ControllerBase
 
     /// <summary>Fetch one payment receipt by receipt number.</summary>
     [HttpGet("receipt/{receiptNumber}")]
-    [BypassPermission]
     public async Task<IActionResult> GetReceipt(string receiptNumber)
     {
         var result = await _service.GetReceiptAsync(receiptNumber);
@@ -203,7 +196,6 @@ public class FeeController : ControllerBase
 
     /// <summary>Fee dashboard data for overview cards, upcoming schedules, recent payments and group-wise collection charts.</summary>
     [HttpGet("dashboard")]
-    [BypassPermission]
     public async Task<IActionResult> GetDashboard([FromQuery] int? campusId, [FromQuery] int? boardId, [FromQuery] int? academicYearId) => Ok(await _service.GetDashboardAsync(campusId, boardId, academicYearId));
 
     /// <summary>Return daily fee collection report.</summary>

@@ -22,6 +22,7 @@ public class StudentTransportController : ControllerBase
     /// Get dropdown options for Academic Years in Transport view
     /// </summary>
     [HttpGet("options")]
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
     public async Task<IActionResult> GetTransportDropdownOptions()
     {
         var result = await _transportService.GetTransportDropdownOptionsAsync();
@@ -32,6 +33,7 @@ public class StudentTransportController : ControllerBase
     /// Get Student Transport details (Enforces rule: If student is Hosteller, she/he is excluded from transport tab)
     /// </summary>
     [HttpGet("details")]
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
     public async Task<IActionResult> GetStudentTransportDetails(
         [FromQuery] int? studentId = 1,
         [FromQuery] string? academicYear = "2027-28")

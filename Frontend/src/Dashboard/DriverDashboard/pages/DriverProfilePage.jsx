@@ -20,6 +20,8 @@ import {
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getProfile, updateProfileContact } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../components/common/Ui.jsx";
+import { getDriverIdentity } from "../data/driverIdentity.js";
+import { unwrapDriverData } from "../data/driverData.js";
 
 export default function DriverProfilePage() {
   const [driverProfile, setDriverProfile] = useState({});
@@ -48,8 +50,8 @@ export default function DriverProfilePage() {
       try {
         setLoading(true);
         const res = await getProfile();
-        const data = res.data || res;
-        const profile = data.profile || data || {};
+        const data = unwrapDriverData(res);
+        const profile = getDriverIdentity({ ...data, ...(data.profile || data.driverProfile || {}) });
         setDriverProfile(profile);
         setDriverDocuments(data.documents || data.driverDocuments || []);
         setProfileData({
@@ -252,19 +254,19 @@ export default function DriverProfilePage() {
               <div className="dp-lic-grid">
                 <div>
                   <small>License Number</small>
-                  <strong>{driverProfile.licenseNumber}</strong>
+                  <strong>{driverProfile.licenseNumber || "Not provided"}</strong>
                 </div>
                 <div>
                   <small>Category</small>
-                  <strong>{driverProfile.licenseCategory}</strong>
+                  <strong>{driverProfile.licenseCategory || "Not provided"}</strong>
                 </div>
                 <div>
                   <small>Badge Number</small>
-                  <strong>{driverProfile.badgeNumber}</strong>
+                  <strong>{driverProfile.badgeNumber || "Not provided"}</strong>
                 </div>
                 <div>
                   <small>Valid Till</small>
-                  <strong className="dp-text-success">{driverProfile.licenseExpiry}</strong>
+                  <strong className="dp-text-success">{driverProfile.licenseExpiry || "Not provided"}</strong>
                 </div>
               </div>
             </div>

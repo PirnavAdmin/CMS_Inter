@@ -39,10 +39,10 @@ export default function ExamCellPortalRoutes() {
         <Route element={<ExamCellLayout />}>
           <Route index element={<Dashboard />} />
           <Route path="dashboard" element={<Navigate to="/exam-cell-dashboard" replace />} />
-          <Route path="exams" element={<ExamCellPermissionRoute moduleKey="examinations" moduleName="Examinations"><Examinations key="management" /></ExamCellPermissionRoute>} />
-          <Route path="exam-timetable" element={<ExamCellPermissionRoute moduleKey="examinations" moduleName="Exam Timetable"><ExamTimetable key="timetable" /></ExamCellPermissionRoute>} />
-          <Route path="hall-allocation" element={<ExamCellPermissionRoute moduleKey="examinations" screenKey="hall-allocation" moduleName="Hall Allocation"><HallAllocation /></ExamCellPermissionRoute>} />
-          <Route path="hall-tickets" element={<ExamCellPermissionRoute moduleKey="examinations" screenKey="hall-tickets" moduleName="Hall Tickets"><HallTickets /></ExamCellPermissionRoute>} />
+          <Route path="exams" element={<ExamCellPermissionRoute moduleKey="examination" moduleName="Examinations"><Examinations key="management" /></ExamCellPermissionRoute>} />
+          <Route path="exam-timetable" element={<ExamCellPermissionRoute moduleKey="examination" moduleName="Exam Timetable"><ExamTimetable key="timetable" /></ExamCellPermissionRoute>} />
+          <Route path="hall-allocation" element={<ExamCellPermissionRoute moduleKey="examination" screenKey="hall-allocation" moduleName="Hall Allocation"><HallAllocation /></ExamCellPermissionRoute>} />
+          <Route path="hall-tickets" element={<ExamCellPermissionRoute moduleKey="examination" screenKey="hall-tickets" moduleName="Hall Tickets"><HallTickets /></ExamCellPermissionRoute>} />
           <Route path="marks-entry" element={<ExamCellPermissionRoute moduleKey="marks-evaluation" moduleName="Marks Entry"><Marks key="entry" initialTab="entry" /></ExamCellPermissionRoute>} />
           <Route path="marks-verification" element={<ExamCellPermissionRoute moduleKey="marks-evaluation" moduleName="Marks Verification"><Marks key="verification" initialTab="evaluation" /></ExamCellPermissionRoute>} />
           <Route path="results" element={<ExamCellPermissionRoute moduleKey="results" moduleName="Results"><Results key="results" /></ExamCellPermissionRoute>} />

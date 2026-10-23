@@ -541,6 +541,22 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
     console.warn("Notice: could not query students endpoint:", err);
   }
 
+  // Resilient fallback: query students by sectionId if multi-param filter returned 0
+  if (studentMap.size === 0 && sectionId) {
+    try {
+      const res = await apiClient.get(apiEndpoints.students?.list || "/api/v1/students", {
+        params: { sectionId: Number(sectionId) || sectionId, pageSize: 100 },
+        skipGlobalLoader: true,
+      });
+      const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
+      const batch = Array.isArray(payload)
+        ? payload
+        : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
+      addRecords(batch);
+    } catch (err) {
+      console.warn("Fallback student query failed:", err);
+    }
+  }
   // Fallback to Attendance Student Roster (accessible by Faculty & Staff roles without 403 Forbidden)
   if (studentMap.size === 0) {
     try {
@@ -1396,6 +1412,9 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     return normalizeId(rawId || "1");
   }, [effectiveCampus, selectedCampus, selectedCampusId]);
 
+  // Initial Master Boards (Loaded once on mount)
+  const [allBoards, setAllBoards] = useState([]);
+
   const effectiveBoardId = useMemo(() => {
     return normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId ?? (allBoards[0]?.id || ""));
   }, [selectedBoardId, selectedBoard, allBoards]);
@@ -1403,7 +1422,6 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   const effectiveYearId = useMemo(() => {
     return normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? "");
   }, [selectedAcademicYearId, selectedAcademicYear]);
-
   // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
   const [tab, setTab] = useState(forcedTab || initialTab || "entry");
 
@@ -1412,8 +1430,6 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     else if (initialTab && initialTab !== tab) setTab(initialTab);
   }, [forcedTab, initialTab]);
 
-  // Initial Master Boards (Loaded once on mount)
-  const [allBoards, setAllBoards] = useState([]);
 
   // Shared UI Notifications and Unsaved Modals
   const [toast, setToast] = useState(null);

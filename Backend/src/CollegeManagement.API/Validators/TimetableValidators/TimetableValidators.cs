@@ -15,18 +15,9 @@ namespace CollegeManagement.API.Validators.TimetableValidators
             RuleFor(x => x.SectionId).GreaterThan(0).WithMessage("Section ID is required.");
             RuleFor(x => x.DayOfWeek).InclusiveBetween(1, 7).WithMessage("Day of week must be between 1 (Monday) and 7 (Sunday).");
             RuleFor(x => x.PeriodId).GreaterThan(0).WithMessage("Period ID is required.");
-            RuleFor(x => x.SubjectId)
-                .NotNull().WithMessage("Subject ID is required.")
-                .GreaterThan(0).WithMessage("Subject ID must be greater than 0.")
-                .When(x => !string.Equals(x.SlotType, "Leisure", System.StringComparison.OrdinalIgnoreCase));
-            RuleFor(x => x.StaffId)
-                .NotNull().WithMessage("Teaching Staff ID is required.")
-                .GreaterThan(0).WithMessage("Teaching Staff ID must be greater than 0.")
-                .When(x => !string.Equals(x.SlotType, "Leisure", System.StringComparison.OrdinalIgnoreCase));
-            RuleFor(x => x.RoomId)
-                .NotNull().WithMessage("Room ID is required.")
-                .GreaterThan(0).WithMessage("Room ID must be greater than 0.")
-                .When(x => !string.Equals(x.SlotType, "Leisure", System.StringComparison.OrdinalIgnoreCase));
+            RuleFor(x => x.SubjectId).GreaterThan(0).WithMessage("Subject ID is required.");
+            RuleFor(x => x.StaffId).GreaterThan(0).WithMessage("Teaching Staff ID is required.");
+            RuleFor(x => x.RoomId).GreaterThan(0).WithMessage("Room ID is required.");
             RuleFor(x => x.Remarks).MaximumLength(250).WithMessage("Remarks cannot exceed 250 characters.");
         }
     }
@@ -42,18 +33,9 @@ namespace CollegeManagement.API.Validators.TimetableValidators
             RuleFor(x => x.SectionId).GreaterThan(0).WithMessage("Section ID is required.");
             RuleFor(x => x.DayOfWeek).InclusiveBetween(1, 7).WithMessage("Day of week must be between 1 (Monday) and 7 (Sunday).");
             RuleFor(x => x.PeriodId).GreaterThan(0).WithMessage("Period ID is required.");
-            RuleFor(x => x.SubjectId)
-                .NotNull().WithMessage("Subject ID is required.")
-                .GreaterThan(0).WithMessage("Subject ID must be greater than 0.")
-                .When(x => !string.Equals(x.SlotType, "Leisure", System.StringComparison.OrdinalIgnoreCase));
-            RuleFor(x => x.StaffId)
-                .NotNull().WithMessage("Teaching Staff ID is required.")
-                .GreaterThan(0).WithMessage("Teaching Staff ID must be greater than 0.")
-                .When(x => !string.Equals(x.SlotType, "Leisure", System.StringComparison.OrdinalIgnoreCase));
-            RuleFor(x => x.RoomId)
-                .NotNull().WithMessage("Room ID is required.")
-                .GreaterThan(0).WithMessage("Room ID must be greater than 0.")
-                .When(x => !string.Equals(x.SlotType, "Leisure", System.StringComparison.OrdinalIgnoreCase));
+            RuleFor(x => x.SubjectId).GreaterThan(0).WithMessage("Subject ID is required.");
+            RuleFor(x => x.StaffId).GreaterThan(0).WithMessage("Teaching Staff ID is required.");
+            RuleFor(x => x.RoomId).GreaterThan(0).WithMessage("Room ID is required.");
             RuleFor(x => x.Remarks).MaximumLength(250).WithMessage("Remarks cannot exceed 250 characters.");
         }
     }
@@ -82,11 +64,6 @@ namespace CollegeManagement.API.Validators.TimetableValidators
                 .GreaterThan(0)
                 .When(x => x.PeriodStructureId.HasValue)
                 .WithMessage("PeriodStructureId must be a valid positive integer when specified.");
-
-            RuleFor(x => x.MaxDailyPeriodsPerSubject)
-                .InclusiveBetween(1, 10)
-                .When(x => x.MaxDailyPeriodsPerSubject.HasValue)
-                .WithMessage("Max daily periods per subject must be between 1 and 10.");
 
             RuleFor(x => x.SectionIds)
                 .NotEmpty().WithMessage("At least one Section ID is required.")

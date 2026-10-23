@@ -87,18 +87,12 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   const refreshData = useCallback(async () => {
     setIsLoadingClaims(true);
     try {
-      // 1. Fetch claims based on active tab:
-      // Endpoint 2: GET /api/v1/reimbursements (all claims)
-      // Endpoint 3: GET /api/v1/reimbursements/my-claims (logged-in faculty's claims)
       const fetchPromise =
-        activePortalTab === "my-claims"
+        isFacultyUser || activePortalTab === "my-claims"
           ? reimbursementService.fetchMyClaims({ campusId })
           : reimbursementService.fetchClaims({ campusId });
 
-      // Endpoint 1: GET /api/v1/reimbursements/summary
       const summaryPromise = reimbursementService.fetchReimbursementSummary({ campusId });
-
-      // Endpoint 5: GET /api/v1/reimbursements/account-entries (Dedicated Account Ledger modal list)
       const accountEntriesPromise = reimbursementService.fetchAccountEntries({ campusId });
 
       const [claimsResult, summaryResult, accountEntriesResult] = await Promise.allSettled([
@@ -125,8 +119,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     } finally {
       setIsLoadingClaims(false);
     }
-  }, [activePortalTab, campusId]);
-
+  }, [activePortalTab, campusId, isFacultyUser]);
   useEffect(() => {
     refreshData();
   }, [refreshData]);

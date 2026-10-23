@@ -369,7 +369,8 @@ namespace CollegeManagement.API.Data
         public DbSet<FeePayment> FeePayments { get; set; }
 
         public DbSet<FeeReceipt> FeeReceipts { get; set; }
-        public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
+
+     
 
 
         public DbSet<BreakType> BreakTypes { get; set; }
@@ -857,7 +858,6 @@ namespace CollegeManagement.API.Data
                 entity.HasKey(x => x.FeePaymentPlanId);
                 entity.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
                 entity.Property(x => x.PlanName).IsRequired().HasMaxLength(100);
-                entity.Ignore(x => x.UpdatedAt);
                 entity.HasOne(x => x.StudentFee).WithMany(x => x.PaymentPlans).HasForeignKey(x => x.StudentFeeId).OnDelete(DeleteBehavior.Cascade);
             });
 
@@ -1945,7 +1945,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             modelBuilder.Entity<Permission>(entity =>
             {
                 entity.HasIndex(e => e.PermissionCode).IsUnique();
-                entity.HasIndex(e => new { e.SubModule, e.ScreenCode, e.Action }).IsUnique();
+                entity.HasIndex(e => new { e.SubModule, e.Action }).IsUnique();
             });
 
             // RolePermissions Configuration
