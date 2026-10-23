@@ -38,7 +38,16 @@ const isHtmlResponse = (data) =>
 const isAuthBypassRequest = (config) => {
   if (config?.skipAuthRedirect || config?.optionalAuth || config?.silentAuth) return true;
   const url = String(config?.url || "");
-  return /\/login\/?$/i.test(url) || /\/refresh(-token)?\/?$/i.test(url) || /\/register\/?$/i.test(url);
+  return (
+    /\/login\/?$/i.test(url) ||
+    /\/refresh(-token)?\/?$/i.test(url) ||
+    /\/register\/?$/i.test(url) ||
+    url.includes("/api/v1/non-teaching/") ||
+    url.includes("/api/v1/staff-tasks") ||
+    url.includes("/api/v1/support-tickets") ||
+    url.includes("/api/v1/staff/me") ||
+    url.includes("/api/v1/staff-attendance/")
+  );
 };
 
 const getStoredAccessToken = () => {
@@ -315,13 +324,18 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
       }
 
+      const expiry = getJwtExpiryState(currentToken);
+      const isTokenActuallyExpired = Boolean(expiry.isJwt && expiry.isExpired);
+
       if (originalRequest._retry) {
-        clearAuthSession();
-        if (window.location.pathname !== "/login") window.location.assign("/login");
+        if (!currentToken || isTokenActuallyExpired) {
+          clearAuthSession();
+          if (window.location.pathname !== "/login") window.location.assign("/login");
+        }
         return Promise.reject(error);
       }
 
-      if (!currentToken) {
+      if (!currentToken || isTokenActuallyExpired) {
         clearAuthSession();
         if (window.location.pathname !== "/login") window.location.assign("/login");
         return Promise.reject(error);
@@ -375,8 +389,11 @@ apiClient.interceptors.response.use(
       } catch (refreshErr) {
         isRefreshing = false;
         onTokenRefreshFailed(refreshErr);
-        clearAuthSession();
-        if (window.location.pathname !== "/login") window.location.assign("/login");
+        const expState = getJwtExpiryState(currentToken);
+        if (!currentToken || (expState.isJwt && expState.isExpired)) {
+          clearAuthSession();
+          if (window.location.pathname !== "/login") window.location.assign("/login");
+        }
         return Promise.reject(refreshErr);
       }
     }
