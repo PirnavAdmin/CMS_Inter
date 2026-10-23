@@ -227,15 +227,15 @@
 }
 
 .sp-shell {
-  --sp-sidebar-width: 180px;
+  --sp-sidebar-width: 218px;
   --sp-primary: #6f8700;
   --sp-primary-dark: #536600;
   --sp-primary-hover: #819b08;
   --sp-primary-soft: #eef3d9;
   --sp-soft: #f3f6e8;
   --sp-bg: #f7f9f0;
-  --sp-sidebar: #e1eabb;
-  --sp-header: #dce7b9;
+  --sp-sidebar: #d5dfb0;
+  --sp-header: #d5dfb0;
   --sp-surface: #fff;
   --sp-border: #d7ddc6;
   --sp-text: #1d2519;
@@ -372,7 +372,7 @@
 }
 
 .sp-sidebar nav a.is-active {
-  background: linear-gradient(90deg, var(--sp-primary), var(--sp-primary-hover));
+  background: linear-gradient(90deg, var(--sp-primary), var(--sp-primary-dark));
   color: #fff;
   box-shadow: none
 }
@@ -1063,7 +1063,9 @@
   gap: 12px;
   padding: 12px 0 0;
   color: var(--sp-muted);
-  font-size: 11px
+  font-size: 11px;
+  background: var(--cms-subtle, var(--sp-soft));
+  border-top: 1px solid var(--sp-border);
 }
 
 .sp-pagination>div {
@@ -3993,8 +3995,8 @@
 }
 
 .sp-dashboard-page .sp-summary {
-  min-height: 84px;
-  padding: 12px 16px;
+  min-height: 56px;
+  padding: 7px 10px;
   border-radius: 10px;
   border-left-width: 2px;
   background: color-mix(in srgb, var(--sp-surface) 94%, #23ab62)
@@ -4013,8 +4015,8 @@
 }
 
 .sp-dashboard-page .sp-summary-icon {
-  width: 46px;
-  height: 46px;
+  width: 32px;
+  height: 32px;
   background: color-mix(in srgb, var(--sp-surface) 80%, #23ab62)
 }
 
@@ -4031,7 +4033,7 @@
 }
 
 .sp-dashboard-page .sp-summary strong {
-  font-size: 23px
+  font-size: 19px;
 }
 
 .sp-dashboard-page .sp-summary.sp-tone-green strong {
@@ -4106,8 +4108,8 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
-  padding: 5px 8px
+  gap: 6px;
+  padding: 3px 6px;
 }
 
 .sp-dashboard-page .sp-dashboard-quick-actions .sp-card-head {
@@ -4117,7 +4119,7 @@
 }
 
 .sp-dashboard-page .sp-dashboard-quick-actions .sp-card-head h2 {
-  font-size: 13px;
+  font-size: 11.5px;
   white-space: nowrap
 }
 
@@ -4137,9 +4139,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 4px 6px;
-  min-height: 32px;
+  gap: 5px;
+  padding: 3px 6px;
+  min-height: 26px;
   box-sizing: border-box;
   min-width: 0;
   border: 1px solid color-mix(in srgb, var(--sp-border) 60%, var(--action-accent));
@@ -4148,7 +4150,8 @@
   color: var(--sp-text);
   text-decoration: none;
   text-align: center;
-  transition: background .15s, border-color .15s
+  transition: background .15s, border-color .15s;
+  flex-direction: row;
 }
 
 .sp-dashboard-action.tone-green {
@@ -4168,15 +4171,19 @@
 }
 
 .sp-dashboard-action img {
-  width: 22px;
-  height: 22px;
+  width: 17px;
+  height: 17px;
   object-fit: contain;
   flex-shrink: 0
 }
 
 .sp-dashboard-action strong {
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.25
+}
+
+.sp-dashboard-action small {
+  display: none;
 }
 
 .sp-dashboard-action:hover {
@@ -5262,6 +5269,7 @@
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
@@ -5396,10 +5404,10 @@
 }
 
 /* Student examination results */
-.sp-results-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.sp-results-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .sp-results-toolbar input, .sp-results-toolbar select { padding: 10px 12px; border: 1px solid var(--sp-border); border-radius: 9px; background: var(--sp-surface); color: var(--sp-text); font: inherit; }
 .sp-results-toolbar input { width: min(380px, 100%); }
-.sp-results-toolbar select { max-width: 100%; }
+.sp-results-toolbar select { max-width: 100%; height: 36px; min-height: 36px; box-sizing: border-box; padding: 0 10px; font-size: 12px; }
 .sp-result-status { display: inline-block; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .sp-result-status.is-published { color: #15803d; background: rgba(34,197,94,.13); }
 .sp-result-status.is-absent { color: #dc2626; background: rgba(239,68,68,.12); }
@@ -5540,3 +5548,229 @@
   .sp-hostel-no-fee > span { width: 52px; flex-basis: 52px; }
   .sp-hostel-no-fee h3 { font-size: 18px; }
 }
+
+/* Student-only faculty profile reference: compact identity strip and numbered tabs. */
+.sp-shell .sp-profile-page { gap: 16px; }
+.sp-shell .sp-profile-page .sp-profile-hero { padding: 12px 22px; gap: 20px; border-radius: 14px; box-shadow: 0 1px 3px #0000000a; }
+.sp-shell .sp-profile-page .sp-photo-control { flex: 0 0 60px; width: 60px; height: 60px; }
+.sp-shell .sp-profile-page .sp-photo-avatar-button { width: 60px; height: 60px; border-radius: 15px; background: var(--sp-soft); }
+.sp-shell .sp-profile-page .sp-photo-avatar-button :is(img, .sp-avatar) { border-radius: 13px; object-fit: cover; font-size: 21px; }
+.sp-shell .sp-profile-page .sp-photo-camera-button { width: 25px; height: 25px; bottom: -4px; right: -4px; box-shadow: 0 2px 5px #00000025; }
+.sp-shell .sp-profile-page .sp-profile-hero > div:nth-child(2) { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; min-width: 0; }
+.sp-shell .sp-profile-page .sp-profile-hero h2 { margin: 0; font-size: 18px; font-weight: 800; }
+.sp-shell .sp-profile-page .sp-profile-hero p { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.sp-shell .sp-profile-page .sp-profile-hero p strong { color: var(--sp-primary); }
+.sp-shell .sp-profile-page .sp-profile-tabs { padding: 6px 10px; gap: 6px; border-radius: 12px; background: var(--sp-soft); }
+.sp-shell .sp-profile-page .sp-profile-tabs span { gap: 8px; padding: 8px 12px; font-size: 13px; border-radius: 8px; }
+.sp-shell .sp-profile-page .sp-profile-tabs input:checked + span { color: var(--sp-text); background: var(--sp-surface); box-shadow: 0 1px 4px #00000014; }
+.sp-shell .sp-profile-page .sp-student-step-number { width: 22px; height: 22px; display: grid; place-items: center; flex-shrink: 0; border-radius: 50%; background: var(--sp-border); color: var(--sp-text); font-size: 11px; }
+.sp-shell .sp-profile-page .sp-profile-tabs input:checked + span .sp-student-step-number { background: var(--sp-primary); color: #fff; }
+.sp-shell .sp-profile-page .sp-profile-section { border-radius: 14px; background: linear-gradient(140deg, var(--sp-surface), color-mix(in srgb, var(--sp-soft) 25%, var(--sp-surface))); }
+.sp-shell .sp-profile-page .sp-profile-value small, .sp-shell .sp-profile-page .sp-profile-input > span { color: var(--sp-text); font-weight: 650; font-size: 11px; }
+.sp-shell .sp-profile-page .sp-profile-value strong, .sp-shell .sp-profile-page .sp-profile-input :is(input, select, textarea) { min-height: 36px; padding: 8px 10px; font-size: 12px; background: var(--sp-soft); border-radius: 8px; }
+.sp-shell .sp-profile-page .sp-profile-fields { gap: 16px; }
+.sp-photo-modal { display: flex; flex-direction: column; max-height: calc(100dvh - 32px); }
+.sp-photo-modal .cms-modal-head, .sp-photo-modal .cms-modal-foot { flex: 0 0 auto; }
+.sp-photo-modal .cms-modal-body { min-height: 0; overflow-y: auto; }
+.sp-photo-modal .cms-modal-head { padding: 14px 18px; }
+.sp-photo-modal .cms-modal-head h3 { font-size: 16px; }
+.sp-photo-modal .sp-photo-summary { padding: 20px 18px 16px; }
+.sp-photo-modal .sp-photo-summary :is(img, .sp-photo-initials) { width: 84px; height: 84px; border-radius: 20px; border-width: 2px; }
+.sp-photo-modal .sp-photo-summary h3 { font-size: 16px; margin-top: 12px; }
+.sp-photo-modal .sp-photo-menu { padding: 8px 14px 14px; }
+.sp-photo-modal .sp-photo-menu button { gap: 12px; padding: 12px; font-size: 13px; }
+.sp-student-photo-crop { display: grid; justify-items: center; gap: 14px; padding: 18px; color: var(--cms-text); }
+.sp-student-photo-crop > p { margin: 0; text-align: center; font-size: 12px; color: var(--cms-muted); }
+.sp-student-photo-crop canvas { display: block; width: min(300px, 100%); height: auto; aspect-ratio: 1; border: 2px solid var(--cms-primary); border-radius: 14px; background: var(--cms-subtle); touch-action: none; cursor: grab; }
+.sp-student-photo-crop canvas:active { cursor: grabbing; }
+.sp-student-photo-crop > label { display: flex; width: 100%; align-items: center; gap: 12px; font-size: 12px; }
+.sp-student-photo-crop input { flex: 1; min-width: 0; accent-color: var(--cms-primary); }
+.sp-photo-modal .cms-modal-foot { flex-wrap: wrap; gap: 8px; }
+@media (max-width: 640px) {
+  .sp-shell .sp-profile-page .sp-profile-hero { padding: 12px; gap: 14px; }
+  .sp-shell .sp-profile-page .sp-profile-hero > div:nth-child(2) { flex: 1; gap: 4px; }
+  .sp-shell .sp-profile-page .sp-profile-hero h2 { font-size: 17px; }
+  .sp-shell .sp-profile-page .sp-profile-tabs span { padding: 8px; font-size: 11px; }
+}
+
+/* Student dashboard home: admin dashboard spacing, card hierarchy and density. */
+.sp-shell .sp-content:has(> .sp-dashboard-page) { padding: 4px 12px 6px; }
+.sp-shell .sp-dashboard-page { gap: 6px; width: 100%; min-width: 0; }
+.sp-shell .sp-dashboard-page .sp-card { border-radius: 12px; background: color-mix(in srgb, var(--sp-surface) 94%, var(--sp-soft)); box-shadow: 0 1px 4px #00000006; }
+.sp-shell .sp-dashboard-page .sp-card-head { min-height: 32px; padding: 5px 10px; gap: 6px; }
+.sp-shell .sp-dashboard-page .sp-card-head h2 { font-size: 12px; font-weight: 800; }
+.sp-shell .sp-dashboard-page .sp-card-head p { margin-top: 2px; font-size: 10px; }
+.sp-shell .sp-dashboard-page .sp-card-body { padding: 8px 10px; }
+.sp-shell .sp-dashboard-page .sp-text-link { font-size: 10px; font-weight: 700; }
+.sp-shell .sp-dashboard-page .sp-student-strip { padding: 9px 12px; gap: 12px; border-radius: 10px; }
+.sp-shell .sp-dashboard-page .sp-student-strip > .sp-avatar { width: 42px; height: 42px; flex: 0 0 42px; font-size: 16px; }
+.sp-shell .sp-dashboard-page .sp-student-name > strong { font-size: 16px; }
+.sp-shell .sp-dashboard-page .sp-student-name > small { font-size: 10px; }
+.sp-shell .sp-dashboard-page .sp-student-detail { gap: 8px; padding-left: 12px; }
+.sp-shell .sp-dashboard-page .sp-dashboard-detail-icon { width: 30px; height: 30px; border-radius: 7px; }
+.sp-shell .sp-dashboard-page .sp-dashboard-detail-icon svg { width: 19px; height: 19px; }
+.sp-shell .sp-dashboard-page .sp-summary { gap: 8px; padding: 7px 9px; min-height: 52px; border-radius: 8px; }
+.sp-shell .sp-dashboard-page .sp-summary-icon { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 6px; }
+.sp-shell .sp-dashboard-page .sp-summary-icon svg { width: 20px; height: 20px; }
+.sp-shell .sp-dashboard-page .sp-summary :is(p, span) { font-size: 10px; font-weight: 700; }
+.sp-shell .sp-dashboard-page .sp-summary strong { font-size: 17px; line-height: 1.1; }
+.sp-shell .sp-dashboard-page .sp-summary small { font-size: 9px; line-height: 1.35; }
+.sp-shell .sp-dashboard-page .sp-dashboard-quick-actions { padding: 3px 6px; border-radius: 8px; }
+.sp-shell .sp-dashboard-page .sp-dashboard-quick-actions .sp-card-head { padding: 0; min-height: 0; }
+.sp-shell .sp-dashboard-page .sp-dashboard-quick-actions .sp-card-body { padding: 0; }
+.sp-shell .sp-dashboard-page .sp-dashboard-quick-actions .sp-card-head h2 { font-size: 11.5px; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action { min-height: 26px; font-size: 10px; }
+.sp-shell .sp-dashboard-page .sp-dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sp-shell .sp-dashboard-page .sp-dashboard-highlights > .sp-card { height: 240px; }
+.sp-shell .sp-dashboard-page .sp-highlight-list article { min-height: 36px; padding: 4px 6px; border-radius: 7px; }
+.sp-shell .sp-dashboard-page .sp-highlight-title > strong { font-size: 10px; }
+.sp-shell .sp-dashboard-page .sp-highlight-list article p { font-size: 9px; }
+.sp-shell .sp-dashboard-page .sp-highlight-list article > svg { width: 23px; height: 23px; padding: 3px; border-radius: 6px; }
+.sp-shell .sp-dashboard-page .sp-monthly-chart svg { width: 100px; height: 100px; }
+.sp-shell .sp-dashboard-page .sp-chart-legend { font-size: 10px; }
+.sp-shell .sp-dashboard-page .sp-monthly-chart-counts { gap: 4px; }
+.sp-shell .sp-dashboard-page .sp-monthly-chart-counts > div { padding: 5px 3px; border-radius: 7px; }
+.sp-shell .sp-dashboard-page .sp-monthly-chart-counts span { font-size: 9px; }
+.sp-shell .sp-dashboard-page .sp-monthly-chart-counts strong { font-size: 12px; }
+.sp-shell .sp-dashboard-page .sp-table th { font-size: 10px; padding: 7px 9px; }
+.sp-shell .sp-dashboard-page .sp-table td { font-size: 11px; padding: 8px 9px; }
+.sp-shell .sp-dashboard-page .sp-fee-overview { gap: 6px; }
+.sp-shell .sp-dashboard-page .sp-fee-overview > div { padding: 9px; border-radius: 8px; }
+.sp-shell .sp-dashboard-page .sp-fee-overview span { font-size: 10px; }
+.sp-shell .sp-dashboard-page .sp-fee-overview strong { font-size: 17px; }
+@media (max-width: 900px) {
+  .sp-shell .sp-dashboard-page .sp-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 620px) {
+  .sp-shell .sp-content:has(> .sp-dashboard-page) { padding: 10px; }
+  .sp-shell .sp-dashboard-page .sp-dashboard-highlights > .sp-card { height: auto; min-height: 220px; }
+  .sp-shell .sp-dashboard-page .sp-dashboard-action { min-height: 36px; }
+}
+
+/* Student Holidays: admin reference list layout, without calendar controls. */
+.sp-shell .sp-holidays-page { gap: 16px; }
+.sp-shell .sp-holidays-page .sp-holiday-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.sp-shell .sp-holidays-page .sp-summary { min-height: 82px; padding: 13px; gap: 11px; border-radius: 11px; background: var(--sp-primary-soft); }
+.sp-shell .sp-holidays-page .sp-tone-blue { background: color-mix(in srgb, #2563eb 5%, var(--sp-surface)); }
+.sp-shell .sp-holidays-page .sp-tone-orange { background: color-mix(in srgb, #e5aa17 8%, var(--sp-surface)); }
+.sp-shell .sp-holidays-page .sp-tone-purple { background: color-mix(in srgb, #7c3aed 5%, var(--sp-surface)); }
+.sp-shell .sp-holidays-page .sp-summary:last-child { background: color-mix(in srgb, #16a34a 7%, var(--sp-surface)); }
+.sp-shell .sp-holidays-page .sp-summary-icon { width: 39px; height: 39px; flex: 0 0 39px; border-radius: 10px; }
+.sp-shell .sp-holidays-page .sp-summary strong { font-size: 22px; }
+.sp-shell .sp-holidays-page .sp-holiday-list-layout { min-width: 0; }
+.sp-shell .sp-holidays-page .sp-card { overflow: hidden; border-radius: 12px; }
+.sp-shell .sp-holidays-page .sp-card-head {
+  padding: 7px 12px;
+}
+
+.sp-shell .sp-holidays-page .sp-card-head h2 {
+  font-size: 14px;
+}
+
+.sp-shell .sp-holidays-page .sp-card-head p {
+  font-size: 10px;
+  margin-top: 2px;
+}
+.sp-shell .sp-holidays-page .sp-card-body { padding: 0; }
+.sp-shell .sp-holidays-page .sp-holiday-list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--sp-border); }
+.sp-shell .sp-holidays-page .sp-holiday-search { display: flex; align-items: center; gap: 8px; flex: 1 1 240px; max-width: 380px; min-width: 0; padding: 0 11px; border: 1px solid var(--sp-border); border-radius: 8px; background: var(--sp-surface); color: var(--sp-muted); }
+.sp-shell .sp-holidays-page .sp-holiday-search input { width: 100%; min-width: 0; height: 37px; border: 0; outline: 0; background: transparent; color: var(--sp-text); font: inherit; font-size: 13px; }
+.sp-shell .sp-holidays-page .sp-holiday-search:focus-within { outline: 2px solid var(--sp-primary); outline-offset: 1px; }
+.sp-shell .sp-holidays-page .sp-holiday-list-filters select { min-height: 38px; padding: 0 10px; flex: 0 1 160px; max-width: 100%; border: 1px solid var(--sp-border); border-radius: 8px; background: var(--sp-surface); color: var(--sp-text); font: inherit; font-size: 13px; }
+.sp-shell .sp-holidays-page .sp-table :is(th, td) { padding: 12px 16px; font-size: 12px; vertical-align: middle; }
+.sp-shell .sp-holidays-page .sp-table th { background: var(--sp-soft); font-size: 11px; }
+.sp-shell .sp-holidays-page .sp-table td:first-child { font-weight: 700; }
+.sp-shell .sp-holidays-page :is(.sp-holiday-type, .sp-holiday-status) { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.sp-shell .sp-holidays-page .sp-holiday-status.is-past { background: color-mix(in srgb, #16a34a 12%, var(--sp-surface)); color: var(--sp-text); }
+.sp-shell .sp-holidays-page .sp-holiday-status.is-ongoing { background: color-mix(in srgb, #2563eb 12%, var(--sp-surface)); color: var(--sp-text); }
+.sp-shell .sp-holidays-page .sp-pagination { margin: 0; padding: 12px 16px; border-top: 1px solid var(--sp-border); font-size: 12px; }
+.sp-shell .sp-holidays-page .sp-pagination strong { padding: 6px 10px; border-radius: 8px; color: #fff; background: var(--sp-primary); }
+@media (max-width: 1150px) { .sp-shell .sp-holidays-page .sp-holiday-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .sp-shell .sp-holidays-page .sp-holiday-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) {
+  .sp-shell .sp-holidays-page .sp-holiday-summary { grid-template-columns: minmax(0, 1fr); }
+  .sp-shell .sp-holidays-page .sp-holiday-search { max-width: none; }
+  .sp-shell .sp-holidays-page .sp-holiday-list-filters select { flex: 1 1 120px; }
+}
+
+/* Exact admin holiday summary treatment, scoped to the student Holidays page. */
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary {
+  --holiday-card-accent: var(--sp-primary);
+  --holiday-card-surface: var(--sp-primary-soft);
+  --holiday-card-icon: color-mix(in srgb, var(--sp-primary) 15%, #fff);
+  display: grid; grid-template-columns: 39px minmax(0, 1fr); align-items: center;
+  gap: 11px; min-height: 82px; padding: 13px;
+  border: 1px solid var(--sp-border); border-left: 3px solid var(--holiday-card-accent);
+  border-radius: 11px; background: var(--holiday-card-surface); box-shadow: none;
+}
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary:nth-child(2) { --holiday-card-accent: #2563eb; --holiday-card-surface: #f5f8ff; --holiday-card-icon: #dbeafe; }
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary:nth-child(3) { --holiday-card-accent: #b45309; --holiday-card-surface: #fffbeb; --holiday-card-icon: #fef3c7; }
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary:nth-child(4) { --holiday-card-accent: #7c3aed; --holiday-card-surface: #f8f5ff; --holiday-card-icon: #ede9fe; }
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary:nth-child(5) { --holiday-card-accent: #167244; --holiday-card-surface: #f0fbf4; --holiday-card-icon: #dcfce7; }
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary-icon { width: 39px; height: 39px; border-radius: 10px; background: var(--holiday-card-icon); }
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary-icon img { width: 30px; height: 30px; object-fit: contain; }
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary > div { display: grid; gap: 4px; min-width: 0; }
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary small { font-size: 11px; font-weight: 700; color: var(--sp-muted); }
+.sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary strong { margin: 0; font-size: 22px; line-height: 1; color: var(--sp-text); }
+[data-theme="dark"] .sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary { background: var(--sp-surface); border-color: color-mix(in srgb, var(--holiday-card-accent) 30%, var(--sp-border)); border-left-color: var(--holiday-card-accent); }
+[data-theme="dark"] .sp-shell .sp-holidays-page .sp-holiday-summary .sp-summary-icon { background: color-mix(in srgb, var(--holiday-card-accent) 18%, var(--sp-surface)); }
+
+/* Consistent student portal search fields: shared admin-reference treatment. */
+.sp-shell .sp-content :is(.sp-search, .sp-exam-search, .sp-holiday-search, .sp-doc-search) {
+  display: flex; align-items: center; gap: 8px; min-height: 36px; min-width: 0;
+  padding: 0 10px 0 32px; box-sizing: border-box;
+  border: 1px solid var(--sp-border); border-radius: 9px;
+  background: var(--sp-surface) url('../../assets/navbar-3d/search.png') no-repeat 10px center / 17px 17px;
+  color: var(--sp-text); transition: border-color .15s, box-shadow .15s;
+}
+.sp-shell .sp-content :is(.sp-search, .sp-exam-search, .sp-holiday-search, .sp-doc-search) > svg { display: none; }
+.sp-shell .sp-content :is(.sp-search, .sp-exam-search, .sp-holiday-search, .sp-doc-search) input {
+  flex: 1; width: 100%; min-width: 0; height: 34px; min-height: 0; margin: 0; padding: 0;
+  border: 0; border-radius: 0; outline: none; box-shadow: none;
+  background: transparent; color: var(--sp-text); font: inherit; font-size: 12px;
+}
+.sp-shell .sp-content :is(.sp-search, .sp-exam-search, .sp-holiday-search, .sp-doc-search):focus-within {
+  border-color: var(--sp-primary); outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sp-primary) 14%, transparent);
+}
+.sp-shell .sp-results-page .sp-results-toolbar > input[type="search"] {
+  min-height: 36px; height: 36px; min-width: 0; box-sizing: border-box;
+  padding: 0 10px 0 32px; border: 1px solid var(--sp-border); border-radius: 9px;
+  background: var(--sp-surface) url('../../assets/navbar-3d/search.png') no-repeat 10px center / 17px 17px;
+  color: var(--sp-text); font: inherit; font-size: 12px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.sp-shell .sp-results-page .sp-results-toolbar > input[type="search"]:focus {
+  border-color: var(--sp-primary); outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sp-primary) 14%, transparent);
+}
+.sp-shell :is(.sp-navbar-search, .sp-search, .sp-exam-search, .sp-holiday-search, .sp-doc-search, .sp-results-toolbar) input::placeholder { color: var(--sp-muted); opacity: 1; }
+.sp-shell .sp-navbar-search { border-radius: 9px; border-color: var(--sp-border); background-color: var(--sp-surface); }
+.sp-shell .sp-navbar-search:focus-within { border-color: var(--sp-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sp-primary) 14%, transparent); }
+.sp-shell .sp-navbar-search input { outline: none; box-shadow: none; border: 0; }
+@media (max-width: 620px) {
+  .sp-shell .sp-content :is(.sp-search, .sp-exam-search, .sp-holiday-search, .sp-doc-search) { max-width: 100%; }
+  .sp-shell .sp-results-page .sp-results-toolbar > input[type="search"] { width: 100%; }
+}
+
+/* Shared student data-table hover, matching the admin Teaching Staff reference. */
+:is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr,
+:is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr > td {
+  transition: background-color .12s ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
+  :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
+    background-color: #edf2dc;
+  }
+  [data-theme="dark"] :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
+  [data-theme="dark"] :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
+    background-color: color-mix(in srgb, var(--sp-surface, #1d251a) 75%, #65833d);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr,
+  :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr > td { transition: none; }
+}
+
+.sp-shell .sp-results-page .sp-card-body:has(> .sp-results-toolbar) { padding-top: 8px; }
