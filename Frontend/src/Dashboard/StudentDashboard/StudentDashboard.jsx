@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, XCircle, Clock3, GraduationCap, Users, FileText, Sun, X } from "lucide-react";
+import {  Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, X , Sun, Clock3, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -117,13 +117,15 @@ const normalizeFeeSummary = (detailsPayload, ledgerPayload) => {
   };
 };
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function StudentDashboard() {
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good Morning";
-    if (hour < 17) return "Good Afternoon";
-    return "Good Evening";
-  };
+
   const [greeting, setGreeting] = useState(getGreeting);
   useEffect(() => {
     const updateGreeting = () => setGreeting(getGreeting());
@@ -142,6 +144,7 @@ export default function StudentDashboard() {
   const [attendanceError, setAttendanceError] = useState("");
   const [latestResult, setLatestResult] = useState(null);
   const [resultError, setResultError] = useState("");
+  const resultPublished = Boolean(latestResult && (latestResult.published || latestResult.status === "PUBLISHED" || latestResult.isPublished));
   const [feeSummary, setFeeSummary] = useState(null);
   const [feeLoading, setFeeLoading] = useState(true);
   const [feeError, setFeeError] = useState("");
@@ -222,6 +225,7 @@ export default function StudentDashboard() {
     : [];
   return (
     <div className="sp-page sp-dashboard-page">
+
       <div className="sp-dashboard-greeting">
         <h1 className="sp-dashboard-greeting-title"><span className="sp-dashboard-greeting-emoji" aria-hidden="true">{greeting === "Good Morning" ? "🌅" : greeting === "Good Afternoon" ? "☀️" : "🌙"}</span> {greeting}, {studentName.split(" ")[0]}!</h1>
         <p className="sp-dashboard-greeting-sub">Welcome back! Here's what's happening with your academics today.</p>
@@ -270,8 +274,9 @@ export default function StudentDashboard() {
       <section className="sp-summary-grid four">
         <StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={attendanceData ? `${attendance.percentage}%` : "—"} note={attendanceError ? "Unable to load" : `${attendance.present} present · ${attendance.absent} absent`} />
         <StudentSummaryCard icon={IndianRupee} label="Fee Due" value={feeValue("due")} note={feeError ? "Unable to load fee data" : `Due ${feeDate}`} tone="orange" />
+
         <StudentSummaryCard icon={CalendarClock} label="Upcoming Exams" value={upcomingExams.length} note={upcomingExams[0] ? `Next on ${formatExamDate(upcomingExams[0].nextDate)}` : "No upcoming exams"} tone="purple" />
-        <StudentSummaryCard icon={Award} label="Latest Result" value={latestResult ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : latestResult ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
+        <StudentSummaryCard icon={Award} label="Latest Result" value={resultPublished ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : resultPublished ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
       </section>
       <StudentCard title="Quick Actions" className="sp-dashboard-quick-actions">
         <div className="sp-dashboard-action-grid">
@@ -286,6 +291,7 @@ export default function StudentDashboard() {
           ].map(([title, description, route, icon, tone]) => <Link key={route} className={`sp-dashboard-action tone-${tone}`} to={route} state={route === "certificates" ? { openRequestCertificate: true } : undefined}><img src={icon} alt="" aria-hidden="true" /><strong>{title}</strong><small>{description}</small></Link>)}
         </div>
       </StudentCard>
+
       <StudentDashboardHighlights student={profile} upcomingExams={upcomingExams} examsError={examsError} formatExamDate={formatExamDate} />
       <div className="sp-dashboard-grid">
         <StudentCard className="sp-dashboard-results" title="Recent Results" action={<Link className="sp-text-link" to="results">View All →</Link>}>

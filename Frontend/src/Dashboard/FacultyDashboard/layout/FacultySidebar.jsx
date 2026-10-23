@@ -66,6 +66,7 @@ export const permissionByModule = {
   holidays: "VIEW_HOLIDAYS",
   classes: "VIEW_CLASSES",
   reimbursements: "VIEW_REIMBURSEMENTS",
+  settings: "VIEW_SETTINGS",
 };
 
 

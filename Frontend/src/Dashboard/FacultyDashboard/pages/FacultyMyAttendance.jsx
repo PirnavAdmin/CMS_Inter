@@ -485,10 +485,13 @@ export default function FacultyMyAttendance() {
           <div className="sp-punch-twin-grid">
             {/* Check In Panel */}
             <div className="sp-twin-panel checkin-panel">
-              <div className="sp-twin-icon-box checkin">
-                <LogIn size={16} />
+              {/* Check In Header: Icon beside Title */}
+              <div className="sp-twin-header">
+                <div className="sp-twin-icon-box checkin">
+                  <LogIn size={15} />
+                </div>
+                <div className="sp-twin-title checkin">CHECK IN</div>
               </div>
-              <div className="sp-twin-title checkin">CHECK IN</div>
 
               {/* Modern Digital Clock & Status Badge */}
               <div className="sp-digital-display checkin">
@@ -521,10 +524,13 @@ export default function FacultyMyAttendance() {
 
             {/* Check Out Panel */}
             <div className="sp-twin-panel checkout-panel">
-              <div className="sp-twin-icon-box checkout">
-                <LogOut size={16} />
+              {/* Check Out Header: Icon beside Title */}
+              <div className="sp-twin-header">
+                <div className="sp-twin-icon-box checkout">
+                  <LogOut size={15} />
+                </div>
+                <div className="sp-twin-title checkout">CHECK OUT</div>
               </div>
-              <div className="sp-twin-title checkout">CHECK OUT</div>
 
               {/* Modern Digital Clock & Status Badge */}
               <div className="sp-digital-display checkout">

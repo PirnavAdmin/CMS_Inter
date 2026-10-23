@@ -721,6 +721,11 @@ export default function FacultyMarks() {
 
       await apiClient.post("/api/v1/marks/bulk", payload);
     } catch (err) {
+      if (err?.response?.status === 403 || err?.status === 403) {
+        setSavingMarks(false);
+        notify("Access Denied: You do not have permission to save marks.", "error");
+        return;
+      }
       console.warn("API bulk save endpoint warning, saving to local evaluations ledger:", err);
     }
 
@@ -781,6 +786,11 @@ export default function FacultyMarks() {
 
       await apiClient.post("/api/v1/marks/bulk", payload);
     } catch (err) {
+      if (err?.response?.status === 403 || err?.status === 403) {
+        setSavingMarks(false);
+        notify("Access Denied: You do not have permission to submit marks.", "error");
+        return;
+      }
       console.warn("API bulk submit warning:", err);
     }
 

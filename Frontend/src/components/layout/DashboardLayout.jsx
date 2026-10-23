@@ -13,8 +13,10 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
-import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
-import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
+import { clearAuthSession, getAuthUser, getAuthToken } from "@/features/authStorage.js";
+import { env } from "@/config/env.js";
+import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
@@ -165,10 +167,11 @@ export const menu = [
   {
     section: "Academic",
     items: [
-      { to: "/dashboard/courses", label: "Group Management", icon: generatedSidebarIcons.groups, moduleKey: "group-management" },
+      { to: "/dashboard/courses", label: "Group Management", icon: generatedSidebarIcons.groups, moduleKey: "group-management", screenKey: "courses" },
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon, moduleKey: "subject-management" },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon, moduleKey: "section-room" },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
+      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
       { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
       { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes, moduleKey: "inventory-management" },
     ],
@@ -207,6 +210,7 @@ export const menu = [
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon, moduleKey: "fee-management" },
       { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll, moduleKey: "payroll" },
+      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon, moduleKey: "reimbursement" },
     ],
   },
   {
@@ -288,6 +292,46 @@ export const principalMenu = menu.map((group) => (
     ? { ...group, items: [{ ...group.items[0], to: "/principal-dashboard" }] }
     : group
 ));
+
+export const examCellMenu = [
+  {
+    section: "Overview",
+    items: [{ to: "/exam-cell-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: "dashboard" }],
+  },
+  {
+    section: "Examinations",
+    items: [
+      { to: "/exam-cell-dashboard/exams", label: "Examination", icon: examinationIcon, moduleKey: "examinations" },
+      { to: "/exam-cell-dashboard/hall-allocation", label: "Hall Allocation", icon: sectionsIcon, moduleKey: "examinations", screenKey: "hall-allocation" },
+      { to: "/exam-cell-dashboard/hall-tickets", label: "Hall Tickets", icon: certificatesIcon, moduleKey: "examinations", screenKey: "hall-tickets" },
+    ],
+  },
+  {
+    section: "Marks & Results",
+    items: [
+      { to: "/exam-cell-dashboard/marks-entry", label: "Marks Entry", icon: marksEvaluationIcon, moduleKey: "marks-evaluation" },
+      { to: "/exam-cell-dashboard/results", label: "Results", icon: resultsIcon, moduleKey: "results" },
+    ],
+  },
+  {
+    section: "Student Operations",
+    items: [
+      { to: "/exam-cell-dashboard/attendance", label: "Attendance", icon: attendanceIcon, moduleKey: "attendance" },
+      { to: "/exam-cell-dashboard/check-in-out", label: "My Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance", screenKey: "my-attendance" },
+      { to: "/exam-cell-dashboard/certificates", label: "Certificates", icon: certificatesIcon, moduleKey: "certificates" },
+      { to: "/exam-cell-dashboard/promotions", label: "Promotions", icon: promotionIcon, moduleKey: "promotion" },
+      { to: "/exam-cell-dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
+    ],
+  },
+  {
+    section: "Reports & Account",
+    items: [
+      { to: "/exam-cell-dashboard/reports", label: "Exam Reports", icon: reportsAnalyticsIcon, moduleKey: "reports-analytics" },
+      { to: "/exam-cell-dashboard/profile", label: "My Profile", icon: staffIcon, moduleKey: "profile" },
+      { to: "/exam-cell-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: "settings" },
+    ],
+  },
+];
 
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
@@ -462,7 +506,11 @@ function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
 
-
+// Module-level notifications cache to prevent duplicate backend requests on route navigation
+let cachedLiveNotifications = [];
+let lastNotifFetchTimestamp = 0;
+let lastNotifCampus = null;
+const NOTIF_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 
 export default function DashboardLayout({
   title,
@@ -478,6 +526,9 @@ export default function DashboardLayout({
   profilePath,
   settingsPath,
   showSettingsAction = true,
+  showCampusSelector = true,
+  showBoardSelector = true,
+  showAcademicYearSelector = true,
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -521,23 +572,37 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!currentUser || hasRole("SUPER_ADMIN", currentUser)) return;
-    if (currentUser.permissions || currentUser.rolePermissions) return;
 
-    getCurrentUserPermissions()
-      .then((res) => {
-        if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-          const updated = { ...currentUser, permissions: res.data };
-          try {
-            const raw = window.localStorage.getItem("user") ? window.localStorage : window.sessionStorage;
-            raw.setItem("user", JSON.stringify(updated));
-          } catch { /* Storage may be unavailable in restricted browser contexts. */ }
-          setCurrentUser(updated);
-        }
-      })
-      .catch((err) => {
-        console.warn("Could not load current user permissions:", err?.message);
-      });
-  }, [currentUser]);
+    let isMounted = true;
+    const fetchPerms = () => {
+      getCurrentUserPermissions()
+        .then((res) => {
+          if (isMounted && res?.data && Array.isArray(res.data)) {
+            const updated = { ...currentUser, permissions: res.data };
+            try {
+              for (const storage of [window.localStorage, window.sessionStorage]) {
+                if (storage.getItem("user")) storage.setItem("user", JSON.stringify(updated));
+              }
+            } catch {}
+            setCurrentUser(updated);
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not load current user permissions:", err?.message);
+        });
+    };
+
+    fetchPerms();
+
+    const handleUpdate = () => fetchPerms();
+    window.addEventListener("roles-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("roles-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
@@ -555,7 +620,7 @@ export default function DashboardLayout({
           ...group,
           items: (group.items || []).filter((item) => {
             if (!item.moduleKey || item.moduleKey === "dashboard") return true;
-            return can(item.moduleKey, ACTIONS.VIEW, undefined, user);
+            return can(item.moduleKey, ACTIONS.VIEW, user?.permissions, user, item.screenKey);
           }),
         }))
         .filter((group) => group.items.length > 0);
@@ -587,7 +652,19 @@ export default function DashboardLayout({
   useEffect(() => {
     let disposed = false;
     if (canReviewReimbursements || canReviewCertificates) {
-      const fetchLiveNotifications = async () => {
+      const fetchLiveNotifications = async (force = false) => {
+        const now = Date.now();
+        if (
+          !force &&
+          lastNotifCampus === reimbursementCampusId &&
+          now - lastNotifFetchTimestamp < NOTIF_CACHE_TTL_MS
+        ) {
+          if (!disposed && cachedLiveNotifications.length > 0) {
+            setLiveNotifications(cachedLiveNotifications);
+          }
+          return;
+        }
+
         const notifs = [];
         try {
           if (canReviewReimbursements) {
@@ -636,11 +713,48 @@ export default function DashboardLayout({
         }
 
         if (!disposed) {
+          cachedLiveNotifications = notifs;
+          lastNotifFetchTimestamp = Date.now();
+          lastNotifCampus = reimbursementCampusId;
           setLiveNotifications(notifs);
         }
       };
 
       fetchLiveNotifications();
+
+      // SignalR Push Connection: ONLY fetch when server pushes a real notification event
+      let hubConnection = null;
+      try {
+        const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
+        if (token) {
+          const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
+          hubConnection = new HubConnectionBuilder()
+            .withUrl(`${base}/hubs/notifications`, {
+              accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
+              headers: { "ngrok-skip-browser-warning": "true" },
+            })
+            .withAutomaticReconnect()
+            .configureLogging(LogLevel.None)
+            .build();
+
+          hubConnection.on("NotificationReceived", () => {
+            if (!disposed) {
+              setHasViewedNotifications(false);
+              fetchLiveNotifications(true);
+            }
+          });
+
+          hubConnection.start()
+            .then(() => {
+              if (reimbursementCampusId && hubConnection) {
+                hubConnection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
+      } catch {
+        // Fallback
+      }
 
       // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
       let channel = null;
@@ -654,21 +768,29 @@ export default function DashboardLayout({
             event.data?.type === "REIMBURSEMENT_STATUS_UPDATED"
           ) {
             setHasViewedNotifications(false);
-            fetchLiveNotifications();
+            fetchLiveNotifications(true);
           }
         };
       } catch {
         // Fallback
       }
 
-      const timer = setInterval(() => {
-        fetchLiveNotifications();
-      }, 60000);
+      // Listen for same-tab local events so badges update immediately upon action
+      const handleLocalAction = () => {
+        setHasViewedNotifications(false);
+        fetchLiveNotifications(true);
+      };
+      window.addEventListener("cms-reimbursements-updated", handleLocalAction);
+      window.addEventListener("cms-certificates-updated", handleLocalAction);
 
       return () => {
         disposed = true;
-        clearInterval(timer);
         if (channel) channel.close();
+        if (hubConnection) {
+          hubConnection.stop().catch(() => {});
+        }
+        window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
+        window.removeEventListener("cms-certificates-updated", handleLocalAction);
       };
     }
     setLiveNotifications([]);

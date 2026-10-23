@@ -102,7 +102,7 @@ export default function Login() {
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
       try {
         const permsRes = await getCurrentUserPermissions();
-        if (permsRes?.data && Array.isArray(permsRes.data) && permsRes.data.length > 0) {
+        if (permsRes?.data && Array.isArray(permsRes.data)) {
           result.user.permissions = permsRes.data;
           saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
         }

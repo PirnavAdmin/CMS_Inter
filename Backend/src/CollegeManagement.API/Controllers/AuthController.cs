@@ -93,13 +93,31 @@ namespace CollegeManagement.API.Controllers
                 Status = result.Status,
                 Message = result.Message,
                 AccessToken = result.AccessToken,
+                Token = result.AccessToken,
                 UserId = result.UserId,
                 Name = result.Name,
                 Email = result.Email,
                 StaffId = result.StaffId,
                 StudentId = result.StudentId,
                 AdminId = result.AdminId,
-                Role = result.Role
+                Role = result.Role,
+                StaffType = result.StaffType,
+                Designation = result.Designation,
+                EmployeeId = result.EmployeeId,
+                AssignedCampusIds = result.AssignedCampusIds,
+                AssignedBoardIds = result.AssignedBoardIds,
+                User = new
+                {
+                    staffId = result.StaffId,
+                    userId = result.UserId,
+                    role = result.Role,
+                    staffType = result.StaffType,
+                    designation = result.Designation,
+                    employeeId = result.EmployeeId,
+                    email = result.Email,
+                    name = result.Name,
+                    isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                }
             });
         }
 
@@ -145,9 +163,31 @@ namespace CollegeManagement.API.Controllers
                 Status = result.Status,
                 Message = result.Message,
                 AccessToken = result.AccessToken,
+                Token = result.AccessToken,
                 UserId = result.UserId,
                 Name = result.Name,
-                Role = result.Role
+                Email = result.Email,
+                StaffId = result.StaffId,
+                StudentId = result.StudentId,
+                AdminId = result.AdminId,
+                Role = result.Role,
+                StaffType = result.StaffType,
+                Designation = result.Designation,
+                EmployeeId = result.EmployeeId,
+                AssignedCampusIds = result.AssignedCampusIds,
+                AssignedBoardIds = result.AssignedBoardIds,
+                User = new
+                {
+                    staffId = result.StaffId,
+                    userId = result.UserId,
+                    role = result.Role,
+                    staffType = result.StaffType,
+                    designation = result.Designation,
+                    employeeId = result.EmployeeId,
+                    email = result.Email,
+                    name = result.Name,
+                    isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                }
             });
         }
 

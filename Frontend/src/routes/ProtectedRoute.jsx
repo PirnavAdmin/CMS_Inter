@@ -215,7 +215,6 @@ export default function ProtectedRoute({
     clearAuthSession();
     return <Navigate to="/login" replace />;
   }
-
   const isWarden = isWardenRole(role, user);
   const isNonTeaching = !isWarden && isNonTeachingRole(role, user);
   const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden && !isNonTeaching;

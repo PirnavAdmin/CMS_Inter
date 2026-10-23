@@ -1,7 +1,14 @@
+.cms-content:has(.rbac-page) {
+  overflow-y: hidden;
+  padding-bottom: 8px;
+}
+
 .rbac-page {
   display: grid;
   gap: 12px;
   width: 100%;
+  max-width: 1680px;
+  margin: 0 auto;
   min-width: 0;
 }
 
@@ -50,9 +57,11 @@
 
 .rbac-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
+  height: calc(100dvh - 185px);
+  min-height: 520px;
 }
 
 .rbac-panel {
@@ -69,6 +78,35 @@
   padding: 14px;
 }
 
+.rbac-role-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rbac-role-panel-header {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+}
+
+.rbac-role-panel-header .rbac-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.rbac-detail-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .rbac-panel-head {
   display: flex;
   align-items: center;
@@ -76,6 +114,8 @@
   gap: 10px;
   margin-bottom: 10px;
 }
+
+
 
 .rbac-panel h2,
 .rbac-panel h3 {
@@ -117,13 +157,14 @@
 }
 
 .rbac-role-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
   display: grid;
   gap: 7px;
-  max-height: calc(100dvh - 245px);
-  min-height: 420px;
-  margin-top: 12px;
-  overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
+  margin-top: 0;
 }
 
 .rbac-role-item {
@@ -488,16 +529,21 @@
 }
 
 .rbac-permission-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--cms-border);
   border-radius: 8px;
   overflow: hidden;
 }
 
 .rbac-permission-toolbar {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px;
+  padding: 10px 14px;
   background: color-mix(in srgb, var(--cms-primary-soft) 72%, var(--cms-surface));
   border-bottom: 1px solid var(--cms-border);
 }
@@ -552,8 +598,8 @@
 }
 
 .rbac-search-wrapper {
-  flex: 1;
-  min-width: 200px;
+  flex: 0 1 360px;
+  min-width: 180px;
 }
 
 .rbac-search-wrapper .rbac-search {
@@ -647,15 +693,16 @@
 }
 
 .rbac-matrix {
-  display: grid;
-  max-height: calc(100dvh - 325px);
-  min-height: 365px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
+  display: block;
 }
 
 .rbac-matrix-row {
   display: grid;
-  grid-template-columns: minmax(210px, 1.4fr) repeat(4, minmax(78px, .45fr));
+  grid-template-columns: minmax(240px, 1fr) repeat(4, 96px);
   align-items: stretch;
   border-bottom: 1px solid var(--cms-border);
 }
@@ -906,17 +953,20 @@
 }
 
 .rbac-savebar {
+  flex: 0 0 auto;
+  position: static;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 12px;
-  padding: 10px 12px;
+  margin-top: 10px;
+  padding: 10px 14px;
   border: 1px solid var(--cms-border);
   border-radius: 8px;
-  background: var(--cms-bg);
+  background: var(--cms-surface);
   color: var(--cms-muted);
   font-size: 12.5px;
+  box-shadow: none;
 }
 
 .rbac-savebar > div {
@@ -1438,7 +1488,7 @@
   }
 
   .rbac-matrix-row {
-    grid-template-columns: minmax(170px, 1.2fr) repeat(4, minmax(64px, .45fr));
+    grid-template-columns: minmax(170px, 1fr) repeat(4, 68px);
   }
 
   .rbac-module-cell {
@@ -1456,15 +1506,17 @@
 
 /* Quick Presets Bar */
 .rbac-presets-bar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px 12px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   background: var(--cms-bg);
-  border: 1px solid var(--cms-border);
-  border-radius: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--cms-border);
+  border-radius: 0;
 }
 
 .rbac-presets-label {
@@ -1830,3 +1882,38 @@
   color: #fff;
 }
 
+
+@media (max-width: 1080px) {
+  .cms-content:has(.rbac-page) {
+    overflow-y: auto;
+  }
+  .rbac-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .rbac-role-panel,
+  .rbac-detail-panel {
+    height: auto;
+  }
+  .rbac-role-list {
+    max-height: 340px;
+  }
+  .rbac-matrix {
+    max-height: 480px;
+  }
+}
+
+@media (max-height: 620px) {
+  .cms-content:has(.rbac-page) {
+    overflow-y: auto;
+  }
+  .rbac-grid {
+    height: auto;
+  }
+  .rbac-role-list {
+    max-height: 300px;
+  }
+  .rbac-matrix {
+    max-height: 380px;
+  }
+}

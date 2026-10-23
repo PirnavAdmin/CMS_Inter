@@ -371,3 +371,28 @@
   .student-profile-compact .student-profile-personal-layout { grid-template-columns: 1fr; }
   .student-profile-compact .student-profile-read-field { grid-template-columns: minmax(90px, 38%) minmax(0, 1fr); }
 }
+
+/* Facility settlement preview for student management and portal fee screens. */
+.facility-settlement-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.facility-settlement-heading h3 { margin:0 0 6px; }
+.facility-settlement-demo { background:#fff1cd; color:#805900; border-radius:20px; padding:5px 12px; font-size:12px; font-weight:700; white-space:nowrap; }
+.facility-settlement-disclaimer { padding:12px; border:1px dashed #d5bd79; border-radius:9px; font-size:13px; line-height:1.5; }
+.facility-settlement-selector { display:grid; gap:7px; max-width:360px; margin:16px 0; font-size:13px; }
+.facility-settlement-selector select { width:100%; padding:11px; border:1px solid var(--cms-border,#d9dfc9); border-radius:9px; background:var(--cms-card,#fff); color:inherit; }
+.facility-settlement-status { background:rgba(120,139,0,.08); padding:14px 16px; border-radius:10px; line-height:1.7; margin:16px 0; }
+.facility-settlement-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.facility-settlement-columns > section { border:1px solid var(--cms-border,#d9dfc9); border-radius:12px; padding:18px; }
+.facility-settlement-preview h4 { margin:6px 0 16px; font-size:15px; }
+.facility-settlement-values { display:grid; margin:0 0 16px; }
+.facility-settlement-values > div { display:flex; justify-content:space-between; gap:18px; padding:11px 0; border-bottom:1px solid var(--cms-border,#d9dfc9); font-size:13px; }
+.facility-settlement-values dt,.facility-settlement-note,.facility-settlement-heading p { color:var(--cms-muted,#737b69); }
+.facility-settlement-values dd { margin:0; text-align:right; font-weight:600; }
+.facility-settlement-note { font-size:13px; line-height:1.6; }
+@media(max-width:760px) { .facility-settlement-columns { grid-template-columns:1fr; } .facility-settlement-values > div { flex-wrap:wrap; } }
+
+/* Keep facility charges, settlement history, then the remaining fee sections. */
+.student-profile-fee:has(> .facility-settlement-slot) { display:flex; flex-direction:column; }
+.student-profile-fee:has(> .facility-settlement-slot) > * { order:2; }
+.student-profile-fee:has(> .facility-settlement-slot) > .cms-fee-context { order:-1; }
+.student-profile-fee:has(> .facility-settlement-slot) > .settlement-facility-fees { order:0; }
+.student-profile-fee:has(> .facility-settlement-slot) > .facility-settlement-slot { order:1; }

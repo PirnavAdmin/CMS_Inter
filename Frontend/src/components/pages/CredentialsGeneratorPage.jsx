@@ -62,6 +62,32 @@ export function getStoredCredentialSettings() {
   return DEFAULT_CREDENTIAL_SETTINGS;
 }
 
+function StatusBadge({ value }) {
+  const status = String(value || "Pending").toLowerCase();
+  const styles = {
+    generated: { bg: "#e0f2fe", text: "#0284c7" },
+    sent: { bg: "#dcfce7", text: "#16a34a" },
+    pending: { bg: "#fef9c3", text: "#ca8a04" },
+    failed: { bg: "#fee2e2", text: "#dc2626" },
+  };
+  const current = styles[status] || styles.pending;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "3px 10px",
+        borderRadius: "12px",
+        fontSize: "12px",
+        fontWeight: 600,
+        backgroundColor: current.bg,
+        color: current.text,
+      }}
+    >
+      {value || "Pending"}
+    </span>
+  );
+}
+
 // --- MOCK FACULTY DATA ---
 const INITIAL_FACULTY = [
   {

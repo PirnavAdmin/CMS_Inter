@@ -120,7 +120,14 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            return _mapper.Map<StaffResponseDto>(staff);
+            var dto = _mapper.Map<StaffResponseDto>(staff);
+            var linkedUser = await _userRepository.GetByStaffIdAsync(id);
+            if (linkedUser != null && linkedUser.RoleId > 0)
+            {
+                dto.RoleId = linkedUser.RoleId;
+                dto.RoleName = linkedUser.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(linkedUser.RoleId))?.RoleName;
+            }
+            return dto;
         }
 
         public async Task<StaffResponseDto?> GetStaffByEmployeeIdAsync(string employeeId)
@@ -129,7 +136,14 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with Employee ID {employeeId} not found.");
 
-            return _mapper.Map<StaffResponseDto>(staff);
+            var dto = _mapper.Map<StaffResponseDto>(staff);
+            var linkedUser = await _userRepository.GetByStaffIdAsync(staff.Id);
+            if (linkedUser != null && linkedUser.RoleId > 0)
+            {
+                dto.RoleId = linkedUser.RoleId;
+                dto.RoleName = linkedUser.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(linkedUser.RoleId))?.RoleName;
+            }
+            return dto;
         }
 
         public async Task<StaffProfileFullDto> GetStaffProfileFullAsync(int id)
@@ -138,7 +152,14 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            return MapToFullProfileDto(staff);
+            var dto = MapToFullProfileDto(staff);
+            var linkedUser = await _userRepository.GetByStaffIdAsync(id);
+            if (linkedUser != null && linkedUser.RoleId > 0)
+            {
+                dto.RoleId = linkedUser.RoleId;
+                dto.RoleName = linkedUser.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(linkedUser.RoleId))?.RoleName;
+            }
+            return dto;
         }
 
         public async Task<StaffProfileFullDto> GetStaffProfileByEmployeeIdAsync(string employeeId)
@@ -476,10 +497,25 @@ namespace CollegeManagement.API.Services.Implementations
                 if (dto.RoleId.HasValue && dto.RoleId.Value > 0)
                 {
                     assignedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value, connection, dbTransaction);
-                    if (assignedRole == null)
+                    if (assignedRole == null || !assignedRole.IsActive)
                     {
                         await transaction.RollbackAsync();
-                        throw new ValidationException($"Role with ID '{dto.RoleId.Value}' was not found in Roles table.");
+                        throw new ValidationException($"The selected role with ID '{dto.RoleId.Value}' does not exist or is inactive.");
+                    }
+                    if (!string.IsNullOrWhiteSpace(dto.RoleName) &&
+                        !string.Equals(assignedRole.RoleName.Trim(), dto.RoleName.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        await transaction.RollbackAsync();
+                        throw new ValidationException($"Submitted role name '{dto.RoleName}' does not match role ID '{dto.RoleId.Value}'.");
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(dto.RoleName))
+                {
+                    assignedRole = await _userRepository.GetRoleByNameAsync(dto.RoleName.Trim(), connection, dbTransaction);
+                    if (assignedRole == null || !assignedRole.IsActive)
+                    {
+                        await transaction.RollbackAsync();
+                        throw new ValidationException($"The selected role '{dto.RoleName}' does not exist or is inactive.");
                     }
                 }
                 else
@@ -573,7 +609,13 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var refreshedStaff = await _staffRepository.GetByIdAsync(staff.Id) ?? staff;
-            return _mapper.Map<StaffResponseDto>(refreshedStaff);
+            var responseDto = _mapper.Map<StaffResponseDto>(refreshedStaff);
+            if (assignedRole != null)
+            {
+                responseDto.RoleId = assignedRole.RoleId;
+                responseDto.RoleName = assignedRole.RoleName;
+            }
+            return responseDto;
         }
 
         public async Task<StaffResponseDto> UpdateStaffAsync(int id, UpdateStaffDto dto)
@@ -768,6 +810,39 @@ namespace CollegeManagement.API.Services.Implementations
                 existingStaff.DrivingLicenseExpiryDate = expParsed2;
             }
 
+            // Role resolution & validation for update
+            Role? updatedRole = null;
+            if (dto.RoleId.HasValue && dto.RoleId.Value > 0)
+            {
+                updatedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value);
+                if (updatedRole == null || !updatedRole.IsActive)
+                {
+                    throw new ValidationException($"The selected role with ID '{dto.RoleId.Value}' does not exist or is inactive.");
+                }
+                if (!string.IsNullOrWhiteSpace(dto.RoleName) &&
+                    !string.Equals(updatedRole.RoleName.Trim(), dto.RoleName.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ValidationException($"Submitted role name '{dto.RoleName}' does not match role ID '{dto.RoleId.Value}'.");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.RoleName))
+            {
+                updatedRole = await _userRepository.GetRoleByNameAsync(dto.RoleName.Trim());
+                if (updatedRole == null || !updatedRole.IsActive)
+                {
+                    throw new ValidationException($"The selected role '{dto.RoleName}' does not exist or is inactive.");
+                }
+            }
+
+            if (updatedRole != null)
+            {
+                var nonStaffRoles = new[] { "Super Admin", "Admin", "Student", "Parent" };
+                if (nonStaffRoles.Any(r => string.Equals(r, updatedRole.RoleName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new ValidationException($"Role '{updatedRole.RoleName}' (RoleId: {updatedRole.RoleId}) cannot be assigned to a Staff account.");
+                }
+            }
+
             // Transactional update: Staff domain + Users sync
             var updateStrategy = _context.Database.CreateExecutionStrategy();
             await updateStrategy.ExecuteAsync(async () =>
@@ -791,6 +866,11 @@ namespace CollegeManagement.API.Services.Implementations
                     await _userRepository.UpdateStatusByStaffIdAsync(id, newIsActive, connection, dbTransaction);
                 }
 
+                if (updatedRole != null)
+                {
+                    await _userRepository.UpdateRoleByStaffIdAsync(id, updatedRole.RoleId, connection, dbTransaction);
+                }
+
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;
                 if (subNames != null)
                 {
@@ -801,7 +881,22 @@ namespace CollegeManagement.API.Services.Implementations
             });
 
             var refreshedStaff = await _staffRepository.GetByIdAsync(existingStaff.Id) ?? existingStaff;
-            return _mapper.Map<StaffResponseDto>(refreshedStaff);
+            var responseDto = _mapper.Map<StaffResponseDto>(refreshedStaff);
+            if (updatedRole != null)
+            {
+                responseDto.RoleId = updatedRole.RoleId;
+                responseDto.RoleName = updatedRole.RoleName;
+            }
+            else
+            {
+                var linkedUser = await _userRepository.GetByStaffIdAsync(id);
+                if (linkedUser != null && linkedUser.RoleId > 0)
+                {
+                    responseDto.RoleId = linkedUser.RoleId;
+                    responseDto.RoleName = linkedUser.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(linkedUser.RoleId))?.RoleName;
+                }
+            }
+            return responseDto;
         }
 
         public async Task<bool> DeleteStaffAsync(int id)

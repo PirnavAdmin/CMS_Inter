@@ -7,6 +7,8 @@ namespace CollegeManagement.API.DTOs.Roles
     public class ModulePermissionUpdateItem
     {
         public string SubModule { get; set; } = string.Empty;
+        public string? ScreenId { get; set; } = string.Empty;
+        public string? ScreenName { get; set; } = string.Empty;
         public bool CanView { get; set; }
         public bool CanAdd { get; set; }
         public bool CanEdit { get; set; }
@@ -16,6 +18,10 @@ namespace CollegeManagement.API.DTOs.Roles
     public class FrontendPermissionInputItem
     {
         public string Module { get; set; } = string.Empty;
+        public string? ModuleId { get; set; }
+        public string ResolvedModule => !string.IsNullOrWhiteSpace(ModuleId) ? ModuleId : Module;
+        public string? ScreenId { get; set; } = string.Empty;
+        public string? ScreenName { get; set; } = string.Empty;
         public List<string> Actions { get; set; } = new();
     }
 
@@ -39,7 +45,9 @@ namespace CollegeManagement.API.DTOs.Roles
             {
                 return Permissions.Select(p => new ModulePermissionUpdateItem
                 {
-                    SubModule = MapModuleIdToSubModule(p.Module),
+                    SubModule = MapModuleIdToSubModule(p.ResolvedModule),
+                    ScreenId = p.ScreenId ?? string.Empty,
+                    ScreenName = p.ScreenName ?? string.Empty,
                     CanView = p.Actions.Any(a => a.Equals("view", StringComparison.OrdinalIgnoreCase)),
                     CanAdd = p.Actions.Any(a => a.Equals("create", StringComparison.OrdinalIgnoreCase) || a.Equals("add", StringComparison.OrdinalIgnoreCase)),
                     CanEdit = p.Actions.Any(a => a.Equals("edit", StringComparison.OrdinalIgnoreCase)),
@@ -58,6 +66,7 @@ namespace CollegeManagement.API.DTOs.Roles
             var map = new Dictionary<string, string>
             {
                 { "dashboard", "Dashboard" },
+                { "board-academic-year", "Board & Academic Year" },
                 { "group-management", "Group Management" },
                 { "subject-management", "Subject Management" },
                 { "section-room", "Section & Room" },
@@ -73,7 +82,15 @@ namespace CollegeManagement.API.DTOs.Roles
                 { "department-designation", "Department & Designation" },
                 { "staff-attendance", "Staff Attendance" },
                 { "staff-leave-management", "Staff Leave Management" },
+                { "reimbursement", "Staff Reimbursements" },
+                { "reimbursements", "Staff Reimbursements" },
+                { "staff-reimbursement", "Staff Reimbursements" },
+                { "staff-reimbursements", "Staff Reimbursements" },
+                { "reports", "Reports & Analytics" },
+                { "board-academic-years", "Board & Academic Year" },
+                { "courses", "Group Management" },
                 { "examination", "Examination" },
+                { "examinations", "Examination" },
                 { "marks-evaluation", "Marks Evaluation" },
                 { "results", "Results" },
                 { "fee-management", "Fee Management" },
@@ -81,8 +98,6 @@ namespace CollegeManagement.API.DTOs.Roles
                 { "certificates", "Certificates" },
                 { "reports-analytics", "Reports & Analytics" },
                 { "hostel-management", "Hostel Management" },
-                { "library", "Library" },
-                { "placement", "Placement" },
                 { "settings", "Settings" },
                 { "roles-permissions", "Roles & Permissions" },
                 { "inventory-management", "Inventory Management" },

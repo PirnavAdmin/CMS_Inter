@@ -73,6 +73,7 @@ export const submitReimbursementClaim = async (payload) => {
 };
 
 export const createReimbursement = submitReimbursementClaim;
+export const submitReimbursement = submitReimbursementClaim;
 
 /**
  * 7. POST /api/v1/reimbursements/{id}/upload-proof

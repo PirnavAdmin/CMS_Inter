@@ -48,6 +48,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_CampusId", campusId);
             parameters.Add("p_BoardId", boardId);
             parameters.Add("p_AcademicYearId", academicYearId);
+            parameters.Add("p_IncludeInactive", 0);
 
             var result = await conn.QueryAsync<RoleCardDto>(
                 "sp_GetRoleCards",
@@ -329,6 +330,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 { "staff-attendance", "Staff Attendance" },
                 { "staff-leave-management", "Staff Leave Management" },
                 { "examination", "Examination" },
+                { "examinations", "Examination" },
                 { "marks-evaluation", "Marks Evaluation" },
                 { "results", "Results" },
                 { "fee-management", "Fee Management" },
@@ -336,8 +338,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                 { "certificates", "Certificates" },
                 { "reports-analytics", "Reports & Analytics" },
                 { "hostel-management", "Hostel Management" },
-                { "library", "Library" },
-                { "placement", "Placement" },
                 { "settings", "Settings" },
                 { "roles-permissions", "Roles & Permissions" },
                 { "inventory-management", "Inventory Management" },

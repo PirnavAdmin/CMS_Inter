@@ -1052,13 +1052,13 @@ export default function FacultyDashboardHome() {
 
   const kpis = [
     {
-      label: "Total Students",
+      label: "My Classes",
       value: String(overallAttendance.total || 0),
       badge: `${facultySections.length} SECTION${facultySections.length === 1 ? "" : "S"}`,
       subtext: facultySections.map((s) => s.sectionName).join(", ") || "No assigned sections",
       tone: "green",
       icon: totalStudentsIcon,
-      tooltip: `${overallAttendance.total || 0} enrolled students across ${facultySections.length} assigned sections`,
+      tooltip: `View your ${facultySections.length} assigned sections and ${overallAttendance.total || 0} enrolled students`,
       onClick: () => setActiveModule("classes"),
     },
     {

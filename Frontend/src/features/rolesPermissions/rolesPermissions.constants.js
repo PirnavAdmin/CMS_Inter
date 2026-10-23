@@ -1,6 +1,5 @@
 import {
   BookOpen,
-  BriefcaseBusiness,
   Building2,
   Bus,
   CalendarCheck,
@@ -13,7 +12,6 @@ import {
   Home,
   Landmark,
   LayoutDashboard,
-  Library,
   Medal,
   ReceiptIndianRupee,
   Settings,
@@ -243,16 +241,6 @@ export const ROLE_SEEDS = Object.freeze([
     icon: ClipboardCheck,
   },
   {
-    id: "librarian",
-    code: "LIBRARIAN",
-    name: "Library / Librarian",
-    description: "Library catalog, issue and return management access.",
-    isSystemRole: true,
-    isProtected: false,
-    assignedUserCount: 1,
-    icon: Library,
-  },
-  {
     id: "hostel-warden",
     code: "HOSTEL_WARDEN",
     name: "Hostel Warden",
@@ -261,16 +249,6 @@ export const ROLE_SEEDS = Object.freeze([
     isProtected: false,
     assignedUserCount: 1,
     icon: Home,
-  },
-  {
-    id: "placement-officer",
-    code: "PLACEMENT_OFFICER",
-    name: "Placement Officer",
-    description: "Placement drives and student application management access.",
-    isSystemRole: true,
-    isProtected: false,
-    assignedUserCount: 1,
-    icon: BriefcaseBusiness,
   },
   {
     id: "bus-driver",
@@ -750,33 +728,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   },
 ]);
 
-export const OPTIONAL_MODULES_CONFIRMED_BY_CONFIG = Object.freeze([
-  {
-    id: "library",
-    name: "Library",
-    section: "Operations",
-    icon: Library,
-    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
-    reason: "Library roles are present in nonTeachingRolesConfig.js.",
-    screens: [
-      { id: "book-catalog", name: "Book Catalog & Search", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Book catalog, ISBN lookup, authors, and shelf allocation" },
-      { id: "circulation", name: "Issue & Return Desk", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Issue books, process returns, calculate late fines" },
-      { id: "library-members", name: "Student & Staff Cards", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Manage library membership cards and borrowing limits" },
-    ],
-  },
-  {
-    id: "placement",
-    name: "Placement",
-    section: "Operations",
-    icon: BriefcaseBusiness,
-    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
-    reason: "Placement Officer is an existing staff role option.",
-    screens: [
-      { id: "placement-drives", name: "Recruitment Drives", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Company visits, eligibility criteria, and interview dates" },
-      { id: "student-applications", name: "Applications & Offers", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Shortlisted candidates, job offers, and salary packages" },
-    ],
-  },
-]);
+export const OPTIONAL_MODULES_CONFIRMED_BY_CONFIG = Object.freeze([]);
 
 export const ALL_PERMISSION_MODULES = Object.freeze([
   ...MODULE_PERMISSION_CONFIG,
@@ -1032,16 +984,6 @@ export const ROLE_MEMBER_FALLBACK = Object.freeze([
     status: "Active",
   },
   {
-    id: "usr-library-001",
-    userId: "LIB-0001",
-    name: "Library Staff",
-    userType: "Staff",
-    department: "Library",
-    designation: "Librarian",
-    roleCodes: ["LIBRARIAN"],
-    status: "Active",
-  },
-  {
     id: "usr-hostel-001",
     userId: "HST-0001",
     name: "Hostel Warden",
@@ -1049,16 +991,6 @@ export const ROLE_MEMBER_FALLBACK = Object.freeze([
     department: "Hostel",
     designation: "Warden",
     roleCodes: ["HOSTEL_WARDEN"],
-    status: "Active",
-  },
-  {
-    id: "usr-placement-001",
-    userId: "PLC-0001",
-    name: "Placement Officer",
-    userType: "Staff",
-    department: "Placements",
-    designation: "Placement Officer",
-    roleCodes: ["PLACEMENT_OFFICER"],
     status: "Active",
   },
   {
