@@ -509,6 +509,8 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("{examinationId:int}/schedules")]
         [ProducesResponseType(typeof(IEnumerable<ExamScheduleResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell")]
+        [BypassPermission]
         public async Task<ActionResult<IEnumerable<ExamScheduleResponse>>> GetExamSchedules(
             [FromRoute] int examinationId)
         {
@@ -540,6 +542,8 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(ExamScheduleResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell")]
+        [BypassPermission]
         public async Task<ActionResult<ExamScheduleResponse>> GetExamScheduleById(
             [FromRoute] int examinationId,
             [FromRoute] int examScheduleId)

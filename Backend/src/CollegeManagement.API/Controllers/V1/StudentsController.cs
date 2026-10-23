@@ -68,6 +68,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves the profile of the current authenticated student.
         /// </summary>
         [HttpGet("me")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StudentSelfProfileResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -89,6 +91,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// Protected academic, financial, and system fields cannot be modified through this endpoint.
         /// </summary>
         [HttpPut("me/profile")]
+        [Authorize(Roles = "Admin,Student")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -119,6 +123,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// Uploads or replaces the current authenticated student's profile photograph.
         /// </summary>
         [HttpPost("me/photo")]
+        [Authorize(Roles = "Admin,Student")]
+        [BypassPermission]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StudentPhotoUploadResultDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -143,6 +149,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// CommunityCertificate, IncomeCertificate, CasteCertificate, TenthCertificate, MarksMemo.
         /// </summary>
         [HttpPost("me/documents")]
+        [Authorize(Roles = "Admin,Student")]
+        [BypassPermission]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StudentDocumentUploadResultDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -168,6 +176,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// Changes the current authenticated student's password after first login.
         /// </summary>
         [HttpPost("me/change-password")]
+        [Authorize(Roles = "Admin,Student")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

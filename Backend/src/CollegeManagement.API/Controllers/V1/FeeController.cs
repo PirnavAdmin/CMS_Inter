@@ -163,6 +163,8 @@ public class FeeController : ControllerBase
     // ---------------- Payment History / Receipt ----------------
     /// <summary>View payment history for one student.</summary>
     [HttpGet("history/{studentId:int}")]
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+    [BypassPermission]
     public async Task<IActionResult> GetHistory(int studentId) => Ok(await _service.GetFeePaymentsAsync(studentId));
 
     [HttpPost("bulk-history")]
@@ -183,6 +185,8 @@ public class FeeController : ControllerBase
 
     /// <summary>Fetch one payment receipt by receipt number.</summary>
     [HttpGet("receipt/{receiptNumber}")]
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+    [BypassPermission]
     public async Task<IActionResult> GetReceipt(string receiptNumber)
     {
         var result = await _service.GetReceiptAsync(receiptNumber);
