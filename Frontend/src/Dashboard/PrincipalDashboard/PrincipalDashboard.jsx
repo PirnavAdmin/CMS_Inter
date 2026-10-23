@@ -58,7 +58,7 @@ export default function PrincipalDashboard() {
       .catch(() => { if (active) { setData(EMPTY_DASHBOARD); setLoadError("Unable to load the live principal dashboard data."); } })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId, range.startDate, range.endDate]);
+  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId, range]);
 
   const classFilters = useMemo(() => ["All classes", ...new Set(data.classOverview.map((item) => item.className.split(" ").slice(0, 3).join(" ")))], [data.classOverview]);
   const filteredClasses = useMemo(() => classFilter === "All classes" ? data.classOverview : data.classOverview.filter((item) => item.className.startsWith(classFilter)), [classFilter, data.classOverview]);
