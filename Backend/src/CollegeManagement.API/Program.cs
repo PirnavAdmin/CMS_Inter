@@ -183,6 +183,10 @@ builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
 builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
 
+// Academic Calendar & Notifications Repositories
+builder.Services.AddScoped<IAcademicCalendarRepository, AcademicCalendarRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+
 // Hostel Repositories
 builder.Services.AddScoped<IHostelBlockRepository, HostelBlockRepository>();
 builder.Services.AddScoped<IRoomTypeConfigRepository, RoomTypeConfigRepository>();
@@ -231,6 +235,10 @@ builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
 builder.Services.AddScoped<ITemplateService, TemplateService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
 builder.Services.AddScoped<IAttendanceTimingConfigService, AttendanceTimingConfigService>();
+
+// Academic Calendar & Notifications Services
+builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
