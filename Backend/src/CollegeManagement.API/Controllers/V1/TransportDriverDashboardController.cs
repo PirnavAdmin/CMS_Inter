@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Data;
@@ -13,7 +13,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/transport/driver")]
-    [Authorize]
+    [Authorize(Roles = "Driver,Bus Driver")]
     public class TransportDriverDashboardController : ControllerBase
     {
         private readonly AppDbContext _context;

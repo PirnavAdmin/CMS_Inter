@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.DTOs.StaffAttendance.Responses;
-using CollegeManagement.API.Enums;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,63 +18,15 @@ namespace CollegeManagement.API.Services.Implementations
             _context = context;
         }
 
-        private async Task<decimal> CalculateWorkingLeaveDaysAsync(DateTime startDate, DateTime endDate)
-        {
-            if (startDate.Date > endDate.Date) return 0;
-            decimal workingDays = 0;
-
-            var holidays = await _context.Holidays
-                .Where(h => !h.IsDeleted && h.Status == "Active" &&
-                            h.StartDate.Date <= endDate.Date && h.EndDate.Date >= startDate.Date &&
-                            (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"))
-                .ToListAsync();
-
-            for (var date = startDate.Date; date <= endDate.Date; date = date.AddDays(1))
-            {
-                if (date.DayOfWeek == DayOfWeek.Sunday) continue;
-                bool isHoliday = holidays.Any(h => date >= h.StartDate.Date && date <= h.EndDate.Date);
-                if (isHoliday) continue;
-
-                workingDays += 1;
-            }
-            return workingDays;
-        }
-
-        private decimal CalculateWorkingDaysSynchronous(DateTime startDate, DateTime endDate, List<CollegeManagement.API.Models.Holiday.Holiday> holidays)
-        {
-            if (startDate.Date > endDate.Date) return 0;
-            decimal workingDays = 0;
-            for (var date = startDate.Date; date <= endDate.Date; date = date.AddDays(1))
-            {
-                if (date.DayOfWeek == DayOfWeek.Sunday) continue;
-                bool isHoliday = holidays.Any(h => date >= h.StartDate.Date && date <= h.EndDate.Date);
-                if (isHoliday) continue;
-                workingDays += 1;
-            }
-            return workingDays;
-        }
-
         public async Task<StaffLeaveResponse> CreateStaffLeaveRequestAsync(CreateStaffLeaveRequest request, int userId)
         {
-            decimal requestedDays = await CalculateWorkingLeaveDaysAsync(request.StartDate, request.EndDate);
-            if (requestedDays <= 0)
-            {
-                throw new CollegeManagement.API.Exceptions.ValidationException("Selected leave period consists entirely of Sundays or official college holidays.");
-            }
+            decimal requestedDays = (decimal)(request.EndDate.Date - request.StartDate.Date).TotalDays + 1;
 
             // 1. Resolve StaffId defensively
             int validStaffId = request.StaffId;
             if (validStaffId <= 0 || !await _context.Staffs.AnyAsync(s => s.Id == validStaffId))
             {
-                var callingUser = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
-                if (callingUser?.StaffId.HasValue == true && await _context.Staffs.AnyAsync(s => s.Id == callingUser.StaffId.Value))
-                {
-                    validStaffId = callingUser.StaffId.Value;
-                }
-                else
-                {
-                    validStaffId = await _context.Staffs.Select(s => s.Id).FirstOrDefaultAsync();
-                }
+                validStaffId = await _context.Staffs.Select(s => s.Id).FirstOrDefaultAsync();
             }
 
             // 2. Resolve CreatedByUserId defensively
@@ -122,43 +73,16 @@ namespace CollegeManagement.API.Services.Implementations
 
             // 5. Resolve LeaveCategoryId defensively to prevent FK constraint failures
             int? validCategoryId = null;
-            if (request.LeaveCategoryId.HasValue && request.LeaveCategoryId.Value > 0)
+            if (request.LeaveCategoryId.HasValue && request.LeaveCategoryId.Value > 0 &&
+                await _context.LeaveCategories.AnyAsync(c => c.LeaveCategoryId == request.LeaveCategoryId.Value))
             {
-                var cat = await _context.LeaveCategories.FirstOrDefaultAsync(c => c.LeaveCategoryId == request.LeaveCategoryId.Value);
-                if (cat == null || !cat.IsActive)
-                {
-                    throw new CollegeManagement.API.Exceptions.ValidationException("Selected leave category does not exist or is inactive.");
-                }
-                validCategoryId = cat.LeaveCategoryId;
-
-                // Align LeaveType enum with category if default or Other or mismatched
-                if (request.LeaveType == LeaveType.Other || request.LeaveType == LeaveType.Casual)
-                {
-                    var catCode = (cat.CategoryCode ?? string.Empty).Trim().ToUpper();
-                    var catName = (cat.CategoryName ?? string.Empty).ToLowerInvariant();
-                    if (catCode == "SL" || catName.Contains("sick") || catName.Contains("medical"))
-                    {
-                        request.LeaveType = LeaveType.Sick;
-                    }
-                    else if (catCode == "CL" || catName.Contains("casual"))
-                    {
-                        request.LeaveType = LeaveType.Casual;
-                    }
-                    else if (catCode == "EL" || catName.Contains("earned") || catName.Contains("privilege"))
-                    {
-                        request.LeaveType = LeaveType.Earned;
-                    }
-                    else if (catCode == "ML" || catName.Contains("maternity"))
-                    {
-                        request.LeaveType = LeaveType.Maternity;
-                    }
-                }
+                validCategoryId = request.LeaveCategoryId.Value;
             }
             else
             {
                 string leaveTypeName = request.LeaveType.ToString();
                 var matchedCategory = await _context.LeaveCategories
-                    .FirstOrDefaultAsync(c => c.IsActive && (c.CategoryCode == leaveTypeName || c.CategoryName.Contains(leaveTypeName) || c.CategoryName.StartsWith(leaveTypeName.Replace("Leave", ""))));
+                    .FirstOrDefaultAsync(c => c.CategoryCode == leaveTypeName || c.CategoryName.Contains(leaveTypeName) || c.CategoryName.StartsWith(leaveTypeName.Replace("Leave", "")));
                 validCategoryId = matchedCategory?.LeaveCategoryId;
             }
 
@@ -275,7 +199,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                             if (revBalance != null)
                             {
-                                decimal requestedDays = await CalculateWorkingLeaveDaysAsync(leave.StartDate, leave.EndDate);
+                                decimal requestedDays = (decimal)(leave.EndDate.Date - leave.StartDate.Date).TotalDays + 1;
                                 revBalance.UsedDays = Math.Max(0, revBalance.UsedDays - requestedDays);
                                 revBalance.RemainingDays = Math.Max(0, revBalance.TotalDays - revBalance.UsedDays);
                                 revBalance.UpdatedAt = DateTime.UtcNow;
@@ -402,7 +326,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                         if (matchingBalance != null)
                         {
-                            decimal requestedDays = await CalculateWorkingLeaveDaysAsync(leave.StartDate, leave.EndDate);
+                            decimal requestedDays = (decimal)(leave.EndDate.Date - leave.StartDate.Date).TotalDays + 1;
                             matchingBalance.UsedDays += requestedDays;
                             matchingBalance.RemainingDays = Math.Max(0, matchingBalance.TotalDays - matchingBalance.UsedDays);
                             matchingBalance.UpdatedAt = DateTime.UtcNow;
@@ -440,10 +364,6 @@ namespace CollegeManagement.API.Services.Implementations
                 .Include(l => l.LeaveCategory)
                 .ToListAsync();
 
-            var activeHolidays = await _context.Holidays
-                .Where(h => !h.IsDeleted && h.Status == "Active" && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"))
-                .ToListAsync();
-
             return list.Select(l => new StaffLeaveResponse
             {
                 StaffLeaveRequestId = l.StaffLeaveRequestId,
@@ -456,7 +376,7 @@ namespace CollegeManagement.API.Services.Implementations
                 LeaveCategoryName = l.LeaveCategory != null ? l.LeaveCategory.CategoryName : l.LeaveType.ToString(),
                 StartDate = l.StartDate,
                 EndDate = l.EndDate,
-                TotalDays = CalculateWorkingDaysSynchronous(l.StartDate, l.EndDate, activeHolidays),
+                TotalDays = (decimal)(l.EndDate.Date - l.StartDate.Date).TotalDays + 1,
                 Reason = l.Reason,
                 Status = l.Status,
                 RejectionReason = l.RejectionReason,
@@ -579,27 +499,22 @@ namespace CollegeManagement.API.Services.Implementations
             int yearId = currentYear?.AcademicYearId ?? 0;
 
             var rawRequests = await _context.StaffLeaveRequests
-                .Where(r => r.StaffId == staffId && r.IsActive && (yearId == 0 || r.AcademicYearId == null || r.AcademicYearId == 0 || r.AcademicYearId == yearId))
+                .Where(r => r.StaffId == staffId && r.AcademicYearId == yearId && r.IsActive)
                 .OrderByDescending(r => r.CreatedAt)
                 .Include(l => l.ApprovedByUser)
                 .ToListAsync();
 
-            var activeHolidays = await _context.Holidays
-                .Where(h => !h.IsDeleted && h.Status == "Active" && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"))
-                .ToListAsync();
-
-            var defaultDept = staff.StaffType == "Non-Teaching" ? "Administration" : "General";
             var requests = rawRequests.Select(l => new StaffLeaveResponse
             {
                 StaffLeaveRequestId = l.StaffLeaveRequestId,
                 StaffId = l.StaffId,
                 StaffName = $"{staff.FirstName} {staff.LastName}".Trim(),
-                Department = staff.DepartmentRef?.DepartmentName ?? defaultDept,
-                StaffType = staff.StaffType == "Teaching" ? "Teaching Staff" : (staff.StaffType ?? "Non-Teaching Staff"),
+                Department = staff.DepartmentRef?.DepartmentName ?? "Mathematics",
+                StaffType = staff.StaffType == "Teaching" ? "Teaching Staff" : (staff.StaffType ?? "Teaching Staff"),
                 LeaveType = l.LeaveType,
                 StartDate = l.StartDate,
                 EndDate = l.EndDate,
-                TotalDays = CalculateWorkingDaysSynchronous(l.StartDate, l.EndDate, activeHolidays),
+                TotalDays = (decimal)(l.EndDate.Date - l.StartDate.Date).TotalDays + 1,
                 Reason = l.Reason,
                 Status = l.Status,
                 RejectionReason = l.RejectionReason,
@@ -610,36 +525,25 @@ namespace CollegeManagement.API.Services.Implementations
             }).ToList();
 
             var balances = await _context.StaffLeaveBalances
-                .Where(b => b.StaffId == staffId && (yearId == 0 || b.AcademicYearId == yearId))
+                .Where(b => b.StaffId == staffId && b.AcademicYearId == yearId)
                 .ToListAsync();
-
-            if (!balances.Any())
-            {
-                balances = await _context.StaffLeaveBalances
-                    .Where(b => b.StaffId == staffId)
-                    .ToListAsync();
-            }
-
-            decimal totalDays = balances.Any() ? balances.Sum(b => b.TotalDays) : 35m;
-            decimal usedDays = balances.Any() ? balances.Sum(b => b.UsedDays) : (decimal)requests.Count(r => r.Status == CollegeManagement.API.Enums.LeaveStatus.Approved);
-            decimal remainingDays = balances.Any() ? balances.Sum(b => b.RemainingDays) : Math.Max(0m, totalDays - usedDays);
 
             return new StaffLeaveHistoryDto
             {
                 StaffId = staff.Id,
                 StaffName = $"{staff.FirstName} {staff.LastName}".Trim(),
                 StaffCode = staff.EmployeeId,
-                Department = staff.DepartmentRef != null ? staff.DepartmentRef.DepartmentName : defaultDept,
-                StaffType = staff.StaffType == "Teaching" ? "Teaching Staff" : (staff.StaffType ?? "Non-Teaching Staff"),
+                Department = staff.DepartmentRef != null ? staff.DepartmentRef.DepartmentName : "Mathematics",
+                StaffType = staff.StaffType == "Teaching" ? "Teaching Staff" : (staff.StaffType ?? "Teaching Staff"),
                 TotalRequests = requests.Count,
                 Approved = requests.Count(r => r.Status == CollegeManagement.API.Enums.LeaveStatus.Approved),
                 Pending = requests.Count(r => r.Status == CollegeManagement.API.Enums.LeaveStatus.Pending),
                 Rejected = requests.Count(r => r.Status == CollegeManagement.API.Enums.LeaveStatus.Rejected),
                 Balance = new LeaveBalanceDto
                 {
-                    Total = totalDays,
-                    Used = usedDays,
-                    Remaining = remainingDays
+                    Total = balances.Sum(b => b.TotalDays),
+                    Used = balances.Sum(b => b.UsedDays),
+                    Remaining = balances.Sum(b => b.RemainingDays)
                 },
                 History = requests
             };
@@ -657,10 +561,6 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (l == null) return null!;
 
-            var activeHolidays = await _context.Holidays
-                .Where(h => !h.IsDeleted && h.Status == "Active" && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"))
-                .ToListAsync();
-
             return new StaffLeaveResponse
             {
                 StaffLeaveRequestId = l.StaffLeaveRequestId,
@@ -673,7 +573,7 @@ namespace CollegeManagement.API.Services.Implementations
                 LeaveCategoryName = l.LeaveCategory != null ? l.LeaveCategory.CategoryName : l.LeaveType.ToString(),
                 StartDate = l.StartDate,
                 EndDate = l.EndDate,
-                TotalDays = CalculateWorkingDaysSynchronous(l.StartDate, l.EndDate, activeHolidays),
+                TotalDays = (decimal)(l.EndDate.Date - l.StartDate.Date).TotalDays + 1,
                 Reason = l.Reason,
                 Status = l.Status,
                 RejectionReason = l.RejectionReason,

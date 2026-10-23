@@ -119,7 +119,7 @@ export default function Login() {
         String(result.user?.designation || "").toLowerCase().includes("warden");
       const userRole = String(result.user?.role || "").toLowerCase();
       const isInventory = userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper";
-      const isExamCell = !isWarden && isExamCellRole(userRole);
+      const isExamCell = !isWarden && (isExamCellRole(userRole) || result.roleType === "examcell");
       const isPrincipal = !isWarden && (userRole === "principal" || userRole.includes("principal"));
       const isNonTeaching =
         !isWarden &&

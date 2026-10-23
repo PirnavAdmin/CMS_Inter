@@ -24,8 +24,6 @@ namespace CollegeManagement.API.DTOs.Timetable
         [Required]
         public int SectionId { get; set; }
 
-        public string SlotType { get; set; } = "Teaching";
-
         public int? CampusId { get; set; }
 
         [Required]
@@ -35,17 +33,19 @@ namespace CollegeManagement.API.DTOs.Timetable
         [Required]
         public int PeriodId { get; set; }
 
-        public int? SubjectId { get; set; }
+        [Required]
+        public int SubjectId { get; set; }
 
-        public int? StaffId { get; set; }
+        public int StaffId { get; set; }
 
-        public int? FacultyId
+        public int FacultyId
         {
             get => StaffId;
             set => StaffId = value;
         }
 
-        public int? RoomId { get; set; }
+        [Required]
+        public int RoomId { get; set; }
 
         public bool IsPublished { get; set; } = false;
 
@@ -60,18 +60,17 @@ namespace CollegeManagement.API.DTOs.Timetable
         public int GroupId { get; set; }
         public int? ProgramId { get; set; }
         public int SectionId { get; set; }
-        public string SlotType { get; set; } = "Teaching";
         public int? CampusId { get; set; }
         public int DayOfWeek { get; set; }
         public int PeriodId { get; set; }
-        public int? SubjectId { get; set; }
-        public int? StaffId { get; set; }
-        public int? FacultyId
+        public int SubjectId { get; set; }
+        public int StaffId { get; set; }
+        public int FacultyId
         {
             get => StaffId;
             set => StaffId = value;
         }
-        public int? RoomId { get; set; }
+        public int RoomId { get; set; }
         public bool IsPublished { get; set; } = false;
         public string? Remarks { get; set; }
     }
@@ -140,7 +139,6 @@ namespace CollegeManagement.API.DTOs.Timetable
 
         public int SectionId { get; set; }
         public string SectionName { get; set; } = string.Empty;
-        public string SlotType { get; set; } = "Teaching";
 
         public int DayOfWeek { get; set; }
         public string DayName { get; set; } = string.Empty;
@@ -152,12 +150,12 @@ namespace CollegeManagement.API.DTOs.Timetable
         public TimeSpan EndTime { get; set; }
         public bool IsBreak { get; set; }
 
-        public int? SubjectId { get; set; }
+        public int SubjectId { get; set; }
         public string SubjectCode { get; set; } = string.Empty;
         public string SubjectName { get; set; } = string.Empty;
 
-        public int? StaffId { get; set; }
-        public int? FacultyId
+        public int StaffId { get; set; }
+        public int FacultyId
         {
             get => StaffId;
             set => StaffId = value;
@@ -177,7 +175,7 @@ namespace CollegeManagement.API.DTOs.Timetable
             set => StaffName = value;
         }
 
-        public int? RoomId { get; set; }
+        public int RoomId { get; set; }
         public string RoomCode { get; set; } = string.Empty;
         public string RoomName { get; set; } = string.Empty;
 
@@ -226,9 +224,6 @@ namespace CollegeManagement.API.DTOs.Timetable
         public List<int> SectionIds { get; set; } = new List<int>();
 
         public List<int> WorkingDays { get; set; } = new List<int> { 1, 2, 3, 4, 5, 6 };
-
-        public bool RelaxDailySubjectLimit { get; set; } = false;
-        public int? MaxDailyPeriodsPerSubject { get; set; } = 2;
 
         public List<SubjectWeeklyPeriodRequirementDto>? SubjectRequirements { get; set; }
             = new List<SubjectWeeklyPeriodRequirementDto>();

@@ -802,6 +802,10 @@ export default function HostelPage() {
         });
       }
 
+      const isServerOffline = !blocksRes.value && !roomsRes.value && !catsRes.value;
+      if (isServerOffline) {
+        setApiError("Backend server is offline or unreachable. Please ensure the backend server is running.");
+      }
       blocksRef.current = uniqueBlocks;
       setBlocks(uniqueBlocks);
       if (uniqueBlocks.length > 0) {
@@ -986,7 +990,7 @@ export default function HostelPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord]);
+  }, [canAccessAdminEndpoints, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord]);
 
   const hasFetchedInitialRef = useRef(false);
   useEffect(() => {
@@ -1009,7 +1013,7 @@ export default function HostelPage() {
           return Array.from(map.values());
         });
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapBlock]);
 
   const refreshCategories = useCallback(async () => {
@@ -1021,7 +1025,7 @@ export default function HostelPage() {
         categoriesRef.current = uniqueCats;
         setCategories(uniqueCats);
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapCategory]);
 
   const refreshRooms = useCallback(async () => {
@@ -1037,7 +1041,7 @@ export default function HostelPage() {
           return Array.from(map.values());
         });
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapRoom]);
 
   const refreshBeds = useCallback(async () => {
@@ -1053,7 +1057,7 @@ export default function HostelPage() {
           return Array.from(map.values());
         });
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapBed]);
 
   const refreshWardens = useCallback(async () => {
@@ -1064,7 +1068,7 @@ export default function HostelPage() {
         const uniqueWardens = Array.from(new Map(raw.map(mapWarden).map((w) => [String(w.id || `${w.hostelId}-${w.staffId}`), w])).values());
         setWardens(uniqueWardens);
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapWarden]);
 
   const refreshAllocations = useCallback(async () => {
@@ -1101,7 +1105,7 @@ export default function HostelPage() {
         });
         setAttendanceStudents(uniqueAttStudents);
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapAllocation]);
 
   const refreshOutpasses = useCallback(async () => {
@@ -1112,7 +1116,7 @@ export default function HostelPage() {
         const uniqueOutpass = Array.from(new Map(raw.map(mapOutpass).map((o) => [String(o.id), o])).values());
         setOutpasses(uniqueOutpass);
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapOutpass]);
 
   const refreshTransfers = useCallback(async () => {
@@ -1123,14 +1127,14 @@ export default function HostelPage() {
         const uniqueTransfer = Array.from(new Map(raw.map(mapTransfer).map((t) => [String(t.id), t])).values());
         setTransfers(uniqueTransfer);
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapTransfer]);
 
   const refreshDashboard = useCallback(async () => {
     try {
       const res = await hostelApi.getHostelDashboard();
       setDashboardData(res?.data?.data ?? res?.data ?? null);
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, []);
 
   const refreshAttendance = useCallback(async () => {
@@ -1138,7 +1142,7 @@ export default function HostelPage() {
       const res = await hostelApi.getAttendance();
       const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setAttendanceRecords(raw.map(mapAttendanceRecord).filter(Boolean));
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
   }, [mapAttendanceRecord]);
 
   // ── Synchronize route location with initial tab ──────────────────────
@@ -1353,7 +1357,7 @@ export default function HostelPage() {
     try {
       const raw = typeof window !== "undefined" ? window.localStorage?.getItem(STORAGE_KEY_HOSTEL_PAYMENTS) : null;
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch { /* Intentionally ignored. */ }
     return {
       "1": { paidAmount: 12000, lastPaymentDate: "2026-10-02", paymentMode: "UPI (GPay)", receiptNo: "RCP-2026-001", notes: "Full payment received" },
       "2": { paidAmount: 8500, lastPaymentDate: "2026-10-03", paymentMode: "Net Banking", receiptNo: "RCP-2026-002", notes: "Paid via College Portal" },
@@ -1371,7 +1375,7 @@ export default function HostelPage() {
         if (typeof window !== "undefined") {
           window.localStorage?.setItem(STORAGE_KEY_HOSTEL_PAYMENTS, JSON.stringify(next));
         }
-      } catch {}
+      } catch { /* Intentionally ignored. */ }
       return next;
     });
   };
@@ -1661,7 +1665,7 @@ export default function HostelPage() {
           considerStudent(x);
         });
       }
-    } catch (_) {}
+    } catch (_) { /* Intentionally ignored. */ }
 
     return list;
   }, [allocations, candidateStudents, candidateAdmissions, blocks]);
@@ -1717,8 +1721,8 @@ export default function HostelPage() {
       }
       closeModal();
       (async () => {
-        try { await refreshBlocks(); } catch (_) {}
-        try { await refreshDashboard(); } catch (_) {}
+        try { await refreshBlocks(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshDashboard(); } catch (_) { /* Intentionally ignored. */ }
       })();
     } catch (err) {
       showToast(getApiErrorMessage(err) || "Failed to save hostel block.", "danger");
@@ -1810,7 +1814,7 @@ export default function HostelPage() {
                   bedCapacity: bedsToGen,
                   status: "Active",
                 }, { skipErrorLog: true });
-              } catch (_) {}
+              } catch (_) { /* Intentionally ignored. */ }
             } else {
               try {
                 const roomRes = await hostelApi.createRoom({
@@ -1823,7 +1827,7 @@ export default function HostelPage() {
                   status: "Active",
                 }, { skipErrorLog: true });
                 newRoomId = roomRes?.data?.data?.roomId ?? roomRes?.data?.roomId ?? roomRes?.data?.data?.id ?? roomRes?.data?.id;
-              } catch (_) {}
+              } catch (_) { /* Intentionally ignored. */ }
             }
 
             const roomUid = newRoomId ? Number(newRoomId) : `rm-${blockCode}-${roomNum}-${Date.now()}-${i}`;
@@ -1852,7 +1856,7 @@ export default function HostelPage() {
                     status: "Active",
                   }, { skipErrorLog: true });
                   existingBedNumbers.add(String(bedNum || "").toLowerCase());
-                } catch (_) {}
+                } catch (_) { /* Intentionally ignored. */ }
               }
               generatedLocalBeds.push({
                 id: `bed-${roomUid}-${bi}`,
@@ -2026,10 +2030,10 @@ export default function HostelPage() {
 
       // Non-blocking background sync with backend
       (async () => {
-        try { await refreshRooms(); } catch (_) {}
-        try { await refreshBeds(); } catch (_) {}
-        try { await refreshBlocks(); } catch (_) {}
-        try { await refreshDashboard(); } catch (_) {}
+        try { await refreshRooms(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshBeds(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshBlocks(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshDashboard(); } catch (_) { /* Intentionally ignored. */ }
 
         // Re-ensure local rooms stay present after background refresh
         if (generatedLocalRooms.length > 0) {
@@ -2098,8 +2102,8 @@ export default function HostelPage() {
       await refreshRooms();
       closeModal();
       (async () => {
-        try { await refreshCategories(); } catch (_) {}
-        try { await refreshRooms(); } catch (_) {}
+        try { await refreshCategories(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshRooms(); } catch (_) { /* Intentionally ignored. */ }
       })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
@@ -2279,7 +2283,7 @@ export default function HostelPage() {
                 bedCapacity: targetCap,
               }, { skipErrorLog: true });
               updatedCount++;
-            } catch (_) {}
+            } catch (_) { /* Intentionally ignored. */ }
 
             const existingBedNumbers = new Set(
               beds
@@ -2297,7 +2301,7 @@ export default function HostelPage() {
                     status: "Active",
                   }, { skipErrorLog: true });
                   existingBedNumbers.add(String(bedNum || "").toLowerCase());
-                } catch (_) {}
+                } catch (_) { /* Intentionally ignored. */ }
               }
             }
             continue;
@@ -2334,7 +2338,7 @@ export default function HostelPage() {
                       status: "Active",
                     }, { skipErrorLog: true });
                     existingBedNumbers.add(String(bedNum || "").toLowerCase());
-                  } catch (_) {}
+                  } catch (_) { /* Intentionally ignored. */ }
                 }
               }
             }
@@ -2382,7 +2386,7 @@ export default function HostelPage() {
                 bedCapacity: targetCap,
               }, { skipErrorLog: true });
               updatedCount++;
-            } catch (_) {}
+            } catch (_) { /* Intentionally ignored. */ }
 
             const existingBedNumbers = new Set(
               beds
@@ -2400,7 +2404,7 @@ export default function HostelPage() {
                     status: "Active",
                   }, { skipErrorLog: true });
                   existingBedNumbers.add(String(bedNum || "").toLowerCase());
-                } catch (_) {}
+                } catch (_) { /* Intentionally ignored. */ }
               }
             }
           }
@@ -2432,11 +2436,11 @@ export default function HostelPage() {
       await refreshDashboard();
       closeModal();
       (async () => {
-        try { await refreshRooms(); } catch (_) {}
-        try { await refreshBeds(); } catch (_) {}
-        try { await refreshCategories(); } catch (_) {}
-        try { await refreshBlocks(); } catch (_) {}
-        try { await refreshDashboard(); } catch (_) {}
+        try { await refreshRooms(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshBeds(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshCategories(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshBlocks(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshDashboard(); } catch (_) { /* Intentionally ignored. */ }
       })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
@@ -2569,9 +2573,9 @@ export default function HostelPage() {
       await refreshDashboard();
       closeModal();
       (async () => {
-        try { await refreshWardens(); } catch (_) {}
-        try { await refreshBlocks(); } catch (_) {}
-        try { await refreshDashboard(); } catch (_) {}
+        try { await refreshWardens(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshBlocks(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshDashboard(); } catch (_) { /* Intentionally ignored. */ }
       })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
@@ -2672,7 +2676,7 @@ export default function HostelPage() {
               actualBedId = Number(createdBedId);
               await refreshBeds();
             }
-          } catch (_) {}
+          } catch (_) { /* Intentionally ignored. */ }
         }
       }
 
@@ -2733,14 +2737,14 @@ export default function HostelPage() {
             )
         );
         localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
-      } catch (_) {}
+      } catch (_) { /* Intentionally ignored. */ }
       closeModal();
       (async () => {
-        try { await refreshAllocations(); } catch (_) {}
-        try { await refreshRooms(); } catch (_) {}
-        try { await refreshBlocks(); } catch (_) {}
-        try { await refreshBeds(); } catch (_) {}
-        try { await refreshDashboard(); } catch (_) {}
+        try { await refreshAllocations(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshRooms(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshBlocks(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshBeds(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshDashboard(); } catch (_) { /* Intentionally ignored. */ }
       })();
     } catch (err) {
       const apiMsg = getApiErrorMessage(err);
@@ -2777,7 +2781,7 @@ export default function HostelPage() {
         );
         filtered.push(record);
         localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
-      } catch (_) {}
+      } catch (_) { /* Intentionally ignored. */ }
 
       // 2. Optimistically mark allocation as Vacated in allocations state
       setAllocations((prev) =>
@@ -2794,10 +2798,10 @@ export default function HostelPage() {
       closeModal();
       showToast(`Bed vacated for ${alloc.studentName}.`);
       (async () => {
-        try { await refreshAllocations(); } catch (_) {}
-        try { await refreshRooms(); } catch (_) {}
-        try { await refreshBlocks(); } catch (_) {}
-        try { await refreshDashboard(); } catch (_) {}
+        try { await refreshAllocations(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshRooms(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshBlocks(); } catch (_) { /* Intentionally ignored. */ }
+        try { await refreshDashboard(); } catch (_) { /* Intentionally ignored. */ }
       })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
@@ -2925,7 +2929,7 @@ export default function HostelPage() {
       closeModal();
       showToast(`Outpass/Leave request submitted for ${payload.studentName}.`);
       (async () => {
-        try { await refreshOutpasses(); } catch (_) {}
+        try { await refreshOutpasses(); } catch (_) { /* Intentionally ignored. */ }
       })();
     } catch (err) {
       const errMsg = getApiErrorMessage(err);
@@ -3012,7 +3016,7 @@ export default function HostelPage() {
           );
           filtered.push(record);
           localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
-        } catch (_) {}
+        } catch (_) { /* Intentionally ignored. */ }
 
         setAllocations((prev) =>
           prev.map((a) =>
@@ -3037,7 +3041,7 @@ export default function HostelPage() {
       if (apiStatus === "Approved") {
         try {
           await hostelApi.completeTransferVacate(requestId, { skipErrorLog: true });
-        } catch (_) {}
+        } catch (_) { /* Intentionally ignored. */ }
       }
 
       await refreshTransfers();
@@ -3100,7 +3104,7 @@ export default function HostelPage() {
       closeModal();
       showToast(`${isVacate ? "Bed vacate request" : "Room transfer request"} submitted for ${payload.studentName}.`);
       (async () => {
-        try { await refreshTransfers(); } catch (_) {}
+        try { await refreshTransfers(); } catch (_) { /* Intentionally ignored. */ }
       })();
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
@@ -9015,10 +9019,26 @@ export default function HostelPage() {
         </div>
 
             {/* Active Tab Screen */}
-            {activeMajorTab === "dashboard" && renderDashboard()}
-            {activeMajorTab === "setup" && renderSetupMasters()}
-            {activeMajorTab === "students" && renderStudentManagement()}
-            {activeMajorTab === "reports" && renderReportsSection()}
+            {isLoading ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 320, padding: 40 }}>
+                <div style={{ width: 40, height: 40, border: "3px solid var(--cms-border)", borderTopColor: "var(--cms-primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' }} />
+                <p style={{ marginTop: 14, color: "var(--cms-muted)", fontSize: 13.5, fontWeight: 600 }}>Loading Hostel records from server...</p>
+              </div>
+            ) : (
+              <>
+                {apiError && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 8, background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", marginBottom: 16 }}>
+                    <AlertCircle size={18} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{apiError}</span>
+                  </div>
+                )}
+                {activeMajorTab === "dashboard" && renderDashboard()}
+                {activeMajorTab === "setup" && renderSetupMasters()}
+                {activeMajorTab === "students" && renderStudentManagement()}
+                {activeMajorTab === "reports" && renderReportsSection()}
+              </>
+            )}
 
         {/* Global Modals */}
         {modal.isOpen && modal.type === "block" && (
@@ -9645,7 +9665,7 @@ function StudentAttendanceModal({
                       if (!isNaN(d.getTime())) {
                         dayOfWeek = d.toLocaleDateString("en-US", { weekday: "short" });
                       }
-                    } catch (_) {}
+                    } catch (_) { /* Intentionally ignored. */ }
                   }
                   return (
                     <tr key={log.id || `${log.date}-${log.session}`}>
@@ -11082,12 +11102,7 @@ function RoomModal({
       }
     });
 
-    if (list.length === 0) {
-      list.push(
-        { id: "1", hostelId: 1, name: "Boys Hostel Block-A", code: "BH-A", floors: 3, type: "Boys" },
-        { id: "2", hostelId: 2, name: "Girls Hostel Block-B", code: "GH-B", floors: 3, type: "Girls" }
-      );
-    }
+
 
     return list;
   }, [blocks, rooms, allocations]);
@@ -14356,7 +14371,7 @@ function AllocationModal({
             addKeys(s.studentId, s.admissionNo, s.studentName);
           });
         }
-      } catch (_) {}
+      } catch (_) { /* Intentionally ignored. */ }
 
       // If student has a currently active allocation, remove them from vacated set
       activeAllocationsMap.forEach((alloc) => {

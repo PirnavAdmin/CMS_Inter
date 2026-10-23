@@ -3,7 +3,6 @@ namespace CollegeManagement.API.DTOs.Certificate;
 public class CertificateWorkflowStatsDto
 {
     public int TotalCount { get; set; }
-    public int RequestedCount { get; set; }
     public int GeneratedCount { get; set; }
     public int ReviewedCount { get; set; }
     public int ApprovedCount { get; set; }

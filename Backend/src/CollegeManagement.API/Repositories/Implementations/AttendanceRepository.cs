@@ -901,9 +901,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     return new FacultySubjectDerivationResponse
                     {
-                        SubjectId = ttSlot.SubjectId.GetValueOrDefault(),
+                        SubjectId = ttSlot.SubjectId,
                         SubjectName = ttSlot.Subject.SubjectName,
-                        FacultyId = ttSlot.StaffId.GetValueOrDefault(),
+                        FacultyId = ttSlot.StaffId,
                         FacultyName = $"{ttSlot.Staff.FirstName} {ttSlot.Staff.LastName}".Trim(),
                         PeriodId = reqPeriodId,
                         PeriodName = ttSlot.Period?.PeriodName ?? $"Period {reqPeriodId}"

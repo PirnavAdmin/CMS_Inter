@@ -26,16 +26,5 @@ namespace CollegeManagement.API.Exceptions
     {
         public ForbiddenException(string message) : base(message) { }
     }
-
-    public class MovementNotReversibleException : ConflictException
-    {
-        public string Code { get; }
-
-        public MovementNotReversibleException(string message, string code = "MOVEMENT_NOT_REVERSIBLE") 
-            : base(message)
-        {
-            Code = code;
-        }
-    }
 }
 
