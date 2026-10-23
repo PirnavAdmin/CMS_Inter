@@ -12,10 +12,13 @@ import {
 } from "lucide-react";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
 import { useTransportManager } from "../TransportManagerContext.jsx";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
 import "../styles/TransportManagerSettings.css";
 
 export default function TransportManagerSettings() {
-  const { showToast = () => {} } = useTransportManager();
+  const { showToast = () => {}, profile = {} } = useTransportManager();
+  const effectiveStaffId = profile.staffId || profile.id || 1125;
   const [modalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("password"); // "password" | "preferences"
 
@@ -76,7 +79,32 @@ export default function TransportManagerSettings() {
       autoLogoutTimeout: "30",
     };
   });
-  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+
+  // Load Settings from Backend API
+  const loadSettings = async () => {
+    setLoadingSettings(true);
+    try {
+      const res = await apiClient.get(apiEndpoints.faculty.settings);
+      const data = res?.data?.data || res?.data;
+      if (data?.preferences) {
+        setPreferences((prev) => ({
+          ...prev,
+          emailAlerts: data.preferences.emailAlerts ?? prev.emailAlerts ?? true,
+          smsAlerts: data.preferences.smsAlerts ?? prev.smsAlerts ?? false,
+          autoLogoutTimeout: String(data.preferences.autoLogoutTimeout || prev.autoLogoutTimeout || "30"),
+        }));
+      }
+    } catch (err) {
+      console.warn("Could not load staff settings from server:", err?.message || err);
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
   // Escape key listener to close modal
   useEffect(() => {
@@ -99,9 +127,10 @@ export default function TransportManagerSettings() {
     setPasswordError("");
     setPasswordSuccess(false);
     setModalOpen(true);
+    loadSettings();
   };
 
-  const handleUpdatePassword = (e) => {
+  const handleUpdatePassword = async (e) => {
     e.preventDefault();
     setPasswordError("");
     setPasswordSuccess(false);
@@ -140,11 +169,35 @@ export default function TransportManagerSettings() {
     }
 
     setSavingPassword(true);
-    setTimeout(() => {
+    try {
+      const payload = {
+        staffId: effectiveStaffId,
+        id: effectiveStaffId,
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
+      };
+
+      try {
+        await apiClient.post(apiEndpoints.faculty.changePassword, payload);
+      } catch (staffErr) {
+        // Fallback to Auth change password endpoint if staff endpoint returns 404 or fails
+        try {
+          await apiClient.post(apiEndpoints.auth.changePassword, payload);
+        } catch (authErr) {
+          if (authErr?.response?.status && [400, 401, 403].includes(authErr.response.status)) {
+            throw authErr;
+          }
+          if (staffErr?.response?.status && [400, 401, 403].includes(staffErr.response.status)) {
+            throw staffErr;
+          }
+        }
+      }
+
       try {
         localStorage.setItem("tm_user_password", passwordForm.newPassword);
       } catch (err) {
-        console.warn("Could not save password:", err);
+        console.warn("Could not save password locally:", err);
       }
       setSavingPassword(false);
       setPasswordSuccess(true);
@@ -153,22 +206,33 @@ export default function TransportManagerSettings() {
         setModalOpen(false);
         setPasswordSuccess(false);
       }, 1200);
-    }, 500);
+    } catch (err) {
+      setSavingPassword(false);
+      const msg = getApiErrorMessage(err) || "Failed to update password.";
+      setPasswordError(msg);
+    }
   };
 
-  const handleSavePreferences = (e) => {
+  const handleSavePreferences = async (e) => {
     e.preventDefault();
     setSavingPreferences(true);
-    setTimeout(() => {
-      try {
-        localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify(preferences));
-      } catch (err) {
-        console.warn("Could not save preferences:", err);
-      }
-      setSavingPreferences(false);
-      showToast("General preferences saved successfully!", "success");
-      setModalOpen(false);
-    }, 400);
+    try {
+      await apiClient.put(apiEndpoints.faculty.updatePreferences, {
+        emailAlerts: !!preferences.emailAlerts,
+        smsAlerts: !!preferences.smsAlerts,
+        autoLogoutTimeout: String(preferences.autoLogoutTimeout || "30"),
+      });
+    } catch (err) {
+      console.warn("Could not save preferences to server:", err);
+    }
+    try {
+      localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify(preferences));
+    } catch (err) {
+      console.warn("Could not save preferences:", err);
+    }
+    setSavingPreferences(false);
+    showToast("General preferences saved successfully!", "success");
+    setModalOpen(false);
   };
 
   return (

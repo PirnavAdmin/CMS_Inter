@@ -179,7 +179,7 @@ export default function TransportManagerSidebar() {
           }}
           title={
             sidebarCollapsed
-              ? `${profile?.name || "tangiro kamado"} (${profile?.role || "Transport Manager"})`
+              ? `${profile?.name || "muzan kibutsuzi"} (${profile?.role || "Transport Manager"})`
               : "View My Profile"
           }
         >
@@ -212,7 +212,7 @@ export default function TransportManagerSidebar() {
                 color: "var(--cms-text, #232a1e)",
               }}
             >
-              {profile?.name || "tangiro kamado"}
+              {profile?.name || "muzan kibutsuzi"}
             </div>
             <div
               style={{
