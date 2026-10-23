@@ -18,14 +18,14 @@ import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { getAuthUser, getAuthToken } from "@/features/authStorage.js";
 
 const getMonthLabel = (slip) => {
-  if (!slip) return "October 2026";
+  if (!slip) return "No Payslip Available";
   if (slip.month) return slip.month;
   const monthNum = Number(slip.payrollMonth);
   const yearNum = Number(slip.payrollYear);
-  if (!monthNum || isNaN(monthNum)) return "October 2026";
+  if (!monthNum || isNaN(monthNum)) return "—";
   const date = new Date(yearNum || 2026, monthNum - 1, 1);
   const monthName = date.toLocaleString("en-IN", { month: "long" });
-  return yearNum ? `${monthName} ${yearNum}` : `${monthName} 2026`;
+  return yearNum ? `${monthName} ${yearNum}` : `${monthName}`;
 };
 
 const fmt = (v) => {
@@ -74,9 +74,9 @@ export default function TransportManagerPayslips() {
       a?.staffId ||
       profileData?.id ||
       a?.id ||
-      1108
+      1125
     );
-    return id > 0 ? id : 1108;
+    return id > 0 ? id : 1125;
   }, [profileData]);
 
   const effectiveEmployeeId = useMemo(() => {
@@ -86,7 +86,7 @@ export default function TransportManagerPayslips() {
       a?.employeeId ||
       profileData?.empId ||
       a?.empId ||
-      "MTCH0063"
+      "MNT0044"
     ).trim();
   }, [profileData?.employeeId, profileData?.empId]);
 
@@ -96,101 +96,42 @@ export default function TransportManagerPayslips() {
     try {
       let loaded = [];
       try {
-        const res = await apiClient.get("/api/v1/Payroll/payslips", {
-          params: { search: effectiveEmployeeId },
-        });
-        const payload = res.data?.data ?? res.data ?? [];
-        loaded = Array.isArray(payload) ? payload : payload.items || payload.payslips || [];
-      } catch (err) {
-        console.warn("Could not load backend payslips, using fallback demo", err);
-      }
+        const params = {};
+        if (effectiveEmployeeId) params.search = effectiveEmployeeId;
+        if (profileData?.campusId) params.campusId = profileData.campusId;
 
-      if (loaded.length === 0) {
-        // Fallback realistic payslip records matching FacultyPayslips
-        loaded = [
-          {
-            payslipId: 101,
-            payrollMonth: 10,
-            payrollYear: 2026,
-            month: "October 2026",
-            basicPay: 45000,
-            hra: 18000,
-            da: 12000,
-            conveyanceAllowance: 3000,
-            medicalAllowance: 2500,
-            specialAllowance: 4500,
-            grossSalary: 85000,
-            pf: 5400,
-            professionalTax: 200,
-            tds: 4500,
-            esi: 0,
-            totalDeductions: 10100,
-            netSalary: 74900,
-            status: "Paid",
-            employeeId: effectiveEmployeeId,
-            employeeName: profileData.name || "tangiro kamado",
-            designation: profileData.role || "Transport Manager",
-            department: profileData.department || "Transport Operations",
-          },
-          {
-            payslipId: 100,
-            payrollMonth: 9,
-            payrollYear: 2026,
-            month: "September 2026",
-            basicPay: 45000,
-            hra: 18000,
-            da: 12000,
-            conveyanceAllowance: 3000,
-            medicalAllowance: 2500,
-            specialAllowance: 4500,
-            grossSalary: 85000,
-            pf: 5400,
-            professionalTax: 200,
-            tds: 4500,
-            esi: 0,
-            totalDeductions: 10100,
-            netSalary: 74900,
-            status: "Paid",
-            employeeId: effectiveEmployeeId,
-            employeeName: profileData.name || "tangiro kamado",
-            designation: profileData.role || "Transport Manager",
-            department: profileData.department || "Transport Operations",
-          },
-          {
-            payslipId: 99,
-            payrollMonth: 8,
-            payrollYear: 2026,
-            month: "August 2026",
-            basicPay: 45000,
-            hra: 18000,
-            da: 12000,
-            conveyanceAllowance: 3000,
-            medicalAllowance: 2500,
-            specialAllowance: 4500,
-            grossSalary: 85000,
-            pf: 5400,
-            professionalTax: 200,
-            tds: 4500,
-            esi: 0,
-            totalDeductions: 10100,
-            netSalary: 74900,
-            status: "Paid",
-            employeeId: effectiveEmployeeId,
-            employeeName: profileData.name || "tangiro kamado",
-            designation: profileData.role || "Transport Manager",
-            department: profileData.department || "Transport Operations",
-          },
-        ];
+        const res = await apiClient.get("/api/v1/Payroll/payslips", { params });
+        let raw = res?.data;
+        let list = Array.isArray(raw) ? raw : raw?.data || raw?.items || raw?.$values || [];
+        if (!Array.isArray(list)) list = [];
+
+        if (effectiveStaffId || effectiveEmployeeId) {
+          list = list.filter((slip) => {
+            if (effectiveStaffId && String(slip.staffId) === String(effectiveStaffId)) return true;
+            if (
+              effectiveEmployeeId &&
+              String(slip.employeeId || "").trim().toLowerCase() === effectiveEmployeeId.toLowerCase()
+            ) {
+              return true;
+            }
+            return false;
+          });
+        }
+
+        loaded = list;
+      } catch (err) {
+        console.warn("Could not load backend payslips:", err);
       }
 
       setPayslipList(loaded);
     } catch (err) {
       console.warn("Failed to load payslips:", err);
       setError("Failed to load personal payslips.");
+      setPayslipList([]);
     } finally {
       setLoading(false);
     }
-  }, [effectiveEmployeeId, profileData.department, profileData.name, profileData.role]);
+  }, [effectiveEmployeeId, effectiveStaffId, profileData.campusId]);
 
   useEffect(() => {
     fetchPayslips();
@@ -217,11 +158,46 @@ export default function TransportManagerPayslips() {
       notify("No payslip PDF is available for download.", "info");
       return;
     }
+    const slipId = slip.payslipId || slip.id;
     const label = getMonthLabel(slip);
-    notify(`Downloading payslip for ${label}...`, "info");
-    setTimeout(() => {
-      notify(`Payslip for ${label} downloaded successfully.`, "success");
-    }, 1200);
+    try {
+      setDownloadingId(slipId);
+      notify(`Downloading payslip for ${label}...`, "info");
+      const res = await apiClient.get(`/api/v1/Payroll/payslips/${slipId}/download-pdf`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Payslip_${slip.employeeId || "Staff"}_${slip.payrollYear || ""}_${String(slip.payrollMonth || "").padStart(2, "0")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 2000);
+      notify(`Payslip for ${label} downloaded successfully.`);
+    } catch (err) {
+      console.warn("download-pdf failed, trying /pdf endpoint:", err);
+      try {
+        const fallbackRes = await apiClient.get(`/api/v1/Payroll/payslips/${slipId}/pdf`, {
+          responseType: "blob",
+        });
+        const blob = new Blob([fallbackRes.data], { type: "application/pdf" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Payslip_${slip.employeeId || "Staff"}_${slip.payrollYear || ""}_${String(slip.payrollMonth || "").padStart(2, "0")}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => window.URL.revokeObjectURL(url), 2000);
+        notify(`Payslip for ${label} downloaded successfully.`);
+      } catch (fallbackErr) {
+        notify(getApiErrorMessage(fallbackErr || err) || "Failed to download payslip PDF.", "error");
+      }
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handlePrintPdf = (slip) => {
@@ -288,31 +264,39 @@ export default function TransportManagerPayslips() {
         <div className="salary-cards">
           <div className="salary-box gross-box">
             <p>Gross Salary</p>
-            <h3>{current ? fmt(current.grossSalary) : "₹85,000"}</h3>
+            <h3>{current ? fmt(current.grossSalary) : "₹0"}</h3>
           </div>
           <div className="salary-box deduction-box">
             <p>Deductions</p>
-            <h3>{current ? fmt(current.totalDeductions) : "₹10,100"}</h3>
+            <h3>{current ? fmt(current.totalDeductions) : "₹0"}</h3>
           </div>
           <div className="salary-box net-box">
             <p>Net Pay</p>
-            <h3>{current ? fmt(current.netSalary) : "₹74,900"}</h3>
+            <h3>{current ? fmt(current.netSalary) : "₹0"}</h3>
           </div>
         </div>
 
         <div className="action-buttons">
           <button
             className="view-btn"
-            onClick={() => setViewingPayslip(current)}
+            onClick={() => current && setViewingPayslip(current)}
+            disabled={!current}
+            style={!current ? { opacity: 0.55, cursor: "not-allowed" } : {}}
           >
             <Eye size={16} />
             View Breakdown
           </button>
           <button
             className="download-btn"
-            onClick={() => handleDownloadPdf(current)}
+            onClick={() => current && handleDownloadPdf(current)}
+            disabled={!current || downloadingId === (current?.payslipId || current?.id)}
+            style={!current ? { opacity: 0.55, cursor: "not-allowed" } : {}}
           >
-            <Download size={16} />
+            {downloadingId === (current?.payslipId || current?.id) ? (
+              <Loader2 size={16} className="spin" />
+            ) : (
+              <Download size={16} />
+            )}
             Download PDF
           </button>
         </div>
@@ -422,7 +406,7 @@ export default function TransportManagerPayslips() {
                   <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Transport Operations Division</span>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>{viewingPayslip.employeeName || profileData.name || "tangiro kamado"}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{viewingPayslip.employeeName || profileData.name || "muzan kibutsuzi"}</div>
                   <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>{viewingPayslip.designation || profileData.role || "Transport Manager"} ({viewingPayslip.employeeId || effectiveEmployeeId})</span>
                 </div>
               </div>
@@ -435,27 +419,27 @@ export default function TransportManagerPayslips() {
                   <div className="payslip-table-mini">
                     <div className="payslip-row">
                       <span>Basic Salary</span>
-                      <span>{fmt(viewingPayslip.basicPay || 45000)}</span>
+                      <span>{fmt(viewingPayslip.basicPay || 0)}</span>
                     </div>
                     <div className="payslip-row">
                       <span>HRA</span>
-                      <span>{fmt(viewingPayslip.hra || 18000)}</span>
+                      <span>{fmt(viewingPayslip.hra || 0)}</span>
                     </div>
                     <div className="payslip-row">
                       <span>DA</span>
-                      <span>{fmt(viewingPayslip.da || 12000)}</span>
+                      <span>{fmt(viewingPayslip.da || 0)}</span>
                     </div>
                     <div className="payslip-row">
                       <span>Conveyance</span>
-                      <span>{fmt(viewingPayslip.conveyanceAllowance || 3000)}</span>
+                      <span>{fmt(viewingPayslip.conveyanceAllowance || 0)}</span>
                     </div>
                     <div className="payslip-row">
                       <span>Medical Allowance</span>
-                      <span>{fmt(viewingPayslip.medicalAllowance || 2500)}</span>
+                      <span>{fmt(viewingPayslip.medicalAllowance || 0)}</span>
                     </div>
                     <div className="payslip-row total">
                       <strong>Total Earnings</strong>
-                      <strong>{fmt(viewingPayslip.grossSalary || 85000)}</strong>
+                      <strong>{fmt(viewingPayslip.grossSalary || 0)}</strong>
                     </div>
                   </div>
                 </div>
@@ -466,19 +450,19 @@ export default function TransportManagerPayslips() {
                   <div className="payslip-table-mini">
                     <div className="payslip-row">
                       <span>Provident Fund (PF)</span>
-                      <span>{fmt(viewingPayslip.pf || 5400)}</span>
+                      <span>{fmt(viewingPayslip.pf || 0)}</span>
                     </div>
                     <div className="payslip-row">
                       <span>Professional Tax (PT)</span>
-                      <span>{fmt(viewingPayslip.professionalTax || 200)}</span>
+                      <span>{fmt(viewingPayslip.professionalTax || 0)}</span>
                     </div>
                     <div className="payslip-row">
                       <span>Income Tax (TDS)</span>
-                      <span>{fmt(viewingPayslip.tds || 4500)}</span>
+                      <span>{fmt(viewingPayslip.tds || 0)}</span>
                     </div>
                     <div className="payslip-row total">
                       <strong>Total Deductions</strong>
-                      <strong style={{ color: "#dc2626" }}>{fmt(viewingPayslip.totalDeductions || 10100)}</strong>
+                      <strong style={{ color: "#dc2626" }}>{fmt(viewingPayslip.totalDeductions || 0)}</strong>
                     </div>
                   </div>
                 </div>
@@ -489,11 +473,11 @@ export default function TransportManagerPayslips() {
                 <div>
                   <span style={{ fontSize: 12, fontWeight: 600, color: "var(--cms-muted)", textTransform: "uppercase" }}>Net Amount Payable</span>
                   <div style={{ fontSize: 20, fontWeight: 800, color: "var(--cms-primary-dark, #3b4800)" }}>
-                    {fmt(viewingPayslip.netSalary || 74900)}
+                    {fmt(viewingPayslip.netSalary || 0)}
                   </div>
                 </div>
                 <span className="cms-badge cms-badge-active" style={{ fontSize: 13, padding: "4px 10px" }}>
-                  Payment Complete
+                  {viewingPayslip.status || "Paid"}
                 </span>
               </div>
             </div>
