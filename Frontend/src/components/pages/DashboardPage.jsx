@@ -36,8 +36,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-import { getStudentOverviewMetrics } from "@/api/studentApi.js";
+import axios from "axios";
+import sharedApiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { getStudentOverviewMetrics as loadStudentOverviewMetrics } from "@/api/studentApi.js";
+import { getAuthToken } from "@/features/authStorage.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -56,6 +58,29 @@ import markAttendanceIcon from "@/assets/dashboard-3d/mark-attendance.png";
 import "./DashboardPage.css";
 
 const GROUP_COLORS = ["#2563eb", "#7c3aed", "#f59e0b", "#16a34a", "#e11d48", "#0891b2", "#64748b"];
+
+// Keep dashboard requests on the network, including during a demo login.
+// Request transforms run after the shared client's mock adapter selection.
+const serverConfig = (config = {}) => ({
+  ...config,
+  _isMockFallback: true,
+  transformRequest: [
+    ...sharedApiClient.defaults.transformRequest,
+    function requireServer(data) {
+      this.adapter = axios.getAdapter(["xhr", "http", "fetch"]);
+      return data;
+    },
+  ],
+});
+const apiClient = {
+  get: (url, config) => sharedApiClient.get(url, serverConfig(config)),
+  post: (url, data, config) => sharedApiClient.post(url, data, serverConfig(config)),
+};
+const getStudentOverviewMetrics = (params) => {
+  const mockSession = /^(mock-|demo-|non-teaching-|warden-|parent-)/.test(getAuthToken());
+  if (mockSession || import.meta.env.VITE_USE_MOCK_DATA === "true") return Promise.resolve(null);
+  return loadStudentOverviewMetrics(params);
+};
 
 const DASHBOARD_API = {
   filters: "/api/v1/dashboard/filters",
@@ -422,7 +447,7 @@ export default function DashboardPage() {
       
       const [res, staffRes, studentMetrics] = await Promise.all([
         apiClient.get(DASHBOARD_API.summary, { params }),
-        apiClient.get("/api/v1/staff", { params: staffParams }).catch(() => ({ data: { items: [] } })),
+        apiClient.get("/api/v1/staff", { params: staffParams }),
         studentMetricsPromise,
       ]);
 
@@ -587,7 +612,7 @@ export default function DashboardPage() {
         ...(campusId ? { campusId } : {}),
       };
       const [res, studentMetrics] = await Promise.all([
-        apiClient.get(DASHBOARD_API.groupDistribution, { params }).catch(() => ({ data: null })),
+        apiClient.get(DASHBOARD_API.groupDistribution, { params }),
         getStudentOverviewMetrics({ campusId, boardId, academicYearId }).catch(() => null),
       ]);
       if (groupSeq.current === seq) {
@@ -1113,7 +1138,7 @@ export default function DashboardPage() {
 
     // If attendance is not marked today yet, use total enrolled student count so 0% donut renders consistently with staff
     if (total === 0) {
-      total = Number(summaryData?.totalStudents ?? overviewData?.totalStudents ?? 0);
+      total = Number(summaryState.data?.totalStudents ?? overviewState.data?.totalStudents ?? 0);
     }
 
     if ((absent === undefined || absent === null || (present === 0 && Number(absent) === 0 && halfDay === 0) || (present + Number(absent) + halfDay < total)) && total > 0) {
@@ -1135,7 +1160,7 @@ export default function DashboardPage() {
     const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
     return { total, present, absent, halfDay, late: halfDay, percentage, chartData, breakdownList };
-  }, [studentAttState.data, summaryData?.totalStudents, overviewData?.totalStudents]);
+  }, [studentAttState.data, summaryState.data?.totalStudents, overviewState.data?.totalStudents]);
 
   // Staff Attendance Normalized Values
   const staffAttData = useMemo(() => {
@@ -1447,7 +1472,7 @@ export default function DashboardPage() {
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
-                {studentAttData.total === 0 && !summaryData?.totalStudents ? (
+                {studentAttData.total === 0 && !summaryState.data?.totalStudents ? (
                     <EmptyState message="No student attendance data available for today." />
                   ) : (
                     <>

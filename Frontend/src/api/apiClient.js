@@ -152,7 +152,7 @@ apiClient.interceptors.request.use(
     );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
-    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(config.url || "") && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
       config.adapter = handleMockApiRequest;
     }
 
@@ -207,7 +207,7 @@ apiClient.interceptors.response.use(
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
     // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
-    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
+    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") && !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(originalRequest.url || "") && !originalRequest._isMockFallback) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);

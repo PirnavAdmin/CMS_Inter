@@ -1,22 +1,18 @@
-import { useState } from "react";
-import { Plus, IndianRupee, CalendarDays, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, IndianRupee, CalendarDays, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import DataTable from "@/components/common/DataTable.jsx";
 import { Modal } from "@/components/common/Ui.jsx";
 import { money } from "@/components/pages/InventoryManagement/inventoryModel.js";
 import { useDialogFocus } from "@/components/pages/InventoryManagement/components/InventoryUi.jsx";
-import {
-  mockStaff,
-  sampleLOP,
-  payrollMonth,
-  calculateLOP,
-  saveLOP,
-  LOP_STORAGE_KEY,
-} from "./lopModel.js";
+import { payrollMonth } from "./lopModel.js";
+import { lopRequest, lopRows } from "./lopApi.js";
+import { getApiErrorMessage } from "@/api/apiClient.js";
 import "./LOPConfigurationPage.css";
 import CommonLOPPolicy from "./CommonLOPPolicy.jsx";
 
-function LOPForm({ record, onClose, onSave }) {
+function LOPForm({ record, onClose, onSave, staffList }) {
   useDialogFocus(onClose);
   const [values, setValues] = useState(
     record
@@ -24,13 +20,38 @@ function LOPForm({ record, onClose, onSave }) {
       : { staffId: "", month: payrollMonth(), days: "", basis: "calendar", reason: "" },
   );
   const [error, setError] = useState("");
-  const staff = mockStaff.find((s) => s.id === values.staffId);
-  let calculation;
-  try {
-    if (staff) calculation = calculateLOP({ ...values, salary: staff.salary });
-  } catch {
-    /* Show validation on submission. */
-  }
+  const [busy, setBusy] = useState(false);
+  const staff = staffList.find((s) => String(s.id) === String(values.staffId));
+  const [calculation, setCalculation] = useState(null);
+  useEffect(() => {
+    setCalculation(null);
+    if (!staff || !values.days || !values.month) return;
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () =>
+        lopRequest("calculate", {
+          method: "post",
+          signal: controller.signal,
+          data: {
+            staffId: values.staffId,
+            month: values.month,
+            days: Number(values.days),
+            lopDays: Number(values.days),
+            basis: values.basis,
+            salary: staff.salary,
+          },
+        })
+          .then(setCalculation)
+          .catch((e) => {
+            if (!controller.signal.aborted) setError(getApiErrorMessage(e));
+          }),
+      300,
+    );
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [staff, values.staffId, values.days, values.month, values.basis]);
   const change = (key, value) => {
     setError("");
     setValues((v) => ({ ...v, [key]: value }));
@@ -43,13 +64,17 @@ function LOPForm({ record, onClose, onSave }) {
     >
       <form
         className="lop-form"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
           try {
-            onSave(values);
+            if (busy) return;
+            setBusy(true);
+            await onSave(values);
             onClose();
           } catch (failure) {
-            setError(failure.message);
+            setError(getApiErrorMessage(failure));
+          } finally {
+            setBusy(false);
           }
         }}
       >
@@ -61,7 +86,7 @@ function LOPForm({ record, onClose, onSave }) {
             onChange={(e) => change("staffId", e.target.value)}
           >
             <option value="">Select Staff</option>
-            {mockStaff.map((s) => (
+            {staffList.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} · {s.employeeId} · {s.department}
               </option>
@@ -116,11 +141,11 @@ function LOPForm({ record, onClose, onSave }) {
         </label>
         <div className="lop-preview">
           <span>
-            LOP Deduction<strong>{money(calculation?.deduction || 0)}</strong>
+            LOP Deduction<strong>{calculation ? money(calculation.deduction) : "—"}</strong>
           </span>
           <span>
             Salary After LOP
-            <strong>{staff ? money(calculation?.salaryAfterLOP ?? staff.salary) : "—"}</strong>
+            <strong>{calculation ? money(calculation.salaryAfterLOP) : "—"}</strong>
           </span>
           <small>
             Monthly salary ÷{" "}
@@ -137,55 +162,103 @@ function LOPForm({ record, onClose, onSave }) {
           <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="cms-btn cms-btn-primary">Save Mock LOP</button>
+          <button disabled={busy} className="cms-btn cms-btn-primary">
+            Save LOP
+          </button>
         </div>
       </form>
     </Modal>
   );
 }
-function load() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(LOP_STORAGE_KEY) || "null");
-    return Array.isArray(stored) ? stored : sampleLOP();
-  } catch {
-    return sampleLOP();
-  }
-}
 export default function LOPConfigurationPage() {
-  const [records, setRecords] = useState(load),
+  const [records, setRecords] = useState([]),
     [modal, setModal] = useState(null),
     [month, setMonth] = useState(payrollMonth()),
     [notice, setNotice] = useState(""),
     [error, setError] = useState("");
-  const rows = records.filter((r) => !month || r.month === month);
-  const persist = (next) => {
-    localStorage.setItem(LOP_STORAGE_KEY, JSON.stringify(next));
-    setRecords(next);
+  const [staffList, setStaffList] = useState([]),
+    [kpis, setKpis] = useState(null),
+    [search, setSearch] = useState(""),
+    [revision, setRevision] = useState(0),
+    [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const c = new AbortController();
+    lopRequest("staff", { signal: c.signal })
+      .then((data) => setStaffList(lopRows(data)))
+      .catch((e) => {
+        if (!c.signal.aborted) setError(getApiErrorMessage(e));
+      });
+    return () => c.abort();
+  }, []);
+  useEffect(() => {
+    const c = new AbortController();
+    setLoading(true);
     setError("");
-    setNotice("Mock LOP records saved in this browser.");
+    setRecords([]);
+    setKpis(null);
+    Promise.all([
+      lopRequest("records", { params: { month, search }, signal: c.signal }),
+      lopRequest("kpis", { params: { month }, signal: c.signal }),
+    ])
+      .then(([data, stats]) => {
+        setRecords(lopRows(data));
+        setKpis(data.kpis || stats);
+      })
+      .catch((e) => {
+        if (!c.signal.aborted) setError(getApiErrorMessage(e));
+      })
+      .finally(() => {
+        if (!c.signal.aborted) setLoading(false);
+      });
+    return () => c.abort();
+  }, [month, search, revision]);
+  const rows = records;
+  const edit = async (r) => {
+    try {
+      setModal({ record: await lopRequest("records/" + encodeURIComponent(r.id)) });
+    } catch (e) {
+      setError(getApiErrorMessage(e));
+    }
+  };
+  const save = async (values) => {
+    await lopRequest("records" + (values.id ? "/" + encodeURIComponent(values.id) : ""), {
+      method: values.id ? "put" : "post",
+      data: { ...values, days: Number(values.days), lopDays: Number(values.days) },
+    });
+    setNotice("LOP record saved.");
+    setRevision((v) => v + 1);
   };
   return (
     <DashboardLayout
       title="LOP Configuration"
       subtitle="Assign staff loss-of-pay days and preview salary deductions."
       breadcrumb={["Settings", "LOP Configuration"]}
-      actions={
-        <button className="cms-btn cms-btn-primary" onClick={() => setModal({})}>
-          <Plus size={16} /> Add Staff LOP
-        </button>
+      backLinkPosition="below"
+      backLink={
+        <Link to="/dashboard/settings" className="lop-back-link">
+          <ArrowLeft size={16} /> Back to Settings
+        </Link>
       }
     >
       <div className="lop-page">
         <CommonLOPPolicy />
         <div className="lop-notice">
-          Mock configuration · Browser data only. These entries do not change live payroll or staff
-          payslips. Record only unpaid days after applicable paid leave is exhausted.
+          LOP configuration is loaded from and saved to the server. Record only unpaid days after
+          applicable paid leave is exhausted.
         </div>
         <div className="lop-kpis">
           {[
-            ["Staff With LOP", new Set(rows.map((r) => r.staffId)).size, Users],
-            ["Total LOP Days", rows.reduce((sum, r) => sum + r.lopDays, 0), CalendarDays],
-            ["Total Deduction", money(rows.reduce((sum, r) => sum + r.deduction, 0)), IndianRupee],
+            ["Staff With LOP", kpis?.staffWithLOP ?? kpis?.staffWithLop ?? "Unavailable", Users],
+            [
+              "Total LOP Days",
+              kpis?.totalLOPDays ?? kpis?.totalLopDays ?? "Unavailable",
+              CalendarDays,
+            ],
+            [
+              "Total Deduction",
+              kpis?.totalDeduction == null ? "Unavailable" : money(kpis.totalDeduction),
+              IndianRupee,
+            ],
           ].map(([label, value, Icon]) => (
             <article className="cms-card" key={label}>
               <Icon size={22} />
@@ -194,6 +267,7 @@ export default function LOPConfigurationPage() {
             </article>
           ))}
         </div>
+        {loading && <p role="status">Loading LOP records...</p>}
         {notice && <p role="status">{notice}</p>}
         {error && (
           <p className="lop-error" role="alert">
@@ -203,14 +277,16 @@ export default function LOPConfigurationPage() {
         <DataTable
           title="Staff LOP Configuration"
           rows={rows}
+          onSearchChange={setSearch}
           enablePdfExport
           enableTablePrint={false}
           onView={undefined}
-          onEdit={(r) => setModal({ record: r })}
-          onDelete={(r) => {
+          onEdit={edit}
+          onDelete={async (r) => {
             if (window.confirm(`Remove the LOP entry for ${r.name} (${r.month})?`))
               try {
-                persist(records.filter((entry) => entry.id !== r.id));
+                await lopRequest("records/" + encodeURIComponent(r.id), { method: "delete" });
+                setRevision((v) => v + 1);
               } catch (failure) {
                 setError(failure.message);
               }
@@ -253,7 +329,8 @@ export default function LOPConfigurationPage() {
           <LOPForm
             record={modal.record}
             onClose={() => setModal(null)}
-            onSave={(values) => persist(saveLOP(records, values))}
+            onSave={save}
+            staffList={staffList}
           />
         )}
       </div>

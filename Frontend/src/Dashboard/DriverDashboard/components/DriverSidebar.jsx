@@ -13,8 +13,10 @@ import {
   Bus,
 } from "lucide-react";
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
+import { useDriverData } from "../DriverDataContext.jsx";
 
 export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, onClose }) {
+  const { driverProfile } = useDriverData();
   const menuItems = [
     { id: "home", label: "Dashboard", icon: LayoutDashboard },
     { id: "route", label: "My Route", icon: RouteIcon },
@@ -23,6 +25,11 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
     { id: "gps", label: "GPS Tracking", icon: Navigation },
     { id: "reports", label: "Reports", icon: FileBarChart2 },
     { id: "profile", label: "Profile", icon: User },
+    { id: "attendance", label: "My Attendance", icon: FileBarChart2 },
+    { id: "leave", label: "Leave Management", icon: FileBarChart2 },
+    { id: "payslips", label: "My Payslips", icon: FileBarChart2 },
+    { id: "holidays", label: "Holidays", icon: FileBarChart2 },
+    { id: "settings", label: "Settings", icon: User },
   ];
 
   return (
@@ -66,10 +73,10 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
 
       <div className="dp-sidebar-footer">
         <div className="dp-sidebar-driver-mini">
-          <div className="dp-mini-avatar">RK</div>
+          <div className="dp-mini-avatar">{driverProfile.initials}</div>
           <div className="dp-mini-info">
-            <strong>Ramesh Kumar</strong>
-            <small>EMP001 • Bus PC-101</small>
+            <strong>{driverProfile.name}</strong>
+            <small>{driverProfile.employeeId} · {driverProfile.assignedVehicle}</small>
           </div>
         </div>
         <button
