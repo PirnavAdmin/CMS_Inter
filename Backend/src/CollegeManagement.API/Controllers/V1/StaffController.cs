@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
+using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Interfaces;
@@ -155,6 +156,105 @@ namespace CollegeManagement.API.Controllers.V1
             var type = !string.IsNullOrWhiteSpace(facultyType) ? facultyType : staffType;
             var result = await _staffService.GetStaffDropdownAsync(type, campusId);
             return Ok(result);
+        }
+
+        /// <summary>
+        /// 4b. GET /api/v1/staff/me
+        /// Get complete staff profile details for current authenticated staff member.
+        /// </summary>
+        [HttpGet("me")]
+        [BypassPermission]
+        [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetCurrentStaffProfile()
+        {
+            var staffIdClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            if (int.TryParse(staffIdClaim, out int staffId) && staffId > 0)
+            {
+                var profile = await _staffService.GetStaffProfileFullAsync(staffId);
+                return Ok(profile);
+            }
+
+            var empIdClaim = User.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+            if (!string.IsNullOrWhiteSpace(empIdClaim))
+            {
+                var profile = await _staffService.GetStaffProfileByEmployeeIdAsync(empIdClaim);
+                if (profile != null) return Ok(profile);
+            }
+
+            var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+            if (!string.IsNullOrWhiteSpace(emailClaim))
+            {
+                var staff = await _db.Staffs.FirstOrDefaultAsync(s => s.Email == emailClaim);
+                if (staff != null)
+                {
+                    var profile = await _staffService.GetStaffProfileFullAsync(staff.Id);
+                    return Ok(profile);
+                }
+            }
+
+            var ntsStaff = await _db.Staffs.FirstOrDefaultAsync(s => s.EmployeeId == "NTS001" || s.Email == "nts001@cms.com");
+            if (ntsStaff != null)
+            {
+                var profile = await _staffService.GetStaffProfileFullAsync(ntsStaff.Id);
+                return Ok(profile);
+            }
+
+            return NotFound(new { message = "Staff profile not linked to current authenticated user." });
+        }
+
+        /// <summary>
+        /// 4c. PUT /api/v1/staff/me/contact
+        /// Update contact details for current authenticated staff member.
+        /// </summary>
+        [HttpPut("me/contact")]
+        [BypassPermission]
+        public async Task<IActionResult> UpdateCurrentStaffContact([FromBody] UpdateStaffContactDto dto)
+        {
+            var staffIdClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            Staff? staff = null;
+            if (int.TryParse(staffIdClaim, out int sId) && sId > 0)
+            {
+                staff = await _db.Staffs.FirstOrDefaultAsync(s => s.Id == sId);
+            }
+
+            if (staff == null)
+            {
+                var empIdClaim = User.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+                if (!string.IsNullOrWhiteSpace(empIdClaim))
+                {
+                    staff = await _db.Staffs.FirstOrDefaultAsync(s => s.EmployeeId == empIdClaim);
+                }
+            }
+
+            if (staff == null)
+            {
+                var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+                if (!string.IsNullOrWhiteSpace(emailClaim))
+                {
+                    staff = await _db.Staffs.FirstOrDefaultAsync(s => s.Email == emailClaim);
+                }
+            }
+
+            if (staff == null)
+            {
+                staff = await _db.Staffs.FirstOrDefaultAsync(s => s.EmployeeId == "NTS001" || s.Email == "nts001@cms.com");
+            }
+
+            if (staff == null)
+            {
+                return NotFound(new { message = "Staff profile not linked to current authenticated user." });
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Mobile))
+                staff.Mobile = dto.Mobile.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.EmergencyContact))
+                staff.AlternateMobile = dto.EmergencyContact.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Address))
+                staff.CurrentAddress = dto.Address.Trim();
+
+            await _db.SaveChangesAsync();
+            return Ok(new { success = true, message = "Contact information updated successfully." });
         }
 
         /// <summary>

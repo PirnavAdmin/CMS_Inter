@@ -577,7 +577,7 @@ export default function DashboardLayout({
     const fetchPerms = () => {
       getCurrentUserPermissions()
         .then((res) => {
-          if (isMounted && res?.data && Array.isArray(res.data)) {
+          if (isMounted && res?.data && Array.isArray(res.data) && res.data.length > 0) {
             const updated = { ...currentUser, permissions: res.data };
             try {
               for (const storage of [window.localStorage, window.sessionStorage]) {

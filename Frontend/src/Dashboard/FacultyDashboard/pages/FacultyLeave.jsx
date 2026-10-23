@@ -149,9 +149,14 @@ export default function FacultyLeave() {
       let balanceObj = null;
 
       try {
-        const histRes = await apiClient.get(
-          `/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`
-        );
+        let histRes;
+        try {
+          histRes = await apiClient.get("/api/v1/staff-attendance/leave/my-history");
+        } catch {
+          histRes = await apiClient.get(
+            `/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`
+          );
+        }
         const histData = histRes?.data?.data || histRes?.data?.Data;
         if (histData) {
           balanceObj = histData.balance || null;

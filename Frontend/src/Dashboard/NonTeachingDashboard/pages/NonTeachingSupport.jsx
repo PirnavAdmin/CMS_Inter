@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   HelpCircle,
   Plus,
@@ -6,9 +6,6 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  Wrench,
-  Monitor,
-  FileQuestion,
   X,
   MessageSquare,
 } from "lucide-react";
@@ -19,7 +16,7 @@ export default function NonTeachingSupport() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [ticketForm, setTicketForm] = useState({
     subject: "",
-    category: "IT Support",
+    category: "IT & Network Infrastructure",
     priority: "Medium",
     description: "",
   });
@@ -30,19 +27,34 @@ export default function NonTeachingSupport() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleCreate = (e) => {
+  const loadTickets = useCallback(async () => {
+    try {
+      const data = await nonTeachingService.fetchSupportTickets();
+      if (Array.isArray(data)) {
+        setTickets(data);
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTickets();
+  }, [loadTickets]);
+
+  const handleCreate = async (e) => {
     e.preventDefault();
     if (!ticketForm.subject.trim() || !ticketForm.description.trim()) {
       showToast("Please provide both subject and description.");
       return;
     }
 
-    const created = nonTeachingService.createSupportTicket(ticketForm);
+    const created = await nonTeachingService.createSupportTicket(ticketForm);
     setTickets(nonTeachingService.getSupportTickets());
     setShowNewModal(false);
     setTicketForm({
       subject: "",
-      category: "IT Support",
+      category: "IT & Network Infrastructure",
       priority: "Medium",
       description: "",
     });
@@ -52,16 +64,20 @@ export default function NonTeachingSupport() {
   return (
     <>
       {toastMessage && (
-        <div className="cms-toast-banner cms-toast-success" role="alert" style={{ position: "fixed", top: 16, right: 16, zIndex: 9999 }}>
+        <div
+          className="cms-toast-banner cms-toast-success"
+          role="alert"
+          style={{ position: "fixed", top: 16, right: 16, zIndex: 9999 }}
+        >
           <CheckCircle2 size={16} /> {toastMessage}
         </div>
       )}
 
-      {/* Action Bar */}
+      {/* Action Bar (Screen 15) */}
       <section className="nts-filter-bar">
         <div>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--nts-text)" }}>
-            Employee Helpdesk & Support Services
+            Employee Helpdesk &amp; Support Services
           </h3>
           <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--nts-muted)" }}>
             Raise facility maintenance, equipment repair, or IT support queries.
@@ -77,11 +93,11 @@ export default function NonTeachingSupport() {
         </button>
       </section>
 
-      {/* Tickets List */}
+      {/* Tickets List (Screen 15) */}
       <section className="nts-card">
         <div className="nts-card-head">
           <h3>
-            <HelpCircle size={16} style={{ color: "var(--nts-primary)" }} /> My Support Tickets ({tickets.length})
+            <HelpCircle size={16} style={{ color: "var(--nts-primary, #5c7c2f)" }} /> My Support Tickets ({tickets.length})
           </h3>
         </div>
         <div className="nts-card-body" style={{ gap: 12 }}>
@@ -100,17 +116,17 @@ export default function NonTeachingSupport() {
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontWeight: 800, fontSize: 13, color: "var(--nts-primary)" }}>#{t.id}</span>
-                  <span className={`nts-pill-priority ${t.priority.toLowerCase()}`}>{t.priority}</span>
+                  <span style={{ fontWeight: 800, fontSize: 13, color: "var(--nts-primary, #5c7c2f)" }}>#{t.id}</span>
+                  <span className={`nts-pill-priority ${(t.priority || "Medium").toLowerCase()}`}>{t.priority}</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--nts-muted)" }}>• {t.category}</span>
                   <span style={{ fontSize: 11, color: "var(--nts-muted)" }}>• Logged on {t.createdAt}</span>
                 </div>
 
-                <span className={`nts-status-badge ${t.status.toLowerCase().replace(/\s+/g, "-")}`}>
+                <span className={`nts-status-badge ${(t.status || "Open").toLowerCase().replace(/\s+/g, "-")}`}>
                   {t.status === "Resolved" && <CheckCircle2 size={12} />}
                   {t.status === "In Progress" && <Clock size={12} />}
                   {t.status === "Open" && <AlertCircle size={12} />}
-                  {t.status}
+                  {t.status || "Open"}
                 </span>
               </div>
 
@@ -135,7 +151,7 @@ export default function NonTeachingSupport() {
                     gap: 8,
                   }}
                 >
-                  <MessageSquare size={14} style={{ color: "var(--nts-primary)", flexShrink: 0, marginTop: 2 }} />
+                  <MessageSquare size={14} style={{ color: "var(--nts-primary, #5c7c2f)", flexShrink: 0, marginTop: 2 }} />
                   <div>
                     <strong>Helpdesk Response:</strong> {t.response}
                   </div>
@@ -152,7 +168,7 @@ export default function NonTeachingSupport() {
         </div>
       </section>
 
-      {/* New Ticket Modal */}
+      {/* New Ticket Modal (Screen 16) */}
       {showNewModal && (
         <div className="nts-modal-backdrop">
           <div className="nts-modal-container">
@@ -188,11 +204,11 @@ export default function NonTeachingSupport() {
                       value={ticketForm.category}
                       onChange={(e) => setTicketForm({ ...ticketForm, category: e.target.value })}
                     >
-                      <option value="IT Support">IT & Network Infrastructure</option>
-                      <option value="Maintenance">Maintenance & Electrical</option>
-                      <option value="Office Supplies">Office Supplies & Stationery</option>
-                      <option value="Facility">Facility & Housekeeping</option>
-                      <option value="HR & Payroll">HR & Payroll Query</option>
+                      <option value="IT & Network Infrastructure">IT &amp; Network Infrastructure</option>
+                      <option value="Maintenance & Electrical">Maintenance &amp; Electrical</option>
+                      <option value="Office Supplies & Stationery">Office Supplies &amp; Stationery</option>
+                      <option value="Facility & Housekeeping">Facility &amp; Housekeeping</option>
+                      <option value="HR & Payroll Query">HR &amp; Payroll Query</option>
                     </select>
                   </div>
 

@@ -38,6 +38,7 @@ import {
 } from "recharts";
 import axios from "axios";
 import sharedApiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getStudentOverviewMetrics as loadStudentOverviewMetrics } from "@/api/studentApi.js";
 import { getAuthToken } from "@/features/authStorage.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
@@ -602,7 +603,7 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
       };
-      const [res, studentMetrics] = await Promise.all([
+      const [res, studentMetrics, allGroupsRes] = await Promise.all([
         apiClient.get(DASHBOARD_API.groupDistribution, { params }),
         getStudentOverviewMetrics({ campusId, boardId, academicYearId }).catch(() => null),
         apiClient.get("/api/v1/groups", { params: { ...(boardId ? { boardId } : {}), ...(academicYearId ? { academicYearId } : {}) } }).catch(() => ({ data: null })),

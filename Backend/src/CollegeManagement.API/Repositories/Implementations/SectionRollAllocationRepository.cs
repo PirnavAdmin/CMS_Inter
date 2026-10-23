@@ -23,13 +23,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        private async Task OpenAsync()
-        {
-            if (Connection.State != ConnectionState.Open)
-            {
-                await ((System.Data.Common.DbConnection)Connection).OpenAsync();
-            }
-        }
+        private Task OpenAsync() => Task.CompletedTask;
 
         // =========================================================
         // SECTION ALLOCATION PREVIEW
