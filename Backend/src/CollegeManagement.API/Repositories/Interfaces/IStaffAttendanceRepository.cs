@@ -19,5 +19,14 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<StaffDetailsResponse?> GetStaffDetailsAsync(int facultyId, DateTime date);
 
         Task<StaffMonthlyReportResponse> GetStaffMonthlyReportGridAsync(StaffMonthlyReportRequest request);
+
+        // Self-Service Attendance & Regularization
+        Task<MyAttendanceTodayResponse> GetMyTodayStatusAsync(int facultyId, DateTime date);
+        Task<MyAttendanceTodayResponse> PunchInAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId);
+        Task<MyAttendanceTodayResponse> PunchOutAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId);
+        Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate);
+        Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId);
+        Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId);
+        Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId);
     }
 }
