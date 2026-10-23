@@ -44,6 +44,8 @@ export default function ParentDashboard() {
     child,
     childFee: contextChildFee,
     results,
+    examinations: contextExaminations,
+    curriculumSubjects,
     dataKey,
     currentAcademicYear,
     loading,
@@ -81,24 +83,47 @@ export default function ParentDashboard() {
     status: breakdownTotal > 0 ? (breakdownPending === 0 ? "Paid" : breakdownPaid > 0 ? "Partial" : "Due") : rawChildFee.status,
   };
   const subjects = child?.attendance?.subjectRecords || [];
-  const academics = child ? academicSubjectsData[dataKey] || (isCurrentYear ? (academicSubjectsData[child.id] || []) : []) : [];
+  const academics = useMemo(() => {
+    if (curriculumSubjects && curriculumSubjects.length > 0) return curriculumSubjects;
+    return child ? academicSubjectsData[dataKey] || (isCurrentYear ? (academicSubjectsData[child.id] || []) : []) : [];
+  }, [curriculumSubjects, child, dataKey, isCurrentYear]);
   
-  // Bridge real published examination results or upcoming exams
+  // Bridge real published examination results or live scheduled exams
   const exams = useMemo(() => {
+    if (contextExaminations && contextExaminations.length > 0) {
+      const scheduledExam =
+        contextExaminations.find((e) => e.schedules && e.schedules.length > 0 && String(e.status).toUpperCase() === "SCHEDULED") ||
+        contextExaminations.find((e) => e.schedules && e.schedules.length > 0) ||
+        contextExaminations[0];
+
+      if (scheduledExam?.schedules?.length > 0) {
+        return scheduledExam.schedules.map((s, idx) => ({
+          id: String(s.examScheduleId || s.id || `sched-${idx}`),
+          subject: s.subjectName || `Subject ${idx + 1}`,
+          code: s.subjectCode || `SUB-${s.subjectId || idx + 1}`,
+          date: s.examDate ? new Date(s.examDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Scheduled",
+          time: s.startTime && s.endTime ? `${s.startTime.slice(0, 5)} - ${s.endTime.slice(0, 5)}` : "09:00 AM - 12:00 PM",
+          hall: s.hall || s.roomNumber ? `Hall ${s.hall || s.roomNumber}` : "Main Examination Hall",
+          seat: `Seat #${child?.roll || "02"}`,
+          syllabus: `Course curriculum for ${s.subjectName}. Maximum marks: ${s.maxMarks || 100}. Mode: ${s.examMode || "Written"}.`,
+        }));
+      }
+    }
+
     if (results && results.length > 0) {
       return results.map((r, idx) => ({
         id: String(r.examinationId || r.resultId || `ex-${idx}`),
         subject: r.examName,
         code: r.examCode,
         date: r.publishedAt || "Academic Session",
-        time: "10:00 AM - 01:00 PM",
+        time: "09:00 AM - 12:00 PM",
         hall: "Main Examination Hall",
-        seat: `Seat ${r.classRank || "A-12"}`,
+        seat: `Seat #${child?.roll || "02"}`,
         syllabus: `Course curriculum for ${r.examName}. Total marks: ${r.maxMarks}. Grade: ${r.grade}.`,
       }));
     }
     return child ? upcomingExamsData[dataKey] || (isCurrentYear ? (upcomingExamsData[child.id] || []) : []) : [];
-  }, [results, child, dataKey, isCurrentYear]);
+  }, [contextExaminations, results, child, dataKey, isCurrentYear]);
 
   const nextExam = exams[0] || null;
 

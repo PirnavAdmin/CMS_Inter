@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BarChart3, Boxes, CircleAlert, IndianRupee, ShoppingCart } from "lucide-react";
+import { BarChart3, Boxes, CircleAlert, IndianRupee, ShoppingCart, Eye, Pencil, Trash2 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   actionColumn,

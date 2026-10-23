@@ -1,0 +1,1440 @@
+/* Accountant My Attendance Screen Styles - Theme Based */
+
+.acct-att-accountant-attendance-page {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+/* ==========================================================================
+   Top Grid: Attendance & Shift Summary + Check-In / Check-Out
+   ========================================================================== */
+.acct-att-attendance-top-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  align-items: stretch;
+}
+
+@media (max-width: 920px) {
+  .acct-att-attendance-top-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Shared Card Headers */
+.acct-att-card-header {
+  margin-bottom: 4px;
+}
+
+.acct-att-card-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--cms-text, #171d15);
+  margin: 0 0 3px 0;
+  letter-spacing: -0.2px;
+}
+
+[data-theme="dark"] .acct-att-card-title,
+:root[data-theme="dark"] .acct-att-card-title,
+.dark-theme .acct-att-card-title {
+  color: #f8fafc !important;
+}
+
+.acct-att-card-desc {
+  font-size: 11.5px;
+  color: var(--cms-muted, #7b8275);
+  line-height: 1.35;
+  margin: 0;
+}
+
+[data-theme="dark"] .acct-att-card-desc,
+:root[data-theme="dark"] .acct-att-card-desc,
+.dark-theme .acct-att-card-desc {
+  color: #94a3b8 !important;
+}
+
+/* ==========================================================================
+   Left Card: Attendance & Shift Summary
+   ========================================================================== */
+.acct-att-shift-summary-card {
+  background: var(--cms-card-bg, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e5e9dc) !important;
+  border-radius: 12px !important;
+  padding: 8px 14px !important;
+  box-shadow: var(--cms-shadow, 0 2px 8px rgba(0, 0, 0, 0.04)) !important;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-theme="dark"] .acct-att-shift-summary-card,
+:root[data-theme="dark"] .acct-att-shift-summary-card,
+.dark-theme .acct-att-shift-summary-card {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+}
+
+.acct-att-summary-inner-box {
+  background: var(--cms-surface, #fafbf7);
+  border: 1px solid var(--cms-border, #e7ebd9);
+  border-radius: 10px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: auto 0;
+}
+
+[data-theme="dark"] .acct-att-summary-inner-box,
+:root[data-theme="dark"] .acct-att-summary-inner-box,
+.dark-theme .acct-att-summary-inner-box {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Check Status Row - Centered in middle */
+.acct-att-summary-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.acct-att-summary-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cms-text, #171d15);
+}
+
+[data-theme="dark"] .acct-att-summary-label,
+:root[data-theme="dark"] .acct-att-summary-label,
+.dark-theme .acct-att-summary-label {
+  color: #f1f5f9 !important;
+}
+
+.acct-att-check-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.acct-att-check-status-badge .acct-att-status-bullet {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.acct-att-check-status-badge.not-checked {
+  background: #f0f7ec;
+  color: #2e7d32;
+  border: 1px solid #d3e7cb;
+}
+
+[data-theme="dark"] .acct-att-check-status-badge.not-checked,
+:root[data-theme="dark"] .acct-att-check-status-badge.not-checked,
+.dark-theme .acct-att-check-status-badge.not-checked {
+  background: rgba(46, 125, 50, 0.22) !important;
+  color: #86efac !important;
+  border-color: rgba(46, 125, 50, 0.45) !important;
+}
+
+.acct-att-check-status-badge.in {
+  background: #eaf4dc;
+  color: #3b5a10;
+  border: 1px solid #c4d9a0;
+}
+
+[data-theme="dark"] .acct-att-check-status-badge.in,
+:root[data-theme="dark"] .acct-att-check-status-badge.in,
+.dark-theme .acct-att-check-status-badge.in {
+  background: rgba(59, 90, 16, 0.35) !important;
+  color: #bbf7d0 !important;
+  border-color: rgba(59, 90, 16, 0.6) !important;
+}
+
+.acct-att-check-status-badge.completed {
+  background: var(--cms-primary-soft, #f4f6e6);
+  color: var(--cms-primary, #607718);
+  border: 1px solid rgba(96, 119, 24, 0.3);
+}
+
+[data-theme="dark"] .acct-att-check-status-badge.completed,
+:root[data-theme="dark"] .acct-att-check-status-badge.completed,
+.dark-theme .acct-att-check-status-badge.completed {
+  background: rgba(96, 119, 24, 0.3) !important;
+  color: #d9f99d !important;
+  border-color: rgba(96, 119, 24, 0.5) !important;
+}
+
+/* 3 Metric Columns */
+.acct-att-summary-metric-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 2px 0;
+  text-align: center;
+}
+
+.acct-att-summary-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.acct-att-metric-col-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--cms-muted, #7b8275);
+}
+
+[data-theme="dark"] .acct-att-metric-col-label,
+:root[data-theme="dark"] .acct-att-metric-col-label,
+.dark-theme .acct-att-metric-col-label {
+  color: #94a3b8 !important;
+}
+
+.acct-att-metric-col-val {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--cms-text, #171d15);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[data-theme="dark"] .acct-att-metric-col-val,
+:root[data-theme="dark"] .acct-att-metric-col-val,
+.dark-theme .acct-att-metric-col-val {
+  color: #f8fafc !important;
+}
+
+.acct-att-metric-col-val.highlight {
+  color: var(--cms-primary, #607718) !important;
+}
+
+[data-theme="dark"] .acct-att-metric-col-val.highlight,
+:root[data-theme="dark"] .acct-att-metric-col-val.highlight,
+.dark-theme .acct-att-metric-col-val.highlight {
+  color: #86efac !important;
+}
+
+/* Bottom Shift & Date Info in Left Card */
+.acct-att-summary-foot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--cms-border, #edf0e6);
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+[data-theme="dark"] .acct-att-summary-foot-row,
+:root[data-theme="dark"] .acct-att-summary-foot-row,
+.dark-theme .acct-att-summary-foot-row {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.acct-att-summary-foot-left,
+.acct-att-summary-foot-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.acct-att-foot-label {
+  color: var(--cms-muted, #7b8275);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .acct-att-foot-label,
+:root[data-theme="dark"] .acct-att-foot-label,
+.dark-theme .acct-att-foot-label {
+  color: #94a3b8 !important;
+}
+
+.acct-att-foot-icon {
+  color: var(--cms-primary, #607718);
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .acct-att-foot-icon,
+:root[data-theme="dark"] .acct-att-foot-icon,
+.dark-theme .acct-att-foot-icon {
+  color: #a3e635 !important;
+}
+
+.acct-att-foot-val {
+  color: var(--cms-text, #171d15);
+  font-weight: 700;
+}
+
+[data-theme="dark"] .acct-att-foot-val,
+:root[data-theme="dark"] .acct-att-foot-val,
+.dark-theme .acct-att-foot-val {
+  color: #f1f5f9 !important;
+}
+
+/* ==========================================================================
+   Right Card: Check-In / Check-Out (Compact & Responsive)
+   ========================================================================== */
+.acct-att-punch-action-card {
+  background: var(--cms-card-bg, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e5e9dc) !important;
+  border-radius: 12px !important;
+  padding: 8px 14px !important;
+  box-shadow: var(--cms-shadow, 0 2px 8px rgba(0, 0, 0, 0.04)) !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+[data-theme="dark"] .acct-att-punch-action-card,
+:root[data-theme="dark"] .acct-att-punch-action-card,
+.dark-theme .acct-att-punch-action-card {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Twin Panels Grid */
+.acct-att-punch-twin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  align-items: stretch;
+  flex: 1;
+}
+
+@media (max-width: 480px) {
+  .acct-att-punch-twin-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.acct-att-twin-panel {
+  border-radius: 9px;
+  padding: 4px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+}
+
+.acct-att-twin-panel.checkin-panel {
+  background: #f9fbf7;
+  border: 1px solid #e1ebd7;
+}
+
+[data-theme="dark"] .acct-att-twin-panel.checkin-panel,
+:root[data-theme="dark"] .acct-att-twin-panel.checkin-panel,
+.dark-theme .acct-att-twin-panel.checkin-panel {
+  background: rgba(34, 197, 94, 0.05) !important;
+  border-color: rgba(34, 197, 94, 0.2) !important;
+}
+
+.acct-att-twin-panel.checkout-panel {
+  background: #fdfbf7;
+  border: 1px solid #fae8d4;
+}
+
+[data-theme="dark"] .acct-att-twin-panel.checkout-panel,
+:root[data-theme="dark"] .acct-att-twin-panel.checkout-panel,
+.dark-theme .acct-att-twin-panel.checkout-panel {
+  background: rgba(249, 115, 22, 0.05) !important;
+  border-color: rgba(249, 115, 22, 0.2) !important;
+}
+
+.acct-att-twin-icon-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.acct-att-twin-icon-box.checkin {
+  background: #eaf4dc;
+  color: #3b5a10;
+}
+
+[data-theme="dark"] .acct-att-twin-icon-box.checkin,
+:root[data-theme="dark"] .acct-att-twin-icon-box.checkin,
+.dark-theme .acct-att-twin-icon-box.checkin {
+  background: rgba(34, 197, 94, 0.2) !important;
+  color: #86efac !important;
+}
+
+.acct-att-twin-icon-box.checkout {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+[data-theme="dark"] .acct-att-twin-icon-box.checkout,
+:root[data-theme="dark"] .acct-att-twin-icon-box.checkout,
+.dark-theme .acct-att-twin-icon-box.checkout {
+  background: rgba(249, 115, 22, 0.2) !important;
+  color: #fdba74 !important;
+}
+
+.acct-att-twin-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 1px;
+}
+
+.acct-att-twin-title.checkin {
+  color: #3b5a10;
+}
+
+[data-theme="dark"] .acct-att-twin-title.checkin,
+:root[data-theme="dark"] .acct-att-twin-title.checkin,
+.dark-theme .acct-att-twin-title.checkin {
+  color: #86efac !important;
+}
+
+.acct-att-twin-title.checkout {
+  color: #ea580c;
+}
+
+[data-theme="dark"] .acct-att-twin-title.checkout,
+:root[data-theme="dark"] .acct-att-twin-title.checkout,
+.dark-theme .acct-att-twin-title.checkout {
+  color: #fdba74 !important;
+}
+
+/* Modern Digital Clock & Status Badge */
+.acct-att-digital-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin: 3px auto 4px;
+  width: 100%;
+}
+
+.acct-att-digital-time {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--cms-text, #171d15);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+}
+
+[data-theme="dark"] .acct-att-digital-time,
+:root[data-theme="dark"] .acct-att-digital-time,
+.dark-theme .acct-att-digital-time {
+  color: #f8fafc !important;
+}
+
+.acct-att-digital-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1.5px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.acct-att-digital-status-pill .acct-att-status-dot {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.acct-att-digital-status-pill.pending {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .acct-att-digital-status-pill.pending,
+:root[data-theme="dark"] .acct-att-digital-status-pill.pending,
+.dark-theme .acct-att-digital-status-pill.pending {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #94a3b8 !important;
+  border-color: rgba(148, 163, 184, 0.3) !important;
+}
+
+.acct-att-digital-status-pill.checked {
+  background: #eaf7ec;
+  color: #1e7e34;
+  border: 1px solid #bce6c4;
+}
+
+[data-theme="dark"] .acct-att-digital-status-pill.checked,
+:root[data-theme="dark"] .acct-att-digital-status-pill.checked,
+.dark-theme .acct-att-digital-status-pill.checked {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #86efac !important;
+  border-color: rgba(34, 197, 94, 0.4) !important;
+}
+
+/* Twin Action Pill Buttons - Compact & Responsive */
+.acct-att-punch-pill-btn {
+  width: 100%;
+  max-width: 120px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.acct-att-punch-pill-btn.checkin.active {
+  background: var(--cms-primary, #607718);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(96, 119, 24, 0.35);
+}
+
+.acct-att-punch-pill-btn.checkin.active:hover {
+  background: #506412;
+  transform: translateY(-1px);
+}
+
+.acct-att-punch-pill-btn.checkin.inactive,
+.acct-att-punch-pill-btn.checkin.disabled {
+  background: #f4eedf;
+  color: #5c5242;
+  border: 1px solid #e8dfcb;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+[data-theme="dark"] .acct-att-punch-pill-btn.checkin.inactive,
+[data-theme="dark"] .acct-att-punch-pill-btn.checkin.disabled,
+:root[data-theme="dark"] .acct-att-punch-pill-btn.checkin.inactive,
+:root[data-theme="dark"] .acct-att-punch-pill-btn.checkin.disabled,
+.dark-theme .acct-att-punch-pill-btn.checkin.inactive,
+.dark-theme .acct-att-punch-pill-btn.checkin.disabled {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Check Out Button */
+.acct-att-punch-pill-btn.checkout.inactive {
+  background: #f4eedf;
+  color: #5c5242;
+  border: 1px solid #e8dfcb;
+  cursor: not-allowed;
+}
+
+[data-theme="dark"] .acct-att-punch-pill-btn.checkout.inactive,
+:root[data-theme="dark"] .acct-att-punch-pill-btn.checkout.inactive,
+.dark-theme .acct-att-punch-pill-btn.checkout.inactive {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.acct-att-punch-pill-btn.checkout.active {
+  background: #ea580c;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(234, 88, 12, 0.35);
+  cursor: pointer;
+}
+
+.acct-att-punch-pill-btn.checkout.active:hover {
+  background: #c2410c;
+  transform: translateY(-1px);
+}
+
+.acct-att-punch-foot-hint {
+  font-size: 9.5px;
+  color: var(--cms-muted, #7b8275);
+  margin-top: 4px;
+}
+
+[data-theme="dark"] .acct-att-punch-foot-hint,
+:root[data-theme="dark"] .acct-att-punch-foot-hint,
+.dark-theme .acct-att-punch-foot-hint {
+  color: #94a3b8 !important;
+}
+
+/* ==========================================================================
+   Row 2: 4 Metric Cards (Compact)
+   ========================================================================== */
+.acct-att-metric-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .acct-att-metric-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .acct-att-metric-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.acct-att-metric-kpi-card {
+  background: var(--cms-card-bg, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e5e9dc) !important;
+  border-radius: 10px !important;
+  padding: 6px 12px !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: var(--cms-shadow, 0 2px 8px rgba(0, 0, 0, 0.04)) !important;
+}
+
+[data-theme="dark"] .acct-att-metric-kpi-card,
+:root[data-theme="dark"] .acct-att-metric-kpi-card,
+.dark-theme .acct-att-metric-kpi-card {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+.acct-att-kpi-icon-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.acct-att-kpi-icon-box.green {
+  background: #eaf5e9;
+  color: #2e7d32;
+}
+
+[data-theme="dark"] .acct-att-kpi-icon-box.green,
+:root[data-theme="dark"] .acct-att-kpi-icon-box.green,
+.dark-theme .acct-att-kpi-icon-box.green {
+  background: rgba(34, 197, 94, 0.18) !important;
+  color: #86efac !important;
+}
+
+.acct-att-kpi-icon-box.purple {
+  background: #f3e8ff;
+  color: #9333ea;
+}
+
+[data-theme="dark"] .acct-att-kpi-icon-box.purple,
+:root[data-theme="dark"] .acct-att-kpi-icon-box.purple,
+.dark-theme .acct-att-kpi-icon-box.purple {
+  background: rgba(168, 85, 247, 0.18) !important;
+  color: #d8b4fe !important;
+}
+
+.acct-att-kpi-icon-box.red {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+[data-theme="dark"] .acct-att-kpi-icon-box.red,
+:root[data-theme="dark"] .acct-att-kpi-icon-box.red,
+.dark-theme .acct-att-kpi-icon-box.red {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #fca5a5 !important;
+}
+
+.acct-att-kpi-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.acct-att-kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cms-muted, #7b8275);
+  margin-bottom: 1px;
+}
+
+[data-theme="dark"] .acct-att-kpi-label,
+:root[data-theme="dark"] .acct-att-kpi-label,
+.dark-theme .acct-att-kpi-label {
+  color: #94a3b8 !important;
+}
+
+.acct-att-kpi-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--cms-text, #171d15);
+  line-height: 1.2;
+}
+
+[data-theme="dark"] .acct-att-kpi-value,
+:root[data-theme="dark"] .acct-att-kpi-value,
+.dark-theme .acct-att-kpi-value {
+  color: #f8fafc !important;
+}
+
+.acct-att-kpi-value.green-val {
+  color: #16a34a;
+}
+
+[data-theme="dark"] .acct-att-kpi-value.green-val,
+:root[data-theme="dark"] .acct-att-kpi-value.green-val,
+.dark-theme .acct-att-kpi-value.green-val {
+  color: #4ade80 !important;
+}
+
+.acct-att-kpi-value.red-val {
+  color: #dc2626;
+}
+
+[data-theme="dark"] .acct-att-kpi-value.red-val,
+:root[data-theme="dark"] .acct-att-kpi-value.red-val,
+.dark-theme .acct-att-kpi-value.red-val {
+  color: #f87171 !important;
+}
+
+.acct-att-kpi-sub {
+  font-size: 10.5px;
+  color: var(--cms-muted, #7b8275);
+  margin-top: 1px;
+}
+
+[data-theme="dark"] .acct-att-kpi-sub,
+:root[data-theme="dark"] .acct-att-kpi-sub,
+.dark-theme .acct-att-kpi-sub {
+  color: #94a3b8 !important;
+}
+
+/* ==========================================================================
+   Row 3: Table Card ("This Week" - Compact)
+   ========================================================================== */
+.acct-att-attendance-history-card {
+  background: var(--cms-card-bg, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e5e9dc) !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: var(--cms-shadow, 0 2px 8px rgba(0, 0, 0, 0.04)) !important;
+}
+
+[data-theme="dark"] .acct-att-attendance-history-card,
+:root[data-theme="dark"] .acct-att-attendance-history-card,
+.dark-theme .acct-att-attendance-history-card {
+  background: var(--cms-card-bg, #1a2318) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+}
+
+.acct-att-attendance-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+[data-theme="dark"] .acct-att-attendance-card-head,
+:root[data-theme="dark"] .acct-att-attendance-card-head,
+.dark-theme .acct-att-attendance-card-head {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.acct-att-table-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.acct-att-att-cal-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #e0f2fe;
+  color: #0284c7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .acct-att-att-cal-icon,
+:root[data-theme="dark"] .acct-att-att-cal-icon,
+.dark-theme .acct-att-att-cal-icon {
+  background: rgba(2, 132, 199, 0.2) !important;
+  color: #38bdf8 !important;
+}
+
+.acct-att-table-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--cms-text, #171d15);
+}
+
+[data-theme="dark"] .acct-att-table-title,
+:root[data-theme="dark"] .acct-att-table-title,
+.dark-theme .acct-att-table-title {
+  color: #f8fafc !important;
+}
+
+.acct-att-table-subtitle {
+  font-size: 11px;
+  color: var(--cms-muted, #7b8275);
+  display: block;
+  margin-top: 1px;
+}
+
+[data-theme="dark"] .acct-att-table-subtitle,
+:root[data-theme="dark"] .acct-att-table-subtitle,
+.dark-theme .acct-att-table-subtitle {
+  color: #94a3b8 !important;
+}
+
+/* Filter Tabs - Compact & Responsive */
+.acct-att-att-filter-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #f0f3e6;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px solid #e1e7d2;
+}
+
+[data-theme="dark"] .acct-att-att-filter-tabs,
+:root[data-theme="dark"] .acct-att-att-filter-tabs,
+.dark-theme .acct-att-att-filter-tabs {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.acct-att-att-filter-btn {
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  background: transparent;
+  color: var(--cms-muted, #7b8275);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.acct-att-att-filter-btn:hover {
+  color: var(--cms-text, #171a17);
+}
+
+[data-theme="dark"] .acct-att-att-filter-btn,
+:root[data-theme="dark"] .acct-att-att-filter-btn,
+.dark-theme .acct-att-att-filter-btn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .acct-att-att-filter-btn:hover,
+:root[data-theme="dark"] .acct-att-att-filter-btn:hover,
+.dark-theme .acct-att-att-filter-btn:hover {
+  color: #ffffff !important;
+}
+
+.acct-att-att-filter-btn.active {
+  background: var(--cms-primary, #607718);
+  color: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] .acct-att-att-filter-btn.active,
+:root[data-theme="dark"] .acct-att-att-filter-btn.active,
+.dark-theme .acct-att-att-filter-btn.active {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Attendance Table */
+.acct-att-attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.acct-att-attendance-table th {
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--cms-muted, #7b8275);
+  letter-spacing: 0.4px;
+  border-bottom: 1.5px solid var(--cms-border, #e6e7de);
+  text-align: left;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .acct-att-attendance-table th,
+:root[data-theme="dark"] .acct-att-attendance-table th,
+.dark-theme .acct-att-attendance-table th {
+  color: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.acct-att-attendance-table td {
+  padding: 5px 10px;
+  font-size: 11.5px;
+  border-bottom: 1px solid var(--cms-border, #edf0e6);
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .acct-att-attendance-table td,
+:root[data-theme="dark"] .acct-att-attendance-table td,
+.dark-theme .acct-att-attendance-table td {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.acct-att-attendance-table tbody tr:hover td {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+[data-theme="dark"] .acct-att-attendance-table tbody tr:hover td,
+:root[data-theme="dark"] .acct-att-attendance-table tbody tr:hover td,
+.dark-theme .acct-att-attendance-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.acct-att-att-skeleton-row td {
+  padding: 8px 10px;
+  vertical-align: middle;
+}
+
+.acct-att-day-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-text, #171d15);
+}
+
+[data-theme="dark"] .acct-att-day-name,
+:root[data-theme="dark"] .acct-att-day-name,
+.dark-theme .acct-att-day-name {
+  color: #f8fafc !important;
+}
+
+.acct-att-day-date {
+  font-size: 10.5px;
+  color: var(--cms-muted, #7b8275);
+  margin-top: 1px;
+}
+
+[data-theme="dark"] .acct-att-day-date,
+:root[data-theme="dark"] .acct-att-day-date,
+.dark-theme .acct-att-day-date {
+  color: #94a3b8 !important;
+}
+
+.acct-att-shift-text {
+  font-size: 11.5px;
+  color: var(--cms-muted, #7b8275);
+}
+
+[data-theme="dark"] .acct-att-shift-text,
+:root[data-theme="dark"] .acct-att-shift-text,
+.dark-theme .acct-att-shift-text {
+  color: #a3b190 !important;
+}
+
+.acct-att-time-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cms-text, #171d15);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[data-theme="dark"] .acct-att-time-text,
+:root[data-theme="dark"] .acct-att-time-text,
+.dark-theme .acct-att-time-text {
+  color: #f8fafc !important;
+}
+
+.acct-att-time-text.highlight {
+  color: #16a34a !important;
+}
+
+[data-theme="dark"] .acct-att-time-text.highlight,
+:root[data-theme="dark"] .acct-att-time-text.highlight,
+.dark-theme .acct-att-time-text.highlight {
+  color: #4ade80 !important;
+}
+
+.acct-att-hours-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cms-text, #171d15);
+}
+
+[data-theme="dark"] .acct-att-hours-text,
+:root[data-theme="dark"] .acct-att-hours-text,
+.dark-theme .acct-att-hours-text {
+  color: #f8fafc !important;
+}
+
+/* Status capsule pills */
+.acct-att-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+.acct-att-status-badge.present {
+  background: #eaf7ec;
+  color: #1e7e34;
+  border: 1px solid #bce6c4;
+}
+
+[data-theme="dark"] .acct-att-status-badge.present,
+:root[data-theme="dark"] .acct-att-status-badge.present,
+.dark-theme .acct-att-status-badge.present {
+  background: rgba(34, 197, 94, 0.16) !important;
+  color: #4ade80 !important;
+  border-color: rgba(34, 197, 94, 0.35) !important;
+}
+
+.acct-att-status-badge.absent {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+[data-theme="dark"] .acct-att-status-badge.absent,
+:root[data-theme="dark"] .acct-att-status-badge.absent,
+.dark-theme .acct-att-status-badge.absent {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #f87171 !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
+
+.acct-att-status-badge.late {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+[data-theme="dark"] .acct-att-status-badge.late,
+:root[data-theme="dark"] .acct-att-status-badge.late,
+.dark-theme .acct-att-status-badge.late {
+  background: rgba(245, 158, 11, 0.18) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
+}
+
+.acct-att-status-badge.half-day {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+[data-theme="dark"] .acct-att-status-badge.half-day,
+:root[data-theme="dark"] .acct-att-status-badge.half-day,
+.dark-theme .acct-att-status-badge.half-day {
+  background: rgba(234, 88, 12, 0.18) !important;
+  color: #fb923c !important;
+  border-color: rgba(234, 88, 12, 0.4) !important;
+}
+
+.acct-att-status-badge.leave {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+[data-theme="dark"] .acct-att-status-badge.leave,
+:root[data-theme="dark"] .acct-att-status-badge.leave,
+.dark-theme .acct-att-status-badge.leave {
+  background: rgba(239, 68, 68, 0.18) !important;
+  color: #f87171 !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+.acct-att-status-badge.holiday {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+[data-theme="dark"] .acct-att-status-badge.holiday,
+:root[data-theme="dark"] .acct-att-status-badge.holiday,
+.dark-theme .acct-att-status-badge.holiday {
+  background: rgba(148, 163, 184, 0.16) !important;
+  color: #cbd5e1 !important;
+  border-color: rgba(148, 163, 184, 0.35) !important;
+}
+
+.acct-att-status-badge.weekly-off {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .acct-att-status-badge.weekly-off,
+:root[data-theme="dark"] .acct-att-status-badge.weekly-off,
+.dark-theme .acct-att-status-badge.weekly-off {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #94a3b8 !important;
+  border-color: rgba(148, 163, 184, 0.3) !important;
+}
+
+.acct-att-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.acct-att-holiday-name-subtext {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  line-height: 1.1;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .acct-att-holiday-name-subtext,
+:root[data-theme="dark"] .acct-att-holiday-name-subtext,
+.dark-theme .acct-att-holiday-name-subtext {
+  color: #94a3b8 !important;
+}
+
+.acct-att-status-badge.empty {
+  background: transparent;
+  color: var(--cms-muted, #7b8275);
+  border: 1px dashed var(--cms-border, #d1d5db);
+}
+
+[data-theme="dark"] .acct-att-status-badge.empty,
+:root[data-theme="dark"] .acct-att-status-badge.empty,
+.dark-theme .acct-att-status-badge.empty {
+  background: transparent !important;
+  color: #64748b !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Toast Notifications */
+.acct-att-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #171d15;
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 9999;
+  animation: acctAttendanceToastSlideIn 0.25s ease;
+}
+
+.acct-att-toast.error {
+  background: #dc2626;
+}
+
+@keyframes acctAttendanceToastSlideIn {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ==========================================================================
+   Regularization Button, Badge & Modal Styles
+   ========================================================================== */
+.acct-att-btn-regularize {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.acct-att-btn-regularize:hover {
+  background: #059669;
+  color: #ffffff;
+}
+[data-theme="dark"] .acct-att-btn-regularize {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+[data-theme="dark"] .acct-att-btn-regularize:hover {
+  background: #059669;
+  color: #ffffff;
+}
+
+.acct-att-reg-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: capitalize;
+  display: inline-block;
+}
+.acct-att-reg-badge.pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.acct-att-reg-badge.approved {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.acct-att-reg-badge.rejected {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+/* Modal Backdrop */
+.acct-att-reg-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 16px;
+  animation: acctAttendanceModalFadeIn 0.2s ease;
+}
+
+.acct-att-reg-modal {
+  background: var(--cms-card-bg, #ffffff);
+  border: 1px solid var(--cms-border, #e5e7eb);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  animation: acctAttendanceModalSlideUp 0.25s ease;
+}
+[data-theme="dark"] .acct-att-reg-modal {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.acct-att-reg-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--cms-border, #e5e7eb);
+}
+[data-theme="dark"] .acct-att-reg-modal-header {
+  border-bottom-color: #334155;
+}
+
+.acct-att-reg-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--cms-text, #171d15);
+}
+[data-theme="dark"] .acct-att-reg-modal-title {
+  color: #f8fafc;
+}
+
+.acct-att-reg-modal-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--cms-muted, #64748b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+}
+.acct-att-reg-modal-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--cms-text, #171d15);
+}
+
+.acct-att-reg-modal-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.acct-att-reg-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.acct-att-reg-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cms-text, #374151);
+}
+[data-theme="dark"] .acct-att-reg-label {
+  color: #cbd5e1;
+}
+
+.acct-att-reg-input,
+.acct-att-reg-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--cms-border, #d1d5db);
+  border-radius: 8px;
+  font-size: 13px;
+  background: var(--cms-input-bg, #ffffff);
+  color: var(--cms-text, #111827);
+  box-sizing: border-box;
+  font-family: inherit;
+}
+[data-theme="dark"] .acct-att-reg-input,
+[data-theme="dark"] .acct-att-reg-textarea {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.acct-att-reg-quick-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.acct-att-reg-quick-pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #4f46e5;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.acct-att-reg-quick-pill:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+[data-theme="dark"] .acct-att-reg-quick-pill {
+  background: rgba(99, 102, 241, 0.16);
+  color: #818cf8;
+}
+
+.acct-att-reg-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--cms-border, #e5e7eb);
+  background: rgba(0, 0, 0, 0.015);
+}
+[data-theme="dark"] .acct-att-reg-modal-footer {
+  border-top-color: #334155;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.acct-att-reg-cancel-btn {
+  padding: 7px 14px;
+  border: 1px solid var(--cms-border, #d1d5db);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cms-text, #374151);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+[data-theme="dark"] .acct-att-reg-cancel-btn {
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.acct-att-reg-submit-btn {
+  padding: 7px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #059669;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease;
+}
+.acct-att-reg-submit-btn:hover {
+  background: #047857;
+}
+.acct-att-reg-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@keyframes acctAttendanceModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes acctAttendanceModalSlideUp {
+  from { transform: translateY(14px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+
+.acct-att-accountant-attendance-page { min-width: 0; }
+.acct-att-accountant-attendance-page > *, .acct-att-attendance-top-grid > * { min-width: 0; }
+.acct-att-accountant-attendance-page .cms-table-wrap { overflow-x: auto; }
+.acct-att-accountant-attendance-page .acct-att-attendance-table { min-width: 700px; width: 100%; }
+.acct-att-attendance-error { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid var(--cms-border); border-radius: 10px; background: var(--cms-card-bg); font-size: 13px; }
+.acct-att-attendance-error span { flex: 1; }
+.acct-att-attendance-error button { cursor: pointer; color: var(--cms-primary); background: var(--cms-surface); border: 1px solid var(--cms-border); border-radius: 6px; padding: 4px 10px; }
+@media (max-width: 480px) { .acct-att-summary-status-row, .acct-att-att-filter-tabs { flex-wrap: wrap; } .acct-att-reg-modal { max-width: calc(100vw - 24px); } }
+
+.acct-att-spin { animation: acctAttendanceSpin 1s linear infinite; }
+@keyframes acctAttendanceSpin { to { transform: rotate(360deg); } }

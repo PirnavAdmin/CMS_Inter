@@ -348,8 +348,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                 { "certificates", "Certificates" },
                 { "reports-analytics", "Reports & Analytics" },
                 { "hostel-management", "Hostel Management" },
-                { "library", "Library" },
-                { "placement", "Placement" },
                 { "settings", "Settings" },
                 { "roles-permissions", "Roles & Permissions" },
                 { "inventory-management", "Inventory Management" },

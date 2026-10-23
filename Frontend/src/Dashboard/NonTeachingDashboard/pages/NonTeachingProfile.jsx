@@ -21,9 +21,9 @@ export default function NonTeachingProfile() {
   const [profile, setProfile] = useState(() => nonTeachingService.getProfile());
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
-    mobile: profile.mobile || "",
-    emergencyContact: profile.emergencyContact || "",
-    address: profile.address || "",
+    mobile: profile.mobile && profile.mobile !== "--" ? profile.mobile : "",
+    emergencyContact: profile.emergencyContact && profile.emergencyContact !== "--" ? profile.emergencyContact : "",
+    address: profile.address && profile.address !== "--" ? profile.address : "",
   });
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -40,7 +40,11 @@ export default function NonTeachingProfile() {
     showToast("Contact details updated successfully.");
   };
 
-  const initials = (profile.displayName || profile.name || "NTS")
+  const cleanName = (profile.displayName || profile.name || "Non-Teaching Staff")
+    .replace(/\bDemo\s*/gi, "")
+    .trim() || "Non-Teaching Staff";
+
+  const initials = cleanName
     .split(" ")
     .map((p) => p[0])
     .join("")
@@ -78,7 +82,7 @@ export default function NonTeachingProfile() {
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--nts-text)" }}>
-                  {profile.displayName || profile.name}
+                  {cleanName}
                 </h2>
                 <span className="nts-status-badge present">
                   <ShieldCheck size={12} /> {profile.status || "Active Employee"}

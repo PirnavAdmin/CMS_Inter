@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
 import {
   ArrowLeft,

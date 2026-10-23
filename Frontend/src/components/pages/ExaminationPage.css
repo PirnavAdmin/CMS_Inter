@@ -365,8 +365,8 @@
 
 .exam-list-table th:nth-child(10),
 .exam-list-table td:nth-child(10) {
-  width: 130px;
-  min-width: 125px;
+  width: 175px;
+  min-width: 175px;
 }
 
 /* Actions */
@@ -588,6 +588,25 @@
   align-items: center;
   justify-content: center;
   border-radius: 6px;
+}
+
+.exam-list-table .cms-action-btn.warning {
+  color: var(--cms-amber, #b7791f);
+  background: var(--cms-amber-soft, #fdf3e0);
+  border-color: #fed7aa;
+}
+
+.exam-list-table .cms-action-btn.warning:hover:not(:disabled) {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+
+.exam-list-table .cms-action-btn.is-disabled,
+.exam-list-table .cms-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .exam-list-pagination {

@@ -263,3 +263,11 @@
   }
 }
 @media (max-width: 620px) { .accountant-shell .accountant-chart-row { grid-template-columns: 88px minmax(0, 1fr) auto; } }
+
+/* Payroll records pagination. */
+.acct-payroll-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--cms-border); font-size: 12px; color: var(--cms-muted); }
+.acct-payroll-pagination nav { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.acct-payroll-pagination .sp-btn { min-width: 32px; justify-content: center; padding: 6px 10px; }
+.acct-payroll-pagination .sp-btn:disabled { opacity: .5; cursor: not-allowed; }
+.acct-payroll-pagination .sp-btn:focus-visible { outline: 2px solid var(--cms-primary); outline-offset: 2px; }
+@media (max-width: 620px) { .acct-payroll-pagination { align-items: flex-start; flex-direction: column; } .acct-payroll-pagination nav { justify-content: flex-start; } }
