@@ -802,6 +802,10 @@ export default function HostelPage() {
         });
       }
 
+      const isServerOffline = !blocksRes.value && !roomsRes.value && !catsRes.value;
+      if (isServerOffline) {
+        setApiError("Backend server is offline or unreachable. Please ensure the backend server is running.");
+      }
       blocksRef.current = uniqueBlocks;
       setBlocks(uniqueBlocks);
       if (uniqueBlocks.length > 0) {
@@ -9015,10 +9019,26 @@ export default function HostelPage() {
         </div>
 
             {/* Active Tab Screen */}
-            {activeMajorTab === "dashboard" && renderDashboard()}
-            {activeMajorTab === "setup" && renderSetupMasters()}
-            {activeMajorTab === "students" && renderStudentManagement()}
-            {activeMajorTab === "reports" && renderReportsSection()}
+            {isLoading ? (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 320, padding: 40 }}>
+                <div style={{ width: 40, height: 40, border: "3px solid var(--cms-border)", borderTopColor: "var(--cms-primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' }} />
+                <p style={{ marginTop: 14, color: "var(--cms-muted)", fontSize: 13.5, fontWeight: 600 }}>Loading Hostel records from server...</p>
+              </div>
+            ) : (
+              <>
+                {apiError && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 8, background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", marginBottom: 16 }}>
+                    <AlertCircle size={18} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{apiError}</span>
+                  </div>
+                )}
+                {activeMajorTab === "dashboard" && renderDashboard()}
+                {activeMajorTab === "setup" && renderSetupMasters()}
+                {activeMajorTab === "students" && renderStudentManagement()}
+                {activeMajorTab === "reports" && renderReportsSection()}
+              </>
+            )}
 
         {/* Global Modals */}
         {modal.isOpen && modal.type === "block" && (
@@ -11082,12 +11102,7 @@ function RoomModal({
       }
     });
 
-    if (list.length === 0) {
-      list.push(
-        { id: "1", hostelId: 1, name: "Boys Hostel Block-A", code: "BH-A", floors: 3, type: "Boys" },
-        { id: "2", hostelId: 2, name: "Girls Hostel Block-B", code: "GH-B", floors: 3, type: "Girls" }
-      );
-    }
+
 
     return list;
   }, [blocks, rooms, allocations]);

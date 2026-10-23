@@ -145,18 +145,20 @@ apiClient.interceptors.request.use(
       // ignore storage errors
     }
 
-    // Only route through mock adapter if explicitly configured or using a synthetic mock token
+    // Only route through mock adapter if explicitly configured, mock token, or backend is known offline
     const isExplicitMockToken = Boolean(
       token &&
         (token.startsWith("mock-") ||
           token.startsWith("demo-") ||
           token.startsWith("non-teaching-") ||
           token.startsWith("warden-") ||
-          token.startsWith("parent-"))
+          token.startsWith("parent-") ||
+          token.startsWith("exam-cell-"))
     );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
+    const isBackendOfflineKnown = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
 
-    if ((isExplicitMockToken || isExplicitMockForced) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
+    if ((isExplicitMockToken || isExplicitMockForced || isBackendOfflineKnown) && !/\/api\/(Auth|Admin)\/login/i.test(config.url || "")) {
       config.adapter = handleMockApiRequest;
     }
 
@@ -191,6 +193,9 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => {
     finishApiLoading(response.config);
+    if (!response.config?._isMockFallback && typeof window !== "undefined") {
+      try { window.localStorage.removeItem("cms_backend_offline"); } catch {}
+    }
     if (!isHtmlResponse(response.data)) return response;
     return Promise.reject(new Error("Backend returned HTML instead of JSON. Check API base URL or proxy."));
   },
@@ -205,17 +210,39 @@ apiClient.interceptors.response.use(
 
     const errText = `${error?.message || ""} ${typeof error?.response?.data === "string" ? error.response.data : JSON.stringify(error?.response?.data || "")}`;
     const isNgrokOffline = /ERR_NGROK|is offline/i.test(errText);
+    const isProxyUnreachable =
+      error?.response?.status === 502 ||
+      error?.response?.status === 503 ||
+      error?.response?.status === 504 ||
+      error?.response?.data?.message === "Backend proxy unreachable";
+    const isNetworkError = error?.message === "Network Error" || error?.code === "ERR_NETWORK" || !error?.response;
+    const isBackendUnavailable = isNgrokOffline || isProxyUnreachable || isNetworkError;
 
     const token = getStoredAccessToken();
-    const isExplicitMockToken = Boolean(token && (token.startsWith("mock-") || token.startsWith("demo-")));
+    const isExplicitMockToken = Boolean(
+      token &&
+        (token.startsWith("mock-") ||
+          token.startsWith("demo-") ||
+          token.startsWith("non-teaching-") ||
+          token.startsWith("warden-") ||
+          token.startsWith("parent-") ||
+          token.startsWith("exam-cell-"))
+    );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
 
-    // Automatic fallback to mock adapter ONLY for explicit mock sessions or tests
-    if ((isExplicitMockToken || isExplicitMockForced) && originalRequest && !originalRequest._isMockFallback) {
+    // Automatic fallback to mock adapter when explicit mock sessions, forced mock, or backend is unavailable
+    if ((isExplicitMockToken || isExplicitMockForced || isBackendUnavailable) && originalRequest && !originalRequest._isMockFallback) {
       originalRequest._isMockFallback = true;
       try {
         const mockRes = await handleMockApiRequest(originalRequest);
-        if (mockRes) return mockRes;
+        if (mockRes) {
+          try {
+            if (typeof window !== "undefined" && isBackendUnavailable) {
+              window.localStorage.setItem("cms_backend_offline", "true");
+            }
+          } catch (_sErr) {}
+          return mockRes;
+        }
       } catch (_e) {
         // ignore mock adapter fallback errors
       }
