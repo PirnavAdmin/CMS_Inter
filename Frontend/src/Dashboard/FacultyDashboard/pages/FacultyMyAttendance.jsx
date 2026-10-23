@@ -158,24 +158,20 @@ export default function FacultyMyAttendance() {
   const syncGlobalPunchState = useCallback(
     (status, inTime, outTime) => {
       const setPunchState = contextRef.current?.setPunchState;
+      const isPunchedIn = status === "punched_in";
+      const next = {
+        isPunchedIn,
+        inTime: inTime,
+        outTime: outTime,
+        hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunchedIn) : "--",
+      };
       if (typeof setPunchState === "function") {
-        const isPunchedIn = status === "punched_in";
-        setPunchState((prev) => {
-          if (
-            prev?.isPunchedIn === isPunchedIn &&
-            prev?.inTime === inTime &&
-            prev?.outTime === outTime
-          ) {
-            return prev;
-          }
-          return {
-            isPunchedIn,
-            inTime: inTime,
-            outTime: outTime,
-            hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunchedIn) : "--",
-          };
-        });
+        setPunchState(next);
       }
+      try {
+        localStorage.setItem("staff_punch_state", JSON.stringify(next));
+        window.dispatchEvent(new Event("storage"));
+      } catch {}
     },
     []
   );

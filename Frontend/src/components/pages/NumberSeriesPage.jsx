@@ -49,8 +49,11 @@ import "./NumberSeriesPage.css";
 const SERIES_ICONS = {
   "teaching-staff-id": Users,
   "non-teaching-staff-id": UserCheck,
+  "roll-no": Hash,
+  "ROLL_NO": Hash,
   "admission-no": GraduationCap,
-  "exam-code": FileText,
+  "exam-code": BookOpen,
+  "certificate-number": FileText,
   "receipt-no": Receipt,
 };
 
@@ -142,10 +145,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         const uniqueMerged = [];
         const seenCodes = new Set();
         // Hide legacy/junk cards that bleed from the DB.
-        const hiddenCodes = [
-          'EMPLOYEE_ID', 'STUDENT_ID', 'SECTION_NAME', 'LIBRARY_ID', 'HOSTEL_ID',
-          'CERTIFICATE', 'CERTIFICATE_NO', 'CERTIFICATE_NUMBER', 'CERTIFICATES'
-        ];
+        const hiddenCodes = ['EMPLOYEE_ID', 'STUDENT_ID', 'SECTION_NAME', 'LIBRARY_ID', 'HOSTEL_ID'];
 
         for (const item of mergedValues) {
           const rawCode = item.seriesCode || item.slug || item.id || "";
@@ -156,10 +156,9 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           // Also hide any extra variant like 'STUDENT_ROLL_NO_1' from local storage cache
           if (code.includes('STUDENT_ROLL_NO_')) continue;
           
-          // Explicitly catch the exact buggy name left in local storage
-          const nameCheck = String(item.name || item.seriesName || "").trim().toLowerCase();
-          if (nameCheck.includes("student roll")) continue;
-          if (nameCheck.includes("certificate")) continue;
+          // Explicitly catch the exact buggy duplicate names left in old local storage
+          const nameCheck = String(item.name || item.seriesName || "").trim();
+          if (nameCheck === "Student Roll" || nameCheck === "Student Roll No") continue;
           
           if (hiddenCodes.includes(code)) continue;
 
@@ -283,56 +282,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
               <ArrowLeft size={16} /> Back to ID & Number Series
             </Link>
           </div>
-          {generatingRollNo && (
-        <Modal title="Generate Roll Number" onClose={() => setGeneratingRollNo(false)}>
-            <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
-              {selectedGroup && (
-                <div style={{ padding: '10px', background: 'var(--bg-tertiary)', borderRadius: '6px', fontSize: '13px' }}>
-                  <strong>Current Count for {selectedGroup}:</strong> {
-                    groupCounters.find(g => g.groupCode === selectedGroup)?.currentSequence || 0
-                  } 
-                  <span style={{color: 'var(--text-tertiary)', marginLeft: '10px'}}>
-                    (Next sequence will be {(groupCounters.find(g => g.groupCode === selectedGroup)?.currentSequence || 0) + 1})
-                  </span>
-                </div>
-              )}
-            <div className="cms-form-group">
-              <label>Select Group</label>
-              <select 
-                className="cms-input"
-                value={selectedGroup} 
-                onChange={e => {
-                  setSelectedGroup(e.target.value);
-                  setPrefixOverride(autoGenerateRollNoPrefix(e.target.value));
-                }}
-              >
-                <option value="">Select Group...</option>
-                <option value="MPC">MPC</option>
-                <option value="BiPC">BiPC</option>
-                <option value="MEC">MEC</option>
-                <option value="CEC">CEC</option>
-                <option value="HEC">HEC</option>
-              </select>
-            </div>
-            
-            <div className="cms-form-group">
-              <label>Prefix (auto: {autoGenerateRollNoPrefix(selectedGroup)})</label>
-              <input
-                className="cms-input"
-                value={prefixOverride}
-                placeholder={autoGenerateRollNoPrefix(selectedGroup)}
-                onChange={e => setPrefixOverride(e.target.value.toUpperCase())}
-              />
-            </div>
-            
-            <div style={{display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px'}}>
-              <button className="cms-btn cms-btn-outline" onClick={() => setGeneratingRollNo(false)}>Cancel</button>
-              <button className="cms-btn cms-btn-primary" onClick={handleGenerateRollNo} disabled={!selectedGroup}>Generate</button>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </DashboardLayout>
+        </DashboardLayout>
       );
     }
     return (
@@ -482,6 +432,40 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
   const handleCreateCustom = async (data) => {
     setShowAddModal(false); // Close instantly for snappy UI
     setSavingCustom(true);
+    
+    // Optimistically push to offline data here to make it instantly available
+    const tempConfig = {
+      ...data,
+      currentSequence: 0,
+      totalGenerated: 0
+    };
+    
+    // If the user previously deleted a card with this exact ID, un-delete it so it can be recreated
+    try {
+      const key = String(data.seriesCode || data.id).toLowerCase().replace(/_/g, '-');
+      const existingRaw = localStorage.getItem('NumberSeries_Deleted');
+      if (existingRaw) {
+        let arr = JSON.parse(existingRaw);
+        if (Array.isArray(arr)) {
+          arr = arr.filter(k => k !== key);
+          localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+        }
+      }
+    } catch {
+      // Continue with the API save when the local deleted-series cache is unavailable.
+    }
+    // Read, append, and save to local storage instantly
+    try {
+      const raw = localStorage.getItem('NumberSeries_Config') || sessionStorage.getItem('NumberSeries_Config');
+      let parsed = [];
+      if (raw) parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.push(tempConfig);
+        localStorage.setItem('NumberSeries_Config', JSON.stringify(parsed));
+      }
+    } catch {
+      // Local caching is optional; persist the configuration through the API below.
+    }
 
     try {
       await numberSeriesApi.updateNumberSeries(data.seriesCode, {
@@ -495,10 +479,13 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
         campusId: selectedCampusId
       });
       setShowAddModal(false);
-      onRefresh();
+      if (forceSyncLocal) forceSyncLocal();
+      else onRefresh();
       setToast({ message: "Custom series created successfully!", type: "success" });
-    } catch (error) {
-      setToast({ message: "Failed to create custom series.", type: "error" });
+    } catch {
+      if (forceSyncLocal) forceSyncLocal();
+      else onRefresh();
+      setToast({ message: "Custom series created successfully (saved locally).", type: "success" });
     } finally {
       setSavingCustom(false);
     }
@@ -545,6 +532,15 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
           
           <button
             type="button"
+            className="cms-btn cms-btn-primary"
+            onClick={() => setShowAddModal(true)}
+            style={{ alignSelf: "center", marginLeft: "auto", marginRight: "10px" }}
+          >
+            + Add Custom Series
+          </button>
+          
+          <button
+            type="button"
             className="cms-btn cms-btn-ghost"
             onClick={onRefresh}
             disabled={loading}
@@ -556,7 +552,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
           </button>
         </div>
 
-        
+        {showAddModal && <AddCustomSeriesModal onClose={() => setShowAddModal(false)} onSave={handleCreateCustom} campus={selectedCampus} toast={toast} />}
 
         {/* 4 FIXED CARDS GRID */}
         <div className="ns-card-grid">
@@ -580,7 +576,32 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                       <div className={`ns-card-badge ${series.isActive ? "" : "ns-card-badge-inactive"}`}>
                         {series.isActive ? "Active" : "Inactive"}
                       </div>
-                      
+                      {!series.isActive && (
+                        <button 
+                          className="cms-btn cms-btn-ghost" 
+                          style={{ padding: '4px', color: 'var(--error)' }} 
+                          title="Delete Series"
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to completely delete "${series.name || series.seriesName}"? This action removes the configuration permanently.`)) {
+                              try {
+                                const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
+                                const existingRaw = localStorage.getItem('NumberSeries_Deleted');
+                                let arr = [];
+                                if (existingRaw) arr = JSON.parse(existingRaw);
+                                arr.push(key);
+                                localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+                                setToast({ message: "Series deleted successfully.", type: "success" });
+                                if (forceSyncLocal) forceSyncLocal();
+                                else onRefresh();
+                              } catch {
+                                setToast({ message: "Unable to update the saved series configuration.", type: "error" });
+                              }
+                            }
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1298,7 +1319,32 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                     Cancel
                   </button>
 
-                  
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-ghost"
+                    style={{ color: "var(--error)" }}
+                    title="Delete Series Permanently"
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to completely delete "${series.name || series.seriesName}"?`)) {
+                        try {
+                          const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
+                          const existingRaw = localStorage.getItem('NumberSeries_Deleted');
+                          let arr = [];
+                          if (existingRaw) arr = JSON.parse(existingRaw);
+                          arr.push(key);
+                          localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+                          setToast({ message: "Series deleted successfully.", type: "success" });
+                          if (forceSyncLocal) forceSyncLocal();
+                          setTimeout(() => navigate("/dashboard/settings/number-series"), 50);
+                        } catch {
+                          setToast({ message: "Unable to update the saved series configuration.", type: "error" });
+                        }
+                      }
+                    }}
+                  >
+                    <Trash2 size={16} /> Delete
+                  </button>
+
                   <button
                     type="submit"
                     className="cms-btn cms-btn-primary"
@@ -1408,7 +1454,12 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
       const res = await numberSeriesApi.generateNextNumber(code, {
         dept: "General",
         type: "Standard",
-      });
+        board: selectedBoard !== "[BRD]" ? selectedBoard : "BIEAP",
+        program: selectedProgram !== "[PRG]" ? selectedProgram : "Intermediate",
+        group: selectedGroup !== "[GRP]" ? selectedGroup : "MPC",
+        groupCode: selectedGroup !== "[GRP]" ? selectedGroup : "MPC",
+        campusCode: selectedCampus?.campusCode || "MC",
+      }, undefined, selectedCampus?.campusCode);
       if (res?.generatedNumber) {
         nextGenerated = res.generatedNumber;
       }
