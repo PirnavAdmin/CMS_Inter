@@ -52,37 +52,35 @@ export function CampusProvider({ children }) {
     return null;
   });
 
-  // Keep principal assigned campuses updated on auth change or fetch from profile if missing
+  // Keep assigned campuses updated on auth change or fetch from profile if missing
   useEffect(() => {
     const u = getAuthUser();
     if (!u) return;
 
-    const isPrincipal =
-      String(u.role || "").trim().toLowerCase() === "principal" ||
-      String(u.designation || "").trim().toLowerCase() === "principal";
+    const roleStr = String(u.role || "").trim().toLowerCase();
+    const isAdmin = roleStr === "admin" || roleStr === "superadmin" || roleStr === "administrator";
+    if (isAdmin) return; // Admins have full access to all campuses
 
-    if (isPrincipal) {
-      if (Array.isArray(u.assignedCampusIds) && u.assignedCampusIds.length > 0) {
-        setPrincipalAssignedCampusIds(u.assignedCampusIds.map(Number));
-      } else {
-        const targetStaffId = u.staffId || u.id;
-        if (targetStaffId) {
-          apiClient.get(apiEndpoints.faculty.getById(targetStaffId))
-            .then((res) => {
-              const data = res?.data?.data || res?.data;
-              if (data) {
-                const ids = Array.isArray(data.assignedCampusIds) && data.assignedCampusIds.length > 0
-                  ? data.assignedCampusIds.map(Number)
-                  : (data.campusId ? [Number(data.campusId)] : []);
-                if (ids.length > 0) {
-                  setPrincipalAssignedCampusIds(ids);
-                  const token = getAuthToken();
-                  saveAuthSession({ token, user: { ...u, assignedCampusIds: ids, assignedBoardIds: data.assignedBoardIds || [] }, role: u.role }, true);
-                }
+    if (Array.isArray(u.assignedCampusIds) && u.assignedCampusIds.length > 0) {
+      setPrincipalAssignedCampusIds(u.assignedCampusIds.map(Number));
+    } else {
+      const targetStaffId = u.staffId || u.id;
+      if (targetStaffId) {
+        apiClient.get(apiEndpoints.faculty.getById(targetStaffId))
+          .then((res) => {
+            const data = res?.data?.data || res?.data;
+            if (data) {
+              const ids = Array.isArray(data.assignedCampusIds) && data.assignedCampusIds.length > 0
+                ? data.assignedCampusIds.map(Number)
+                : (data.campusId ? [Number(data.campusId)] : []);
+              if (ids.length > 0) {
+                setPrincipalAssignedCampusIds(ids);
+                const token = getAuthToken();
+                saveAuthSession({ token, user: { ...u, assignedCampusIds: ids, assignedBoardIds: data.assignedBoardIds || [] }, role: u.role }, true);
               }
-            })
-            .catch(() => {});
-        }
+            }
+          })
+          .catch(() => {});
       }
     }
   }, []);
@@ -146,14 +144,19 @@ export function CampusProvider({ children }) {
     });
 
     const u = getAuthUser();
-    const isPrincipal =
-      u &&
-      (String(u.role || "").trim().toLowerCase() === "principal" ||
-       String(u.designation || "").trim().toLowerCase() === "principal");
+    const roleStr = String(u?.role || "").trim().toLowerCase();
+    const isAdmin = roleStr === "admin" || roleStr === "superadmin" || roleStr === "administrator";
 
-    const assignedIds = principalAssignedCampusIds || (Array.isArray(u?.assignedCampusIds) && u.assignedCampusIds.length > 0 ? u.assignedCampusIds.map(Number) : null);
+    if (isAdmin) {
+      return allActive;
+    }
 
-    if (isPrincipal && Array.isArray(assignedIds) && assignedIds.length > 0) {
+    const assignedIds = principalAssignedCampusIds || 
+      (Array.isArray(u?.assignedCampusIds) && u.assignedCampusIds.length > 0 
+        ? u.assignedCampusIds.map(Number) 
+        : (u?.campusId ? [Number(u.campusId)] : null));
+
+    if (Array.isArray(assignedIds) && assignedIds.length > 0) {
       const allowedSet = new Set(assignedIds);
       const filtered = allActive.filter((c) => {
         const cId = Number(c.id ?? c.campusId);
@@ -162,6 +165,12 @@ export function CampusProvider({ children }) {
       if (filtered.length > 0) {
         return filtered;
       }
+    }
+
+    if (u?.campusId) {
+      const cId = Number(u.campusId);
+      const filtered = allActive.filter((c) => Number(c.id ?? c.campusId) === cId);
+      if (filtered.length > 0) return filtered;
     }
 
     return allActive;

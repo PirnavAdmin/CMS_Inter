@@ -7,6 +7,7 @@ import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
 import navbarBoardIcon from "@/assets/navbar-3d/board.png";
 import navbarAcademicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
+import TransparentAvatar from "@/components/common/TransparentAvatar.jsx";
 import { useFaculty } from "../FacultyContext.jsx";
 import { facultyMockData } from "../data/facultyMockData.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -421,6 +422,7 @@ export default function FacultyNavbar() {
   const yearDisplayName = activeAcademicYear?.name || activeAcademicYear?.label || activeAcademicYear?.code || "2026-2027";
 
   const [photoOverride, setPhotoOverride] = useState(null);
+  const [navPhotoError, setNavPhotoError] = useState(false);
 
   useEffect(() => {
     const handler = (e) => {
@@ -432,14 +434,21 @@ export default function FacultyNavbar() {
 
   const activePhoto = useMemo(() => {
     if (photoOverride !== null) return photoOverride;
+    const staffId = profileData?.id || profileData?.facultyId;
+    const cachedStaffPhoto = typeof window !== "undefined" && staffId ? localStorage.getItem(`staff_profile_${staffId}_photo`) : null;
     return (
       profileData?.photoUrl ||
+      profileData?.photoPath ||
+      profileData?.profilePhoto ||
+      cachedStaffPhoto ||
       (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
-      (profileData?.photoPath
-        ? `/api/v1/staff/photo/${profileData.id || profileData.facultyId}?t=${Date.now()}`
-        : null)
+      null
     );
-  }, [photoOverride, profileData?.photoUrl, profileData?.photoPath, profileData?.id, profileData?.facultyId]);
+  }, [photoOverride, profileData?.photoUrl, profileData?.photoPath, profileData?.profilePhoto, profileData?.id, profileData?.facultyId]);
+
+  useEffect(() => {
+    setNavPhotoError(false);
+  }, [activePhoto]);
 
   return (
     <header className="cms-topbar">
@@ -799,22 +808,17 @@ export default function FacultyNavbar() {
         {/* Profile Avatar & Dropdown */}
         <div style={{ position: "relative" }} ref={profileDropRef}>
           <button className="cms-profile-btn" onClick={() => setProfileDropOpen((p) => !p)}>
-            {activePhoto ? (
+            {activePhoto && !navPhotoError ? (
               <img 
                 src={activePhoto} 
                 alt="Profile" 
                 className="cms-avatar" 
                 style={{ objectFit: 'cover' }} 
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  const fb = e.currentTarget.parentElement?.querySelector('.cms-avatar-fallback');
-                  if (fb) fb.style.display = 'flex';
-                }} 
+                onError={() => setNavPhotoError(true)} 
               />
-            ) : null}
-            <div className="cms-avatar cms-avatar-fallback" style={{ display: activePhoto ? 'none' : 'flex' }}>
-              {initials}
-            </div>
+            ) : (
+              <TransparentAvatar size={34} className="cms-avatar" />
+            )}
 
             <div className="cms-profile-meta">
               <strong>
@@ -831,25 +835,17 @@ export default function FacultyNavbar() {
             <div className="cms-dropdown" onClick={() => setProfileDropOpen(false)}>
               <div className="cms-dropdown-head">
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  {activePhoto ? (
+                  {activePhoto && !navPhotoError ? (
                     <img 
                       src={activePhoto} 
                       alt="Profile" 
                       className="cms-avatar" 
                       style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: "50%", flexShrink: 0 }} 
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        const fb = e.currentTarget.parentElement?.querySelector('.cms-dropdown-avatar-fallback');
-                        if (fb) fb.style.display = 'flex';
-                      }} 
+                      onError={() => setNavPhotoError(true)} 
                     />
-                  ) : null}
-                  <div
-                    className="cms-avatar cms-dropdown-avatar-fallback"
-                    style={{ width: 36, height: 36, fontSize: 13, display: activePhoto ? 'none' : 'flex', flexShrink: 0 }}
-                  >
-                    {initials}
-                  </div>
+                  ) : (
+                    <TransparentAvatar size={36} className="cms-avatar" />
+                  )}
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {profileData.fullName ||

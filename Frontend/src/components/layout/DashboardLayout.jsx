@@ -4,10 +4,12 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
-  ReceiptIndianRupee, Boxes,
+  ReceiptIndianRupee, Boxes, KeyRound,
 } from "lucide-react";
+import ChangePasswordModal from "@/Dashboard/ExamCellDashboard/components/ChangePasswordModal.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
+import TransparentAvatar from "@/components/common/TransparentAvatar.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useSidebar } from "@/hooks/useSidebar.js";
@@ -574,6 +576,7 @@ export default function DashboardLayout({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [campusOpen, setCampusOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
@@ -831,6 +834,26 @@ export default function DashboardLayout({
   
   const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
   const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
+
+  const [adminPhotoError, setAdminPhotoError] = useState(false);
+  const activeAdminPhoto = useMemo(() => {
+    let savedAdminProfile = null;
+    try {
+      savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
+    } catch {}
+    return (
+      user?.photoUrl ||
+      user?.photoPath ||
+      user?.photo ||
+      savedAdminProfile?.photo ||
+      (typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
+      null
+    );
+  }, [user]);
+
+  useEffect(() => {
+    setAdminPhotoError(false);
+  }, [activeAdminPhoto]);
 
   const rememberSidebarScroll = () => {
     const scrollTop = sidebarNavRef.current?.scrollTop || 0;
@@ -1414,7 +1437,17 @@ export default function DashboardLayout({
               </button>
             )}
             <button className="cms-profile-btn" onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}>
-              <span className="cms-avatar">{initials(profileName)}</span>
+              {activeAdminPhoto && !adminPhotoError ? (
+                <img
+                  src={activeAdminPhoto}
+                  alt={profileName}
+                  className="cms-avatar"
+                  style={{ objectFit: 'cover' }}
+                  onError={() => setAdminPhotoError(true)}
+                />
+              ) : (
+                <TransparentAvatar size={34} className="cms-avatar" />
+              )}
               <span className="cms-profile-meta"><strong>{profileName}</strong><span>{profileRole}</span></span>
             </button>
 
@@ -1456,6 +1489,19 @@ export default function DashboardLayout({
                 >
                   <User size={15} /> My Profile
                 </button>
+                {isExamCell ? (
+                  <button
+                    type="button"
+                    className="cms-dropdown-item"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      closeOnMobile();
+                      setChangePasswordOpen(true);
+                    }}
+                  >
+                    <KeyRound size={15} /> Change Password
+                  </button>
+                ) : null}
                 {showSettingsAction && resolvedSettingsPath ? <button
                   type="button"
                   className="cms-dropdown-item"
@@ -1496,6 +1542,13 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+
+      {changePasswordOpen && (
+        <ChangePasswordModal
+          isOpen={changePasswordOpen}
+          onClose={() => setChangePasswordOpen(false)}
+        />
+      )}
     </div>
   );
 }

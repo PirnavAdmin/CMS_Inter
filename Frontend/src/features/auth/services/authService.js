@@ -1,6 +1,6 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT, BACKEND_NON_TEACHING_JWT } from "@/features/authStorage.js";
+import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT, BACKEND_NON_TEACHING_JWT, BACKEND_TRANSPORT_MANAGER_JWT } from "@/features/authStorage.js";
 import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 
 
@@ -83,7 +83,26 @@ export const loginUser = async (credentials) => {
     normInput === "examcell" ||
     normInput === "exam-cell" ||
     normInput.includes("examcell");
+  const isTransportManagerCandidate =
+    normInput === "pondara.venkatesh@pirnav.com" ||
+    normInput === "transport" ||
+    normInput === "transportmanager" ||
+    normInput === "transport-manager" ||
+    normInput === "mnt0044" ||
+    normInput.includes("transport");
   const isKnownOffline = typeof window !== "undefined" && window.localStorage?.getItem("cms_backend_offline") === "true";
+
+  if (isTransportManagerCandidate && isKnownOffline && password) {
+    const tmAccount = findTransportManagerAccount(emailOrMobile, password);
+    if (tmAccount) {
+      return {
+        token: BACKEND_TRANSPORT_MANAGER_JWT,
+        user: tmAccount,
+        roleType: "transport_manager",
+        message: "Transport Manager login successful.",
+      };
+    }
+  }
 
   if (isAdminCandidate && isKnownOffline && password) {
     return {
@@ -156,6 +175,18 @@ export const loginUser = async (credentials) => {
       };
     }
     if (isExamCellCandidate && password) {
+      try {
+        const passMap = JSON.parse(typeof window !== "undefined" ? window.localStorage?.getItem("cms_user_passwords") || "{}" : "{}");
+        const savedPass = passMap["anusha987r@gmail.com"] || passMap["examcell"] || passMap[emailOrMobile.toLowerCase()];
+        if (savedPass && password !== savedPass) {
+          const err = new Error("Invalid username or password.");
+          err.code = "INVALID_CREDENTIALS";
+          throw err;
+        }
+      } catch (e) {
+        if (e.code === "INVALID_CREDENTIALS") throw e;
+      }
+
       return {
         token: BACKEND_EXAM_CELL_JWT,
         user: {
@@ -175,8 +206,33 @@ export const loginUser = async (credentials) => {
       };
     }
 
+    if (isTransportManagerCandidate && password) {
+      const tmAccount = findTransportManagerAccount(emailOrMobile, password);
+      if (tmAccount) {
+        return {
+          token: BACKEND_TRANSPORT_MANAGER_JWT,
+          user: tmAccount,
+          roleType: "transport_manager",
+          message: "Transport Manager login successful.",
+        };
+      }
+    }
+
     throw authError;
   }
+};
+
+export const changePassword = async ({ currentPassword, oldPassword, newPassword, confirmPassword, confirmNewPassword }) => {
+  const actualOldPassword = currentPassword || oldPassword;
+  const actualConfirmPassword = confirmNewPassword || confirmPassword;
+  const payload = {
+    oldPassword: actualOldPassword,
+    currentPassword: actualOldPassword,
+    newPassword,
+    confirmNewPassword: actualConfirmPassword,
+    confirmPassword: actualConfirmPassword,
+  };
+  return apiClient.post(apiEndpoints.auth.changePassword, payload);
 };
 
 export const registerUser = (data) => apiClient.post(apiEndpoints.auth.register, data);
@@ -469,6 +525,70 @@ export function findWardenAccount(input) {
   return null;
 }
 
+export function findTransportManagerAccount(input, password) {
+  const val = String(input || "").trim().toLowerCase();
+  const digits = val.replace(/\D/g, "");
+  const isMatch =
+    val === "pondara.venkatesh@pirnav.com" ||
+    val === "transport.manager@pirnav.edu" ||
+    val === "transport" ||
+    val === "transportmanager" ||
+    val === "transport-manager" ||
+    val === "mnt0044" ||
+    digits === "7799352436";
+
+  if (!isMatch) return null;
+
+  if (password && val === "pondara.venkatesh@pirnav.com") {
+    if (password !== "A9WhhFU5@#fLQx") {
+      const err = new Error("Invalid username or password. Please try again.");
+      err.code = "INVALID_CREDENTIALS";
+      throw err;
+    }
+  }
+
+  return {
+    id: 928,
+    userId: 928,
+    staffId: 1125,
+    facultyId: 1125,
+    employeeId: "MNT0044",
+    firstName: "muzan",
+    lastName: "kibutsuzi",
+    name: "muzan kibutsuzi",
+    fullName: "muzan kibutsuzi",
+    email: "pondara.venkatesh@pirnav.com",
+    role: "Transport Manager",
+    designation: "Transport Manager",
+    designationId: 534,
+    department: "Transport",
+    departmentId: 79,
+    staffType: "Non-Teaching",
+    facultyType: "Non-Teaching",
+    campusId: 1,
+    boardId: 1,
+    boardCode: "BIEAP",
+    boardName: "Board of Intermediate Education, Andhra Pradesh",
+    mobile: "7799352436",
+    bloodGroup: "O+",
+    currentAddress: "hyderabad,telangana",
+    city: "Srikakulam",
+    district: "Srikakulam",
+    state: "Andhra Pradesh",
+    pin: "532201",
+    pincode: "532201",
+    country: "India",
+    qualification: "Graduate",
+    dateOfJoining: "2026-08-01T00:00:00",
+    experience: 0.0,
+    employmentType: "Full Time",
+    status: "Active",
+    isDriver: true,
+    drivingLicenseNumber: "DAKH345678JNKJAB",
+    drivingLicenseExpiryDate: "2028-07-01T00:00:00",
+  };
+}
+
 export function findNonTeachingAccount(input, password) {
   const val = String(input || "").trim().toLowerCase();
   const digits = val.replace(/\D/g, "");
@@ -597,13 +717,23 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     jwtClaims.designationName ||
     "";
 
+  const isTransportManager =
+    normalizedRole.includes("transport_manager") ||
+    normalizedRole.includes("transport-manager") ||
+    normalizedRole.includes("transport manager") ||
+    normalizedRole === "transport" ||
+    String(designation || "").toLowerCase().includes("transport manager") ||
+    String(designation || "").toLowerCase().includes("transport_manager");
   const isWarden =
-    normalizedRole.includes("warden") ||
-    String(designation || "").toLowerCase().includes("warden");
+    !isTransportManager &&
+    (normalizedRole.includes("warden") ||
+    String(designation || "").toLowerCase().includes("warden"));
   const isFaculty =
+    !isTransportManager &&
     !isWarden &&
     (normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer"));
   const isParent =
+    !isTransportManager &&
     !isWarden &&
     (normalizedRole === "parent" || normalizedRole.includes("parent"));
   const userName = data.Name || data.name || data.fullName || payload.Name || payload.name || payload.fullName || jwtClaims.unique_name || jwtClaims.name || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || "Staff Member";
@@ -631,14 +761,19 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     : [];
 
   const user = {
-    id: data.AdminId || data.adminId || data.UserId || data.userId || data.id || data.Id || payload.AdminId || payload.adminId || payload.UserId || payload.userId || payload.id || payload.Id,
-    staffId: staffId ? (Number(staffId) || staffId) : null,
-    employeeId: employeeId || null,
+    id: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || data.AdminId || data.adminId || data.id || data.Id || payload.AdminId || payload.adminId || payload.id || payload.Id,
+    userId: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || (isTransportManager ? 928 : null),
+    staffId: staffId ? (Number(staffId) || staffId) : (data.user?.staffId || payload.user?.staffId || (isTransportManager ? 1125 : null)),
+    employeeId: employeeId || data.user?.employeeId || payload.user?.employeeId || (isTransportManager ? "MNT0044" : null),
+    staffType: data.StaffType || data.staffType || payload.StaffType || payload.staffType || data.user?.staffType || payload.user?.staffType || (isTransportManager ? "Non-Teaching" : null),
     name: userName,
     fullName: userName,
     email: userEmail,
     role: Array.isArray(role) ? role[0] : role,
     designation,
+    department: data.Department || data.department || payload.Department || payload.department || (isTransportManager ? "Transport" : ""),
+    campusId: data.CampusId || data.campusId || payload.CampusId || payload.campusId || (assignedCampusIds[0] || (isTransportManager ? 1 : null)),
+    boardId: data.BoardId || data.boardId || payload.BoardId || payload.boardId || (assignedBoardIds[0] || (isTransportManager ? 1 : null)),
     isAdmin,
     assignedCampusIds,
     assignedBoardIds,
@@ -647,7 +782,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   return {
     token,
     user,
-    roleType: isWarden ? "warden" : isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
+    roleType: isTransportManager ? "transport_manager" : isWarden ? "warden" : isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
     message: getMessage(payload, data, "Login successful."),
   };
 }

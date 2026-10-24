@@ -33,3 +33,6 @@ Backend/src/CollegeManagement.API/wwwroot/uploads/staff-photos/*
 # Screenshots & Reference Images
 hostel screens/
 
+# Scratch & Local Development Agents
+scratch/
+.agents/

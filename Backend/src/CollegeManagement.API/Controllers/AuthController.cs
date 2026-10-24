@@ -91,6 +91,8 @@ namespace CollegeManagement.API.Controllers
             return Ok(new
             {
                 Status = result.Status,
+                Success = result.Status,
+                success = result.Status,
                 Message = result.Message,
                 AccessToken = result.AccessToken,
                 Token = result.AccessToken,
@@ -101,22 +103,64 @@ namespace CollegeManagement.API.Controllers
                 StudentId = result.StudentId,
                 AdminId = result.AdminId,
                 Role = result.Role,
+                Roles = new[] { result.Role },
+                roles = new[] { result.Role },
                 StaffType = result.StaffType,
                 Designation = result.Designation,
                 EmployeeId = result.EmployeeId,
                 AssignedCampusIds = result.AssignedCampusIds,
                 AssignedBoardIds = result.AssignedBoardIds,
+                PhotoPath = result.PhotoPath,
+                PhotoUrl = result.PhotoUrl,
                 User = new
                 {
                     staffId = result.StaffId,
                     userId = result.UserId,
                     role = result.Role,
+                    roles = new[] { result.Role },
                     staffType = result.StaffType,
                     designation = result.Designation,
                     employeeId = result.EmployeeId,
                     email = result.Email,
                     name = result.Name,
+                    photoPath = result.PhotoPath,
+                    photoUrl = result.PhotoUrl,
+                    photo = result.PhotoUrl,
                     isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                },
+                Data = new
+                {
+                    accessToken = result.AccessToken,
+                    user = new
+                    {
+                        userId = result.UserId,
+                        staffId = result.StaffId,
+                        employeeId = result.EmployeeId,
+                        name = result.Name,
+                        email = result.Email,
+                        role = result.Role,
+                        roles = new[] { result.Role },
+                        staffType = result.StaffType,
+                        designation = result.Designation,
+                        isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                    }
+                },
+                data = new
+                {
+                    accessToken = result.AccessToken,
+                    user = new
+                    {
+                        userId = result.UserId,
+                        staffId = result.StaffId,
+                        employeeId = result.EmployeeId,
+                        name = result.Name,
+                        email = result.Email,
+                        role = result.Role,
+                        roles = new[] { result.Role },
+                        staffType = result.StaffType,
+                        designation = result.Designation,
+                        isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                    }
                 }
             });
         }
@@ -161,6 +205,8 @@ namespace CollegeManagement.API.Controllers
             return Ok(new
             {
                 Status = result.Status,
+                Success = result.Status,
+                success = result.Status,
                 Message = result.Message,
                 AccessToken = result.AccessToken,
                 Token = result.AccessToken,
@@ -171,6 +217,8 @@ namespace CollegeManagement.API.Controllers
                 StudentId = result.StudentId,
                 AdminId = result.AdminId,
                 Role = result.Role,
+                Roles = new[] { result.Role },
+                roles = new[] { result.Role },
                 StaffType = result.StaffType,
                 Designation = result.Designation,
                 EmployeeId = result.EmployeeId,
@@ -181,12 +229,47 @@ namespace CollegeManagement.API.Controllers
                     staffId = result.StaffId,
                     userId = result.UserId,
                     role = result.Role,
+                    roles = new[] { result.Role },
                     staffType = result.StaffType,
                     designation = result.Designation,
                     employeeId = result.EmployeeId,
                     email = result.Email,
                     name = result.Name,
                     isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                },
+                Data = new
+                {
+                    accessToken = result.AccessToken,
+                    user = new
+                    {
+                        userId = result.UserId,
+                        staffId = result.StaffId,
+                        employeeId = result.EmployeeId,
+                        name = result.Name,
+                        email = result.Email,
+                        role = result.Role,
+                        roles = new[] { result.Role },
+                        staffType = result.StaffType,
+                        designation = result.Designation,
+                        isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                    }
+                },
+                data = new
+                {
+                    accessToken = result.AccessToken,
+                    user = new
+                    {
+                        userId = result.UserId,
+                        staffId = result.StaffId,
+                        employeeId = result.EmployeeId,
+                        name = result.Name,
+                        email = result.Email,
+                        role = result.Role,
+                        roles = new[] { result.Role },
+                        staffType = result.StaffType,
+                        designation = result.Designation,
+                        isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                    }
                 }
             });
         }

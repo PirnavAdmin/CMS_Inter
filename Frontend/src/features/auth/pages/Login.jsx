@@ -7,7 +7,7 @@ import { clearPasswordResetContext, loginUser } from "@/features/auth/services/a
 import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import { clearAuthSession, saveAuthSession } from "@/features/authStorage.js";
 import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
-import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
+import { isWardenRole, isTransportManagerRole } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../campusImages.js";
 import { getCampusContent } from "../../campusContent.js";
 
@@ -112,17 +112,24 @@ export default function Login() {
       }
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
+      const isTransportManager =
+        isTransportManagerRole(result.user?.role, result.user) ||
+        result.roleType === "transport_manager" ||
+        String(result.user?.role || "").toLowerCase().includes("transport") ||
+        String(result.user?.designation || "").toLowerCase().includes("transport");
       const isWarden =
-        isWardenRole(result.user?.role, result.user) ||
-        result.roleType === "warden" ||
-        String(result.user?.role || "").toLowerCase().includes("warden") ||
-        String(result.user?.designation || "").toLowerCase().includes("warden");
+        !isTransportManager &&
+        (isWardenRole(result.user?.role, result.user) ||
+          result.roleType === "warden" ||
+          String(result.user?.role || "").toLowerCase().includes("warden") ||
+          String(result.user?.designation || "").toLowerCase().includes("warden"));
       const userRole = String(result.user?.role || "").toLowerCase();
       const isInventory = userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper";
-      const isExamCell = !isWarden && (isExamCellRole(userRole) || result.roleType === "examcell");
-      const isPrincipal = !isWarden && (userRole === "principal" || userRole.includes("principal"));
+      const isExamCell = !isWarden && !isTransportManager && (isExamCellRole(userRole) || result.roleType === "examcell");
+      const isPrincipal = !isWarden && !isTransportManager && (userRole === "principal" || userRole.includes("principal"));
       const isNonTeaching =
         !isWarden &&
+        !isTransportManager &&
         !isExamCell &&
         (userRole === "non_teaching_staff" ||
           userRole === "non-teaching" ||
@@ -132,6 +139,7 @@ export default function Login() {
           String(result.user?.staffType || "").toLowerCase() === "non-teaching");
       const isFacultyOrStaff =
         !isWarden &&
+        !isTransportManager &&
         !isNonTeaching &&
         (userRole === "faculty" ||
         userRole === "teacher" ||
@@ -143,14 +151,18 @@ export default function Login() {
         userRole.includes("lecturer"));
       const isParent =
         !isWarden &&
+        !isTransportManager &&
         (userRole === "parent" ||
         userRole.includes("parent") ||
         result.roleType === "parent");
       const isAccountant =
         !isWarden &&
+        !isTransportManager &&
         (userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier");
 
-      if (isWarden) {
+      if (isTransportManager) {
+        navigate("/transport-manager/overview", { replace: true });
+      } else if (isWarden) {
         navigate("/warden-dashboard", { replace: true });
       } else if (isInventory) {
         navigate("/inventory-dashboard", { replace: true });

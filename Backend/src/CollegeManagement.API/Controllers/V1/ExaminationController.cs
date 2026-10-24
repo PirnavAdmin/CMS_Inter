@@ -528,10 +528,13 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<FacultyExamDutyDto>>> GetFacultyExamDuties(
             [FromQuery] int? staffId = null,
-            [FromQuery] string? status = null)
+            [FromQuery] string? status = null,
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? academicYearId = null,
+            [FromQuery] int? boardId = null)
         {
-            _logger.LogInformation("Fetching exam duties for Staff ID: {StaffId}, Status: {Status}", staffId, status);
-            var result = await _examinationService.GetFacultyExamDutiesAsync(staffId, status);
+            _logger.LogInformation("Fetching exam duties for Staff ID: {StaffId}, Status: {Status}, CampusId: {CampusId}", staffId, status, campusId);
+            var result = await _examinationService.GetFacultyExamDutiesAsync(staffId, status, campusId, academicYearId, boardId);
             return Ok(result);
         }
 

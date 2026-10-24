@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
   LogIn,
@@ -122,8 +122,8 @@ export default function TransportManagerMyAttendance() {
   const [historyData, setHistoryData] = useState({
     logs: [],
     metrics: {
-      workingDays: "6 Days",
-      workingDaysSub: "Current Week (Mon–Sat)",
+      workingDays: "0 Days",
+      workingDaysSub: "Current Period",
       presentDays: "0 Days",
       presentDaysSub: "Biometric verified",
       leaves: "0 Days",
@@ -157,6 +157,29 @@ export default function TransportManagerMyAttendance() {
     [context]
   );
 
+  const contextRef = useRef(context);
+  useEffect(() => {
+    contextRef.current = context;
+  }, [context]);
+
+  const syncGlobalPunchState = useCallback((status, inTime, outTime) => {
+    const setPunchState = contextRef.current?.setPunchState;
+    const isPunchedIn = status === "punched_in";
+    const next = {
+      isPunchedIn,
+      inTime,
+      outTime,
+      hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunchedIn) : "--",
+    };
+    if (typeof setPunchState === "function") {
+      setPunchState(next);
+    }
+    try {
+      localStorage.setItem("staff_punch_state", JSON.stringify(next));
+      window.dispatchEvent(new Event("storage"));
+    } catch {}
+  }, []);
+
   const fetchTodayStatus = useCallback(async () => {
     try {
       setLoadingToday(true);
@@ -166,6 +189,7 @@ export default function TransportManagerMyAttendance() {
         const normalized = normalizeTodayData(payload);
         if (normalized) {
           setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
         }
       }
     } catch (err) {
@@ -173,7 +197,7 @@ export default function TransportManagerMyAttendance() {
     } finally {
       setLoadingToday(false);
     }
-  }, []);
+  }, [syncGlobalPunchState]);
 
   const fetchHistory = useCallback(async (period) => {
     try {
@@ -201,8 +225,8 @@ export default function TransportManagerMyAttendance() {
             holidayName: l.holidayName || l.HolidayName || null,
           })),
           metrics: {
-            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "6 Days",
-            workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "Current Week (Mon–Sat)",
+            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "0 Days",
+            workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "Current Period",
             presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || "0 Days",
             presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "Biometric verified",
             leaves: rawMetrics.leaves || rawMetrics.Leaves || "0 Days",
@@ -211,9 +235,36 @@ export default function TransportManagerMyAttendance() {
             absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "No absences",
           },
         });
+      } else {
+        setHistoryData({
+          logs: [],
+          metrics: {
+            workingDays: "0 Days",
+            workingDaysSub: "Current Period",
+            presentDays: "0 Days",
+            presentDaysSub: "Biometric verified",
+            leaves: "0 Days",
+            leavesSub: "No leaves applied",
+            absentDays: "0 Days",
+            absentDaysSub: "No absences",
+          },
+        });
       }
     } catch (err) {
-      console.warn("Using fallback attendance history", err);
+      console.warn("Could not fetch attendance history", err);
+      setHistoryData({
+        logs: [],
+        metrics: {
+          workingDays: "0 Days",
+          workingDaysSub: "Current Period",
+          presentDays: "0 Days",
+          presentDaysSub: "Biometric verified",
+          leaves: "0 Days",
+          leavesSub: "No leaves applied",
+          absentDays: "0 Days",
+          absentDaysSub: "No absences",
+        },
+      });
     } finally {
       setLoadingHistory(false);
     }
@@ -241,7 +292,10 @@ export default function TransportManagerMyAttendance() {
       const payload = res?.data || res?.Data;
       if (isSuccess && payload) {
         const normalized = normalizeTodayData(payload);
-        if (normalized) setTodayData(normalized);
+        if (normalized) {
+          setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
+        }
         notify(res?.message || res?.Message || `Checked In Successfully at ${payload.inTime || payload.InTime}`, "success");
         fetchHistory(activeFilter);
       } else {
@@ -252,6 +306,7 @@ export default function TransportManagerMyAttendance() {
           inTime: nowTime,
           todayStatus: "Present",
         }));
+        syncGlobalPunchState("punched_in", nowTime, null);
         notify(`Checked In Successfully at ${nowTime}`, "success");
       }
     } catch (err) {
@@ -262,6 +317,7 @@ export default function TransportManagerMyAttendance() {
         inTime: nowTime,
         todayStatus: "Present",
       }));
+      syncGlobalPunchState("punched_in", nowTime, null);
       notify(`Checked In at ${nowTime}`, "success");
     } finally {
       setActionLoading(false);
@@ -282,7 +338,10 @@ export default function TransportManagerMyAttendance() {
       const payload = res?.data || res?.Data;
       if (isSuccess && payload) {
         const normalized = normalizeTodayData(payload);
-        if (normalized) setTodayData(normalized);
+        if (normalized) {
+          setTodayData(normalized);
+          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
+        }
         notify(res?.message || res?.Message || `Punched Out Successfully at ${payload.outTime || payload.OutTime}`, "success");
         fetchHistory(activeFilter);
       } else {
@@ -292,6 +351,7 @@ export default function TransportManagerMyAttendance() {
           status: "punched_out",
           outTime: nowTime,
         }));
+        syncGlobalPunchState("punched_out", todayData.inTime, nowTime);
         notify(`Punched Out Successfully at ${nowTime}`, "success");
       }
     } catch (err) {
@@ -301,6 +361,7 @@ export default function TransportManagerMyAttendance() {
         status: "punched_out",
         outTime: nowTime,
       }));
+      syncGlobalPunchState("punched_out", todayData.inTime, nowTime);
       notify(`Punched Out at ${nowTime}`, "success");
     } finally {
       setActionLoading(false);

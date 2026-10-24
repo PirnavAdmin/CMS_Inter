@@ -59,6 +59,8 @@ function StudentResultDetails({ examination }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+  const downloadLock = useRef(false);
   const examId = examination.examinationId ?? examination.examId ?? examination.id;
 
   useEffect(() => {
@@ -93,18 +95,20 @@ function StudentResultDetails({ examination }) {
   const published = resultState(examination, memo) === "Published";
 
   const downloadMemo = async () => {
-    if (!student?.studentId || downloading || !published || !memo || !subjects.length) return;
+    if (!student?.studentId || downloadLock.current || !published || !memo || !subjects.length) return;
+    downloadLock.current = true;
+    setDownloadError("");
     setDownloading(true);
     try {
       await downloadStudentMarksMemo({ student, examination, memo, subjects, obtained, maximum, percentage });
-    } catch (requestError) { setError(getApiErrorMessage(requestError)); }
-    finally { setDownloading(false); }
+    } catch (requestError) { setDownloadError(getApiErrorMessage(requestError)); }
+    finally { downloadLock.current = false; setDownloading(false); }
   };
 
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
   return <div className="sp-page">
     <StudentPageHeader title="Results" subtitle="Published academic results only." action={<button className="sp-btn" type="button" onClick={downloadMemo} disabled={!published || downloading}><Download size={16}/>{downloading ? " Downloading..." : " Download Marks Memo"}</button>}/>
-    {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
+    {profileError || error || downloadError ? <div className="sp-api-state is-error" role="alert">{profileError || error || downloadError}</div> : null}
     {!error && !published ? <StudentEmptyState icon={Award} title={resultState(examination, memo)} text="Published marks are available only after the college releases your result."/> : null}
     {published ? <>
       <div className="sp-summary-grid five"><StudentSummaryCard icon={Sigma} label="Total Marks" value={maximum}/><StudentSummaryCard icon={CheckCircle2} label="Obtained" value={obtained} tone="blue"/><StudentSummaryCard icon={Percent} label="Percentage" value={percentage == null ? "—" : `${percentage}%`} tone="orange"/><StudentSummaryCard icon={Award} label="Grade" value={read(memo, "overallGrade", "OverallGrade", "grade", "Grade") || "—"} tone="purple"/><StudentSummaryCard icon={CheckCircle2} label="Result" value={read(memo, "finalResult", "FinalResult", "resultStatus", "ResultStatus", "result", "Result") || "—"} tone="green"/></div>
@@ -144,11 +148,11 @@ function StudentResultsList({ renderDetails }) {
         const results = [];
         for (let offset = 0; offset < unique.length && active; offset += 5) {
           results.push(...await Promise.all(unique.slice(offset, offset + 5).map(async (exam) => {
-            if (["Upcoming Examination", "Examination in Progress"].includes(resultState(exam, null))) return { exam, memo: null };
+            if (published(null, exam) === false || ["Upcoming Examination", "Examination in Progress"].includes(resultState(exam, null))) return { exam, memo: null };
             try {
               const memo = validateStudentMemo(await getStudentResult(student, examKey(exam)), student, exam);
-              return { exam, memo };
-            } catch (requestError) { return { exam, memo: null, error: getApiErrorMessage(requestError) }; }
+              return { exam, memo, notPublished: memo == null };
+            } catch (requestError) { if (isUnpublishedResultError(requestError)) return { exam, memo: null, notPublished: true }; return { exam, memo: null, error: getApiErrorMessage(requestError) }; }
           })));
         }
         if (active) setEntries(results);
@@ -158,7 +162,7 @@ function StudentResultsList({ renderDetails }) {
     if (!profileLoading) load();
     return () => { active = false; };
   }, [profileLoading, student, refresh]);
-  const classified = useMemo(() => entries.filter((entry) => isCompletedExamination(entry.exam, now)).map((entry) => ({ ...entry, state: entry.error ? "Unable to load result" : resultState(entry.exam, entry.memo, now) })), [entries, now]);
+  const classified = useMemo(() => entries.filter((entry) => isCompletedExamination(entry.exam, now)).map((entry) => ({ ...entry, state: entry.error ? "Unable to load result" : entry.notPublished ? "Not Published" : resultState(entry.exam, entry.memo, now) })), [entries, now]);
   const visible = classified.filter(({ exam, state }) => (!filter || state === filter)
     && `${resultRead(exam, "examName", "examinationName", "name") || ""} ${resultRead(exam, "examCode", "code") || ""}`.toLowerCase().includes(search.trim().toLowerCase())).sort(compareResultEntries);
   const pages = Math.max(1, Math.ceil(visible.length / pageSize));
@@ -211,6 +215,14 @@ function StudentResultsList({ renderDetails }) {
     </StudentCard> : null}
     {selected ? <StudentResultModal onClose={() => setSelectedId("")}>{renderDetails(selected.exam)}</StudentResultModal> : null}
   </div>;
+}
+
+export function isUnpublishedResultError(error) {
+  const status = error?.response?.status;
+  if ([401, 403].includes(status) || !error?.response) return false;
+  const data = error.response.data;
+  const message = data?.message ?? data?.Message ?? '';
+  return /^(?:student result not found|marks memo is not available or has not been published yet|results? (?:is |are )?not (?:yet )?published)[.!]?$/i.test(String(message).trim());
 }
 
 const resultRead = (row, ...keys) => keys.flatMap((key) => [key, key[0].toUpperCase() + key.slice(1)])
@@ -280,7 +292,7 @@ function resultState(exam, memo, now = Date.now()) {
   if (!completed && start != null && start <= now) return "Examination in Progress";
   if (!completed) return "Examination status unavailable";
   const publication = published(memo, exam);
-  if (publication !== true) return "Not yet published";
+  if (publication !== true) return "Not Published";
   const subjects = subjectRows(memo);
   if (absent(memo) || (subjects.length > 0 && subjects.every(absent))) return "Not Appeared for Exam";
   if (!memo || !subjects.length) return "Published result unavailable";
