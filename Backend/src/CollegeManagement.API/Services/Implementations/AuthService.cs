@@ -248,7 +248,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
                     staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType FROM Staffs WHERE Id = @Id", 
+                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType, PhotoPath FROM Staffs WHERE Id = @Id", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
@@ -304,7 +304,9 @@ namespace CollegeManagement.API.Services.Implementations
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
                     StaffType = staffInfo?.StaffType ?? (user.StudentId.HasValue ? "Student" : (user.AdminId.HasValue ? "Admin" : "Non-Teaching")),
                     AssignedCampusIds = assignedCampusIds,
-                    AssignedBoardIds = assignedBoardIds
+                    AssignedBoardIds = assignedBoardIds,
+                    PhotoPath = (string?)staffInfo?.PhotoPath,
+                    PhotoUrl = (string?)staffInfo?.PhotoPath
                 };
             }
 

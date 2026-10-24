@@ -12,17 +12,59 @@ const STAFF_TYPE_OPTIONS = [
   { label: "Non-Teaching / Admin", value: "2" },
 ];
 
+export const formatTime12h = (timeStr) => {
+  if (!timeStr || timeStr === "--") return "--:--";
+  const cleaned = String(timeStr).trim();
+  const match = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (!match) return cleaned;
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2].padStart(2, "0");
+  const ampmExisting = match[3]?.toUpperCase();
+  if (ampmExisting) return `${String(hours).padStart(2, "0")}:${minutes} ${ampmExisting}`;
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+  return `${String(hours).padStart(2, "0")}:${minutes} ${ampm}`;
+};
+
+export const getCheckoutCutoff = (timeStr, graceMinutes = 15) => {
+  if (!timeStr) return "--:--";
+  const match = String(timeStr).match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "--:--";
+  let hours = parseInt(match[1], 10);
+  let mins = parseInt(match[2], 10) + Number(graceMinutes || 0);
+  hours += Math.floor(mins / 60);
+  mins = mins % 60;
+  hours = hours % 24;
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  return `${String(displayHours).padStart(2, "0")}:${String(mins).padStart(2, "0")} ${ampm}`;
+};
+
+export const getThresholdWithGrace = (lateThreshold, graceMinutes = 15) => {
+  if (!lateThreshold) return "--:--";
+  const match = String(lateThreshold).match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "--:--";
+  let hours = parseInt(match[1], 10);
+  let mins = parseInt(match[2], 10) + Number(graceMinutes || 0);
+  hours += Math.floor(mins / 60);
+  mins = mins % 60;
+  hours = hours % 24;
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  return `${String(displayHours).padStart(2, "0")}:${String(mins).padStart(2, "0")} ${ampm}`;
+};
+
 const INITIAL_FORM = {
-  configName: "",
-  staffType: "",
+  configName: "Teaching Staff Shift (09:00 AM – 04:30 PM)",
+  staffType: "1",
   departmentId: "",
   workStartTime: "09:00",
-  workEndTime: "17:00",
+  workEndTime: "16:30",
   lateThreshold: "09:15",
   earlyCheckoutThreshold: "16:30",
-  gracePeriodMinutes: 5,
+  gracePeriodMinutes: 15,
   minWorkingHours: 7.0,
-  description: "",
+  description: "Official Shift: 09:00 AM – 04:30 PM (Late arrival after 09:15 AM, 15m checkout window up to 04:45 PM).",
   isActive: true,
 };
 
@@ -54,6 +96,36 @@ export default function AttendanceTimingConfigPage() {
     fetchConfigs();
   }, []);
 
+  const applyPreset = (type) => {
+    if (type === "teaching") {
+      setForm((prev) => ({
+        ...prev,
+        configName: "Teaching Staff Shift (09:00 AM – 04:30 PM)",
+        staffType: "1",
+        workStartTime: "09:00",
+        workEndTime: "16:30",
+        lateThreshold: "09:15",
+        earlyCheckoutThreshold: "16:30",
+        gracePeriodMinutes: 15,
+        minWorkingHours: 7.0,
+        description: "Official Teaching Shift: 09:00 AM – 04:30 PM (Late arrival after 09:15 AM, 15m checkout window up to 04:45 PM).",
+      }));
+    } else if (type === "nonteaching") {
+      setForm((prev) => ({
+        ...prev,
+        configName: "Non-Teaching Staff Shift (08:30 AM – 05:30 PM)",
+        staffType: "2",
+        workStartTime: "08:30",
+        workEndTime: "17:30",
+        lateThreshold: "08:45",
+        earlyCheckoutThreshold: "17:30",
+        gracePeriodMinutes: 15,
+        minWorkingHours: 8.5,
+        description: "Official Non-Teaching Shift: 08:30 AM – 05:30 PM (Late arrival after 08:45 AM, 15m checkout window up to 05:45 PM).",
+      }));
+    }
+  };
+
   const openCreateModal = () => {
     setEditingId(null);
     setForm(INITIAL_FORM);
@@ -67,10 +139,10 @@ export default function AttendanceTimingConfigPage() {
       staffType: config.staffType != null ? String(config.staffType) : "",
       departmentId: config.departmentId ? String(config.departmentId) : "",
       workStartTime: config.workStartTime || "09:00",
-      workEndTime: config.workEndTime || "17:00",
+      workEndTime: config.workEndTime || "16:30",
       lateThreshold: config.lateThreshold || "09:15",
       earlyCheckoutThreshold: config.earlyCheckoutThreshold || "16:30",
-      gracePeriodMinutes: config.gracePeriodMinutes ?? 5,
+      gracePeriodMinutes: config.gracePeriodMinutes ?? 15,
       minWorkingHours: config.minWorkingHours ?? 7.0,
       description: config.description || "",
       isActive: config.isActive ?? true,
@@ -137,7 +209,7 @@ export default function AttendanceTimingConfigPage() {
   return (
     <DashboardLayout
       title="Attendance Timing Configuration"
-      subtitle="Define daily work shift timings, late-arrival thresholds, and early-checkout detection rules for staff."
+      subtitle="Define daily 12-hour work shift timings, late-arrival thresholds, and early/missed checkout rules for staff."
       breadcrumb={["Settings", "Attendance Timing"]}
       actions={
         <div style={{ display: "flex", gap: "10px" }}>
@@ -157,9 +229,10 @@ export default function AttendanceTimingConfigPage() {
             <Clock size={28} />
           </div>
           <div className="att-timing-banner-text">
-            <h4>Automated Status Derivation</h4>
+            <h4>Daily Attendance Timing Rules &amp; Grace Windows</h4>
             <p>
-              When staff check-in times are recorded, arrivals after the <strong>Late Threshold</strong> (+ Grace Period) are automatically flagged as <strong>Late</strong>. Check-outs occurring before the <strong>Early Checkout Threshold</strong> will be tagged with an early departure note.
+              Arrivals after the <strong>Late Threshold</strong> (+ 15m Grace) are automatically marked <strong>Late</strong>.
+              Staff have a <strong>15-minute check-out window</strong> following shift end (e.g. up to <strong>04:45 PM</strong> for Teaching, <strong>05:45 PM</strong> for Non-Teaching). If check-out is missed after this cutoff, it is flagged as <strong>Missed Checkout</strong> and self-checkout is disabled.
             </p>
           </div>
         </div>
@@ -188,7 +261,7 @@ export default function AttendanceTimingConfigPage() {
                     <th>Applies To</th>
                     <th>Shift Timings</th>
                     <th>Late Arrival After</th>
-                    <th>Grace Period</th>
+                    <th>Checkout Window &amp; Cutoff</th>
                     <th>Early Checkout Before</th>
                     <th>Min Hours</th>
                     <th>Status</th>
@@ -204,14 +277,31 @@ export default function AttendanceTimingConfigPage() {
                       </td>
                       <td>{staffTypeBadge(c.staffType)}</td>
                       <td>
-                        <span className="att-timing-pill">{c.workStartTime} – {c.workEndTime}</span>
+                        <span className="att-timing-pill">
+                          {formatTime12h(c.workStartTime)} – {formatTime12h(c.workEndTime)}
+                        </span>
                       </td>
                       <td>
-                        <strong className="att-timing-late-time">{c.lateThreshold}</strong>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          <div>
+                            <strong className="att-timing-late-time">{formatTime12h(c.lateThreshold)}</strong>
+                            <span className="att-grace-badge">+{c.gracePeriodMinutes ?? 15}m Grace</span>
+                          </div>
+                          <small className="field-hint">Late if punch &gt; {formatTime12h(c.lateThreshold)}</small>
+                        </div>
                       </td>
-                      <td>{c.gracePeriodMinutes} mins</td>
                       <td>
-                        <span className="att-timing-early-time">{c.earlyCheckoutThreshold}</span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                          <span className="att-checkout-window-pill">
+                            {formatTime12h(c.workEndTime)} – {getCheckoutCutoff(c.workEndTime, c.gracePeriodMinutes ?? 15)}
+                          </span>
+                          <span className="att-timing-cutoff-tag">
+                            Missed Checkout after {getCheckoutCutoff(c.workEndTime, c.gracePeriodMinutes ?? 15)}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="att-timing-early-time">{formatTime12h(c.earlyCheckoutThreshold)}</span>
                       </td>
                       <td>{c.minWorkingHours} hrs</td>
                       <td>
@@ -275,6 +365,29 @@ export default function AttendanceTimingConfigPage() {
           }
         >
           <form className="att-timing-form" onSubmit={handleSave}>
+            {/* Quick Presets Bar */}
+            <div className="att-timing-presets">
+              <span className="att-presets-label">Quick 12-Hour Shift Presets:</span>
+              <div className="att-presets-buttons">
+                <button
+                  type="button"
+                  className="att-preset-btn"
+                  onClick={() => applyPreset("teaching")}
+                >
+                  <Clock size={14} />
+                  <span>Teaching Staff (09:00 AM – 04:30 PM)</span>
+                </button>
+                <button
+                  type="button"
+                  className="att-preset-btn"
+                  onClick={() => applyPreset("nonteaching")}
+                >
+                  <Clock size={14} />
+                  <span>Non-Teaching Staff (08:30 AM – 05:30 PM)</span>
+                </button>
+              </div>
+            </div>
+
             <div className="att-timing-field-group">
               <label>
                 <span>Rule / Shift Name *</span>
@@ -303,22 +416,28 @@ export default function AttendanceTimingConfigPage() {
             <div className="att-timing-row">
               <label>
                 <span>Shift Start Time *</span>
-                <input
-                  type="time"
-                  value={form.workStartTime}
-                  onChange={(e) => setForm({ ...form, workStartTime: e.target.value })}
-                  required
-                />
+                <div className="att-time-input-wrap">
+                  <input
+                    type="time"
+                    value={form.workStartTime}
+                    onChange={(e) => setForm({ ...form, workStartTime: e.target.value })}
+                    required
+                  />
+                  <span className="att-12h-preview">{formatTime12h(form.workStartTime)}</span>
+                </div>
               </label>
 
               <label>
                 <span>Shift End Time *</span>
-                <input
-                  type="time"
-                  value={form.workEndTime}
-                  onChange={(e) => setForm({ ...form, workEndTime: e.target.value })}
-                  required
-                />
+                <div className="att-time-input-wrap">
+                  <input
+                    type="time"
+                    value={form.workEndTime}
+                    onChange={(e) => setForm({ ...form, workEndTime: e.target.value })}
+                    required
+                  />
+                  <span className="att-12h-preview">{formatTime12h(form.workEndTime)}</span>
+                </div>
               </label>
             </div>
 
@@ -326,13 +445,16 @@ export default function AttendanceTimingConfigPage() {
               <div className="att-timing-row">
                 <label>
                   <span>Late Arrival Threshold *</span>
-                  <input
-                    type="time"
-                    value={form.lateThreshold}
-                    onChange={(e) => setForm({ ...form, lateThreshold: e.target.value })}
-                    required
-                  />
-                  <small className="field-hint">Arrival after this is marked as Late</small>
+                  <div className="att-time-input-wrap">
+                    <input
+                      type="time"
+                      value={form.lateThreshold}
+                      onChange={(e) => setForm({ ...form, lateThreshold: e.target.value })}
+                      required
+                    />
+                    <span className="att-12h-preview">{formatTime12h(form.lateThreshold)}</span>
+                  </div>
+                  <small className="field-hint">Arrival after {formatTime12h(form.lateThreshold)} is marked Late</small>
                 </label>
 
                 <label>
@@ -344,19 +466,22 @@ export default function AttendanceTimingConfigPage() {
                     value={form.gracePeriodMinutes}
                     onChange={(e) => setForm({ ...form, gracePeriodMinutes: e.target.value })}
                   />
-                  <small className="field-hint">Added to threshold before marking Late</small>
+                  <small className="field-hint">15m standard grace window for check-in &amp; check-out</small>
                 </label>
               </div>
 
               <div className="att-timing-row">
                 <label>
                   <span>Early Checkout Threshold *</span>
-                  <input
-                    type="time"
-                    value={form.earlyCheckoutThreshold}
-                    onChange={(e) => setForm({ ...form, earlyCheckoutThreshold: e.target.value })}
-                    required
-                  />
+                  <div className="att-time-input-wrap">
+                    <input
+                      type="time"
+                      value={form.earlyCheckoutThreshold}
+                      onChange={(e) => setForm({ ...form, earlyCheckoutThreshold: e.target.value })}
+                      required
+                    />
+                    <span className="att-12h-preview">{formatTime12h(form.earlyCheckoutThreshold)}</span>
+                  </div>
                   <small className="field-hint">Check-out before this flags Early Checkout</small>
                 </label>
 
@@ -372,6 +497,11 @@ export default function AttendanceTimingConfigPage() {
                   />
                   <small className="field-hint">Required for full attendance credit</small>
                 </label>
+              </div>
+
+              {/* Checkout Window & Cutoff Summary Box */}
+              <div className="att-summary-rule-box">
+                <strong>Check-Out Grace &amp; Cutoff:</strong> Shift ends at <strong>{formatTime12h(form.workEndTime)}</strong>. Staff have a <strong>{form.gracePeriodMinutes || 15}-minute check-out window</strong> until <strong>{getCheckoutCutoff(form.workEndTime, form.gracePeriodMinutes || 15)}</strong>. If check-out is not recorded by <strong>{getCheckoutCutoff(form.workEndTime, form.gracePeriodMinutes || 15)}</strong>, the record is flagged as <strong>"Missed Checkout"</strong> and punch out is disabled.
               </div>
             </div>
 

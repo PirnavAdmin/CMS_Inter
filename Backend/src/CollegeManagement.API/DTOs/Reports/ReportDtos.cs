@@ -28,6 +28,14 @@ public class DashboardReportDto
     public int StudentStrength { get; set; }
     public decimal PassPercentage { get; set; }
     public int ToppersIdentified { get; set; }
+
+    // Intermediate College Compliance & Board Rules (75% Attendance & Fee Clearance)
+    public int AttendanceEligibleCount { get; set; }
+    public int AttendanceCondonationCount { get; set; }
+    public int AttendanceDetainedCount { get; set; }
+    public int StudentsWithDuesCount { get; set; }
+    public int StudentsClearedCount { get; set; }
+
     public IReadOnlyList<TrendPointDto> AdmissionsVsTarget { get; set; } = [];
     public IReadOnlyList<TrendPointDto> AttendanceTrend { get; set; } = [];
     public IReadOnlyList<TrendPointDto> FeeCollectedVsDue { get; set; } = [];
@@ -125,6 +133,7 @@ public class AttendanceReportDto
     public int Late { get; set; }
     public int Leave { get; set; }
     public decimal AttendancePercentage { get; set; }
+    public string? StatusCategory { get; set; } = "Eligible";
 }
 
 public class FacultyAttendanceReportDto

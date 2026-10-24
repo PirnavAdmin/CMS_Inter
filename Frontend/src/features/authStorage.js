@@ -151,14 +151,14 @@ export const clearAuthSession = () => {
   try {
     window.localStorage.removeItem("staff_profile_data");
     window.sessionStorage.removeItem("staff_profile_data");
-    // Also remove any namespaced staff profiles
+    // Remove namespaced staff profiles but preserve user profile photos across logins/logouts
     Object.keys(window.localStorage || {}).forEach((k) => {
-      if (k.startsWith("staff_profile_")) {
+      if (k.startsWith("staff_profile_") && k !== "staff_profile_photo" && !k.endsWith("_photo")) {
         window.localStorage.removeItem(k);
       }
     });
     Object.keys(window.sessionStorage || {}).forEach((k) => {
-      if (k.startsWith("staff_profile_")) {
+      if (k.startsWith("staff_profile_") && k !== "staff_profile_photo" && !k.endsWith("_photo")) {
         window.sessionStorage.removeItem(k);
       }
     });

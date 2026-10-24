@@ -4776,6 +4776,18 @@ function TeachingForm({ records, setRecords, existing }) {
     }
   }, [activeCampusId, activeCampusName, activeCampusCode, activeBoardName, activeBoardCode, activeBoardId, existing]);
 
+  // If role is changed away from Principal, reset multi-campus assignments
+  useEffect(() => {
+    if (!isPrincipal && values.campusBoardAssignmentsJson) {
+      setValues((v) => ({
+        ...v,
+        assignedCampusIds: v.campusId ? [Number(v.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []),
+        assignedCampuses: v.campusName ? [v.campusName] : (activeCampusName ? [activeCampusName] : []),
+        campusBoardAssignmentsJson: "",
+      }));
+    }
+  }, [isPrincipal, values.campusBoardAssignmentsJson, activeCampusId, activeCampusName]);
+
   // Build the next employee ID from existing staff without advancing a series on form load.
   useEffect(() => {
     let isMounted = true;
@@ -4804,11 +4816,13 @@ function TeachingForm({ records, setRecords, existing }) {
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
     const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (isPrincipal ? 15 : (values.role === "Faculty" ? 4 : values.role === "HOD" ? 3 : values.role === "Accounts" ? 7 : values.role === "Examination Cell" ? 8 : values.role === "Library" ? 9 : values.role === "Placement Officer" ? 11 : 4)));
 
-    const finalAssignedCampusIds = isPrincipal && Array.isArray(values.assignedCampusIds) && values.assignedCampusIds.length > 0
+    const hasAssignedCampuses = Array.isArray(values.assignedCampusIds) && values.assignedCampusIds.length > 0;
+    const finalAssignedCampusIds = hasAssignedCampuses
       ? [...new Set(values.assignedCampusIds.map(Number).filter(Boolean))]
       : (values.campusId ? [Number(values.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []));
 
-    const finalAssignedBoardIds = isPrincipal && Array.isArray(values.assignedBoardIds) && values.assignedBoardIds.length > 0
+    const hasAssignedBoards = Array.isArray(values.assignedBoardIds) && values.assignedBoardIds.length > 0;
+    const finalAssignedBoardIds = hasAssignedBoards
       ? [...new Set(values.assignedBoardIds.map(Number).filter(Boolean))]
       : (values.boardId ? [Number(values.boardId)] : (activeBoardId ? [Number(activeBoardId)] : []));
 
@@ -6376,6 +6390,10 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     }];
   }, [record, campuses]);
 
+  const hasMultipleCampuses = useMemo(() => {
+    return isPrincipalRecord || (Array.isArray(resolvedCampusList) && resolvedCampusList.length > 1);
+  }, [isPrincipalRecord, resolvedCampusList]);
+
   const resolvedBoardList = useMemo(() => {
     if (Array.isArray(record?.assignedBoards) && record.assignedBoards.length > 0) {
       return record.assignedBoards.map((b) => typeof b === "object" ? (b.name || b.boardName || b.code || String(b)) : String(b));
@@ -6417,7 +6435,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         ["fullName", "Full Name"],
         ["employeeId", "Employee ID"],
         ["board", "Board Name"],
-        [isPrincipalRecord ? "assignedCampusesDisplay" : "campusName", isPrincipalRecord ? "Assigned Campuses" : "Assigned Campus"],
+        [hasMultipleCampuses ? "assignedCampusesDisplay" : "campusName", hasMultipleCampuses ? "Assigned Campuses" : "Assigned Campus"],
         ["dateOfBirth", "Date of Birth"],
         ["gender", "Gender"],
         ["status", "Status"],
@@ -6452,7 +6470,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         ["dateOfJoining", "Date of Joining"],
         ["employmentType", "Employment Type"],
         ["staffType", "Staff Type"],
-        ...(isPrincipalRecord ? [["assignedCampusesDisplay", "Assigned Campuses"]] : []),
+        ...(hasMultipleCampuses ? [["assignedCampusesDisplay", "Assigned Campuses"]] : []),
       ],
     ],
     [
@@ -6659,8 +6677,8 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
 
   return (
     <div className="staff-summary">
-      {/* Dedicated Principal Campus & Board Assignment Summary Card in Profile */}
-      {isPrincipalRecord ? (
+      {/* Dedicated Multi-Campus & Board Assignment Summary Card in Profile */}
+      {hasMultipleCampuses ? (
         <article
           className="principal-summary-card"
           style={{
@@ -6699,10 +6717,12 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "var(--cms-text, #1f2937)" }}>
-                  Principal Campus & Board Allocations
+                  {isPrincipalRecord ? "Principal Campus & Board Allocations" : "Multi-Campus & Board Allocations"}
                 </h3>
                 <span style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)" }}>
-                  Assigned campuses and affiliated educational boards under this Principal's purview
+                  {isPrincipalRecord
+                    ? "Assigned campuses and affiliated educational boards under this Principal's purview"
+                    : "Assigned campuses and affiliated educational boards under this staff member's purview"}
                 </span>
               </div>
             </div>

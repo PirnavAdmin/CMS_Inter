@@ -110,6 +110,8 @@ namespace CollegeManagement.API.Controllers
                 EmployeeId = result.EmployeeId,
                 AssignedCampusIds = result.AssignedCampusIds,
                 AssignedBoardIds = result.AssignedBoardIds,
+                PhotoPath = result.PhotoPath,
+                PhotoUrl = result.PhotoUrl,
                 User = new
                 {
                     staffId = result.StaffId,
@@ -121,6 +123,9 @@ namespace CollegeManagement.API.Controllers
                     employeeId = result.EmployeeId,
                     email = result.Email,
                     name = result.Name,
+                    photoPath = result.PhotoPath,
+                    photoUrl = result.PhotoUrl,
+                    photo = result.PhotoUrl,
                     isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
                 },
                 Data = new

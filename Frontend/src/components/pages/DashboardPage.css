@@ -1,16 +1,24 @@
 /* Admin Dashboard Page CSS — Compact & Responsive */
+.cms-content:has(> .dashboard-page),
+.cms-content:has(.dashboard-page) {
+  padding: 4px 14px 6px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100%;
+  box-sizing: border-box;
+}
+
 .dashboard-page {
   --dashboard-radius: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   width: 100%;
   min-width: 0;
+  flex: 1;
+  min-height: 0;
   color: var(--cms-text);
-}
-
-.cms-content:has(> .dashboard-page) {
-  padding: 4px 12px 6px;
+  box-sizing: border-box;
 }
 
 /* Top Header Bar & Control Panel */
@@ -345,7 +353,8 @@
 
 .dashboard-row-three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: start;
+  flex: 1;
+  min-height: 264px;
 }
 
 .dashboard-card {
@@ -359,6 +368,8 @@
 }
 
 .dashboard-row-three > .dashboard-card {
+  height: 100%;
+  min-height: 264px;
   box-sizing: border-box;
 }
 
@@ -468,13 +479,16 @@
   display: flex;
   align-items: stretch;
   width: 100%;
-  height: 142px;
+  height: 156px;
+  min-height: 156px;
+  flex: 1;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .dashboard-area-chart-yaxis {
-  height: 142px;
+  height: 156px;
+  min-height: 156px;
   flex-shrink: 0;
   overflow: visible;
   user-select: none;
@@ -484,9 +498,10 @@
 .dashboard-area-chart-wrap {
   flex: 1;
   min-width: 0;
-  height: 142px;
+  height: 156px;
+  min-height: 156px;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   scrollbar-width: none;
   -ms-overflow-style: none;
   cursor: grab;
@@ -501,6 +516,27 @@
   display: none;
   width: 0;
   height: 0;
+}
+
+.dashboard-area-chart-wrap .recharts-xAxis text,
+.dashboard-area-chart-wrap .recharts-xAxis .recharts-cartesian-axis-tick text {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  fill: var(--cms-text, #334155) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+[data-theme="dark"] .dashboard-area-chart-wrap .recharts-xAxis text,
+[data-theme="dark"] .dashboard-area-chart-wrap .recharts-xAxis .recharts-cartesian-axis-tick text {
+  fill: var(--cms-text, #F2F3EE) !important;
+}
+
+.dashboard-area-chart-yaxis .recharts-yAxis .recharts-cartesian-axis-tick text {
+  font-size: 9.5px !important;
+  fill: var(--cms-muted, #64748b) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 .dashboard-students-chips {
@@ -532,6 +568,8 @@
 .chip-total .chip-icon { background: #edf7e2; color: #22a447; }
 .chip-boys .chip-icon { background: #eaf3fd; color: #2563eb; }
 .chip-girls .chip-icon { background: #fdf0f5; color: #e11d62; }
+.chip-groups .chip-icon { background: #f5f3ff; color: #7c3aed; }
+.chip-top .chip-icon { background: #fffbeb; color: #d97706; }
 
 .dashboard-student-chip strong {
   display: block;
@@ -539,22 +577,40 @@
   font-weight: 800;
   color: var(--cms-text);
   line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .dashboard-student-chip small {
   font-size: 8.5px;
   color: var(--cms-muted);
+  white-space: nowrap;
 }
 
 /* Students by Group Bar Chart */
 .dashboard-bar-chart-wrap {
   width: 100%;
   height: 100%;
-  min-height: 0;
+  min-height: 152px;
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
+}
+
+.dashboard-bar-chart-wrap .recharts-xAxis .recharts-cartesian-axis-tick text {
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  fill: var(--cms-text, #334155) !important;
+  opacity: 1 !important;
+}
+
+.dashboard-bar-chart-wrap .recharts-yAxis .recharts-cartesian-axis-tick text {
+  font-size: 9.5px !important;
+  fill: var(--cms-muted, #64748b) !important;
+  opacity: 1 !important;
 }
 
 /* Attendance Today Donut Cards (Students & Staff) */
@@ -926,15 +982,21 @@
   color: var(--cms-border);
 }
 
-/* Card Footers */
+/* Card Footers (Aligned Baseline across all cards) */
 .dashboard-card-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  padding-top: 3px;
+  height: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  padding-top: 2px;
   border-top: 1px solid var(--cms-border);
   font-size: 9.5px;
+  margin-top: auto;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .dashboard-footer-time {
@@ -966,7 +1028,8 @@
   gap: 4px;
   overflow-y: auto;
   min-height: 0;
-  max-height: 175px;
+  flex: 1;
+  max-height: none;
   padding-right: 2px;
 }
 

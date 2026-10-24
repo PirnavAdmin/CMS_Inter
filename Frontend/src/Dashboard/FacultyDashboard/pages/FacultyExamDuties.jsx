@@ -89,7 +89,8 @@ export default function FacultyExamDuties() {
     try {
       const params = new URLSearchParams();
       if (staffId) params.append("staffId", staffId);
-      if (activeTab && activeTab !== "all") params.append("status", activeTab);
+      const selectedCampusId = typeof window !== "undefined" ? window.localStorage?.getItem("cms_selected_campus_id") : null;
+      if (selectedCampusId) params.append("campusId", selectedCampusId);
 
       const res = await apiClient.get(`/api/v1/examinations/duties?${params.toString()}`);
       const rawData = res.data?.data || res.data || [];
@@ -109,7 +110,7 @@ export default function FacultyExamDuties() {
     } finally {
       setLoading(false);
     }
-  }, [staffId, activeTab]);
+  }, [staffId]);
 
   useEffect(() => {
     fetchExamDuties();
