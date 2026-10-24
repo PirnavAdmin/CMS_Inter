@@ -72,14 +72,14 @@ export default function TransportManagerLeave() {
       a?.staffId ||
       profileData?.id ||
       a?.id ||
-      1108
+      1125
     );
-    return id > 0 ? id : 1108;
+    return id > 0 ? id : 1125;
   }, [profileData]);
 
   const effectiveDepartmentId = useMemo(() => {
     const a = getAuthUser();
-    return Number(profileData?.departmentId || a?.departmentId || 0);
+    return Number(profileData?.departmentId || a?.departmentId || 79);
   }, [profileData?.departmentId]);
 
   const effectiveCampusId = useMemo(() => {
@@ -122,25 +122,63 @@ export default function TransportManagerLeave() {
         console.warn("Could not load backend leave categories:", catErr);
       }
 
+      let leaves = [];
+      let balanceObj = null;
+
       try {
-        const histRes = await apiClient.get("/api/v1/staff-attendance/leave/my-history");
-        const histData = histRes?.data?.data || histRes?.data?.Data || histRes?.data || [];
-        if (Array.isArray(histData)) {
-          setLeaveList(histData);
-        } else if (Array.isArray(histData.items)) {
-          setLeaveList(histData.items);
+        let histRes;
+        try {
+          histRes = await apiClient.get("/api/v1/staff-attendance/leave/my-history");
+        } catch {
+          histRes = await apiClient.get(
+            `/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`
+          );
+        }
+        const histData = histRes?.data?.data || histRes?.data?.Data || histRes?.data;
+        if (histData) {
+          balanceObj = histData.balance || null;
+          if (Array.isArray(histData.history)) {
+            leaves = histData.history;
+          } else if (Array.isArray(histData)) {
+            leaves = histData;
+          } else if (Array.isArray(histData.items)) {
+            leaves = histData.items;
+          }
         }
       } catch (histErr) {
-        console.warn("Could not fetch personal leave history:", histErr);
-        setLeaveList([]);
+        console.warn("Could not fetch staff leave history:", histErr);
       }
+
+      // Fallback to /api/v1/staff-attendance/leave?staffId=... if history is empty
+      if (leaves.length === 0) {
+        try {
+          const leaveRes = await apiClient.get("/api/v1/staff-attendance/leave", {
+            params: { staffId: effectiveStaffId, campusId: effectiveCampusId },
+          });
+          const leaveData = leaveRes?.data?.data || leaveRes?.data?.Data || leaveRes?.data;
+          if (Array.isArray(leaveData) && leaveData.length > 0) {
+            leaves = leaveData;
+          }
+        } catch (leaveErr) {
+          console.warn("Could not fetch leaves list:", leaveErr);
+        }
+      }
+
+      leaves.sort((a, b) => {
+        const dateA = new Date(a.startDate || a.createdAt || 0);
+        const dateB = new Date(b.startDate || b.createdAt || 0);
+        return dateB - dateA;
+      });
+
+      setLeaveList(leaves);
+      if (balanceObj) setStaffBalance(balanceObj);
     } catch (err) {
       console.warn("Error fetching leave details:", err);
       setError(getApiErrorMessage(err) || "Failed to load leave records.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [effectiveStaffId, effectiveCampusId]);
 
   useEffect(() => {
     fetchLeaveData();

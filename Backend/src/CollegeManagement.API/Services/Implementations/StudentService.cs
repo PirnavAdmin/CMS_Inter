@@ -331,28 +331,69 @@ namespace CollegeManagement.API.Services
                 throw new ArgumentException("Photo file size cannot exceed 5 MB.");
             }
 
-            var uploadsFolder = Path.Combine(_environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "student-photos");
+            var webRoot = _environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadsFolder = Path.Combine(webRoot, "uploads", "student-photos");
             if (!Directory.Exists(uploadsFolder))
             {
                 Directory.CreateDirectory(uploadsFolder);
             }
 
-            var uniqueFileName = $"student_photo_{studentId}_{DateTime.UtcNow.Ticks}{ext}";
-            var physicalPath = Path.Combine(uploadsFolder, uniqueFileName);
+            // 1. Delete previous photo file referenced in student record if it exists
+            if (!string.IsNullOrWhiteSpace(student.Photo))
+            {
+                try
+                {
+                    var oldRelPath = student.Photo.Split('?')[0].TrimStart('/', '\\').Replace('/', Path.DirectorySeparatorChar);
+                    var oldFile = Path.Combine(webRoot, oldRelPath);
+                    if (File.Exists(oldFile))
+                    {
+                        File.Delete(oldFile);
+                    }
+                }
+                catch
+                {
+                    // Ignore deletion error on legacy file
+                }
+            }
+
+            // 2. Delete any existing files matching student_photo_{studentId}.* or student_photo_{studentId}_*.* in uploads folder
+            try
+            {
+                var existingFiles = Directory.GetFiles(uploadsFolder, $"student_photo_{studentId}*");
+                foreach (var f in existingFiles)
+                {
+                    try
+                    {
+                        File.Delete(f);
+                    }
+                    catch
+                    {
+                        // Ignore locked or inaccessible files
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore directory scan errors
+            }
+
+            // 3. Save new photo with canonical replaced filename
+            var targetFileName = $"student_photo_{studentId}{ext}";
+            var physicalPath = Path.Combine(uploadsFolder, targetFileName);
 
             using (var stream = new FileStream(physicalPath, FileMode.Create))
             {
                 await file.CopyToAsync(stream, ct);
             }
 
-            var relativePath = $"/uploads/student-photos/{uniqueFileName}";
+            var relativePath = $"/uploads/student-photos/{targetFileName}";
             await _repository.UpdatePhotoPathAsync(studentId, relativePath);
 
             return new StudentPhotoUploadResultDto
             {
                 StudentId = studentId,
                 Uploaded = true,
-                PhotoUrl = relativePath,
+                PhotoUrl = $"{relativePath}?v={DateTime.UtcNow.Ticks}",
                 Message = "Student photo uploaded successfully."
             };
         }
@@ -390,21 +431,36 @@ namespace CollegeManagement.API.Services
                 throw new ArgumentException("Document file size cannot exceed 10 MB.");
             }
 
-            var uploadsFolder = Path.Combine(_environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "student-documents");
+            var webRoot = _environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadsFolder = Path.Combine(webRoot, "uploads", "student-documents");
             if (!Directory.Exists(uploadsFolder))
             {
                 Directory.CreateDirectory(uploadsFolder);
             }
 
-            var uniqueFileName = $"student_doc_{studentId}_{targetColumn}_{DateTime.UtcNow.Ticks}{ext}";
-            var physicalPath = Path.Combine(uploadsFolder, uniqueFileName);
+            // Clean up any older document files for this student and target column
+            try
+            {
+                var existingFiles = Directory.GetFiles(uploadsFolder, $"student_doc_{studentId}_{targetColumn}*");
+                foreach (var f in existingFiles)
+                {
+                    try { File.Delete(f); } catch { }
+                }
+            }
+            catch
+            {
+                // Ignore cleanup error
+            }
+
+            var targetFileName = $"student_doc_{studentId}_{targetColumn}{ext}";
+            var physicalPath = Path.Combine(uploadsFolder, targetFileName);
 
             using (var stream = new FileStream(physicalPath, FileMode.Create))
             {
                 await file.CopyToAsync(stream, ct);
             }
 
-            var relativePath = $"/uploads/student-documents/{uniqueFileName}";
+            var relativePath = $"/uploads/student-documents/{targetFileName}";
             await _repository.UpdateDocumentPathAsync(studentId, targetColumn, relativePath);
 
             return new StudentDocumentUploadResultDto
@@ -412,7 +468,7 @@ namespace CollegeManagement.API.Services
                 StudentId = studentId,
                 DocumentType = targetColumn,
                 Uploaded = true,
-                DocumentUrl = relativePath,
+                DocumentUrl = $"{relativePath}?v={DateTime.UtcNow.Ticks}",
                 Message = $"{targetColumn} uploaded successfully."
             };
         }

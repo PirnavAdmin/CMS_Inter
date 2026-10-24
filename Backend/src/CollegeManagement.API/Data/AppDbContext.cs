@@ -369,8 +369,7 @@ namespace CollegeManagement.API.Data
         public DbSet<FeePayment> FeePayments { get; set; }
 
         public DbSet<FeeReceipt> FeeReceipts { get; set; }
-
-     
+        public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
 
 
         public DbSet<BreakType> BreakTypes { get; set; }
@@ -394,6 +393,9 @@ namespace CollegeManagement.API.Data
         public DbSet<InventoryItem> InventoryItems { get; set; }
         public DbSet<InventoryTransaction> InventoryTransactions { get; set; }
         public DbSet<InventoryActivity> InventoryActivities { get; set; }
+
+        public DbSet<AcademicCalendarEvent> AcademicCalendarEvents { get; set; } = null!;
+        public DbSet<Notification> Notifications { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -1985,6 +1987,32 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     .HasForeignKey(e => e.RoleId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
+
+            // Academic Calendar Events
+            modelBuilder.Entity<AcademicCalendarEvent>(entity =>
+            {
+                entity.ToTable("AcademicCalendarEvents");
+                entity.HasKey(e => e.EventId);
+                entity.HasOne(e => e.Board)
+                    .WithMany()
+                    .HasForeignKey(e => e.BoardId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.AcademicYear)
+                    .WithMany()
+                    .HasForeignKey(e => e.AcademicYearId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Notifications
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.ToTable("Notifications");
+                entity.HasKey(e => e.NotificationId);
+                entity.HasOne(e => e.User)
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
 
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -2127,6 +2155,8 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                 "FeePayment" or "StudentFee" => "Finance",
                 "Staff" or "Student" => "Administration",
                 "Holiday" => "Holiday Management",
+                "AcademicCalendarEvent" => "Academic Calendar",
+                "Notification" => "Notifications",
                 "TransportRoute" or "TransportVehicle" => "Transport",
                 _ => "System"
             };

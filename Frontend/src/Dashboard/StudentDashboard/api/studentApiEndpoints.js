@@ -1,4 +1,13 @@
 const studentApiEndpoints = {
+  facilityTransition: {
+    history: (studentId) => `/api/v1/facility-transition/history/${encodeURIComponent(studentId)}`,
+    preview: '/api/v1/facility-transition/preview',
+    execute: '/api/v1/facility-transition/execute',
+    previewTransportToHostel: '/api/v1/facility-transition/preview-transport-to-hostel',
+    executeTransportToHostel: '/api/v1/facility-transition/execute-transport-to-hostel',
+    previewDiscontinue: '/api/v1/facility-transition/preview-discontinue',
+    executeDiscontinue: '/api/v1/facility-transition/execute-discontinue',
+  },
   profile: {
     me: "/api/v1/students/me",
     update: "/api/v1/students/me/profile",
