@@ -68,7 +68,26 @@ namespace CollegeManagement.API.Filters
                 }
             }
 
-            // Proceed for non-parents, or if the parent is authorized
+            // If the user is a Student, ensure they can only access their own student record
+            if (userRole == "Student")
+            {
+                if (context.ActionArguments.TryGetValue(_studentIdParamName, out var sVal) && sVal is int targetStudentId)
+                {
+                    var studentIdClaim = context.HttpContext.User.FindFirst("StudentId")?.Value;
+                    if (!int.TryParse(studentIdClaim, out int ownStudentId) || ownStudentId != targetStudentId)
+                    {
+                        context.Result = new ForbidResult();
+                        return;
+                    }
+                }
+                else
+                {
+                    context.Result = new ForbidResult();
+                    return;
+                }
+            }
+
+            // Proceed for non-parents and non-students, or if the parent/student is authorized
             await next();
         }
     }

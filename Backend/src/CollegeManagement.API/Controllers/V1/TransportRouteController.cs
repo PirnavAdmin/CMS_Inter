@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport/routes")]
-    [AllowAnonymous]
+    [Authorize]
     public class TransportRoutesController : ControllerBase
     {
         private readonly ITransportRouteService _service;
@@ -19,6 +19,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal,Driver,Bus Driver")]
         [ProducesResponseType(typeof(CollegeManagement.API.Common.PagedResult<TransportRouteDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
             [FromQuery] TransportRouteFilterDto filter)
@@ -35,6 +36,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("{routeIdOrCode}")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal,Driver,Bus Driver")]
         [ProducesResponseType(typeof(TransportRouteDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetByIdOrCode(
             string routeIdOrCode)
@@ -57,6 +59,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Create(
             [FromBody] CreateTransportRouteDto dto)
         {
@@ -87,6 +90,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpPut("{routeIdOrCode}")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Update(
             string routeIdOrCode,
             [FromBody] UpdateTransportRouteDto dto)
@@ -140,6 +144,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpDelete("{routeIdOrCode}")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Delete(
             string routeIdOrCode)
         {

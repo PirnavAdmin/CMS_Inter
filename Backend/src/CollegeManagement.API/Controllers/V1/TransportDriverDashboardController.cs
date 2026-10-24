@@ -83,7 +83,6 @@ namespace CollegeManagement.API.Controllers.V1
             var assignment = await _context.TransportVehicleAssignments
                 .Include(a => a.Vehicle)
                 .Include(a => a.Route)
-                .Include(a => a.Attendant)
                 .FirstOrDefaultAsync(a => a.DriverId == driverId.Value && a.Status && !a.IsDeleted &&
                                           (a.EffectiveFrom <= today) && (a.EffectiveTo == null || a.EffectiveTo >= today));
 

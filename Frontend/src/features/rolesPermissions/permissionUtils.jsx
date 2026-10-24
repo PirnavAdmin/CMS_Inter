@@ -294,14 +294,16 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
 
 
   const rawSource = permissions ?? user?.permissions ?? user?.rolePermissions;
-  const source = Array.isArray(rawSource) && rawSource.length === 0 ? null : rawSource;
-  if (!source) {
-    if (hasRole("ADMIN", user)) return true;
-    if (normAct === ACTIONS.VIEW) return true;
+
+  // Administrators have full access
+  if (hasRole("ADMIN", user)) return true;
+
+  // If permissions are not an array or empty, deny access (no arbitrary fallback)
+  if (!Array.isArray(rawSource) || rawSource.length === 0) {
     return false;
   }
 
-  const permissionMap = toPermissionMap(source);
+  const permissionMap = toPermissionMap(rawSource);
   let normScr = screenKey ? normalizeModuleKey(screenKey) : null;
 
   if (SETTINGS_SCREENS.includes(normMod) && !normScr) {
