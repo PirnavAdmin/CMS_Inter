@@ -467,14 +467,30 @@ if (args.Contains("--verify-inventory"))
     return;
 }
 
+if (args.Contains("--test-audit"))
+{
+    var tester = new CollegeManagement.API.Tests.AuditModuleBackendTester(app.Services);
+    await tester.RunAllTestsAsync();
+    return;
+}
+
 
 #region Pipeline Middleware
 var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.All
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 };
 forwardedHeadersOptions.KnownNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
+var trustedProxiesConfig = app.Configuration.GetSection("SecuritySettings:TrustedProxies").Get<string[]>() ?? Array.Empty<string>();
+CollegeManagement.API.Helpers.ClientIpHelper.ConfigureTrustedProxies(trustedProxiesConfig);
+foreach (var proxy in trustedProxiesConfig)
+{
+    if (System.Net.IPAddress.TryParse(proxy, out var ip))
+    {
+        forwardedHeadersOptions.KnownProxies.Add(ip);
+    }
+}
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseCors("AllowFrontend");
@@ -583,6 +599,7 @@ app.Use(async (context, next) =>
 #endregion
 
 app.UseAuthorization();
+app.UseMiddleware<CollegeManagement.API.Middleware.AuditRequestMiddleware>();
 app.MapControllers();
 app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
 app.MapHub<CollegeManagement.API.Hubs.NotificationHub>("/hubs/notifications");

@@ -1,5 +1,9 @@
-﻿import api from './axios';
+import api from './axios';
 
 export const getAuditLogs = (params) => {
   return api.get('/api/v1/settings/audit-logs', { params });
+};
+
+export const getRelatedAuditLogs = (correlationId) => {
+  return api.get(`/api/v1/settings/audit-logs/related/${encodeURIComponent(correlationId)}`);
 };
