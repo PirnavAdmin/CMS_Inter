@@ -136,6 +136,18 @@ export const getAuthUser = () => {
       };
     }
 
+    const roleLower = String(cleaned.role || "").toLowerCase();
+    if (roleLower.includes("exam") || roleLower.includes("examination")) {
+      return {
+        ...cleaned,
+        id: cleaned.id || 890,
+        userId: cleaned.userId || 890,
+        staffId: cleaned.staffId || 1109,
+        campusId: cleaned.campusId || 1,
+        assignedCampusIds: Array.isArray(cleaned.assignedCampusIds) && cleaned.assignedCampusIds.length > 0 ? cleaned.assignedCampusIds : [1],
+      };
+    }
+
     return cleaned;
   } catch {
     return null;

@@ -2,11 +2,26 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Megaphone, Calendar, Search, Eye, CheckCircle2, Clock, MapPin } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { collegeAnnouncements, upcomingEvents } from "../parentData.js";
+import { useParentPortal, collegeAnnouncements, upcomingEvents } from "../parentData.js";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import "../ParentDashboard.css";
 
 export default function ParentAnnouncementsPage() {
+  const {
+    announcements: contextAnnouncements,
+    events: contextEvents,
+    holidays,
+    refreshHolidays,
+  } = useParentPortal();
+
+  const allAnnouncements = contextAnnouncements && contextAnnouncements.length > 0
+    ? contextAnnouncements
+    : collegeAnnouncements;
+
+  const baseEvents = contextEvents && contextEvents.length > 0
+    ? contextEvents
+    : upcomingEvents;
+
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") === "events" ? "events" : "notices";
   const [activeMainTab, setActiveMainTab] = useState(initialTab);
@@ -17,9 +32,15 @@ export default function ParentAnnouncementsPage() {
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
 
   // Events state
-  const [events, setEvents] = useState(upcomingEvents);
+  const [events, setEvents] = useState(baseEvents);
   const [selectedEventModal, setSelectedEventModal] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
+
+  useEffect(() => {
+    if (contextEvents && contextEvents.length > 0) {
+      setEvents(contextEvents);
+    }
+  }, [contextEvents]);
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
@@ -49,7 +70,7 @@ export default function ParentAnnouncementsPage() {
 
   const categories = ["all", "Examinations", "Academic", "Holidays", "Events"];
 
-  const filteredNotices = collegeAnnouncements.filter((ann) => {
+  const filteredNotices = allAnnouncements.filter((ann) => {
     const matchesCat = selectedCategory === "all" || ann.category.toLowerCase() === selectedCategory.toLowerCase();
     const matchesQuery = !query.trim() || ann.title.toLowerCase().includes(query.toLowerCase()) || ann.summary.toLowerCase().includes(query.toLowerCase());
     return matchesCat && matchesQuery;
@@ -72,7 +93,7 @@ export default function ParentAnnouncementsPage() {
               className={`cms-btn cms-btn-sm ${activeMainTab === "notices" ? "cms-btn-primary" : "cms-btn-outline"}`}
               onClick={() => handleSwitchTab("notices")}
             >
-              <Megaphone size={14} /> Circulars & Notices ({collegeAnnouncements.length})
+              <Megaphone size={14} /> Circulars & Notices ({allAnnouncements.length})
             </button>
             <button
               type="button"

@@ -27,8 +27,8 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "@/components/pages/ResultProcessingPage.css";
 
-const PAGE_SIZE = 6;
-const ANALYTICS_MODAL_PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
+const ANALYTICS_MODAL_PAGE_SIZE = 10;
 
 /* ============================================================
    PAYLOAD UNWRAPPING & FILE UTILITIES
@@ -4990,25 +4990,66 @@ function PublishConfirmModal({ confirm, examName, onCancel, onConfirm, loading }
 
 /* Shared Pagination Component */
 function Pagination({ page, pages, setPage, className = "", btnClassName = "" }) {
+  const totalPages = Math.max(1, pages || 1);
+  const activePage = Math.min(Math.max(1, page || 1), totalPages);
+
+  const pageNumbers = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
+  } else {
+    pageNumbers.push(1);
+    if (activePage > 3) pageNumbers.push('...');
+    const pStart = Math.max(2, activePage - 1);
+    const pEnd = Math.min(totalPages - 1, activePage + 1);
+    for (let i = pStart; i <= pEnd; i += 1) pageNumbers.push(i);
+    if (activePage < totalPages - 2) pageNumbers.push('...');
+    pageNumbers.push(totalPages);
+  }
+
   return (
-    <div className={`results-pagination ${className}`.trim()}>
+    <div className={`results-pagination ${className}`.trim()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
       <button
+        type="button"
         className={`cms-btn cms-btn-ghost ${btnClassName}`.trim()}
-        disabled={page === 1}
-        onClick={() => setPage(page - 1)}
+        disabled={activePage <= 1}
+        onClick={() => setPage(activePage - 1)}
+        aria-label="Previous Page"
       >
         Previous
       </button>
-      <span className="results-page-label">
-        Page {page} of {pages}
-      </span>
+
+      {pageNumbers.map((p, idx) =>
+        p === '...' ? (
+          <span key={`dots-${idx}`} className="results-page-label" style={{ padding: '0 4px' }}>
+            ...
+          </span>
+        ) : (
+          <button
+            key={`page-${p}`}
+            type="button"
+            className={`cms-btn ${p === activePage ? 'cms-btn-primary is-active' : 'cms-btn-ghost'} ${btnClassName}`.trim()}
+            onClick={() => setPage(p)}
+            aria-label={`Page ${p}`}
+            style={{ minWidth: '32px', height: '32px', padding: '0 8px' }}
+          >
+            {p}
+          </button>
+        )
+      )}
+
       <button
+        type="button"
         className={`cms-btn cms-btn-ghost ${btnClassName}`.trim()}
-        disabled={page === pages}
-        onClick={() => setPage(page + 1)}
+        disabled={activePage >= totalPages}
+        onClick={() => setPage(activePage + 1)}
+        aria-label="Next Page"
       >
         Next
       </button>
+
+      <span className="results-page-label" style={{ marginLeft: '8px' }}>
+        Page {activePage} of {totalPages}
+      </span>
     </div>
   );
 }

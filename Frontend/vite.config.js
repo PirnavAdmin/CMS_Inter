@@ -6,66 +6,13 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function hostelDevMockPlugin() {
-  return {
-    name: "vite-hostel-dev-mock",
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const rawUrl = req.url || "";
-        const pathname = rawUrl.split("?")[0];
-        if (!pathname.startsWith("/api/v1/hostel")) {
-          return next();
-        }
-
-        res.setHeader("Content-Type", "application/json");
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-        if (req.method === "OPTIONS") {
-          res.statusCode = 204;
-          return res.end();
-        }
-
-        const successJson = (data) => {
-          res.statusCode = 200;
-          res.end(JSON.stringify({ success: true, data, message: "OK" }));
-        };
-
-        if (req.method === "POST" || req.method === "PUT" || req.method === "DELETE") {
-          return successJson({ id: `item-${Date.now()}` });
-        }
-
-        if (pathname.includes("/dashboard")) {
-          return successJson({
-            totalHostels: 7,
-            totalCapacity: 138,
-            occupiedBeds: 5,
-            vacantBeds: 133,
-            occupancyRate: 4,
-            occupancyPercentage: 4,
-            availableBeds: 133,
-            hostellers: 5,
-            monthlyRevenue: 34500,
-            activeWardens: 4,
-            blocks: [],
-          });
-        }
-
-        return successJson([]);
-      });
-    },
-  };
-}
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev";
+  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev").trim().replace(/\/+$/, "");
   const isHttpsApi = apiBaseUrl.startsWith("https://");
-  const useHostelMock = env.VITE_USE_MOCK_DATA === "true";
 
   return {
-    plugins: [react(), ...(useHostelMock ? [hostelDevMockPlugin()] : [])],
+    plugins: [react()],
     resolve: {
       alias: {
         "@": normalizePath(path.resolve(__dirname, "./src")),
@@ -100,6 +47,30 @@ export default defineConfig(({ mode }) => {
                 try {
                   res.writeHead(502, { "Content-Type": "application/json" });
                   res.end(JSON.stringify({ success: false, message: "Backend proxy unreachable", error: err?.message }));
+                } catch {
+                  // ignore
+                }
+              }
+            });
+          },
+        },
+        "/hubs": {
+          target: apiBaseUrl,
+          changeOrigin: true,
+          ws: true,
+          secure: !isHttpsApi ? true : false,
+          agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
+          proxyTimeout: 120000,
+          timeout: 120000,
+          headers: {
+            "ngrok-skip-browser-warning": "true",
+          },
+          configure: (proxy) => {
+            proxy.on("error", (err, req, res) => {
+              if (res && !res.headersSent && typeof res.writeHead === "function") {
+                try {
+                  res.writeHead(502, { "Content-Type": "application/json" });
+                  res.end(JSON.stringify({ success: false, message: "Hub proxy unreachable", error: err?.message }));
                 } catch {
                   // ignore
                 }

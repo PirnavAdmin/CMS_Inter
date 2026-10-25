@@ -2499,8 +2499,18 @@ export function handleMockApiRequest(config) {
   const { path, params } = parseUrl(config.url, config.params);
   const body = config.data ? (typeof config.data === "string" ? JSON.parse(config.data || "{}") : config.data) : {};
 
-  // 0. AUTH CHANGE PASSWORD (/api/Auth/change-password, /api/Admin/change-password)
+  // 0. HOSTEL MODULE: Mock data is completely disabled - live backend required
   const normPath = path.toLowerCase();
+  if (normPath.includes("/api/v1/hostel")) {
+    return Promise.reject({
+      response: {
+        status: 503,
+        data: { success: false, status: false, message: "Hostel mock data disabled. Live backend required." },
+      },
+    });
+  }
+
+  // 0.1 AUTH CHANGE PASSWORD (/api/Auth/change-password, /api/Admin/change-password)
   if (method === "post" && (normPath.endsWith("/api/auth/change-password") || normPath.endsWith("/api/admin/change-password"))) {
     const oldPassword = body.oldPassword || body.currentPassword || body.OldPassword || body.CurrentPassword || "";
     const newPassword = body.newPassword || body.NewPassword || "";
@@ -3710,6 +3720,7 @@ export function handleMockApiRequest(config) {
     });
   }
 
+
   // 22. AVAILABLE HALLS (/api/v1/examinations/available-halls)
   if (path === "/api/v1/examinations/available-halls") {
     const qDate = params.get("date") || params.get("examDate");
@@ -4549,8 +4560,39 @@ export function handleMockApiRequest(config) {
     });
   }
 
-  // Single Evaluation Students (GET /api/v1/evaluations/:evalId/students)
-  const evalStudentsMatch = path.match(/^\/api\/v1\/evaluations\/([^/]+)\/students$/);
+  // EVALUATIONS READINESS (GET /api/v1/evaluations/readiness)
+  if (path === "/api/v1/evaluations/readiness") {
+    const examId = Number(params.get("examinationId") || params.get("examId") || 0);
+    const secId = params.get("sectionId") ? Number(params.get("sectionId")) : null;
+    const evals = mockStore.evaluations || [];
+    const draftCount = evals.filter((e) => e.status === "DRAFT").length;
+    const submittedCount = evals.filter((e) => e.status === "SUBMITTED").length;
+    const verifiedCount = evals.filter((e) => e.status === "VERIFIED").length;
+    const approvedCount = evals.filter((e) => e.status === "APPROVED").length;
+    const rejectedCount = evals.filter((e) => e.status === "REJECTED").length;
+    return ok(config, {
+      examinationId: examId,
+      sectionId: secId,
+      requiredEvaluationCount: evals.length,
+      draftCount,
+      submittedCount,
+      verifiedCount,
+      approvedCount,
+      rejectedCount,
+      missingCount: 0,
+      allRequiredEvaluationsApproved: approvedCount === evals.length && evals.length > 0,
+      readyForResults: approvedCount === evals.length && evals.length > 0,
+      requiredSubjects: [],
+    });
+  }
+
+  // EVALUATIONS EXPORT (GET /api/v1/evaluations/export)
+  if (path === "/api/v1/evaluations/export") {
+    return ok(config, new Blob(["mock-excel-evaluation-content"], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  }
+
+  // Single Evaluation Students (GET /api/v1/faculty/evaluations/:evalId/students or /api/v1/evaluations/:evalId/students)
+  const evalStudentsMatch = path.match(/^\/api\/v1\/(?:faculty\/)?evaluations\/([^/]+)\/students$/);
   if (evalStudentsMatch) {
     const evalId = evalStudentsMatch[1];
     const currentEval = (mockStore.evaluations || []).find((e) => String(e.id || e.evaluationId) === String(evalId)) || {};
@@ -4787,6 +4829,35 @@ export function handleMockApiRequest(config) {
     return ok(config, { success: true, message: "Student marks bulk-saved successfully" });
   }
 
+  // MARKS SUMMARY (GET /api/v1/marks/summary/:examinationId)
+  const marksSummaryMatch = path.match(/^\/api\/v1\/marks\/summary\/(\d+)$/);
+  if (marksSummaryMatch && method === "get") {
+    const examId = marksSummaryMatch[1];
+    const marks = (mockStore.studentMarks || []).filter((m) => String(m.examId || m.examinationId) === String(examId));
+    const totalCount = marks.length || 20;
+    return ok(config, {
+      totalStudents: totalCount,
+      totalMarksEntered: totalCount,
+      verifiedStudents: totalCount,
+      pendingStudents: 0,
+      passedStudents: totalCount,
+      failedStudents: 0,
+      passPercentage: 100,
+      highestMarks: 94,
+      averageMarks: 74.7,
+    });
+  }
+
+  // MARKS EXPORT CSV (GET /api/v1/marks/export/csv)
+  if (path === "/api/v1/marks/export/csv") {
+    const examId = params.get("examinationId") || "0";
+    const subId = params.get("subjectId") || "0";
+    const csvContent = "StudentId,RollNumber,StudentName,MarksObtained,MaxMarks\n101,R-01,Student 1,85,100";
+    return ok(config, new Blob([csvContent], { type: "text/csv" }), {
+      "content-disposition": `attachment; filename=Marks_${examId}_${subId}.csv`,
+    });
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // 34. RESULTS, PUBLISHING & ANALYTICS (/api/v1/results/*)
   // ──────────────────────────────────────────────────────────────────────────
@@ -4804,15 +4875,21 @@ export function handleMockApiRequest(config) {
   }
 
   if (path === "/api/v1/results/readiness") {
+    const examId = Number(params.get("examId") || params.get("examinationId") || 0);
+    const ex = (mockStore.examinations || []).find((e) => Number(e.id || e.examinationId) === examId);
     const approvedCount = (mockStore.evaluations || []).filter((e) => e.status === "APPROVED").length;
     return ok(config, {
-      success: true,
-      data: {
-        canGenerateResults: true,
-        isReady: true,
-        approvedEvaluationCount: approvedCount || 4,
-        totalEligibleStudents: 60,
-      },
+      examinationId: examId,
+      examinationName: ex?.name || ex?.examName || "Examination",
+      examinationStatus: ex?.status || "COMPLETED",
+      isExamCompleted: true,
+      expectedSectionCount: 1,
+      totalEligibleStudents: 20,
+      requiredEvaluationCount: 4,
+      approvedEvaluationCount: approvedCount || 4,
+      allEvaluationsApproved: true,
+      canGenerateResults: true,
+      validationBlockers: [],
     });
   }
 
@@ -4830,6 +4907,77 @@ export function handleMockApiRequest(config) {
       items: list,
       records: list,
       totalCount: list.length,
+    });
+  }
+
+  // Section detailed student-wise result table (GET /api/v1/results/sections/:sectionId)
+  const sectionResultsMatch = path.match(/^\/api\/v1\/results\/sections\/(\d+)$/);
+  if (sectionResultsMatch && method === "get") {
+    const sectionId = Number(sectionResultsMatch[1]);
+    const examId = Number(params.get("examId") || params.get("examinationId") || 0);
+    const pub = (mockStore.publishedResults || []).find((r) => Number(r.examId || r.examinationId) === examId);
+    const pubSec = (pub?.sections || []).find((s) => Number(s.id || s.sectionId) === sectionId);
+
+    const subjectDefs = [
+      { subjectId: 31, subjectName: "Mathematics", subjectCode: "MATH101", shortName: "MATH101", isPractical: false, maxMarks: 100 },
+      { subjectId: 32, subjectName: "Physics", subjectCode: "PHYS101", shortName: "PHYS101", isPractical: true, maxMarks: 100 },
+      { subjectId: 33, subjectName: "Chemistry", subjectCode: "CHEM101", shortName: "CHEM101", isPractical: true, maxMarks: 100 },
+      { subjectId: 34, subjectName: "English", subjectCode: "ENGL101", shortName: "ENGL101", isPractical: false, maxMarks: 100 },
+    ];
+
+    const studentRows = pubSec?.studentRows || [
+      {
+        studentId: 104,
+        rollNo: "MPC2504",
+        rollNumber: "MPC2504",
+        studentName: "Ishita Reddy",
+        boardId: 1,
+        yearId: 9,
+        levelId: 1,
+        groupId: 37,
+        groupName: "MPC",
+        programId: "Regular",
+        programName: "Regular",
+        sectionId,
+        sectionName: pubSec?.name || `Section ${sectionId}`,
+        examinationId: examId,
+        examId,
+        subjects: [
+          { subjectId: 31, subjectName: "Mathematics", subjectCode: "MATH101", short: "MATH101", internalMarks: 16, practicalMarks: null, theoryMarks: 64, totalMarks: 80, obtainedMarks: 80, maxMarks: 100 },
+          { subjectId: 32, subjectName: "Physics", subjectCode: "PHYS101", short: "PHYS101", internalMarks: 17, practicalMarks: 23, theoryMarks: 43, totalMarks: 83, obtainedMarks: 83, maxMarks: 100 },
+          { subjectId: 33, subjectName: "Chemistry", subjectCode: "CHEM101", short: "CHEM101", internalMarks: 18, practicalMarks: 24, theoryMarks: 45, totalMarks: 87, obtainedMarks: 87, maxMarks: 100 },
+          { subjectId: 34, subjectName: "English", subjectCode: "ENGL101", short: "ENGL101", internalMarks: 19, practicalMarks: null, theoryMarks: 70, totalMarks: 89, obtainedMarks: 89, maxMarks: 100 },
+        ],
+        total: 339,
+        totalMarks: 339,
+        maximum: 400,
+        maxMarks: 400,
+        percentage: 84.75,
+        grade: "A",
+        result: "PASS",
+        sectionRank: 1,
+        groupRank: 1,
+        rank: 1,
+        status: "PUBLISHED",
+        publicationStatus: "PUBLISHED",
+        isPublished: true,
+      },
+    ];
+
+    return ok(config, {
+      sectionId,
+      sectionName: pubSec?.name || pubSec?.sectionName || `Section ${sectionId}`,
+      section: pubSec?.name || pubSec?.sectionName || `Section ${sectionId}`,
+      examId,
+      examName: pub?.examName || "Examination",
+      groupName: pub?.groupName || "MPC",
+      programName: pub?.programName || "Regular",
+      inChargeName: pubSec?.inChargeName || "Faculty In-Charge",
+      totalStudents: studentRows.length,
+      resultStatus: "PUBLISHED",
+      isPublished: true,
+      subjectDefinitions: subjectDefs,
+      students: studentRows,
     });
   }
 
@@ -5143,64 +5291,6 @@ export function handleMockApiRequest(config) {
     return ok(config, { success: true, message: "Staff attendance updated successfully", data: match });
   }
 
-  if (path === "/api/v1/staff-attendance/monthly-report") {
-    const month = parseInt(params.get("month") || String(new Date().getMonth() + 1), 10);
-    const year = parseInt(params.get("year") || String(new Date().getFullYear()), 10);
-    const daysInMonth = new Date(year, month, 0).getDate();
-
-    const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => {
-      const d = new Date(year, month - 1, i + 1);
-      const dayStr = String(i + 1).padStart(2, "0");
-      const monthStr = String(month).padStart(2, "0");
-      return {
-        date: `${year}-${monthStr}-${dayStr}`,
-        Date: `${year}-${monthStr}-${dayStr}`,
-        dayNumber: i + 1,
-        dayName: d.toLocaleDateString("en-US", { weekday: "short" }),
-      };
-    });
-
-    const staffList = mockStore.staffAttendance || [];
-    const staffRows = staffList.map((st) => {
-      const dailyStatus = dayHeaders.map((dh, dIdx) => {
-        const d = new Date(year, month - 1, dIdx + 1);
-        if (d.getDay() === 0) return "H";
-        if (dIdx === 5) return "LT";
-        return "P";
-      });
-
-      const presentDays = dailyStatus.filter((s) => s === "P" || s === "LT").length;
-      const absentDays = dailyStatus.filter((s) => s === "A").length;
-      const leavesTaken = dailyStatus.filter((s) => s === "L").length;
-      const lateDays = dailyStatus.filter((s) => s === "LT").length;
-
-      return {
-        ...st,
-        dailyStatus,
-        statuses: dailyStatus,
-        presentDays,
-        absentDays,
-        leavesTaken,
-        lateDays,
-        attendancePercentage: 96.6,
-      };
-    });
-
-    const reportObj = {
-      dayHeaders,
-      headers: dayHeaders,
-      staffRows,
-      rows: staffRows,
-      totalStaff: staffRows.length,
-      daysInMonth,
-    };
-
-    return ok(config, {
-      success: true,
-      data: reportObj,
-      ...reportObj,
-    });
-  }
 
   const staffDetailsMatch = path.match(/^\/api\/v1\/staff-attendance\/staff\/([^/]+)\/details$/);
   if (staffDetailsMatch) {

@@ -50,18 +50,27 @@ export const holidayApi = {
   createHoliday: async (payload) => {
     clearHolidayCache();
     const response = await apiClient.post(apiEndpoints.holidays.create, payload);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("cms-holidays-changed"));
+    }
     return response?.data?.data ?? response?.data;
   },
 
   updateHoliday: async (id, payload) => {
     clearHolidayCache();
     const response = await apiClient.put(apiEndpoints.holidays.update(id), payload);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("cms-holidays-changed"));
+    }
     return response?.data?.data ?? response?.data;
   },
 
   deleteHoliday: async (id) => {
     clearHolidayCache();
     const response = await apiClient.delete(apiEndpoints.holidays.delete(id));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("cms-holidays-changed"));
+    }
     return response?.data;
   },
 
@@ -87,6 +96,9 @@ export const holidayApi = {
         "Content-Type": "multipart/form-data",
       },
     });
+    if (!validateOnly && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("cms-holidays-changed"));
+    }
     return response.data;
   },
 };

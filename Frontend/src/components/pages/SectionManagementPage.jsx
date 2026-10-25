@@ -349,7 +349,7 @@ const buildRoomAvailabilityRows = (rooms, sections, resolveSection) =>
 const buildSectionAllocationRows = (sections, rooms, resolveSection) =>
   sections.map((section, index) => {
     const detail = resolveSection(section);
-    const room = Boolean(section.roomId) ? rooms.find((item) => normalizeId(item.id) === normalizeId(section.roomId)) : null;
+    const room = section.roomId ? rooms.find((item) => normalizeId(item.id) === normalizeId(section.roomId)) : null;
     return {
       "S.No": index + 1,
       "Section Name": sanitizeExcelCell(section.name),

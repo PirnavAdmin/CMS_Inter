@@ -18,9 +18,144 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { Toast, Pagination } from "@/components/common/Ui.jsx";
 import "@/components/pages/ExaminationPage.css";
 import "./ExamReports.css";
+
+const REPORT_PAGE_SIZE = 10;
+
+const printExamReport = (exam, analytics, allRanks) => {
+  if (!exam || !analytics) return;
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    alert("Popup blocked! Please allow popups to print report.");
+    return;
+  }
+
+  const examName = exam.examName || exam.name || "Examination Report";
+  const academicLevel = exam.academicLevelName || exam.academicLevel || "General";
+  const groupName = exam.groupName || "All Groups";
+  const total = analytics.totalStudents ?? allRanks.length;
+  const passed = analytics.passed ?? allRanks.filter((r) => r.result === "PASS").length;
+  const failed = analytics.failed ?? allRanks.filter((r) => r.result !== "PASS").length;
+  const passRate = total > 0 ? ((passed / total) * 100).toFixed(1) : 0;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Examination Performance & Merit Report - ${examName}</title>
+  <style>
+    @page { size: A4 portrait; margin: 12mm 15mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #1e293b; margin: 0; padding: 20px; font-size: 12px; line-height: 1.4; }
+    .header { text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 12px; margin-bottom: 16px; }
+    .header h1 { margin: 0 0 4px; font-size: 20px; color: #0f766e; text-transform: uppercase; letter-spacing: 0.5px; }
+    .header h2 { margin: 0 0 4px; font-size: 14px; color: #334155; font-weight: 600; }
+    .header p { margin: 0; font-size: 11px; color: #64748b; }
+    .kpi-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .kpi-box { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; text-align: center; background: #f8fafc; }
+    .kpi-title { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+    .kpi-val { font-size: 18px; font-weight: 700; color: #0f172a; }
+    .section-title { font-size: 13px; font-weight: 700; color: #0f766e; margin: 16px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
+    th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; font-weight: 700; color: #334155; }
+    td { border: 1px solid #cbd5e1; padding: 5px 8px; }
+    .text-center { text-align: center; }
+    .badge-pass { color: #16a34a; font-weight: 700; }
+    .badge-fail { color: #dc2626; font-weight: 700; }
+    .signatures { display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; page-break-inside: avoid; }
+    .sig-col { text-align: center; width: 180px; }
+    .sig-line { border-top: 1px solid #475569; margin-top: 40px; padding-top: 6px; font-weight: 600; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>COLLEGE EXAMINATION CELL</h1>
+    <h2>EXAMINATION PERFORMANCE & MERIT REPORT</h2>
+    <p>Examination: <strong>${examName}</strong> | Group: <strong>${groupName}</strong> | Level: <strong>${academicLevel}</strong></p>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-box"><div class="kpi-title">Total Students</div><div class="kpi-val">${total}</div></div>
+    <div class="kpi-box"><div class="kpi-title">Passed</div><div class="kpi-val" style="color: #16a34a">${passed}</div></div>
+    <div class="kpi-box"><div class="kpi-title">Failed</div><div class="kpi-val" style="color: #dc2626">${failed}</div></div>
+    <div class="kpi-box"><div class="kpi-title">Pass Percentage</div><div class="kpi-val" style="color: #0f766e">${passRate}%</div></div>
+  </div>
+
+  ${analytics.subjectPerformance && analytics.subjectPerformance.length > 0 ? `
+    <div class="section-title">Subject Performance Analytics</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Subject Name</th>
+          <th class="text-center">Candidates</th>
+          <th class="text-center">Average Score</th>
+          <th class="text-center">Highest Score</th>
+          <th class="text-center">Lowest Score</th>
+          <th class="text-center">Pass %</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${analytics.subjectPerformance.map(s => `
+          <tr>
+            <td>${s.subjectName || "—"}</td>
+            <td class="text-center">${s.students ?? "—"}</td>
+            <td class="text-center">${s.average ?? "—"}</td>
+            <td class="text-center" style="color: #16a34a; font-weight: 700;">${s.highest ?? "—"}</td>
+            <td class="text-center" style="color: #dc2626;">${s.lowest ?? "—"}</td>
+            <td class="text-center" style="font-weight: 700;">${s.passPercentage ?? "—"}%</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  ` : ""}
+
+  <div class="section-title">Student Merit & Rank List (Total Records: ${allRanks.length})</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="text-center" style="width: 50px;">Rank</th>
+        <th>Student Name</th>
+        <th>Roll Number</th>
+        <th>Section</th>
+        <th class="text-center">Total Marks</th>
+        <th class="text-center">Percentage</th>
+        <th class="text-center">Result</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${allRanks.length === 0 ? `<tr><td colspan="7" class="text-center">No ranked student records.</td></tr>` : 
+        allRanks.map(r => `
+          <tr>
+            <td class="text-center" style="font-weight: 700;">${r.rank}</td>
+            <td><strong>${r.studentName || r.student || "—"}</strong></td>
+            <td>${r.rollNumber || r.rollNo || "—"}</td>
+            <td>${r.sectionName || r.section || "—"}</td>
+            <td class="text-center">${r.totalMarks ?? r.total ?? "—"}</td>
+            <td class="text-center" style="font-weight: 700;">${r.percentage}%</td>
+            <td class="text-center ${r.result === "PASS" ? "badge-pass" : "badge-fail"}">${r.result}</td>
+          </tr>
+        `).join("")}
+    </tbody>
+  </table>
+
+  <div class="signatures">
+    <div class="sig-col"><div class="sig-line">Exam Cell In-charge</div></div>
+    <div class="sig-col"><div class="sig-line">Controller of Examinations</div></div>
+    <div class="sig-col"><div class="sig-line">Principal / Director</div></div>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 250);
+    };
+  <\/script>
+</body>
+</html>`;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+};
 
 const unwrapRecords = (res) => {
   if (!res) return [];
@@ -44,6 +179,7 @@ export default function ExamReports() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [reportPage, setReportPage] = useState(1);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
@@ -219,6 +355,15 @@ export default function ExamReports() {
     });
   }, [ranks, searchTerm]);
 
+  useEffect(() => {
+    setReportPage(1);
+  }, [examId, searchTerm]);
+
+  const pagedRanks = useMemo(() => {
+    const start = (reportPage - 1) * REPORT_PAGE_SIZE;
+    return filteredRanks.slice(start, start + REPORT_PAGE_SIZE);
+  }, [filteredRanks, reportPage]);
+
   return (
     <DashboardLayout
       title="Exam Reports"
@@ -280,7 +425,7 @@ export default function ExamReports() {
             <button
               type="button"
               className="cms-btn cms-btn-secondary"
-              onClick={() => window.print()}
+              onClick={() => printExamReport(selectedExam, analytics, ranks)}
               disabled={!analytics}
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
@@ -392,7 +537,7 @@ export default function ExamReports() {
                       </td>
                     </tr>
                   ) : (
-                    filteredRanks.map((row) => (
+                    pagedRanks.map((row) => (
                       <tr key={row.studentId || row.rollNumber} style={{ borderBottom: "1px solid var(--cms-border, rgba(0,0,0,0.05))" }}>
                         <td style={{ padding: "12px 16px", textAlign: "center" }}>
                           <span
@@ -437,6 +582,16 @@ export default function ExamReports() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            <div style={{ padding: "12px 20px" }}>
+              <Pagination
+                currentPage={reportPage}
+                totalRecords={filteredRanks.length}
+                pageSize={REPORT_PAGE_SIZE}
+                onPageChange={setReportPage}
+                unit="students"
+              />
             </div>
           </div>
 

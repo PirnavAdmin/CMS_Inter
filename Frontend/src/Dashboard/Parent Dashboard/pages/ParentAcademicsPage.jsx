@@ -56,10 +56,10 @@ export default function ParentAcademicsPage() {
     if (curriculumSubjects && curriculumSubjects.length > 0) {
       return curriculumSubjects;
     }
-    return child ? (academicSubjectsData[dataKey] || (currentAcademicYear === "2026-2027" ? academicSubjectsData[child.id] : [])) || [] : [];
-  }, [curriculumSubjects, child, dataKey, currentAcademicYear]);
+    return [];
+  }, [curriculumSubjects]);
 
-  const rawResults = contextResults && contextResults.length > 0 ? contextResults : (child ? examResultsData[child.id] || [] : []);
+  const rawResults = contextResults && contextResults.length > 0 ? contextResults : [];
   const yearResults = rawResults.filter((r) => r.academicYear === currentAcademicYear || !r.academicYear);
   const currentExam = (selectedResult && (selectedResult.academicYear === currentAcademicYear || !selectedResult.academicYear))
     ? selectedResult

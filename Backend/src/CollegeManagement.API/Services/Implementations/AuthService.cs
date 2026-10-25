@@ -892,6 +892,17 @@ namespace CollegeManagement.API.Services.Implementations
 
             _logger.LogInformation("Password reset successfully for UserId: {UserId}", user.UserId);
 
+            await _auditService.LogAsync(
+                action: "Password Reset Completed",
+                module: "Authentication",
+                target: user.Email,
+                severity: "Info",
+                status: "Success",
+                details: $"Password reset successfully completed for user {user.Email}",
+                overrideUser: user.FullName ?? user.Email,
+                overrideRole: user.Role?.RoleName ?? "User"
+            );
+
             if (_emailService != null)
             {
                 try
@@ -1003,6 +1014,14 @@ namespace CollegeManagement.API.Services.Implementations
             // 3. Verify OldPassword strictly against Users.PasswordHash
             if (!PasswordHasher.VerifyPassword(oldPassword, user.PasswordHash))
             {
+                await _auditService.LogAsync(
+                    action: "Failed Password Change Attempt",
+                    module: "Authentication",
+                    target: user.Email,
+                    severity: "Warning",
+                    status: "Failed",
+                    details: $"User {user.Email} provided an incorrect old password."
+                );
                 return (false, "Old password is incorrect.");
             }
 
@@ -1029,6 +1048,16 @@ namespace CollegeManagement.API.Services.Implementations
                     }
 
                     transaction.Commit();
+
+                    await _auditService.LogAsync(
+                        action: "Password Changed",
+                        module: "Authentication",
+                        target: user.Email,
+                        severity: "Info",
+                        status: "Success",
+                        details: $"User {user.Email} (ID: {user.UserId}) successfully changed their account password."
+                    );
+
                     return (true, "Password changed successfully.");
                 }
                 catch (Exception ex)

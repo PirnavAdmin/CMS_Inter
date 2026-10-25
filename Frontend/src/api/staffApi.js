@@ -202,3 +202,36 @@ export const reimbursementApi = {
   },
 };
 
+// ==================== STAFF ATTENDANCE APIs ====================
+export const staffAttendanceApi = {
+  // GET /api/v1/staff-attendance/monthly-report
+  getMonthlyReport: (params) => {
+    return api.get("/api/v1/staff-attendance/monthly-report", { params });
+  },
+
+  // GET /api/v1/staff-attendance/my-today
+  getMyToday: () => {
+    return api.get("/api/v1/staff-attendance/my-today");
+  },
+
+  // GET /api/v1/staff-attendance/my-history
+  getMyHistory: (period = "week") => {
+    return api.get("/api/v1/staff-attendance/my-history", { params: { period } });
+  },
+
+  // POST /api/v1/staff-attendance/punch-in
+  punchIn: (data = {}) => {
+    return api.post("/api/v1/staff-attendance/punch-in", data);
+  },
+
+  // POST /api/v1/staff-attendance/punch-out
+  punchOut: (data = {}) => {
+    return api.post("/api/v1/staff-attendance/punch-out", data);
+  },
+
+  // POST /api/v1/staff-attendance/regularize
+  regularize: (data) => {
+    return api.post("/api/v1/staff-attendance/regularize", data);
+  },
+};
+

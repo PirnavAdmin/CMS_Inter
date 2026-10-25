@@ -25,9 +25,37 @@ import {
   storedFeeRecords,
   examResultsData,
   initialChildren,
+  collegeAnnouncements,
+  upcomingEvents,
 } from "../parentData.js";
+import holidayApi from "@/api/holidayApi.js";
+import { holidayRecords } from "@/data/mockData.js";
 
 const ParentPortalContext = createContext(null);
+
+export const formatHolidayDateRange = (holiday) => {
+  if (!holiday) return "—";
+  if (holiday.formattedDateRange) return holiday.formattedDateRange;
+  const start = holiday.startDate || holiday.holidayDate || "";
+  const end = holiday.endDate || start;
+  if (!start) return "—";
+  if (holiday.dateType === "Date Range" && end && end !== start) {
+    return `${formatDate(start)} - ${formatDate(end)}`;
+  }
+  return formatDate(start);
+};
+
+export const getHolidayLifecycleStatus = (holiday) => {
+  if (!holiday) return "Active";
+  if (holiday.lifecycleStatus && holiday.lifecycleStatus !== "Active") return holiday.lifecycleStatus;
+  if (holiday.status === "Inactive") return "Inactive";
+  const start = holiday.startDate || holiday.holidayDate || "";
+  const end = holiday.endDate || start;
+  const today = new Date().toISOString().slice(0, 10);
+  if (end && end < today) return "Completed";
+  if (start && start > today) return "Upcoming";
+  return "Active";
+};
 
 export const formatDate = (val) => {
   if (!val) return "—";
@@ -484,6 +512,8 @@ export function ParentPortalProvider({ children }) {
   const [timetableMap, setTimetableMap] = useState({});
   const [examinationsMap, setExaminationsMap] = useState({});
   const [curriculumSubjectsMap, setCurriculumSubjectsMap] = useState({});
+  const [holidays, setHolidays] = useState([]);
+  const [holidaysLoading, setHolidaysLoading] = useState(false);
 
   // 1. Fetch children enrolled under parent from GET /api/v1/students/my-children
   const fetchChildren = useCallback(async () => {
@@ -517,19 +547,19 @@ export function ParentPortalProvider({ children }) {
           status: "—",
         },
         academics: {
-          sgpa: "9.0",
-          cgpa: "9.0",
-          grade: "A+",
-          rank: "1st in Class",
-          totalCredits: 24,
-          performanceTrend: "+4.2% from last term",
+          sgpa: "—",
+          cgpa: "—",
+          grade: "—",
+          rank: "—",
+          totalCredits: 0,
+          performanceTrend: "—",
         },
         fees: {
-          total: 70000,
+          total: 0,
           paid: 0,
-          pending: 70000,
-          status: "Pending",
-          dueDate: "30 Sep 2026",
+          pending: 0,
+          status: "—",
+          dueDate: "—",
         },
       }));
 
@@ -551,6 +581,67 @@ export function ParentPortalProvider({ children }) {
   useEffect(() => {
     fetchChildren();
   }, [fetchChildren]);
+
+  // Fetch holidays from Admin holiday management (real API with fallback to mockStore/mockData)
+  const fetchHolidays = useCallback(async () => {
+    setHolidaysLoading(true);
+    try {
+      const res = await holidayApi.getHolidays({ page: 1, pageSize: 100 });
+      let list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+
+      if (!list || list.length === 0) {
+        try {
+          const stored = typeof window !== "undefined" ? window.localStorage.getItem("cms_mock_store_v4_holidays") : null;
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              list = parsed;
+            }
+          }
+        } catch {}
+      }
+
+      if (!list || list.length === 0) {
+        list = holidayRecords || [];
+      }
+
+      setHolidays(list);
+    } catch {
+      try {
+        const stored = typeof window !== "undefined" ? window.localStorage.getItem("cms_mock_store_v4_holidays") : null;
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setHolidays(parsed);
+            return;
+          }
+        }
+      } catch {}
+      setHolidays(holidayRecords || []);
+    } finally {
+      setHolidaysLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHolidays();
+
+    const handleHolidaysChanged = () => {
+      fetchHolidays();
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("cms-holidays-changed", handleHolidaysChanged);
+      window.addEventListener("storage", handleHolidaysChanged);
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("cms-holidays-changed", handleHolidaysChanged);
+        window.removeEventListener("storage", handleHolidaysChanged);
+      }
+    };
+  }, [fetchHolidays]);
 
   // 2. Fetch active child detailed record, fees, results, attendance, timetable, examinations & curriculum
   const fetchActiveChildData = useCallback(async (studentId) => {
@@ -757,11 +848,7 @@ export function ParentPortalProvider({ children }) {
     const rawDetailed = detailedStudentMap[activeBaseChild.id];
     const rawFee = feeMap[activeBaseChild.id];
     const rawAttendance = attendanceMap[activeBaseChild.id];
-    const rawSubjectAttendance = subjectAttendanceMap[activeBaseChild.id]
-      || subjectAttendanceData[activeBaseChild.id]
-      || subjectAttendanceData[String(activeBaseChild.studentId)]
-      || (activeBaseChild.group === "BiPC" ? subjectAttendanceData["stu-002"] : subjectAttendanceData["stu-001"])
-      || [];
+    const rawSubjectAttendance = subjectAttendanceMap[activeBaseChild.id] || [];
 
     if (rawDetailed) {
       return transformStudentData(rawDetailed, rawFee, rawAttendance, currentAcademicYear, rawSubjectAttendance);
@@ -770,43 +857,42 @@ export function ParentPortalProvider({ children }) {
     const attendanceOverview = transformAttendanceOverview(rawAttendance);
     const initialAttendance = activeBaseChild.attendance || {};
 
-    // Fallback based on base summary item
     return {
       ...activeBaseChild,
-      level: activeBaseChild.level || "Intermediate 1st Year",
+      level: activeBaseChild.level || "Intermediate",
       semester: activeBaseChild.semester || "Semester 1",
       academicYear: currentAcademicYear,
-      board: activeBaseChild.board || "Board of Intermediate Education",
-      mentor: activeBaseChild.mentor || (activeBaseChild.group === "BiPC" ? "Mrs. Lakshmi Devi" : "Dr. Anitha Rao"),
-      mentorDesignation: activeBaseChild.mentorDesignation || (activeBaseChild.group === "BiPC" ? "Senior Lecturer & Class Teacher" : "Professor & Class Teacher"),
-      mentorMobile: activeBaseChild.mentorMobile || (activeBaseChild.group === "BiPC" ? "+91 98480 34567" : "+91 98480 12345"),
-      mentorEmail: activeBaseChild.mentorEmail || (activeBaseChild.group === "BiPC" ? "lakshmi.d@college.edu" : "anitha.rao@college.edu"),
+      board: activeBaseChild.board || "State Board",
+      mentor: activeBaseChild.mentor || "—",
+      mentorDesignation: activeBaseChild.mentorDesignation || "—",
+      mentorMobile: activeBaseChild.mentorMobile || "—",
+      mentorEmail: activeBaseChild.mentorEmail || "—",
       attendance: {
-        overall: attendanceOverview.overall > 0 ? attendanceOverview.overall : (initialAttendance.overall || 94),
-        presentDays: attendanceOverview.presentDays > 0 ? attendanceOverview.presentDays : (initialAttendance.presentDays || 47),
-        absentDays: attendanceOverview.absentDays > 0 ? attendanceOverview.absentDays : (initialAttendance.absentDays || 3),
-        totalWorkingDays: attendanceOverview.totalWorkingDays > 0 ? attendanceOverview.totalWorkingDays : (initialAttendance.totalWorkingDays || 50),
+        overall: attendanceOverview.overall > 0 ? attendanceOverview.overall : (initialAttendance.overall || 0),
+        presentDays: attendanceOverview.presentDays > 0 ? attendanceOverview.presentDays : (initialAttendance.presentDays || 0),
+        absentDays: attendanceOverview.absentDays > 0 ? attendanceOverview.absentDays : (initialAttendance.absentDays || 0),
+        totalWorkingDays: attendanceOverview.totalWorkingDays > 0 ? attendanceOverview.totalWorkingDays : (initialAttendance.totalWorkingDays || 0),
         totalLeave: attendanceOverview.totalLeave ?? 0,
         totalLate: attendanceOverview.totalLate ?? 0,
         totalHalfDays: attendanceOverview.totalHalfDays ?? 0,
-        status: attendanceOverview.overall > 0 ? attendanceOverview.status : (initialAttendance.status || "Excellent"),
-        monthlyRecords: attendanceOverview.monthlyRecords,
+        status: attendanceOverview.overall > 0 ? attendanceOverview.status : (initialAttendance.status || "—"),
+        monthlyRecords: attendanceOverview.monthlyRecords || [],
         subjectRecords: transformSubjectAttendance(rawSubjectAttendance),
         raw: rawAttendance,
       },
       academics: activeBaseChild.academics || {
-        sgpa: "8.8",
-        cgpa: "8.9",
-        grade: "A+",
-        rank: "3rd in Class",
-        totalCredits: 24,
-        performanceTrend: "+4.2% from last term",
+        sgpa: "—",
+        cgpa: "—",
+        grade: "—",
+        rank: "—",
+        totalCredits: 0,
+        performanceTrend: "—",
       },
       fees: activeBaseChild.fees || {
-        total: 70000,
-        paid: 70000,
+        total: 0,
+        paid: 0,
         pending: 0,
-        status: "Paid",
+        status: "—",
         dueDate: "—",
       },
     };
@@ -822,20 +908,7 @@ export function ParentPortalProvider({ children }) {
     if (rawFee) {
       return transformFeeData(rawFee, rawDetailed);
     }
-    const stored = storedFeeRecords[activeBaseChild.id] || storedFeeRecords["stu-001"];
-    if (stored) {
-      return {
-        total: stored.total,
-        paid: stored.paid,
-        pending: stored.pending,
-        status: stored.status,
-        dueDate: stored.dueDate,
-        breakdown: stored.breakdown || [],
-        schedules: stored.schedules || [],
-        receipts: stored.receipts || [],
-      };
-    }
-    return transformFeeData(null, activeBaseChild);
+    return { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], schedules: [], receipts: [] };
   }, [activeBaseChild, feeMap, detailedStudentMap]);
 
   // Active child exam results
@@ -845,27 +918,7 @@ export function ParentPortalProvider({ children }) {
     if (Array.isArray(rawList) && rawList.length > 0) {
       return transformResultsData(rawList, currentAcademicYear);
     }
-    const storedResults = examResultsData[activeBaseChild.id] || examResultsData["stu-001"] || [];
-    return storedResults.map((r, idx) => ({
-      id: r.id || `res-${idx}`,
-      resultId: r.id,
-      examinationId: r.examinationId || r.id,
-      examName: r.examName || r.exam,
-      examCode: r.examCode || "EXAM",
-      academicYear: r.academicYear || currentAcademicYear,
-      period: r.academicYear || "Annual",
-      obtainedMarks: r.obtainedMarks ?? (r.obtained ? Number(r.obtained) : 0),
-      maxMarks: r.maxMarks ?? (r.max ? Number(r.max) : 100),
-      percentage: r.percentage ? `${r.percentage}%` : "—",
-      grade: r.grade || "A+",
-      sgpa: r.sgpa || "8.8",
-      resultStatus: r.resultStatus || r.status || "Passed",
-      classRank: r.classRank || r.rank || "—",
-      isPublished: true,
-      publishedAt: r.publishedAt || r.date || "—",
-      subjects: r.subjects || [],
-      raw: r,
-    }));
+    return [];
   }, [activeBaseChild, resultsMap, currentAcademicYear]);
 
   // Active child timetable formatted schedule
@@ -876,13 +929,7 @@ export function ParentPortalProvider({ children }) {
       const transformed = transformTimetableData(rawSlots);
       if (transformed && transformed.length > 0) return transformed;
     }
-    const key = activeBaseChild.id || String(activeBaseChild.studentId || "");
-    const fallback = timetableData[key]
-      || timetableData[String(activeBaseChild.studentId)]
-      || (activeBaseChild.group === "BiPC" ? timetableData["stu-002"] : timetableData["stu-001"])
-      || timetableData["860"]
-      || [];
-    return fallback;
+    return [];
   }, [activeBaseChild, timetableMap]);
 
   // Active child raw timetable slots
@@ -962,6 +1009,93 @@ export function ParentPortalProvider({ children }) {
     };
   }, [detailedStudentMap, activeChildId, authUser]);
 
+  // Combined circulars & announcements including Admin Holidays & Examinations
+  const announcements = useMemo(() => {
+    const list = [];
+
+    // 1. Map Admin holidays as official Holiday Circulars
+    (holidays || []).forEach((h, idx) => {
+      const name = h.holidayName || h.name || `Holiday #${idx + 1}`;
+      const title = `${name} (${h.holidayType || "Holiday"})`;
+      const dateRangeStr = formatHolidayDateRange(h);
+      const start = h.startDate || h.holidayDate || "";
+      const end = h.endDate || start;
+      const status = getHolidayLifecycleStatus(h);
+
+      list.push({
+        id: `hol-ann-${h.id || h.holidayId || idx}`,
+        title,
+        category: "Holidays",
+        date: dateRangeStr,
+        priority: status === "Active" ? "High" : (status === "Upcoming" ? "Important" : "General"),
+        summary: h.description || `The college administration declares ${name} on ${dateRangeStr}. Applicable to: ${h.appliesTo || "All Students & Staff"}. Normal academic schedule resumes after the holiday period.`,
+        author: "College Administration",
+        startDate: start,
+        endDate: end,
+        appliesTo: h.appliesTo || "All Students & Staff",
+        holidayType: h.holidayType || "Holiday",
+        isHoliday: true,
+        raw: h,
+      });
+    });
+
+    // 2. Map Admin examinations as Examination Notices if available
+    (examinations || []).forEach((exam, idx) => {
+      const examName = exam.examinationName || exam.name || `Examination #${idx + 1}`;
+      const examDate = exam.startDate ? formatDate(exam.startDate) : (exam.academicYear || "Upcoming");
+      list.push({
+        id: `exam-ann-${exam.examinationId || exam.id || idx}`,
+        title: `${examName} — Schedule & Guidelines`,
+        category: "Examinations",
+        date: examDate,
+        priority: "High",
+        summary: `Official examination schedule published for ${examName}. Parents are requested to review their ward's hall tickets and test timetables.`,
+        author: "Office of Controller of Examinations",
+        isExam: true,
+        raw: exam,
+      });
+    });
+
+    // 3. Include base announcements from parentData that are not duplicates
+    (collegeAnnouncements || []).forEach((ann) => {
+      if (ann.category === "Holidays" && holidays.some((h) => (h.holidayName || h.name || "").toLowerCase().includes("diwali"))) {
+        return;
+      }
+      list.push(ann);
+    });
+
+    return list;
+  }, [holidays, examinations]);
+
+  // Combined upcoming events including Admin Holidays & PTM
+  const events = useMemo(() => {
+    const list = [...(upcomingEvents || [])];
+    const seenTitles = new Set(list.map((e) => e.title.toLowerCase()));
+
+    (holidays || []).forEach((h, idx) => {
+      const name = h.holidayName || h.name || `Holiday #${idx + 1}`;
+      const title = `${name} (${h.holidayType || "Holiday"})`;
+      if (seenTitles.has(title.toLowerCase())) return;
+      seenTitles.add(title.toLowerCase());
+
+      const status = getHolidayLifecycleStatus(h);
+      list.push({
+        id: `ev-hol-${h.id || h.holidayId || idx}`,
+        title,
+        date: formatHolidayDateRange(h),
+        time: "All Day",
+        location: "College Campus Closed / Holiday",
+        category: "Holidays",
+        status: status === "Active" ? "Active Today" : status,
+        rsvpRequired: false,
+        isHoliday: true,
+        raw: h,
+      });
+    });
+
+    return list;
+  }, [holidays]);
+
   const value = useMemo(() => ({
     loading,
     error,
@@ -980,6 +1114,11 @@ export function ParentPortalProvider({ children }) {
     rawTimetable,
     childAttendance,
     attendanceOverview: childAttendance,
+    holidays,
+    holidaysLoading,
+    announcements,
+    events,
+    refreshHolidays: fetchHolidays,
     fetchExamMemo,
     memoMap,
     parentUser,
@@ -1016,6 +1155,11 @@ export function ParentPortalProvider({ children }) {
     rawTimetable,
     childAttendance,
     subjectAttendanceMap,
+    holidays,
+    holidaysLoading,
+    announcements,
+    events,
+    fetchHolidays,
     fetchExamMemo,
     memoMap,
     parentUser,
