@@ -35,7 +35,7 @@ export default function AccountantFeeOverview({ params }) {
   const chartTotals = ["expected", "collected", "outstanding"].map((key) => ({ name: key[0].toUpperCase() + key.slice(1), value: sum(selected, key), key }));
   const pie = chartTotals.filter((item) => item.value > 0);
   const rows = tab === "recent" ? recent : schedules[tab];
-  const page = pageOf(rows, pageNumber);
+  const page = pageOf(rows, pageNumber, "", "", 5);
   const tableError = tab === "recent" ? state.data?.errors.dashboard
     : tab === "overdue" ? state.data?.errors.due
       : !hasSchedules ? state.data?.errors.due || state.data?.errors.dashboard || "Fee schedule data is unavailable." : "";
@@ -77,7 +77,7 @@ export default function AccountantFeeOverview({ params }) {
     <FeeCard title="Fee Management Overview" className="cms-fee-overview-card" bodyClass="cms-fee-overview-shell">
       <div className="cms-fee-overview-tabs" aria-label="Fee Management Overview">{overviewTabs.map(([key, label, Icon]) => <button key={key} type="button" aria-current={tab === key ? "page" : undefined} className={`cms-fee-overview-tab ${tab === key ? "is-active" : ""}`} onClick={() => chooseTab(key)}><Icon size={15} />{label}</button>)}</div>
       <div className="cms-fee-overview-content"><FeeTable rows={page.rows} columns={tab === "recent" ? recentColumns : dueColumns} className={tab === "recent" ? "cms-fee-recent-payments-table" : "cms-fee-schedule-list-table"} loading={state.loading} error={tableError} empty={tab === "recent" ? "No recent payments." : tab === "overdue" ? "No overdue fee schedules." : "No pending fee schedules."} />
-        {!state.loading && !tableError ? <FeePagination page={page} onPage={setPageNumber} /> : null}
+        {!state.loading && !tableError ? <FeePagination page={page} onPage={setPageNumber} numbered /> : null}
       </div>
     </FeeCard>
   </div>;

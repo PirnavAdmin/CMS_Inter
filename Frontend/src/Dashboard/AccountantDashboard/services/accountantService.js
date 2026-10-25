@@ -5,6 +5,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { readFee, feeStatus, scopedFeeMasters } from "../utils/feeViewData.js";
+import { PAYMENT_METHODS } from "../../../data/feeManagementData.js";
 
 // Shared API modules retain their original clients, endpoints and contracts.
 // Payroll: reuse the project API without changing its contract.
@@ -200,28 +201,94 @@ export async function loadScopedLedger(params, signal) {
   });
 }
 
-export async function loadPaymentHistory(params, signal) {
+export async function loadPaymentHistory(params, signal, authorize = () => false) {
+  signal?.throwIfAborted();
+  if (!authorize()) throw invalid("Student payment history requires verified Fee Management create permission for POST /api/v1/fees/bulk-history. The individual history and receipt routes exclude Accountant.");
   const ledger = await loadScopedLedger(params, signal);
-  const students = [...new Set(rowsOf(ledger).map((row) => row.studentId ?? row.StudentId).filter(Boolean))];
-  const payments = [];
-  const errors = [];
-  // Bound concurrent history requests for large ledgers.
-  for (let start = 0; start < students.length; start += 6) {
+  const students = [...new Set(ledger.map(row => readFee(row, "studentId")))];
+  if (students.some(id => !validId(id)) || ledger.some(row => !validId(readFee(row, "studentFeeId")))) throw invalid("Payment history cannot be verified because account IDs are missing.");
+  const feeIds = new Set(ledger.map(row => String(readFee(row, "studentFeeId"))));
+  const payments = new Map(), errors = [];
+  // The existing bulk endpoint has its own module/create authorization. It is
+  // the primary source, never a fallback after a denied history/receipt request.
+  for (let start = 0; start < students.length; start += 50) {
     signal?.throwIfAborted();
-    const results = await Promise.allSettled(students.slice(start, start + 6).map((id) => apiClient.get(apiEndpoints.fee.history(id), { signal })));
-    results.forEach((result) => {
-      if (result.status === "fulfilled") payments.push(...rowsOf(result.value));
-      else errors.push(requestError(result.reason));
-    });
+    try {
+      if (!authorize()) throw invalid("History permission is no longer available. Refresh your permissions.");
+      const ids = students.slice(start, start + 50).map(Number);
+      const data = checkedFeeData(await apiClient.post("/api/v1/fees/bulk-history", ids, { signal }));
+      for (const id of ids) {
+        if (data?.[String(id)] == null) throw invalid("The backend did not return payment history for a requested student.");
+        for (const payment of checkedFeeRows(data[String(id)])) {
+          if (!validId(readFee(payment, "studentFeeId")) || Number(readFee(payment, "studentId")) !== id) throw invalid("The returned transaction does not match the requested student.");
+          if (!feeIds.has(String(readFee(payment, "studentFeeId")))) continue;
+          const amount = readFee(payment, "amount");
+          if (!validId(readFee(payment, "feePaymentId")) || amount == null || !Number.isFinite(Number(amount)) || Number(amount) <= 0) throw invalid("The API returned an invalid payment transaction. No replacement values have been used.");
+          payments.set(String(readFee(payment, "feePaymentId")), payment);
+        }
+      }
+    } catch (failure) {
+      signal?.throwIfAborted();
+      errors.push(requestError(failure));
+      break;
+    }
   }
-  const feeIds = new Set(rowsOf(ledger).map((row) => String(row.studentFeeId ?? row.StudentFeeId)));
-  const unique = new Map();
-  payments.forEach((row, index) => {
-    const feeId = row.studentFeeId ?? row.StudentFeeId;
-    if (feeId != null && !feeIds.has(String(feeId))) return;
-    unique.set(String(row.feePaymentId ?? row.FeePaymentId ?? `payment-${index}`), row);
-  });
-  return { payments: [...unique.values()], errors: [...new Set(errors)] };
+  return { payments: [...payments.values()], errors };
+}
+
+export async function loadCollectionAccounts(params, signal) {
+  const rows = checkedFeeRows(await apiClient.get(apiEndpoints.fee.collection, { params, signal }));
+  return rows.map((row) => ({ ...row, totalPayable: readFee(row, "payable"), totalPaid: readFee(row, "paid"), nextDueDate: readFee(row, "nextDue") }));
+}
+
+export async function loadCollectionDetails(row, signal) {
+  const id = readFee(row, "studentFeeId");
+  if (!validId(id) || !validId(readFee(row, "studentId"))) throw invalid("Valid student and fee account IDs are required.");
+  const detail = checkedFeeData(await apiClient.get(apiEndpoints.fee.getStudentFee(id), { signal }));
+  if (Number(readFee(detail, "studentFeeId")) !== Number(id) || Number(readFee(detail, "studentId")) !== Number(readFee(row, "studentId"))) throw invalid("The returned fee account does not match the selected student.");
+  return detail;
+}
+
+export function feeCollectionAccess(permissions) {
+  return Boolean(!permissions.loading && !permissions.error && (permissions.isSuperOrAdmin || permissions.canDo("fee-management", ACTIONS.CREATE, "fee-collection")));
+}
+
+export function paymentPayload(account, draft) {
+  const id = (key) => Number(readFee(account, key));
+  if (!["studentId", "studentFeeId"].every(key => validId(readFee(account, key)))) throw invalid("Valid student and fee account IDs are required.");
+  const number = key => draft[key] !== "" && draft[key] != null && Number.isFinite(Number(draft[key]));
+  if (!number("amount") || Number(draft.amount) <= 0) throw invalid("Enter a valid payment amount greater than zero.");
+  if (!["discount", "fine"].every(key => number(key) && Number(draft[key]) >= 0)) throw invalid("Discount and fine must be valid, non-negative amounts.");
+  const amount = Number(draft.amount), discount = Number(draft.discount), fine = Number(draft.fine);
+  const balance = readFee(account, "outstandingBalance");
+  const savedBalance = balance == null ? NaN : Number(balance);
+  const finalAmount = Math.round((amount + fine - discount + Number.EPSILON) * 100) / 100;
+  if (!Number.isFinite(savedBalance) || savedBalance <= 0) throw invalid("A current outstanding balance is required. Refresh the fee account.");
+  if (amount > savedBalance || !Number.isFinite(finalAmount) || finalAmount <= 0 || finalAmount > savedBalance) throw invalid("Payment including fine and discount must be positive and cannot exceed the outstanding balance.");
+  if (!["full", "partial", "schedules"].includes(draft.target)) throw invalid("Select a payment target.");
+  const ids = draft.target !== "schedules" ? [] : [...new Set(draft.feeInstallmentIds || [])].map(Number);
+  const schedules = checkedFeeRows(readFee(account, "schedules") ?? []);
+  const selected = schedules.filter(row => ids.includes(Number(readFee(row, "feeInstallmentId"))));
+  if (draft.target === "schedules" && (!ids.length || ids.some(value => !validId(value)) || selected.length !== ids.length || selected.some(row => readFee(row, "balanceAmount") == null || Number(readFee(row, "balanceAmount")) <= 0 || !Number.isFinite(Number(readFee(row, "balanceAmount")))))) throw invalid("Select valid pending fee schedules from this account.");
+  if (ids.length && (amount > selected.reduce((sum, row) => sum + Number(readFee(row, "balanceAmount")), 0) || finalAmount > selected.reduce((sum, row) => sum + Number(readFee(row, "balanceAmount")), 0))) throw invalid("Payment cannot exceed the selected schedule balance.");
+  if (!PAYMENT_METHODS.includes(draft.paymentMode)) throw invalid("Select a supported payment method.");
+  if (draft.paymentMode !== "Cash" && !String(draft.transactionReference || "").trim()) throw invalid("A transaction reference is required for non-cash payments.");
+  if (String(draft.transactionReference || "").length > 100 || String(draft.note || "").length > 500) throw invalid("Reference must be at most 100 characters and notes at most 500 characters.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.paymentDate || "") || Number.isNaN(Date.parse(draft.paymentDate)) || new Date(draft.paymentDate).toISOString().slice(0, 10) !== draft.paymentDate) throw invalid("Enter a valid payment date.");
+  return { studentId: id("studentId"), studentFeeId: id("studentFeeId"), feeInstallmentIds: ids, amount, paymentDate: new Date(draft.paymentDate).toISOString(), paymentMode: draft.paymentMode, receiptNumber: "", discount, fine, transactionReference: String(draft.transactionReference || "").trim(), note: draft.note || "" };
+}
+
+export async function collectStudentPayment(account, draft, authorize) {
+  const payload = paymentPayload(account, draft);
+  if (!authorize()) throw invalid("Verified Fee Management create permission is required to collect payment.");
+  try {
+    const saved = checkedFeeData(await apiClient.post(apiEndpoints.fee.collect, payload));
+    if (!validId(readFee(saved, "feePaymentId")) || Number(readFee(saved, "studentId")) !== payload.studentId || Number(readFee(saved, "studentFeeId")) !== payload.studentFeeId || readFee(saved, "amount") == null || !Number.isFinite(Number(readFee(saved, "amount"))) || Number(readFee(saved, "amount")) <= 0 || String(readFee(saved, "status")).toLowerCase() !== "success") throw invalid("The payment response could not be confirmed.");
+    return saved;
+  } catch (error) {
+    if (!error.response || error.response.status >= 500) error.feeSaveUncertain = true;
+    throw error;
+  }
 }
 
 
@@ -249,7 +316,7 @@ export async function loadSetupRecords(kind, endpoint, params, signal, paging = 
   // Admin treats types/scholarships as reusable masters, not student-year records.
   const query = kind === "types" || kind === "scholarships" ? undefined
     : kind === "structures" ? { campusId: params.campusId }
-      : kind === "transport" ? { campusId: params.campusId, pageNumber: paging.page, pageSize: 10, search: paging.search }
+      : kind === "transport" ? { campusId: params.campusId, pageNumber: paging.page, pageSize: 5, search: paging.search }
         : params;
   const response = await apiClient.get(endpoint, { ...(query ? { params: query } : {}), signal });
   const data = checkedFeeData(response);
