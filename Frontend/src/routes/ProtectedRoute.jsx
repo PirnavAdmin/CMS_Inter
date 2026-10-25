@@ -111,6 +111,14 @@ export function isTransportManagerRole(role, user) {
 }
 
 export function isNonTeachingRole(role, user) {
+  // Explicitly exclude specific known roles and admins so they are never hijacked into non-teaching portal
+  if (user?.isAdmin || isAdminRole(role) || (user && isAdminRole(user.role))) return false;
+  if (isPrincipalRole(role) || (user && isPrincipalRole(user.role))) return false;
+  if (isAccountantRole(role) || (user && isAccountantRole(user.role))) return false;
+  if (isExamCellRole(role) || (user && isExamCellRole(user.role))) return false;
+  if (isWardenRole(role, user)) return false;
+  if (isTransportManagerRole(role, user)) return false;
+
   const check = (val) => {
     if (!val) return false;
     const s = String(val).trim().toLowerCase();
@@ -120,11 +128,10 @@ export function isNonTeachingRole(role, user) {
   if (check(role)) return true;
   if (user && typeof user === "object") {
     if (check(user.role)) return true;
-    if (check(user.staffType)) return true;
-    if (check(user.type)) return true;
-    if (check(user.designationType)) return true;
     if (check(user.roleType)) return true;
-    if (check(user.userType)) return true;
+    // Only check staffType if role is specifically generic "staff"
+    const userRoleStr = String(user.role || "").trim().toLowerCase();
+    if (userRoleStr === "staff" && check(user.staffType)) return true;
   }
   return false;
 }
@@ -272,17 +279,16 @@ export default function ProtectedRoute({
     clearAuthSession();
     return <Navigate to="/login" replace />;
   }
-  const isWarden = isWardenRole(role, user);
-  const isTransportManager = isTransportManagerRole(role, user);
-  const isNonTeaching = !isWarden && !isTransportManager && isNonTeachingRole(role, user);
-  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden && !isTransportManager && !isNonTeaching;
-  const isFaculty = !isWarden && !isTransportManager && !isNonTeaching && isFacultyOrStaffRole(role);
-  const isPrincipal = !isWarden && !isTransportManager && isPrincipalRole(role);
-  const isParent = !isWarden && !isTransportManager && isParentRole(role);
-  const isAccountant = !isWarden && !isTransportManager && isAccountantRole(role);
-  const isStudent = isStudentRole(role);
-
-  const isExamCell = !isWarden && !isTransportManager && isExamCellRole(role);
+  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWardenRole(role, user) && !isTransportManagerRole(role, user);
+  const isWarden = !isAdmin && isWardenRole(role, user);
+  const isTransportManager = !isAdmin && isTransportManagerRole(role, user);
+  const isPrincipal = !isAdmin && !isWarden && !isTransportManager && isPrincipalRole(role);
+  const isAccountant = !isAdmin && !isWarden && !isTransportManager && isAccountantRole(role);
+  const isExamCell = !isAdmin && !isWarden && !isTransportManager && isExamCellRole(role);
+  const isNonTeaching = !isAdmin && !isWarden && !isTransportManager && !isPrincipal && !isAccountant && !isExamCell && isNonTeachingRole(role, user);
+  const isFaculty = !isAdmin && !isWarden && !isTransportManager && !isNonTeaching && isFacultyOrStaffRole(role);
+  const isParent = !isAdmin && !isWarden && !isTransportManager && isParentRole(role);
+  const isStudent = !isAdmin && isStudentRole(role);
 
   // Transport Manager check
   if (requireTransportManager && !isTransportManager && !isAdmin) {
@@ -452,28 +458,29 @@ export function PublicOnlyRoute({ children }) {
 
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
-  const isWarden = isWardenRole(role, user);
-  const isTransportManager = isTransportManagerRole(role, user);
-  const isNonTeaching = !isWarden && !isTransportManager && isNonTeachingRole(role, user);
-  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWarden && !isTransportManager && !isNonTeaching;
-  const isFaculty = !isWarden && !isTransportManager && !isNonTeaching && isFacultyOrStaffRole(role);
-  const isPrincipal = !isWarden && !isTransportManager && isPrincipalRole(role);
-  const isParent = !isWarden && !isTransportManager && isParentRole(role);
-  const isAccountant = !isWarden && !isTransportManager && isAccountantRole(role);
-  const isStudent = isStudentRole(role);
+  const isAdmin = (user?.isAdmin || isAdminRole(role)) && !isWardenRole(role, user) && !isTransportManagerRole(role, user);
+  const isWarden = !isAdmin && isWardenRole(role, user);
+  const isTransportManager = !isAdmin && isTransportManagerRole(role, user);
+  const isPrincipal = !isAdmin && !isWarden && !isTransportManager && isPrincipalRole(role);
+  const isAccountant = !isAdmin && !isWarden && !isTransportManager && isAccountantRole(role);
+  const isExamCell = !isAdmin && !isWarden && !isTransportManager && isExamCellRole(role);
+  const isNonTeaching = !isAdmin && !isWarden && !isTransportManager && !isPrincipal && !isAccountant && !isExamCell && isNonTeachingRole(role, user);
+  const isFaculty = !isAdmin && !isWarden && !isTransportManager && !isNonTeaching && isFacultyOrStaffRole(role);
+  const isParent = !isAdmin && !isWarden && !isTransportManager && isParentRole(role);
+  const isStudent = !isAdmin && isStudentRole(role);
 
   if (isTokenValid && (user || role)) {
+    if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isTransportManager) return <Navigate to="/transport-manager/overview" replace />;
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;
-    if (isNonTeaching) return <Navigate to="/non-teaching-dashboard" replace />;
-    if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;
-    if (isAdmin) return <Navigate to="/dashboard" replace />;
+    if (isExamCell) return <Navigate to="/exam-cell-dashboard" replace />;
     if (isPrincipal) return <Navigate to="/principal-dashboard" replace />;
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
-    if (isParent) return <Navigate to="/parent-dashboard" replace />;
+    if (isNonTeaching) return <Navigate to="/non-teaching-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
+    if (isParent) return <Navigate to="/parent-dashboard" replace />;
     if (isStudent) return <Navigate to="/student-dashboard" replace />;
-    if (user?.isAdmin) return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   // If a valid token exists but there is no user and no role, clear orphan token
