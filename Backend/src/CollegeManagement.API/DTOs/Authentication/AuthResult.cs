@@ -17,6 +17,8 @@ namespace CollegeManagement.API.DTOs.Authentication
         public string? EmployeeId { get; set; }
         public List<int> AssignedCampusIds { get; set; } = new();
         public List<int> AssignedBoardIds { get; set; } = new();
+        public string? PhotoPath { get; set; }
+        public string? PhotoUrl { get; set; }
         public string? Otp { get; set; }
         public string? ResetToken { get; set; }
     }

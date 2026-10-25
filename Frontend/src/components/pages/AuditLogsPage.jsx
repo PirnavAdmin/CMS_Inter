@@ -15,17 +15,23 @@ import {
   FileDown,
   FileText,
   Filter,
+  Globe,
+  HardDrive,
   Layers,
+  Network,
   Search,
+  Server,
+  Shield,
   ShieldAlert,
   ShieldCheck,
+  Smartphone,
   UserCheck,
   Users,
   X
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { getAuditLogs } from "@/api/auditLogApi";
+import { getAuditLogs, getRelatedAuditLogs } from "@/api/auditLogApi";
 import "./AuditLogsPage.css";
 
 const severityClass = (value) => "audit-severity audit-severity-" + (value || "info").toLowerCase();
@@ -77,6 +83,7 @@ const formatLocalTime = (isoOrUtcStr) => {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
       hour12: true
     });
   } catch {
@@ -103,22 +110,28 @@ export default function AuditLogsPage() {
   const [module, setModule] = useState("All modules");
   const [severity, setSeverity] = useState("All severity");
   const [role, setRole] = useState("All roles");
+  const [status, setStatus] = useState("All status");
   const [activeCard, setActiveCard] = useState(null);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [selected, setSelected] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [copiedIp, setCopiedIp] = useState(false);
 
-  // Daily date filter (defaults to today just like student/staff attendance)
+  // Related events state for correlation investigation
+  const [relatedLogs, setRelatedLogs] = useState([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+
+  // Daily date filter (defaults to today)
   const [date, setDate] = useState(() => getTodayDate());
   const [isRange, setIsRange] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  
+
   // Configurable pagination
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
-  
+
   const [logs, setLogs] = useState([]);
   const [statsData, setStatsData] = useState(null);
   const [moduleList, setModuleList] = useState([]);
@@ -144,6 +157,7 @@ export default function AuditLogsPage() {
           module: module !== "All modules" ? module : undefined,
           severity: severity !== "All severity" ? severity : undefined,
           role: role !== "All roles" ? role : undefined,
+          status: status !== "All status" ? status : undefined,
           fromDate: fDate,
           toDate: tDate,
           pageNumber: page,
@@ -165,10 +179,29 @@ export default function AuditLogsPage() {
         setLoading(false);
       }
     };
-    
+
     const timeoutId = setTimeout(fetchLogs, 300);
     return () => clearTimeout(timeoutId);
-  }, [query, module, severity, role, date, isRange, fromDate, toDate, page, pageSize]);
+  }, [query, module, severity, role, status, date, isRange, fromDate, toDate, page, pageSize]);
+
+  // Load related events when modal opens with a correlation ID
+  useEffect(() => {
+    if (selected?.correlationId) {
+      setLoadingRelated(true);
+      getRelatedAuditLogs(selected.correlationId)
+        .then((res) => {
+          if (res.data.success && res.data.records) {
+            setRelatedLogs(res.data.records.filter((r) => r.auditLogId !== selected.auditLogId));
+          } else {
+            setRelatedLogs([]);
+          }
+        })
+        .catch(() => setRelatedLogs([]))
+        .finally(() => setLoadingRelated(false));
+    } else {
+      setRelatedLogs([]);
+    }
+  }, [selected]);
 
   const handleCardClick = (cardType) => {
     if (cardType === "today") {
@@ -184,7 +217,18 @@ export default function AuditLogsPage() {
         setSeverity("All severity");
         setModule("All modules");
         setRole("All roles");
+        setStatus("All status");
         setQuery("");
+      }
+      setPage(1);
+    } else if (cardType === "failed") {
+      if (activeCard === "failed") {
+        setActiveCard(null);
+        setStatus("All status");
+      } else {
+        setActiveCard("failed");
+        setStatus("Failed");
+        setSeverity("All severity");
       }
       setPage(1);
     } else if (cardType === "security") {
@@ -194,39 +238,96 @@ export default function AuditLogsPage() {
       } else {
         setActiveCard("security");
         setSeverity("Security alerts");
-        setRole("All roles");
+        setStatus("All status");
       }
       setPage(1);
-    } else if (cardType === "admin") {
-      if (activeCard === "admin") {
+    } else if (cardType === "users") {
+      if (activeCard === "users") {
         setActiveCard(null);
         setRole("All roles");
       } else {
-        setActiveCard("admin");
-        setRole("Administrator");
-        setSeverity("All severity");
+        setActiveCard("users");
+        setRole("All roles");
+        setStatus("All status");
+      }
+      setPage(1);
+    } else if (cardType === "devices") {
+      if (activeCard === "devices") {
+        setActiveCard(null);
+        setQuery("");
+      } else {
+        setActiveCard("devices");
+        setQuery("device");
+      }
+      setPage(1);
+    } else if (cardType === "ips") {
+      if (activeCard === "ips") {
+        setActiveCard(null);
+      } else {
+        setActiveCard("ips");
       }
       setPage(1);
     }
   };
 
+  /**
+   * Sanitizes cells to neutralize CSV Formula Injection (CWE-1236)
+   */
+  const sanitizeCsvValue = (val) => {
+    let str = String(val ?? "");
+    if (str.length > 0 && ["=", "+", "-", "@", "\t", "\r"].includes(str[0])) {
+      str = "'" + str;
+    }
+    return '"' + str.replaceAll('"', '""') + '"';
+  };
+
   const exportCsv = () => {
-    const rows = [["Log ID", "Timestamp", "Actor", "Role", "Action", "Module", "Target", "Severity", "Status", "IP Address"]]
-      .concat(logs.map((log) => [
+    const headers = [
+      "Log ID",
+      "Timestamp (UTC)",
+      "Actor",
+      "User ID",
+      "Role",
+      "Action",
+      "Module",
+      "Target",
+      "Severity",
+      "Status",
+      "IP Address",
+      "Remote IP",
+      "IP Source",
+      "Device",
+      "Correlation ID",
+      "Duration (ms)"
+    ];
+
+    const rows = [headers].concat(
+      logs.map((log) => [
         log.id,
         formatLocalTime(log.createdAt || log.time),
         log.actor,
-        log.role,
+        log.userId ?? "",
+        log.role ?? "",
         log.action,
         log.module,
         log.target,
         log.severity,
         log.status,
-        log.ip
-      ]));
-    const csv = rows.map((row) => row.map((value) => "\"" + String(value || "").replaceAll("\"", "\"\"") + "\"").join(",")).join("\n");
+        log.ip ?? "",
+        log.remoteIpAddress ?? "",
+        log.ipSource ?? "",
+        log.device ?? "",
+        log.correlationId ?? "",
+        log.durationMs != null ? Math.round(log.durationMs) : ""
+      ])
+    );
+
+    const csvContent = rows
+      .map((row) => row.map(sanitizeCsvValue).join(","))
+      .join("\n");
+
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    link.href = URL.createObjectURL(new Blob([csvContent], { type: "text/csv;charset=utf-8" }));
     const dateSuffix = isRange && fromDate && toDate ? `${fromDate}_to_${toDate}` : (date || "all");
     link.download = `audit-logs-${dateSuffix}.csv`;
     link.click();
@@ -235,6 +336,7 @@ export default function AuditLogsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  // The 6 required summary metric cards
   const stats = [
     {
       type: "today",
@@ -245,45 +347,81 @@ export default function AuditLogsPage() {
       hint: "Filter today's events"
     },
     {
-      type: "security",
-      label: "Security alerts",
-      value: statsData?.securityAlerts || 0,
+      type: "failed",
+      label: "Failed operations",
+      value: statsData?.failedOperationsToday || 0,
       icon: ShieldAlert,
-      tone: "amber",
-      hint: "Filter security alerts"
+      tone: "red",
+      hint: "Filter failed & forbidden operations"
     },
     {
-      type: "admin",
-      label: "Active administrators",
-      value: statsData?.activeAdministrators || 0,
-      icon: UserCheck,
-      tone: "blue",
-      hint: "Filter administrator logs"
+      type: "security",
+      label: "Security alerts",
+      value: statsData?.securityAlertsToday || statsData?.securityAlerts || 0,
+      icon: Shield,
+      tone: "amber",
+      hint: "Filter security alerts & warnings"
     },
+    {
+      type: "users",
+      label: "Active users",
+      value: statsData?.activeUsersToday || 0,
+      icon: Users,
+      tone: "indigo",
+      hint: "Authenticated user accounts active today"
+    },
+    {
+      type: "devices",
+      label: "Registered devices",
+      value: statsData?.registeredDevicesToday || 0,
+      icon: Layers,
+      tone: "purple",
+      hint: "Observed device clients today"
+    },
+    {
+      type: "ips",
+      label: "Distinct public IPs",
+      value: statsData?.distinctPublicIpsToday || 0,
+      icon: Globe,
+      tone: "teal",
+      hint: "Distinct routable client networks observed"
+    }
   ];
 
   const dateDescription = activeCard === "today"
     ? `Live audit data for Today (${formatDisplayDate(getTodayDate())}) · filtered from top card.`
+    : activeCard === "failed"
+    ? "Filtered to show failed operations, unauthorized access, and forbidden attempts."
     : activeCard === "security"
     ? "Filtered to show security alerts (warnings and critical security events)."
-    : activeCard === "admin"
-    ? "Filtered to show events performed by active administrators."
+    : activeCard === "users"
+    ? "Showing audit records generated by authenticated user sessions."
     : isRange && fromDate && toDate
     ? `Live audit data from ${formatDisplayDate(fromDate)} to ${formatDisplayDate(toDate)}.`
     : date
     ? `Live audit data for ${date === getTodayDate() ? "Today (" + formatDisplayDate(date) + ")" : formatDisplayDate(date)}.`
-    : "Live audit data across all dates · records include actor, source, result, and affected entity.";
+    : "Live audit data across all dates · records include actor, network provenance, diffs, and outcome.";
 
   return (
-    <DashboardLayout title="Audit Logs" subtitle="Review system activity, security events, and administrative changes." breadcrumb={["Home", "Settings", "Audit Logs"]}>
+    <DashboardLayout title="Audit Logs" subtitle="Review system activity, security events, network provenance, and administrative changes." breadcrumb={["Home", "Settings", "Audit Logs"]}>
       <main className="audit-logs-page">
         <div className="audit-page-actions">
           <button type="button" className="cms-back-link audit-back" onClick={() => navigate("/dashboard/settings")}>
             <ArrowLeft size={14} /> Back to Settings
           </button>
-          <button type="button" className="cms-btn cms-btn-primary" onClick={exportCsv} disabled={loading || !logs.length}>
-            <Download size={14} /> Export CSV
-          </button>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              onClick={() => setShowAdminModal(true)}
+              title="View administrators active today"
+            >
+              <UserCheck size={14} /> Active Admins ({statsData?.activeAdministrators || 0})
+            </button>
+            <button type="button" className="cms-btn cms-btn-primary" onClick={exportCsv} disabled={loading || !logs.length}>
+              <Download size={14} /> Export CSV
+            </button>
+          </div>
         </div>
 
         <section className="audit-stat-grid" aria-label="Audit summary metrics">
@@ -305,7 +443,7 @@ export default function AuditLogsPage() {
                 title={isActive ? "Click to clear active filter" : hint}
               >
                 <div className="audit-stat-icon-wrap">
-                  <Icon size={20} />
+                  <Icon size={18} />
                 </div>
                 <div className="audit-stat-content">
                   <div className="audit-stat-header">
@@ -321,19 +459,6 @@ export default function AuditLogsPage() {
                     {isActive ? "Click to reset" : hint}
                   </span>
                 </div>
-                {type === "admin" && (
-                  <button
-                    type="button"
-                    className="audit-stat-sub-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowAdminModal(true);
-                    }}
-                    title="View active administrators list"
-                  >
-                    View details
-                  </button>
-                )}
               </div>
             );
           })}
@@ -345,27 +470,21 @@ export default function AuditLogsPage() {
               <span className="audit-active-filter-label">Filtered by:</span>
               <strong>
                 {activeCard === "today" && `Events Today (${statsData?.eventsToday || 0})`}
-                {activeCard === "security" && `Security Alerts (${statsData?.securityAlerts || 0})`}
-                {activeCard === "admin" && `Active Administrators (${statsData?.activeAdministrators || 0})`}
+                {activeCard === "failed" && `Failed Operations (${statsData?.failedOperationsToday || 0})`}
+                {activeCard === "security" && `Security Alerts (${statsData?.securityAlertsToday || statsData?.securityAlerts || 0})`}
+                {activeCard === "users" && `Active Users (${statsData?.activeUsersToday || 0})`}
+                {activeCard === "devices" && `Registered Devices (${statsData?.registeredDevicesToday || 0})`}
+                {activeCard === "ips" && `Distinct Public IPs (${statsData?.distinctPublicIpsToday || 0})`}
               </strong>
               <span>— showing matching records below</span>
             </div>
             <div className="audit-active-filter-actions">
-              {activeCard === "admin" && (
-                <button
-                  type="button"
-                  className="audit-filter-action-btn"
-                  onClick={() => setShowAdminModal(true)}
-                >
-                  <Users size={13} /> View Active Admins
-                </button>
-              )}
               <button
                 type="button"
                 className="audit-clear-filter-btn"
                 onClick={() => {
                   if (activeCard === "security") setSeverity("All severity");
-                  if (activeCard === "admin") setRole("All roles");
+                  if (activeCard === "failed") setStatus("All status");
                   setActiveCard(null);
                   setPage(1);
                 }}
@@ -391,7 +510,7 @@ export default function AuditLogsPage() {
               <input
                 value={query}
                 onChange={(event) => { setQuery(event.target.value); setPage(1); }}
-                placeholder="Search activity, user, record, or ID..."
+                placeholder="Search activity, actor, target, IP, or correlation ID..."
               />
             </label>
 
@@ -575,22 +694,40 @@ export default function AuditLogsPage() {
             </label>
 
             <label className="audit-select-filter">
+              <select
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value);
+                  if (activeCard === "failed" && event.target.value !== "Failed") {
+                    setActiveCard(null);
+                  }
+                  setPage(1);
+                }}
+              >
+                <option>All status</option>
+                <option value="Success">Success</option>
+                <option value="Failed">Failed</option>
+                <option value="Forbidden">Forbidden</option>
+                <option value="Unauthorized">Unauthorized</option>
+                <option value="ServerError">Server Error</option>
+              </select>
+            </label>
+
+            <label className="audit-select-filter">
               <UserCheck size={14} />
               <select
                 value={role}
                 onChange={(event) => {
                   setRole(event.target.value);
-                  if (activeCard === "admin" && event.target.value !== "Administrator") {
-                    setActiveCard(null);
-                  }
                   setPage(1);
                 }}
                 aria-label="Filter by role"
               >
                 <option>All roles</option>
                 <option>Administrator</option>
-                <option>Staff</option>
+                <option>Super Admin</option>
                 <option>Faculty</option>
+                <option>Staff</option>
                 <option>Student</option>
               </select>
             </label>
@@ -604,8 +741,8 @@ export default function AuditLogsPage() {
                   <th>Actor</th>
                   <th>Activity</th>
                   <th>Module</th>
-                  <th>Severity</th>
-                  <th>Result</th>
+                  <th>Outcome</th>
+                  <th>IP & Provenance</th>
                   <th aria-label="View details" />
                 </tr>
               </thead>
@@ -618,7 +755,7 @@ export default function AuditLogsPage() {
                     </td>
                     <td>
                       <strong>{log.actor}</strong>
-                      <small>{log.role || "Unknown"}</small>
+                      <small>{log.role || log.actorType || "System"}</small>
                     </td>
                     <td className="audit-activity-col">
                       <div className="audit-activity-headline" title={log.details || log.action}>
@@ -634,11 +771,28 @@ export default function AuditLogsPage() {
                             <ArrowRight size={11} /> {log.changes.length} field{log.changes.length === 1 ? "" : "s"} modified
                           </span>
                         )}
+                        {log.correlationId && (
+                          <span className="audit-target-chip" title={`Correlation: ${log.correlationId}`}>
+                            corr:{log.correlationId.substring(0, 6)}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td>{log.module}</td>
-                    <td><span className={severityClass(log.severity)}>{log.severity || "Info"}</span></td>
-                    <td><span className={"audit-status audit-status-" + (log.status || "success").toLowerCase()}>{log.status || "Success"}</span></td>
+                    <td>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <span className={"audit-status audit-status-" + (log.status || "success").toLowerCase()}>
+                          {log.status || "Success"}
+                        </span>
+                        <span className={severityClass(log.severity)} style={{ fontSize: "10px", padding: "1px 6px" }}>
+                          {log.severity || "Info"}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <strong>{log.ip || "Unknown"}</strong>
+                      <small>{log.ipSource || "DirectConnection"}</small>
+                    </td>
                     <td>
                       <button type="button" className="audit-view-button" onClick={() => setSelected(log)} aria-label={"View " + log.id}>
                         <Eye size={15} />
@@ -811,7 +965,6 @@ export default function AuditLogsPage() {
                         onClick={() => {
                           setQuery(admin.userName);
                           setRole("Administrator");
-                          setActiveCard("admin");
                           setShowAdminModal(false);
                           setPage(1);
                         }}
@@ -858,21 +1011,129 @@ export default function AuditLogsPage() {
                 <div className="audit-narrative-card">
                   <Activity size={18} className="audit-narrative-icon" />
                   <div>
-                    <span className="audit-narrative-label">Activity Description</span>
+                    <span className="audit-narrative-label">Activity Narrative</span>
                     <p className="audit-narrative-text">{selected.details}</p>
                   </div>
                 </div>
               )}
 
+              {/* 1. Actor & Identity */}
+              <div className="audit-modal-section-title">
+                <Users size={14} /> Actor & Identity
+              </div>
               <dl className="audit-meta-grid">
-                <div><dt>Timestamp</dt><dd>{formatLocalTime(selected.createdAt || selected.time)}</dd></div>
                 <div><dt>Actor</dt><dd>{selected.actor} <span className="audit-actor-role">({selected.role || "Unknown"})</span></dd></div>
-                <div><dt>Module</dt><dd>{selected.module}</dd></div>
-                <div><dt>Affected record</dt><dd>{selected.target}</dd></div>
-                <div><dt>IP Address</dt><dd>{selected.ip || "Unknown"}</dd></div>
-                <div><dt>User Agent / Device</dt><dd className="audit-device-val">{selected.device || "Unknown"}</dd></div>
+                <div><dt>User ID</dt><dd>{selected.userId != null ? `#${selected.userId}` : "None (System/Background)"}</dd></div>
+                <div><dt>Staff ID</dt><dd>{selected.staffId != null ? `#${selected.staffId}` : "None"}</dd></div>
+                <div><dt>Actor Classification</dt><dd>{selected.actorType || "User"}</dd></div>
               </dl>
 
+              {/* 2. Network Provenance */}
+              <div className="audit-modal-section-title">
+                <Network size={14} /> Network Provenance & IP Verification
+              </div>
+              <dl className="audit-meta-grid">
+                <div>
+                  <dt>Effective IP Address</dt>
+                  <dd style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <code>{selected.ip || "Unknown"}</code>
+                    {selected.ip && (
+                      <button
+                        type="button"
+                        className="audit-copy-tag"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selected.ip);
+                          setCopiedIp(true);
+                          setTimeout(() => setCopiedIp(false), 1500);
+                        }}
+                      >
+                        {copiedIp ? <Check size={11} /> : <Copy size={11} />}
+                        <span>{copiedIp ? "Copied" : "Copy"}</span>
+                      </button>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Connection Socket IP</dt>
+                  <dd><code>{selected.remoteIpAddress || selected.ip || "Unknown"}</code></dd>
+                </div>
+                <div>
+                  <dt>Trusted Forwarded IP</dt>
+                  <dd>{selected.forwardedClientIp ? <code>{selected.forwardedClientIp}</code> : <span className="audit-actor-role">None (Direct Connection)</span>}</dd>
+                </div>
+                <div>
+                  <dt>IP Source & Confidence</dt>
+                  <dd>
+                    <span className={`audit-badge-provenance ${selected.ipSource === "TrustedProxy" ? "audit-badge-trusted" : "audit-badge-direct"}`}>
+                      {selected.ipSource || "DirectConnection"} · {selected.ipConfidence || "DirectlyObserved"}
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Local Laptop IP</dt>
+                  <dd><span className="audit-actor-role">Unavailable (Standard Web Client)</span></dd>
+                </div>
+                <div>
+                  <dt>Network Gateway IP</dt>
+                  <dd><span className="audit-actor-role">Unavailable (Standard Web Client)</span></dd>
+                </div>
+              </dl>
+
+              {/* 3. Device & Client Environment */}
+              <div className="audit-modal-section-title">
+                <Smartphone size={14} /> Device & Client Environment
+              </div>
+              <dl className="audit-meta-grid">
+                <div><dt>Registered Device ID</dt><dd>{selected.deviceId ? <code>{selected.deviceId}</code> : <span className="audit-actor-role">Unregistered Browser Session</span>}</dd></div>
+                <div><dt>Session ID</dt><dd>{selected.sessionId ? <code>{selected.sessionId}</code> : <span className="audit-actor-role">Standard Session</span>}</dd></div>
+                <div style={{ gridColumn: "span 2" }}>
+                  <dt>User Agent / Browser</dt>
+                  <dd className="audit-device-val">{selected.device || "Unknown"}</dd>
+                </div>
+              </dl>
+
+              {/* 4. Request Metadata */}
+              <div className="audit-modal-section-title">
+                <Server size={14} /> Request & Correlation Trace
+              </div>
+              <dl className="audit-meta-grid">
+                <div><dt>HTTP Method & Status</dt><dd>{selected.requestMethod || "N/A"} · {selected.httpStatusCode != null ? `HTTP ${selected.httpStatusCode}` : "Handled"}</dd></div>
+                <div><dt>Route Template</dt><dd>{selected.routeTemplate || selected.target || "N/A"}</dd></div>
+                <div><dt>Duration (Latency)</dt><dd>{selected.durationMs != null ? `${Math.round(selected.durationMs)} ms` : "N/A"}</dd></div>
+                <div><dt>Correlation ID</dt><dd>{selected.correlationId ? <code>{selected.correlationId}</code> : "N/A"}</dd></div>
+              </dl>
+
+              {/* 5. Correlated Events */}
+              {selected.correlationId && (
+                <div className="audit-section-block">
+                  <div className="audit-section-head">
+                    <Activity size={15} />
+                    <h3>Correlated Operations in Same Request ({relatedLogs.length})</h3>
+                  </div>
+                  {loadingRelated ? (
+                    <small>Loading correlated events...</small>
+                  ) : relatedLogs.length > 0 ? (
+                    <div className="audit-related-list">
+                      {relatedLogs.map((rel) => (
+                        <div key={rel.id} className="audit-related-item">
+                          <div>
+                            <strong>{rel.action}</strong> · <span>{rel.module} / {rel.target}</span>
+                          </div>
+                          <div>
+                            <span className={"audit-status audit-status-" + (rel.status || "success").toLowerCase()}>
+                              {rel.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <small className="audit-actor-role">No additional operations were dispatched under this correlation ID.</small>
+                  )}
+                </div>
+              )}
+
+              {/* 6. Property Changes */}
               {selected.changes && selected.changes.length > 0 && (
                 <div className="audit-section-block">
                   <div className="audit-section-head">
@@ -914,11 +1175,12 @@ export default function AuditLogsPage() {
                 </div>
               )}
 
+              {/* 7. Submitted User Input */}
               {selected.userInput && Object.keys(selected.userInput).length > 0 && (
                 <div className="audit-section-block">
                   <div className="audit-section-head">
                     <FileText size={15} />
-                    <h3>Submitted User Input & Parameters</h3>
+                    <h3>Submitted Parameters (Sanitized)</h3>
                     <button
                       type="button"
                       className="audit-copy-btn"

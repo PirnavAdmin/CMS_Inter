@@ -336,7 +336,7 @@ export default function HostelPage() {
   const activeSection = useMemo(() => {
     const p = location.pathname.toLowerCase();
     if (p.includes("attendance")) return "attendance";
-    if (p.includes("outpass") || p.includes("leave")) return "outpasses";
+    if (p.includes("outpass") || p.includes("leave") || p.includes("complaint")) return "outpasses";
     if (p.includes("transfer") || p.includes("vacat")) return "transfers";
     if (p.includes("student-allocation") || p.includes("allocat")) return "allocations";
     if (p.includes("students")) return "students";
@@ -9020,35 +9020,67 @@ export default function HostelPage() {
           />
         )}
 
-        {/* 4 Major Horizontal Navigation Tabs */}
-        <div className="cms-hostel-tabs">
-          {majorTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeMajorTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
-                onClick={() => {
-                  setActiveMajorTab(tab.id);
-                  setSearchQuery("");
-                  setBlocksCurrentPage(1);
-                  setRoomsCurrentPage(1);
-                  setWardensCurrentPage(1);
-                  setCategoriesCurrentPage(1);
-                  setAllocCurrentPage(1);
-                  setAttendanceCurrentPage(1);
-                  setOutpassCurrentPage(1);
-                  setTransferCurrentPage(1);
-                }}
-              >
-                <Icon size={16} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        {/* If viewing a dedicated sidebar field (like Warden portal routes), render ONLY that view */}
+        {isDedicatedView ? (
+          isLoading ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 320, padding: 40 }}>
+              <div style={{ width: 40, height: 40, border: "3px solid var(--cms-border)", borderTopColor: "var(--cms-primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' }} />
+              <p style={{ marginTop: 14, color: "var(--cms-muted)", fontSize: 13.5, fontWeight: 600 }}>Loading Hostel records from server...</p>
+            </div>
+          ) : (
+            <div className="cms-hostel-stack">
+              {apiError && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 8, background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", marginBottom: 16 }}>
+                  <AlertCircle size={18} />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{apiError}</span>
+                </div>
+              )}
+              {activeSection === "dashboard" && renderDashboard()}
+              {activeSection === "rooms" && renderRooms()}
+              {activeSection === "allocations" && renderAllocations()}
+              {activeSection === "students" && renderAllocations()}
+              {activeSection === "attendance" && renderAttendance()}
+              {activeSection === "outpasses" && renderOutpasses()}
+              {activeSection === "transfers" && renderTransfers()}
+              {activeSection === "blocks" && renderHostelBlocks()}
+              {activeSection === "wardens" && renderWardens()}
+              {activeSection === "reports" && renderReportsSection()}
+              {activeSection === "setup" && renderSetupMasters()}
+              {!["dashboard", "rooms", "allocations", "students", "attendance", "outpasses", "transfers", "blocks", "wardens", "reports", "setup"].includes(activeSection) && renderDashboard()}
+            </div>
+          )
+        ) : (
+          <>
+            {/* 4 Major Horizontal Navigation Tabs */}
+            <div className="cms-hostel-tabs">
+              {majorTabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeMajorTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
+                    onClick={() => {
+                      setActiveMajorTab(tab.id);
+                      setSearchQuery("");
+                      setBlocksCurrentPage(1);
+                      setRoomsCurrentPage(1);
+                      setWardensCurrentPage(1);
+                      setCategoriesCurrentPage(1);
+                      setAllocCurrentPage(1);
+                      setAttendanceCurrentPage(1);
+                      setOutpassCurrentPage(1);
+                      setTransferCurrentPage(1);
+                    }}
+                  >
+                    <Icon size={16} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
             {/* Active Tab Screen */}
             {isLoading ? (
@@ -9071,6 +9103,8 @@ export default function HostelPage() {
                 {activeMajorTab === "reports" && renderReportsSection()}
               </>
             )}
+          </>
+        )}
 
         {/* Global Modals */}
         {modal.isOpen && modal.type === "block" && (

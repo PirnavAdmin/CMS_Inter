@@ -24,6 +24,7 @@ import { useFaculty } from "../FacultyContext.jsx";
 import { facultyMockData } from "../data/facultyMockData.js";
 import apiClient from "@/api/apiClient.js";
 import apiEndpoints from "@/api/apiEndpoints.js";
+import TransparentAvatar from "@/components/common/TransparentAvatar.jsx";
 import "../styles/FacultyProfile.css";
 
 const PIN_LOOKUP = {
@@ -316,6 +317,24 @@ export default function FacultyProfile() {
 
   const [cameraError, setCameraError] = useState("");
   const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const [photoLoadError, setPhotoLoadError] = useState(false);
+
+  const activePhotoUrl = useMemo(() => {
+    const staffId = profileData?.id || profileData?.facultyId;
+    const cachedStaffPhoto = typeof window !== "undefined" && staffId ? localStorage.getItem(`staff_profile_${staffId}_photo`) : null;
+    return (
+      profileData?.photoUrl ||
+      profileData?.photoPath ||
+      profileData?.profilePhoto ||
+      cachedStaffPhoto ||
+      (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
+      null
+    );
+  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.profilePhoto, profileData?.id, profileData?.facultyId]);
+
+  useEffect(() => {
+    setPhotoLoadError(false);
+  }, [activePhotoUrl]);
 
   const avatarRef = useRef(null);
   const docFileRef = useRef(null);
@@ -413,8 +432,9 @@ export default function FacultyProfile() {
   };
 
   const handleRemovePhoto = () => {
+    const staffTargetId = profileData.id || profileData.facultyId;
     setProfileData((prev) => {
-      const updated = { ...prev, photoUrl: "", photoPath: "" };
+      const updated = { ...prev, photoUrl: "", photoPath: "", profilePhoto: "" };
       persistStaffProfile(updated);
       return updated;
     });
@@ -423,8 +443,12 @@ export default function FacultyProfile() {
     }
     if (typeof window !== "undefined") {
       localStorage.removeItem("staff_profile_photo");
+      if (staffTargetId) {
+        localStorage.removeItem(`staff_profile_${staffTargetId}_photo`);
+      }
       window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: "" } }));
     }
+    setPhotoLoadError(false);
     notify("Profile photo removed.");
   };
 
@@ -562,18 +586,19 @@ export default function FacultyProfile() {
               headers: { "Content-Type": "multipart/form-data" },
             });
 
-            const permanentUrl = `/api/v1/staff/photo/${staffTargetId}?t=${Date.now()}`;
-            const serverPath = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || `/uploads/staff-photos/photo_staff_${staffTargetId}.jpg`;
+            const serverPath = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || uploadRes?.data?.profilePhoto;
+            const finalPhotoUrl = serverPath || `/uploads/staff-photos/photo_staff_${staffTargetId}.jpg`;
 
             setProfileData((prev) => {
-              const updated = { ...prev, photoUrl: permanentUrl, photoPath: serverPath };
+              const updated = { ...prev, photoUrl: finalPhotoUrl, photoPath: serverPath || finalPhotoUrl };
               persistStaffProfile(updated);
               return updated;
             });
 
             if (typeof window !== "undefined") {
-              localStorage.setItem("staff_profile_photo", permanentUrl);
-              window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: permanentUrl } }));
+              localStorage.setItem("staff_profile_photo", finalPhotoUrl);
+              localStorage.setItem(`staff_profile_${staffTargetId}_photo`, finalPhotoUrl);
+              window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: finalPhotoUrl } }));
             }
           } catch (e) {
             console.error("Photo upload to backend failed:", e);
@@ -588,8 +613,12 @@ export default function FacultyProfile() {
       });
       if (typeof window !== "undefined") {
         localStorage.setItem("staff_profile_photo", croppedDataUrl);
+        if (staffTargetId) {
+          localStorage.setItem(`staff_profile_${staffTargetId}_photo`, croppedDataUrl);
+        }
         window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: croppedDataUrl } }));
       }
+      setPhotoLoadError(false);
       notify("Profile photo cropped and saved to server successfully!");
       setIsCropModalOpen(false);
       setRawImageToCrop(null);
@@ -1202,13 +1231,14 @@ export default function FacultyProfile() {
                 onClick={() => setIsPhotoActionModalOpen(true)}
                 title="Profile Photo Options"
               >
-                {profileData.photoUrl ? (
+                {activePhotoUrl && !photoLoadError ? (
                   <img
-                    src={profileData.photoUrl}
-                    alt={profileData.fullName}
+                    src={activePhotoUrl}
+                    alt={profileData.fullName || "Profile Photo"}
+                    onError={() => setPhotoLoadError(true)}
                   />
                 ) : (
-                  <User size={30} strokeWidth={1.8} className="sp-profile-user-icon" />
+                  <TransparentAvatar size={54} />
                 )}
               </div>
 
@@ -2723,15 +2753,17 @@ export default function FacultyProfile() {
               </button>
             </div>
             <div className="sp-photo-view-body">
-              {profileData.photoUrl ? (
+              {activePhotoUrl && !photoLoadError ? (
                 <img
-                  src={profileData.photoUrl}
-                  alt={profileData.fullName}
+                  src={activePhotoUrl}
+                  alt={profileData.fullName || "Profile Photo"}
                   className="sp-photo-view-img"
+                  onError={() => setPhotoLoadError(true)}
                 />
               ) : (
                 <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
-                  No photo uploaded yet.
+                  <TransparentAvatar size={80} style={{ margin: "0 auto 12px" }} />
+                  <div>No photo uploaded yet.</div>
                 </div>
               )}
             </div>

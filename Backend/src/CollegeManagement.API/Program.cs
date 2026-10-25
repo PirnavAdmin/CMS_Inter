@@ -183,6 +183,10 @@ builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
 builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
 
+// Academic Calendar & Notifications Repositories
+builder.Services.AddScoped<IAcademicCalendarRepository, AcademicCalendarRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+
 // Hostel Repositories
 builder.Services.AddScoped<IHostelBlockRepository, HostelBlockRepository>();
 builder.Services.AddScoped<IRoomTypeConfigRepository, RoomTypeConfigRepository>();
@@ -231,6 +235,10 @@ builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
 builder.Services.AddScoped<ITemplateService, TemplateService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
 builder.Services.AddScoped<IAttendanceTimingConfigService, AttendanceTimingConfigService>();
+
+// Academic Calendar & Notifications Services
+builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
@@ -459,14 +467,30 @@ if (args.Contains("--verify-inventory"))
     return;
 }
 
+if (args.Contains("--test-audit"))
+{
+    var tester = new CollegeManagement.API.Tests.AuditModuleBackendTester(app.Services);
+    await tester.RunAllTestsAsync();
+    return;
+}
+
 
 #region Pipeline Middleware
 var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.All
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 };
 forwardedHeadersOptions.KnownNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
+var trustedProxiesConfig = app.Configuration.GetSection("SecuritySettings:TrustedProxies").Get<string[]>() ?? Array.Empty<string>();
+CollegeManagement.API.Helpers.ClientIpHelper.ConfigureTrustedProxies(trustedProxiesConfig);
+foreach (var proxy in trustedProxiesConfig)
+{
+    if (System.Net.IPAddress.TryParse(proxy, out var ip))
+    {
+        forwardedHeadersOptions.KnownProxies.Add(ip);
+    }
+}
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseCors("AllowFrontend");
@@ -575,6 +599,7 @@ app.Use(async (context, next) =>
 #endregion
 
 app.UseAuthorization();
+app.UseMiddleware<CollegeManagement.API.Middleware.AuditRequestMiddleware>();
 app.MapControllers();
 app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
 app.MapHub<CollegeManagement.API.Hubs.NotificationHub>("/hubs/notifications");
@@ -605,6 +630,111 @@ try
         dbContext.SaveChanges();
     }
 
+    try
+    {
+        await dbContext.Database.ExecuteSqlRawAsync("DROP PROCEDURE IF EXISTS `sp_GetDashboardTodaysHighlights`;");
+        await dbContext.Database.ExecuteSqlRawAsync(@"CREATE PROCEDURE `sp_GetDashboardTodaysHighlights`(
+            IN p_BoardId INT,
+            IN p_AcademicYearId INT,
+            IN p_TargetDate DATE,
+            IN p_CampusId INT
+        )
+        BEGIN
+            DECLARE v_TargetDate DATE;
+            DECLARE v_AdmissionsToday INT DEFAULT 0;
+            DECLARE v_CertificatesToday INT DEFAULT 0;
+            DECLARE v_ExamsToday INT DEFAULT 0;
+            DECLARE v_BirthdaysToday INT DEFAULT 0;
+
+            SET v_TargetDate = COALESCE(p_TargetDate, CURDATE());
+
+            -- Admissions Today
+            SELECT COUNT(*) INTO v_AdmissionsToday
+            FROM `StudentAdmissions` sa 
+            WHERE (p_CampusId IS NULL OR sa.CampusId = p_CampusId)
+              AND (DATE(sa.AdmissionDate) = v_TargetDate OR DATE(sa.CreatedAt) = v_TargetDate)
+              AND (sa.IsActive = 1 OR sa.IsActive IS NULL)
+              AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
+              AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId);
+
+            -- Certificate Requests Today
+            SELECT COUNT(*) INTO v_CertificatesToday
+            FROM `certificates` c
+            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
+            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
+            WHERE (p_CampusId IS NULL OR sa.CampusId = p_CampusId OR s.CampusId = p_CampusId)
+              AND (DATE(c.RequestDate) = v_TargetDate OR DATE(c.CreatedAt) = v_TargetDate OR DATE(c.GeneratedAt) = v_TargetDate OR DATE(c.IssueDate) = v_TargetDate)
+              AND (c.IsActive = 1 OR c.IsActive IS NULL)
+              AND (p_BoardId IS NULL OR COALESCE(sa.BoardId, s.BoardId) = p_BoardId)
+              AND (p_AcademicYearId IS NULL OR COALESCE(sa.AcademicYearId, s.AcademicYearId) = p_AcademicYearId);
+
+            -- Examinations Today
+            SELECT COUNT(*) INTO v_ExamsToday
+            FROM `Examinations` e 
+            WHERE (p_CampusId IS NULL OR e.CampusId = p_CampusId)
+              AND (e.IsActive = 1 OR e.IsActive IS NULL)
+              AND DATE(e.StartDate) <= v_TargetDate AND DATE(e.EndDate) >= v_TargetDate
+              AND (p_BoardId IS NULL OR e.BoardId = p_BoardId)
+              AND (p_AcademicYearId IS NULL OR e.AcademicYearId = p_AcademicYearId);
+
+            -- Birthdays Today
+            SELECT COUNT(*) INTO v_BirthdaysToday
+            FROM `Students` s
+            WHERE (p_CampusId IS NULL OR s.CampusId = p_CampusId)
+              AND MONTH(s.DateOfBirth) = MONTH(v_TargetDate) AND DAY(s.DateOfBirth) = DAY(v_TargetDate)
+              AND (s.IsActive = 1 OR s.IsActive IS NULL)
+              AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
+              AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId);
+
+            SELECT 
+                v_AdmissionsToday AS AdmissionsToday,
+                v_CertificatesToday AS CertificateRequestsToday,
+                v_ExamsToday AS ExaminationsToday,
+                v_BirthdaysToday AS BirthdaysToday;
+        END;");
+        try
+        {
+            var colExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+                WHERE table_schema = DATABASE() AND table_name = 'FeePaymentPlans' AND column_name = 'UpdatedAt'").FirstOrDefaultAsync();
+            if (colExists == 0)
+            {
+                await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeePaymentPlans` ADD COLUMN `UpdatedAt` datetime(6) NULL;");
+            }
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE IF NOT EXISTS `facility_transition_histories` (
+                    `TransitionId` INT NOT NULL AUTO_INCREMENT,
+                    `StudentId` INT NOT NULL,
+                    `FromFacility` VARCHAR(50) NOT NULL,
+                    `ToFacility` VARCHAR(50) NOT NULL,
+                    `TransitionDate` DATETIME(6) NOT NULL,
+                    `MonthsUsedFromFacility` INT NOT NULL,
+                    `ProratedFromFee` DECIMAL(18,2) NOT NULL,
+                    `MonthsUsedToFacility` INT NOT NULL,
+                    `ProratedToFee` DECIMAL(18,2) NOT NULL,
+                    `ExcessCreditTransferred` DECIMAL(18,2) NOT NULL,
+                    `PreviousTotalFee` DECIMAL(18,2) NOT NULL,
+                    `NewTotalFee` DECIMAL(18,2) NOT NULL,
+                    `PreviousBalance` DECIMAL(18,2) NOT NULL,
+                    `NewBalance` DECIMAL(18,2) NOT NULL,
+                    `Remarks` VARCHAR(500) NULL,
+                    `PerformedBy` VARCHAR(100) NULL,
+                    `CreatedAt` DATETIME(6) NOT NULL,
+                    PRIMARY KEY (`TransitionId`),
+                    KEY `IX_facility_transition_histories_StudentId` (`StudentId`),
+                    CONSTRAINT `FK_facility_transition_histories_Students_StudentId` FOREIGN KEY (`StudentId`) REFERENCES `Students` (`StudentId`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+        }
+        catch (Exception fpEx)
+        {
+            app.Logger.LogWarning(fpEx, "Failed to align FeePaymentPlans schema or facility_transition_histories table.");
+        }
+    }
+    catch (Exception spEx)
+    {
+        app.Logger.LogWarning(spEx, "Failed to align sp_GetDashboardTodaysHighlights schema.");
+    }
 }
 catch (Exception ex)
 {

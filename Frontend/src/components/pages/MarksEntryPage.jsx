@@ -1152,7 +1152,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           }))
           .filter((s) => s.isActive);
 
-        // If faculty user or embedded in faculty dashboard, strictly constrain sections to assigned timetable sections
+        // If faculty user or embedded in faculty dashboard, mark their assigned timetable sections and prioritize them
         const authUser = typeof getAuthUser === "function" ? getAuthUser() : null;
         const isFaculty = embedded || authUser?.role?.toLowerCase() === "faculty";
         const facultyId = authUser?.staffId || authUser?.id || (isFaculty ? 1108 : null);
@@ -1162,10 +1162,26 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             const ttSlots = unwrapRecords(ttRes);
             const assignedSecIds = new Set(ttSlots.map((t) => normalizeId(t.sectionId)).filter(Boolean));
             if (assignedSecIds.size > 0) {
-              list = list.filter((sec) => assignedSecIds.has(normalizeId(sec.id)));
+              list = list.map((sec) => ({
+                ...sec,
+                isAssigned: assignedSecIds.has(normalizeId(sec.id)),
+                name: assignedSecIds.has(normalizeId(sec.id)) ? `${sec.name} (Assigned)` : sec.name,
+              }));
+              list.sort((a, b) => (b.isAssigned ? 1 : 0) - (a.isAssigned ? 1 : 0));
+              if (!filters.section && assignedSecIds.size > 0) {
+                const firstAssigned = list.find((s) => s.isAssigned);
+                if (firstAssigned) {
+                  setFilters((prev) => ({
+                    ...prev,
+                    section: firstAssigned.id,
+                    level: firstAssigned.academicLevelId || prev.level,
+                    group: firstAssigned.groupId || prev.group,
+                  }));
+                }
+              }
             }
           } catch (ttErr) {
-            console.warn("Could not fetch timetable for faculty sections:", ttErr);
+            console.warn("Could not fetch timetable for section prioritization:", ttErr);
           }
         }
 
@@ -3301,7 +3317,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
         subjectId: subjId,
       });
       const ws = workspaces[key];
-      if (ws) {
+      if (ws && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())) {
         items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
       }
     });

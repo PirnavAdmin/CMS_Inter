@@ -2411,7 +2411,12 @@ namespace CollegeManagement.API.Services.Implementations
             return _mapper.Map<IEnumerable<InvigilatorAssignmentResponse>>(assignments);
         }
 
-        public async Task<IEnumerable<FacultyExamDutyDto>> GetFacultyExamDutiesAsync(int? staffId = null, string? status = null)
+        public async Task<IEnumerable<FacultyExamDutyDto>> GetFacultyExamDutiesAsync(
+            int? staffId = null,
+            string? status = null,
+            int? campusId = null,
+            int? academicYearId = null,
+            int? boardId = null)
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
             var resultList = new List<FacultyExamDutyDto>();
@@ -2439,13 +2444,27 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 var sch = ia.ExamSchedule;
                 if (sch == null) continue;
-                processedScheduleIds.Add(sch.ExamScheduleId);
 
                 var exam = sch.Examination;
                 var subj = sch.Subject;
 
+                // Filter out inactive or soft-deleted examinations
+                if (exam == null || !exam.IsActive) continue;
+
+                bool isExamCancelled = string.Equals(exam.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
+
+                // If schedule is inactive and exam is not cancelled, schedule was deleted
+                if (!sch.IsActive && !isExamCancelled) continue;
+
+                // Multi-tenant isolation (Campus / Academic Year / Board)
+                if (campusId.HasValue && campusId.Value > 0 && exam.CampusId.HasValue && exam.CampusId.Value > 0 && exam.CampusId.Value != campusId.Value) continue;
+                if (academicYearId.HasValue && academicYearId.Value > 0 && exam.AcademicYearId > 0 && exam.AcademicYearId != academicYearId.Value) continue;
+                if (boardId.HasValue && boardId.Value > 0 && exam.BoardId > 0 && exam.BoardId != boardId.Value) continue;
+
+                processedScheduleIds.Add(sch.ExamScheduleId);
+
                 string dutyStatus = "Upcoming";
-                if (!sch.IsActive || (exam != null && string.Equals(exam.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)))
+                if (isExamCancelled || !sch.IsActive)
                 {
                     dutyStatus = "Cancelled";
                 }
@@ -2530,13 +2549,27 @@ namespace CollegeManagement.API.Services.Implementations
             foreach (var sch in directSchedules)
             {
                 if (processedScheduleIds.Contains(sch.ExamScheduleId)) continue;
-                processedScheduleIds.Add(sch.ExamScheduleId);
 
                 var exam = sch.Examination;
                 var subj = sch.Subject;
 
+                // Filter out inactive or soft-deleted examinations
+                if (exam == null || !exam.IsActive) continue;
+
+                bool isExamCancelled = string.Equals(exam.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
+
+                // If schedule is inactive and exam is not cancelled, schedule was deleted
+                if (!sch.IsActive && !isExamCancelled) continue;
+
+                // Multi-tenant isolation (Campus / Academic Year / Board)
+                if (campusId.HasValue && campusId.Value > 0 && exam.CampusId.HasValue && exam.CampusId.Value > 0 && exam.CampusId.Value != campusId.Value) continue;
+                if (academicYearId.HasValue && academicYearId.Value > 0 && exam.AcademicYearId > 0 && exam.AcademicYearId != academicYearId.Value) continue;
+                if (boardId.HasValue && boardId.Value > 0 && exam.BoardId > 0 && exam.BoardId != boardId.Value) continue;
+
+                processedScheduleIds.Add(sch.ExamScheduleId);
+
                 string dutyStatus = "Upcoming";
-                if (!sch.IsActive || (exam != null && string.Equals(exam.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)))
+                if (isExamCancelled || !sch.IsActive)
                 {
                     dutyStatus = "Cancelled";
                 }
@@ -2600,91 +2633,6 @@ namespace CollegeManagement.API.Services.Implementations
                         "Hand over signed absentee statement within 30 minutes of start."
                     }
                 });
-            }
-
-            // Fallback if staffId was requested but has 0 records yet:
-            if (staffId.HasValue && staffId.Value > 0 && resultList.Count == 0)
-            {
-                var generalSchedules = await _context.ExamSchedules
-                    .Include(es => es.Examination)
-                    .Include(es => es.Subject)
-                    .Where(es => es.IsActive)
-                    .OrderByDescending(es => es.ExamDate)
-                    .Take(15)
-                    .AsNoTracking()
-                    .ToListAsync();
-
-                foreach (var sch in generalSchedules)
-                {
-                    var exam = sch.Examination;
-                    var subj = sch.Subject;
-
-                    string dutyStatus = "Upcoming";
-                    if (!sch.IsActive || (exam != null && string.Equals(exam.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        dutyStatus = "Cancelled";
-                    }
-                    else if (sch.ExamDate < today)
-                    {
-                        dutyStatus = "Completed";
-                    }
-                    else if (sch.ExamDate == today)
-                    {
-                        dutyStatus = "Today";
-                    }
-
-                    string session = !string.IsNullOrWhiteSpace(sch.SessionId)
-                        ? sch.SessionId
-                        : (sch.StartTime.Hour < 12 ? "Morning Session" : "Afternoon Session");
-
-                    string startTimeStr = sch.StartTime.ToString("hh\\:mm tt");
-                    string endTimeStr = sch.EndTime.ToString("hh\\:mm tt");
-                    string examHours = $"{startTimeStr} – {endTimeStr}";
-
-                    var repTime = sch.StartTime.AddMinutes(-30);
-                    string repTimeStr = $"{repTime.ToString("hh\\:mm tt")} (Mandatory 30 mins prior)";
-
-                    string examCat = exam?.ExamCategory?.ToLowerInvariant() ?? "internal";
-                    if (examCat.Contains("board") || examCat.Contains("ipe")) examCat = "board";
-                    else if (examCat.Contains("prac")) examCat = "practical";
-                    else examCat = "internal";
-
-                    resultList.Add(new FacultyExamDutyDto
-                    {
-                        Id = sch.ExamScheduleId,
-                        ExamScheduleId = sch.ExamScheduleId,
-                        ExaminationId = sch.ExaminationId,
-                        ExamName = exam?.ExamName ?? $"Exam #{sch.ExaminationId}",
-                        ExamCode = exam?.ExamCode ?? $"EXAM-{sch.ExaminationId}",
-                        Category = examCat,
-                        ExamType = exam?.ExamPattern ?? exam?.ExamCategory ?? "Internal",
-                        Role = "Invigilator (Institutional)",
-                        Status = dutyStatus,
-                        Subject = subj != null ? $"{subj.SubjectName} ({subj.SubjectCode})" : $"Subject #{sch.SubjectId}",
-                        SubjectCode = subj?.SubjectCode ?? "",
-                        Date = sch.ExamDate.ToString("dd MMM yyyy"),
-                        ExamDate = sch.ExamDate.ToString("yyyy-MM-dd"),
-                        Session = session,
-                        ExamHours = examHours,
-                        StartTime = startTimeStr,
-                        EndTime = endTimeStr,
-                        Venue = !string.IsNullOrWhiteSpace(sch.Hall) ? sch.Hall : "Examination Hall",
-                        Invigilator = !string.IsNullOrWhiteSpace(sch.Invigilator) ? sch.Invigilator : "Faculty Invigilator",
-                        InvigilatorId = staffId,
-                        ReportingTime = repTimeStr,
-                        Candidates = "30 Candidates",
-                        TotalEnrolled = 30,
-                        Present = 30,
-                        Absent = 0,
-                        Sops = new List<string>
-                        {
-                            "Collect sealed Question Paper packets from Chief Superintendent room.",
-                            "Verify Student Hall Tickets and prohibit unauthorized gadgets / smart watches.",
-                            "Cross-verify candidate signature on Nominal Roll & OMR Barcode.",
-                            "Hand over signed absentee statement within 30 minutes of start."
-                        }
-                    });
-                }
             }
 
             if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "all", StringComparison.OrdinalIgnoreCase))

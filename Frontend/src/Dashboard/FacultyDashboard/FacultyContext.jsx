@@ -60,12 +60,16 @@ export const persistStaffProfile = (data) => {
     const key = getStaffStorageKey(data);
     if (key) {
       localStorage.setItem(key, JSON.stringify(data));
+      if (data?.photoUrl) {
+        localStorage.setItem(`${key}_photo`, data.photoUrl);
+      }
     }
     localStorage.setItem("staff_profile_data", JSON.stringify(data));
     if (data?.photoUrl) {
       localStorage.setItem("staff_profile_photo", data.photoUrl);
     } else if (data && data.photoUrl === "") {
       localStorage.removeItem("staff_profile_photo");
+      if (key) localStorage.removeItem(`${key}_photo`);
     }
   } catch {}
 };
@@ -128,9 +132,14 @@ const getInitialProfileData = () => {
       }
     } catch {}
 
-    const savedPhoto = localStorage.getItem("staff_profile_photo");
+    const userKey = getStaffStorageKey(mergedUser);
+    const cachedUserPhoto = userKey ? localStorage.getItem(`${userKey}_photo`) : null;
+    const savedPhoto = localStorage.getItem("staff_profile_photo") || cachedUserPhoto;
     if (savedPhoto && !mergedUser.photoUrl) {
       mergedUser.photoUrl = savedPhoto;
+    }
+    if ((mergedUser.photoPath || mergedUser.profilePhoto) && !mergedUser.photoUrl) {
+      mergedUser.photoUrl = mergedUser.photoPath || mergedUser.profilePhoto;
     }
 
     return mergedUser;
@@ -232,15 +241,30 @@ export function FacultyProvider({ children }) {
           if (apiStaff && typeof apiStaff === "object") {
             setProfileData((current) => {
               const updated = { ...current, ...apiStaff };
-              const savedPhoto = localStorage.getItem("staff_profile_photo");
+              const staffKey = getStaffStorageKey(updated);
+              const cachedStaffPhoto = staffKey ? localStorage.getItem(`${staffKey}_photo`) : null;
+              const savedPhoto = localStorage.getItem("staff_profile_photo") || cachedStaffPhoto;
+
+              // Prioritize backend persistent static file path from DB, avoiding 401 controller routes
+              const serverPhoto =
+                (apiStaff.photoPath && String(apiStaff.photoPath).trim()) ||
+                (apiStaff.profilePhoto && String(apiStaff.profilePhoto).trim().startsWith("/") ? apiStaff.profilePhoto : null) ||
+                (apiStaff.photoUrl && !String(apiStaff.photoUrl).includes("/api/v1/staff/photo/") ? apiStaff.photoUrl : null);
+
               const activePhoto =
+                serverPhoto ||
                 current.photoUrl ||
                 savedPhoto ||
-                (apiStaff.photoPath || apiStaff.photoUrl
-                  ? "/api/v1/staff/photo/" + apiStaff.id + "?t=" + Date.now()
-                  : "");
+                (apiStaff.photoPath ? apiStaff.photoPath : "");
+
               if (activePhoto) {
                 updated.photoUrl = activePhoto;
+                try {
+                  localStorage.setItem("staff_profile_photo", activePhoto);
+                  if (staffKey) {
+                    localStorage.setItem(`${staffKey}_photo`, activePhoto);
+                  }
+                } catch {}
               }
               if (apiStaff.firstName || apiStaff.lastName) {
                 updated.fullName = `${apiStaff.firstName || ""} ${apiStaff.lastName || ""}`.trim();

@@ -26,6 +26,12 @@ namespace CollegeManagement.API.Hubs
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"Campus_{campusClaim}");
             }
 
+            var userIdClaim = user?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier || c.Type == "UserId" || c.Type == "sub" || c.Type == "userId")?.Value;
+            if (!string.IsNullOrEmpty(userIdClaim))
+            {
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"User_{userIdClaim}");
+            }
+
             await Groups.AddToGroupAsync(Context.ConnectionId, "AllNotifications");
             await base.OnConnectedAsync();
         }

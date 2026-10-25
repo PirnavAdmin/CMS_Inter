@@ -18,6 +18,7 @@ import "../styles/FacultyMyAttendance.css";
 import { Skeleton } from "@/components/common/Ui.jsx";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import { attendanceService } from "../../../api/attendanceService.js";
+import { attendanceTimingApi } from "../../../api/attendanceTimingApi.js";
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr || timeStr === "--") return null;
@@ -55,21 +56,69 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
   return `${hours}h ${mins}m`;
 };
 
-const normalizeTodayData = (raw) => {
+const normalizeTodayData = (raw, timing) => {
   if (!raw) return null;
+  const inTime = raw.inTime || raw.InTime || null;
+  const outTime = raw.outTime || raw.OutTime || null;
+  const rawStatus = raw.status || raw.Status || "not_punched";
+  const rawTodayStatus = raw.todayStatus || raw.TodayStatus || "Absent";
+
+  const inMins = parseTimeToMinutes(inTime);
+  const outMins = parseTimeToMinutes(outTime);
+  const lateThresholdStr = timing?.lateThreshold || "09:15";
+  const lateThreshMins = parseTimeToMinutes(lateThresholdStr) || (9 * 60 + 15);
+  const isLate = Boolean(raw.isLate ?? raw.IsLate) || (inMins !== null && inMins > lateThreshMins);
+
+  const shiftEndStr = raw.shiftEndTime || raw.ShiftEndTime || timing?.workEndTime || "04:30 PM";
+  const shiftEndMins = parseTimeToMinutes(shiftEndStr) || (16 * 60 + 30);
+  const graceMins = Number(timing?.gracePeriodMinutes ?? 15);
+  const checkoutCutoffMins = shiftEndMins + graceMins; // 04:45 PM
+
+  let status = rawStatus;
+  let todayStatus = rawTodayStatus;
+
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+
+  if (outTime) {
+    if (outMins !== null && outMins > checkoutCutoffMins) {
+      status = "missed_checkout";
+      todayStatus = "Missed Checkout";
+    } else {
+      status = "punched_out";
+      todayStatus = isLate ? "Late" : "Present";
+    }
+  } else if (inTime) {
+    if (nowMins > checkoutCutoffMins) {
+      status = "missed_checkout";
+      todayStatus = "Missed Checkout";
+    } else {
+      status = "punched_in";
+      todayStatus = isLate ? "Late" : "Present";
+    }
+  }
+
+  const regState = raw.regularizationState || raw.RegularizationState || null;
+  if (regState?.toLowerCase() === "approved") {
+    todayStatus = "Present";
+  }
+
+  const canRegularize = (todayStatus === "Late" || todayStatus === "Missed Checkout" || todayStatus === "Absent" || todayStatus === "Half Day")
+    && (!regState || regState.toLowerCase() !== "approved");
+
   return {
-    status: raw.status || raw.Status || "not_punched",
-    inTime: raw.inTime || raw.InTime || null,
-    outTime: raw.outTime || raw.OutTime || null,
+    status,
+    inTime,
+    outTime,
     shiftDuration: raw.shiftDuration || raw.ShiftDuration || "--",
     shiftName: raw.shiftName || raw.ShiftName || "Morning (09:00 AM – 04:30 PM)",
     shiftStartTime: raw.shiftStartTime || raw.ShiftStartTime || "09:00 AM",
-    shiftEndTime: raw.shiftEndTime || raw.ShiftEndTime || "04:30 PM",
-    isLate: Boolean(raw.isLate ?? raw.IsLate),
-    todayStatus: raw.todayStatus || raw.TodayStatus || "Absent",
-    canRegularize: Boolean(raw.canRegularize ?? raw.CanRegularize),
+    shiftEndTime: shiftEndStr,
+    isLate,
+    todayStatus,
+    canRegularize,
     dateFormatted: raw.dateFormatted || raw.DateFormatted || new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
-    regularizationState: raw.regularizationState || raw.RegularizationState || null,
+    regularizationState: regState,
   };
 };
 
@@ -83,6 +132,45 @@ export default function FacultyMyAttendance() {
       setShiftUpdateTick((prev) => prev + 1);
     }, 60000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Attendance Timing Configuration State (Default to Teaching faculty shift: 09:00 - 16:30, Late after 09:15, Cutoff 16:45)
+  const [timingConfig, setTimingConfig] = useState({
+    workStartTime: "09:00",
+    workEndTime: "16:30",
+    lateThreshold: "09:15",
+    earlyCheckoutThreshold: "16:30",
+    gracePeriodMinutes: 15,
+    minWorkingHours: 6.5,
+  });
+
+  // Load timing configuration from admin settings
+  useEffect(() => {
+    let isMounted = true;
+    const loadTiming = async () => {
+      try {
+        const configs = await attendanceTimingApi.getConfigs();
+        if (Array.isArray(configs) && configs.length > 0) {
+          const cfg = configs.find((c) => c.staffType === 1 || c.staffType === "Teaching") || configs[0];
+          if (cfg && isMounted) {
+            setTimingConfig({
+              workStartTime: cfg.workStartTime || "09:00",
+              workEndTime: cfg.workEndTime || "16:30",
+              lateThreshold: cfg.lateThreshold || "09:15",
+              earlyCheckoutThreshold: cfg.earlyCheckoutThreshold || "16:30",
+              gracePeriodMinutes: cfg.gracePeriodMinutes ?? 15,
+              minWorkingHours: cfg.minWorkingHours ?? 6.5,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load attendance timing config, using defaults", err);
+      }
+    };
+    loadTiming();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Filter State: "week" | "last_week" | "month" | "last_month"
@@ -183,7 +271,7 @@ export default function FacultyMyAttendance() {
       const res = await attendanceService.getMyTodayStatus();
       const payload = res?.data || res?.Data || (res?.status ? res : null);
       if (payload) {
-        const normalized = normalizeTodayData(payload);
+        const normalized = normalizeTodayData(payload, timingConfig);
         if (normalized) {
           setTodayData(normalized);
           syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
@@ -194,7 +282,7 @@ export default function FacultyMyAttendance() {
     } finally {
       setLoadingToday(false);
     }
-  }, [syncGlobalPunchState]);
+  }, [syncGlobalPunchState, timingConfig]);
 
   // Fetch Attendance History for selected filter
   const fetchHistory = useCallback(async (period) => {
@@ -205,28 +293,109 @@ export default function FacultyMyAttendance() {
       if (payload) {
         const rawLogs = payload.logs || payload.Logs || [];
         const rawMetrics = payload.metrics || payload.Metrics || {};
-        setHistoryData({
-          logs: rawLogs.map((l) => ({
+
+        const lateThreshMins = parseTimeToMinutes(timingConfig.lateThreshold || "09:15") || (9 * 60 + 15);
+        const shiftEndMins = parseTimeToMinutes(timingConfig.workEndTime || "16:30") || (16 * 60 + 30);
+        const checkoutCutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
+
+        const now = new Date();
+        const nowMins = now.getHours() * 60 + now.getMinutes();
+
+        const processedLogs = rawLogs.map((l, idx, arr) => {
+          const inTime = l.inTime || l.InTime || "--";
+          const outTime = l.outTime || l.OutTime || "--";
+          const rawStatus = l.status || l.Status || "--";
+          const isToday = Boolean(l.isToday ?? l.IsToday);
+          const regState = l.regularizationState || l.RegularizationState || null;
+
+          const inMins = parseTimeToMinutes(inTime);
+          const outMins = parseTimeToMinutes(outTime);
+          const isLatePunch = inMins !== null && inMins > lateThreshMins;
+
+          let status = rawStatus;
+          let hours = l.hours || l.Hours || "--";
+          let isMissedCheckout = false;
+
+          if (inTime !== "--" && inMins !== null) {
+            if (outTime !== "--" && outMins !== null) {
+              // Punched out: check if punch out was past cutoff (e.g. Thursday 09:49 PM)
+              if (outMins > checkoutCutoffMins) {
+                isMissedCheckout = true;
+                status = "Missed Checkout";
+              } else {
+                status = isLatePunch ? "Late" : "Present";
+              }
+              hours = calculateDurationStr(inTime, outTime, false);
+            } else {
+              // Missing outTime
+              if (isToday) {
+                if (nowMins > checkoutCutoffMins) {
+                  isMissedCheckout = true;
+                  status = "Missed Checkout";
+                } else {
+                  status = isLatePunch ? "Late" : "Present";
+                }
+                hours = calculateDurationStr(inTime, null, true);
+              } else {
+                // Past day without punch out
+                isMissedCheckout = true;
+                status = "Missed Checkout";
+
+                // Calculate duration up to next check-in or shift end
+                const nextDayLog = arr.slice(idx + 1).find((next) => next.inTime && next.inTime !== "--");
+                if (nextDayLog && nextDayLog.inTime) {
+                  const nextInMins = parseTimeToMinutes(nextDayLog.inTime);
+                  if (nextInMins !== null) {
+                    const totalMins = (24 * 60 - inMins) + nextInMins;
+                    const h = Math.floor(totalMins / 60);
+                    const m = totalMins % 60;
+                    hours = `${h}h ${m}m`;
+                  } else {
+                    hours = calculateDurationStr(inTime, "04:30 PM", false);
+                  }
+                } else {
+                  hours = calculateDurationStr(inTime, "04:30 PM", false);
+                }
+              }
+            }
+          }
+
+          if (regState?.toLowerCase() === "approved") {
+            status = "Present";
+          }
+
+          const canRegularize = (status === "Late" || status === "Missed Checkout" || status === "Absent" || status === "Half Day")
+            && (!regState || regState.toLowerCase() !== "approved");
+
+          return {
             id: l.id || l.Id,
             day: l.day || l.Day,
             date: l.date || l.Date,
             rawDate: l.rawDate || l.RawDate,
             shift: l.shift || l.Shift,
-            inTime: l.inTime || l.InTime,
-            outTime: l.outTime || l.OutTime,
-            hours: l.hours || l.Hours,
+            inTime,
+            outTime,
+            hours,
             device: l.device || l.Device,
-            status: l.status || l.Status,
-            canRegularize: Boolean(l.canRegularize ?? l.CanRegularize),
-            isToday: Boolean(l.isToday ?? l.IsToday),
-            regularizationState: l.regularizationState || l.RegularizationState,
+            status,
+            canRegularize,
+            isToday,
+            regularizationState: regState,
             holidayName: l.holidayName || l.HolidayName || null,
-          })),
+          };
+        });
+
+        // Compute late punch count dynamically
+        const lateCount = processedLogs.filter((l) => l.status === "Late").length;
+        const presentDaysCount = processedLogs.filter((l) => l.status === "Present" || l.status === "Late" || l.status === "Missed Checkout").length;
+
+        setHistoryData({
+          logs: processedLogs,
           metrics: {
             workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "6 Days",
             workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "--",
-            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || "0 Days",
-            presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "--",
+            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || `${presentDaysCount} Days`,
+            presentDaysSub: lateCount > 0 ? `${lateCount} late punch logged` : (rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "--"),
             leaves: rawMetrics.leaves || rawMetrics.Leaves || "0 Days",
             leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "--",
             absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "0 Days",
@@ -239,7 +408,7 @@ export default function FacultyMyAttendance() {
     } finally {
       setLoadingHistory(false);
     }
-  }, []);
+  }, [timingConfig]);
 
   // Initial load once on mount
   useEffect(() => {
@@ -265,7 +434,7 @@ export default function FacultyMyAttendance() {
       const isSuccess = Boolean(res?.status ?? res?.Status);
       const payload = res?.data || res?.Data;
       if (isSuccess && payload) {
-        const normalized = normalizeTodayData(payload);
+        const normalized = normalizeTodayData(payload, timingConfig);
         if (normalized) {
           setTodayData(normalized);
           syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
@@ -283,9 +452,29 @@ export default function FacultyMyAttendance() {
     }
   };
 
+  // Real-time check if check-out cutoff (shift end + 15 min grace) has passed
+  const isMissedCheckout = useMemo(() => {
+    if (todayData.status === "missed_checkout" || todayData.todayStatus === "Missed Checkout") return true;
+    if (todayData.status === "punched_in" && !todayData.outTime) {
+      const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime);
+      if (shiftEndMins !== null) {
+        const cutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
+        const now = new Date();
+        const nowMins = now.getHours() * 60 + now.getMinutes();
+        return nowMins > cutoffMins;
+      }
+    }
+    return false;
+  }, [todayData.status, todayData.todayStatus, todayData.outTime, todayData.shiftEndTime, timingConfig, shiftUpdateTick]);
+
   // Punch Out Handler
   const handlePunchOut = async () => {
-    if (todayData.status !== "punched_in" || actionLoading) return;
+    if (todayData.status !== "punched_in" || actionLoading || isMissedCheckout) {
+      if (isMissedCheckout) {
+        notify("The 15-minute check-out window has expired. Marked as Missed Checkout. Please apply for attendance regularization.", "error");
+      }
+      return;
+    }
     setActionLoading(true);
     try {
       const res = await attendanceService.punchOut({
@@ -297,7 +486,7 @@ export default function FacultyMyAttendance() {
       const isSuccess = Boolean(res?.status ?? res?.Status);
       const payload = res?.data || res?.Data;
       if (isSuccess && payload) {
-        const normalized = normalizeTodayData(payload);
+        const normalized = normalizeTodayData(payload, timingConfig);
         if (normalized) {
           setTodayData(normalized);
           syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
@@ -379,6 +568,8 @@ export default function FacultyMyAttendance() {
         return "present";
       case "Late":
         return "late";
+      case "Missed Checkout":
+        return "missed-checkout";
       case "Half Day":
         return "half-day";
       case "Leave":
@@ -416,18 +607,22 @@ export default function FacultyMyAttendance() {
               <span className="sp-summary-label">Check Status:</span>
               <span
                 className={`sp-check-status-badge ${
-                  todayData.status === "punched_in"
-                    ? "in"
+                  todayData.status === "punched_in" && !isMissedCheckout
+                    ? (todayData.isLate ? "late" : "in")
                     : todayData.status === "punched_out"
                     ? "completed"
+                    : isMissedCheckout
+                    ? "missed"
                     : "not-checked"
                 }`}
               >
                 <span className="sp-status-bullet">•</span>
-                {todayData.status === "punched_in"
-                  ? `Checked In (${todayData.inTime || "--"})`
+                {todayData.status === "punched_in" && !isMissedCheckout
+                  ? `Checked In (${todayData.inTime || "--"})${todayData.isLate ? " (Late)" : ""}`
                   : todayData.status === "punched_out"
                   ? `Completed (${todayData.outTime || "--"})`
+                  : isMissedCheckout
+                  ? "Missed Checkout (Cutoff Passed)"
                   : "Not Checked In"}
               </span>
             </div>
@@ -448,7 +643,7 @@ export default function FacultyMyAttendance() {
               </div>
               <div className="sp-summary-col">
                 <span className="sp-metric-col-label">SHIFT DURATION</span>
-                <span className={`sp-metric-col-val ${todayData.status === "punched_in" ? "highlight" : ""}`}>
+                <span className={`sp-metric-col-val ${todayData.status === "punched_in" && !isMissedCheckout ? "highlight" : ""}`}>
                   {clockShiftDuration === "--" ? "--:--" : clockShiftDuration}
                 </span>
               </div>
@@ -492,9 +687,9 @@ export default function FacultyMyAttendance() {
               {/* Modern Digital Clock & Status Badge */}
               <div className="sp-digital-display checkin">
                 <span className="sp-digital-time">{todayData.inTime || "--:-- --"}</span>
-                <span className={`sp-digital-status-pill ${todayData.inTime ? "checked" : "pending"}`}>
+                <span className={`sp-digital-status-pill ${todayData.inTime ? (todayData.isLate ? "late" : "checked") : "pending"}`}>
                   <span className="sp-status-dot">•</span>
-                  {todayData.inTime ? "Checked In" : "Not Checked In"}
+                  {todayData.inTime ? (todayData.isLate ? "Checked In (Late)" : "Checked In") : "Not Checked In"}
                 </span>
               </div>
 
@@ -531,30 +726,71 @@ export default function FacultyMyAttendance() {
               {/* Modern Digital Clock & Status Badge */}
               <div className="sp-digital-display checkout">
                 <span className="sp-digital-time">{todayData.outTime || "--:-- --"}</span>
-                <span className={`sp-digital-status-pill ${todayData.outTime ? "checked" : "pending"}`}>
+                <span className={`sp-digital-status-pill ${
+                  todayData.outTime 
+                    ? "checked" 
+                    : isMissedCheckout 
+                    ? "missed" 
+                    : "pending"
+                }`}>
                   <span className="sp-status-dot">•</span>
-                  {todayData.outTime ? "Checked Out" : "Not Checked Out"}
+                  {todayData.outTime 
+                    ? "Checked Out" 
+                    : isMissedCheckout 
+                    ? "Missed Checkout" 
+                    : "Not Checked Out"}
                 </span>
               </div>
 
               {/* Check Out Button */}
-              <button
-                type="button"
-                className={`sp-punch-pill-btn checkout ${
-                  todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
-                }`}
-                disabled={todayData.status !== "punched_in" || actionLoading}
-                onClick={handlePunchOut}
-              >
-                {actionLoading && todayData.status === "punched_in" ? (
-                  <Loader2 size={15} className="sp-spin" />
-                ) : (
-                  <LogOut size={15} />
-                )}
-                <span>Check Out</span>
-              </button>
+              {isMissedCheckout ? (
+                <>
+                  <button
+                    type="button"
+                    className="sp-punch-pill-btn checkout missed"
+                    disabled
+                    title="Check-out window (shift end + 15m) has passed. Marked as Missed Checkout."
+                  >
+                    <AlertCircle size={14} />
+                    <span>Missed Checkout</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sp-missed-regularize-btn"
+                    onClick={() =>
+                      openRegularizeModal({
+                        rawDate: new Date().toISOString().split("T")[0],
+                        date: todayData.dateFormatted,
+                      })
+                    }
+                  >
+                    Regularize Attendance &gt;
+                  </button>
+                  <div className="sp-punch-foot-hint" style={{ color: "#b91c1c" }}>
+                    15m cutoff passed. Apply for regularization.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className={`sp-punch-pill-btn checkout ${
+                      todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
+                    }`}
+                    disabled={todayData.status !== "punched_in" || actionLoading}
+                    onClick={handlePunchOut}
+                  >
+                    {actionLoading && todayData.status === "punched_in" ? (
+                      <Loader2 size={15} className="sp-spin" />
+                    ) : (
+                      <LogOut size={15} />
+                    )}
+                    <span>Check Out</span>
+                  </button>
 
-              <div className="sp-punch-foot-hint">After check-in only</div>
+                  <div className="sp-punch-foot-hint">15m checkout window after shift end</div>
+                </>
+              )}
             </div>
           </div>
         </div>

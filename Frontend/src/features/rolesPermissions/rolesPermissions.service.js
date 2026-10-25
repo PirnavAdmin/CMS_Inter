@@ -622,31 +622,22 @@ export async function getCurrentUserPermissions() {
   try {
     const response = await apiClient.get(apiEndpoints.roles.myPermissions);
     const permissions = response?.data?.permissions || response?.data?.data || response?.data;
-    if (Array.isArray(permissions) && permissions.length > 0) {
+    if (Array.isArray(permissions)) {
+      // Valid API response (whether permissions exist or are legitimately empty for this user)
       return apiResult(transformBackendPermissionsToMatrix(permissions), "api");
     }
   } catch (err) {
     console.warn("Live getCurrentUserPermissions failed:", err?.message);
-  }
-
-  // Fallback 1: Return existing cached permissions from the current authenticated user if present
-  try {
+    // On network failure only, preserve the existing authenticated user's session cache if available
     const authUser = getAuthUser();
     const existingPerms = authUser?.permissions || authUser?.rolePermissions;
     if (Array.isArray(existingPerms) && existingPerms.length > 0) {
       return apiResult(existingPerms, "cache");
     }
-    // Fallback 2: Generate default permissions based on the user's role code
-    const roleCode = authUser?.role || authUser?.roleCode || "ADMIN";
-    const fallbackPerms = await getRolePermissions(roleCode, roleCode);
-    if (Array.isArray(fallbackPerms?.data) && fallbackPerms.data.length > 0) {
-      return apiResult(fallbackPerms.data, "fallback");
-    }
-  } catch (err) {
-    console.warn("Error resolving fallback permissions:", err?.message);
+    return apiResult([], "error");
   }
 
-  return apiResult([], "fallback");
+  return apiResult([], "api");
 }
 
 export async function cloneRole(sourceRoleId, { newName, description = "" }) {

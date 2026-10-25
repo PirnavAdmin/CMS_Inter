@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -27,7 +28,7 @@ namespace CollegeManagement.API.Middleware
             }
             catch (Exception ex)
             {
-                if (ex is NotFoundException || ex is ConflictException || ex is ValidationException || ex is UnauthorizedException || ex is ForbiddenException || ex is ArgumentException)
+                if (ex is NotFoundException || ex is KeyNotFoundException || ex is ConflictException || ex is ValidationException || ex is UnauthorizedException || ex is ForbiddenException || ex is ArgumentException)
                 {
                     _logger.LogWarning("A client error occurred during HTTP request processing at {Path} (TraceId: {TraceId}): {Message}", context.Request.Path, context.TraceIdentifier, ex.Message);
                 }
@@ -50,6 +51,8 @@ namespace CollegeManagement.API.Middleware
                 ArgumentException => (HttpStatusCode.BadRequest, exception.Message),
 
                 NotFoundException => (HttpStatusCode.NotFound, exception.Message),
+
+                KeyNotFoundException => (HttpStatusCode.NotFound, exception.Message),
 
                 ConflictException => (HttpStatusCode.Conflict, exception.Message),
 

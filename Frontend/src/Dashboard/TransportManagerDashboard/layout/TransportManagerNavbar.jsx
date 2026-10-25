@@ -391,7 +391,7 @@ export default function TransportManagerNavbar() {
               {initials}
             </div>
             <div className="cms-profile-meta">
-              <strong>{profile.name || "tangiro kamado"}</strong>
+              <strong>{profile.name || "muzan kibutsuzi"}</strong>
               <span>{profile.role || "Transport Manager"}</span>
             </div>
             <ChevronDown size={14} />
@@ -420,7 +420,7 @@ export default function TransportManagerNavbar() {
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {profile.name || "tangiro kamado"}
+                      {profile.name || "muzan kibutsuzi"}
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--cms-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {profile.role || "Transport Manager"}

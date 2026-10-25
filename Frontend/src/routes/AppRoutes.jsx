@@ -536,8 +536,10 @@ export default function AppRoutes() {
         <Route path="/non-teaching" element={<Navigate to="/non-teaching-dashboard" replace />} />
       </Route>
       {/* Transport Manager Module Routes */}
-      <Route path="/transport-manager" element={<Navigate to="/transport-manager/overview" replace />} />
-      <Route path="/transport-manager/*" element={<TransportManagerRoutes />} />
+      <Route element={<ProtectedRoute requireTransportManager />}>
+        <Route path="/transport-manager" element={<Navigate to="/transport-manager/overview" replace />} />
+        <Route path="/transport-manager/*" element={<TransportManagerRoutes />} />
+      </Route>
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/inventory-dashboard/*" element={<InventoryDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />

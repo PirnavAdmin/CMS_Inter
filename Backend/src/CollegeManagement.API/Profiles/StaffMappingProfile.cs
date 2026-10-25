@@ -65,7 +65,7 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.AssignedCampusIds, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => a.CampusId).ToList() : new List<int>()))
                 .ForMember(dest => dest.AssignedCampuses, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => new { id = a.CampusId, name = a.Campus != null ? a.Campus.CampusName : "", code = a.Campus != null ? a.Campus.CampusCode : "" }).Cast<object>().ToList() : new List<object>()))
                 .ForMember(dest => dest.AssignedBoardIds, opt => opt.MapFrom(src => src.StaffBoardAssignments != null ? src.StaffBoardAssignments.Select(a => a.BoardId).ToList() : new List<int>()))
-                .ForMember(dest => dest.Documents, opt => opt.MapFrom(src => DeserializeList<StaffDocumentPayloadItem>(src.DocumentsJson)))
+                .ForMember(dest => dest.Documents, opt => opt.MapFrom(src => DeserializeDocuments(src.DocumentsJson)))
                 .ForMember(dest => dest.AssignedBoards, opt => opt.MapFrom(src => src.StaffBoardAssignments != null ? src.StaffBoardAssignments.Select(a => new { id = a.BoardId, name = a.Board != null ? a.Board.BoardName : "", code = a.Board != null ? a.Board.BoardCode : "" }).Cast<object>().ToList() : new List<object>()));
 
             // Staff Entity -> StaffProfileFullDto
@@ -78,11 +78,33 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => src.StaffSubjectAllocations != null
                     ? src.StaffSubjectAllocations.Select(a => a.Subject != null ? a.Subject.SubjectName : string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList()
                     : new List<string>()))
+                .ForMember(dest => dest.AssignedCampusIds, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => a.CampusId).ToList() : new List<int>()))
+                .ForMember(dest => dest.AssignedCampuses, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => new { id = a.CampusId, name = a.Campus != null ? a.Campus.CampusName : "", code = a.Campus != null ? a.Campus.CampusCode : "" }).Cast<object>().ToList() : new List<object>()))
+                .ForMember(dest => dest.AssignedBoardIds, opt => opt.MapFrom(src => src.StaffBoardAssignments != null ? src.StaffBoardAssignments.Select(a => a.BoardId).ToList() : new List<int>()))
+                .ForMember(dest => dest.AssignedBoards, opt => opt.MapFrom(src => src.StaffBoardAssignments != null ? src.StaffBoardAssignments.Select(a => new { id = a.BoardId, name = a.Board != null ? a.Board.BoardName : "", code = a.Board != null ? a.Board.BoardCode : "" }).Cast<object>().ToList() : new List<object>()))
                 .ForMember(dest => dest.EducationList, opt => opt.MapFrom(src => DeserializeList<StaffEducationItem>(src.EducationJson)))
                 .ForMember(dest => dest.ExperienceList, opt => opt.MapFrom(src => DeserializeList<StaffExperienceItem>(src.ExperienceJson)))
-                .ForMember(dest => dest.DocumentsList, opt => opt.MapFrom(src => DeserializeList<StaffDocumentItem>(src.DocumentsJson)))
+                .ForMember(dest => dest.DocumentsList, opt => opt.MapFrom(src => DeserializeDocuments(src.DocumentsJson)))
                 .ForMember(dest => dest.BankDetails, opt => opt.MapFrom(src => DeserializeObject<StaffBankDetails>(src.BankDetailsJson) ?? new StaffBankDetails()))
                 .ForMember(dest => dest.EmergencyContact, opt => opt.MapFrom(src => DeserializeObject<StaffEmergencyContact>(src.EmergencyContactJson) ?? new StaffEmergencyContact()));
+
+            // StaffDocumentItem <-> StaffDocumentPayloadItem Type Maps
+            CreateMap<StaffDocumentItem, StaffDocumentPayloadItem>()
+                .ForMember(dest => dest.id, opt => opt.MapFrom(src => src.DocumentType))
+                .ForMember(dest => dest.type, opt => opt.MapFrom(src => src.DocumentType))
+                .ForMember(dest => dest.name, opt => opt.MapFrom(src => !string.IsNullOrEmpty(src.DocumentName) ? src.DocumentName : src.FileName))
+                .ForMember(dest => dest.url, opt => opt.MapFrom(src => src.FilePath))
+                .ForMember(dest => dest.format, opt => opt.MapFrom(src => src.FileType))
+                .ForMember(dest => dest.size, opt => opt.MapFrom(src => src.FileSizeBytes > 0 ? src.FileSizeBytes.ToString() : null));
+
+            CreateMap<StaffDocumentPayloadItem, StaffDocumentItem>()
+                .ForMember(dest => dest.DocumentType, opt => opt.MapFrom(src => src.type ?? src.id ?? "Other"))
+                .ForMember(dest => dest.DocumentName, opt => opt.MapFrom(src => src.name ?? string.Empty))
+                .ForMember(dest => dest.FileName, opt => opt.MapFrom(src => src.name ?? string.Empty))
+                .ForMember(dest => dest.FilePath, opt => opt.MapFrom(src => src.url ?? string.Empty))
+                .ForMember(dest => dest.FileType, opt => opt.MapFrom(src => src.format ?? string.Empty))
+                .ForMember(dest => dest.FileSizeBytes, opt => opt.MapFrom(src => ParseFileSize(src.size)))
+                .ForMember(dest => dest.UploadedAt, opt => opt.MapFrom(_ => DateTime.UtcNow));
 
             // AssignStaffSubjectDto -> StaffSubjectAllocation Entity
             CreateMap<AssignStaffSubjectDto, StaffSubjectAllocation>()
@@ -158,6 +180,46 @@ namespace CollegeManagement.API.Profiles
         private static DateTime? ParseNullableDate(string? dateStr)
         {
             return !string.IsNullOrWhiteSpace(dateStr) && DateTime.TryParse(dateStr, out var d) ? d : null;
+        }
+
+        private static List<StaffDocumentPayloadItem> DeserializeDocuments(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new List<StaffDocumentPayloadItem>();
+            try
+            {
+                var payloadItems = JsonSerializer.Deserialize<List<StaffDocumentPayloadItem>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (payloadItems != null && payloadItems.Any(p => !string.IsNullOrEmpty(p.type) || !string.IsNullOrEmpty(p.url) || !string.IsNullOrEmpty(p.name)))
+                {
+                    return payloadItems;
+                }
+
+                var docItems = JsonSerializer.Deserialize<List<StaffDocumentItem>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (docItems != null && docItems.Any())
+                {
+                    return docItems.Select(d => new StaffDocumentPayloadItem
+                    {
+                        id = d.DocumentType,
+                        type = d.DocumentType,
+                        name = !string.IsNullOrEmpty(d.DocumentName) ? d.DocumentName : d.FileName,
+                        url = d.FilePath,
+                        format = d.FileType,
+                        size = d.FileSizeBytes > 0 ? d.FileSizeBytes.ToString() : null
+                    }).ToList();
+                }
+
+                return payloadItems ?? new List<StaffDocumentPayloadItem>();
+            }
+            catch
+            {
+                return new List<StaffDocumentPayloadItem>();
+            }
+        }
+
+        private static long ParseFileSize(string? sizeStr)
+        {
+            if (string.IsNullOrWhiteSpace(sizeStr)) return 0;
+            if (long.TryParse(sizeStr, out var bytes)) return bytes;
+            return 0;
         }
     }
 }

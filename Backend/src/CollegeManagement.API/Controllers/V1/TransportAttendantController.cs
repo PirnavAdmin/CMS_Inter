@@ -8,7 +8,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport/attendants")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     public class TransportAttendantController : ControllerBase
     {
         private readonly ITransportAttendantService _service;

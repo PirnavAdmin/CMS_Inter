@@ -28,6 +28,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  LabelList,
 } from "recharts";
 import { useFaculty } from "../FacultyContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -513,7 +514,7 @@ export default function FacultyDashboardHome() {
         historyPromise,
         Promise.race([
           leavePromise,
-          new Promise((resolve) => setTimeout(() => resolve(null), 1200)),
+          new Promise((resolve) => setTimeout(() => resolve(null), 500)),
         ]),
       ]);
 
@@ -899,21 +900,19 @@ export default function FacultyDashboardHome() {
               attendanceDate: todayIso,
             };
 
-            let res = await apiClient.get("/api/v1/attendance/admin/students", { params }).catch(() => null);
-            let payload = res?.data?.data ?? res?.data?.Data ?? res?.data ?? [];
-            let studentList = Array.isArray(payload) ? payload : (payload?.items ?? payload?.Items ?? payload?.records ?? []);
+            // Query today's attendance records and section roster in parallel for instant data availability
+            const [attRes, rosterRes] = await Promise.all([
+              apiClient.get("/api/v1/attendance/admin/students", { params }).catch(() => null),
+              apiClient.get(`/api/v1/students/section/${sec.sectionId}`).catch(() => null),
+            ]);
 
-            if (!studentList.length) {
-              const fallbackRes = await apiClient.get(`/api/v1/attendance/admin/students?sectionId=${sec.sectionId}`).catch(() => null);
-              const fallbackPayload = fallbackRes?.data?.data ?? fallbackRes?.data?.Data ?? fallbackRes?.data ?? [];
-              studentList = Array.isArray(fallbackPayload) ? fallbackPayload : (fallbackPayload?.items ?? fallbackPayload?.Items ?? fallbackPayload?.records ?? []);
-            }
+            const attPayload = attRes?.data?.data ?? attRes?.data?.Data ?? attRes?.data ?? [];
+            const attList = Array.isArray(attPayload) ? attPayload : (attPayload?.items ?? attPayload?.Items ?? attPayload?.records ?? []);
 
-            if (!studentList.length) {
-              const secRes = await apiClient.get(`/api/v1/students/section/${sec.sectionId}`).catch(() => null);
-              const secPayload = secRes?.data?.data ?? secRes?.data?.Data ?? secRes?.data ?? [];
-              studentList = Array.isArray(secPayload) ? secPayload : (secPayload?.items ?? secPayload?.Items ?? secPayload?.records ?? []);
-            }
+            const rosterPayload = rosterRes?.data?.data ?? rosterRes?.data?.Data ?? rosterRes?.data ?? [];
+            const rosterList = Array.isArray(rosterPayload) ? rosterPayload : (rosterPayload?.items ?? rosterPayload?.Items ?? rosterPayload?.records ?? []);
+
+            let studentList = attList.length ? attList : rosterList;
 
             let present = 0;
             let absent = 0;
@@ -1115,27 +1114,23 @@ export default function FacultyDashboardHome() {
     if (maxCount <= 5) {
       return { sectionYMax: 5, sectionYTicks: [0, 1, 2, 3, 4, 5] };
     }
-    if (maxCount <= 15) {
-      const ceilMax = Math.ceil(maxCount / 5) * 5;
-      const ticks = [];
-      const step = ceilMax <= 10 ? 2 : 5;
-      for (let i = 0; i <= ceilMax; i += step) ticks.push(i);
-      return { sectionYMax: ceilMax, sectionYTicks: ticks };
+    if (maxCount <= 12) {
+      return { sectionYMax: 15, sectionYTicks: [0, 3, 6, 9, 12, 15] };
     }
-    if (maxCount <= 30) {
-      const ceilMax = Math.ceil(maxCount / 5) * 5;
-      const ticks = [0, 5, 10, 15, 20, 25, 30].filter((t) => t <= ceilMax);
-      if (ticks[ticks.length - 1] < ceilMax) ticks.push(ceilMax);
+    if (maxCount <= 25) {
+      const ceilMax = Math.ceil((maxCount + 2) / 5) * 5;
+      const ticks = [];
+      for (let i = 0; i <= ceilMax; i += 5) ticks.push(i);
       return { sectionYMax: ceilMax, sectionYTicks: ticks };
     }
     if (maxCount <= 60) {
-      const ceilMax = Math.ceil(maxCount / 10) * 10;
+      const ceilMax = maxCount % 10 === 0 ? maxCount + 10 : Math.ceil(maxCount / 10) * 10;
       const ticks = [];
       for (let i = 0; i <= ceilMax; i += 10) ticks.push(i);
       return { sectionYMax: ceilMax, sectionYTicks: ticks };
     }
     if (maxCount <= 120) {
-      const ceilMax = Math.ceil(maxCount / 20) * 20;
+      const ceilMax = maxCount % 20 === 0 ? maxCount + 20 : Math.ceil(maxCount / 20) * 20;
       const ticks = [];
       for (let i = 0; i <= ceilMax; i += 20) ticks.push(i);
       return { sectionYMax: ceilMax, sectionYTicks: ticks };
@@ -1151,7 +1146,7 @@ export default function FacultyDashboardHome() {
     else if (normalizedStep <= 5) step = 5 * magnitude;
     else step = 10 * magnitude;
 
-    const ceilMax = Math.ceil(maxCount / step) * step;
+    const ceilMax = Math.ceil((maxCount + step * 0.7) / step) * step;
     const ticks = [];
     for (let i = 0; i <= ceilMax; i += step) ticks.push(i);
     return { sectionYMax: ceilMax, sectionYTicks: ticks };
@@ -1167,23 +1162,33 @@ export default function FacultyDashboardHome() {
       }
 
       const startTime = Date.now();
-      const MIN_LOADING_TIME_MS = 2000;
+      const MIN_LOADING_TIME_MS = 600;
 
       try {
-        // Step 1: Fetch timetable slots to derive faculty sections immediately
-        const slots = await fetchTimetableData();
-        const derivedSections = extractSectionsFromSlots(slots, profileData);
+        // Kick off all independent fetch operations concurrently from time 0
+        const dutiesPromise = fetchDutiesAndEvals();
+        const holidaysPromise = fetchUpcomingHolidays();
+        const examsPromise = fetchUpcomingExaminations();
+        const myAttPromise = fetchMyAttendanceData();
 
-        // Step 2: Concurrently fetch all remaining dashboard modules
+        // Concurrently fetch timetable slots and derive section student attendance
+        const timetablePromise = (async () => {
+          const slots = await fetchTimetableData();
+          const derivedSections = extractSectionsFromSlots(slots, profileData);
+          await fetchSectionAttendance(derivedSections);
+          return slots;
+        })();
+
+        // Concurrently wait for ALL dashboard modules to complete together
         await Promise.allSettled([
-          fetchSectionAttendance(derivedSections),
-          fetchDutiesAndEvals(),
-          fetchUpcomingHolidays(),
-          fetchUpcomingExaminations(),
-          fetchMyAttendanceData(),
+          timetablePromise,
+          myAttPromise,
+          dutiesPromise,
+          holidaysPromise,
+          examsPromise,
         ]);
 
-        // Step 3: Enforce strict minimum 2-second loading duration for synchronized reveal
+        // Smooth transition duration to avoid visual jarring
         const elapsed = Date.now() - startTime;
         if (elapsed < MIN_LOADING_TIME_MS) {
           await new Promise((resolve) => setTimeout(resolve, MIN_LOADING_TIME_MS - elapsed));
@@ -1193,6 +1198,9 @@ export default function FacultyDashboardHome() {
       } finally {
         setIsInitialLoading(false);
         setIsRefreshing(false);
+        setAttendanceLoading(false);
+        setTimetableLoading(false);
+        setMyAttLoading(false);
         const nowStr = formattedTimestamp();
         setLastUpdated(nowStr);
         facultyDashboardCache.lastUpdated = nowStr;
@@ -1219,14 +1227,14 @@ export default function FacultyDashboardHome() {
   }, [loadAllDashboardData]);
 
   // Master initial loader: triggers on mount if cache is not valid or when facultyId changes
-  const initialLoadTriggeredRef = useRef(false);
+  const lastLoadedFacultyIdRef = useRef(null);
   useEffect(() => {
     if (isCacheValid) {
       setIsInitialLoading(false);
       return;
     }
-    if (!initialLoadTriggeredRef.current && facultyId) {
-      initialLoadTriggeredRef.current = true;
+    if (facultyId && lastLoadedFacultyIdRef.current !== facultyId) {
+      lastLoadedFacultyIdRef.current = facultyId;
       loadAllDashboardData(false);
     }
   }, [facultyId, isCacheValid, loadAllDashboardData]);
@@ -1329,7 +1337,7 @@ export default function FacultyDashboardHome() {
       {/* 5 KPI Cards Row with 3D Icons */}
       <section className="dashboard-kpi-grid" aria-label="Faculty Metrics">
         {kpis.map((item) => (
-          <KpiCard key={item.label} {...item} loading={showSkeleton || (!isCacheValid && timetableLoading)} />
+          <KpiCard key={item.label} {...item} loading={showSkeleton} />
         ))}
       </section>
 
@@ -1358,7 +1366,7 @@ export default function FacultyDashboardHome() {
         <article className={`dashboard-card dashboard-attendance-today-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader title="Student Attendance (Today)" />
           <div className="dashboard-card-body dashboard-attendance-body">
-            {showSkeleton || (!isCacheValid && (attendanceLoading || timetableLoading)) ? (
+            {showSkeleton ? (
               <>
                 <Skeleton className="dashboard-skeleton-donut" />
                 <div className="dashboard-skeleton-chips">
@@ -1522,57 +1530,20 @@ export default function FacultyDashboardHome() {
         <article className={`dashboard-card dashboard-group-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
             title="Student Strength by Section"
-            action={
-              <button
-                type="button"
-                className="dashboard-view-link"
-                onClick={() => setActiveModule("classes")}
-              >
-                View All <ChevronRight size={13} />
-              </button>
-            }
           />
           <div className="dashboard-card-body">
-            {showSkeleton || (!isCacheValid && (attendanceLoading || timetableLoading)) ? (
+            {showSkeleton ? (
               <>
-                <Skeleton className="dashboard-skeleton-chart" style={{ height: 165, marginBottom: 8 }} />
+                <Skeleton className="dashboard-skeleton-chart" style={{ height: "100%", minHeight: 140, marginBottom: 4 }} />
                 <div className="dashboard-students-chips">
                   {Array.from({ length: 3 }, (_, index) => (
-                    <Skeleton key={index} style={{ height: 38, borderRadius: 6 }} />
+                    <Skeleton key={index} style={{ height: 34, borderRadius: 6 }} />
                   ))}
                 </div>
               </>
             ) : (
               <>
                 <div className="faculty-section-chart-container">
-                  {/* Fixed Y-Axis column (pinned on the left) */}
-                  <div
-                    className="faculty-section-chart-yaxis"
-                    style={{
-                      width: sectionYMax >= 1000 ? 38 : sectionYMax >= 100 ? 32 : 26,
-                      flexShrink: 0,
-                    }}
-                  >
-                    <ResponsiveContainer width="100%" height={165}>
-                      <BarChart
-                        data={sectionStudentsData}
-                        margin={{ top: 8, right: 2, left: 0, bottom: 20 }}
-                      >
-                        <YAxis
-                          width={sectionYMax >= 1000 ? 34 : sectionYMax >= 100 ? 28 : 22}
-                          domain={[0, sectionYMax]}
-                          ticks={sectionYTicks}
-                          allowDecimals={false}
-                          tickLine={false}
-                          axisLine={false}
-                          tick={{ fontSize: 10, fill: "#475569" }}
-                        />
-                        <XAxis height={24} tick={false} axisLine={false} tickLine={false} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Scrollable Bar Chart Area */}
                   <div
                     ref={chartScrollRef}
                     className="faculty-section-chart-wrap"
@@ -1585,32 +1556,48 @@ export default function FacultyDashboardHome() {
                     <div
                       style={{
                         width:
-                          sectionStudentsData.length > 4
-                            ? `${Math.max(100, Math.round((sectionStudentsData.length / 4) * 100))}%`
+                          sectionStudentsData.length > 5
+                            ? `${Math.max(100, Math.round((sectionStudentsData.length / 5) * 100))}%`
                             : "100%",
                         minWidth: "100%",
-                        height: 165,
+                        height: "100%",
+                        minHeight: 140,
                         position: "relative",
                       }}
                     >
-                      <ResponsiveContainer width="100%" height={165}>
+                      <ResponsiveContainer width="100%" height="100%" minHeight={140}>
                         <BarChart
                           data={sectionStudentsData}
-                          margin={{ top: 8, right: 12, left: 8, bottom: 20 }}
+                          margin={{ top: 16, right: 10, left: -6, bottom: 2 }}
                         >
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
                           <XAxis
                             dataKey="name"
                             tickLine={false}
-                            axisLine={false}
-                            height={24}
-                            dy={4}
-                            tick={{ fontSize: 10, fontWeight: 700, fill: "#475569" }}
+                            axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
+                            height={20}
+                            tick={{ fontSize: 10.5, fontWeight: 700, fill: "#334155" }}
                             interval={0}
                           />
-                          <YAxis hide domain={[0, sectionYMax]} ticks={sectionYTicks} />
+                          <YAxis
+                            domain={[0, sectionYMax]}
+                            ticks={sectionYTicks}
+                            interval={0}
+                            allowDecimals={false}
+                            width={26}
+                            tickLine={false}
+                            axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
+                            tick={{ fontSize: 9.5, fill: "#64748b" }}
+                          />
                           <Tooltip content={<CustomBarTooltip />} />
-                          <Bar dataKey="students" minPointSize={3} maxBarSize={40} radius={[4, 4, 0, 0]}>
+                          <Bar dataKey="students" maxBarSize={38} radius={[4, 4, 0, 0]}>
+                            <LabelList
+                              dataKey="students"
+                              position="top"
+                              formatter={(val) => (val > 0 ? val : "0")}
+                              style={{ fontSize: 10.5, fontWeight: 800, fill: "#334155" }}
+                              offset={4}
+                            />
                             {sectionStudentsData.map((entry) => (
                               <Cell key={entry.name} fill={entry.fill} />
                             ))}
@@ -1665,18 +1652,9 @@ export default function FacultyDashboardHome() {
         <article className={`dashboard-card dashboard-schedule-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
             title={`Today's Lecture Schedule (${todayLectures.length})`}
-            action={
-              <button
-                type="button"
-                className="dashboard-view-link"
-                onClick={() => setActiveModule("timetable")}
-              >
-                View All <ChevronRight size={13} />
-              </button>
-            }
           />
           <div className="dashboard-card-body">
-            {showSkeleton || (!isCacheValid && timetableLoading) ? (
+            {showSkeleton ? (
               <>
                 <div className="dashboard-skeleton-list">
                   {Array.from({ length: 3 }, (_, index) => (
@@ -1813,7 +1791,7 @@ export default function FacultyDashboardHome() {
             title={`My Attendance (${myAttMetrics.monthLabel || new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date())})`}
           />
           <div className="dashboard-card-body dashboard-attendance-body">
-            {showSkeleton || (!isCacheValid && myAttLoading) ? (
+            {showSkeleton ? (
               <>
                 <Skeleton className="dashboard-skeleton-donut" />
                 <div className="dashboard-skeleton-chips" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
@@ -1986,17 +1964,8 @@ export default function FacultyDashboardHome() {
         <article className={`dashboard-card dashboard-holiday-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
             title={`Upcoming Holidays (${holidaysList.length})`}
-            action={
-              <button
-                type="button"
-                className="dashboard-view-link"
-                onClick={() => setActiveModule("holidays")}
-              >
-                View All <ChevronRight size={13} />
-              </button>
-            }
           />
-          {showSkeleton || (holidayState.loading && !holidayState.data) ? (
+          {showSkeleton ? (
             <div className="dashboard-card-body">
               <div className="dashboard-skeleton-list">
                 {Array.from({ length: 4 }, (_, index) => (
@@ -2063,17 +2032,8 @@ export default function FacultyDashboardHome() {
         <article className={`dashboard-card dashboard-exams-card ${showSkeleton ? "is-refreshing" : ""}`}>
           <CardHeader
             title={`Upcoming Examinations (${examsList.length})`}
-            action={
-              <button
-                type="button"
-                className="dashboard-view-link"
-                onClick={() => setActiveModule("examduties")}
-              >
-                View All <ChevronRight size={13} />
-              </button>
-            }
           />
-          {showSkeleton || (examState.loading && !examState.data) ? (
+          {showSkeleton ? (
             <div className="dashboard-card-body">
               <div className="dashboard-skeleton-list">
                 {Array.from({ length: 4 }, (_, index) => (
