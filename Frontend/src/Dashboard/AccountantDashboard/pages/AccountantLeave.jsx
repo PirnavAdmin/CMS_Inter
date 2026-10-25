@@ -19,7 +19,12 @@ const unwrap = response => {
   if ((body?.status ?? body?.Status ?? body?.success ?? body?.Success) === false) throw new Error(body?.message || body?.Message || "Request failed.");
   return body?.data ?? body?.Data ?? body;
 };
-const apiError = (err, method, url) => `${method} ${url}${err?.response?.status ? ` (HTTP ${err.response.status})` : ""}: ${getApiErrorMessage(err)}`;
+const apiError = (err, method, url) => {
+  const message = err?.response?.status === 403 && url === CATEGORY_URL
+    ? "Your account is not permitted to view leave categories. Please contact your administrator. Retry after access has been granted."
+    : getApiErrorMessage(err);
+  return `${method} ${url}${err?.response?.status ? ` (HTTP ${err.response.status})` : ""}: ${message}`;
+};
 const normalize = (obj, fields) => Object.fromEntries(fields.map(name => [name, field(obj, name)]));
 const leaveFields = ["staffLeaveRequestId", "staffId", "leaveType", "leaveCategoryId", "leaveCategoryName", "startDate", "endDate", "totalDays", "reason", "createdAt", "status", "approvedByUserName"];
 const formatDate = value => {
