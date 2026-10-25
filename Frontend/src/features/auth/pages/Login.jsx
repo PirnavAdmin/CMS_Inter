@@ -112,32 +112,45 @@ export default function Login() {
       }
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
+      const userRole = String(result.user?.role || "").toLowerCase();
+      const isAdmin = result.user?.isAdmin || userRole.includes("admin") || result.roleType === "admin";
+
       const isTransportManager =
-        isTransportManagerRole(result.user?.role, result.user) ||
-        result.roleType === "transport_manager" ||
-        String(result.user?.role || "").toLowerCase().includes("transport") ||
-        String(result.user?.designation || "").toLowerCase().includes("transport");
+        !isAdmin &&
+        (isTransportManagerRole(result.user?.role, result.user) ||
+          result.roleType === "transport_manager" ||
+          String(result.user?.role || "").toLowerCase().includes("transport") ||
+          String(result.user?.designation || "").toLowerCase().includes("transport"));
       const isWarden =
+        !isAdmin &&
         !isTransportManager &&
         (isWardenRole(result.user?.role, result.user) ||
           result.roleType === "warden" ||
           String(result.user?.role || "").toLowerCase().includes("warden") ||
           String(result.user?.designation || "").toLowerCase().includes("warden"));
-      const userRole = String(result.user?.role || "").toLowerCase();
-      const isInventory = userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper";
-      const isExamCell = !isWarden && !isTransportManager && (isExamCellRole(userRole) || result.roleType === "examcell");
-      const isPrincipal = !isWarden && !isTransportManager && (userRole === "principal" || userRole.includes("principal"));
+      const isInventory = !isAdmin && (userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper");
+      const isExamCell = !isAdmin && !isWarden && !isTransportManager && (isExamCellRole(userRole) || result.roleType === "examcell");
+      const isPrincipal = !isAdmin && !isWarden && !isTransportManager && (userRole === "principal" || userRole.includes("principal"));
+      const isAccountant =
+        !isAdmin &&
+        !isWarden &&
+        !isTransportManager &&
+        (userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier");
       const isNonTeaching =
+        !isAdmin &&
         !isWarden &&
         !isTransportManager &&
         !isExamCell &&
+        !isPrincipal &&
+        !isAccountant &&
         (userRole === "non_teaching_staff" ||
           userRole === "non-teaching" ||
           userRole === "non-teaching-staff" ||
           userRole === "nonteaching" ||
           result.roleType === "non_teaching" ||
-          String(result.user?.staffType || "").toLowerCase() === "non-teaching");
+          (userRole === "staff" && String(result.user?.staffType || "").toLowerCase() === "non-teaching"));
       const isFacultyOrStaff =
+        !isAdmin &&
         !isWarden &&
         !isTransportManager &&
         !isNonTeaching &&
@@ -150,17 +163,16 @@ export default function Login() {
         userRole.includes("staff") ||
         userRole.includes("lecturer"));
       const isParent =
+        !isAdmin &&
         !isWarden &&
         !isTransportManager &&
         (userRole === "parent" ||
         userRole.includes("parent") ||
         result.roleType === "parent");
-      const isAccountant =
-        !isWarden &&
-        !isTransportManager &&
-        (userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier");
 
-      if (isTransportManager) {
+      if (isAdmin) {
+        navigate("/dashboard", { replace: true });
+      } else if (isTransportManager) {
         navigate("/transport-manager/overview", { replace: true });
       } else if (isWarden) {
         navigate("/warden-dashboard", { replace: true });
@@ -168,20 +180,18 @@ export default function Login() {
         navigate("/inventory-dashboard", { replace: true });
       } else if (userRole.includes("driver")) {
         navigate("/driver", { replace: true });
-      } else if (isNonTeaching) {
-        navigate("/non-teaching-dashboard", { replace: true });
       } else if (isExamCell) {
         navigate("/exam-cell-dashboard", { replace: true });
-      } else if (result.user.isAdmin || userRole.includes("admin")) {
-        navigate("/dashboard", { replace: true });
       } else if (isPrincipal) {
         navigate("/principal-dashboard", { replace: true });
+      } else if (isAccountant) {
+        navigate("/accountant-dashboard", { replace: true });
+      } else if (isNonTeaching) {
+        navigate("/non-teaching-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
       } else if (isParent) {
         navigate("/parent-dashboard", { replace: true });
-      } else if (isAccountant) {
-        navigate("/accountant-dashboard", { replace: true });
       } else {
         navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
       }

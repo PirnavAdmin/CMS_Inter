@@ -302,7 +302,9 @@ namespace CollegeManagement.API.Services.Implementations
                     Designation = user.Designation,
                     EmployeeId = user.EmployeeId,
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
-                    StaffType = staffInfo?.StaffType ?? (user.StudentId.HasValue ? "Student" : (user.AdminId.HasValue ? "Admin" : "Non-Teaching")),
+                    StaffType = (user.AdminId.HasValue && user.AdminId.Value > 0) || string.Equals(user.Role?.RoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(user.Role?.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)
+                        ? "Admin"
+                        : (user.StudentId.HasValue ? "Student" : (staffInfo?.StaffType ?? "Non-Teaching")),
                     AssignedCampusIds = assignedCampusIds,
                     AssignedBoardIds = assignedBoardIds,
                     PhotoPath = (string?)staffInfo?.PhotoPath,
@@ -1223,7 +1225,9 @@ namespace CollegeManagement.API.Services.Implementations
                 StudentId = user.StudentId,
                 AdminId = user.AdminId,
                 Role = canonicalRoleName,
-                StaffType = staffType ?? (user.StudentId.HasValue ? "Student" : (user.AdminId.HasValue ? "Admin" : "Non-Teaching")),
+                StaffType = (user.AdminId.HasValue && user.AdminId.Value > 0) || string.Equals(canonicalRoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(canonicalRoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)
+                    ? "Admin"
+                    : (staffType ?? (user.StudentId.HasValue ? "Student" : "Non-Teaching")),
                 Designation = user.Designation,
                 EmployeeId = user.EmployeeId
             };
