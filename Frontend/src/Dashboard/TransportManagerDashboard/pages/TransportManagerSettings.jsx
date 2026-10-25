@@ -80,6 +80,7 @@ export default function TransportManagerSettings() {
     };
   });
   const [loadingSettings, setLoadingSettings] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   // Load Settings from Backend API
   const loadSettings = async () => {

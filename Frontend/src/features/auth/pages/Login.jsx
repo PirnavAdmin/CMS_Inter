@@ -188,11 +188,25 @@ export default function Login() {
     } catch (loginError) {
       clearAuthSession();
       const status = Number(loginError?.response?.status || 0);
-      setError(
-        [400, 401, 403].includes(status) || loginError?.code === "INVALID_CREDENTIALS"
-          ? "Invalid username or password. Please try again."
-          : getApiErrorMessage(loginError) || "Unable to sign in right now. Please try again.",
-      );
+      const serverMessage =
+        loginError?.response?.data?.message ||
+        loginError?.response?.data?.Message ||
+        loginError?.response?.data?.error ||
+        loginError?.response?.data?.Error ||
+        loginError?.response?.data?.detail ||
+        (typeof loginError?.response?.data === "string" ? loginError.response.data : null) ||
+        loginError?.message;
+
+      const displayMessage =
+        serverMessage &&
+        serverMessage !== "Error" &&
+        !serverMessage.startsWith("Authentication failed because")
+          ? serverMessage
+          : [400, 401, 403].includes(status) || loginError?.code === "INVALID_CREDENTIALS"
+          ? "Invalid Email or Password"
+          : getApiErrorMessage(loginError) || "Unable to sign in right now. Please try again.";
+
+      setError(displayMessage);
     } finally {
       setBusy(false);
     }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -956,8 +956,12 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const [searchParams, setSearchParams] = useSearchParams();
   const tmContext = useTransportManagerSafe();
 
-  const { selectedBoardId, selectedAcademicYearId } = useAcademicContext?.() || {};
-  const { selectedCampusId } = useCampusContext?.() || {};
+  const academicContext = useAcademicContext?.() || {};
+  const campusContext = useCampusContext?.() || {};
+
+  const effectiveCampusId = tmContext?.effectiveCampusId ?? campusContext.selectedCampus?.id ?? campusContext.selectedCampusId ?? 1;
+  const effectiveBoardId = tmContext?.effectiveBoardId ?? tmContext?.selectedBoardId ?? academicContext.selectedBoardId ?? 1;
+  const effectiveAcademicYearId = tmContext?.effectiveAcademicYearId ?? academicContext.selectedAcademicYearId ?? 1;
 
   const activeSection = defaultSection;
 
@@ -1014,17 +1018,28 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
 
   useEffect(() => {
     if (tmContext) {
-      if (tmContext.routes?.length && !routes.length) setRoutes(tmContext.routes);
-      if (tmContext.pickupPoints?.length && !pickupPoints.length) setPickupPoints(tmContext.pickupPoints);
-      if (tmContext.vehicles?.length && !vehicles.length) setVehicles(tmContext.vehicles);
-      if (tmContext.drivers?.length && !drivers.length) setDrivers(tmContext.drivers);
-      if (tmContext.attendants?.length && !attendants.length) setAttendants(tmContext.attendants);
-      if (tmContext.assignments?.length && !vehicleAssignments.length) setVehicleAssignments(tmContext.assignments);
-      if (tmContext.studentAssignments?.length && !studentAssignments.length) setStudentAssignments(tmContext.studentAssignments);
-      if (tmContext.trips?.length && !trips.length) setTrips(tmContext.trips);
-      if (tmContext.maintenance?.length && !maintenance.length) setMaintenance(tmContext.maintenance);
+      if (tmContext.routes?.length) setRoutes(tmContext.routes);
+      if (tmContext.pickupPoints?.length) setPickupPoints(tmContext.pickupPoints);
+      if (tmContext.vehicles?.length) setVehicles(tmContext.vehicles);
+      if (tmContext.drivers?.length) setDrivers(tmContext.drivers);
+      if (tmContext.attendants?.length) setAttendants(tmContext.attendants);
+      if (tmContext.assignments?.length) setVehicleAssignments(tmContext.assignments);
+      if (tmContext.studentAssignments?.length) setStudentAssignments(tmContext.studentAssignments);
+      if (tmContext.trips?.length) setTrips(tmContext.trips);
+      if (tmContext.maintenance?.length) setMaintenance(tmContext.maintenance);
     }
-  }, [tmContext, routes.length, pickupPoints.length, vehicles.length, drivers.length, attendants.length, vehicleAssignments.length, studentAssignments.length, trips.length, maintenance.length]);
+  }, [
+    tmContext,
+    tmContext?.routes,
+    tmContext?.pickupPoints,
+    tmContext?.vehicles,
+    tmContext?.drivers,
+    tmContext?.attendants,
+    tmContext?.assignments,
+    tmContext?.studentAssignments,
+    tmContext?.trips,
+    tmContext?.maintenance,
+  ]);
 
   const showToast = (message, type = "success") => setToast({ message, type });
   const preparePrint = (report) => {
@@ -1045,19 +1060,50 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     showToast(normalizedMessage, "error");
   };
 
+  const scoped = useCallback((items) => {
+    if (!Array.isArray(items)) return [];
+    if (typeof tmContext?.filterByScope === "function") {
+      return tmContext.filterByScope(items);
+    }
+    return items.filter((item) => {
+      if (!item) return false;
+      const cId = item.campusId ?? item.CampusId;
+      const bId = item.boardId ?? item.BoardId;
+      const ayId = item.academicYearId ?? item.AcademicYearId;
+
+      if (cId != null && String(cId) !== String(effectiveCampusId)) return false;
+      if (bId != null && String(bId) !== String(effectiveBoardId)) return false;
+      if (ayId != null && String(ayId) !== String(effectiveAcademicYearId)) return false;
+
+      const cList = item.assignedCampusIds ?? item.assignedCampuses;
+      if (Array.isArray(cList) && cList.length > 0) {
+        if (!cList.some((c) => String(typeof c === "object" ? c.id || c.campusId : c) === String(effectiveCampusId))) return false;
+      }
+
+      const bList = item.assignedBoardIds ?? item.assignedBoards;
+      if (Array.isArray(bList) && bList.length > 0) {
+        if (!bList.some((b) => String(typeof b === "object" ? b.id || b.boardId : b) === String(effectiveBoardId))) return false;
+      }
+
+      return true;
+    });
+  }, [tmContext, effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
+
   const fetchTransportData = async () => {
     setIsLoading(true);
-    const scoped = (items) => items.filter((item) => {
-      const campusId = item?.campusId ?? item?.CampusId;
-      const boardId = item?.boardId ?? item?.BoardId;
-      const academicYearId = item?.academicYearId ?? item?.AcademicYearId;
-      return (campusId == null || !selectedCampusId || String(campusId) === String(selectedCampusId))
-        && (boardId == null || !selectedBoardId || String(boardId) === String(selectedBoardId))
-        && (academicYearId == null || !selectedAcademicYearId || String(academicYearId) === String(selectedAcademicYearId));
-    });
 
     try {
-      const driverListUrl = `${apiEndpoints.faculty.list}?PageNumber=1&PageSize=1000`;
+      const commonParams = {
+        campusId: effectiveCampusId,
+        boardId: effectiveBoardId,
+        academicYearId: effectiveAcademicYearId,
+        CampusId: effectiveCampusId,
+        BoardId: effectiveBoardId,
+        AcademicYearId: effectiveAcademicYearId,
+        PageNumber: 1,
+        PageSize: 1000,
+      };
+
       const [
         routesRes,
         pickupsRes,
@@ -1073,25 +1119,19 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         studentRes,
         dashboardRes,
       ] = await Promise.allSettled([
-        apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
-        apiClient.get(apiEndpoints.transport.pickupPoints, {
-          params: {
-            CampusId: selectedCampusId || undefined,
-            PageNumber: 1,
-            PageSize: 1000,
-          },
-        }),
-        apiClient.get(apiEndpoints.transport.lookups.pickupPoints),
-        apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
-        apiClient.get(driverListUrl),
-        apiClient.get(`${apiEndpoints.transport.drivers}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.attendants}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
-        apiClient.get(apiEndpoints.transport.trips),
-        apiClient.get(apiEndpoints.transport.gps),
-        apiClient.get(apiEndpoints.transport.maintenance),
-        apiClient.get(`${apiEndpoints.transport.studentAssignments}?PageNumber=1&PageSize=1000`),
-        apiClient.get(apiEndpoints.transport.dashboard),
+        apiClient.get(apiEndpoints.transport.routes, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.pickupPoints, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.lookups.pickupPoints, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.vehicles, { params: commonParams }),
+        apiClient.get(apiEndpoints.faculty.list, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.drivers, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.attendants, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.vehicleAssignments, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.trips, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.gps, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.maintenance, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.studentAssignments, { params: commonParams }),
+        apiClient.get(apiEndpoints.transport.dashboard, { params: commonParams }),
       ]);
 
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
@@ -1369,7 +1409,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   useEffect(() => {
     fetchTransportData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
+  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
 
   // Report sync
   useEffect(() => {
@@ -1378,9 +1418,12 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     if (!definition) return undefined;
     let active = true;
     const params = {
-      campusId: selectedCampusId || undefined,
-      boardId: selectedBoardId || undefined,
-      academicYearId: selectedAcademicYearId || undefined,
+      campusId: effectiveCampusId,
+      boardId: effectiveBoardId,
+      academicYearId: effectiveAcademicYearId,
+      CampusId: effectiveCampusId,
+      BoardId: effectiveBoardId,
+      AcademicYearId: effectiveAcademicYearId,
       routeId: reportFilters.route !== "All" ? reportFilters.route : undefined,
       vehicleId: reportFilters.vehicle !== "All" ? reportFilters.vehicle : undefined,
       status: reportFilters.status !== "All" ? reportFilters.status : undefined,
@@ -1390,7 +1433,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       .then((response) => {
         if (!active) return;
         setReportApiPayloads((current) => ({ ...current, [activeReportTab]: response.data }));
-        setReportApiRows((current) => ({ ...current, [activeReportTab]: reportRowsFromPayload(response.data) }));
+        setReportApiRows((current) => ({ ...current, [activeReportTab]: scoped(reportRowsFromPayload(response.data)) }));
       })
       .catch((error) => {
         if (!active) return;
@@ -1402,12 +1445,13 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   }, [
     activeSection,
     activeReportTab,
-    selectedCampusId,
-    selectedBoardId,
-    selectedAcademicYearId,
+    effectiveCampusId,
+    effectiveBoardId,
+    effectiveAcademicYearId,
     reportFilters.route,
     reportFilters.vehicle,
     reportFilters.status,
+    scoped,
   ]);
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
@@ -1481,6 +1525,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           description: values.description || "",
           status: values.status === "Active",
           isActive: values.status === "Active",
+          campusId: values.campusId || effectiveCampusId,
+          boardId: values.boardId || effectiveBoardId,
+          academicYearId: values.academicYearId || effectiveAcademicYearId,
         };
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.routeById(numericId), payload);
@@ -1499,6 +1546,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
             distanceFromStart: Number(pickupValues.distanceKm) || 0,
             monthlyFee: Number(pickupValues.monthlyFee) || 1200,
             status: pickupValues.status === "Active",
+            campusId: pickupValues.campusId || effectiveCampusId,
+            boardId: pickupValues.boardId || effectiveBoardId,
+            academicYearId: pickupValues.academicYearId || effectiveAcademicYearId,
           };
           if (isEdit) {
             await apiClient.put(apiEndpoints.transport.pickupPointById(numericId), payload);
@@ -1522,6 +1572,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           pollutionExpiry: values.pollutionExpiry || null,
           fitnessExpiry: values.fitnessExpiry || null,
           status: values.status === "Active",
+          campusId: values.campusId || effectiveCampusId,
+          boardId: values.boardId || effectiveBoardId,
+          academicYearId: values.academicYearId || effectiveAcademicYearId,
         };
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.vehicleById(numericId), payload);
@@ -1538,6 +1591,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           eveningTripTime: values.eveningTripTime || "04:30 PM",
           effectiveFrom: values.effectiveFrom ? `${values.effectiveFrom}T00:00:00` : new Date().toISOString(),
           status: values.status === "Active",
+          campusId: values.campusId || effectiveCampusId,
+          boardId: values.boardId || effectiveBoardId,
+          academicYearId: values.academicYearId || effectiveAcademicYearId,
         };
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.reassignVehicleAssignment(numericId), payload);
@@ -1555,6 +1611,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           vehicleId: Number(values.vehicleId),
           monthlyFee: Number(values.monthlyFee) || 1200,
           status: values.status === "Active",
+          campusId: values.campusId || effectiveCampusId,
+          boardId: values.boardId || effectiveBoardId,
+          academicYearId: values.academicYearId || effectiveAcademicYearId,
         };
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.studentAssignmentById(numericId), payload);
@@ -1571,6 +1630,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           eveningTripTime: values.endTime || "03:45 PM",
           studentsCount: Number(values.studentsPresent) || 0,
           status: values.status || "Running",
+          campusId: values.campusId || effectiveCampusId,
+          boardId: values.boardId || effectiveBoardId,
+          academicYearId: values.academicYearId || effectiveAcademicYearId,
         };
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.tripById(numericId), payload);
@@ -1587,6 +1649,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           nextServiceDue: values.nextDueDate ? `${values.nextDueDate}T00:00:00` : null,
           remarks: values.notes || "",
           status: values.status === "Completed",
+          campusId: values.campusId || effectiveCampusId,
+          boardId: values.boardId || effectiveBoardId,
+          academicYearId: values.academicYearId || effectiveAcademicYearId,
         };
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.maintenanceById(record.id), payload);
@@ -1620,6 +1685,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         licenceExpiry: values.licenseExpiryDate || null,
         address: values.address || "",
         status: values.status === "Active",
+        campusId: values.campusId || effectiveCampusId,
+        boardId: values.boardId || effectiveBoardId,
+        academicYearId: values.academicYearId || effectiveAcademicYearId,
       };
       await apiClient.post(apiEndpoints.transport.drivers, payload);
       setIsAddDriverOpen(false);
@@ -1644,6 +1712,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         mobileNumber: values.mobileNumber,
         gender: values.gender,
         status: values.status === "Active",
+        campusId: values.campusId || effectiveCampusId,
+        boardId: values.boardId || effectiveBoardId,
+        academicYearId: values.academicYearId || effectiveAcademicYearId,
       };
       await apiClient.post(apiEndpoints.transport.attendants, payload);
       setIsAddAttendantOpen(false);

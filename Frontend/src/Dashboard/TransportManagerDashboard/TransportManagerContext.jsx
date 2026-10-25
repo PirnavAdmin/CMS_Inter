@@ -71,8 +71,12 @@ export const DEFAULT_TRANSPORT_MANAGER_PROFILE = {
   maritalStatus: "married",
   nationality: "Indian",
   aadhaar: "961895468299",
+  aadhaarCardUrl: null,
+  aadhaarDocument: null,
   pan: null,
   panNumber: null,
+  panCardUrl: null,
+  panDocument: null,
   mobile: "7799352436",
   phone: "7799352436",
   alternateMobile: null,
@@ -87,31 +91,43 @@ export const DEFAULT_TRANSPORT_MANAGER_PROFILE = {
   pincode: "532201",
   country: "India",
   qualification: "Graduate",
+  highestQualification: "Graduate",
   designation: "Transport Manager",
   designationId: 534,
   role: "Transport Manager",
+  roleId: 18,
+  roleName: "Transport Manager",
   staffType: "Non-Teaching",
   facultyType: "Non-Teaching",
   departmentId: 79,
   department: "Transport",
   campusId: 1,
-  campusName: "Main Campus",
+  campusName: "Main Campus (HQ)",
   assignedCampusIds: [1],
-  assignedCampuses: [],
+  assignedCampuses: [
+    { id: 1, name: "Main Campus (HQ)", code: "MAIN" }
+  ],
   boardId: 1,
   boardCode: "BIEAP",
   boardName: "Board of Intermediate Education, Andhra Pradesh",
   board: "BIEAP",
   assignedBoardIds: [1],
-  assignedBoards: [],
+  assignedBoards: [
+    { id: 1, name: "Board of Intermediate Education, Andhra Pradesh", code: "BIEAP" }
+  ],
   dateOfJoining: "2026-08-01T00:00:00",
   joiningDate: "2026-08-01T00:00:00",
-  experience: 0.0,
+  experience: 0,
+  totalExperience: "0 Years",
   employmentType: "Full Time",
   status: "Active",
+  profileStatus: "Completed",
+  profileCompletion: 68,
+  profileCompletionPercentage: 68,
   isDriver: true,
   drivingLicenseNumber: "DAKH345678JNKJAB",
   drivingLicenseExpiryDate: "2028-07-01T00:00:00",
+  drivingLicence: "Staff_Profile_MTCH0063_tangiro_kamado.pdf",
   documents: [
     {
       id: "98349d94-9db7-4a97-b43b-53f75bbb6e12",
@@ -122,6 +138,42 @@ export const DEFAULT_TRANSPORT_MANAGER_PROFILE = {
       format: "PDF",
     },
   ],
+  documentsList: [
+    {
+      id: "98349d94-9db7-4a97-b43b-53f75bbb6e12",
+      type: "DrivingLicence",
+      name: "Staff_Profile_MTCH0063_tangiro_kamado.pdf",
+      size: "Unknown",
+      url: "/uploads/staff-documents/Staff_Profile_MTCH0063_tangiro_kamado.pdf",
+      format: "PDF",
+    },
+  ],
+  documentsMap: {
+    DrivingLicence: "Staff_Profile_MTCH0063_tangiro_kamado.pdf",
+  },
+  bankDetails: {
+    bankName: "",
+    accountHolderName: "",
+    accountNumber: "",
+    ifscCode: "",
+    branch: "",
+    accountType: "Savings",
+    panNumber: "",
+    basicSalary: null,
+  },
+  emergencyContact: {
+    contactName: "",
+    relationship: "",
+    mobile: "",
+    alternateMobile: "",
+    address: "",
+  },
+  allocatedSubjects: [],
+  subjects: [],
+  educationList: [],
+  experienceList: [],
+  customFields: {},
+  departmentSpecific: {},
 };
 
 const TransportManagerContext = createContext(null);
@@ -317,26 +369,20 @@ export function TransportManagerProvider({ children }) {
     };
   }, [staffProfile, authUser]);
 
-  // Board Authorization & Restriction
-  const authorizedBoards = useMemo(() => {
-    const userBoards = authUser.boards || authUser.assignedBoards || authUser.boardList;
-    const campusBoards = selectedCampus?.affiliatedBoards || selectedCampus?.boards || academicContext.boards || [];
-
-    if (Array.isArray(userBoards) && userBoards.length > 0) {
-      const userBoardIdentities = userBoards.map((b) =>
-        typeof b === "string" ? b.trim().toLowerCase() : String(b.boardId || b.id || b.name || "").trim().toLowerCase()
-      );
-      return campusBoards.filter((b) => {
-        const id = String(b.id || b.boardId || "").trim().toLowerCase();
-        const name = String(b.name || b.boardName || "").trim().toLowerCase();
-        const code = String(b.code || b.boardCode || "").trim().toLowerCase();
-        return userBoardIdentities.includes(id) || userBoardIdentities.includes(name) || userBoardIdentities.includes(code);
-      });
+  // Authorized Campuses & Boards strictly from assigned staff details
+  const authorizedCampuses = useMemo(() => {
+    if (Array.isArray(profile.assignedCampuses) && profile.assignedCampuses.length > 0) {
+      return profile.assignedCampuses;
     }
+    return [{ id: 1, campusId: 1, name: "Main Campus (HQ)", code: "MAIN" }];
+  }, [profile.assignedCampuses]);
 
-    if (campusBoards.length > 0) return campusBoards;
+  const authorizedBoards = useMemo(() => {
+    if (Array.isArray(profile.assignedBoards) && profile.assignedBoards.length > 0) {
+      return profile.assignedBoards;
+    }
     return [{ id: 1, boardId: 1, code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh" }];
-  }, [authUser, selectedCampus, academicContext.boards]);
+  }, [profile.assignedBoards]);
 
   // Selected board
   const [selectedBoardId, setSelectedBoardId] = useState(() => {
@@ -353,6 +399,48 @@ export function TransportManagerProvider({ children }) {
       setSelectedBoardId(String(authorizedBoards[0].id || authorizedBoards[0].boardId || "1"));
     }
   }, [authorizedBoards, selectedBoardId]);
+
+  // Effective filter parameters strictly for campus, board and academic year
+  const effectiveCampusId = useMemo(() => {
+    return Number(selectedCampus?.id || selectedCampus?.campusId || profile.campusId || 1);
+  }, [selectedCampus, profile.campusId]);
+
+  const effectiveBoardId = useMemo(() => {
+    return Number(selectedBoardId || profile.boardId || 1);
+  }, [selectedBoardId, profile.boardId]);
+
+  const effectiveAcademicYearId = useMemo(() => {
+    return academicContext.selectedAcademicYearId || (academicContext.selectedAcademicYear?.id || academicContext.selectedAcademicYear?.name) || 1;
+  }, [academicContext.selectedAcademicYearId, academicContext.selectedAcademicYear]);
+
+  // Scope filter helper
+  const filterByScope = useCallback((list) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter((item) => {
+      if (!item) return false;
+      const cId = item.campusId ?? item.CampusId;
+      const bId = item.boardId ?? item.BoardId;
+      const ayId = item.academicYearId ?? item.AcademicYearId;
+
+      if (cId != null && String(cId) !== String(effectiveCampusId)) return false;
+      if (bId != null && String(bId) !== String(effectiveBoardId)) return false;
+      if (ayId != null && String(ayId) !== String(effectiveAcademicYearId)) return false;
+
+      const cList = item.assignedCampusIds ?? item.assignedCampuses;
+      if (Array.isArray(cList) && cList.length > 0) {
+        const match = cList.some((c) => String(typeof c === "object" ? c.id || c.campusId : c) === String(effectiveCampusId));
+        if (!match) return false;
+      }
+
+      const bList = item.assignedBoardIds ?? item.assignedBoards;
+      if (Array.isArray(bList) && bList.length > 0) {
+        const match = bList.some((b) => String(typeof b === "object" ? b.id || b.boardId : b) === String(effectiveBoardId));
+        if (!match) return false;
+      }
+
+      return true;
+    });
+  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type, id: Date.now() });
@@ -371,14 +459,13 @@ export function TransportManagerProvider({ children }) {
 
     const loadData = async () => {
       try {
-        const effectiveCampusId = profile.campusId || selectedCampus?.id || selectedCampus?.campusId || 1;
-        const effectiveBoardId = selectedBoardId || String(profile.boardId || 1);
-        const effectiveAcademicYearId = academicContext.selectedAcademicYearId || 1;
-
         const params = {
           boardId: effectiveBoardId,
           campusId: effectiveCampusId,
           academicYearId: effectiveAcademicYearId,
+          BoardId: effectiveBoardId,
+          CampusId: effectiveCampusId,
+          AcademicYearId: effectiveAcademicYearId,
         };
 
         const [
@@ -407,16 +494,16 @@ export function TransportManagerProvider({ children }) {
 
         if (!isMounted) return;
 
-        if (vehiclesRes.status === "fulfilled") setVehicles(vehiclesRes.value);
-        if (driversRes.status === "fulfilled") setDrivers(driversRes.value);
-        if (assignmentsRes.status === "fulfilled") setAssignments(assignmentsRes.value);
-        if (maintenanceRes.status === "fulfilled") setMaintenance(maintenanceRes.value);
+        if (vehiclesRes.status === "fulfilled") setVehicles(filterByScope(vehiclesRes.value));
+        if (driversRes.status === "fulfilled") setDrivers(filterByScope(driversRes.value));
+        if (assignmentsRes.status === "fulfilled") setAssignments(filterByScope(assignmentsRes.value));
+        if (maintenanceRes.status === "fulfilled") setMaintenance(filterByScope(maintenanceRes.value));
         if (statsRes.status === "fulfilled") setDashboardMetrics(statsRes.value);
-        if (routesRes.status === "fulfilled") setRoutes(routesRes.value);
-        if (pickupsRes.status === "fulfilled") setPickupPoints(pickupsRes.value);
-        if (attendantsRes.status === "fulfilled") setAttendants(attendantsRes.value);
-        if (tripsRes.status === "fulfilled") setTrips(tripsRes.value);
-        if (studentsRes.status === "fulfilled") setStudentAssignments(studentsRes.value);
+        if (routesRes.status === "fulfilled") setRoutes(filterByScope(routesRes.value));
+        if (pickupsRes.status === "fulfilled") setPickupPoints(filterByScope(pickupsRes.value));
+        if (attendantsRes.status === "fulfilled") setAttendants(filterByScope(attendantsRes.value));
+        if (tripsRes.status === "fulfilled") setTrips(filterByScope(tripsRes.value));
+        if (studentsRes.status === "fulfilled") setStudentAssignments(filterByScope(studentsRes.value));
       } catch (err) {
         if (isMounted) {
           setError(err.message || "Failed to load transport data.");
@@ -431,7 +518,7 @@ export function TransportManagerProvider({ children }) {
     return () => {
       isMounted = false;
     };
-  }, [selectedBoardId, selectedCampus, profile.campusId, profile.boardId, academicContext.selectedAcademicYearId, revision]);
+  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId, revision, filterByScope]);
 
   const toggleSidebar = useCallback(() => {
     if (typeof window !== "undefined" && window.innerWidth <= 1024) {
@@ -456,9 +543,13 @@ export function TransportManagerProvider({ children }) {
     setSidebarOpen,
     toggleSidebar,
     closeSidebar,
+    authorizedCampuses,
     authorizedBoards,
     selectedBoardId,
     setSelectedBoardId,
+    effectiveCampusId,
+    effectiveBoardId,
+    effectiveAcademicYearId,
     vehicles,
     drivers,
     assignments,

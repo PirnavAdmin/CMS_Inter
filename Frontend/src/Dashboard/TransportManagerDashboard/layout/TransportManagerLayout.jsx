@@ -6,6 +6,11 @@ import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import transportBusIcon from "@/assets/sidebar-3d/transport-bus.png";
 import reportsAnalyticsIcon from "@/assets/sidebar-3d/reports-analytics.png";
 import staffIcon from "@/assets/dashboard-3d/teaching-staff.png";
+import TransportManagerSidebar from "./TransportManagerSidebar.jsx";
+import TransportManagerNavbar from "./TransportManagerNavbar.jsx";
+import { useTransportManager } from "../TransportManagerContext.jsx";
+import "@/components/layout/DashboardLayout.css";
+import "@/cms.css";
 import "./TransportManagerLayout.css";
 
 export const transportManagerMenu = [
@@ -67,17 +72,34 @@ export const transportSearchIndex = [
 ];
 
 export default function TransportManagerLayout({ children }) {
+  const { sidebarCollapsed, sidebarOpen, closeSidebar } = useTransportManager();
+
   return (
-    <DashboardLayout
-      menuOverride={transportManagerMenu}
-      searchIndexOverride={transportSearchIndex}
-      profilePath="/transport-manager/profile"
-      settingsPath="/transport-manager/settings"
-      showSettingsAction={true}
-    >
-      <div className="tm-shell">
-        {children}
-      </div>
-    </DashboardLayout>
+    <div className={`cms-shell ${sidebarCollapsed ? "nav-closed" : ""}`}>
+      {/* Transport Manager Sidebar with Pirnav branding & modules matching Screenshot 1 */}
+      <TransportManagerSidebar />
+
+      {/* Main Workspace */}
+      <main className="cms-main">
+        {/* Transport Manager Topbar with fixed role, assigned campus/board/year */}
+        <TransportManagerNavbar />
+
+        {/* Content Body */}
+        <div className="cms-content">
+          <div className="tm-shell">
+            {children}
+          </div>
+        </div>
+      </main>
+
+      {/* Mobile Backdrop */}
+      {sidebarOpen && (
+        <div
+          className="cms-backdrop-mobile is-open"
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 55 }}
+          onClick={closeSidebar}
+        />
+      )}
+    </div>
   );
 }
