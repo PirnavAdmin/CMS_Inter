@@ -35,10 +35,10 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast, Pagination } from "@/components/common/Ui.jsx";
 import "@/components/pages/ExaminationPage.css";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 // Use the shared table-row skeleton for the examination table's ten columns.
 const ExaminationTableSkeleton = () =>
@@ -5443,30 +5443,15 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
             </table>
           </div>
 
-          <div className="exam-list-pagination">
-            <span className="exam-record-summary">
-              Showing {rangeStart}–{rangeEnd} of {list.length} records
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost"
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </button>
-            <span>
-              {page} / {pages}
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost"
-              disabled={page === pages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-          </div>
+          {list.length > 0 && (
+            <Pagination
+              currentPage={page}
+              totalRecords={list.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              unit="examinations"
+            />
+          )}
         </div>
       ) : (
         <>
@@ -10053,7 +10038,7 @@ function ScheduleTable({
   }, [entries, rooms, faculty]);
 
   const [page, setPage] = useState(1);
-  const pageSize = 6;
+  const pageSize = 10;
   const pages = Math.max(1, Math.ceil(displayEntries.length / pageSize));
   const pagedEntries = displayEntries.slice((page - 1) * pageSize, page * pageSize);
   const rangeStart = displayEntries.length ? (page - 1) * pageSize + 1 : 0;
@@ -10492,34 +10477,14 @@ function ScheduleTable({
         </table>
       </div>
 
-      {displayEntries.length > pageSize && (
-        <div
-          className="exam-list-pagination"
-          style={{ border: "1px solid var(--cms-border)", borderRadius: "0 0 12px 12px" }}
-        >
-          <span className="exam-record-summary">
-            Showing {rangeStart}–{rangeEnd} of {displayEntries.length} records (6 per page)
-          </span>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            Previous
-          </button>
-          <span>
-            {page} / {pages}
-          </span>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            disabled={page === pages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </button>
-        </div>
+      {displayEntries.length > 0 && (
+        <Pagination
+          currentPage={page}
+          totalRecords={displayEntries.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          unit="schedules"
+        />
       )}
     </div>
   );

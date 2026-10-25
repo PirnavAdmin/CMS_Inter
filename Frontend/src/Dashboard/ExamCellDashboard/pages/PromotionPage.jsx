@@ -38,7 +38,7 @@ const EMPTY_HISTORY_FILTERS = {
   groupId: "", programId: "", section: "", studentId: "", search: "", promotionStatus: "", fromDate: "", toDate: "",
 };
 
-const PROMOTION_STUDENT_PAGE_SIZE = 5;
+const PROMOTION_STUDENT_PAGE_SIZE = 10;
 const preservePreview = (value) => value;
 const loadProgramFeePreviews = async (entries) => Promise.all(entries.map(async (entry) => {
   try {
@@ -618,14 +618,30 @@ export default function PromotionPage({ screen = "promotion" }) {
     await fetchEligibleStudents(nextPage);
   };
 
-  const visibleStudents = useMemo(() => {
+  useEffect(() => {
+    if (localStudentPaging) {
+      setStudentsPage(1);
+    }
+  }, [search, eligibilityFilter, localStudentPaging]);
+
+  const filteredStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
     return students.filter((student) => {
       const matchesSearch = !query || `${student.name} ${student.admissionNo} ${student.id}`.toLowerCase().includes(query);
       return matchesSearch && (!eligibilityFilter || student.eligibility === eligibilityFilter);
-    }).slice(localStudentPaging ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE : 0,
-      localStudentPaging ? studentsPage * PROMOTION_STUDENT_PAGE_SIZE : PROMOTION_STUDENT_PAGE_SIZE);
-  }, [eligibilityFilter, search, students, localStudentPaging, studentsPage]);
+    });
+  }, [eligibilityFilter, search, students]);
+
+  const effectiveTotalCount = localStudentPaging ? filteredStudents.length : studentsTotalCount;
+  const effectiveTotalPages = localStudentPaging ? Math.max(1, Math.ceil(filteredStudents.length / PROMOTION_STUDENT_PAGE_SIZE)) : studentsTotalPages;
+
+  const visibleStudents = useMemo(() => {
+    if (localStudentPaging) {
+      const start = (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE;
+      return filteredStudents.slice(start, start + PROMOTION_STUDENT_PAGE_SIZE);
+    }
+    return filteredStudents.slice(0, PROMOTION_STUDENT_PAGE_SIZE);
+  }, [filteredStudents, localStudentPaging, studentsPage]);
 
   const selectedStudents = useMemo(() => students.filter((student) => selectedIds.includes(student.id) && isEligible(student)), [selectedIds, students]);
   const feePreviewParams = {
@@ -1206,27 +1222,56 @@ export default function PromotionPage({ screen = "promotion" }) {
                   </div>
                   <footer className="promotion-pagination student-management-pagination">
                   <span>
-                    Showing {students.length ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + 1 : 0}-
-                    {visibleStudents.length ? Math.min((studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + visibleStudents.length, studentsTotalCount) : 0} of {studentsTotalCount} students
+                    Showing {effectiveTotalCount ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + 1 : 0}-
+                    {visibleStudents.length ? Math.min((studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + visibleStudents.length, effectiveTotalCount) : 0} of {effectiveTotalCount} students
                   </span>
-                  <div className="student-management-pagination-actions">
+                  <div className="student-management-pagination-actions" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <button
                       type="button"
                       className="cms-btn cms-btn-ghost"
-                      disabled={studentsLoading || studentsPage === 1}
+                      disabled={studentsLoading || studentsPage <= 1}
                       onClick={() => changeStudentsPage(studentsPage - 1)}
                     >
                       Previous
                     </button>
-                    <span>Page {studentsPage} of {studentsTotalPages}</span>
+                    {(() => {
+                      const pages = [];
+                      if (effectiveTotalPages <= 7) {
+                        for (let i = 1; i <= effectiveTotalPages; i += 1) pages.push(i);
+                      } else {
+                        pages.push(1);
+                        if (studentsPage > 3) pages.push('...');
+                        const start = Math.max(2, studentsPage - 1);
+                        const end = Math.min(effectiveTotalPages - 1, studentsPage + 1);
+                        for (let i = start; i <= end; i += 1) pages.push(i);
+                        if (studentsPage < effectiveTotalPages - 2) pages.push('...');
+                        pages.push(effectiveTotalPages);
+                      }
+                      return pages.map((p, idx) =>
+                        p === '...' ? (
+                          <span key={`dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
+                        ) : (
+                          <button
+                            key={`page-${p}`}
+                            type="button"
+                            className={`cms-btn ${p === studentsPage ? 'cms-btn-primary is-active' : 'cms-btn-ghost'}`}
+                            onClick={() => changeStudentsPage(p)}
+                            style={{ minWidth: '32px', height: '32px', padding: '0 8px' }}
+                          >
+                            {p}
+                          </button>
+                        )
+                      );
+                    })()}
                     <button
                       type="button"
                       className="cms-btn cms-btn-ghost"
-                      disabled={studentsLoading || studentsPage === studentsTotalPages}
+                      disabled={studentsLoading || studentsPage >= effectiveTotalPages}
                       onClick={() => changeStudentsPage(studentsPage + 1)}
                     >
                       Next
                     </button>
+                    <span style={{ marginLeft: '8px' }}>Page {studentsPage} of {effectiveTotalPages}</span>
                   </div>
                   </footer>
                 </>
@@ -1972,10 +2017,39 @@ function HistoryTable({ rows, onRollback }) {
     </div>
     <div className="promotion-pagination">
       <span>Showing {rows.length ? start + 1 : 0}-{start + pagedRows.length} of {rows.length} records</span>
-      <div>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage === 1} onClick={() => setHistoryPage(currentPage - 1)}>Previous</button>
-        <span>Page {currentPage} of {totalPages}</span>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage === totalPages} onClick={() => setHistoryPage(currentPage + 1)}>Next</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1} onClick={() => setHistoryPage(currentPage - 1)}>Previous</button>
+        {(() => {
+          const pages = [];
+          if (totalPages <= 7) {
+            for (let i = 1; i <= totalPages; i += 1) pages.push(i);
+          } else {
+            pages.push(1);
+            if (currentPage > 3) pages.push('...');
+            const pStart = Math.max(2, currentPage - 1);
+            const pEnd = Math.min(totalPages - 1, currentPage + 1);
+            for (let i = pStart; i <= pEnd; i += 1) pages.push(i);
+            if (currentPage < totalPages - 2) pages.push('...');
+            pages.push(totalPages);
+          }
+          return pages.map((p, idx) =>
+            p === '...' ? (
+              <span key={`hist-dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
+            ) : (
+              <button
+                key={`hist-page-${p}`}
+                type="button"
+                className={`cms-btn ${p === currentPage ? 'cms-btn-primary is-active' : 'cms-btn-ghost'}`}
+                onClick={() => setHistoryPage(p)}
+                style={{ minWidth: '32px', height: '32px', padding: '0 8px' }}
+              >
+                {p}
+              </button>
+            )
+          );
+        })()}
+        <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages} onClick={() => setHistoryPage(currentPage + 1)}>Next</button>
+        <span style={{ marginLeft: '8px' }}>Page {currentPage} of {totalPages}</span>
       </div>
     </div>
     </>
@@ -2696,10 +2770,39 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
 
       <div className="promotion-pagination">
         <span>Showing {rows.length ? allocationStart + 1 : 0}-{allocationStart + pagedAllocationRows.length} of {rows.length} students</span>
-        <div>
-          <button type="button" className="cms-btn cms-btn-ghost" disabled={currentAllocationPage === 1 || saving} onClick={() => setAllocationPage(currentAllocationPage - 1)}>Previous</button>
-          <span>Page {currentAllocationPage} of {allocationTotalPages}</span>
-          <button type="button" className="cms-btn cms-btn-ghost" disabled={currentAllocationPage === allocationTotalPages || saving} onClick={() => setAllocationPage(currentAllocationPage + 1)}>Next</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button type="button" className="cms-btn cms-btn-ghost" disabled={currentAllocationPage <= 1 || saving} onClick={() => setAllocationPage(currentAllocationPage - 1)}>Previous</button>
+          {(() => {
+            const pages = [];
+            if (allocationTotalPages <= 7) {
+              for (let i = 1; i <= allocationTotalPages; i += 1) pages.push(i);
+            } else {
+              pages.push(1);
+              if (currentAllocationPage > 3) pages.push('...');
+              const pStart = Math.max(2, currentAllocationPage - 1);
+              const pEnd = Math.min(allocationTotalPages - 1, currentAllocationPage + 1);
+              for (let i = pStart; i <= pEnd; i += 1) pages.push(i);
+              if (currentAllocationPage < allocationTotalPages - 2) pages.push('...');
+              pages.push(allocationTotalPages);
+            }
+            return pages.map((p, idx) =>
+              p === '...' ? (
+                <span key={`alloc-dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
+              ) : (
+                <button
+                  key={`alloc-page-${p}`}
+                  type="button"
+                  className={`cms-btn ${p === currentAllocationPage ? 'cms-btn-primary is-active' : 'cms-btn-ghost'}`}
+                  onClick={() => setAllocationPage(p)}
+                  style={{ minWidth: '32px', height: '32px', padding: '0 8px' }}
+                >
+                  {p}
+                </button>
+              )
+            );
+          })()}
+          <button type="button" className="cms-btn cms-btn-ghost" disabled={currentAllocationPage >= allocationTotalPages || saving} onClick={() => setAllocationPage(currentAllocationPage + 1)}>Next</button>
+          <span style={{ marginLeft: '8px' }}>Page {currentAllocationPage} of {allocationTotalPages}</span>
         </div>
       </div>
 

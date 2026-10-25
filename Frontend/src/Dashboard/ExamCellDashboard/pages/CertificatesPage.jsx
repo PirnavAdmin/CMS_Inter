@@ -25,7 +25,7 @@ export const pageConfig = {
   route: "/exam-cell-dashboard/certificates",
 };
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 const MAX_PURPOSE_LENGTH = 160;
 const MAX_REMARKS_LENGTH = 240;
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -3598,7 +3598,35 @@ let serverMapped = [];
           <span>Showing {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} records</span>
           <nav aria-label="Certificate records pagination">
             <button type="button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Prev</button>
-            <button type="button" className="active" aria-current="page">{currentPage}</button>
+            {(() => {
+              const pages = [];
+              if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i += 1) pages.push(i);
+              } else {
+                pages.push(1);
+                if (currentPage > 3) pages.push('...');
+                const start = Math.max(2, currentPage - 1);
+                const end = Math.min(totalPages - 1, currentPage + 1);
+                for (let i = start; i <= end; i += 1) pages.push(i);
+                if (currentPage < totalPages - 2) pages.push('...');
+                pages.push(totalPages);
+              }
+              return pages.map((p, idx) =>
+                p === '...' ? (
+                  <span key={`dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
+                ) : (
+                  <button
+                    key={`p-${p}`}
+                    type="button"
+                    className={p === currentPage ? "active" : ""}
+                    aria-current={p === currentPage ? "page" : undefined}
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </button>
+                )
+              );
+            })()}
             <button type="button" disabled={currentPage >= totalPages || totalPages === 0} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
           </nav>
         </footer>
@@ -3762,7 +3790,35 @@ let serverMapped = [];
               <span>Showing {actionRows.length ? (currentActionPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentActionPage * PAGE_SIZE, actionRows.length)} of {actionRows.length} records</span>
               <nav aria-label="Certificate workflow pagination">
                 <button type="button" disabled={currentActionPage <= 1} onClick={() => setActionPage((value) => Math.max(1, value - 1))}>Prev</button>
-                <button type="button" className="active" aria-current="page">{currentActionPage}</button>
+                {(() => {
+                  const pages = [];
+                  if (actionTotalPages <= 7) {
+                    for (let i = 1; i <= actionTotalPages; i += 1) pages.push(i);
+                  } else {
+                    pages.push(1);
+                    if (currentActionPage > 3) pages.push('...');
+                    const start = Math.max(2, currentActionPage - 1);
+                    const end = Math.min(actionTotalPages - 1, currentActionPage + 1);
+                    for (let i = start; i <= end; i += 1) pages.push(i);
+                    if (currentActionPage < actionTotalPages - 2) pages.push('...');
+                    pages.push(actionTotalPages);
+                  }
+                  return pages.map((p, idx) =>
+                    p === '...' ? (
+                      <span key={`act-dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
+                    ) : (
+                      <button
+                        key={`act-p-${p}`}
+                        type="button"
+                        className={p === currentActionPage ? "active" : ""}
+                        aria-current={p === currentActionPage ? "page" : undefined}
+                        onClick={() => setActionPage(p)}
+                      >
+                        {p}
+                      </button>
+                    )
+                  );
+                })()}
                 <button type="button" disabled={currentActionPage >= actionTotalPages || actionTotalPages === 0} onClick={() => setActionPage((value) => Math.min(actionTotalPages, value + 1))}>Next</button>
               </nav>
             </footer>
