@@ -65,8 +65,15 @@ export const getBeds = (params, config = {}) =>
 export const getBedById = (id, config = {}) =>
   api.get(`/api/v1/hostel/beds/${id}`, config);
 
-export const createBed = (data, config = {}) =>
-  api.post("/api/v1/hostel/beds", data, config);
+export const createBed = (data, config = {}) => {
+  const payload = {
+    roomId: Number(data?.roomId),
+    bedNumber: String(data?.bedNumber || "BED-1").trim(),
+    bedStatus: data?.bedStatus || "Available",
+    status: data?.status || "Active",
+  };
+  return api.post("/api/v1/hostel/beds", payload, config);
+};
 
 export const updateBed = (id, data, config = {}) =>
   api.put(`/api/v1/hostel/beds/${id}`, data, config);

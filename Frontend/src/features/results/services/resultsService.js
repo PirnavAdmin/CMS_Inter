@@ -92,6 +92,23 @@ export const getRevaluation = async (revaluationId) => {
   return unwrapPayload(response.data);
 };
 
+export const getPublishedResults = async (params = {}) => {
+  const response = await apiClient.get(apiEndpoints.results.published, { params });
+  return unwrapPayload(response.data);
+};
+
+export const getResultsReadiness = async (params = {}) => {
+  const response = await apiClient.get(apiEndpoints.results.readiness, { params });
+  return unwrapPayload(response.data);
+};
+
+export const getSectionResults = async (sectionId, examId, params = {}) => {
+  const response = await apiClient.get(apiEndpoints.results.sections(sectionId), {
+    params: { examId, ...params },
+  });
+  return unwrapPayload(response.data);
+};
+
 function unwrapPayload(payload) {
   return payload?.data ?? payload?.Data ?? payload;
 }

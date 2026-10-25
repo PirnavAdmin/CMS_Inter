@@ -323,4 +323,91 @@ export const getExaminationSchedules = async (examinationId) => {
   }
 };
 
+/**
+ * 14. GET /api/v1/certificates
+ * Retrieves all certificates and records matching a student.
+ */
+export const getStudentCertificates = async (studentId, admissionNo) => {
+  const searchTerm = admissionNo || studentId;
+  if (!searchTerm) return [];
+  try {
+    const res = await api.get("/api/v1/certificates", {
+      params: { search: String(searchTerm).trim() },
+    });
+    const rawList = res?.data?.data ?? (Array.isArray(res?.data) ? res.data : (res?.data?.items ?? []));
+    if (!Array.isArray(rawList)) return [];
+
+    const filtered = rawList.filter((item) => {
+      const matchId = studentId && String(item.studentId || item.StudentId) === String(studentId);
+      const matchAdm = admissionNo && String(item.admissionNo || item.AdmissionNo || "").trim().toLowerCase() === String(admissionNo).trim().toLowerCase();
+      return matchId || matchAdm;
+    });
+
+    return filtered.length > 0 ? filtered : rawList;
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * 15. POST /api/v1/certificates/student-request
+ * Submits an official certificate application.
+ */
+export const requestStudentCertificate = async ({ admissionNo, certificateType, purpose, remarks = "" }) => {
+  if (!admissionNo || !certificateType || !purpose) {
+    throw new Error("Admission number, certificate type, and purpose are required.");
+  }
+  const payload = {
+    admissionNo: String(admissionNo).trim(),
+    certificateType: String(certificateType).trim(),
+    purpose: String(purpose).trim(),
+    remarks: String(remarks || "").trim() || "Requested via Parent Portal",
+    requestDate: new Date().toISOString(),
+  };
+
+  const res = await api.post("/api/v1/certificates/student-request", payload);
+  return res?.data?.data ?? res?.data;
+};
+
+/**
+ * 16. GET /api/v1/certificates/{id}/preview
+ * Retrieves preview details for a certificate.
+ */
+export const getCertificatePreview = async (certificateId) => {
+  if (!certificateId) return null;
+  try {
+    const res = await api.get(`/api/v1/certificates/${encodeURIComponent(certificateId)}/preview`);
+    return res?.data?.data ?? res?.data ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 17. GET /api/v1/certificates/download/{id}
+ * Downloads certificate PDF blob.
+ */
+export const downloadStudentCertificate = async (certificateId) => {
+  if (!certificateId) throw new Error("Certificate ID is required.");
+  const res = await api.get(`/api/v1/certificates/download/${encodeURIComponent(certificateId)}`, {
+    responseType: "blob",
+  });
+  return res.data;
+};
+
+/**
+ * 18. GET /api/v1/certificates/active-templates
+ * Retrieves active certificate templates list.
+ */
+export const getCertificateActiveTemplates = async () => {
+  try {
+    const res = await api.get("/api/v1/certificates/active-templates");
+    const data = res?.data?.data ?? res?.data ?? [];
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
+
+
 

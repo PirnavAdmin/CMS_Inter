@@ -98,8 +98,7 @@ export default function ParentExaminationsPage() {
         syllabus: `Official curriculum for ${r.examName}. Maximum Total Marks: ${r.maxMarks}. Grade: ${r.grade}.`,
       }));
     }
-
-    return child ? (upcomingExamsData[dataKey] || upcomingExamsData[child.id] || upcomingExamsData["860"] || []) : [];
+    return [];
   }, [activeExam, results, child, dataKey]);
 
   const examMeta = useMemo(() => {

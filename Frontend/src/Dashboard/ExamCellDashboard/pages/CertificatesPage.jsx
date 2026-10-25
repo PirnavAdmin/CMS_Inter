@@ -1762,28 +1762,7 @@ let serverMapped = [];
         // Fallback
       }
 
-      let cachedList = [];
-      try {
-        const cached = localStorage.getItem("cms_certificates");
-        if (cached) {
-          cachedList = JSON.parse(cached).map(normalizeCertificate);
-        }
-      } catch {}
-
-      if (cachedList.length === 0 && serverMapped.length === 0) {
-        cachedList = mockCertificates.map(normalizeCertificate);
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(cachedList));
-        } catch {}
-      }
-
-      // Merge: Local records take precedence for client edits, combined with server records
-      const combinedMap = new Map();
-      mockCertificates.forEach((r) => combinedMap.set(String(r.id || r.number), normalizeCertificate(r)));
-      serverMapped.forEach((r) => combinedMap.set(String(r.id || r.number), r));
-      cachedList.forEach((r) => combinedMap.set(String(r.id || r.number), r));
-
-      let allRecords = Array.from(combinedMap.values());
+      let allRecords = serverMapped;
 
       if (requestId !== listRequestRef.current) return false;
 
@@ -1839,7 +1818,7 @@ let serverMapped = [];
         cancelledCount: Number(pick(data, ["cancelledCount", "CancelledCount"])) || 0,
       });
     } catch (error) {
-      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : mockCertificates.map(normalizeCertificate);
+      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : [];
       setWorkflowStats({
         totalCount: list.length,
         requestedCount: list.filter((r) => r.status === "Requested").length,
@@ -1930,7 +1909,7 @@ let serverMapped = [];
             const aRes = await apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true });
             raw = aRes?.data;
           } catch {
-            raw = mockStudents;
+            raw = [];
           }
         }
       }
@@ -1943,14 +1922,13 @@ let serverMapped = [];
         return true;
       });
       if (requestId !== studentRequestRef.current) return [];
-      const finalStudents = mapped.length ? mapped : mockStudents.map(normalizeStudentRecord);
+      const finalStudents = mapped;
       setStudentRows(finalStudents);
       return finalStudents;
     } catch (error) {
       if (requestId !== studentRequestRef.current) return [];
-      const fallbackStudents = mockStudents.map(normalizeStudentRecord);
-      setStudentRows(fallbackStudents);
-      return fallbackStudents;
+      setStudentRows([]);
+      return [];
     } finally {
       if (requestId === studentRequestRef.current) setLoadingStudents(false);
     }
@@ -1975,7 +1953,7 @@ let serverMapped = [];
           const sRes = await apiClient.get(CERTIFICATE_API.studentsDropdown, { skipGlobalLoader: true });
           raw = sRes?.data;
         } catch {
-          raw = studentRows.length ? studentRows : mockStudents;
+          raw = studentRows.length ? studentRows : [];
         }
       }
       const rawBulkList = unwrapStudentPayload(raw).map(normalizeStudentRecord).filter((student) => student.admissionNo);
@@ -1987,11 +1965,11 @@ let serverMapped = [];
         return true;
       });
       if (requestId === bulkStudentRequestRef.current) {
-        setBulkStudentRows(mapped.length ? mapped : (studentRows.length ? studentRows : mockStudents.map(normalizeStudentRecord)));
+        setBulkStudentRows(mapped);
       }
     } catch (error) {
       if (requestId === bulkStudentRequestRef.current) {
-        setBulkStudentRows(studentRows.length ? studentRows : mockStudents.map(normalizeStudentRecord));
+        setBulkStudentRows([]);
       }
     } finally {
       if (requestId === bulkStudentRequestRef.current) setLoadingBulkStudents(false);
@@ -2270,11 +2248,9 @@ let serverMapped = [];
       setToast("Unsupported certificate type.");
       return;
     }
-    const matchedStudent = findStudentByAdmission(admissionNo) ||
-      mockStudents.find((s) => String(s.admissionNo).trim().toLowerCase() === admissionNo.toLowerCase()) ||
-      null;
+    const matchedStudent = findStudentByAdmission(admissionNo) || null;
 
-    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo || "MADM-0068";
+    const canonicalAdmissionNo = matchedStudent?.admissionNo || admissionNo || "";
     const studentName = matchedStudent?.name || form.student || "Student";
 
     setCreating(true);
@@ -2287,50 +2263,12 @@ let serverMapped = [];
         requestDate: normalizedRequestDate,
         remarks: remarks || "",
       };
-      let createdCertificate = null;
-      try {
-        const response = await apiClient.post(CERTIFICATE_API.generate, specializedPayload, { skipGlobalLoader: true });
-        const createdRecord = unwrapSinglePayload(response?.data);
-        if (hasCertificateShape(createdRecord)) {
-          createdCertificate = normalizeCertificate(createdRecord);
-        }
-      } catch (apiError) {
-        console.warn("Server generation offline/fallback:", apiError);
+      const response = await apiClient.post(CERTIFICATE_API.generate, specializedPayload, { skipGlobalLoader: true });
+      const createdRecord = unwrapSinglePayload(response?.data);
+      if (!hasCertificateShape(createdRecord)) {
+        throw new Error(response?.data?.message || "Invalid certificate response from server.");
       }
-if (!createdCertificate) {
-        const certCount = rows.length + 1;
-        const certNumber = `CERT-${new Date().getFullYear()}-${String(certCount).padStart(3, "0")}`;
-        const derivedFather = matchedStudent?.fatherName || deriveFatherNameFromStudent(studentName);
-        const derivedStudentId = matchedStudent?.studentId || (canonicalAdmissionNo ? canonicalAdmissionNo.replace(/\D/g, "") : "") || "518";
-
-        createdCertificate = {
-          id: `cert-local-${Date.now()}`,
-          backendId: null,
-          number: certNumber,
-          certificateNumber: certNumber,
-          student: studentName,
-          studentName: studentName,
-          admissionNo: canonicalAdmissionNo,
-          admissionNumber: canonicalAdmissionNo,
-          studentId: derivedStudentId,
-          rollNo: matchedStudent?.rollNo || form.rollNo || "101",
-          fatherName: derivedFather,
-          motherName: matchedStudent?.motherName || "Anita Devi",
-          group: matchedStudent?.group || form.group || "MPC",
-          level: matchedStudent?.level || form.level || "Intermediate 1st Year",
-          academicYear: matchedStudent?.academicYear || form.academicYear || navbarYearName || "2025-2026",
-          type: certificateRequest.type,
-          certificateType: certificateRequest.type,
-          orientation: form.orientation || "landscape",
-          purpose: purpose || "Official Purpose",
-          requestDate: form.requestDate || todayIso(),
-          issue: "",
-          issueDate: "",
-          status: "Requested",
-          remarks: remarks || "",
-          signature: getBackendPrincipalSignatureUrl(),
-        };
-      }
+      const createdCertificate = normalizeCertificate(createdRecord);
 
       setRows((currentRows) => {
         const next = [
@@ -2340,20 +2278,8 @@ if (!createdCertificate) {
             && String(row.number) !== String(createdCertificate.number)
           )),
         ];
-        try {
-          localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {
-          // Ignore storage write error
-        }
         return next;
       });
-
-      try {
-        const storedMock = localStorage.getItem("cms_mock_store_certificates");
-        const list = storedMock ? JSON.parse(storedMock) : [];
-        list.unshift(createdCertificate);
-        localStorage.setItem("cms_mock_store_certificates", JSON.stringify(list));
-      } catch {}
 
       setWorkflowStats((prev) => ({
         ...prev,

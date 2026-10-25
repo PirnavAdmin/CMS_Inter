@@ -2953,7 +2953,7 @@ const deleteScheduleFromBackend = async (examId, scheduleId) => {
 };
 
 const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList = [], studentsList = []) => {
-  const id = normalizeId(e?.examinationId ?? e?.id);
+  const id = normalizeId(e?.examinationId ?? e?.examId ?? e?.id);
   const rawLevels =
     e?.academicLevelIds ??
     e?.levelIds ??
@@ -4499,6 +4499,12 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           while (attempt < maxAttempts) {
             attempt++;
             try {
+              const validBoardId = Number(newRecord.boardId || selectedBoardId || selectedBoard?.id || 1);
+              const firstLevelId = Number((newRecord.levelIds || [])[0] || newRecord.levelId || 0);
+              const firstGroupId = Number((newRecord.groupIds || [])[0] || newRecord.groupId || 0);
+              const firstProgramId = Number((newRecord.programIds || [])[0] || newRecord.programId || 0);
+              const allSelectedSubjectIds = (newRecord.selectedSubjectIds || []).map((id) => Number(id) || id);
+
               res = await apiClient.post("/api/v1/examinations", {
                 campusId: Number(effectiveCampusId) || 1,
                 examCode: resolvedExamCode,
@@ -4511,14 +4517,23 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
                 exam_category: newRecord.examCategory,
                 categoryName: newRecord.examCategory,
                 rawCategory: newRecord.rawCategory || newRecord.examCategory,
-                customCategoryName: newRecord.customCategoryName,
-                boardId: Number(newRecord.boardId) || newRecord.boardId,
+                customCategoryName: newRecord.customCategoryName || "",
+                boardId: validBoardId,
                 academicYearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
                 yearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
                 academicLevelIds: (newRecord.levelIds || []).map((id) => Number(id) || id),
+                academicLevelId: firstLevelId,
+                academicLevel: newRecord.levelName || "",
                 groupIds: (newRecord.groupIds || []).map((id) => Number(id) || id),
+                groupId: firstGroupId,
                 programIds: (newRecord.programIds || []).map((id) => Number(id) || id),
-                selectedSubjectIds: (newRecord.selectedSubjectIds || []).map((id) => Number(id) || id),
+                programId: firstProgramId,
+                assessmentTypeId: Number(newRecord.assessmentTypeId) || 0,
+                examType: newRecord.examType || "",
+                totalMarks: Number(newRecord.totalMarks) || 0,
+                passPercentage: Number(newRecord.passPercentage) || 0,
+                allocatedSubjectIds: allSelectedSubjectIds,
+                selectedSubjectIds: allSelectedSubjectIds,
                 groupProgramSelections: Array.isArray(newRecord.groupProgramSelections)
                   ? newRecord.groupProgramSelections.map((item) => ({
                     groupId: Number(item?.groupId) || item?.groupId,
@@ -4527,15 +4542,15 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
                       : [],
                   }))
                   : [],
-                examPattern: newRecord.examPattern,
-                pattern: newRecord.examPattern,
-                examType: newRecord.examType,
+                examPattern: newRecord.examPattern || "",
+                pattern: newRecord.examPattern || "",
+                examPatternId: String(newRecord.examPatternId || ""),
                 selectedGroupPatterns: newRecord.selectedGroupPatterns,
                 startDate: newRecord.startDate,
                 endDate: newRecord.endDate,
-                description: newRecord.description,
+                description: newRecord.description || "",
                 status: "DRAFT",
-                scheduleMode: newRecord.scheduleMode,
+                scheduleMode: newRecord.scheduleMode || "SUBJECT_WISE",
               });
               break;
             } catch (postErr) {
