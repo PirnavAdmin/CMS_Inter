@@ -100,29 +100,45 @@ export default function TransportManagerNavbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const campusDisplayName =
-    selectedCampus?.name || selectedCampus?.campusName || "Main Campus (HQ)";
+  const availableCampuses = useMemo(() => {
+    if (context?.authorizedCampuses?.length > 0) return context.authorizedCampuses;
+    if (profile?.assignedCampuses?.length > 0) return profile.assignedCampuses;
+    return [{ id: 1, campusId: 1, name: "Main Campus (HQ)", code: "MAIN" }];
+  }, [context?.authorizedCampuses, profile?.assignedCampuses]);
+
+  const campusDisplayName = useMemo(() => {
+    if (selectedCampus?.name || selectedCampus?.campusName) {
+      return selectedCampus.name || selectedCampus.campusName;
+    }
+    return availableCampuses[0]?.name || "Main Campus (HQ)";
+  }, [selectedCampus, availableCampuses]);
+
+  const availableBoards = useMemo(() => {
+    if (context?.authorizedBoards?.length > 0) return context.authorizedBoards;
+    if (profile?.assignedBoards?.length > 0) return profile.assignedBoards;
+    return [{ id: 1, boardId: 1, code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh" }];
+  }, [context?.authorizedBoards, profile?.assignedBoards]);
 
   const currentBoardObj = useMemo(() => {
-    if (authorizedBoards.length > 0 && selectedBoardId) {
-      return authorizedBoards.find(
-        (b) => String(b.id || b.boardId) === String(selectedBoardId)
-      ) || authorizedBoards[0];
-    }
-    return (
-      boards.find((b) => String(b.id || b.boardId) === String(selectedBoardId)) ||
-      boards[0] || {
-        name: "Board of Intermediate Education, Andhra Pradesh",
-        boardName: "Board of Intermediate Education, Andhra Pradesh",
-      }
-    );
-  }, [authorizedBoards, boards, selectedBoardId]);
+    return availableBoards.find(
+      (b) => String(b.id || b.boardId) === String(selectedBoardId)
+    ) || availableBoards[0] || {
+      id: 1,
+      name: "Board of Intermediate Education, Andhra Pradesh",
+      boardName: "Board of Intermediate Education, Andhra Pradesh",
+    };
+  }, [availableBoards, selectedBoardId]);
 
   const boardDisplayName =
     currentBoardObj?.name ||
     currentBoardObj?.boardName ||
     currentBoardObj?.code ||
     "Board of Intermediate Education, Andhra Pradesh";
+
+  const availableYears = useMemo(() => {
+    if (academicYears?.length > 0) return academicYears;
+    return [{ id: 1, code: "2026-2027", name: "2026-2027", label: "2026-2027" }];
+  }, [academicYears]);
 
   const yearDisplayName =
     selectedAcademicYear?.name ||
@@ -131,10 +147,11 @@ export default function TransportManagerNavbar() {
     "2026-2027";
 
   const initials = useMemo(() => {
-    const parts = String(profile?.name || "Transport Manager").trim().split(/\s+/);
+    const fullName = String(profile?.fullName || profile?.name || "muzan kibutsuzi").trim();
+    const parts = fullName.split(/\s+/);
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    return (parts[0]?.[0] || "T").toUpperCase();
-  }, [profile?.name]);
+    return (parts[0]?.[0] || "M").toUpperCase();
+  }, [profile?.fullName, profile?.name]);
 
   const handleLogout = () => {
     clearAuthSession();
@@ -232,9 +249,9 @@ export default function TransportManagerNavbar() {
               <div className="cms-academic-dropdown-panel">
                 <div className="cms-academic-panel-header">Assigned Campus</div>
                 <div className="cms-academic-panel-list">
-                  {(activeCampuses.length ? activeCampuses : campuses).map((c) => {
+                  {availableCampuses.map((c) => {
                     const isSelected =
-                      String(selectedCampus?.id ?? selectedCampus?.campusId) === String(c.id ?? c.campusId);
+                      String(selectedCampus?.id ?? selectedCampus?.campusId ?? "1") === String(c.id ?? c.campusId);
                     return (
                       <button
                         key={c.id || c.campusId}
@@ -284,9 +301,9 @@ export default function TransportManagerNavbar() {
               <div className="cms-academic-dropdown-panel">
                 <div className="cms-academic-panel-header">Assigned Board</div>
                 <div className="cms-academic-panel-list">
-                  {(authorizedBoards.length ? authorizedBoards : boards).map((b) => {
+                  {availableBoards.map((b) => {
                     const isSelected =
-                      String(selectedBoardId) === String(b.id || b.boardId);
+                      String(selectedBoardId || "1") === String(b.id || b.boardId);
                     return (
                       <button
                         key={b.id || b.boardId || b.code}
@@ -336,12 +353,9 @@ export default function TransportManagerNavbar() {
               <div className="cms-academic-dropdown-panel">
                 <div className="cms-academic-panel-header">Academic Year</div>
                 <div className="cms-academic-panel-list">
-                  {(academicYears.length
-                    ? academicYears
-                    : [{ id: "2026-2027", name: "2026-2027" }]
-                  ).map((y) => {
+                  {availableYears.map((y) => {
                     const isSelected =
-                      selectedAcademicYear?.id === y.id || selectedAcademicYear?.name === y.name;
+                      selectedAcademicYear?.id === y.id || selectedAcademicYear?.name === y.name || (!selectedAcademicYear && (y.name === "2026-2027" || y.code === "2026-2027"));
                     return (
                       <button
                         key={y.id || y.name}
@@ -391,8 +405,8 @@ export default function TransportManagerNavbar() {
               {initials}
             </div>
             <div className="cms-profile-meta">
-              <strong>{profile.name || "muzan kibutsuzi"}</strong>
-              <span>{profile.role || "Transport Manager"}</span>
+              <strong>{profile?.fullName || profile?.name || "muzan kibutsuzi"}</strong>
+              <span>Transport Manager</span>
             </div>
             <ChevronDown size={14} />
           </button>
@@ -420,10 +434,10 @@ export default function TransportManagerNavbar() {
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {profile.name || "muzan kibutsuzi"}
+                      {profile?.fullName || profile?.name || "muzan kibutsuzi"}
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--cms-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {profile.role || "Transport Manager"}
+                      Transport Manager
                     </div>
                   </div>
                 </div>

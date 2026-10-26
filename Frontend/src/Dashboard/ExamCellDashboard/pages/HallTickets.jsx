@@ -23,10 +23,158 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
-import { Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, Toast, Pagination } from "@/components/common/Ui.jsx";
 import "./HallTickets.css";
 
 const normalizeId = (val) => String(val ?? "").trim();
+
+const printAdmitCards = (tickets = [], options = {}) => {
+  const list = Array.isArray(tickets) ? tickets : [tickets];
+  if (list.length === 0) return;
+
+  const popup = window.open("", "_blank", "width=920,height=800");
+  if (!popup) {
+    alert("Please allow popups for printing admit cards.");
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Examination Hall Tickets</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm 12mm; }
+    @media print {
+      body { margin: 0; padding: 0; background: #fff !important; color: #000 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+      .admit-card { page-break-after: always; break-after: page; }
+      .admit-card:last-child { page-break-after: auto; break-after: auto; }
+      .no-print { display: none !important; }
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; margin: 0; padding: 14px; background: #f8fafc; }
+    .admit-card { max-width: 800px; margin: 0 auto 20px; padding: 18px 20px; background: #fff; border: 2px solid #1A2114; border-radius: 4px; box-sizing: border-box; }
+    .header { text-align: center; border-bottom: 2px solid #1A2114; padding-bottom: 8px; margin-bottom: 12px; }
+    .college-name { font-size: 17px; font-weight: 800; text-transform: uppercase; margin: 0 0 3px; color: #1A2114; letter-spacing: 0.5px; }
+    .sub-header { font-size: 11px; color: #475569; margin-bottom: 4px; }
+    .doc-title { font-size: 13px; font-weight: 700; color: #15803d; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
+    .details-grid { display: grid; grid-template-columns: 1fr 110px; gap: 12px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 12px; margin-bottom: 12px; border-radius: 4px; }
+    .fields-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    .fields-table td { padding: 3px 5px; vertical-align: top; }
+    .fields-table td.label { font-weight: 700; width: 115px; color: #334155; }
+    .fields-table td.val { font-weight: 600; color: #0f172a; }
+    .photo-box { border: 1px dashed #94a3b8; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 110px; background: #fff; font-size: 9.5px; color: #64748b; text-align: center; }
+    .section-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; margin: 0 0 6px; color: #1e293b; }
+    .schedule-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 12px; }
+    .schedule-table th, .schedule-table td { border: 1px solid #cbd5e1; padding: 5px 7px; }
+    .schedule-table th { background: #f1f5f9; text-transform: uppercase; font-size: 9.5px; font-weight: 700; color: #334155; }
+    .instructions { font-size: 9.5px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 4px; margin-bottom: 16px; }
+    .instructions ol { margin: 3px 0 0; padding-left: 14px; line-height: 1.35; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 22px; padding-top: 8px; }
+    .sig-block { text-align: center; width: 170px; }
+    .sig-line { border-top: 1px solid #334155; padding-top: 4px; font-size: 10.5px; font-weight: 600; color: #0f172a; }
+  </style>
+</head>
+<body>
+  ${list.map((t) => `
+    <div class="admit-card">
+      <div class="header">
+        <h1 class="college-name">${options.collegeName || "COLLEGE EXAMINATION CELL"}</h1>
+        <div class="sub-header">Affiliated to Board of Intermediate Education · Campus: ${t.campusName || options.campusName || "Main Campus"}</div>
+        <h2 class="doc-title">EXAMINATION ADMIT CARD / HALL TICKET</h2>
+      </div>
+      <div class="details-grid">
+        <table class="fields-table">
+          <tr>
+            <td class="label">Roll Number:</td>
+            <td class="val" style="font-size: 13.5px; font-weight: 800; color: #1e3a8a;">${t.rollNumber || "—"}</td>
+            <td class="label">Admission No:</td>
+            <td class="val">${t.admissionNo || "—"}</td>
+          </tr>
+          <tr>
+            <td class="label">Candidate Name:</td>
+            <td class="val" style="font-size: 12.5px;">${t.studentName || "—"}</td>
+            <td class="label">Father's Name:</td>
+            <td class="val">${t.fatherName || "—"}</td>
+          </tr>
+          <tr>
+            <td class="label">Course / Program:</td>
+            <td class="val">${t.academicLevel || "Intermediate"} (${t.sectionName || "General Section"})</td>
+            <td class="label">Examination:</td>
+            <td class="val">${t.examName || "Quarterly Examination"}</td>
+          </tr>
+          <tr>
+            <td class="label">Assigned Hall:</td>
+            <td class="val" style="font-size: 12.5px; font-weight: 700; color: #15803d;">${t.hallNumber || "D-101"}</td>
+            <td class="label">Status:</td>
+            <td class="val">${t.status || "Active / Issued"}</td>
+          </tr>
+        </table>
+        <div class="photo-box">
+          <span style="font-size: 22px; color: #94a3b8; display: block; margin-bottom: 2px;">👤</span>
+          <span>Affix Candidate Photograph</span>
+        </div>
+      </div>
+
+      <div class="section-title">Examination Timetable & Hall Allocations</div>
+      <table class="schedule-table">
+        <thead>
+          <tr>
+            <th style="width: 14%;">Date</th>
+            <th style="width: 18%;">Session / Timing</th>
+            <th style="width: 14%;">Subject Code</th>
+            <th>Subject Name</th>
+            <th style="width: 12%; text-align: center;">Hall No</th>
+            <th style="width: 16%; text-align: center;">Invigilator Sign</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(t.timetable && t.timetable.length > 0 ? t.timetable : [
+            { subjectCode: "MAT101", subjectName: "Mathematics - IA", examDate: "2026-10-20", startTime: "09:30", endTime: "12:30", roomNumber: t.hallNumber || "D-101" },
+            { subjectCode: "PHY101", subjectName: "Physics - I", examDate: "2026-10-22", startTime: "09:30", endTime: "12:30", roomNumber: t.hallNumber || "D-101" },
+            { subjectCode: "CHE101", subjectName: "Chemistry - I", examDate: "2026-10-24", startTime: "09:30", endTime: "12:30", roomNumber: t.hallNumber || "D-101" },
+            { subjectCode: "ENG101", subjectName: "English - I", examDate: "2026-10-26", startTime: "09:30", endTime: "12:30", roomNumber: t.hallNumber || "D-101" },
+          ]).map((s) => `
+            <tr>
+              <td><strong>${String(s.examDate || s.date || "").slice(0, 10)}</strong></td>
+              <td>${s.startTime?.slice(0, 5) || "09:30"} – ${s.endTime?.slice(0, 5) || "12:30"}</td>
+              <td>${s.subjectCode || "—"}</td>
+              <td><strong>${s.subjectName || "—"}</strong></td>
+              <td style="text-align: center; font-weight: 700; color: #15803d;">${s.roomNumber || t.hallNumber || "D-101"}</td>
+              <td>&nbsp;</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+
+      <div class="instructions">
+        <strong>Important Instructions to Candidates:</strong>
+        <ol>
+          <li>Candidates must occupy allotted seats at least 15 minutes before exam commencement.</li>
+          <li>This Admit Card must be presented at each examination session and retained till results publication.</li>
+          <li>Possession of mobile phones, smartwatches, or unauthorized study material inside the hall is strictly prohibited.</li>
+        </ol>
+      </div>
+
+      <div class="sig-row">
+        <div class="sig-block"><div style="height: 26px;"></div><div class="sig-line">Candidate's Signature</div></div>
+        <div class="sig-block"><div style="height: 26px;"></div><div class="sig-line">Chief Superintendent</div></div>
+        <div class="sig-block"><div style="height: 26px;"></div><div class="sig-line">Controller of Examinations</div></div>
+      </div>
+    </div>
+  `).join("")}
+  <script>
+    window.addEventListener("load", () => {
+      window.focus();
+      setTimeout(() => { window.print(); }, 250);
+    });
+  </script>
+</body>
+</html>`;
+
+  popup.document.open();
+  popup.document.write(html);
+  popup.document.close();
+};
 
 const unwrapRecords = (res) => {
   if (!res) return [];
@@ -118,37 +266,32 @@ export default function HallTickets() {
     };
   }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
-  // Fetch Sections & Students
+  // Fetch Sections & Students from Admin authoritative sources
   useEffect(() => {
     let active = true;
+    const stuParams = { campusId: selectedCampusId, pageSize: 500 };
+    if (selectedBoardId) stuParams.boardId = selectedBoardId;
+    if (selectedAcademicYearId) stuParams.academicYearId = selectedAcademicYearId;
+
     Promise.all([
-      api.get("/api/v1/sections", { params: { campusId: selectedCampusId, pageSize: 100 } }).catch(() => null),
-      api.get("/api/v1/students", { params: { campusId: selectedCampusId, pageSize: 100 } }).catch(() => null),
+      api.get("/api/v1/sections", { params: { campusId: selectedCampusId, pageSize: 200 } }).catch(() => null),
+      api.get("/api/v1/students", { params: stuParams })
+        .catch(() => api.get("/api/v1/students", { params: { campusId: selectedCampusId, pageSize: 500 } }))
+        .catch(() => api.get("/api/v1/students/active", { params: { campusId: selectedCampusId } }))
+        .catch(() => null),
     ]).then(([secRes, stuRes]) => {
       if (!active) return;
       const secList = unwrapRecords(secRes);
       const stuList = unwrapRecords(stuRes);
 
-      setSections(secList.length ? secList : [
-        { sectionId: 1, id: 1, sectionName: "MPC - Section A", name: "MPC - Section A", groupName: "MPC", academicLevelName: "Intermediate 1st Year" },
-        { sectionId: 2, id: 2, sectionName: "MPC - Section B", name: "MPC - Section B", groupName: "MPC", academicLevelName: "Intermediate 1st Year" },
-        { sectionId: 3, id: 3, sectionName: "BiPC - Section A", name: "BiPC - Section A", groupName: "BiPC", academicLevelName: "Intermediate 1st Year" },
-        { sectionId: 4, id: 4, sectionName: "MEC - Section A", name: "MEC - Section A", groupName: "MEC", academicLevelName: "Intermediate 1st Year" },
-      ]);
-
-      setStudents(stuList.length ? stuList : [
-        { studentId: 101, id: 101, admissionNo: "ADM202601", rollNumber: "260101", studentName: "Rahul Sharma", fatherName: "Rajesh Sharma", sectionId: 1, sectionName: "MPC - Section A" },
-        { studentId: 102, id: 102, admissionNo: "ADM202602", rollNumber: "260102", studentName: "Priya Varma", fatherName: "Suresh Varma", sectionId: 1, sectionName: "MPC - Section A" },
-        { studentId: 103, id: 103, admissionNo: "ADM202603", rollNumber: "260103", studentName: "Venkata Sai", fatherName: "Subba Rao", sectionId: 1, sectionName: "MPC - Section A" },
-        { studentId: 104, id: 104, admissionNo: "ADM202604", rollNumber: "260104", studentName: "Ananya Reddy", fatherName: "Srinivas Reddy", sectionId: 1, sectionName: "MPC - Section A" },
-        { studentId: 105, id: 105, admissionNo: "ADM202605", rollNumber: "260105", studentName: "Karthik Kumar", fatherName: "Narayana Kumar", sectionId: 2, sectionName: "MPC - Section B" },
-      ]);
+      setSections(secList);
+      setStudents(stuList);
     });
 
     return () => {
       active = false;
     };
-  }, [selectedCampusId]);
+  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
   // Load Exam Schedules and generated Hall Tickets when examId changes
   useEffect(() => {
@@ -190,16 +333,27 @@ export default function HallTickets() {
   }, [exams, examId]);
 
   const targetCandidates = useMemo(() => {
+    let list = students;
     if (sectionId) {
-      const filtered = students.filter((s) => normalizeId(s.sectionId) === normalizeId(sectionId));
-      return filtered.length > 0 ? filtered : students;
+      list = list.filter((s) => normalizeId(s.sectionId || s.batchId) === normalizeId(sectionId));
+    } else if (currentExam?.groupId) {
+      const gFiltered = list.filter((s) => normalizeId(s.groupId) === normalizeId(currentExam.groupId));
+      if (gFiltered.length > 0) list = gFiltered;
     }
-    return students;
-  }, [students, sectionId]);
+    return list;
+  }, [students, sectionId, currentExam]);
 
   const allocatedHallDisplay = useMemo(() => {
     return schedules[0]?.roomNumber || schedules[0]?.hall || (tickets[0]?.hallNumber) || "D-101";
   }, [schedules, tickets]);
+
+  const TICKETS_PAGE_SIZE = 10;
+  const [ticketPage, setTicketPage] = useState(1);
+
+  // Reset to page 1 on search or filter change
+  useEffect(() => {
+    setTicketPage(1);
+  }, [examId, sectionId, searchTerm]);
 
   // Generate Hall Tickets for the selected Examination and Section/Batch
   const handleGenerateHallTickets = async () => {
@@ -283,6 +437,12 @@ export default function HallTickets() {
     });
   }, [tickets, searchTerm]);
 
+  // Paginated tickets for current page (exactly 10 records per page default)
+  const pagedTickets = useMemo(() => {
+    const start = (ticketPage - 1) * TICKETS_PAGE_SIZE;
+    return filteredTickets.slice(start, start + TICKETS_PAGE_SIZE);
+  }, [filteredTickets, ticketPage]);
+
   // Export Hall Ticket Register to Excel
   const handleExportRegister = () => {
     if (tickets.length === 0) {
@@ -317,14 +477,19 @@ export default function HallTickets() {
     setSelectedTicket(ticket);
   };
 
-  // Trigger Print of Single Admit Card
-  const handlePrintAdmitCard = () => {
-    window.print();
+  // Trigger Print of Single Admit Card cleanly in print popup
+  const handlePrintAdmitCard = (ticketToPrint) => {
+    const target = ticketToPrint || selectedTicket;
+    if (!target) return;
+    printAdmitCards([target], {
+      collegeName: "COLLEGE EXAMINATION CELL",
+      campusName: selectedCampusId ? `Campus #${selectedCampusId}` : "Main Campus",
+    });
   };
 
-  // Trigger Batch Print
+  // Trigger Batch Print (prints ALL filtered tickets across all pages)
   const handleBatchPrint = () => {
-    if (tickets.length === 0) {
+    if (filteredTickets.length === 0) {
       showToast("Please generate hall tickets first.", "warning");
       return;
     }
@@ -598,7 +763,7 @@ export default function HallTickets() {
                   </td>
                 </tr>
               ) : (
-                filteredTickets.map((t) => (
+                pagedTickets.map((t) => (
                   <tr key={t.hallTicketId}>
                     <td>
                       <span className="ht-roll-badge">
@@ -654,7 +819,7 @@ export default function HallTickets() {
                           type="button"
                           className="cms-action-btn"
                           title="Print Admit Card Directly"
-                          onClick={() => handleViewAdmitCard(t)}
+                          onClick={() => handlePrintAdmitCard(t)}
                         >
                           <Printer size={15} />
                         </button>
@@ -666,6 +831,16 @@ export default function HallTickets() {
             </tbody>
           </table>
         </div>
+
+        {filteredTickets.length > 0 && (
+          <Pagination
+            currentPage={ticketPage}
+            totalRecords={filteredTickets.length}
+            pageSize={TICKETS_PAGE_SIZE}
+            onPageChange={setTicketPage}
+            unit="admit cards"
+          />
+        )}
       </section>
 
       {/* OFFICIAL ADMIT CARD / HALL TICKET MODAL */}
@@ -825,12 +1000,15 @@ export default function HallTickets() {
                 className="cms-btn cms-btn-primary"
                 onClick={() => {
                   setBatchPrintOpen(false);
-                  window.print();
+                  printAdmitCards(filteredTickets, {
+                    collegeName: "COLLEGE EXAMINATION CELL",
+                    campusName: selectedCampusId ? `Campus #${selectedCampusId}` : "Main Campus",
+                  });
                 }}
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
                 <Printer size={15} />
-                <span>Proceed to Print All ({tickets.length})</span>
+                <span>Proceed to Print All ({filteredTickets.length})</span>
               </button>
             </div>
           </div>

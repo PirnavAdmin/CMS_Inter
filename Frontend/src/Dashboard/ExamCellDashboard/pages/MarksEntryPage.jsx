@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import "@/components/pages/MarksEntryPage.css";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 const normalizeId = (value) => String(value ?? "");
 const isActiveRecord = (item) => item?.isActive !== false && item?.status !== false;
 const evaluationKey = (item) => `${item.examinationId}:${item.sectionId}:${item.subjectId}`;
@@ -1318,7 +1318,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
   const [entryExamId, setEntryExamId] = useState("");
   const [entrySubjectId, setEntrySubjectId] = useState("");
   const [entryPage, setEntryPage] = useState(1);
-  const [entryPageSize, setEntryPageSize] = useState(5);
+  const [entryPageSize, setEntryPageSize] = useState(10);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const activeFetchRef = useRef(0);
 
@@ -2648,11 +2648,11 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
   const [backendAnalysis, setBackendAnalysis] = useState([]);
 
   const [evaluationPage, setEvaluationPage] = useState(1);
-  const [evaluationPageSize, setEvaluationPageSize] = useState(5);
+  const [evaluationPageSize, setEvaluationPageSize] = useState(10);
   const [studentPage, setStudentPage] = useState(1);
-  const [studentPageSize, setStudentPageSize] = useState(5);
+  const [studentPageSize, setStudentPageSize] = useState(10);
   const [detailPage, setDetailPage] = useState(1);
-  const [detailPageSize, setDetailPageSize] = useState(5);
+  const [detailPageSize, setDetailPageSize] = useState(10);
   const [evaluationSearch, setEvaluationSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
 
@@ -3941,7 +3941,7 @@ function Entry({
   onSave,
   onSubmit,
 }) {
-  const pageSize = entryPageSize || 5;
+  const pageSize = entryPageSize || 10;
   const rows = workspace?.rows?.slice((entryPage - 1) * pageSize, entryPage * pageSize) || [];
   const locked = workspace && !editableStatuses.includes(workspace.status) && !editing;
   const blocked = !workspace?.rows?.length || Boolean(validateMarksConfiguration(workspace));
@@ -4229,7 +4229,7 @@ function EvaluationList({
   search,
   setSearch,
   page,
-  pageSize = 5,
+  pageSize = 10,
   setPage,
   setPageSize,
   onView,
@@ -4239,7 +4239,7 @@ function EvaluationList({
   subTab,
   setSubTab,
 }) {
-  const currentLimit = pageSize || 5;
+  const currentLimit = pageSize || 10;
   const shown = rows.slice((page - 1) * currentLimit, page * currentLimit);
   const distinctSubjectCount = new Set(rows.map((item) => item.subjectId || item.subject?.id)).size;
   const subjText = distinctSubjectCount === 1 ? "subject" : "subjects";
@@ -4359,8 +4359,8 @@ function EvaluationList({
 }
 
 // Subject Marks Breakdown (Ref Screenshot 3)
-function EvaluationDetails({ item, page, pageSize = 5, setPage, setPageSize, onBack, onAction, processing }) {
-  const currentLimit = pageSize || 5;
+function EvaluationDetails({ item, page, pageSize = 10, setPage, setPageSize, onBack, onAction, processing }) {
+  const currentLimit = pageSize || 10;
   const rows = item.rows?.slice((page - 1) * currentLimit, page * currentLimit) || [];
   return (
     <section className="cms-card cms-main-card">
@@ -4454,7 +4454,7 @@ function StudentList({
   search,
   setSearch,
   page,
-  pageSize = 5,
+  pageSize = 10,
   setPage,
   setPageSize,
   onView,
@@ -4462,7 +4462,7 @@ function StudentList({
   setSubTab,
   processing,
 }) {
-  const currentLimit = pageSize || 5;
+  const currentLimit = pageSize || 10;
   const shown = rows.slice((page - 1) * currentLimit, page * currentLimit);
   return (
     <section className="cms-card cms-main-card">
@@ -4556,8 +4556,8 @@ function StudentList({
 }
 
 // Detailed Student Performance Report (Ref Screenshot 4)
-function StudentDetails({ student, page, pageSize = 5, setPage, setPageSize, onBack }) {
-  const currentLimit = pageSize || 5;
+function StudentDetails({ student, page, pageSize = 10, setPage, setPageSize, onBack }) {
+  const currentLimit = pageSize || 10;
   const rows = (student.subjectResults || []).slice((page - 1) * currentLimit, page * currentLimit);
   return (
     <section className="cms-card cms-main-card">
@@ -4975,11 +4975,11 @@ const IconAlert = () => (
   </svg>
 );
 
-function DynamicPagination({ page, pageSize = 5, setPageSize, totalItems = 0, setPage, summaryText }) {
+function DynamicPagination({ page, pageSize = 10, setPageSize, totalItems = 0, setPage, summaryText }) {
   const [isCustom, setIsCustom] = useState(false);
-  const [customInput, setCustomInput] = useState(String(pageSize || 5));
+  const [customInput, setCustomInput] = useState(String(pageSize || 10));
 
-  const totalPages = Math.max(1, Math.ceil(totalItems / (pageSize || 5)));
+  const totalPages = Math.max(1, Math.ceil(totalItems / (pageSize || 10)));
 
   useEffect(() => {
     if (totalPages && page > totalPages) {
@@ -4989,6 +4989,19 @@ function DynamicPagination({ page, pageSize = 5, setPageSize, totalItems = 0, se
 
   const start = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
   const end = totalItems > 0 ? Math.min(page * pageSize, totalItems) : 0;
+
+  const pageNumbers = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
+  } else {
+    pageNumbers.push(1);
+    if (page > 3) pageNumbers.push('...');
+    const pStart = Math.max(2, page - 1);
+    const pEnd = Math.min(totalPages - 1, page + 1);
+    for (let i = pStart; i <= pEnd; i += 1) pageNumbers.push(i);
+    if (page < totalPages - 2) pageNumbers.push('...');
+    pageNumbers.push(totalPages);
+  }
 
   return (
     <div className="cms-pagination">
@@ -5057,20 +5070,41 @@ function DynamicPagination({ page, pageSize = 5, setPageSize, totalItems = 0, se
           className="cms-page-btn"
           disabled={page <= 1}
           onClick={() => setPage((current) => Math.max(1, current - 1))}
+          aria-label="Previous Page"
         >
           Previous
         </button>
-        <span className="cms-page-info">
-          {page} / {totalPages}
-        </span>
+
+        {pageNumbers.map((p, idx) =>
+          p === '...' ? (
+            <span key={`dots-${idx}`} className="cms-page-info" style={{ minWidth: 'auto', padding: '0 4px' }}>
+              ...
+            </span>
+          ) : (
+            <button
+              key={`page-${p}`}
+              type="button"
+              className={`cms-page-btn ${p === page ? 'is-active' : ''}`}
+              onClick={() => setPage(p)}
+              aria-label={`Page ${p}`}
+            >
+              {p}
+            </button>
+          )
+        )}
+
         <button
           type="button"
           className="cms-page-btn"
           disabled={page >= totalPages}
           onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+          aria-label="Next Page"
         >
           Next
         </button>
+        <span className="cms-page-info">
+          Page {page} of {totalPages}
+        </span>
       </div>
     </div>
   );

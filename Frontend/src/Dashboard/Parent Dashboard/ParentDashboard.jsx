@@ -46,6 +46,8 @@ export default function ParentDashboard() {
     results,
     examinations: contextExaminations,
     curriculumSubjects,
+    announcements: contextAnnouncements,
+    holidays,
     dataKey,
     currentAcademicYear,
     loading,
@@ -122,7 +124,7 @@ export default function ParentDashboard() {
         syllabus: `Course curriculum for ${r.examName}. Total marks: ${r.maxMarks}. Grade: ${r.grade}.`,
       }));
     }
-    return child ? upcomingExamsData[dataKey] || (isCurrentYear ? (upcomingExamsData[child.id] || []) : []) : [];
+    return [];
   }, [contextExaminations, results, child, dataKey, isCurrentYear]);
 
   const nextExam = exams[0] || null;
@@ -497,7 +499,7 @@ export default function ParentDashboard() {
               </div>
               <div className="parent-card-body">
                 <div className="parent-list-stack">
-                  {collegeAnnouncements.slice(0, 3).map((ann) => (
+                  {(contextAnnouncements && contextAnnouncements.length > 0 ? contextAnnouncements : collegeAnnouncements).slice(0, 3).map((ann) => (
                     <div
                       key={ann.id}
                       style={{ padding: 12, borderRadius: 10, background: "var(--cms-bg)", border: "1px solid var(--cms-border)", cursor: "pointer" }}

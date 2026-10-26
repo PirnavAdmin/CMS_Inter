@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Search, X } from "lucide-react";
-import { Link } from "react-router-dom";
-import apiClient from "@/api/axios.js";
-import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { Link, useSearchParams } from "react-router-dom";
 import { adminIconAssets } from "@/components/layout/DashboardLayout.jsx";
 import StudentCard from "@/Dashboard/StudentDashboard/components/StudentCard.jsx";
 import StudentDataTable from "@/Dashboard/StudentDashboard/components/StudentDataTable.jsx";
@@ -12,12 +10,19 @@ import { fetchClaims, fetchAccountEntries, disburseClaimPayment } from "../servi
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import "@/components/pages/AdminProfilePage.css";
 
-import { getRows, formatMoney, formatDate, normalizePayment, useAccountantPage as useFinancePage, useCampusParams } from "../services/accountantService.js";
-import { PageState } from "../components/AccountantUI.jsx";
+import { formatMoney, formatDate, normalizePayment, loadPaymentHistory, useFinancePage, useFinanceParams } from "../services/accountantService.js";
+import { PageState, FeePagination } from "../components/AccountantUI.jsx";
+import { pageOf } from "../utils/feeViewData.js";
+import { useEffectivePermissions } from "@/features/rolesPermissions/useEffectivePermissions.js";
+import { feeCollectionAccess } from "../services/accountantService.js";
 
 export function AccountantPayments() {
-  const campusParams = useCampusParams();
-  const [activeTab, setActiveTab] = useState("reimbursements"); // "reimbursements" | "fees"
+  const campusParams = useFinanceParams();
+  const permissions = useEffectivePermissions();
+  const canReadHistory = feeCollectionAccess(permissions);
+  const [query] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => query.get("tab") === "fees" ? "fees" : "reimbursements"); // "reimbursements" | "fees"
+  const [feePageNumber, setFeePageNumber] = useState(1);
   const [search, setSearch] = useState("");
   const [reimbFilter, setReimbFilter] = useState("all");
   const [disburseModal, setDisburseModal] = useState(null);
@@ -68,20 +73,22 @@ export function AccountantPayments() {
     };
   }, [refreshAccountEntries]);
 
-  const load = useCallback(async () => {
-    const [collection, payments] = await Promise.allSettled([
-      apiClient.get(apiEndpoints.fee.collection, { params: campusParams }),
-      apiClient.get(apiEndpoints.fee.payments, { params: campusParams }),
-    ]);
-    const rows = [
-      ...(collection.status === "fulfilled" ? getRows(collection.value.data) : []),
-      ...(payments.status === "fulfilled" ? getRows(payments.value.data) : []),
-    ];
-    if (!rows.length && collection.status === "rejected" && payments.status === "rejected") throw collection.reason;
-    return rows.map(normalizePayment).filter((row, index, list) => list.findIndex((item) => String(item.id) === String(row.id)) === index).sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  }, [campusParams]);
-  const state = useFinancePage(load, [load]);
-  const feeRows = (state.data || []).filter((row) => !search || `${row.studentName} ${row.admissionNo} ${row.reference}`.toLowerCase().includes(search.toLowerCase()));
+  const load = useCallback(async (signal) => {
+    if (activeTab !== "fees") return null;
+    if (permissions.loading) return null;
+    return loadPaymentHistory(campusParams, signal, () => canReadHistory);
+  }, [campusParams, activeTab, permissions.loading, canReadHistory]);
+  const state = useFinancePage(load);
+  const reloadFees = state.reload;
+  const feeRows = (state.data?.payments || []).map(normalizePayment).sort((a, b) => String(b.date).localeCompare(String(a.date))).filter((row) => !search || `${row.studentName} ${row.admissionNo} ${row.reference}`.toLowerCase().includes(search.toLowerCase()));
+  const feePage = pageOf(feeRows, feePageNumber, "", "", 5);
+  const currentFeePage = feePage.current;
+  useEffect(() => { if (feePageNumber !== currentFeePage) setFeePageNumber(currentFeePage); }, [feePageNumber, currentFeePage]);
+  useEffect(() => {
+    const refresh = () => { if (activeTab === "fees") reloadFees(); };
+    window.addEventListener("accountant-fees-updated", refresh);
+    return () => window.removeEventListener("accountant-fees-updated", refresh);
+  }, [activeTab, reloadFees]);
 
   const filteredReimbEntries = useMemo(() => {
     return accountEntries.filter((item) => {
@@ -162,8 +169,8 @@ export function AccountantPayments() {
         <StudentSummaryCard
           icon={adminIconAssets.feeManagement}
           label="Fee Transactions"
-          value={feeRows.length}
-          note="From collection records"
+          value={activeTab !== "fees" || state.loading || state.error ? "-" : feeRows.length}
+          note={activeTab === "fees" ? "Verified payment transactions" : "Open Student Fee Transactions to load"}
         />
         <StudentSummaryCard
           icon={adminIconAssets.payroll}
@@ -205,7 +212,7 @@ export function AccountantPayments() {
           onClick={() => setActiveTab("fees")}
           style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
         >
-          <span>Student Fee Transactions ({feeRows.length})</span>
+          <span>Student Fee Transactions{activeTab === "fees" && !state.loading && !state.error ? ` (${feeRows.length})` : ""}</span>
         </button>
       </div>
 
@@ -319,15 +326,17 @@ export function AccountantPayments() {
         </StudentCard>
       ) : (
         <>
-          <PageState {...state} />
-          {!state.loading && !state.error ? (
+          <PageState {...state} onRetry={permissions.refresh} />
+          {permissions.loading ? <div className="sp-api-state" role="status">Verifying payment history permission...</div> : null}
+          {state.data?.errors?.length ? <div className="sp-api-state is-error" role="alert">History is incomplete: {state.data.errors.join(" ")} Access must be granted by your administrator if permission is denied. <button type="button" className="sp-btn" onClick={permissions.refresh}>Retry</button></div> : null}
+          {!state.loading && !state.error && !permissions.loading ? (
             <StudentCard title="Fee Transactions" subtitle={`${feeRows.length} transactions`}>
               <div className="sp-toolbar">
                 <div className="sp-search">
                   <Search size={15} />
                   <input
                     value={search}
-                    onChange={(event) => setSearch(event.target.value)}
+                    onChange={(event) => { setSearch(event.target.value); setFeePageNumber(1); }}
                     placeholder="Search student, admission number, or reference"
                   />
                 </div>
@@ -335,7 +344,7 @@ export function AccountantPayments() {
               <StudentDataTable
                 columns={["Student", "Admission No", "Type", "Amount", "Date", "Method", "Reference", "Status"]}
                 statusColumns={[7]}
-                rows={feeRows.map((row) => ({
+                rows={feePage.rows.map((row) => ({
                   Student: row.studentName,
                   "Admission No": row.admissionNo,
                   Type: row.type,
@@ -345,8 +354,10 @@ export function AccountantPayments() {
                   Reference: row.reference,
                   Status: row.status,
                 }))}
-                empty="No payment transactions available."
+                empty={state.data?.errors?.length ? "No verified transactions are available. Resolve the history errors above." : "No payment transactions available."}
               />
+              <FeePagination page={feePage} onPage={setFeePageNumber} numbered />
+              <p className="sp-muted">Historical receipt retrieval is unavailable for the Accountant role. New collection receipts can be printed immediately after payment.</p>
             </StudentCard>
           ) : null}
         </>

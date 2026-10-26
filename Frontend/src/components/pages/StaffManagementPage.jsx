@@ -2616,13 +2616,13 @@ function Field({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [localFile, setLocalFile] = useState(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState("");
-  if (!Array.isArray(item) || item.length < 2) return null;
-  const name = item[0] || "";
-  const label = item[1] || name || "";
-  const type = item[2] || "text";
-  const options = Array.isArray(item[3]) ? item[3] : [];
-  const configuredRequired = item[4] !== false;
-  const layoutClass = item[5] || "";
+  const isValidItem = Array.isArray(item) && item.length >= 2;
+  const name = isValidItem ? (item[0] || "") : "";
+  const label = isValidItem ? (item[1] || name || "") : "";
+  const type = isValidItem ? (item[2] || "text") : "text";
+  const options = isValidItem && Array.isArray(item[3]) ? item[3] : [];
+  const configuredRequired = isValidItem ? (item[4] !== false) : false;
+  const layoutClass = isValidItem ? (item[5] || "") : "";
 
   const safeValues = values && typeof values === "object" ? values : {};
   const required = configuredRequired && !forceOptional;
@@ -2732,6 +2732,7 @@ function Field({
   }, [name, contextBoardOpts, roleOptions, departmentOptions, designationOptions, options, isTeaching, safeValues.department]);
 
   const opts = Array.isArray(rawOpts) ? rawOpts : [];
+  if (!isValidItem) return null;
 
   const change = (value) => {
     let boardCodeVal = undefined;

@@ -449,6 +449,16 @@ export async function updateRolePermissions(roleId, payload) {
       permissions: permissionsInput,
     });
     notifyRolesUpdated();
+
+    try {
+      const refreshed = await getRolePermissions(targetId);
+      if (refreshed?.data && Array.isArray(refreshed.data) && refreshed.data.length > 0) {
+        return apiResult(refreshed.data, "api");
+      }
+    } catch {
+      // Fallback to normalized
+    }
+
     return apiResult(normalized, "api");
   } catch (err) {
     console.error("Live updateRolePermissions failed:", err);
@@ -535,6 +545,16 @@ export async function updateUserPermissions(userId, payload) {
       notes: payload?.notes || "Manual screen-level override from Roles & Permissions",
     });
     notifyRolesUpdated();
+
+    try {
+      const refreshed = await getUserPermissions(userId);
+      if (refreshed?.data && Array.isArray(refreshed.data) && refreshed.data.length > 0) {
+        return apiResult(refreshed.data, "api");
+      }
+    } catch {
+      // Fallback to normalized
+    }
+
     return apiResult(normalized, "api");
   } catch (err) {
     console.error("Live updateUserPermissions failed:", err);

@@ -43,6 +43,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MySqlConnector;
@@ -103,15 +104,22 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 var serverVersion = new MySqlServerVersion(new Version(8, 0, 30));
 
 builder.Services.AddDbContext<AppDbContext>(options =>
+{
     options.UseMySql(
         connectionString,
         serverVersion,
         mySqlOptions => mySqlOptions
             .CommandTimeout(120)
+            .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)
             .EnableRetryOnFailure(
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(3),
-                errorNumbersToAdd: null)));
+                errorNumbersToAdd: null));
+
+    options.ConfigureWarnings(warnings => warnings
+        .Ignore(CoreEventId.FirstWithoutOrderByAndFilterWarning)
+        .Ignore(RelationalEventId.MultipleCollectionIncludeWarning));
+});
 
 builder.Services.AddSingleton<DatabaseContext>();
 
@@ -467,14 +475,30 @@ if (args.Contains("--verify-inventory"))
     return;
 }
 
+if (args.Contains("--test-audit"))
+{
+    var tester = new CollegeManagement.API.Tests.AuditModuleBackendTester(app.Services);
+    await tester.RunAllTestsAsync();
+    return;
+}
+
 
 #region Pipeline Middleware
 var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.All
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 };
 forwardedHeadersOptions.KnownNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
+var trustedProxiesConfig = app.Configuration.GetSection("SecuritySettings:TrustedProxies").Get<string[]>() ?? Array.Empty<string>();
+CollegeManagement.API.Helpers.ClientIpHelper.ConfigureTrustedProxies(trustedProxiesConfig);
+foreach (var proxy in trustedProxiesConfig)
+{
+    if (System.Net.IPAddress.TryParse(proxy, out var ip))
+    {
+        forwardedHeadersOptions.KnownProxies.Add(ip);
+    }
+}
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseCors("AllowFrontend");
@@ -583,6 +607,7 @@ app.Use(async (context, next) =>
 #endregion
 
 app.UseAuthorization();
+app.UseMiddleware<CollegeManagement.API.Middleware.AuditRequestMiddleware>();
 app.MapControllers();
 app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
 app.MapHub<CollegeManagement.API.Hubs.NotificationHub>("/hubs/notifications");

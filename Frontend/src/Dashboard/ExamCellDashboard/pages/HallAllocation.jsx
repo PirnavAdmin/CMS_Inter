@@ -25,7 +25,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
-import { Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, Toast, Pagination } from "@/components/common/Ui.jsx";
 import {
   d,
   unwrap,
@@ -37,6 +37,98 @@ import {
   hasTimeOverlap,
 } from "@/utils/examinationUtils.js";
 import "./HallAllocation.css";
+
+const printSeatingPlan = (rows = [], currentExam = null, campusId = 1) => {
+  if (!rows || rows.length === 0) return;
+  const popup = window.open("", "_blank", "width=1000,height=800");
+  if (!popup) {
+    alert("Please allow popups for printing seating plan.");
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Official Seating Plan - ${currentExam?.name || "Examination"}</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm 15mm; }
+    @media print {
+      body { margin: 0; padding: 0; background: #fff !important; color: #000 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+      .no-print { display: none !important; }
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; margin: 0; padding: 20px; background: #f8fafc; }
+    .sheet { max-width: 1000px; margin: 0 auto; padding: 24px; background: #fff; border: 2px solid #1A2114; border-radius: 4px; box-sizing: border-box; }
+    .header { text-align: center; border-bottom: 2px solid #1A2114; padding-bottom: 12px; margin-bottom: 16px; }
+    .college-name { font-size: 19px; font-weight: 800; text-transform: uppercase; margin: 0 0 4px; color: #1A2114; letter-spacing: 0.5px; }
+    .sub-title { font-size: 14px; font-weight: 700; color: #15803d; text-transform: uppercase; margin: 0 0 4px; }
+    .meta { font-size: 11.5px; color: #475569; }
+    table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 24px; }
+    th, td { border: 1px solid #cbd5e1; padding: 7px 10px; }
+    th { background: #f1f5f9; text-transform: uppercase; font-size: 10.5px; font-weight: 700; color: #334155; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 40px; padding-top: 16px; border-top: 1px dashed #cbd5e1; }
+    .sig-block { text-align: center; width: 200px; }
+    .sig-line { border-top: 1px solid #334155; padding-top: 5px; font-size: 11.5px; font-weight: 600; color: #0f172a; }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="header">
+      <h1 class="college-name">COLLEGE EXAMINATION CELL</h1>
+      <h2 class="sub-title">Official Seating Plan & Hall Distribution Register</h2>
+      <div class="meta">Examination: <strong>${currentExam?.name || "Academic Examination"}</strong> ${currentExam?.examCode ? `(${currentExam.examCode})` : ""} · Campus ID: ${campusId || 1}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 17%;">Date & Session</th>
+          <th style="width: 24%;">Subject</th>
+          <th style="width: 17%;">Hall / Room No</th>
+          <th style="width: 9%; text-align: center;">Capacity</th>
+          <th style="width: 9%; text-align: center;">Allocated</th>
+          <th style="width: 16%;">Invigilator</th>
+          <th style="width: 8%; text-align: center;">Sign</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr>
+            <td>
+              <strong>${d(r.examDate || r.date)}</strong><br />
+              <span style="font-size: 10.5px; color: #64748b;">${r.startTime?.slice(0, 5) || "09:00"} – ${r.endTime?.slice(0, 5) || "12:00"} · ${r.sessionId || "Morning"}</span>
+            </td>
+            <td>
+              <strong>${r.subjectName || "Subject"}</strong><br />
+              <span style="font-size: 10.5px; color: #64748b;">${r.subjectCode || "—"}</span>
+            </td>
+            <td style="font-weight: 700; color: #15803d;">${r.roomNumber || r.roomName || "Pending Allocation"}</td>
+            <td style="text-align: center; font-weight: 600;">${r.capacity || "—"}</td>
+            <td style="text-align: center; font-weight: 700; color: #2563eb;">${r.allocatedStudents || "—"}</td>
+            <td>${r.invigilatorName || "Faculty Member"}</td>
+            <td>&nbsp;</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <div class="sig-row">
+      <div class="sig-block"><div style="height: 32px;"></div><div class="sig-line">Exam Cell Officer</div></div>
+      <div class="sig-block"><div style="height: 32px;"></div><div class="sig-line">Chief Superintendent</div></div>
+      <div class="sig-block"><div style="height: 32px;"></div><div class="sig-line">Controller of Examinations</div></div>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("load", () => {
+      window.focus();
+      setTimeout(() => { window.print(); }, 250);
+    });
+  </script>
+</body>
+</html>`;
+
+  popup.document.open();
+  popup.document.write(html);
+  popup.document.close();
+};
 
 export default function HallAllocation() {
   const location = useLocation();
@@ -435,6 +527,19 @@ export default function HallAllocation() {
       return true;
     });
   }, [schedules, dateFilter, sessionFilter, roomFilter, searchTerm]);
+
+  const SLOTS_PAGE_SIZE = 10;
+  const [slotPage, setSlotPage] = useState(1);
+
+  // Reset to page 1 when search or filters change
+  useEffect(() => {
+    setSlotPage(1);
+  }, [examId, dateFilter, sessionFilter, roomFilter, searchTerm]);
+
+  const pagedRows = useMemo(() => {
+    const start = (slotPage - 1) * SLOTS_PAGE_SIZE;
+    return filteredRows.slice(start, start + SLOTS_PAGE_SIZE);
+  }, [filteredRows, slotPage]);
 
   // Accurate KPI Metrics Calculations
   const metrics = useMemo(() => {
@@ -1134,7 +1239,7 @@ export default function HallAllocation() {
                     </td>
                   </tr>
                 ) : (
-                  filteredRows.map((row) => {
+                  pagedRows.map((row) => {
                     const hasHall = Boolean(row.roomId || row.roomNumber);
                     const capacity = Number(row.capacity || 0);
                     const allocated = Number(row.allocatedStudents || 0);
@@ -1238,6 +1343,16 @@ export default function HallAllocation() {
               </tbody>
             </table>
           </div>
+
+          {filteredRows.length > 0 && (
+            <Pagination
+              currentPage={slotPage}
+              totalRecords={filteredRows.length}
+              pageSize={SLOTS_PAGE_SIZE}
+              onPageChange={setSlotPage}
+              unit="slots"
+            />
+          )}
         </section>
 
         {/* 4. EDIT HALL / INVIGILATOR MODAL */}
@@ -1447,7 +1562,10 @@ export default function HallAllocation() {
                 <button
                   type="button"
                   className="cms-btn cms-btn-primary"
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    setSeatingPlanOpen(false);
+                    printSeatingPlan(filteredRows, currentExam, selectedCampusId);
+                  }}
                   style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                 >
                   <Printer size={15} />

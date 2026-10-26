@@ -40,6 +40,7 @@ export default function ParentAttendancePage() {
     attendanceOverview,
     currentAcademicYear,
     loading,
+    holidays,
   } = useParentPortal();
 
   const [selectedSubjectModal, setSelectedSubjectModal] = useState(null);
@@ -75,13 +76,11 @@ export default function ParentAttendancePage() {
         if (!cancelled && Array.isArray(res) && res.length > 0) {
           setLiveSubjects(res);
         } else if (!cancelled) {
-          const fallback = subjectAttendanceData[activeChildId] || subjectAttendanceData["stu-001"] || [];
-          setLiveSubjects(fallback);
+          setLiveSubjects([]);
         }
       } catch {
         if (!cancelled) {
-          const fallback = subjectAttendanceData[activeChildId] || subjectAttendanceData["stu-001"] || [];
-          setLiveSubjects(fallback);
+          setLiveSubjects([]);
         }
       } finally {
         if (!cancelled) setSubjectsLoading(false);
@@ -154,53 +153,77 @@ export default function ParentAttendancePage() {
           const d = y && m && day ? new Date(y, m - 1, day) : (rawDate ? new Date(rawDate) : null);
           const dayName = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { weekday: "long" }) : "—";
 
+          // Check if this date corresponds to any Admin holiday
+          const matchingHoliday = (holidays || []).find((h) => {
+            const start = h.startDate || h.holidayDate;
+            const end = h.endDate || start;
+            return datePart && start && datePart >= start && datePart <= end;
+          });
+
+          let status = item.status || "—";
+          let remark = item.dailyPunchRemarks || "—";
+
+          if (matchingHoliday) {
+            status = "Holiday";
+            remark = matchingHoliday.holidayName || matchingHoliday.name || "College Holiday";
+          }
+
           formattedLogs.push({
             id: `${datePart}-${idx}`,
             date: datePart || "—",
             rawDate,
             day: dayName,
-            status: item.status || "—",
+            status,
             timeIn: item.checkInTime || "—",
             timeOut: item.checkOutTime || "—",
-            remark: item.dailyPunchRemarks || "—",
+            remark,
           });
         });
+
+        // Ensure Admin holidays within selected month/year are marked on attendance
+        if (Array.isArray(holidays) && holidays.length > 0) {
+          const selectedYearNum = parseInt(selectedYear, 10) || 2026;
+          holidays.forEach((h) => {
+            const startStr = h.startDate || h.holidayDate;
+            const endStr = h.endDate || startStr;
+            if (!startStr) return;
+
+            const startD = new Date(`${startStr}T00:00:00`);
+            const endD = new Date(`${endStr}T00:00:00`);
+            if (isNaN(startD.getTime()) || isNaN(endD.getTime())) return;
+
+            for (let curr = new Date(startD); curr <= endD; curr.setDate(curr.getDate() + 1)) {
+              const y = curr.getFullYear();
+              const m = curr.getMonth() + 1;
+              if (y !== selectedYearNum) continue;
+              if (selectedMonth !== "all" && m !== parseInt(selectedMonth, 10)) continue;
+
+              const dateIso = `${y}-${String(m).padStart(2, "0")}-${String(curr.getDate()).padStart(2, "0")}`;
+              const alreadyHas = formattedLogs.some((l) => l.date === dateIso);
+              if (!alreadyHas) {
+                const dayName = curr.toLocaleDateString("en-US", { weekday: "long" });
+                formattedLogs.push({
+                  id: `hol-${dateIso}`,
+                  date: dateIso,
+                  rawDate: dateIso,
+                  day: dayName,
+                  status: "Holiday",
+                  timeIn: "—",
+                  timeOut: "—",
+                  remark: h.holidayName || h.name || "College Holiday",
+                });
+              }
+            }
+          });
+        }
 
         // Sort descending by date (most recent first)
         formattedLogs.sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
 
-        if (formattedLogs.length === 0) {
-          const fallback = (recentAttendanceLogs[activeChildId] || recentAttendanceLogs["stu-001"] || []).map((l, idx) => ({
-            id: `fb-log-${idx}`,
-            date: l.date,
-            rawDate: l.date,
-            day: l.day,
-            status: l.status,
-            timeIn: l.timeIn,
-            timeOut: l.timeOut,
-            hours: "7h 00m",
-            type: "Full Day",
-            remarks: l.remark || "Regular College Session",
-          }));
-          setDailyLogs(fallback);
-        } else {
-          setDailyLogs(formattedLogs);
-        }
+        setDailyLogs(formattedLogs || []);
       } catch {
         if (!cancelled) {
-          const fallback = (recentAttendanceLogs[activeChildId] || recentAttendanceLogs["stu-001"] || []).map((l, idx) => ({
-            id: `fb-log-${idx}`,
-            date: l.date,
-            rawDate: l.date,
-            day: l.day,
-            status: l.status,
-            timeIn: l.timeIn,
-            timeOut: l.timeOut,
-            hours: "7h 00m",
-            type: "Full Day",
-            remarks: l.remark || "Regular College Session",
-          }));
-          setDailyLogs(fallback);
+          setDailyLogs([]);
         }
       } finally {
         if (!cancelled) {
@@ -213,7 +236,7 @@ export default function ParentAttendancePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeChildId, selectedYear, selectedMonth]);
+  }, [activeChildId, selectedYear, selectedMonth, holidays]);
 
   const displayedLogs = useMemo(() => {
     if (filterStatus === "all") return dailyLogs;

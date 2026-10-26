@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useTransportManager } from "../TransportManagerContext.jsx";
 import TransportManagerModal from "../components/TransportManagerModal.jsx";
-import TransportManagerSkeleton from "../components/TransportManagerSkeleton.jsx";
+import TransportManagerSkeleton, { TransportManagerDashboardSkeleton } from "../components/TransportManagerSkeleton.jsx";
 import "../styles/TransportManagerHome.css";
 
 function StatCard({ icon: Icon, label, value, hint, tone = "blue" }) {
@@ -91,16 +91,16 @@ export default function TransportManagerHome() {
     const totalAssigned = activeStudents.length;
 
     return {
-      totalVehicles: dashboardMetrics?.totalVehicles ?? vehicles.length,
-      activeVehicles: dashboardMetrics?.activeVehicles ?? activeVehicles.length,
-      maintenanceVehicles: dashboardMetrics?.vehiclesUnderMaintenance ?? vehicles.filter((v) => v.status === "Maintenance" || v.status === "Under Maintenance").length,
-      totalDrivers: dashboardMetrics?.totalDrivers ?? drivers.length,
-      activeDrivers: dashboardMetrics?.activeDrivers ?? activeDrivers.length,
-      totalAttendants: dashboardMetrics?.totalBusAttendants ?? attendants.length,
-      activeRoutes: dashboardMetrics?.activeRoutes ?? activeRoutes.length,
-      activeStudents: dashboardMetrics?.studentsUsingTransport ?? activeStudents.length,
-      expiringDocs: dashboardMetrics?.expiringVehicleDocuments ?? expiringDocs.length,
-      expiringLicenses: dashboardMetrics?.expiringDriverLicenses ?? expiringLicenses.length,
+      totalVehicles: vehicles.length,
+      activeVehicles: activeVehicles.length,
+      maintenanceVehicles: vehicles.filter((v) => v.status === "Maintenance" || v.status === "Under Maintenance").length,
+      totalDrivers: drivers.length,
+      activeDrivers: activeDrivers.length,
+      totalAttendants: attendants.length,
+      activeRoutes: routes.length,
+      activeStudents: activeStudents.length,
+      expiringDocs: expiringDocs.length,
+      expiringLicenses: expiringLicenses.length,
       expiringLicenseDrivers: expiringLicenses,
       utilization: totalCapacity ? Math.round((totalAssigned / totalCapacity) * 100) : 0,
     };
@@ -141,21 +141,7 @@ export default function TransportManagerHome() {
   };
 
   if (loading && !vehicles.length && !trips.length) {
-    return (
-      <div className="tm-home cms-transport-page cms-transport-stack">
-        <div className="tm-header-row">
-          <div>
-            <h1 className="tm-header-title">
-              Dashboard
-            </h1>
-            <p className="tm-header-subtitle">
-              Manage transport routes, vehicles, assignments, trips, GPS and reports.
-            </p>
-          </div>
-        </div>
-        <TransportManagerSkeleton rows={6} height="3.5rem" />
-      </div>
-    );
+    return <TransportManagerDashboardSkeleton />;
   }
 
   return (

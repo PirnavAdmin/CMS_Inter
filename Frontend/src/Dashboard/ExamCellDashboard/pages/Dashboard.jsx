@@ -73,7 +73,13 @@ function statusTone(status) {
   return "violet";
 }
 
-function KpiCard({ label, value, icon, tone, loading, subtext = "View details", to, trend = "Active" }) {
+function KpiCard({ label, value, icon, tone, loading, error, subtext = "View details", to, trend = "Active" }) {
+  const isError = Boolean(error);
+  const displayTrend = isError ? "Restricted" : trend;
+  const displaySubtext = isError
+    ? (String(error).includes("403") || /permission|denied|restrict/i.test(String(error)) ? "Access restricted" : "Unable to load")
+    : subtext;
+
   const content = (
     <article className={`dashboard-kpi dashboard-kpi-${tone} ${to ? "dashboard-kpi-clickable" : ""}`} style={to ? { cursor: "pointer" } : {}}>
       <div className="dashboard-kpi-top">
@@ -83,10 +89,10 @@ function KpiCard({ label, value, icon, tone, loading, subtext = "View details", 
         <div className="dashboard-kpi-title-wrap">
           <span className="dashboard-kpi-label">{label}</span>
           <div className="dashboard-kpi-value-row">
-            <strong className="dashboard-kpi-value">{loading ? "…" : formatNumber(value)}</strong>
-            <span className="dashboard-kpi-trend">{trend}</span>
+            <strong className="dashboard-kpi-value">{loading ? "…" : isError ? "—" : formatNumber(value)}</strong>
+            <span className="dashboard-kpi-trend">{displayTrend}</span>
           </div>
-          <span className="dashboard-kpi-subtext">{subtext}</span>
+          <span className="dashboard-kpi-subtext">{displaySubtext}</span>
         </div>
       </div>
     </article>
@@ -104,7 +110,14 @@ function KpiCard({ label, value, icon, tone, loading, subtext = "View details", 
 
 export default function Dashboard() {
   const { selectedCampus, selectedCampusId } = useCampusContext();
-  const { selectedBoard, selectedAcademicYear, selectedBoardId, selectedAcademicYearId } = useAcademicContext();
+  const {
+    selectedBoard,
+    selectedAcademicYear,
+    selectedBoardId,
+    selectedAcademicYearId,
+    academicYears,
+    setSelectedAcademicYear,
+  } = useAcademicContext();
 
   const [data, setData] = useState({});
   const [errors, setErrors] = useState({});
@@ -113,18 +126,77 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState(() => formattedTimestamp());
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
 
+  // Resolve matching active academic year for the selected board
+  const effectiveAcademicYear = useMemo(() => {
+    const boardYears = (academicYears || []).filter((y) => {
+      const yBoard = y.boardId ?? y.BoardId;
+      return !yBoard || String(yBoard) === String(selectedBoardId || 1);
+    });
+
+    const currentId = String(
+      selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? ""
+    );
+
+    // 1. If currentId is a valid ID in boardYears and not the stale/dummy 1
+    if (currentId && currentId !== "1") {
+      const match = boardYears.find((y) => String(y.id || y.academicYearId) === currentId);
+      if (match) return match;
+    }
+
+    // 2. Match by year name (e.g. "2026-2027")
+    const currentName = String(
+      selectedAcademicYear?.name ||
+      selectedAcademicYear?.academicYearName ||
+      selectedAcademicYear?.label ||
+      selectedAcademicYear?.code ||
+      ""
+    ).trim().toLowerCase();
+
+    if (currentName && currentName !== "1") {
+      const match = boardYears.find(
+        (y) => String(y.name || y.code || "").trim().toLowerCase() === currentName
+      );
+      if (match) return match;
+    }
+
+    // 3. Active year in boardYears (preferring 2026-2027)
+    const active =
+      boardYears.find((y) => y.isActive !== false && String(y.name || y.code || "").includes("2026-2027")) ||
+      boardYears.find((y) => y.isActive !== false);
+    if (active) return active;
+
+    // 4. First board year if available
+    if (boardYears.length > 0) return boardYears[0];
+
+    // 5. Default fallback for Board 1 (BIEAP 2026-2027 has ID 9)
+    return { id: 9, academicYearId: 9, name: "2026-2027" };
+  }, [academicYears, selectedBoardId, selectedAcademicYearId, selectedAcademicYear]);
+
+  // Synchronize AcademicContext if selectedAcademicYear was unassigned or stale
+  useEffect(() => {
+    if (
+      effectiveAcademicYear &&
+      typeof setSelectedAcademicYear === "function" &&
+      String(selectedAcademicYearId) !== String(effectiveAcademicYear.id || effectiveAcademicYear.academicYearId)
+    ) {
+      setSelectedAcademicYear(effectiveAcademicYear);
+    }
+  }, [effectiveAcademicYear, selectedAcademicYearId, setSelectedAcademicYear]);
+
   useEffect(() => {
     const timer = setInterval(() => setCurrentHour(new Date().getHours()), 60_000);
     return () => clearInterval(timer);
   }, []);
 
+  const effectiveYearId = Number(effectiveAcademicYear?.id || effectiveAcademicYear?.academicYearId || 9);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
     const params = {
-      campusId: selectedCampusId,
-      boardId: selectedBoardId,
-      academicYearId: selectedAcademicYearId,
+      campusId: Number(selectedCampusId) || 1,
+      boardId: Number(selectedBoardId) || 1,
+      academicYearId: effectiveYearId,
       pageNumber: 1,
       pageSize: 1000,
     };
@@ -133,12 +205,20 @@ export default function Dashboard() {
       exams: () => api.get(apiEndpoints.examinations.getAll, { params }),
       evaluations: () => api.post(apiEndpoints.evaluations.search, params),
       results: () => api.get("/api/v1/results/dashboard", { params }),
-      attendance: () => api.get(apiEndpoints.attendance.studentAdminDaily, {
-        params: { ...params, date: today(), attendanceDate: today(), fromDate: today(), toDate: today() },
-      }),
+      attendance: async () => {
+        try {
+          return await api.get(apiEndpoints.dashboard.studentAttendance, {
+            params: { campusId: params.campusId, boardId: params.boardId, academicYearId: params.academicYearId },
+          });
+        } catch {
+          return api.get(apiEndpoints.attendance.studentAdminDaily, {
+            params: { ...params, date: today(), attendanceDate: today(), fromDate: today(), toDate: today() },
+          });
+        }
+      },
       certificates: () => api.get("/api/v1/certificates", { params: { ...params, status: "Requested" } }),
       certificateStats: () => api.get("/api/v1/certificates/workflow-stats", { params }),
-      promotions: () => api.get(apiEndpoints.promotions.eligible, { params }),
+      promotions: () => api.get(apiEndpoints.promotions.eligible, { params, silent: true, skipErrorLog: true }),
     };
 
     Promise.all(
@@ -188,7 +268,7 @@ export default function Dashboard() {
     return () => {
       active = false;
     };
-  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId, refresh]);
+  }, [selectedCampusId, selectedBoardId, effectiveYearId, refresh]);
 
   const exams = records(data.exams)
     .filter((exam) => !/cancel/i.test(exam.status || ""))
@@ -201,16 +281,23 @@ export default function Dashboard() {
   const pending = evaluations.filter((row) =>
     /draft|submitted|verified|not started|rejected/i.test(String(evaluationStatus(row) || ""))
   );
-  const marked = records(data.attendance).filter((row) => row.isAttendanceMarked);
+
+  const attendanceData = payload(data.attendance);
+  const attendanceCount = Array.isArray(attendanceData)
+    ? attendanceData.filter((row) => row.isAttendanceMarked).length
+    : (attendanceData?.presentCount ?? attendanceData?.present ?? 0);
+  const totalStudentsToday = attendanceData?.totalStudents ?? attendanceData?.totalCount ?? 0;
+
   const certificates = records(data.certificates).filter((row) => /^requested$/i.test(String(row.status || "")));
   const readyExams = data.readyExams || [];
-  const certCount = data.certificateStats?.requestedCount ?? certificates.length;
+  const certCount = errors.certificates ? null : (certificates.length || data.certificateStats?.generatedCount || 0);
   const promoCount = data.promotions?.totalCount ?? records(data.promotions).length;
 
   const kpis = [
     {
       label: "Upcoming Exams",
       value: errors.exams ? null : exams.length,
+      error: errors.exams,
       icon: examImage,
       tone: "orange",
       trend: "Active",
@@ -220,6 +307,7 @@ export default function Dashboard() {
     {
       label: "Marks Pending",
       value: errors.evaluations ? null : pending.length,
+      error: errors.evaluations,
       icon: marksImage,
       tone: "violet",
       trend: "Pending",
@@ -229,6 +317,7 @@ export default function Dashboard() {
     {
       label: "Results Ready",
       value: errors.readiness || errors.exams ? null : readyExams.length,
+      error: errors.readiness || errors.exams,
       icon: resultsImage,
       tone: "blue",
       trend: "Ready",
@@ -237,16 +326,18 @@ export default function Dashboard() {
     },
     {
       label: "Today's Attendance",
-      value: errors.attendance ? null : marked.length,
+      value: errors.attendance ? null : attendanceCount,
+      error: errors.attendance,
       icon: attendanceImage,
       tone: "green",
       trend: "Marked",
-      subtext: "Sessions marked today",
+      subtext: totalStudentsToday > 0 ? `${attendanceCount} of ${totalStudentsToday} present` : "Sessions marked today",
       to: `${examCellBase}/attendance`,
     },
     {
       label: "Pending Certificates",
       value: certCount,
+      error: errors.certificates,
       icon: certificateImage,
       tone: "cyan",
       trend: "Requested",
@@ -256,10 +347,11 @@ export default function Dashboard() {
     {
       label: "Promotion Pending",
       value: errors.promotions ? null : promoCount,
+      error: errors.promotions,
       icon: promotionImage,
       tone: "violet",
-      trend: "Eligible",
-      subtext: "Next level promotions",
+      trend: errors.promotions ? "Restricted" : "Eligible",
+      subtext: errors.promotions ? "Access restricted" : "Next level promotions",
       to: `${examCellBase}/promotions`,
     },
   ];

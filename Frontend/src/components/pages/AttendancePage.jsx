@@ -14,141 +14,6 @@ import FacultyMyAttendance from "@/Dashboard/FacultyDashboard/pages/FacultyMyAtt
 import "./AttendancePage.css";
 import "./AttendanceTimingConfigPage.css";
 
-// Intercept self-service staff attendance endpoints to prevent automatic token refresh failure
-// from wiping the auth session (clearAuthSession) and forcefully redirecting to /login
-if (!apiClient.__staffAttendanceBypassRegistered) {
-  apiClient.__staffAttendanceBypassRegistered = true;
-
-  apiClient.interceptors.request.use(
-    (config) => {
-      const url = String(config?.url || "");
-      if (
-        url.includes("/staff-attendance/my-today") ||
-        url.includes("/staff-attendance/my-history") ||
-        url.includes("/staff-attendance/punch-in") ||
-        url.includes("/staff-attendance/punch-out") ||
-        url.includes("/staff-attendance/regularize") ||
-        url.includes("/staff-attendance/regularizations")
-      ) {
-        config.skipAuthRedirect = true;
-        config.silentAuth = true;
-        config.optionalAuth = true;
-        config.silent = true;
-        config.skipErrorLog = true;
-      }
-      return config;
-    },
-    (error) => Promise.reject(error)
-  );
-
-  apiClient.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      const url = String(error?.config?.url || "");
-      const isSelfAttendanceUrl =
-        url.includes("/staff-attendance/my-today") ||
-        url.includes("/staff-attendance/my-history") ||
-        url.includes("/staff-attendance/punch-in") ||
-        url.includes("/staff-attendance/punch-out") ||
-        url.includes("/staff-attendance/regularize") ||
-        url.includes("/staff-attendance/regularizations");
-
-      if (isSelfAttendanceUrl) {
-        if (error.config) {
-          error.config.skipAuthRedirect = true;
-          error.config.silentAuth = true;
-        }
-
-        const status = error?.response?.status;
-        if (status === 401 || status === 403 || status === 404 || status === 500 || !error?.response) {
-          if (url.includes("/staff-attendance/my-today")) {
-            return Promise.resolve({
-              status: 200,
-              statusText: "OK",
-              headers: {},
-              config: error.config,
-              data: {
-                success: true,
-                data: {
-                  status: "not_punched",
-                  inTime: null,
-                  outTime: null,
-                  shiftDuration: "--",
-                  shiftName: "General Shift (09:00 AM – 05:00 PM)",
-                  shiftStartTime: "09:00 AM",
-                  shiftEndTime: "05:00 PM",
-                  isLate: false,
-                  todayStatus: "Not Punched",
-                  canRegularize: false,
-                  dateFormatted: new Date().toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  }),
-                  regularizationState: null,
-                },
-              },
-            });
-          }
-
-          if (url.includes("/staff-attendance/my-history")) {
-            return Promise.resolve({
-              status: 200,
-              statusText: "OK",
-              headers: {},
-              config: error.config,
-              data: {
-                success: true,
-                data: {
-                  logs: [],
-                  metrics: {
-                    workingDays: "6 Days",
-                    workingDaysSub: "Current Week (Mon–Sat)",
-                    presentDays: "0 Days",
-                    presentDaysSub: "Biometric verified",
-                    leaves: "0 Days",
-                    leavesSub: "No leaves applied",
-                    absentDays: "0 Days",
-                    absentDaysSub: "No absences",
-                  },
-                },
-              },
-            });
-          }
-
-          if (url.includes("/staff-attendance/punch-in") || url.includes("/staff-attendance/punch-out")) {
-            return Promise.reject(error);
-          }
-
-          if (url.includes("/staff-attendance/regularize")) {
-            return Promise.resolve({
-              status: 200,
-              statusText: "OK",
-              headers: {},
-              config: error.config,
-              data: {
-                success: true,
-                message: "Regularization request submitted successfully",
-              },
-            });
-          }
-
-          return Promise.resolve({
-            status: 200,
-            statusText: "OK",
-            headers: {},
-            config: error.config,
-            data: { success: true, data: [] },
-          });
-        }
-      }
-
-      return Promise.reject(error);
-    }
-  );
-}
-
 const STUDENT_STATUSES = ["Present", "Absent", "Half Day"];
 const STUDENT_SESSION_STATUSES = ["Present", "Absent"];
 const dailyStudentStatus = (morning, afternoon) => {
@@ -227,16 +92,58 @@ const staffType = (v) => {
   if (n === 1 || n === 2) return n;
   return /non/i.test(String(v)) ? 2 : 1;
 };
-const ATTENDANCE_PAGE_SIZE = 5;
+const ATTENDANCE_PAGE_SIZE = 10;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
 function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
 
 function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
- const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
- const currentPage = Math.min(page, totalPages);
- const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
- const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
- return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span><div className="att-pagination-controls"><button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button></div></nav>;
+  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
+  const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
+
+  const pageNumbers = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
+  } else {
+    pageNumbers.push(1);
+    if (currentPage > 3) pageNumbers.push('...');
+    const pStart = Math.max(2, currentPage - 1);
+    const pEnd = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = pStart; i <= pEnd; i += 1) pageNumbers.push(i);
+    if (currentPage < totalPages - 2) pageNumbers.push('...');
+    pageNumbers.push(totalPages);
+  }
+
+  return (
+    <nav className="att-pagination" aria-label="Attendance pages">
+      <span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span>
+      <div className="att-pagination-controls">
+        <button type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
+          Previous
+        </button>
+        {pageNumbers.map((p, idx) =>
+          p === '...' ? (
+            <span key={`dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
+          ) : (
+            <button
+              key={`page-${p}`}
+              type="button"
+              className={p === currentPage ? "active is-active" : ""}
+              onClick={() => onPageChange(p)}
+              aria-label={`Page ${p}`}
+            >
+              {p}
+            </button>
+          )
+        )}
+        <button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
+          Next
+        </button>
+        <span style={{ marginLeft: '4px' }}>Page {currentPage} of {totalPages}</span>
+      </div>
+    </nav>
+  );
 }
 
 export default function AttendancePage({ area: areaProp } = {}) {

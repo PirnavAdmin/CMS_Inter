@@ -1591,6 +1591,12 @@
   cursor: pointer;
 }
 .att-pagination-controls button:hover:not(:disabled) { border-color: var(--cms-primary); background: var(--cms-primary-soft); color: var(--cms-primary); }
+.att-pagination-controls button.is-active,
+.att-pagination-controls button.active {
+  background: var(--cms-primary);
+  color: #fff;
+  border-color: var(--cms-primary);
+}
 .att-pagination-controls button:disabled { cursor: not-allowed; opacity: .45; }
 .att-month-card > .att-pagination,
 .att-staff-table-card > .att-pagination { padding: 10px 14px; }

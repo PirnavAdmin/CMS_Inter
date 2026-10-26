@@ -43,11 +43,14 @@ export function CampusProvider({ children }) {
     return DEFAULT_CAMPUSES[0]?.id || "";
   });
 
-  // For Principal role, track their assigned campus IDs
+  // For Principal or assigned staff role, track their assigned campus IDs
   const [principalAssignedCampusIds, setPrincipalAssignedCampusIds] = useState(() => {
     const u = getAuthUser();
     if (Array.isArray(u?.assignedCampusIds) && u.assignedCampusIds.length > 0) {
       return u.assignedCampusIds.map(Number);
+    }
+    if (u?.campusId) {
+      return [Number(u.campusId)];
     }
     return null;
   });
@@ -63,25 +66,33 @@ export function CampusProvider({ children }) {
 
     if (Array.isArray(u.assignedCampusIds) && u.assignedCampusIds.length > 0) {
       setPrincipalAssignedCampusIds(u.assignedCampusIds.map(Number));
-    } else {
-      const targetStaffId = u.staffId || u.id;
-      if (targetStaffId) {
-        apiClient.get(apiEndpoints.faculty.getById(targetStaffId))
-          .then((res) => {
-            const data = res?.data?.data || res?.data;
-            if (data) {
-              const ids = Array.isArray(data.assignedCampusIds) && data.assignedCampusIds.length > 0
-                ? data.assignedCampusIds.map(Number)
-                : (data.campusId ? [Number(data.campusId)] : []);
-              if (ids.length > 0) {
-                setPrincipalAssignedCampusIds(ids);
-                const token = getAuthToken();
-                saveAuthSession({ token, user: { ...u, assignedCampusIds: ids, assignedBoardIds: data.assignedBoardIds || [] }, role: u.role }, true);
-              }
+      return;
+    }
+
+    if (u.campusId) {
+      setPrincipalAssignedCampusIds([Number(u.campusId)]);
+      return;
+    }
+
+    // Only query staff profile if role is principal or non-admin staff needing profile lookup
+    const isPrincipal = roleStr === "principal";
+    const targetStaffId = u.staffId || u.id;
+    if (isPrincipal && targetStaffId) {
+      apiClient.get(apiEndpoints.faculty.getById(targetStaffId), { silent: true, skipErrorLog: true })
+        .then((res) => {
+          const data = res?.data?.data || res?.data;
+          if (data) {
+            const ids = Array.isArray(data.assignedCampusIds) && data.assignedCampusIds.length > 0
+              ? data.assignedCampusIds.map(Number)
+              : (data.campusId ? [Number(data.campusId)] : []);
+            if (ids.length > 0) {
+              setPrincipalAssignedCampusIds(ids);
+              const token = getAuthToken();
+              saveAuthSession({ token, user: { ...u, assignedCampusIds: ids, assignedBoardIds: data.assignedBoardIds || [] }, role: u.role }, true);
             }
-          })
-          .catch(() => {});
-      }
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
