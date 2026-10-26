@@ -306,6 +306,18 @@ export const getStudentAttendance = async (studentId, fromDate, toDate) => {
   }))).filter(Boolean);
 };
 
+export const getPublishedStudentResults = async (student) => {
+  const studentId = Number(student?.studentId);
+  if (!Number.isInteger(studentId) || studentId <= 0) throw new Error('Student ID is unavailable.');
+  const response = await apiClient.get(studentApiEndpoints.results.published, { params: { studentId } });
+  if (response.data?.success === false) throw new Error(response.data.message || 'Unable to load published results.');
+  const data = getPayload(response.data);
+  const rows = Array.isArray(data) ? data : data?.items ?? data?.Items ?? data?.results ?? data?.Results;
+  if (!Array.isArray(rows)) throw new Error('The server returned an invalid published results list.');
+  if (rows.some((row) => (row.studentId ?? row.StudentId) != null && String(row.studentId ?? row.StudentId) !== String(studentId))) throw new Error('The result list does not match your student profile.');
+  return rows;
+};
+
 export const getStudentResult = async (student, examId) => {
   const params = {
     studentId: student?.studentId,

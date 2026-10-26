@@ -57,6 +57,11 @@ export const normalizeVehicle = (v) => {
     driverName: v.driverName ?? v.assignedDriverName ?? "",
     routeId: v.routeId ?? null,
     routeName: v.routeName ?? "",
+    campusId: v.campusId ?? v.CampusId ?? null,
+    boardId: v.boardId ?? v.BoardId ?? null,
+    academicYearId: v.academicYearId ?? v.AcademicYearId ?? null,
+    assignedCampusIds: v.assignedCampusIds ?? null,
+    assignedBoardIds: v.assignedBoardIds ?? null,
   };
 };
 
@@ -80,6 +85,11 @@ export const normalizeDriver = (d) => {
     assignedVehicleId: d.vehicleId ?? d.assignedVehicleId ?? null,
     assignedVehicleNumber: d.vehicleNumber ?? d.assignedVehicleNumber ?? "",
     assignedRouteName: d.routeName ?? d.assignedRouteName ?? "",
+    campusId: d.campusId ?? d.CampusId ?? null,
+    boardId: d.boardId ?? d.BoardId ?? null,
+    academicYearId: d.academicYearId ?? d.AcademicYearId ?? null,
+    assignedCampusIds: d.assignedCampusIds ?? null,
+    assignedBoardIds: d.assignedBoardIds ?? null,
   };
 };
 
@@ -102,6 +112,9 @@ export const normalizeAssignment = (va) => {
     effectiveFrom: va.effectiveFrom ? String(va.effectiveFrom).split("T")[0] : "",
     status: va.status === true || va.status === 1 || va.status === "Active" ? "Active" : "Inactive",
     shift: va.shift || "Regular",
+    campusId: va.campusId ?? va.CampusId ?? null,
+    boardId: va.boardId ?? va.BoardId ?? null,
+    academicYearId: va.academicYearId ?? va.AcademicYearId ?? null,
   };
 };
 
@@ -121,5 +134,8 @@ export const normalizeMaintenance = (m) => {
     nextDueDate: m.nextServiceDue ? String(m.nextServiceDue).split("T")[0] : (m.nextDueDate ? String(m.nextDueDate).split("T")[0] : ""),
     status: isCompleted ? "Completed" : "Scheduled",
     notes: m.remarks || m.notes || "",
+    campusId: m.campusId ?? m.CampusId ?? null,
+    boardId: m.boardId ?? m.BoardId ?? null,
+    academicYearId: m.academicYearId ?? m.AcademicYearId ?? null,
   };
 };

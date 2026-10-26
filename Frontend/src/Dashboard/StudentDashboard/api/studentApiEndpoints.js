@@ -26,6 +26,7 @@ const studentApiEndpoints = {
     dailySessions: "/api/v1/attendance/admin/students",
   },
   results: {
+    published: "/api/v1/students/me/results",
     studentResult: "/api/v1/results/student-result",
     studentMemo: (studentId) => `/api/v1/results/student/${encodeURIComponent(studentId)}/memo`,
     studentMemoPdf: "/api/v1/results/students/memo",

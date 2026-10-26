@@ -24,7 +24,9 @@ namespace CollegeManagement.API.DTOs.Roles
             {
                 return Permissions.Select(p => new ModulePermissionUpdateItem
                 {
-                    SubModule = MapModuleIdToSubModule(p.Module),
+                    SubModule = MapModuleIdToSubModule(p.ResolvedModule),
+                    ScreenId = p.ScreenId ?? string.Empty,
+                    ScreenName = p.ScreenName ?? string.Empty,
                     CanView = p.Actions.Any(a => a.Equals("view", StringComparison.OrdinalIgnoreCase)),
                     CanAdd = p.Actions.Any(a => a.Equals("create", StringComparison.OrdinalIgnoreCase) || a.Equals("add", StringComparison.OrdinalIgnoreCase)),
                     CanEdit = p.Actions.Any(a => a.Equals("edit", StringComparison.OrdinalIgnoreCase)),
@@ -43,6 +45,9 @@ namespace CollegeManagement.API.DTOs.Roles
             var map = new Dictionary<string, string>
             {
                 { "dashboard", "Dashboard" },
+                { "board-academic-year", "Board & Academic Year" },
+                { "board-academic-years", "Board & Academic Year" },
+                { "courses", "Group Management" },
                 { "group-management", "Group Management" },
                 { "subject-management", "Subject Management" },
                 { "section-room", "Section & Room" },
@@ -58,6 +63,11 @@ namespace CollegeManagement.API.DTOs.Roles
                 { "department-designation", "Department & Designation" },
                 { "staff-attendance", "Staff Attendance" },
                 { "staff-leave-management", "Staff Leave Management" },
+                { "reimbursement", "Staff Reimbursements" },
+                { "reimbursements", "Staff Reimbursements" },
+                { "staff-reimbursement", "Staff Reimbursements" },
+                { "staff-reimbursements", "Staff Reimbursements" },
+                { "reports", "Reports & Analytics" },
                 { "examination", "Examination" },
                 { "examinations", "Examination" },
                 { "marks-evaluation", "Marks Evaluation" },

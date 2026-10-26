@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/common/Ui.jsx";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import { attendanceService } from "../../../api/attendanceService.js";
 import { attendanceTimingApi } from "../../../api/attendanceTimingApi.js";
+import { getApiErrorMessage } from "@/api/axios.js";
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr || timeStr === "--") return null;
@@ -445,7 +446,7 @@ export default function FacultyMyAttendance() {
         notify(res?.message || res?.Message || "Failed to check in.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to check in.";
+      const errMsg = getApiErrorMessage(err) || "Failed to check in.";
       notify(errMsg, "error");
     } finally {
       setActionLoading(false);
@@ -497,7 +498,7 @@ export default function FacultyMyAttendance() {
         notify(res?.message || res?.Message || "Failed to punch out.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to punch out.";
+      const errMsg = getApiErrorMessage(err) || "Failed to punch out.";
       notify(errMsg, "error");
     } finally {
       setActionLoading(false);
@@ -544,7 +545,7 @@ export default function FacultyMyAttendance() {
         notify(res?.message || res?.Message || "Failed to submit regularization.", "error");
       }
     } catch (err) {
-      const errMsg = err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to submit regularization.";
+      const errMsg = getApiErrorMessage(err) || "Failed to submit regularization.";
       notify(errMsg, "error");
     } finally {
       setRegSubmitting(false);
@@ -1176,7 +1177,7 @@ export default function FacultyMyAttendance() {
       {toast && (
         <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`}>
           {toast.type === "error" ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-          {toast.text}
+          <span>{toast.text}</span>
         </div>
       )}
     </div>

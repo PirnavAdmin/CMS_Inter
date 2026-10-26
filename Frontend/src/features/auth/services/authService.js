@@ -149,78 +149,103 @@ export const loginUser = async (credentials) => {
     logLoginResponse(response.status);
     return normalizeLoginResponse(response.data, emailOrMobile);
   } catch (authError) {
-    // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
+    // If the server explicitly rejected the credentials, DO NOT fallback to mock accounts!
+    const isExplicitRejection =
+      authError?.code === "INVALID_CREDENTIALS" ||
+      authError?.response?.data?.status === false ||
+      authError?.response?.data?.Status === false ||
+      authError?.response?.data?.success === false ||
+      authError?.response?.data?.Success === false ||
+      [400, 401, 403].includes(Number(authError?.response?.status));
+
+    if (isExplicitRejection) {
+      throw authError;
+    }
+
+    // If the auth endpoint failed due to 404 and it's an admin email, fallback to admin login
     if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
       try {
         logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
         const fallbackResponse = await adminLogin({ email: emailOrMobile, password });
         logLoginResponse(fallbackResponse.status);
         return normalizeLoginResponse(fallbackResponse.data, emailOrMobile, "admin");
-      } catch (_adminError) {
-        // Continue to offline fallback
-      }
-    }
-
-    if (isAdminCandidate && password) {
-      return {
-        token: BACKEND_ADMIN_JWT,
-        user: {
-          id: 10,
-          name: "Administrator",
-          fullName: "Administrator",
-          email: emailOrMobile.includes("@") ? emailOrMobile : "Admin@CMS.com",
-          role: "Admin",
-          isAdmin: true,
-          designation: "System Administrator",
-        },
-        roleType: "admin",
-        message: "Admin login successful.",
-      };
-    }
-    if (isExamCellCandidate && password) {
-      try {
-        const passMap = JSON.parse(typeof window !== "undefined" ? window.localStorage?.getItem("cms_user_passwords") || "{}" : "{}");
-        const savedPass = passMap["anusha987r@gmail.com"] || passMap["examcell"] || passMap[emailOrMobile.toLowerCase()];
-        if (savedPass && password !== savedPass) {
-          const err = new Error("Invalid username or password.");
-          err.code = "INVALID_CREDENTIALS";
-          throw err;
+      } catch (adminError) {
+        if (
+          adminError?.code === "INVALID_CREDENTIALS" ||
+          adminError?.response?.data?.status === false ||
+          adminError?.response?.data?.Status === false ||
+          [400, 401, 403].includes(Number(adminError?.response?.status))
+        ) {
+          throw adminError;
         }
-      } catch (e) {
-        if (e.code === "INVALID_CREDENTIALS") throw e;
       }
-
-      return {
-        token: BACKEND_EXAM_CELL_JWT,
-        user: {
-          id: 890,
-          userId: 890,
-          staffId: 1109,
-          employeeId: "MNT0043",
-          name: "preethi y",
-          fullName: "preethi y",
-          email: emailOrMobile.includes("@") ? emailOrMobile : "anusha987r@gmail.com",
-          role: "Examination Cell",
-          designation: "Examination Incharge",
-          isAdmin: false,
-          campusId: 1,
-          assignedCampusIds: [1],
-          assignedBoardIds: [1],
-        },
-        roleType: "examcell",
-        message: "Exam Cell login successful.",
-      };
     }
 
-    if (isTransportManagerCandidate && password) {
-      const tmAccount = findTransportManagerAccount(emailOrMobile, password);
-      if (tmAccount) {
+    // Only allow offline development mock fallback if the backend is strictly unreachable (network error/connection refused)
+    const isNetworkError =
+      authError?.code === "ERR_NETWORK" ||
+      authError?.message === "Network Error" ||
+      !authError?.response;
+
+    if (isNetworkError) {
+      if (isAdminCandidate && password) {
         return {
-          token: BACKEND_TRANSPORT_MANAGER_JWT,
-          user: tmAccount,
-          roleType: "transport_manager",
-          message: "Transport Manager login successful.",
+          token: BACKEND_ADMIN_JWT,
+          user: {
+            id: 10,
+            name: "Administrator",
+            fullName: "Administrator",
+            email: emailOrMobile.includes("@") ? emailOrMobile : "Admin@CMS.com",
+            role: "Admin",
+            isAdmin: true,
+            designation: "System Administrator",
+          },
+          roleType: "admin",
+          message: "Admin login successful.",
         };
+      }
+      if (isExamCellCandidate && password) {
+        try {
+          const passMap = JSON.parse(typeof window !== "undefined" ? window.localStorage?.getItem("cms_user_passwords") || "{}" : "{}");
+          const savedPass = passMap["anusha987r@gmail.com"] || passMap["examcell"] || passMap[emailOrMobile.toLowerCase()];
+          if (savedPass && password !== savedPass) {
+            const err = new Error("Invalid username or password.");
+            err.code = "INVALID_CREDENTIALS";
+            throw err;
+          }
+        } catch (e) {
+          if (e.code === "INVALID_CREDENTIALS") throw e;
+        }
+
+        return {
+          token: BACKEND_EXAM_CELL_JWT,
+          user: {
+            id: 890,
+            userId: 890,
+            staffId: 1109,
+            employeeId: "MNT0043",
+            name: "preethi y",
+            fullName: "preethi y",
+            email: emailOrMobile.includes("@") ? emailOrMobile : "anusha987r@gmail.com",
+            role: "Examination Cell",
+            designation: "Examination Incharge",
+            isAdmin: false,
+          },
+          roleType: "examcell",
+          message: "Exam Cell login successful.",
+        };
+      }
+
+      if (isTransportManagerCandidate && password) {
+        const tmAccount = findTransportManagerAccount(emailOrMobile, password);
+        if (tmAccount) {
+          return {
+            token: BACKEND_TRANSPORT_MANAGER_JWT,
+            user: tmAccount,
+            roleType: "transport_manager",
+            message: "Transport Manager login successful.",
+          };
+        }
       }
     }
 
@@ -657,7 +682,11 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
 
   const token = normalizeToken(getToken(payload, data));
   if (!token) {
-    throw new Error("Authentication failed because the server did not return an access token.");
+    const errorMsg = getMessage(payload, data, "Authentication failed because the server did not return an access token.");
+    const error = new Error(errorMsg);
+    error.code = "INVALID_CREDENTIALS";
+    error.response = { data: payload, status: 401 };
+    throw error;
   }
 
   try {
@@ -733,7 +762,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   const isWarden =
     !isTransportManager &&
     (normalizedRole.includes("warden") ||
-    String(designation || "").toLowerCase().includes("warden"));
+      String(designation || "").toLowerCase().includes("warden"));
   const isFaculty =
     !isTransportManager &&
     !isWarden &&
@@ -804,9 +833,12 @@ function getMessage(payload, data, fallback) {
 function assertSuccessful(payload, data) {
   const status = payload?.status ?? payload?.Status ?? data?.status ?? data?.Status;
   const success = payload?.success ?? payload?.Success ?? data?.success ?? data?.Success;
-  if (isFalseResponseFlag(status) || isFalseResponseFlag(success)) {
-    const error = new Error(getMessage(payload, data, "Invalid login credentials."));
+  const statusCode = Number(payload?.statusCode ?? payload?.StatusCode ?? data?.statusCode ?? data?.StatusCode);
+  if (isFalseResponseFlag(status) || isFalseResponseFlag(success) || statusCode >= 400) {
+    const errorMsg = getMessage(payload, data, "Invalid Email or Password");
+    const error = new Error(errorMsg);
     error.code = "INVALID_CREDENTIALS";
+    error.response = { data: payload, status: statusCode || 401 };
     throw error;
   }
 }
