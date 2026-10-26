@@ -1,4 +1,14 @@
 export const apiEndpoints = {
+  academicCalendar: {
+    list: '/api/v1/academic-calendar',
+    create: '/api/v1/academic-calendar',
+    range: '/api/v1/academic-calendar/range',
+    metrics: '/api/v1/academic-calendar/metrics',
+    upcoming: '/api/v1/academic-calendar/upcoming',
+    byId: (id) => `/api/v1/academic-calendar/${encodeURIComponent(id)}`,
+    publish: (id) => `/api/v1/academic-calendar/${encodeURIComponent(id)}/publish`,
+    exportExcel: '/api/v1/academic-calendar/export/excel',
+  },
   dashboard: {
     summary: "/api/v1/dashboard/summary",
     principal: "/api/v1/dashboard/principal",

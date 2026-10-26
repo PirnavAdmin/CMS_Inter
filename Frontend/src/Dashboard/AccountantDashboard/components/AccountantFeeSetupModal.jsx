@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/common/Ui.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useFinancePage, requestError } from "../services/accountantService.js";
@@ -38,17 +38,23 @@ function StructureFields({ draft, update, lookups, row, params }) {
   const groups = useFinancePage(loadGroups);
   const loadPrograms = useCallback((signal) => groupId ? loadFeeOptions(apiEndpoints.programs.byGroup(groupId), {}, signal) : Promise.resolve([]), [groupId]);
   const programs = useFinancePage(loadPrograms);
+  useEffect(() => {
+    const choices = opts(programs.data, "programId", "programName");
+    if (!programs.loading && !programs.error && choices.length && !choices.some((program) => String(program.value) === String(draft.programId))) {
+      update("programId", choices[0].value);
+    }
+  }, [programs.loading, programs.error, programs.data, draft.programId, update]);
   const changeItem = (index, patch) => update("items", draft.items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   const field = (name, label, choices, disabled = false) => <EditorField name={name} label={label} draft={draft} update={update} required choices={choices} disabled={disabled} />;
   const groupOptions = opts(scopedFeeMasters(groups.data || [], { ...params, boardId, academicYearId }), "groupId", "groupName");
   if (row && groupId && !groupOptions.some((option) => String(option.value) === String(groupId))) groupOptions.push({ value: groupId, label: feeText(row, "groupName") });
-  const { first: total, second } = structureDraftPreview(draft);
+  const { first: total } = structureDraftPreview(draft);
   return <>
     <div className="cms-form-grid cols-3">
       {field("boardId", "Board", opts(lookups.boards, "boardId", "boardName"), Boolean(row))}
       {field("academicYearId", "Academic Year", opts(lookups.years, "academicYearId", "academicYearName"), Boolean(row))}
       {field("groupId", "Group", groupOptions, Boolean(row) || groups.loading || !boardId || !academicYearId)}
-      {field("programId", "Program", opts(programs.data, "programId", "programName"), programs.loading || !groupId)}
+      {field("programId", "Program", opts(programs.data, "programId", "programName"), programs.loading || !groupId || !programs.data?.length)}
       {row ? <EditorField name="status" label="Status" draft={draft} update={update} choices={options(["Active", "Inactive"])} /> : null}
     </div>
     {groups.error ? <FeeLoadState state={groups} /> : null}{programs.error ? <FeeLoadState state={programs} /> : null}
@@ -61,15 +67,13 @@ function StructureFields({ draft, update, lookups, row, params }) {
       ]} empty="No saved fee types are available." />
       <div className="cms-fee-progress-head"><span>Total Active Fees</span><strong>{feeMoney(total)}</strong></div>
     </div>
-    {!row ? <section className="cms-fee-year-config"><h4>Fee Configuration by Year</h4><fieldset className="cms-fee-year-options"><legend className="cms-sr-only">Year fee configuration</legend>{[["same", "Same Fees for 1st and 2nd Year"], ["different", "Different Fees for 1st and 2nd Year"]].map(([value, label]) => <label key={value}><input type="radio" name="accountant-create-year-mode" checked={draft.yearFeeMode === value} onChange={() => update("yearFeeMode", value)} /><span>{label}</span></label>)}</fieldset>
-      {draft.yearFeeMode === "different" ? <div className="cms-fee-year-increment"><h4>2nd-Year Fee Increment</h4><fieldset className="cms-fee-year-options"><legend className="cms-sr-only">Increment type</legend>{[["percentage", "Percentage (%)"], ["fixed", "Fixed Amount"]].map(([value, label]) => <label key={value}><input type="radio" name="accountant-create-increment-type" checked={draft.incrementType === value} onChange={() => { update("incrementType", value); update("incrementValue", ""); }} /><span>{label}</span></label>)}</fieldset><EditorField name="incrementValue" label={draft.incrementType === "percentage" ? "Increment Percentage (%)" : "Increment Amount"} type="number" min="0" step="0.01" required draft={draft} update={update} /></div> : null}
-      <h4>Fee Summary</h4><dl className="cms-fee-year-summary"><div><dt>1st-Year Total Fee</dt><dd>{feeMoney(total)}</dd></div><div className="cms-fee-year-total"><dt>2nd-Year Total Fee</dt><dd>{feeMoney(second)}</dd></div></dl>
-    </section> : null}
   </>;
 }
 
-function SetupEditor({ kind, row, rows, params, data, authorize, onSaved, onClose }) {
-  const [draft, setDraft] = useState(() => setupDraft(kind, data.detail, data.lookups, params));
+function SetupEditor({ kind, row, rows, params, data, authorize, onSaved, onClose, yearSettings, onDraftTotalChange }) {
+  const [draft, setDraft] = useState(() => ({ ...setupDraft(kind, data.detail, data.lookups, params), ...(kind === "structures" && !row ? yearSettings : {}) }));
+  const draftTotal = kind === "structures" ? structureDraftPreview(draft).first : 0;
+  useEffect(() => { onDraftTotalChange?.(draftTotal); }, [draftTotal, onDraftTotalChange]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -111,9 +115,9 @@ function ViewRecord({ kind, detail, warnings, onClose }) {
   </Modal>;
 }
 
-export default function AccountantFeeSetupModal({ kind, row, rows, params, viewOnly = false, authorize, onSaved, onClose }) {
+export default function AccountantFeeSetupModal({ kind, row, rows, params, viewOnly = false, authorize, onSaved, onClose, yearSettings, onDraftTotalChange }) {
   const load = useCallback((signal) => loadSetupEditor(kind, row, params, signal, viewOnly), [kind, row, params, viewOnly]);
   const state = useFinancePage(load);
   if (state.loading || state.error) return <Modal title={`${viewOnly ? "View" : row ? "Edit" : "Add"} ${setupNames[kind]}`} onClose={onClose}><FeeLoadState state={state} /></Modal>;
-  return viewOnly ? <ViewRecord kind={kind} detail={state.data.detail} warnings={state.data.warnings} onClose={onClose} /> : <SetupEditor kind={kind} row={row} rows={rows} params={params} data={state.data} authorize={authorize} onSaved={onSaved} onClose={onClose} />;
+  return viewOnly ? <ViewRecord kind={kind} detail={state.data.detail} warnings={state.data.warnings} onClose={onClose} /> : <SetupEditor kind={kind} row={row} rows={rows} params={params} data={state.data} authorize={authorize} onSaved={onSaved} onClose={onClose} yearSettings={yearSettings} onDraftTotalChange={onDraftTotalChange} />;
 }
