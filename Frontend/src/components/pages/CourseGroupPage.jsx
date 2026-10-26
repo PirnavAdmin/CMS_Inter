@@ -511,7 +511,6 @@ export const pageConfig = {
       { key: "name", label: "Group Name", strong: true },
       { key: "code", label: "Group Code" },
       { key: "board", label: "Board" },
-      { key: "level", label: "Academic Level" },
       { key: "status", label: "Status", badge: true },
     ],
     fields: [
