@@ -5452,6 +5452,7 @@ export default function ExaminationPage() {
                       examStatus === "ACTIVE" ||
                       examStatus === "PUBLISHED";
                     const isCompleted = examStatus === "COMPLETED";
+                    const isCancelled = examStatus === "CANCELLED";
 
                     return (
                       <tr key={e.id}>
@@ -5531,6 +5532,17 @@ export default function ExaminationPage() {
                                 onClick={() => printSchedule(e)}
                               >
                                 <Printer size={15} />
+                              </button>
+                            )}
+                            {(isCancelled || isDraft) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn danger delete"
+                                title={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
+                                aria-label={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
+                                onClick={() => setRemove(e)}
+                              >
+                                <Trash2 size={15} />
                               </button>
                             )}
                             {(isDraft || isScheduled) && (
@@ -6102,7 +6114,7 @@ export default function ExaminationPage() {
 
       {remove && (
         <ConfirmDialog
-          title={remove.status === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
+          title={normalizeStatus(remove.status) === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
           message={`Delete ${remove.name}? All associated schedules will be removed.`}
           onCancel={() => !deleteLoading && setRemove(null)}
           onConfirm={handleDeleteExam}
@@ -6149,6 +6161,7 @@ export default function ExaminationPage() {
               rowStatus === "ONGOING" ||
               rowStatus === "ACTIVE" ||
               rowStatus === "PUBLISHED";
+            const rowIsCancelled = rowStatus === "CANCELLED";
 
             return (
               <>
@@ -6242,6 +6255,20 @@ export default function ExaminationPage() {
                       <Trash2 size={16} aria-hidden="true" /> Delete Examination
                     </button>
                   </>
+                )}
+
+                {rowIsCancelled && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    onClick={() => {
+                      setMoreMenu(null);
+                      setRemove(rowExam);
+                    }}
+                  >
+                    <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                  </button>
                 )}
               </>
             );
