@@ -572,8 +572,8 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
           aria-controls={open ? "certificate-student-options" : undefined}
           aria-activedescendant={open && matches[highlighted] ? getOptionId(matches[highlighted], highlighted) : undefined}
           value={value}
-          disabled={loading || !students.length}
-          placeholder={loading ? "Loading admissions..." : (students.length ? "Search admission no., student, or roll no." : "No students available")}
+          disabled={loading}
+          placeholder={loading ? "Loading admissions..." : (students.length ? "Search admission no., student, or roll no." : "Search admission no., student, or roll no.")}
           autoComplete="off"
           onFocus={() => setOpen(true)}
           onChange={(event) => {
@@ -1947,25 +1947,55 @@ export default function CertificatesPage() {
     setLoadingStudents(true);
     try {
       let raw = null;
+      const params = {};
+      if (selectedCampusId) params.campusId = selectedCampusId;
+      if (selectedBoardId) params.boardId = selectedBoardId;
+      if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
+
       try {
-        const params = {};
-        if (selectedCampusId) params.campusId = selectedCampusId;
-        if (selectedBoardId) params.boardId = selectedBoardId;
-        if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
-        
-        const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { params, skipGlobalLoader: true });
-        raw = response?.data;
+        const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { params, skipGlobalLoader: true, silent: true, skipErrorLog: true });
+        const list = unwrapStudentPayload(response?.data);
+        if (list.length > 0) raw = response?.data;
       } catch {
+        // Fall through
+      }
+
+      if (!raw) {
         try {
-          const sRes = await apiClient.get("/api/v1/students", { skipGlobalLoader: true });
-          raw = sRes?.data;
+          const bRes = await apiClient.get(CERTIFICATE_API.bulkEligibleStudents, { params, skipGlobalLoader: true, silent: true, skipErrorLog: true });
+          const bList = unwrapStudentPayload(bRes?.data);
+          if (bList.length > 0) raw = bRes?.data;
         } catch {
-          try {
-            const aRes = await apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true });
-            raw = aRes?.data;
-          } catch {
-            raw = mockStudents;
-          }
+          // Fall through
+        }
+      }
+
+      if (!raw) {
+        try {
+          const sRes = await apiClient.get("/api/v1/students", {
+            params: { campusId: selectedCampusId || 1, pageSize: 500 },
+            skipGlobalLoader: true,
+            silent: true,
+            skipErrorLog: true,
+          });
+          const sList = unwrapStudentPayload(sRes?.data);
+          if (sList.length > 0) raw = sRes?.data;
+        } catch {
+          // Fall through
+        }
+      }
+
+      if (!raw) {
+        try {
+          const aRes = await apiClient.get("/api/v1/student-admissions", {
+            params: { campusId: selectedCampusId || 1, pageSize: 500 },
+            skipGlobalLoader: true,
+            silent: true,
+            skipErrorLog: true,
+          });
+          raw = aRes?.data;
+        } catch {
+          raw = mockStudents;
         }
       }
       const rawList = unwrapStudentPayload(raw).map(normalizeStudentRecord).filter((student) => student.admissionNo);

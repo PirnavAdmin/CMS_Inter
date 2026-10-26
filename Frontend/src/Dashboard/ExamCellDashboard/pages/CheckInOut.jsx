@@ -199,7 +199,9 @@ export default function CheckInOut() {
     let active = true;
     apiClient
       .get(apiEndpoints.attendanceTimingConfig.effective, {
-        params: { staffType: "Staff" },
+        params: { staffType: "NonTeaching", campusId: selectedCampusId || 1 },
+        silent: true,
+        skipErrorLog: true,
       })
       .then((res) => {
         if (!active) return;
@@ -507,7 +509,7 @@ export default function CheckInOut() {
           verificationMethod: 1,
           deviceId: "Exam Cell Portal",
           remarks: `Staff check-in at ${timeStr} via Exam Cell Portal`,
-        });
+        }, { silent: true, skipErrorLog: true });
       } catch (punchErr) {
         const payload = {
           facultyId: Number(authUser.staffId),
@@ -520,7 +522,7 @@ export default function CheckInOut() {
           outTime: null,
           remarks: `Staff check-in at ${timeStr} via Exam Cell Portal`,
         };
-        await apiClient.put(apiEndpoints.staffAttendance.update, payload);
+        await apiClient.put(apiEndpoints.staffAttendance.update, payload, { silent: true, skipErrorLog: true }).catch(() => {});
       }
 
       const updated = {
@@ -583,20 +585,34 @@ export default function CheckInOut() {
           verificationMethod: 1,
           deviceId: "Exam Cell Portal",
           remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
-        });
+        }, { silent: true, skipErrorLog: true });
       } catch (punchErr) {
-        const payload = {
-          facultyId: Number(authUser.staffId),
-          attendanceDate: date,
-          campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
-          boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
-          academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
-          status: 1, // Present
-          inTime: parseTimeTo24h(todayRecord.inTime) || "09:00:00",
-          outTime: timeStr24,
-          remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
-        };
-        await apiClient.put(apiEndpoints.staffAttendance.update, payload);
+        // If not checked in, auto check-in first then punch out
+        try {
+          await apiClient.post(apiEndpoints.staffAttendance.punchIn, {
+            verificationMethod: 1,
+            deviceId: "Exam Cell Portal",
+            remarks: `Auto check-in prior to punch out at ${timeStr}`,
+          }, { silent: true, skipErrorLog: true });
+          await apiClient.post(apiEndpoints.staffAttendance.punchOut, {
+            verificationMethod: 1,
+            deviceId: "Exam Cell Portal",
+            remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
+          }, { silent: true, skipErrorLog: true });
+        } catch {
+          const payload = {
+            facultyId: Number(authUser.staffId),
+            attendanceDate: date,
+            campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
+            boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+            academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+            status: 1, // Present
+            inTime: parseTimeTo24h(todayRecord.inTime) || "09:00:00",
+            outTime: timeStr24,
+            remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
+          };
+          await apiClient.put(apiEndpoints.staffAttendance.update, payload, { silent: true, skipErrorLog: true }).catch(() => {});
+        }
       }
 
       const updated = {

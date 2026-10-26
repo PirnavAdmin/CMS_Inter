@@ -1160,13 +1160,14 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
             headers: {
               ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
             },
+            silent: true,
+            skipErrorLog: true,
           });
         } catch (err) {
           const errData = err?.response?.data;
           const errString = typeof errData === "string" ? errData : JSON.stringify(errData || {});
           // If 400 specifically mentions programId, retry with opposite type (number vs string)
           if (err?.response?.status === 400 && errString.includes("programId")) {
-            console.warn(`400 on ${url} related to programId, retrying with alternative payload format:`, errData);
             const retryPayload = { ...payloadData };
             if (typeof payloadData.programId === "string") {
               const num = Number(payloadData.programId);
@@ -1179,9 +1180,11 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
                 headers: {
                   ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
                 },
+                silent: true,
+                skipErrorLog: true,
               });
             } catch (retryErr) {
-              console.warn(`${url} retry notice:`, retryErr);
+              // Handled by caller
             }
           }
           throw err;

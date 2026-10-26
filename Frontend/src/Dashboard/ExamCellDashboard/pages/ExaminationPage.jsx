@@ -7182,6 +7182,8 @@ function ExamForm({
                     groupId: gid,
                     academicLevelId: lid,
                   },
+                  silent: true,
+                  skipErrorLog: true,
                 })
                 .then((res) => ({ res, gid, lid }))
                 .catch(() =>
@@ -8365,6 +8367,8 @@ function ScheduleSection({
                 groupId: selectedGroupId,
                 academicLevelId: lid,
               },
+              silent: true,
+              skipErrorLog: true,
             })
             .catch(() =>
               apiClient.get("/api/v1/subjects", {
