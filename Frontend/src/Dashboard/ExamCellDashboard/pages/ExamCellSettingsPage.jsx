@@ -180,7 +180,7 @@ export default function ExamCellSettingsPage() {
     },
     {
       title: "Certificate Templates",
-      desc: "Customize hall ticket, marksheet, transfer and bona fide certificate layouts.",
+      desc: "Customize marksheet, transfer and bona fide certificate layouts.",
       to: "/exam-cell-dashboard/certificates",
       image: templatesImg,
       btn: "Manage Templates",
@@ -197,7 +197,7 @@ export default function ExamCellSettingsPage() {
   return (
     <DashboardLayout
       title="Exam Cell Settings"
-      subtitle="Manage examination policies, grading thresholds, hall ticket rules, and publication options."
+      subtitle="Manage examination policies, grading thresholds, and publication options."
       breadcrumb={["Home", "Exam Cell", "Settings"]}
     >
       {toast && (
@@ -241,14 +241,6 @@ export default function ExamCellSettingsPage() {
           >
             <Award size={16} />
             <span>Grading &amp; Evaluation</span>
-          </button>
-          <button
-            type="button"
-            className={`ec-settings-tab ${activeTab === "halltickets" ? "is-active" : ""}`}
-            onClick={() => setActiveTab("halltickets")}
-          >
-            <FileText size={16} />
-            <span>Hall Ticket &amp; Attendance</span>
           </button>
           <button
             type="button"
