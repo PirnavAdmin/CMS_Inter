@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -119,5 +119,13 @@ public class DashboardService : IDashboardService
         if (_cache == null) return await _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, campusId, ct);
         string key = $"dashboard:upcoming_holidays:{academicYearId}:{boardId}:{campusId}:{limit}";
         return await _cache.GetOrCreateAsync(key, () => _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, campusId, ct), TimeSpan.FromMinutes(10));
+    }
+
+    public async Task<PrincipalDashboardResponseDto> GetPrincipalDashboardAsync(int? academicYearId, int? boardId, DateTime? date, int campusId, CancellationToken ct = default)
+    {
+        var targetDate = date?.Date ?? DateTime.UtcNow.Date;
+        if (_cache == null) return await _repository.GetPrincipalDashboardAsync(boardId, academicYearId, targetDate, campusId, ct);
+        string key = $"dashboard:principal:{academicYearId}:{boardId}:{campusId}:{targetDate:yyyyMMdd}";
+        return await _cache.GetOrCreateAsync(key, () => _repository.GetPrincipalDashboardAsync(boardId, academicYearId, targetDate, campusId, ct), TimeSpan.FromSeconds(30));
     }
 }

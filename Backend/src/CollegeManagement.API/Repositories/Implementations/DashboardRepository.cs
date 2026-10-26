@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
@@ -923,5 +923,141 @@ public class DashboardRepository : IDashboardRepository
         catch { }
 
         return summary;
+    }
+
+    public async Task<PrincipalDashboardResponseDto> GetPrincipalDashboardAsync(
+        int? boardId,
+        int? academicYearId,
+        DateTime? targetDate,
+        int campusId,
+        CancellationToken ct = default)
+    {
+        var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
+
+        // 1. Campus display name
+        string campusName = await _db.Campuses.AsNoTracking()
+            .Where(c => c.CampusId == campusId)
+            .Select(c => c.CampusName)
+            .FirstOrDefaultAsync(ct) ?? $"Campus {campusId}";
+
+        // 2. Summary & KPIs (Reuses exact Admin Dashboard calculations)
+        var summary = await GetKPIsAsync(boardId, academicYearId, dateVal, campusId, ct);
+
+        // 3. Student Attendance (Reuses exact Admin Dashboard student attendance calculation with Section breakdown)
+        var studentAttendance = await GetStudentAttendanceAsync(boardId, academicYearId, dateVal, "Section", campusId, ct);
+
+        // 4. Staff Attendance (Reuses exact Admin Dashboard staff attendance calculation)
+        var staffAttendance = await GetStaffAttendanceAsync(boardId, dateVal, "all", campusId, ct);
+
+        // 5. Upcoming Examinations (Reuses Admin Dashboard upcoming exams)
+        var exams = await GetUpcomingExaminationsAsync(boardId, academicYearId, dateVal, 6, campusId, ct);
+
+        // 6. Upcoming Holidays (Reuses Admin Dashboard upcoming holidays)
+        var holidays = await GetUpcomingHolidaysAsync(boardId, academicYearId, 6, campusId, ct);
+
+        // 7. Today's Highlights (Reuses Admin Dashboard highlights)
+        var highlights = await GetTodaysHighlightsAsync(boardId, academicYearId, dateVal, campusId, ct);
+
+        // 8. Performance Streams & Pass Percentage from live Results table
+        var resultsQuery = _db.Results.AsNoTracking()
+            .Where(r => r.CampusId == campusId && r.IsPublished);
+
+        if (boardId.HasValue && boardId.Value > 0)
+            resultsQuery = resultsQuery.Where(r => r.BoardId == boardId.Value);
+
+        if (academicYearId.HasValue && academicYearId.Value > 0)
+            resultsQuery = resultsQuery.Where(r => r.AcademicYearId == academicYearId.Value);
+
+        var publishedResults = await resultsQuery
+            .Select(r => new { r.GroupId, r.ResultStatus })
+            .ToListAsync(ct);
+
+        decimal? overallPassPercentage = null;
+        var performanceStreams = new List<PrincipalPerformanceStreamDto>();
+
+        if (publishedResults.Any())
+        {
+            int totalResults = publishedResults.Count;
+            int passedResults = publishedResults.Count(r => string.Equals(r.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase));
+            overallPassPercentage = totalResults > 0 ? Math.Round((decimal)passedResults * 100m / totalResults, 1) : null;
+
+            var groupIds = publishedResults.Select(r => r.GroupId).Distinct().ToList();
+            var groupNames = await _db.Groups.AsNoTracking()
+                .Where(g => groupIds.Contains(g.GroupId))
+                .ToDictionaryAsync(g => g.GroupId, g => g.GroupName ?? g.GroupCode ?? $"Group {g.GroupId}", ct);
+
+            foreach (var grp in publishedResults.GroupBy(r => r.GroupId))
+            {
+                int grpTotal = grp.Count();
+                int grpPassed = grp.Count(r => string.Equals(r.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase));
+                decimal grpRate = grpTotal > 0 ? Math.Round((decimal)grpPassed * 100m / grpTotal, 1) : 0m;
+                string streamName = groupNames.TryGetValue(grp.Key, out var name) ? name : $"Group {grp.Key}";
+
+                performanceStreams.Add(new PrincipalPerformanceStreamDto
+                {
+                    StreamName = streamName,
+                    Current = grpRate,
+                    Previous = grpRate
+                });
+            }
+        }
+
+        // 9. Notices & Circulars (from upcoming holidays & scheduled exams)
+        var notices = new List<PrincipalNoticeDto>();
+
+        if (holidays != null && holidays.Any())
+        {
+            foreach (var h in holidays.Take(3))
+            {
+                notices.Add(new PrincipalNoticeDto
+                {
+                    Id = $"holiday-{h.Id}",
+                    Title = h.Name,
+                    Description = $"{h.StartDate:dd MMM yyyy} to {h.EndDate:dd MMM yyyy} ({h.TotalDays} days)",
+                    Date = h.StartDate.ToString("yyyy-MM-dd"),
+                    Type = "Holiday",
+                    Priority = "Normal"
+                });
+            }
+        }
+
+        if (exams != null && exams.Any())
+        {
+            foreach (var e in exams.Take(3))
+            {
+                string examDate = !string.IsNullOrWhiteSpace(e.FormattedDate) ? e.FormattedDate : e.Date;
+                notices.Add(new PrincipalNoticeDto
+                {
+                    Id = $"exam-{e.Id}",
+                    Title = $"{e.Name} Scheduled",
+                    Description = !string.IsNullOrWhiteSpace(e.Subject) ? $"Subject: {e.Subject} - Date: {examDate}" : $"Date: {examDate}",
+                    Date = !string.IsNullOrWhiteSpace(e.Date) ? e.Date : DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                    Type = "Exam",
+                    Priority = "High"
+                });
+            }
+        }
+
+        return new PrincipalDashboardResponseDto
+        {
+            CampusId = campusId,
+            CampusName = campusName,
+            BoardId = boardId,
+            AcademicYearId = academicYearId,
+            Date = dateVal,
+            StudentCount = summary.TotalStudents,
+            StaffCount = summary.TotalStaff,
+            StudentsGrowth = summary.StudentsVsLastYearPercentage,
+            StaffGrowth = summary.StaffVsLastYearPercentage,
+            ActiveClasses = summary.TotalSections,
+            UpcomingExamCount = summary.UpcomingExams,
+            Admissions = summary.Admissions > 0 ? summary.Admissions : (highlights?.AdmissionsToday ?? 0),
+            PassPercentage = overallPassPercentage,
+            StudentAttendance = studentAttendance,
+            StaffAttendance = staffAttendance,
+            Summary = summary,
+            PerformanceStreams = performanceStreams,
+            Notices = notices
+        };
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace CollegeManagement.API.DTOs.Dashboard;
@@ -579,8 +579,8 @@ public class UpcomingHolidayItemDto
     public string Type => HolidayType;
     public string AppliesTo { get; set; } = "All Students & Staff";
     public string DateType { get; set; } = "Single Day";
-    public DateOnly StartDate { get; set; }
-    public DateOnly EndDate { get; set; }
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
     public string FormattedDateRange { get; set; } = string.Empty;
     public string DateRange => FormattedDateRange;
     public string DayOfWeek { get; set; } = string.Empty;
