@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport/vehicles")]
-    [AllowAnonymous]
+    [Authorize]
     public class TransportVehicleController : ControllerBase
     {
         private readonly ITransportVehicleService _service;
@@ -19,6 +19,7 @@ namespace CollegeManagement.API.Controllers
 
         // GET: api/transport/vehicles
         [HttpGet]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal,Driver,Bus Driver")]
         public async Task<IActionResult> GetAll([FromQuery] TransportVehicleFilterDto filter)
         {
             try
@@ -40,6 +41,7 @@ namespace CollegeManagement.API.Controllers
 
         // GET: api/transport/vehicles/{id}
         [HttpGet("{id}")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal,Driver,Bus Driver")]
         public async Task<IActionResult> GetById(string id)
         {
             try
@@ -57,6 +59,7 @@ namespace CollegeManagement.API.Controllers
 
         // POST: api/transport/vehicles
         [HttpPost]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Create([FromBody] CreateTransportVehicleDto dto)
         {
             try
@@ -79,6 +82,7 @@ namespace CollegeManagement.API.Controllers
 
         // PUT: api/transport/vehicles/{id}
         [HttpPut("{id}")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Update(
             string id,
             [FromBody] UpdateTransportVehicleDto dto)
@@ -125,6 +129,7 @@ namespace CollegeManagement.API.Controllers
 
         // DELETE: api/transport/vehicles/{id}
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Delete(string id)
         {
             try

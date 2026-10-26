@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { CalendarClock, CalendarDays, ClipboardClock, Clock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
@@ -13,141 +13,6 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import FacultyMyAttendance from "@/Dashboard/FacultyDashboard/pages/FacultyMyAttendance.jsx";
 import "./AttendancePage.css";
 import "./AttendanceTimingConfigPage.css";
-
-// Intercept self-service staff attendance endpoints to prevent automatic token refresh failure
-// from wiping the auth session (clearAuthSession) and forcefully redirecting to /login
-if (!apiClient.__staffAttendanceBypassRegistered) {
-  apiClient.__staffAttendanceBypassRegistered = true;
-
-  apiClient.interceptors.request.use(
-    (config) => {
-      const url = String(config?.url || "");
-      if (
-        url.includes("/staff-attendance/my-today") ||
-        url.includes("/staff-attendance/my-history") ||
-        url.includes("/staff-attendance/punch-in") ||
-        url.includes("/staff-attendance/punch-out") ||
-        url.includes("/staff-attendance/regularize") ||
-        url.includes("/staff-attendance/regularizations")
-      ) {
-        config.skipAuthRedirect = true;
-        config.silentAuth = true;
-        config.optionalAuth = true;
-        config.silent = true;
-        config.skipErrorLog = true;
-      }
-      return config;
-    },
-    (error) => Promise.reject(error)
-  );
-
-  apiClient.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      const url = String(error?.config?.url || "");
-      const isSelfAttendanceUrl =
-        url.includes("/staff-attendance/my-today") ||
-        url.includes("/staff-attendance/my-history") ||
-        url.includes("/staff-attendance/punch-in") ||
-        url.includes("/staff-attendance/punch-out") ||
-        url.includes("/staff-attendance/regularize") ||
-        url.includes("/staff-attendance/regularizations");
-
-      if (isSelfAttendanceUrl) {
-        if (error.config) {
-          error.config.skipAuthRedirect = true;
-          error.config.silentAuth = true;
-        }
-
-        const status = error?.response?.status;
-        if (status === 401 || status === 403 || status === 404 || status === 500 || !error?.response) {
-          if (url.includes("/staff-attendance/my-today")) {
-            return Promise.resolve({
-              status: 200,
-              statusText: "OK",
-              headers: {},
-              config: error.config,
-              data: {
-                success: true,
-                data: {
-                  status: "not_punched",
-                  inTime: null,
-                  outTime: null,
-                  shiftDuration: "--",
-                  shiftName: "General Shift (09:00 AM – 05:00 PM)",
-                  shiftStartTime: "09:00 AM",
-                  shiftEndTime: "05:00 PM",
-                  isLate: false,
-                  todayStatus: "Not Punched",
-                  canRegularize: false,
-                  dateFormatted: new Date().toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  }),
-                  regularizationState: null,
-                },
-              },
-            });
-          }
-
-          if (url.includes("/staff-attendance/my-history")) {
-            return Promise.resolve({
-              status: 200,
-              statusText: "OK",
-              headers: {},
-              config: error.config,
-              data: {
-                success: true,
-                data: {
-                  logs: [],
-                  metrics: {
-                    workingDays: "6 Days",
-                    workingDaysSub: "Current Week (Mon–Sat)",
-                    presentDays: "0 Days",
-                    presentDaysSub: "Biometric verified",
-                    leaves: "0 Days",
-                    leavesSub: "No leaves applied",
-                    absentDays: "0 Days",
-                    absentDaysSub: "No absences",
-                  },
-                },
-              },
-            });
-          }
-
-          if (url.includes("/staff-attendance/punch-in") || url.includes("/staff-attendance/punch-out")) {
-            return Promise.reject(error);
-          }
-
-          if (url.includes("/staff-attendance/regularize")) {
-            return Promise.resolve({
-              status: 200,
-              statusText: "OK",
-              headers: {},
-              config: error.config,
-              data: {
-                success: true,
-                message: "Regularization request submitted successfully",
-              },
-            });
-          }
-
-          return Promise.resolve({
-            status: 200,
-            statusText: "OK",
-            headers: {},
-            config: error.config,
-            data: { success: true, data: [] },
-          });
-        }
-      }
-
-      return Promise.reject(error);
-    }
-  );
-}
 
 const STUDENT_STATUSES = ["Present", "Absent", "Half Day"];
 const STUDENT_SESSION_STATUSES = ["Present", "Absent"];
@@ -186,6 +51,21 @@ const VALUE = {
 const asList = (v) => Array.isArray(v) ? v : Array.isArray(v?.items) ? v.items : Array.isArray(v?.records) ? v.records : Array.isArray(v?.data) ? v.data : [];
 const body = (r) => r?.data?.data ?? r?.data ?? r ?? {};
 const get = (o, ...keys) => keys.map((k) => o?.[k]).find((v) => v !== undefined && v !== null);
+// AdmissionDate is the admission DTO's date, never attendance/record CreatedAt.
+export const getAdmissionTimestamp = (row, admissions = new Map()) => {
+  const raw = get(row, "admissionDate", "AdmissionDate") || admissions.get(String(get(row, "admissionNo", "admissionNumber", "AdmissionNo") ?? "").trim());
+  const key = String(raw || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key.startsWith("0001-")) return null;
+  const timestamp = Date.parse(`${key}T00:00:00Z`);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === key ? timestamp : null;
+};
+export const compareAdmissionDates = (a, b, admissions = new Map()) => {
+  const left = getAdmissionTimestamp(a, admissions), right = getAdmissionTimestamp(b, admissions);
+  const tie = () => String(get(a, "studentId", "StudentId", "id") ?? "").localeCompare(String(get(b, "studentId", "StudentId", "id") ?? ""), undefined, { numeric: true });
+  if (left === null) return right === null ? tie() : 1;
+  if (right === null) return -1;
+  return right - left || tie();
+};
 const num = (v) => v === "" || v == null ? undefined : Number(v);
 const getTodayDate = () => {
   const d = new Date();
@@ -217,11 +97,25 @@ const Field = ({ label, children }) => <label className="att-field"><span>{label
 function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
 
 function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
- const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
- const currentPage = Math.min(page, totalPages);
- const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
- const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
- return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span><div className="att-pagination-controls"><button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button></div></nav>;
+  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
+  const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
+
+  return (
+    <nav className="att-pagination" aria-label="Attendance pages">
+      <span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span>
+      <div className="att-pagination-controls">
+        <button type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
+          Previous
+        </button>
+        <span>Page {currentPage} of {totalPages}</span>
+        <button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
+          Next
+        </button>
+      </div>
+    </nav>
+  );
 }
 
 export default function AttendancePage({ area: areaProp } = {}) {
@@ -263,7 +157,7 @@ export default function AttendancePage({ area: areaProp } = {}) {
   const [notice, setNotice] = useState({ message: "", type: "success" });
   const [importOpen, setImportOpen] = useState(false);
   const [studentAttendanceLocked, setStudentAttendanceLocked] = useState(true);
-  const say = (message, type = "success") => setNotice({ message, type });
+  const say = useCallback((message, type = "success") => setNotice({ message, type }), []);
 
   const dynamicHeader = useMemo(() => {
     if (!staff) {
@@ -579,6 +473,22 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  useEffect(() => { onHolidayLockChange?.(holidayLocked); }, [holidayLocked, onHolidayLockChange]);
  const [dirty, setDirty] = useState(false);
  const holidaysCacheRef = useRef(new Map());
+ const [admissionDates, setAdmissionDates] = useState(new Map());
+ useEffect(() => {
+   if (staff) return undefined;
+   let active = true;
+   setAdmissionDates(new Map());
+   apiClient.get("/api/v1/student-admissions", { params: { campusId: num(navbarCampusId) } }).then((response) => {
+     if (!active) return;
+     const dates = new Map();
+     asList(body(response)).forEach((row) => {
+       const admissionNo = String(get(row, "admissionNo", "AdmissionNo") ?? "").trim();
+       if (admissionNo) dates.set(admissionNo, get(row, "admissionDate", "AdmissionDate"));
+     });
+     setAdmissionDates(dates);
+   }).catch(() => { if (active) say("Admission dates could not be loaded. Students without an available admission date are shown last.", "error"); });
+   return () => { active = false; };
+ }, [staff, navbarCampusId, say]);
  const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
  const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
@@ -845,7 +755,27 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
        ? kind === "csv" ? apiEndpoints.staffAttendance.monthlyExportCsv : apiEndpoints.staffAttendance.monthlyExport
        : kind === "csv" ? apiEndpoints.attendance.studentMonthlyExportCsv : apiEndpoints.attendance.studentMonthlyExportExcel;
      const r = await apiClient.get(endpoint, { params: monthParams(), responseType: "blob" });
-     const url = URL.createObjectURL(r.data), a = document.createElement("a");
+     let exportBlob = r.data;
+     if (!staff) {
+       // Reorder the existing export's rows only; retain backend-calculated values.
+       const XLSX = await import("xlsx");
+       const workbook = XLSX.read(await r.data.arrayBuffer(), { type: "array" });
+       const sheetName = workbook.SheetNames[0];
+       const sheet = workbook.Sheets[sheetName];
+       const values = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+       const headers = values[0] || [];
+       const rollIndex = headers.findIndex((value) => /^(rollnumber|rollno)$/.test(String(value).replace(/[^a-z]/gi, "").toLowerCase()));
+       const nameIndex = headers.findIndex((value) => String(value).replace(/[^a-z]/gi, "").toLowerCase() === "studentname");
+       if (rollIndex < 0 || nameIndex < 0) throw new Error("The report export does not contain the expected student identity columns.");
+       const identity = (roll, name) => JSON.stringify([String(roll ?? ""), String(name ?? "")]);
+       const reportRows = report?.studentRows ?? report?.rows ?? [];
+       const lookup = new Map(reportRows.map((row) => [identity(get(row, "rollNo", "rollNumber"), get(row, "studentName", "name")), row]));
+       const ordered = values.slice(1).map((cells) => ({ cells, student: lookup.get(identity(cells[rollIndex], cells[nameIndex])) || {} }))
+         .sort((a, b) => compareAdmissionDates(a.student, b.student, admissionDates));
+       workbook.Sheets[sheetName] = XLSX.utils.aoa_to_sheet([headers, ...ordered.map((row) => row.cells)]);
+       exportBlob = new Blob([XLSX.write(workbook, { type: "array", bookType: kind === "csv" ? "csv" : "xlsx" })], { type: kind === "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+     }
+     const url = URL.createObjectURL(exportBlob), a = document.createElement("a");
      a.href = url;
      a.download = `${staff ? "staff" : "student"}-attendance-${f.date.slice(0, 7)}.${kind === "csv" ? "csv" : "xlsx"}`;
      a.click();
@@ -866,6 +796,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  }).filter((r) => staff ? (!f.status || staffStatus(r.status) === f.status) : (!f.status || [studentSessionStatus(r, "morning"), studentSessionStatus(r, "afternoon")].includes(f.status)));
 
  const normalizedThreshold = attendanceThreshold === "" ? 0 : Number(attendanceThreshold);
+ if (!staff && f.view === "Attendance") visible.sort((a, b) => compareAdmissionDates(a, b, admissionDates));
  const defaulterRows = f.view === "Defaulters"
    ? visible.filter((row) => attendancePercentage(row) < normalizedThreshold)
    : visible;
@@ -936,7 +867,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
 
      {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
      {loaded && (f.view === "Monthly Report" ? (
-     <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
+     <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} admissionDates={admissionDates} />
      ) : !staff && f.view === "Defaulters" ? (
        <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} onPageChange={setPage} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
      ) : (
@@ -1338,7 +1269,7 @@ function MonthlyPill({ value, staff }) {
   return <span className={`att-month-status ${type}`}>{normalized}</span>;
 }
 
-function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onSearchChange = () => {} }) {
+function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onSearchChange = () => {}, admissionDates = new Map() }) {
   const headers = data?.dayHeaders ?? data?.headers ?? [], rawRows = data?.studentRows ?? data?.staffRows ?? data?.rows ?? [];
   const normalizedSearch = search.trim().toLowerCase();
   const rows = rawRows.filter((r) => {
@@ -1347,6 +1278,7 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
     return [get(r, "studentName", "name"), get(r, "rollNo", "rollNumber"), get(r, "admissionNo", "admissionNumber"), get(r, "studentId", "id")]
       .some((value) => String(value ?? "").toLowerCase().includes(normalizedSearch));
   });
+  if (!staff) rows.sort((a, b) => compareAdmissionDates(a, b, admissionDates));
   const totalPages = Math.max(1, Math.ceil(rows.length / ATTENDANCE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedRows = rows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);

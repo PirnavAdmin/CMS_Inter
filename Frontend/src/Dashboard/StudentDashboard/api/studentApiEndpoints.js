@@ -1,4 +1,13 @@
 const studentApiEndpoints = {
+  facilityTransition: {
+    history: (studentId) => `/api/v1/facility-transition/history/${encodeURIComponent(studentId)}`,
+    preview: '/api/v1/facility-transition/preview',
+    execute: '/api/v1/facility-transition/execute',
+    previewTransportToHostel: '/api/v1/facility-transition/preview-transport-to-hostel',
+    executeTransportToHostel: '/api/v1/facility-transition/execute-transport-to-hostel',
+    previewDiscontinue: '/api/v1/facility-transition/preview-discontinue',
+    executeDiscontinue: '/api/v1/facility-transition/execute-discontinue',
+  },
   profile: {
     me: "/api/v1/students/me",
     update: "/api/v1/students/me/profile",
@@ -17,6 +26,7 @@ const studentApiEndpoints = {
     dailySessions: "/api/v1/attendance/admin/students",
   },
   results: {
+    published: "/api/v1/students/me/results",
     studentResult: "/api/v1/results/student-result",
     studentMemo: (studentId) => `/api/v1/results/student/${encodeURIComponent(studentId)}/memo`,
     studentMemoPdf: "/api/v1/results/students/memo",

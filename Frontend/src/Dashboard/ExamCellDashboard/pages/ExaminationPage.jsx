@@ -35,10 +35,10 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast, Pagination } from "@/components/common/Ui.jsx";
 import "@/components/pages/ExaminationPage.css";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 // Use the shared table-row skeleton for the examination table's ten columns.
 const ExaminationTableSkeleton = () =>
@@ -2953,7 +2953,7 @@ const deleteScheduleFromBackend = async (examId, scheduleId) => {
 };
 
 const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList = [], studentsList = []) => {
-  const id = normalizeId(e?.examinationId ?? e?.id);
+  const id = normalizeId(e?.examinationId ?? e?.examId ?? e?.id);
   const rawLevels =
     e?.academicLevelIds ??
     e?.levelIds ??
@@ -4499,6 +4499,12 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           while (attempt < maxAttempts) {
             attempt++;
             try {
+              const validBoardId = Number(newRecord.boardId || selectedBoardId || selectedBoard?.id || 1);
+              const firstLevelId = Number((newRecord.levelIds || [])[0] || newRecord.levelId || 0);
+              const firstGroupId = Number((newRecord.groupIds || [])[0] || newRecord.groupId || 0);
+              const firstProgramId = Number((newRecord.programIds || [])[0] || newRecord.programId || 0);
+              const allSelectedSubjectIds = (newRecord.selectedSubjectIds || []).map((id) => Number(id) || id);
+
               res = await apiClient.post("/api/v1/examinations", {
                 campusId: Number(effectiveCampusId) || 1,
                 examCode: resolvedExamCode,
@@ -4511,14 +4517,23 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
                 exam_category: newRecord.examCategory,
                 categoryName: newRecord.examCategory,
                 rawCategory: newRecord.rawCategory || newRecord.examCategory,
-                customCategoryName: newRecord.customCategoryName,
-                boardId: Number(newRecord.boardId) || newRecord.boardId,
+                customCategoryName: newRecord.customCategoryName || "",
+                boardId: validBoardId,
                 academicYearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
                 yearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
                 academicLevelIds: (newRecord.levelIds || []).map((id) => Number(id) || id),
+                academicLevelId: firstLevelId,
+                academicLevel: newRecord.levelName || "",
                 groupIds: (newRecord.groupIds || []).map((id) => Number(id) || id),
+                groupId: firstGroupId,
                 programIds: (newRecord.programIds || []).map((id) => Number(id) || id),
-                selectedSubjectIds: (newRecord.selectedSubjectIds || []).map((id) => Number(id) || id),
+                programId: firstProgramId,
+                assessmentTypeId: Number(newRecord.assessmentTypeId) || 0,
+                examType: newRecord.examType || "",
+                totalMarks: Number(newRecord.totalMarks) || 0,
+                passPercentage: Number(newRecord.passPercentage) || 0,
+                allocatedSubjectIds: allSelectedSubjectIds,
+                selectedSubjectIds: allSelectedSubjectIds,
                 groupProgramSelections: Array.isArray(newRecord.groupProgramSelections)
                   ? newRecord.groupProgramSelections.map((item) => ({
                     groupId: Number(item?.groupId) || item?.groupId,
@@ -4527,15 +4542,15 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
                       : [],
                   }))
                   : [],
-                examPattern: newRecord.examPattern,
-                pattern: newRecord.examPattern,
-                examType: newRecord.examType,
+                examPattern: newRecord.examPattern || "",
+                pattern: newRecord.examPattern || "",
+                examPatternId: String(newRecord.examPatternId || ""),
                 selectedGroupPatterns: newRecord.selectedGroupPatterns,
                 startDate: newRecord.startDate,
                 endDate: newRecord.endDate,
-                description: newRecord.description,
+                description: newRecord.description || "",
                 status: "DRAFT",
-                scheduleMode: newRecord.scheduleMode,
+                scheduleMode: newRecord.scheduleMode || "SUBJECT_WISE",
               });
               break;
             } catch (postErr) {
@@ -5428,30 +5443,15 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
             </table>
           </div>
 
-          <div className="exam-list-pagination">
-            <span className="exam-record-summary">
-              Showing {rangeStart}–{rangeEnd} of {list.length} records
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost"
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </button>
-            <span>
-              {page} / {pages}
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost"
-              disabled={page === pages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-          </div>
+          {list.length > 0 && (
+            <Pagination
+              currentPage={page}
+              totalRecords={list.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              unit="examinations"
+            />
+          )}
         </div>
       ) : (
         <>
@@ -10038,7 +10038,7 @@ function ScheduleTable({
   }, [entries, rooms, faculty]);
 
   const [page, setPage] = useState(1);
-  const pageSize = 6;
+  const pageSize = 10;
   const pages = Math.max(1, Math.ceil(displayEntries.length / pageSize));
   const pagedEntries = displayEntries.slice((page - 1) * pageSize, page * pageSize);
   const rangeStart = displayEntries.length ? (page - 1) * pageSize + 1 : 0;
@@ -10477,34 +10477,14 @@ function ScheduleTable({
         </table>
       </div>
 
-      {displayEntries.length > pageSize && (
-        <div
-          className="exam-list-pagination"
-          style={{ border: "1px solid var(--cms-border)", borderRadius: "0 0 12px 12px" }}
-        >
-          <span className="exam-record-summary">
-            Showing {rangeStart}–{rangeEnd} of {displayEntries.length} records (6 per page)
-          </span>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            Previous
-          </button>
-          <span>
-            {page} / {pages}
-          </span>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            disabled={page === pages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </button>
-        </div>
+      {displayEntries.length > 0 && (
+        <Pagination
+          currentPage={page}
+          totalRecords={displayEntries.length}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          unit="schedules"
+        />
       )}
     </div>
   );

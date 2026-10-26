@@ -55,6 +55,10 @@
 .accountant-fee-editor .cms-form-grid { margin-bottom: 16px; }
 .accountant-fee-editor .cms-mini-input { max-width: 100%; }
 .accountant-fee-editor .cms-alert { margin-top: 12px; }
+.accountant-fee-editor .accountant-fee-payment-schedules { display: grid; gap: 10px; margin: 16px 0; padding: 12px; border: 1px solid var(--cms-border); border-radius: 10px; }
+.accountant-fee-editor .accountant-fee-payment-schedules label { display: flex; align-items: center; gap: 8px; }
+.accountant-fee-editor textarea { min-height: 76px; width: 100%; resize: vertical; }
+.accountant-fee-editor .accountant-payment-receipt dd { overflow-wrap: anywhere; }
 .accountant-fee-page .cms-fee-tab:focus-visible,
 .accountant-fee-page .cms-fee-overview-tab:focus-visible { outline: 2px solid var(--cms-primary); outline-offset: 2px; }
 @media (max-width: 1100px) {

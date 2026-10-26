@@ -1,8 +1,16 @@
-import { useState } from "react";
-import { FileText, Download, Printer, Plus, Eye, CheckCircle2, Users } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { FileText, Download, Printer, Plus, Eye, CheckCircle2, Users, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { useParentPortal, getStoredDocs, saveStoredDocs } from "../parentData.js";
+import { useParentPortal } from "../parentData.js";
+import { formatDate } from "../context/ParentPortalContext.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
+import {
+  getStudentCertificates,
+  requestStudentCertificate,
+  getCertificatePreview,
+  downloadStudentCertificate,
+  getStudentById,
+} from "@/api/parentApi.js";
 import "../ParentDashboard.css";
 
 export default function ParentDocumentsPage() {
@@ -13,44 +21,149 @@ export default function ParentDocumentsPage() {
     setActiveChildId,
     child,
   } = useParentPortal();
-  const [docsMap, setDocsMap] = useState(getStoredDocs());
+
+  const [docs, setDocs] = useState([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [docsError, setDocsError] = useState(null);
   const [selectedDocModal, setSelectedDocModal] = useState(null);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
   const [docType, setDocType] = useState("Bonafide Certificate");
   const [docPurpose, setDocPurpose] = useState("");
   const [toastMessage, setToastMessage] = useState("");
-
-  const docs = child && docsMap[child.id] ? docsMap[child.id] : [];
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
   };
 
-  const handleRequestSubmit = (e) => {
+  const loadDocuments = useCallback(async (showLoader = true) => {
+    if (!child) return;
+    const studentId = child.studentId || child.id;
+    const admissionNo = child.admissionNo || child.admissionNumber;
+    if (!studentId && !admissionNo) return;
+
+    if (showLoader) setLoadingDocs(true);
+    setDocsError(null);
+
+    try {
+      // 1. Fetch official student certificates from real backend GET /api/v1/certificates
+      const [certsRes, profileRes] = await Promise.allSettled([
+        getStudentCertificates(studentId, admissionNo),
+        (studentId && !String(studentId).startsWith("stu-")) ? getStudentById(studentId) : Promise.resolve(null),
+      ]);
+
+      const rawCerts = certsRes.status === "fulfilled" && Array.isArray(certsRes.value) ? certsRes.value : [];
+      const profile = profileRes.status === "fulfilled" ? profileRes.value : null;
+
+      // Map certificates into table rows
+      const certificateDocs = rawCerts.map((c, idx) => ({
+        id: c.certificateId || c.id || `cert-${idx}`,
+        certificateId: c.certificateId || c.id,
+        title: c.certificateType || c.type || "Official Certificate",
+        type: c.certificateType || c.type || "Certificate",
+        docNo: c.certificateNumber || c.certificateNo || c.number || `CERT-${c.certificateId || idx + 1}`,
+        issuedDate: c.issueDate ? formatDate(c.issueDate) : (c.status === "Requested" ? "Under Process" : (c.requestDate ? formatDate(c.requestDate) : "—")),
+        purpose: c.purpose || c.remarks || "Official Verification",
+        status: c.status || "Requested",
+        raw: c,
+        isCertificate: true,
+      }));
+
+      // 2. Map any student admission profile documents if present
+      const uploadedDocs = [];
+      if (profile) {
+        const docFields = [
+          { key: "aadhaarDocument", label: "Aadhaar Card Document", type: "Identity Proof" },
+          { key: "birthCertificate", label: "Birth Certificate", type: "Date of Birth Proof" },
+          { key: "transferCertificate", label: "Transfer Certificate (TC)", type: "Prior Academic Record" },
+          { key: "tenthCertificate", label: "10th Class SSC / Board Certificate", type: "Academic Verification" },
+          { key: "marksMemo", label: "Marks Memo / Grade Card", type: "Academic Transcript" },
+          { key: "studyCertificate", label: "Study & Conduct Certificate", type: "Institutional Certificate" },
+          { key: "incomeCertificate", label: "Income Certificate", type: "Fee Concession / Scholarship" },
+          { key: "casteCertificate", label: "Caste / Category Certificate", type: "Reservation Verification" },
+        ];
+
+        docFields.forEach((df) => {
+          const val = profile[df.key] || profile[df.key.charAt(0).toUpperCase() + df.key.slice(1)];
+          if (val && typeof val === "string" && val.trim()) {
+            uploadedDocs.push({
+              id: `doc-${df.key}-${child.id}`,
+              title: df.label,
+              type: df.type,
+              docNo: `DOC-${df.key.slice(0, 3).toUpperCase()}-${child.admissionNo || child.id}`,
+              issuedDate: "Verified at Admission",
+              purpose: "Admission Document Verification",
+              status: "Approved",
+              fileUrl: val,
+              isUploadedDoc: true,
+            });
+          }
+        });
+      }
+
+      setDocs([...certificateDocs, ...uploadedDocs]);
+    } catch (err) {
+      setDocsError(err?.message || "Failed to load certificates.");
+      setDocs([]);
+    } finally {
+      if (showLoader) setLoadingDocs(false);
+    }
+  }, [child]);
+
+  useEffect(() => {
+    loadDocuments(true);
+  }, [loadDocuments]);
+
+  const handleRequestSubmit = async (e) => {
     e.preventDefault();
     if (!docPurpose.trim() || !child) return;
 
-    const newDoc = {
-      id: `doc-${Date.now()}`,
-      title: docType,
-      type: docType,
-      issuedDate: "Under Process",
-      docNo: `REQ-2026-${Math.floor(100 + Math.random() * 900)}`,
-      status: "Requested",
-      purpose: docPurpose.trim(),
-      fileUrl: "#",
-    };
+    setSubmitting(true);
+    try {
+      const admissionNo = child.admissionNo || child.admissionNumber;
+      await requestStudentCertificate({
+        admissionNo,
+        certificateType: docType,
+        purpose: docPurpose.trim(),
+        remarks: "Parent Portal request",
+      });
 
-    const updated = {
-      ...docsMap,
-      [child.id]: [newDoc, ...docs],
-    };
+      setToastMessage(`Request for ${docType} submitted successfully to Administration!`);
+      setRequestModalOpen(false);
+      setDocPurpose("");
+      await loadDocuments(false);
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to submit request.";
+      setToastMessage(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-    setDocsMap(updated);
-    saveStoredDocs(updated);
-    setRequestModalOpen(false);
-    setDocPurpose("");
-    setToastMessage(`Request for ${docType} submitted successfully to Administration!`);
+  const handleDownload = async (doc) => {
+    if (doc.isCertificate && doc.certificateId) {
+      setDownloadingId(doc.id);
+      try {
+        const blob = await downloadStudentCertificate(doc.certificateId);
+        const url = window.URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", `${doc.docNo || "certificate"}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        setToastMessage("Failed to download certificate PDF. Please try again.");
+      } finally {
+        setDownloadingId(null);
+      }
+    } else if (doc.fileUrl && doc.fileUrl !== "#") {
+      window.open(doc.fileUrl, "_blank");
+    } else {
+      setSelectedDocModal(doc);
+    }
   };
 
   if (availableChildren.length === 0 || !child) {
@@ -135,7 +248,13 @@ export default function ParentDocumentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {docs.length === 0 ? (
+                  {loadingDocs ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
+                        Loading documents and certificates...
+                      </td>
+                    </tr>
+                  ) : docs.length === 0 ? (
                     <tr>
                       <td colSpan={7} style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
                         No documents or certificates available for {child.name}.
@@ -150,7 +269,7 @@ export default function ParentDocumentsPage() {
                       <td>{doc.issuedDate}</td>
                       <td>{doc.purpose}</td>
                       <td>
-                        <span className={`cms-badge ${doc.status === "Approved" || doc.status === "Paid" ? "cms-badge-active" : "cms-badge-warn"}`}>
+                        <span className={`cms-badge ${doc.status === "Approved" || doc.status === "Paid" || doc.status === "Issued" ? "cms-badge-active" : "cms-badge-warn"}`}>
                           {doc.status}
                         </span>
                       </td>
@@ -166,9 +285,9 @@ export default function ParentDocumentsPage() {
                           <button
                             type="button"
                             className="cms-btn cms-btn-sm cms-btn-primary"
-                            onClick={() => {
-                              setSelectedDocModal(doc);
-                            }}
+                            disabled={downloadingId === doc.id}
+                            title="Download Certificate"
+                            onClick={() => handleDownload(doc)}
                           >
                             <Download size={13} />
                           </button>
@@ -191,8 +310,8 @@ export default function ParentDocumentsPage() {
             footer={
               <>
                 <button type="button" className="cms-btn cms-btn-outline" onClick={() => setRequestModalOpen(false)}>Cancel</button>
-                <button type="button" className="cms-btn cms-btn-primary" onClick={handleRequestSubmit}>
-                  Submit Application
+                <button type="button" className="cms-btn cms-btn-primary" disabled={submitting} onClick={handleRequestSubmit}>
+                  {submitting ? "Submitting..." : "Submit Application"}
                 </button>
               </>
             }

@@ -37,7 +37,7 @@ test("preserves independent success and reports safe endpoint/status errors", as
   await assert.rejects(loadSections({ ledger: async () => { throw failure; } }), (error) => error === failure);
 });
 
-test("history uses scoped ledger and supported student routes, excluding other assignments", async () => {
+test("history uses authorized bulk history and scoped ledger, excluding other assignments", async () => {
   const original = client.defaults.adapter;
   const calls = [];
   client.defaults.adapter = async (config) => {
@@ -46,16 +46,15 @@ test("history uses scoped ledger and supported student routes, excluding other a
       ? [{ studentId: 10, studentFeeId: 100 }, { studentId: 10, studentFeeId: 100 }, { studentId: 20, studentFeeId: 200 }]
       : config.url === "/api/v1/students"
         ? { items: [{ studentId: 10, boardId: 2 }, { studentId: 20, boardId: 2 }], totalPages: 1 }
-      : config.url.endsWith("/10")
-        ? [{ feePaymentId: 1, studentFeeId: 100, amount: 30 }, { feePaymentId: 2, studentFeeId: 999, amount: 40 }]
-        : [{ feePaymentId: 3, studentFeeId: 200, amount: 50 }];
+      : { 10: [{ feePaymentId: 1, studentId: 10, studentFeeId: 100, amount: 30 }, { feePaymentId: 2, studentId: 10, studentFeeId: 999, amount: 40 }], 20: [{ feePaymentId: 3, studentId: 20, studentFeeId: 200, amount: 50 }] };
     return { data, status: 200, statusText: "OK", headers: {}, config };
   };
   try {
     const params = { campusId: 1, boardId: 2, academicYearId: 3 };
-    const result = await loadPaymentHistory(params);
+    const result = await loadPaymentHistory(params, undefined, () => true);
     assert.deepEqual(calls[0].params, params);
-    assert.deepEqual(calls.map((call) => call.url), ["/api/v1/fees/ledger", "/api/v1/students", "/api/v1/fees/history/10", "/api/v1/fees/history/20"]);
+    assert.deepEqual(calls.map((call) => call.url), ["/api/v1/fees/ledger", "/api/v1/students", "/api/v1/fees/bulk-history"]);
+    assert.deepEqual(JSON.parse(calls[2].data), [10, 20]);
     assert.deepEqual(result.payments.map((row) => row.feePaymentId), [1, 3]);
     assert.deepEqual(result.errors, []);
   } finally {
@@ -298,7 +297,7 @@ test("permission denial remains an error and does not retry a broader request", 
 
 test("transport uses documented server paging and requires its total count", async () => {
   await withAdapter((config) => {
-    assert.deepEqual(config.params, { campusId: 1, pageNumber: 2, pageSize: 10, search: "North" });
+    assert.deepEqual(config.params, { campusId: 1, pageNumber: 2, pageSize: 5, search: "North" });
     return { items: [{ pickupPointId: 11 }], totalCount: 11 };
   }, async () => {
     assert.deepEqual(await loadSetupRecords("transport", "/api/v1/transport/pickup-points", { campusId: 1 }, undefined, { page: 2, search: "North" }), { rows: [{ pickupPointId: 11 }], total: 11 });
@@ -469,6 +468,123 @@ test("structure creation leaves paired-year generation to a single existing serv
     assert.equal(calls[0].url, "/api/v1/fees/structures");
     assert.deepEqual(JSON.parse(calls[0].data), { campusId: 1, boardId: 1, academicYearId: 2, groupId: 3, programId: 4, yearFeeMode: "different", incrementType: "percentage", incrementValue: 10, items: [{ feeTypeId: 7, rule: "Mandatory", amount: 1000 }] });
   });
+});
+
+test("five-record fee pages filter before paging and clamp after data changes", () => {
+  const records = Array.from({ length: 23 }, (_, index) => ({ feeTypeId: index + 1, feeTypeName: `Fee ${index + 1}`, status: index % 2 ? "Inactive" : "Active" }));
+  const seen = [];
+  for (let number = 1; number <= 5; number++) {
+    const page = feeView.pageOf(records, number, "", "", 5);
+    assert(page.rows.length <= 5);
+    seen.push(...page.rows.map(row => row.feeTypeId));
+  }
+  assert.deepEqual(seen, records.map(row => row.feeTypeId));
+  const filtered = feeView.pageOf(records, 2, "fee 1", "Active", 5);
+  assert.equal(filtered.total, 6);
+  assert.deepEqual(filtered.rows.map(row => row.feeTypeId), [19]);
+  assert.deepEqual(feeView.pageOf([], 5, "", "", 5), { rows: [], total: 0, pages: 1, current: 1, start: 0, end: 0 });
+  assert.equal(feeView.pageOf(records.slice(0, 7), 5, "", "", 5).current, 2);
+  assert.equal(feeView.pageOf(records, 5, "", "", 5).start, 21);
+});
+
+test("numbered fee navigation supports direct selection and correct boundaries", async () => {
+  const { FeePagination } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantUI.jsx");
+  const nodes = node => node && typeof node === "object" ? [node, ...[node.props?.children].flat(Infinity).flatMap(nodes)] : [];
+  const records = Array.from({ length: 23 }, () => ({}));
+  let selected = 1;
+  const render = () => nodes(FeePagination({ page: feeView.pageOf(records, selected, "", "", 5), onPage: number => { selected = number; }, numbered: true }));
+  assert.equal(render().find(node => node.props?.children === "Previous").props.disabled, true);
+  render().find(node => node.props?.["aria-label"] === "Page 5 of 5").props.onClick();
+  assert.equal(selected, 5);
+  assert.equal(render().find(node => node.props?.children === "Next").props.disabled, true);
+  render().find(node => node.props?.children === "Previous").props.onClick();
+  assert.equal(selected, 4);
+  render().find(node => node.props?.children === "Next").props.onClick();
+  assert.equal(selected, 5);
+});
+
+test("outside year controls configure new structures and display saved pairs without changing them", async () => {
+  const source = await readFile(new URL("../pages/AccountantFeeManagement.jsx", import.meta.url), "utf8");
+  const { code } = await transformWithOxc(source.slice(source.indexOf("function YearConfiguration"), source.indexOf("function SetupRecords")), "YearConfiguration.jsx", { jsx: { runtime: "classic" } });
+  const React = { createElement: (type, props, ...children) => ({ type, props: { ...props, children: children.flat(Infinity) } }) };
+  const context = vm.createContext({ React, ...feeView, structureDraftPreview: setup.structureDraftPreview });
+  vm.runInContext(`${code};globalThis.Component=YearConfiguration`, context);
+  const structures = [{ feeStructureId: 8, pairedStructureId: 9, yearFeeMode: "different", incrementType: "fixed", incrementValue: 500, totalAmount: 1000 }, { feeStructureId: 9, pairedStructureId: 8, academicLevelId: 2, totalAmount: 1500 }];
+  const props = { structures, selectedId: "", settings: { yearFeeMode: "same", incrementType: "percentage", incrementValue: "" }, canCreate: true, firstYearTotal: 1000, isAdding: false,
+    onChange: settings => { props.settings = settings; }, onSelect: id => { props.selectedId = id; } };
+  const nodes = node => node && typeof node === "object" ? [node, ...(node.props?.children || []).flatMap(nodes)] : [];
+  const render = () => nodes(context.Component(props));
+  assert.equal(render().find(node => node.type === "fieldset").props.disabled, false);
+  render().filter(node => node.props?.name === "accountant-year-mode")[1].props.onChange();
+  render().find(node => node.props?.id === "accountant-year-increment").props.onChange({ target: { value: "10" } });
+  assert.equal(props.settings.yearFeeMode, "different");
+  assert.equal(setup.structureDraftPreview({ ...props.settings, items: structure.items }).second, 1100);
+  const amounts = render().filter(node => node.type === "dd").map(node => node.props.children.join(""));
+  assert(amounts.includes(feeView.feeMoney(1100)));
+  render().find(node => node.type === "select").props.onChange({ target: { value: "8" } });
+  assert.equal(render().find(node => node.type === "fieldset").props.disabled, true);
+  assert(render().filter(node => node.type === "dd").some(node => node.props.children.join("") === feeView.feeMoney(1500)));
+  props.selectedId = "9";
+  assert(render().filter(node => node.type === "dd").some(node => node.props.children.join("") === feeView.feeMoney(1000)));
+  props.selectedId = ""; props.canCreate = false;
+  assert.equal(render().find(node => node.type === "fieldset").props.disabled, true);
+  assert.equal(structures[0].incrementValue, 500);
+});
+
+test("structure modal uses outside configuration for creation only and preserves edit requests", async () => {
+  const source = await readFile(new URL("../components/AccountantFeeSetupModal.jsx", import.meta.url), "utf8");
+  assert(!source.includes("Fee Configuration by Year"));
+  const { code } = await transformWithOxc(source.slice(source.indexOf("function SetupEditor"), source.indexOf("function ViewRecord")), "SetupEditor.jsx", { jsx: { runtime: "classic" } });
+  const calls = [];
+  const React = { createElement: (type, props, ...children) => ({ type, props: { ...props, children: children.flat(Infinity) } }) };
+  const context = vm.createContext({ React, ...setup, useState: value => [typeof value === "function" ? value() : value, () => {}], useRef: value => ({ current: value }), useEffect: effect => effect(),
+    Modal: "Modal", StructureFields: "StructureFields", SimpleFields: "SimpleFields", FeeNotice: "FeeNotice", requestError: error => error.message });
+  vm.runInContext(`${code};globalThis.Component=SetupEditor`, context);
+  const saved = { feeStructureId: 8, ...structure, structureName: "Saved", items: [{ ...structure.items[0], feeStructureComponentId: 22 }] };
+  const nodes = node => node && typeof node === "object" ? [node, ...(node.props?.children || []).flatMap(nodes)] : [];
+  const yearSettings = { yearFeeMode: "different", incrementType: "fixed", incrementValue: "250" };
+  const access = setup.feeSetupAccess(feePermissions(["view", "create", "edit"]), "structures");
+  await withAdapter(config => { calls.push(config); return { feeStructureId: 8 }; }, async () => {
+    for (const row of [null, saved]) {
+      let total;
+      const tree = context.Component({ kind: "structures", row, rows: [], params: {}, data: { detail: row, lookups: { types: [{ feeTypeId: 7, feeTypeName: "Course Fee" }] } }, authorize: guard(access), onSaved() {}, onClose() {}, yearSettings, onDraftTotalChange: value => { total = value; } });
+      const fields = nodes(tree).find(node => node.type === "StructureFields");
+      if (!row) {
+        assert.equal(fields.props.draft.yearFeeMode, "different");
+        assert.equal(fields.props.draft.incrementValue, "250");
+        Object.assign(fields.props.draft, structure, yearSettings);
+      } else {
+        assert.equal(fields.props.draft.incrementType, "percentage");
+        assert.equal(total, 1000);
+      }
+      await nodes(tree).find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+    }
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(JSON.parse(calls[0].data).incrementValue, 250);
+  assert.equal(calls[1].method, "put");
+  assert(!Object.hasOwn(JSON.parse(calls[1].data), "yearFeeMode"));
+});
+
+test("structure dropdowns keep Admin field order and select the first returned program", async () => {
+  const source = await readFile(new URL("../components/AccountantFeeSetupModal.jsx", import.meta.url), "utf8");
+  const { code } = await transformWithOxc(source.slice(source.indexOf("const categories"), source.indexOf("function SetupEditor")), "StructureFields.jsx", { jsx: { runtime: "classic" } });
+  const React = { createElement: (type, props, ...children) => ({ type, props: { ...props, children: children.flat(Infinity) } }), Fragment: "Fragment" };
+  let index = 0;
+  const data = [{ loading: false, data: [{ groupId: 3, groupName: "Group" }] }, { loading: false, data: [{ id: 4, name: "Regular" }, { id: 5, name: "Other" }] }];
+  const context = vm.createContext({ React, ...feeView, structureDraftPreview: setup.structureDraftPreview, useCallback: fn => fn, useEffect: fn => fn(), useFinancePage: () => data[index++], FeeLoadState: "LoadState", FeeTable: "FeeTable" });
+  vm.runInContext(`${code};globalThis.Component=StructureFields`, context);
+  const draft = { ...structure, programId: "" };
+  const props = { draft, update: (key, value) => { draft[key] = value; }, lookups: { boards: [], years: [] }, params: {} };
+  const tree = context.Component(props);
+  const fields = tree.props.children[0].props.children;
+  assert.deepEqual(fields.filter(Boolean).map(node => node.props.label), ["Board", "Academic Year", "Group", "Program"]);
+  assert.equal(draft.programId, 4);
+  draft.programId = "5"; index = 0; context.Component(props);
+  assert.equal(draft.programId, "5");
+  data[1] = { loading: true, data: null }; draft.programId = ""; index = 0;
+  assert.equal(context.Component(props).props.children[0].props.children[3].props.disabled, true);
+  assert.equal(draft.programId, "");
 });
 
 test("unchanged server-generated zero components are preserved, not re-saved", async () => {
@@ -663,6 +779,180 @@ test("new fee views only read data and gate access using existing permissions", 
 
 
 
+});
+
+await describe("Fee Management - collection", async () => {
+  const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
+  after(() => server.close());
+  const service = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantService.js");
+  const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
+  const account = { studentId: 10, studentFeeId: 100, studentName: "Actual Student", admissionNumber: "ADM10", outstandingBalance: 1000, schedules: [{ feeInstallmentId: 7, balanceAmount: 400, feeSchedule: "First", dueDate: "2026-10-25" }] };
+  const draft = { target: "schedules", feeInstallmentIds: [7], amount: "200", discount: "10", fine: "5", paymentDate: "2026-10-25", paymentMode: "UPI", transactionReference: "REAL-REFERENCE", note: "Partial installment" };
+  const saved = { feePaymentId: 50, studentId: 10, studentFeeId: 100, studentName: "Actual Student", admissionNumber: "ADM10", amount: 195, paymentMethod: "UPI", paymentDate: "2026-10-25", receiptNumber: "ACTUAL-50", status: "Success" };
+  const withAdapter = async (adapter, work) => {
+    const original = client.defaults.adapter;
+    client.defaults.adapter = async config => ({ data: await adapter(config), status: 200, headers: {}, config });
+    try { await work(); } finally { client.defaults.adapter = original; }
+  };
+
+  test("collection requires verified create permission, never merely the Accountant role", async () => {
+    const permissions = { loading: false, error: "", isAccountant: true, canDo: () => false };
+    assert.equal(service.feeCollectionAccess(permissions), false);
+    assert.equal(service.feeCollectionAccess({ ...permissions, canDo: () => true }), true);
+    assert.equal(service.feeCollectionAccess({ ...permissions, loading: true, canDo: () => true }), false);
+    assert.equal(service.feeCollectionAccess({ ...permissions, error: "Denied", canDo: () => true }), false);
+    let calls = 0;
+    await withAdapter(() => { calls++; return saved; }, async () => {
+      await assert.rejects(service.collectStudentPayment(account, draft, () => false), /create permission/);
+    });
+    assert.equal(calls, 0);
+  });
+
+  test("payment validation covers schedules, references, dates, balances and net payment", () => {
+    for (const patch of [{ amount: "0" }, { amount: "-1" }, { amount: "Infinity" }, { amount: "401" }, { fine: "900" }, { fine: "-1" }, { discount: "999" }, { discount: "NaN" }, { transactionReference: " " }, { paymentMode: "Invented" }, { paymentDate: "2026-02-30" }, { feeInstallmentIds: [999] }, { feeInstallmentIds: [] }]) {
+      assert.throws(() => service.paymentPayload(account, { ...draft, ...patch }), undefined, JSON.stringify(patch));
+    }
+    assert.throws(() => service.paymentPayload({ ...account, outstandingBalance: null }, draft), /current outstanding/);
+    assert.throws(() => service.paymentPayload({ ...account, studentId: null }, draft), /IDs/);
+    for (const paymentMode of ["Cash", "UPI", "Card", "Net Banking", "Cheque"]) {
+      assert.equal(service.paymentPayload(account, { ...draft, paymentMode }).paymentMode, paymentMode);
+    }
+    assert.deepEqual(service.paymentPayload(account, { ...draft, target: "full", amount: "1000", fine: "0", discount: "0" }).feeInstallmentIds, []);
+    assert.deepEqual(service.paymentPayload({ ...account, schedules: [] }, { ...draft, target: "partial" }).feeInstallmentIds, []);
+  });
+
+  test("confirmed collection uses the existing POST once and returns actual receipt values", async () => {
+    const calls = [];
+    await withAdapter(config => { calls.push(config); return { status: true, data: saved }; }, async () => {
+      assert.deepEqual(await service.collectStudentPayment(account, draft, () => true), saved);
+    });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "/api/v1/fees/collect");
+    assert.equal(calls[0].method, "post");
+    assert.deepEqual(JSON.parse(calls[0].data), { studentId: 10, studentFeeId: 100, feeInstallmentIds: [7], amount: 200, paymentDate: "2026-10-25T00:00:00.000Z", paymentMode: "UPI", receiptNumber: "", discount: 10, fine: 5, transactionReference: "REAL-REFERENCE", note: "Partial installment" });
+  });
+
+  test("denied payments never use alternate routes; unknown outcomes require reconciliation", async () => {
+    for (const status of [403, 500, null]) {
+      let calls = 0;
+      await withAdapter(config => { calls++; throw { config, ...(status ? { response: { status } } : {}) }; }, async () => {
+        await assert.rejects(service.collectStudentPayment(account, draft, () => true), error => Boolean(error.feeSaveUncertain) === (status !== 403));
+      });
+      assert.equal(calls, 1);
+    }
+    for (const response of [{}, { ...saved, studentId: 20 }, { success: false }, { ...saved, amount: null }, { ...saved, status: "Failed" }]) {
+      await withAdapter(() => response, async () => {
+        await assert.rejects(service.collectStudentPayment(account, draft, () => true), error => error.feeSaveUncertain === true);
+      });
+    }
+  });
+
+  test("collection reads scoped real balances and rejects a different returned fee account", async () => {
+    await withAdapter(config => {
+      assert.deepEqual(config.params, { campusId: 1 });
+      return [{ studentId: 10, studentFeeId: 100, payable: 1200, paid: 200, balance: 1000 }];
+    }, async () => {
+      const [row] = await service.loadCollectionAccounts({ campusId: 1 });
+      assert.equal(row.totalPayable, 1200); assert.equal(row.totalPaid, 200); assert.equal(row.balance, 1000);
+    });
+    await withAdapter(() => ({ ...account, studentFeeId: 999 }), async () => {
+      await assert.rejects(service.loadCollectionDetails(account), /does not match/);
+    });
+  });
+
+  test("history uses its authorized bulk contract and reports absent or forbidden data", async () => {
+    for (const outcome of ["success", "missing", "denied"]) {
+      const calls = [];
+      await withAdapter(config => {
+        calls.push(config.url);
+        if (config.url.endsWith("/ledger")) return [account];
+        if (outcome === "denied") throw { config, response: { status: 403 } };
+        return outcome === "success" ? { 10: [saved] } : {};
+      }, async () => {
+        const result = await service.loadPaymentHistory({}, undefined, () => true);
+        assert.equal(result.payments.length, outcome === "success" ? 1 : 0);
+        assert.equal(result.errors.length, outcome === "success" ? 0 : 1);
+        assert.deepEqual(calls, ["/api/v1/fees/ledger", "/api/v1/fees/bulk-history"]);
+      });
+    }
+    let calls = 0;
+    await withAdapter(() => { calls++; return {}; }, async () => {
+      await assert.rejects(service.loadPaymentHistory({}, undefined, () => false), /bulk-history/);
+    });
+    assert.equal(calls, 0);
+  });
+
+  const source = await readFile(new URL("../pages/AccountantFeeManagement.jsx", import.meta.url), "utf8");
+  const nodes = node => node && typeof node === "object" ? [node, ...(node.props?.children || []).flat(Infinity).flatMap(nodes)] : [];
+  const React = { createElement: (type, props, ...children) => ({ type, props: { ...props, children: children.flat(Infinity) } }), Fragment: "Fragment" };
+  async function mount(name, bindings, props) {
+    const end = name === "CollectPayment" ? "function PaymentReceipt" : "function FeeLedger";
+    const { code } = await transformWithOxc(source.slice(source.indexOf(`function ${name}`), source.indexOf(end)), "Collection.jsx", { jsx: { runtime: "classic" } });
+    let cursor = 0, hooks = [], tree;
+    const context = vm.createContext({ React, ...feeView, ...service, PAYMENT_METHODS: ["Cash", "UPI", "Card", "Net Banking", "Cheque"], Modal: "Modal", FeeNotice: "FeeNotice", FeeLoadState: "LoadState", FeeTable: "FeeTable", FeeBadge: "FeeBadge", Link: "Link", ArrowLeft: "ArrowLeft", History: "History", WalletCards: "WalletCards", Printer: "Printer", field: () => ({}), CollectPayment: function CollectPayment() {}, PaymentReceipt: function PaymentReceipt() {},
+      useState: initial => { const index = cursor++; hooks[index] ??= { value: typeof initial === "function" ? initial() : initial }; return [hooks[index].value, value => { hooks[index].value = typeof value === "function" ? value(hooks[index].value) : value; }]; },
+      useRef: initial => { const index = cursor++; return hooks[index] ??= { current: initial }; }, useCallback: fn => fn, useEffect: () => {}, ...bindings });
+    vm.runInContext(`${code};globalThis.Component=${name}`, context);
+    const render = () => { cursor = 0; tree = context.Component(props); return nodes(tree); };
+    return { render, all: () => nodes(tree) };
+  }
+
+  test("modal blocks double clicks and repeat submissions after an unconfirmed response", async () => {
+    let calls = 0, resolve, successful = 0;
+    const view = await mount("CollectPayment", { collectStudentPayment: () => { calls++; return new Promise(done => { resolve = done; }); } }, { account, authorize: () => true, onClose() {}, onSaved: () => { successful++; } });
+    const form = view.render().find(node => node.type === "form");
+    const first = form.props.onSubmit({ preventDefault() {} });
+    await form.props.onSubmit({ preventDefault() {} });
+    assert.equal(calls, 1); resolve(saved); await first; assert.equal(successful, 1);
+    const denied = await mount("CollectPayment", { collectStudentPayment: async () => { calls++; throw { feeSaveUncertain: true, code: "ACCOUNTANT_DATA_ERROR", message: "Unconfirmed" }; } }, { account, authorize: () => true, onClose() {}, onSaved() { throw new Error("Must not succeed"); } });
+    await denied.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+    const updated = denied.render();
+    assert.equal(updated.find(node => node.type === "fieldset").props.disabled, true);
+    await updated.find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+    assert.equal(calls, 2);
+  });
+
+  test("confirmed payment refreshes detail and list once, with actual saved receipt data", async () => {
+    let detailReloads = 0, listReloads = 0, events = 0;
+    const state = { data: account, loading: false, error: "", reload: () => { detailReloads++; } };
+    const view = await mount("FeeDetails", { useFinancePage: () => state, window: { dispatchEvent: () => { events++; } }, Event: function Event() {} }, { row: account, collection: true, authorize: () => true, onClose() {}, onCollected: () => { listReloads++; } });
+    view.render().find(node => node.type === "button" && node.props.children.includes(" Collect Payment")).props.onClick();
+    const modal = view.render().find(node => typeof node.type === "function" && node.type.name === "CollectPayment");
+    modal.props.onSaved(saved);
+    const receipt = view.render().find(node => typeof node.type === "function" && node.type.name === "PaymentReceipt");
+    assert.equal(receipt.props.payment, saved);
+    assert.equal(receipt.props.payment.amount, 195);
+    assert.deepEqual([detailReloads, listReloads, events], [1, 1, 1]);
+    const blocked = await mount("FeeDetails", { useFinancePage: () => state }, { row: account, collection: true, authorize: () => false, onClose() {} });
+    assert(!blocked.render().some(node => node.type === "button" && node.props.children.includes(" Collect Payment")));
+  });
+
+  test("navigation and history retain existing routes and do not call restricted receipt routes", async () => {
+    assert(source.includes('["collection", "Fee Collection"]'));
+    const payments = await readFile(new URL("../pages/AccountantPayments.jsx", import.meta.url), "utf8");
+    assert(!payments.includes("apiEndpoints.fee.payments"));
+    assert(!payments.includes("apiEndpoints.fee.collection"));
+    assert(payments.includes("disburseClaimPayment(disburseModal.claimId"));
+    assert(payments.includes('pageOf(feeRows, feePageNumber, "", "", 5)'));
+    assert(!source.includes("receiptByNumber"));
+  });
+
+  test("receipt renders confirmed values and prints only its own document without a retrieval request", async () => {
+    let printed = 0, cloned;
+    const printDocument = { body: { appendChild: node => { cloned = node; } }, head: { appendChild() {} }, createElement: () => ({}), importNode: node => node };
+    const frame = { style: {}, contentDocument: printDocument, contentWindow: { addEventListener() {}, focus() {}, print: () => { printed++; } }, remove() {} };
+    const view = await mount("PaymentReceipt", { document: { createElement: () => frame, body: { appendChild() {} } } }, { payment: saved, account, onClose() {} });
+    const all = view.render();
+    assert(all.some(node => node.type === "dd" && node.props.children.includes("ACTUAL-50")));
+    assert(all.some(node => node.type === "dd" && node.props.children.includes(feeView.feeMoney(195))));
+    const receipt = all.find(node => node.props?.ref);
+    const actualNode = { receiptOnly: true };
+    receipt.props.ref.current = actualNode;
+    const printButton = nodes(all[0].props.footer).find(node => node.type === "button" && node.props.children.includes(" Print Receipt"));
+    printButton.props.onClick();
+    assert.equal(printed, 1); assert.equal(cloned, actualNode);
+    assert(!source.includes("dangerouslySetInnerHTML"));
+  });
 });
 
 await describe("Leave", async () => {

@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Toast } from "@/components/common/Ui.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getExaminationSettings, updateExaminationSettings } from "@/services/examinationService.js";
 import attendanceTimingImg from "@/assets/settings-3d/attendance-timing.png";
 import templatesImg from "@/assets/settings-3d/templates.png";
 import boardYearImg from "@/assets/settings-3d/board-academic-year.png";
@@ -25,10 +27,10 @@ import "./ExamCellSettingsPage.css";
 const STORAGE_KEY = "cms_exam_cell_settings";
 
 const DEFAULT_SETTINGS = {
-  // Grading & Evaluation
+  // Grading & Evaluation (Backend /api/v1/examinations/settings)
   minPassPercentage: 35,
   maxGraceMarks: 5,
-  gradeScale: "10-point",
+  gradeScale: "10-Point CGPA (UGC / AICTE Standard)",
   reevaluationWindowDays: 15,
   allowNegativeMarking: false,
   doubleEvaluationTheory: false,
@@ -49,6 +51,9 @@ const DEFAULT_SETTINGS = {
 
 export default function ExamCellSettingsPage() {
   const navigate = useNavigate();
+  const campusCtx = useCampusContext();
+  const campusId = campusCtx?.selectedCampusId || campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || 1;
+
   const [activeTab, setActiveTab] = useState("grading");
   const [settings, setSettings] = useState(() => {
     try {
@@ -59,34 +64,105 @@ export default function ExamCellSettingsPage() {
     }
   });
 
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  const handleSave = (e) => {
+  // Fetch live examination cell settings from backend
+  useEffect(() => {
+    let isMounted = true;
+    async function loadBackendSettings() {
+      try {
+        setLoading(true);
+        const data = await getExaminationSettings(campusId);
+        if (data && isMounted) {
+          setSettings((prev) => ({
+            ...prev,
+            minPassPercentage: data.minimumPassingPercentage ?? prev.minPassPercentage,
+            maxGraceMarks: data.maximumGraceMarksLimit ?? prev.maxGraceMarks,
+            gradeScale: data.gradeScaleStandard || prev.gradeScale,
+            reevaluationWindowDays: data.reEvaluationWindowDays ?? prev.reevaluationWindowDays,
+            doubleEvaluationTheory: Boolean(data.enableDoubleEvaluation ?? prev.doubleEvaluationTheory),
+            allowNegativeMarking: Boolean(data.allowNegativeMarking ?? prev.allowNegativeMarking),
+          }));
+          if (data.updatedAt) {
+            setLastUpdatedAt(data.updatedAt);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load examination settings from backend, using current/cached values:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadBackendSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [campusId]);
+
+  const handleSave = async (e) => {
     if (e) e.preventDefault();
     setSaving(true);
-    setTimeout(() => {
+    try {
+      const payload = {
+        minimumPassingPercentage: Number(settings.minPassPercentage) || 35,
+        maximumGraceMarksLimit: Number(settings.maxGraceMarks) || 0,
+        gradeScaleStandard: settings.gradeScale || "10-Point CGPA (UGC / AICTE Standard)",
+        reEvaluationWindowDays: Number(settings.reevaluationWindowDays) || 15,
+        enableDoubleEvaluation: Boolean(settings.doubleEvaluationTheory),
+        allowNegativeMarking: Boolean(settings.allowNegativeMarking),
+      };
+
+      const result = await updateExaminationSettings(campusId, payload);
+      if (result?.updatedAt) {
+        setLastUpdatedAt(result.updatedAt);
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      showToast("Exam Cell grading criteria saved to backend successfully!", "success");
+    } catch (err) {
+      console.error("Failed to save examination settings:", err);
+      // Fallback save locally
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-        showToast("Exam Cell configuration saved successfully!", "success");
-      } catch {
-        showToast("Failed to save settings locally.", "error");
+      } catch {}
+      showToast("Backend save failed. Stored settings locally.", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (window.confirm("Are you sure you want to restore default Exam Cell settings?")) {
+      setSettings(DEFAULT_SETTINGS);
+      try {
+        setSaving(true);
+        const defaultPayload = {
+          minimumPassingPercentage: 35,
+          maximumGraceMarksLimit: 5,
+          gradeScaleStandard: "10-Point CGPA (UGC / AICTE Standard)",
+          reEvaluationWindowDays: 15,
+          enableDoubleEvaluation: false,
+          allowNegativeMarking: false,
+        };
+        const result = await updateExaminationSettings(campusId, defaultPayload);
+        if (result?.updatedAt) setLastUpdatedAt(result.updatedAt);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SETTINGS));
+        showToast("Restored system default Exam Cell settings.", "info");
+      } catch (err) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SETTINGS));
+        showToast("Restored local defaults (Backend unavailable).", "info");
       } finally {
         setSaving(false);
       }
-    }, 400);
-  };
-
-  const handleReset = () => {
-    if (window.confirm("Are you sure you want to restore default Exam Cell settings?")) {
-      setSettings(DEFAULT_SETTINGS);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SETTINGS));
-      showToast("Restored system default Exam Cell settings.", "info");
     }
   };
 
@@ -189,7 +265,14 @@ export default function ExamCellSettingsPage() {
           {activeTab === "grading" && (
             <div className="ec-settings-section">
               <div className="ec-settings-section-head">
-                <h3>Grading Criteria &amp; Moderation Rules</h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                  <h3>Grading Criteria &amp; Moderation Rules</h3>
+                  {lastUpdatedAt && (
+                    <span style={{ fontSize: "12px", color: "var(--text-muted, #64748b)" }}>
+                      Live Synced • Updated: {new Date(lastUpdatedAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
                 <p>Define standard academic pass parameters, grace allowances, and scoring systems.</p>
               </div>
 
@@ -231,12 +314,18 @@ export default function ExamCellSettingsPage() {
                   </label>
                   <select
                     className="cms-input"
-                    value={settings.gradeScale}
+                    value={
+                      /percentage/i.test(settings.gradeScale)
+                        ? "Percentage & Divisions (1st, 2nd, 3rd)"
+                        : /letter/i.test(settings.gradeScale)
+                        ? "Letter Grades (A+, A, B, C, D, F)"
+                        : "10-Point CGPA (UGC / AICTE Standard)"
+                    }
                     onChange={(e) => updateSetting("gradeScale", e.target.value)}
                   >
-                    <option value="10-point">10-Point CGPA (UGC / AICTE Standard)</option>
-                    <option value="percentage">Percentage &amp; Divisions (1st, 2nd, 3rd)</option>
-                    <option value="letter">Letter Grades (A+, A, B, C, D, F)</option>
+                    <option value="10-Point CGPA (UGC / AICTE Standard)">10-Point CGPA (UGC / AICTE Standard)</option>
+                    <option value="Percentage & Divisions (1st, 2nd, 3rd)">Percentage &amp; Divisions (1st, 2nd, 3rd)</option>
+                    <option value="Letter Grades (A+, A, B, C, D, F)">Letter Grades (A+, A, B, C, D, F)</option>
                   </select>
                 </div>
 

@@ -5240,128 +5240,146 @@ export default function ExaminationPage() {
                 {examsLoading ? (
                   <ExaminationTableSkeleton />
                 ) : shownExams.length ? (
-                  shownExams.map((e) => (
-                    <tr key={e.id}>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.code}>
-                          {e.code}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.name}>
-                          {e.name}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines exam-cell-academic-level" title={getLevelNames(e, academicLevels)}>
-                          {getLevelNames(e, academicLevels)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={getGroupNames(e, groups)}>
-                          {getGroupNames(e, groups)}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className="exam-cell-two-lines"
-                          title={getProgramNames(e, programs)}
-                        >
-                          {getProgramNames(e, programs)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines">{e.examCategory || "Regular"}</span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.examPattern || "Standard Pattern"}>
-                          {e.examPattern || "Standard Pattern"}
-                        </span>
-                      </td>
-                      <td>
-                        {d(e.startDate)}
-                        <small className="exam-muted"> to {d(e.endDate)}</small>
-                      </td>
-                      <td className="exam-status-cell">
-                        <span className={`cms-badge exam-status-badge exam-status-${normalizeStatus(e.status).toLowerCase()}`}>
-                          {normalizeStatus(e.status) || "DRAFT"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="cms-actions">
-                          <button
-                            type="button"
-                            className="cms-action-btn view"
-                            title="View Details"
-                            onClick={() => handleOpenDetails(e)}
+                  shownExams.map((e) => {
+                    const examStatus = normalizeStatus(e.status) || "DRAFT";
+                    const isDraft = examStatus === "DRAFT";
+                    const isScheduled =
+                      examStatus === "SCHEDULED" ||
+                      examStatus === "ONGOING" ||
+                      examStatus === "ACTIVE" ||
+                      examStatus === "PUBLISHED";
+
+                    return (
+                      <tr key={e.id}>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.code}>
+                            {e.code}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.name}>
+                            {e.name}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines exam-cell-academic-level" title={getLevelNames(e, academicLevels)}>
+                            {getLevelNames(e, academicLevels)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={getGroupNames(e, groups)}>
+                            {getGroupNames(e, groups)}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className="exam-cell-two-lines"
+                            title={getProgramNames(e, programs)}
                           >
-                            <Eye size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn"
-                            title={e.status === "COMPLETED" ? "View Examination Schedule" : "Schedule / Reschedule Examination"}
-                            onClick={() => {
-                              const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
-                              const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
-                              if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
-                                setSelectedBoard(e.boardId);
-                              }
-                              if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
-                                setSelectedAcademicYear(e.yearId);
-                              }
-                              setExamId(String(e.id));
-                              setActiveTab("schedule");
-                              setEditing(null);
-                            }}
-                          >
-                            <CalendarDays size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn edit"
-                            title="Edit Examination Scope"
-                            onClick={() => {
-                              const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
-                              const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
-                              if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
-                                setSelectedBoard(e.boardId);
-                              }
-                              if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
-                                setSelectedAcademicYear(e.yearId);
-                              }
-                              setEditingExamId(String(e.id));
-                              setViewMode("edit");
-                            }}
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn warning"
-                            title={normalizeStatus(e.status) === "CANCELLED" ? "Examination already cancelled" : "Cancel Examination"}
-                            onClick={() => {
-                              if (normalizeStatus(e.status) === "CANCELLED") {
-                                showToast(`Examination "${e.name}" is already cancelled.`, "info");
-                                return;
-                              }
-                              setCancelExamTarget(e);
-                            }}
-                          >
-                            <Ban size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn danger"
-                            title="Delete Examination"
-                            onClick={() => setRemove(e)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {getProgramNames(e, programs)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines">{e.examCategory || "Regular"}</span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.examPattern || "Standard Pattern"}>
+                            {e.examPattern || "Standard Pattern"}
+                          </span>
+                        </td>
+                        <td>
+                          {d(e.startDate)}
+                          <small className="exam-muted"> to {d(e.endDate)}</small>
+                        </td>
+                        <td className="exam-status-cell">
+                          <span className={`cms-badge exam-status-badge exam-status-${examStatus.toLowerCase()}`}>
+                            {examStatus}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="cms-actions">
+                            <button
+                              type="button"
+                              className="cms-action-btn view"
+                              title="View Details"
+                              onClick={() => handleOpenDetails(e)}
+                            >
+                              <Eye size={15} />
+                            </button>
+                            {(isDraft || isScheduled) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn"
+                                title={isScheduled ? "Reschedule Examination" : "Schedule Examination"}
+                                onClick={() => {
+                                  const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
+                                  const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
+                                  if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
+                                    setSelectedBoard(e.boardId);
+                                  }
+                                  if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
+                                    setSelectedAcademicYear(e.yearId);
+                                  }
+                                  setExamId(String(e.id));
+                                  setActiveTab("schedule");
+                                  setEditing(null);
+                                }}
+                              >
+                                <CalendarDays size={15} />
+                              </button>
+                            )}
+                            {isDraft && (
+                              <button
+                                type="button"
+                                className="cms-action-btn edit"
+                                title="Edit Examination Scope"
+                                onClick={() => {
+                                  const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
+                                  const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
+                                  if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
+                                    setSelectedBoard(e.boardId);
+                                  }
+                                  if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
+                                    setSelectedAcademicYear(e.yearId);
+                                  }
+                                  setEditingExamId(String(e.id));
+                                  setViewMode("edit");
+                                }}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            )}
+                            {(isDraft || isScheduled) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn warning"
+                                title="Cancel Examination"
+                                onClick={() => {
+                                  if (normalizeStatus(e.status) === "CANCELLED") {
+                                    showToast(`Examination "${e.name}" is already cancelled.`, "info");
+                                    return;
+                                  }
+                                  setCancelExamTarget(e);
+                                }}
+                              >
+                                <Ban size={15} />
+                              </button>
+                            )}
+                            {isDraft && (
+                              <button
+                                type="button"
+                                className="cms-action-btn danger"
+                                title="Delete Examination"
+                                onClick={() => setRemove(e)}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan="10">

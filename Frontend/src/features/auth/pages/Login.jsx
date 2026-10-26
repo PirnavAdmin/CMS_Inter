@@ -7,7 +7,7 @@ import { clearPasswordResetContext, loginUser } from "@/features/auth/services/a
 import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import { clearAuthSession, saveAuthSession } from "@/features/authStorage.js";
 import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
-import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
+import { isWardenRole, isTransportManagerRole } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../campusImages.js";
 import { getCampusContent } from "../../campusContent.js";
 
@@ -112,26 +112,47 @@ export default function Login() {
       }
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
-      const isWarden =
-        isWardenRole(result.user?.role, result.user) ||
-        result.roleType === "warden" ||
-        String(result.user?.role || "").toLowerCase().includes("warden") ||
-        String(result.user?.designation || "").toLowerCase().includes("warden");
       const userRole = String(result.user?.role || "").toLowerCase();
-      const isInventory = userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper";
-      const isExamCell = !isWarden && (isExamCellRole(userRole) || result.roleType === "examcell");
-      const isPrincipal = !isWarden && (userRole === "principal" || userRole.includes("principal"));
-      const isNonTeaching =
+      const isAdmin = result.user?.isAdmin || userRole.includes("admin") || result.roleType === "admin";
+
+      const isTransportManager =
+        !isAdmin &&
+        (isTransportManagerRole(result.user?.role, result.user) ||
+          result.roleType === "transport_manager" ||
+          String(result.user?.role || "").toLowerCase().includes("transport") ||
+          String(result.user?.designation || "").toLowerCase().includes("transport"));
+      const isWarden =
+        !isAdmin &&
+        !isTransportManager &&
+        (isWardenRole(result.user?.role, result.user) ||
+          result.roleType === "warden" ||
+          String(result.user?.role || "").toLowerCase().includes("warden") ||
+          String(result.user?.designation || "").toLowerCase().includes("warden"));
+      const isInventory = !isAdmin && (userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper");
+      const isExamCell = !isAdmin && !isWarden && !isTransportManager && (isExamCellRole(userRole) || result.roleType === "examcell");
+      const isPrincipal = !isAdmin && !isWarden && !isTransportManager && (userRole === "principal" || userRole.includes("principal"));
+      const isAccountant =
+        !isAdmin &&
         !isWarden &&
+        !isTransportManager &&
+        (userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier");
+      const isNonTeaching =
+        !isAdmin &&
+        !isWarden &&
+        !isTransportManager &&
         !isExamCell &&
+        !isPrincipal &&
+        !isAccountant &&
         (userRole === "non_teaching_staff" ||
           userRole === "non-teaching" ||
           userRole === "non-teaching-staff" ||
           userRole === "nonteaching" ||
           result.roleType === "non_teaching" ||
-          String(result.user?.staffType || "").toLowerCase() === "non-teaching");
+          (userRole === "staff" && String(result.user?.staffType || "").toLowerCase() === "non-teaching"));
       const isFacultyOrStaff =
+        !isAdmin &&
         !isWarden &&
+        !isTransportManager &&
         !isNonTeaching &&
         (userRole === "faculty" ||
         userRole === "teacher" ||
@@ -142,45 +163,60 @@ export default function Login() {
         userRole.includes("staff") ||
         userRole.includes("lecturer"));
       const isParent =
+        !isAdmin &&
         !isWarden &&
+        !isTransportManager &&
         (userRole === "parent" ||
         userRole.includes("parent") ||
         result.roleType === "parent");
-      const isAccountant =
-        !isWarden &&
-        (userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier");
 
-      if (isWarden) {
+      if (isAdmin) {
+        navigate("/dashboard", { replace: true });
+      } else if (isTransportManager) {
+        navigate("/transport-manager/overview", { replace: true });
+      } else if (isWarden) {
         navigate("/warden-dashboard", { replace: true });
       } else if (isInventory) {
         navigate("/inventory-dashboard", { replace: true });
       } else if (userRole.includes("driver")) {
         navigate("/driver", { replace: true });
-      } else if (isNonTeaching) {
-        navigate("/non-teaching-dashboard", { replace: true });
       } else if (isExamCell) {
         navigate("/exam-cell-dashboard", { replace: true });
-      } else if (result.user.isAdmin || userRole.includes("admin")) {
-        navigate("/dashboard", { replace: true });
       } else if (isPrincipal) {
         navigate("/principal-dashboard", { replace: true });
+      } else if (isAccountant) {
+        navigate("/accountant-dashboard", { replace: true });
+      } else if (isNonTeaching) {
+        navigate("/non-teaching-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
       } else if (isParent) {
         navigate("/parent-dashboard", { replace: true });
-      } else if (isAccountant) {
-        navigate("/accountant-dashboard", { replace: true });
       } else {
         navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
       }
     } catch (loginError) {
       clearAuthSession();
       const status = Number(loginError?.response?.status || 0);
-      setError(
-        [400, 401, 403].includes(status) || loginError?.code === "INVALID_CREDENTIALS"
-          ? "Invalid username or password. Please try again."
-          : getApiErrorMessage(loginError) || "Unable to sign in right now. Please try again.",
-      );
+      const serverMessage =
+        loginError?.response?.data?.message ||
+        loginError?.response?.data?.Message ||
+        loginError?.response?.data?.error ||
+        loginError?.response?.data?.Error ||
+        loginError?.response?.data?.detail ||
+        (typeof loginError?.response?.data === "string" ? loginError.response.data : null) ||
+        loginError?.message;
+
+      const displayMessage =
+        serverMessage &&
+        serverMessage !== "Error" &&
+        !serverMessage.startsWith("Authentication failed because")
+          ? serverMessage
+          : [400, 401, 403].includes(status) || loginError?.code === "INVALID_CREDENTIALS"
+          ? "Invalid Email or Password"
+          : getApiErrorMessage(loginError) || "Unable to sign in right now. Please try again.";
+
+      setError(displayMessage);
     } finally {
       setBusy(false);
     }

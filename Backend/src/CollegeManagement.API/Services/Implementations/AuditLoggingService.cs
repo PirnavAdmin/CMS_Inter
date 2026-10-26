@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
+using Microsoft.Extensions.Logging;
 using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
@@ -15,15 +16,18 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IAuditLogRepository _auditLogRepository;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly ILogger<AuditLoggingService> _logger;
 
         public AuditLoggingService(
             IAuditLogRepository auditLogRepository, 
             IHttpContextAccessor httpContextAccessor,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            ILogger<AuditLoggingService> logger)
         {
             _auditLogRepository = auditLogRepository;
             _httpContextAccessor = httpContextAccessor;
             _jwtTokenHelper = jwtTokenHelper;
+            _logger = logger;
         }
 
         public async Task LogAsync(string action, string module, string target, string severity = "Info", string status = "Success", string? details = null, string? overrideUser = null, string? overrideRole = null)
@@ -51,33 +55,48 @@ namespace CollegeManagement.API.Services.Implementations
                     try { staffId = _jwtTokenHelper.GetStaffId(user); } catch { /* Ignore */ }
                 }
 
-                var ipAddress = ClientIpHelper.GetClientIpAddress(context);
-                var userAgent = context?.Request?.Headers["User-Agent"].ToString();
+                var net = ClientIpHelper.GetNetworkDetails(context);
+                var correlationId = AuditCorrelationHelper.GetOrCreateCorrelationId(context);
+                var requestId = AuditCorrelationHelper.GetRequestId(context);
+
+                // Sanitize any sensitive data from details
+                string? sanitizedDetails = details != null ? AuditDataSanitizer.SanitizeJsonString(details) : null;
 
                 var auditLog = new AuditLog
                 {
+                    EventId = Guid.NewGuid().ToString("N"),
+                    CorrelationId = correlationId,
+                    RequestId = requestId,
                     UserName = overrideUser ?? userName ?? "System",
                     ActorRole = overrideRole ?? role,
+                    ActorType = (userId.HasValue || !string.IsNullOrEmpty(overrideUser)) ? "User" : "System",
                     Action = action,
-                    EntityName = target, // Using EntityName column for target
+                    EntityName = target,
                     Module = module,
                     Severity = severity,
                     Status = status,
-                    IpAddress = ipAddress,
-                    UserAgent = userAgent?.Length > 500 ? userAgent.Substring(0, 500) : userAgent,
+                    IpAddress = net.EffectiveIpAddress,
+                    RemoteIpAddress = net.RemoteIpAddress,
+                    ForwardedClientIp = net.ForwardedClientIp,
+                    IpSource = net.IpSource,
+                    IpConfidence = net.IpConfidence,
+                    UserAgent = net.UserAgent,
+                    DeviceId = net.DeviceId,
+                    RequestMethod = context?.Request?.Method,
+                    RouteTemplate = context?.Request?.Path.Value,
                     UserId = userId,
                     StaffId = staffId,
-                    Description = details,
+                    Description = sanitizedDetails,
                     CreatedAt = DateTime.UtcNow
                 };
 
                 await _auditLogRepository.InsertAsync(auditLog);
             }
-            catch
+            catch (Exception ex)
             {
-                // Never fail a business transaction because audit logging failed
+                // Never crash business transactions, but make audit failure observable in structured logs
+                _logger.LogError(ex, "Failed to persist explicit audit log event: Action '{Action}' on Module '{Module}' / Target '{Target}'.", action, module, target);
             }
         }
     }
 }
-

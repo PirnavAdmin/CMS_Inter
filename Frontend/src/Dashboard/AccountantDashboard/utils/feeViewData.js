@@ -11,16 +11,16 @@ export function feeMoney(value) {
 
 export const feeCompactMoney = (value) => feeMoney(value) === "-" ? "-" : formatCompactCurrency(value);
 
-export function pageOf(rows, page, search = "", status = "") {
+export function pageOf(rows, page, search = "", status = "", pageSize = 10) {
   const term = search.trim().toLowerCase();
   const filtered = rows.filter((row) => (!term || Object.values(row).some((value) =>
     typeof value !== "object" && String(value ?? "").toLowerCase().includes(term)))
     && (!status || readFee(row, "status") === status));
   const total = filtered.length;
-  const pages = Math.max(1, Math.ceil(total / 10));
-  const current = Math.min(pages, Math.max(1, page));
-  const offset = (current - 1) * 10;
-  return { rows: filtered.slice(offset, offset + 10), total, pages, current, start: total ? offset + 1 : 0, end: Math.min(offset + 10, total) };
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const current = Math.min(pages, Math.max(1, Number(page) || 1));
+  const offset = (current - 1) * pageSize;
+  return { rows: filtered.slice(offset, offset + pageSize), total, pages, current, start: total ? offset + 1 : 0, end: Math.min(offset + pageSize, total) };
 }
 
 // Structures only accept campusId on the server; board/year filtering must happen here.

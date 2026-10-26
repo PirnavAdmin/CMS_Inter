@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from "react";
-import { CalendarDays, CalendarCheck, CalendarClock, List, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -8,6 +8,12 @@ import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
+
+import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
+import nationalHolidaysIcon from "@/assets/sidebar-3d/holiday-national.svg";
+import festivalHolidaysIcon from "@/assets/sidebar-3d/holiday-festival.svg";
+import upcomingHolidaysIcon from "@/assets/sidebar-3d/holiday-upcoming.svg";
+import completedHolidaysIcon from "@/assets/sidebar-3d/holiday-completed.svg";
 
 const unwrap = (data) => data?.data?.data ?? data?.data ?? data?.Data ?? data ?? {};
 const read = (row, ...keys) => keys.map((key) => row?.[key]).find((value) => value != null && value !== "");
@@ -33,11 +39,9 @@ export default function StudentHolidays() {
   const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [view, setView] = useState("list");
+  const [search, setSearch] = useState("");
   const [type, setType] = useState("All Types");
   const [period, setPeriod] = useState("All Holidays");
-  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
-  const [selectedDate, setSelectedDate] = useState(null);
   const [page, setPage] = useState(1);
   useEffect(() => {
     let active = true;
@@ -58,34 +62,31 @@ export default function StudentHolidays() {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const items = holidays.map((item) => normalizeHoliday(item, today)).sort((a, b) => (a.start?.getTime() ?? Infinity) - (b.start?.getTime() ?? Infinity));
   const upcoming = items.filter((item) => item.status === "Upcoming");
-  const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
   const types = [...new Set(items.map((item) => item.type))];
-  const filtered = items.filter((item) => (type === "All Types" || item.type === type) && (period === "All Holidays" || item.status === period) && (!selectedDate || (item.start && item.start <= selectedDate && item.end >= selectedDate)));
+  const filtered = items.filter((item) => (type === "All Types" || item.type === type) && (period === "All Holidays" || item.status === period) && `${item.name} ${item.description}`.toLowerCase().includes(search.trim().toLowerCase()));
   const pages = Math.max(1, Math.ceil(filtered.length / 5));
   const currentPage = Math.min(page, pages);
-  const firstCell = new Date(month.getFullYear(), month.getMonth(), 1 - month.getDay());
-  const calendarItems = items.filter((item) => type === "All Types" || item.type === type);
-  const navigateMonth = (offset) => { setMonth(new Date(month.getFullYear(), month.getMonth() + offset, 1)); setSelectedDate(null); setPage(1); };
-  const calendar = <StudentCard className="sp-holiday-calendar" title={month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })} action={<div className="sp-holiday-calendar-actions"><button className="sp-icon-action" aria-label="Previous month" onClick={() => navigateMonth(-1)}><ChevronLeft size={16}/></button><button className="sp-icon-action" aria-label="Next month" onClick={() => navigateMonth(1)}><ChevronRight size={16}/></button><button className="sp-btn" onClick={() => { setMonth(thisMonthStart); setSelectedDate(null); setPage(1); }}>Today</button></div>}>
-    <div className="sp-holiday-calendar-grid">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <small key={day}>{day}</small>)}{Array.from({ length: 42 }, (_, index) => {
-      const date = new Date(firstCell.getFullYear(), firstCell.getMonth(), firstCell.getDate() + index);
-      const matches = calendarItems.filter((item) => item.start && item.start <= date && item.end >= date);
-      const label = `${formatDate(date)}${matches.length ? `: ${matches.map((item) => item.name).join(", ")}` : ": No holidays"}`;
-      return <button key={index} title={label} aria-label={label} aria-pressed={selectedDate?.getTime() === date.getTime()} aria-current={date.getTime() === today.getTime() ? "date" : undefined} className={`${date.getMonth() !== month.getMonth() ? "is-outside" : ""} ${matches.length ? `has-holiday is-${category(matches[0].type)}` : ""} ${date.getTime() === today.getTime() ? "is-today" : ""} ${selectedDate?.getTime() === date.getTime() ? "is-selected" : ""}`} onClick={() => { setSelectedDate(selectedDate?.getTime() === date.getTime() ? null : date); setPage(1); }}>{date.getDate()}{matches.length ? <i/> : null}</button>;
-    })}</div><div className="sp-holiday-legend">{["National", "Festival", "Other"].map((label) => <span className={`is-${label.toLowerCase()}`} key={label}><i/>{label}</span>)}</div>
-    {selectedDate ? <p className="sp-muted">Selected: {formatDate(selectedDate)} <button className="sp-holiday-clear" onClick={() => { setSelectedDate(null); setPage(1); }}>Clear</button></p> : null}
-  </StudentCard>;
   return <div className="sp-page sp-holidays-page">
     <StudentPageHeader title="Holidays" subtitle={student?.academicYearName ? `Academic holiday calendar for ${student.academicYearName}.` : "Academic holiday calendar."}/>
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
-    <div className="sp-summary-grid four"><StudentSummaryCard icon={CalendarDays} label="Total Holidays" value={items.length} note="In the loaded academic calendar"/><StudentSummaryCard icon={CalendarClock} label="Upcoming Holidays" value={upcoming.length} note={upcoming[0] ? `Next: ${formatDate(upcoming[0].start)}` : "No upcoming holidays"} tone="blue"/><StudentSummaryCard icon={CalendarDays} label="This Month" value={items.filter((item) => item.start && item.start <= thisMonthEnd && item.end >= thisMonthStart).length} note={today.toLocaleDateString("en-IN", { month: "long", year: "numeric" })} tone="orange"/><StudentSummaryCard icon={CalendarCheck} label="Past Holidays" value={items.filter((item) => item.status === "Past").length} note="Completed calendar holidays"/></div>
-    <div className="sp-holiday-toolbar"><div className="sp-actions"><button className={`sp-btn ${view === "list" ? "primary" : ""}`} aria-pressed={view === "list"} onClick={() => setView("list")}><List size={15}/> List View</button><button className={`sp-btn ${view === "calendar" ? "primary" : ""}`} aria-pressed={view === "calendar"} onClick={() => setView("calendar")}><CalendarDays size={15}/> Calendar View</button></div><div className="sp-holiday-filters"><select aria-label="Holiday type" value={type} onChange={(event) => { setType(event.target.value); setPage(1); }}><option>All Types</option>{types.map((label) => <option key={label}>{label}</option>)}</select><select aria-label="Holiday status" value={period} onChange={(event) => { setPeriod(event.target.value); setPage(1); }}>{["All Holidays", "Upcoming", "Ongoing", "Past"].map((label) => <option key={label}>{label}</option>)}</select><span className="sp-college-managed">{student?.academicYearName || "Academic calendar"}</span></div></div>
-    <div className={`sp-holiday-layout ${view === "calendar" ? "is-calendar-view" : ""}`}>
-      <StudentCard title={selectedDate ? `Holidays · ${formatDate(selectedDate)}` : period === "All Holidays" ? "Academic Holidays" : `${period} Holidays`} subtitle={`${filtered.length} holiday${filtered.length === 1 ? "" : "s"}`}>
+    <div className="sp-summary-grid sp-holiday-summary">
+      <StudentSummaryCard icon={totalHolidaysIcon} label="Total Holidays" value={items.length}/>
+      <StudentSummaryCard icon={nationalHolidaysIcon} label="National Holidays" value={items.filter((item) => category(item.type) === 'national').length} tone="blue"/>
+      <StudentSummaryCard icon={festivalHolidaysIcon} label="Festival Holidays" value={items.filter((item) => category(item.type) === 'festival').length} tone="orange"/>
+      <StudentSummaryCard icon={upcomingHolidaysIcon} label="Upcoming Holidays" value={upcoming.length} tone="purple"/>
+      <StudentSummaryCard icon={completedHolidaysIcon} label="Completed Holidays" value={items.filter((item) => item.status === 'Past').length}/>
+    </div>
+    <div className="sp-holiday-list-layout">
+      <StudentCard title={period === "All Holidays" ? "Holiday List" : `${period} Holidays`} subtitle={`${filtered.length} holiday${filtered.length === 1 ? "" : "s"}`}>
+        <div className="sp-holiday-list-filters">
+          <label className="sp-holiday-search"><Search size={17} aria-hidden="true"/><input type="search" aria-label="Search holidays" placeholder="Search holidays..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></label>
+          <select aria-label="Holiday type" value={type} onChange={(event) => { setType(event.target.value); setPage(1); }}><option>All Types</option>{types.map((label) => <option key={label}>{label}</option>)}</select>
+          <select aria-label="Holiday status" value={period} onChange={(event) => { setPeriod(event.target.value); setPage(1); }}>{["All Holidays", "Upcoming", "Ongoing", "Past"].map((label) => <option key={label}>{label}</option>)}</select>
+          <span className="sp-college-managed">{student?.academicYearName || "Academic calendar"}</span>
+        </div>
         <StudentDataTable columns={["Holiday", "Date", "Day", "Type", "Description", "Status"]} rows={filtered.slice((currentPage - 1) * 5, currentPage * 5).map((item) => [item.name, item.start && item.end > item.start ? `${formatDate(item.start)} - ${formatDate(item.end)}` : formatDate(item.start), item.start && item.end > item.start ? `${weekday(item.start)} - ${weekday(item.end)}` : weekday(item.start), item.type, item.description, item.status])} renderCell={(value, row, column, index) => index === 3 ? <span className={`sp-holiday-type is-${category(value)}`}>{value}</span> : index === 5 ? <span className={`sp-holiday-status is-${String(value).toLowerCase()}`}>{value}</span> : value} empty="No holidays match the selected filters."/>
         {filtered.length ? <div className="sp-pagination"><span>Showing {(currentPage - 1) * 5 + 1}-{Math.min(currentPage * 5, filtered.length)} of {filtered.length} holidays</span><div><button className="sp-btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><strong>{currentPage} / {pages}</strong><button className="sp-btn" disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>Next</button></div></div> : null}
-      </StudentCard>{calendar}
+      </StudentCard>
     </div>
   </div>;
 }

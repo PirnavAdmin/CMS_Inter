@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, KeyRound, Upload, Download, Eye, EyeOff, FileText, LayoutGrid, List, Search, RefreshCw, FolderOpen, Trash2, UserRound, House, Landmark, GraduationCap, LockKeyhole, Pencil, Save, CalendarDays, Phone, Mail, MapPin, Building2, Globe, BookOpen, Users, Hash, Layers, Percent, Heart, Fingerprint } from "lucide-react";
+import { RotateCw, Camera, KeyRound, Upload, Download, Eye, EyeOff, FileText, LayoutGrid, List, Search, RefreshCw, FolderOpen, Trash2, UserRound, House, Landmark, GraduationCap, LockKeyhole, Pencil, Save, CalendarDays, Phone, Mail, MapPin, Building2, Globe, BookOpen, Users, Hash, Layers, Percent, Heart, Fingerprint } from "lucide-react";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { ConfirmDialog, Modal, SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -143,6 +143,31 @@ export default function StudentProfile() {
   const [failedPhotoUrl, setFailedPhotoUrl] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
   const [candidateFailed, setCandidateFailed] = useState(false);
+  const cropCanvasRef = useRef(null);
+  const cropImageRef = useRef(null);
+  const cropDragRef = useRef(null);
+  const photoRequestLock = useRef(false);
+  const [crop, setCrop] = useState({ zoom: 1, rotation: 0, x: 0, y: 0 });
+  const [cropReady, setCropReady] = useState(false);
+
+  useEffect(() => {
+    setCrop({ zoom: 1, rotation: 0, x: 0, y: 0 });
+    setCropReady(false);
+    cropImageRef.current = null;
+    if (!photoCandidateUrl) return;
+    let active = true;
+    const image = new Image();
+    image.onload = () => { if (active) { cropImageRef.current = image; setCropReady(true); } };
+    image.onerror = () => { if (active) { setCandidateFailed(true); setPhotoFlowError('This image could not be opened. Select another photo.'); } };
+    image.src = photoCandidateUrl;
+    return () => { active = false; };
+  }, [photoCandidateUrl]);
+
+  useEffect(() => {
+    const canvas = cropCanvasRef.current, image = cropImageRef.current;
+    if (!canvas || !image || !cropReady) return;
+    drawStudentPhotoCrop(canvas, image, crop);
+  }, [crop, cropReady]);
 
   useEffect(() => {
     if (!photoFile) { setPhotoCandidateUrl(""); return; }
@@ -212,7 +237,7 @@ export default function StudentProfile() {
   };
   const photoAvailable = Boolean(photoUrl && failedPhotoUrl !== photoUrl);
   const openPhotoMenu = () => { setPhotoFlowError(""); setPhotoFile(null); setPhotoMode("menu"); };
-  const closePhotoFlow = () => { if (!photoBusy) { setPhotoMode(null); setPhotoFile(null); setPhotoFlowError(""); } };
+  const closePhotoFlow = () => { if (!photoRequestLock.current && !photoBusy) { setPhotoMode(null); setPhotoFile(null); setPhotoFlowError(""); } };
   const selectPhoto = (event) => {
     const file = event.target.files?.[0]; event.target.value = "";
     if (!file) return;
@@ -236,17 +261,23 @@ export default function StudentProfile() {
     }, "image/jpeg", 0.9);
   };
   const uploadPhoto = async () => {
-    if (!photoFile || photoBusy || candidateFailed) return;
+    if (!photoFile || photoRequestLock.current || candidateFailed || !cropReady) return;
     if (photoFile.size > 5 * 1024 * 1024) { setPhotoFlowError("Photo file size cannot exceed 5 MB."); return; }
+    photoRequestLock.current = true;
     setPhotoBusy(true); setPhotoFlowError("");
     try {
-      await uploadCurrentStudentPhoto(photoFile);
+      const canvas = document.createElement('canvas'); canvas.width = 600; canvas.height = 600;
+      if (!cropImageRef.current) throw new Error('Photo preview is unavailable. Select your photo again.');
+      drawStudentPhotoCrop(canvas, cropImageRef.current, crop);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      if (!blob) throw new Error('Unable to prepare this photo. Please try another image.');
+      await uploadCurrentStudentPhoto(new File([blob], 'profile-photo.jpg', { type: 'image/jpeg' }));
       setPhotoMode("menu"); setPhotoFile(null);
       try { await refreshProfile(); notify("Photo uploaded successfully."); }
       catch (requestError) { setPhotoFlowError(`Photo saved, but the profile could not be refreshed. ${getApiErrorMessage(requestError)}`); }
     }
     catch (requestError) { const message = getApiErrorMessage(requestError); setPhotoFlowError(message); notify(message, "error"); }
-    finally { setPhotoBusy(false); }
+    finally { photoRequestLock.current = false; setPhotoBusy(false); }
   };
   const removePhoto = async () => {
     if (photoBusy) return;
@@ -329,11 +360,11 @@ export default function StudentProfile() {
   return <>
     <div className="sp-page sp-profile-page">
       <StudentPageHeader title="My Profile" subtitle="Review and maintain your permitted student information." action={<div className="sp-actions"><button className="sp-btn" onClick={openPasswordModal}><KeyRound size={15}/> Change Password</button></div>}/>
-      <section className="sp-profile-hero"><div className="sp-photo-control"><button className="sp-photo-avatar-button" onClick={openPhotoMenu} aria-label="Open profile photo options" title="Profile photo">{photoAvailable ? <img className="sp-profile-photo" src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-avatar is-xl">{initials}</span>}</button><button className="sp-photo-camera-button" onClick={openPhotoMenu} aria-label="Change profile photo" title="Change profile photo"><Camera size={16}/></button></div><div><h2>{profile?.studentName}</h2><p>Student ID: {profile?.studentId} • Roll No: {display(profile?.rollNo, true)} • {display(profile?.sectionName, true)}</p></div><input ref={photoRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={selectPhoto}/></section>
+      <section className="sp-profile-hero"><div className="sp-photo-control"><button className="sp-photo-avatar-button" onClick={openPhotoMenu} aria-label="Open profile photo options" title="Profile photo">{photoAvailable ? <img className="sp-profile-photo" src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-avatar is-xl">{initials}</span>}</button><button className="sp-photo-camera-button" onClick={openPhotoMenu} aria-label="Change profile photo" title="Change profile photo"><Camera size={16}/></button></div><div><h2>{profile?.studentName}</h2><p>Admission No: <strong>{display(profile?.admissionNo)}</strong><span aria-hidden="true"> &middot; </span>Roll No: {display(profile?.rollNo, true)}<span aria-hidden="true"> &middot; </span>{display(profile?.sectionName, true)}</p></div><input ref={photoRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={selectPhoto}/></section>
       <nav className="sp-profile-tabs" aria-label="Profile sections">
-        {[["personal", "Personal Details", UserRound], ["contact", "Contact & Address", House], ["previousSchool", "Previous School", Landmark], ["academic", "Academic Information", GraduationCap], ["documents", "Documents", FileText]].map(([id, title, TabIcon]) => <label key={id}>
+        {[["personal", "Personal Details", UserRound], ["contact", "Contact & Address", House], ["previousSchool", "Previous School", Landmark], ["academic", "Academic Information", GraduationCap], ["documents", "Documents", FileText]].map(([id, title], index) => <label key={id}>
           <input type="radio" name="student-profile-section" value={id} defaultChecked={id === "personal"} disabled={Boolean(editingSection)} />
-          <span><TabIcon size={16} aria-hidden="true"/>{title}</span>
+          <span><b className="sp-student-step-number" aria-hidden="true">{index + 1}</b>{title}</span>
         </label>)}
       </nav>
       <div className={`sp-profile-sections ${editingSection ? "has-editing" : ""}`}>
@@ -420,11 +451,17 @@ export default function StudentProfile() {
       </form>
     </Modal> : null}
     {documentPreview ? <Modal className="sp-doc-modal" title={documentPreview.label} onClose={() => setDocumentPreview(null)}>{documentPreview.image ? <img className="sp-doc-preview-image" src={documentPreview.url} alt={documentPreview.label}/> : <iframe className="sp-doc-preview-frame" title={documentPreview.label} src={documentPreview.url}/>}</Modal> : null}
-    {photoMode && !removePhotoOpen ? <Modal className={`sp-photo-modal ${photoMode === "view" ? "is-preview" : ""}`} title={photoMode === "camera" ? "Take Photo" : photoMode === "upload" ? "Upload Photo" : "Profile Photo"} onClose={closePhotoFlow} closeOnOverlay={!photoBusy} footer={photoMode === "camera" || photoMode === "upload" ? <><button className="cms-btn" disabled={photoBusy} onClick={() => { setPhotoFile(null); setPhotoFlowError(""); setPhotoMode("menu"); }}>Cancel</button>{photoMode === "camera" && photoFile ? <button className="cms-btn" disabled={photoBusy} onClick={() => { setPhotoFile(null); setCandidateFailed(false); setPhotoFlowError(""); }}>Retake</button> : null}{photoMode === "camera" && !photoFile ? <button className="cms-btn cms-btn-primary" disabled={!cameraReady || Boolean(photoFlowError)} onClick={capturePhoto}><Camera size={15}/> Capture</button> : <button className="cms-btn cms-btn-primary" disabled={photoBusy || !photoCandidateUrl || candidateFailed} onClick={uploadPhoto}>{photoBusy ? "Saving..." : photoMode === "camera" ? "Use Photo" : "Save Photo"}</button>}</> : photoMode === "view" ? <button className="cms-btn" onClick={() => setPhotoMode("menu")}>Back</button> : null}>
+    {photoMode && !removePhotoOpen ? <Modal className={`sp-photo-modal ${photoMode === "view" ? "is-preview" : ""}`} title={photoFile ? "Crop Profile Photo" : photoMode === "camera" ? "Take Photo" : "Profile Photo"} onClose={closePhotoFlow} closeOnOverlay={!photoBusy} footer={photoMode === "camera" || photoMode === "upload" ? <><button className="cms-btn" disabled={photoBusy} onClick={() => { setPhotoFile(null); setPhotoFlowError(""); setPhotoMode("menu"); }}>Cancel</button>{photoMode === "camera" && photoFile ? <button className="cms-btn" disabled={photoBusy} onClick={() => { setPhotoFile(null); setCandidateFailed(false); setPhotoFlowError(""); }}>Retake</button> : null}{photoMode === "camera" && !photoFile ? <button className="cms-btn cms-btn-primary" disabled={!cameraReady || Boolean(photoFlowError)} onClick={capturePhoto}><Camera size={15}/> Capture</button> : <button className="cms-btn cms-btn-primary" disabled={photoBusy || !photoCandidateUrl || candidateFailed || !cropReady} onClick={uploadPhoto}>{photoBusy ? "Saving..." : "Save Photo"}</button>}</> : photoMode === "view" ? <><button className="cms-btn" onClick={() => photoRef.current?.click()}><FolderOpen size={15}/> Change Photo</button><button className="cms-btn" onClick={() => setPhotoMode("menu")}>Back</button></> : null}>
       {photoMode === "menu" ? <><div className="sp-photo-summary">{photoAvailable ? <img src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-photo-initials">{initials}</span>}<h3>{profile?.studentName || "Student"}</h3><p>Roll No: {display(profile?.rollNo, true)} • {display(profile?.sectionName, true)}</p></div><div className="sp-photo-menu"><button disabled={!photoAvailable || photoLoading || photoBusy} onClick={() => setPhotoMode("view")}><Eye size={20}/> View photo</button><button disabled={photoBusy} onClick={() => { setPhotoFlowError(""); setPhotoFile(null); setPhotoMode("camera"); }}><Camera size={20}/> Take photo</button><button disabled={photoBusy} onClick={() => { setPhotoFlowError(""); photoRef.current?.click(); }}><FolderOpen size={20}/> Upload photo</button><div className="sp-photo-menu-divider"/><button className="is-danger" disabled={!profile?.photo || photoBusy} onClick={() => setRemovePhotoOpen(true)}><Trash2 size={20}/> Remove photo</button></div></> : null}
       {photoMode === "view" ? photoAvailable ? <img className="sp-photo-large-preview" src={photoUrl} alt={`${profile?.studentName || "Student"} profile photo`} onError={() => setFailedPhotoUrl(photoUrl)}/> : <p className="sp-photo-message">The current photo is unavailable.</p> : null}
       {photoMode === "camera" && !photoFile ? <div className="sp-photo-capture"><video ref={videoRef} autoPlay playsInline muted aria-label="Live camera preview" onLoadedData={() => setCameraReady(true)}/>{!cameraReady && !photoFlowError ? <p role="status">Starting camera...</p> : null}</div> : null}
-      {(photoMode === "upload" || photoMode === "camera") && photoCandidateUrl ? <img className="sp-photo-large-preview" src={photoCandidateUrl} alt="Selected photo preview" onLoad={() => setCandidateFailed(false)} onError={() => { setCandidateFailed(true); setPhotoFlowError("This file could not be opened as an image. Select another photo."); }}/> : null}
+      {(photoMode === "upload" || photoMode === "camera") && photoCandidateUrl ? <div className="sp-student-photo-crop">
+        <p>Drag to reposition. Use zoom and rotate to fit your photo inside the frame.</p>
+        <canvas ref={cropCanvasRef} width={300} height={300} aria-label="Profile photo crop preview. Use arrow keys to reposition." tabIndex={0} onKeyDown={(event) => { const moves = { ArrowLeft: [-0.02, 0], ArrowRight: [0.02, 0], ArrowUp: [0, -0.02], ArrowDown: [0, 0.02] }; const move = moves[event.key]; if (!move || photoBusy || !cropReady) return; event.preventDefault(); setCrop((current) => clampStudentPhotoCrop(cropImageRef.current, { ...current, x: current.x + move[0], y: current.y + move[1] })); }} onPointerDown={(event) => { if (!cropReady || photoBusy) return; event.currentTarget.setPointerCapture(event.pointerId); cropDragRef.current = { x: event.clientX, y: event.clientY, startX: crop.x, startY: crop.y }; }} onPointerMove={(event) => { const drag = cropDragRef.current; if (!drag || photoBusy) return; const size = event.currentTarget.getBoundingClientRect().width; setCrop((current) => clampStudentPhotoCrop(cropImageRef.current, { ...current, x: drag.startX + (event.clientX - drag.x) / size, y: drag.startY + (event.clientY - drag.y) / size })); }} onPointerUp={() => { cropDragRef.current = null; }} onPointerCancel={() => { cropDragRef.current = null; }} onLostPointerCapture={() => { cropDragRef.current = null; }} />
+        {!cropReady && !candidateFailed && <p role="status">Preparing photo...</p>}
+        <label>Zoom<input type="range" min="1" max="3" step="0.05" value={crop.zoom} disabled={photoBusy || !cropReady} onChange={(event) => setCrop((current) => clampStudentPhotoCrop(cropImageRef.current, { ...current, zoom: Number(event.target.value) }))} /></label>
+        <div className="sp-actions"><button className="cms-btn" disabled={photoBusy || !cropReady} onClick={() => setCrop((current) => ({ ...current, rotation: (current.rotation + 90) % 360, x: 0, y: 0 }))}><RotateCw size={15}/> Rotate</button><button className="cms-btn" disabled={photoBusy || !cropReady} onClick={() => setCrop({ zoom: 1, rotation: 0, x: 0, y: 0 })}>Reset Alignment</button></div>
+      </div> : null}
       {photoMode === "upload" ? <p className="sp-photo-message">JPG, JPEG, PNG or WEBP · Maximum 5 MB.<br/>Your photo will be saved when you select Save Photo.</p> : null}
       {photoLoading && photoMode === "menu" ? <p className="sp-photo-message" role="status">Loading photo...</p> : null}
       {photoFlowError || (photoMode === "menu" && photoError) ? <p className="sp-photo-error" role="alert">{photoFlowError || "The current photo could not be loaded. You can upload a replacement."}</p> : null}
@@ -432,4 +469,27 @@ export default function StudentProfile() {
     {removePhotoOpen ? <ConfirmDialog title="Remove profile photo?" message="Are you sure you want to remove your profile photo?" confirmLabel="Remove Photo" loadingLabel="Removing..." danger loading={photoBusy} onCancel={() => { if (!photoBusy) setRemovePhotoOpen(false); }} onConfirm={removePhoto}/> : null}
     <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: "", type: "success" })}/>
   </>;
+}
+
+// Pan is stored relative to the square viewport so preview and saved crops match.
+export function clampStudentPhotoCrop(image, crop) {
+  if (!image) return crop;
+  const rotated = crop.rotation % 180 !== 0;
+  const width = rotated ? image.naturalHeight : image.naturalWidth;
+  const height = rotated ? image.naturalWidth : image.naturalHeight;
+  const scale = crop.zoom / Math.min(width, height);
+  const limitX = Math.max(0, (width * scale - 1) / 2);
+  const limitY = Math.max(0, (height * scale - 1) / 2);
+  return { ...crop, x: Math.max(-limitX, Math.min(limitX, crop.x)), y: Math.max(-limitY, Math.min(limitY, crop.y)) };
+}
+function drawStudentPhotoCrop(canvas, image, crop) {
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Photo editing is unavailable in this browser.');
+  const bounded = clampStudentPhotoCrop(image, crop);
+  const scale = canvas.width * bounded.zoom / Math.min(image.naturalWidth, image.naturalHeight);
+  context.save(); context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
+  context.translate(canvas.width * (0.5 + bounded.x), canvas.height * (0.5 + bounded.y));
+  context.rotate(bounded.rotation * Math.PI / 180);
+  context.drawImage(image, -image.naturalWidth * scale / 2, -image.naturalHeight * scale / 2, image.naturalWidth * scale, image.naturalHeight * scale);
+  context.restore();
 }

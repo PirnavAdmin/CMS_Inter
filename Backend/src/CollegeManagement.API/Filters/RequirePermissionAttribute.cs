@@ -3,6 +3,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using CollegeManagement.API.Repositories.Interfaces;
+using System.Linq;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -17,7 +19,7 @@ namespace CollegeManagement.API.Filters
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
     public class RequirePermissionAttribute : TypeFilterAttribute
     {
-        public RequirePermissionAttribute(string module, string action = "auto") 
+        public RequirePermissionAttribute(string module, string action = "auto")
             : base(typeof(RequirePermissionFilter))
         {
             Arguments = new object[] { module, action };
@@ -40,8 +42,8 @@ namespace CollegeManagement.API.Filters
         private readonly ILogger<RequirePermissionFilter> _logger;
 
         public RequirePermissionFilter(
-            string module, 
-            string action, 
+            string module,
+            string action,
             IPermissionRepository permissionRepository,
             ILogger<RequirePermissionFilter> logger)
         {
@@ -75,8 +77,12 @@ namespace CollegeManagement.API.Filters
                 return;
             }
 
-            // 2. Unrestricted bypass for platform Super Admin and Admin
-            if (context.HttpContext.User.IsInRole("Super Admin") || context.HttpContext.User.IsInRole("Admin"))
+            // 2. Unrestricted bypass for platform Super Admin, Admin, and Principal
+            if (context.HttpContext.User.IsInRole("Super Admin")
+                || context.HttpContext.User.IsInRole("Admin")
+                || context.HttpContext.User.IsInRole("Principal")
+                || context.HttpContext.User.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role")
+                    && (c.Value == "Super Admin" || c.Value == "Admin" || c.Value == "Principal")))
             {
                 return;
             }
@@ -101,7 +107,7 @@ namespace CollegeManagement.API.Filters
                 return;
             }
 
-            // Resolve action: if "auto", map based on HTTP method and path
+            // 4. Resolve action: if "auto", map based on HTTP method and path
             string resolvedAction = _action;
             if (string.IsNullOrWhiteSpace(resolvedAction) || resolvedAction.Equals("auto", StringComparison.OrdinalIgnoreCase))
             {
@@ -128,7 +134,7 @@ namespace CollegeManagement.API.Filters
 
             try
             {
-                // 4. Verify permission in DB: User -> Role -> RoleModules -> Permissions (with User Overrides)
+                // 5. Verify permission in DB: User -> Role -> RoleModules -> Permissions (with User Overrides)
                 bool hasPermission = await _permissionRepository.HasModulePermissionAsync(userId, _module, resolvedAction);
                 if (!hasPermission)
                 {
@@ -144,19 +150,20 @@ namespace CollegeManagement.API.Filters
                     {
                         StatusCode = StatusCodes.Status403Forbidden
                     };
+                    return;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error while checking module permission for user {UserId}.", userId);
+                _logger.LogError(ex, "Database or repository error while checking module permission for user {UserId} on module {Module}.", userId, _module);
                 context.Result = new ObjectResult(new
                 {
-                    statusCode = StatusCodes.Status403Forbidden,
+                    statusCode = StatusCodes.Status500InternalServerError,
                     success = false,
-                    message = "Access denied: Unable to verify permissions."
+                    message = "An error occurred while verifying access permissions."
                 })
                 {
-                    StatusCode = StatusCodes.Status403Forbidden
+                    StatusCode = StatusCodes.Status500InternalServerError
                 };
             }
         }
