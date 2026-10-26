@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, Eye, History, Pencil, Plus, Printer, RefreshCw, Trash2, WalletCards } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Eye, History, Pencil, Plus, Printer, RefreshCw, Trash2, WalletCards } from "lucide-react";
 import { ConfirmDialog, Modal } from "@/components/common/Ui.jsx";
 import { PAYMENT_METHODS } from "../../../data/feeManagementData.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -61,7 +61,18 @@ export function AccountantPagination({ page, onPage }) {
 }
 
 function CollectPayment({ account, authorize, onClose, onSaved }) {
-  const schedules = rowsOf(readFee(account, "schedules")).filter(item => Number(readFee(item, "balanceAmount")) > 0 && readFee(item, "feeInstallmentId"));
+  const scheduleData = readFee(account, "schedules");
+  const scheduleRows = rowsOf(scheduleData);
+  const seenIds = new Set();
+  let invalidSchedules = false;
+  const schedules = scheduleRows.filter(item => {
+    if (String(readFee(item, "status") || "").trim().toLowerCase() === "paid" || readFee(item, "balanceAmount") === 0) return false;
+    const id = Number(readFee(item, "feeInstallmentId")), balance = readFee(item, "balanceAmount");
+    if (!Number.isInteger(id) || id <= 0 || id > 2147483647 || balance == null || balance === "" || !Number.isFinite(Number(balance)) || Number(balance) < 0 || seenIds.has(id)) { invalidSchedules = true; return false; }
+    seenIds.add(id);
+    return Number(balance) > 0;
+  });
+  const scheduleTotal = ids => Math.round((schedules.filter(item => ids.includes(Number(readFee(item, "feeInstallmentId")))).reduce((sum, item) => sum + Number(readFee(item, "balanceAmount")), 0) + Number.EPSILON) * 100) / 100;
   const firstId = schedules[0] ? Number(readFee(schedules[0], "feeInstallmentId")) : null;
   const today = new Date();
   const [draft, setDraft] = useState({ target: firstId ? "schedules" : "full", feeInstallmentIds: firstId ? [firstId] : [], amount: firstId ? readFee(schedules[0], "balanceAmount") : readFee(account, "outstandingBalance"), paymentDate: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`, paymentMode: "Cash", discount: "0", fine: "0", transactionReference: "", note: "" });
@@ -70,13 +81,25 @@ function CollectPayment({ account, authorize, onClose, onSaved }) {
   const [uncertain, setUncertain] = useState(false);
   const busy = useRef(false);
   const update = (key, value) => setDraft(current => ({ ...current, [key]: value }));
-  const selectSchedule = id => setDraft(current => {
-    const ids = current.feeInstallmentIds.includes(id) ? current.feeInstallmentIds.filter(value => value !== id) : [...current.feeInstallmentIds, id];
-    return { ...current, target: "schedules", feeInstallmentIds: ids, amount: schedules.filter(item => ids.includes(Number(readFee(item, "feeInstallmentId")))).reduce((sum, item) => sum + Number(readFee(item, "balanceAmount")), 0) };
-  });
+  const selectSchedule = id => {
+    setError("");
+    setDraft(current => {
+      const ids = current.target === "full" ? [id] : current.feeInstallmentIds.includes(id) ? current.feeInstallmentIds.filter(value => value !== id) : [...current.feeInstallmentIds, id];
+      const total = scheduleTotal(ids);
+      return { ...current, target: "schedules", feeInstallmentIds: ids, amount: total || "" };
+    });
+  };
+  const selectFullBalance = () => {
+    setError("");
+    setDraft(current => ({ ...current, target: "full", feeInstallmentIds: [], amount: readFee(account, "outstandingBalance") }));
+  };
+  const selectedScheduleTotal = scheduleTotal(draft.feeInstallmentIds);
+  const targetLabel = draft.target === "full" ? `Pay Full Remaining Balance - ${feeMoney(readFee(account, "outstandingBalance"))}`
+    : draft.feeInstallmentIds.length ? `${draft.feeInstallmentIds.length} schedule${draft.feeInstallmentIds.length === 1 ? "" : "s"} selected - ${feeMoney(selectedScheduleTotal)}` : "Select pending fee schedules";
   const submit = async event => {
     event.preventDefault();
     if (busy.current || uncertain) return;
+    if (draft.target === "schedules" && (invalidSchedules || !draft.feeInstallmentIds.length || !Number.isFinite(selectedScheduleTotal))) { setError(invalidSchedules ? "Fee schedule data is invalid. Reload the account before collecting against schedules." : "Select at least one pending fee schedule."); return; }
     busy.current = true; setSaving(true); setError("");
     try {
       const saved = await collectStudentPayment(account, draft, authorize);
@@ -90,9 +113,19 @@ function CollectPayment({ account, authorize, onClose, onSaved }) {
   return <Modal title="Collect Payment" className="accountant-fee-editor is-structure" onClose={saving ? () => {} : close} closeOnOverlay={!saving} footer={<><button type="button" className="cms-btn cms-btn-ghost" disabled={saving} onClick={close}>Cancel</button><button type="submit" form="accountant-collect-form" className="cms-btn cms-btn-primary" disabled={saving || uncertain || !authorize()}>{saving ? "Saving..." : "Save Payment"}</button></>}>
     <div className="cms-fee-kv"><div><span>Student</span><strong>{feeText(account, "studentName")}</strong></div><div><span>Admission No</span><strong>{feeText(account, "admissionNumber")}</strong></div><div><span>Outstanding Balance</span><strong>{feeMoney(readFee(account, "outstandingBalance"))}</strong></div></div>
     <form id="accountant-collect-form" onSubmit={submit}><fieldset className="accountant-fee-form-fields" disabled={saving || uncertain || !authorize()}>
-      <fieldset className="cms-fee-year-options"><legend>Pay Towards</legend><label><input type="radio" name="accountant-payment-target" checked={draft.target === "full"} onChange={() => setDraft(current => ({ ...current, target: "full", feeInstallmentIds: [], amount: readFee(account, "outstandingBalance") }))} /><span>Full remaining balance</span></label>{schedules.length ? <label><input type="radio" name="accountant-payment-target" checked={draft.target === "schedules"} onChange={() => setDraft(current => ({ ...current, target: "schedules", feeInstallmentIds: [firstId], amount: readFee(schedules[0], "balanceAmount") }))} /><span>Selected schedules / partial payment</span></label> : <label><input type="radio" name="accountant-payment-target" checked={draft.target === "partial"} onChange={() => setDraft(current => ({ ...current, target: "partial", feeInstallmentIds: [], amount: "" }))} /><span>Partial account payment</span></label>}</fieldset>
-      {draft.target === "schedules" ? <fieldset className="accountant-fee-payment-schedules"><legend>Pending fee schedules</legend>{schedules.map(item => { const id = Number(readFee(item, "feeInstallmentId")); return <label key={id}><input type="checkbox" checked={draft.feeInstallmentIds.includes(id)} onChange={() => selectSchedule(id)} /><span>{feeText(item, "feeSchedule")} · {feeDate(readFee(item, "dueDate"))} · {feeMoney(readFee(item, "balanceAmount"))}</span></label>; })}</fieldset> : null}
       <div className="cms-form-grid cols-3">
+        <div className="cms-field full">
+          <label id="accountant-pay-towards-label">Pay Towards</label>
+          <details className="cms-fee-pay-towards">
+            <summary className="cms-fee-pay-towards-trigger" aria-labelledby="accountant-pay-towards-label accountant-pay-towards-summary"><span id="accountant-pay-towards-summary">{targetLabel}</span><span className="cms-fee-pay-towards-arrow" aria-hidden="true"><ChevronDown size={16} strokeWidth={2} /></span></summary>
+            <div className="cms-fee-pay-towards-menu">
+              <label className="cms-fee-pay-option is-strong"><input className="cms-fee-pay-checkbox" type="checkbox" checked={draft.target === "full"} onChange={selectFullBalance} /><span className="cms-fee-pay-option-text">Pay Full Remaining Balance - {feeMoney(readFee(account, "outstandingBalance"))}</span></label>
+              {schedules.length ? <div className="cms-fee-pay-divider" /> : null}
+              {schedules.map(item => { const id = Number(readFee(item, "feeInstallmentId")); return <label key={id} className="cms-fee-pay-option"><input className="cms-fee-pay-checkbox" type="checkbox" checked={draft.target === "schedules" && draft.feeInstallmentIds.includes(id)} onChange={() => selectSchedule(id)} /><span className="cms-fee-pay-option-text">{readFee(item, "installmentNumber") != null ? `Fee Schedule ${readFee(item, "installmentNumber")}` : feeText(item, "feeSchedule")} - {feeMoney(readFee(item, "balanceAmount"))} due {feeDate(readFee(item, "dueDate"))}</span></label>; })}
+              {scheduleData == null || invalidSchedules ? <div className="cms-fee-empty-row" role="alert">Fee schedule data is missing or invalid. Reload the student fee account to verify its schedules.</div> : !schedules.length ? <div className="cms-fee-empty-row">No pending fee schedules.</div> : null}
+            </div>
+          </details>
+        </div>
         <div className="cms-field"><label htmlFor="accountant-pay-amount">Amount *</label><input id="accountant-pay-amount" type="number" min="0.01" step="0.01" required value={draft.amount ?? ""} readOnly={draft.target === "full"} onChange={event => update("amount", event.target.value)} /></div>
         <div className="cms-field"><label htmlFor="accountant-pay-date">Payment Date *</label><input id="accountant-pay-date" type="date" required value={draft.paymentDate} onChange={event => update("paymentDate", event.target.value)} /></div>
         <div className="cms-field"><label htmlFor="accountant-pay-method">Payment Method *</label><select id="accountant-pay-method" required value={draft.paymentMode} onChange={event => update("paymentMode", event.target.value)}>{PAYMENT_METHODS.map(method => <option key={method}>{method}</option>)}</select></div>
@@ -189,7 +222,7 @@ function FeeLedger({ params, collection = false, authorize }) {
     { label: "Actions", value: (row) => {
       let valid = true;
       try { ledgerDetailEndpoint(row); } catch { valid = false; }
-      return <div className="cms-actions"><button type="button" className="cms-action-btn" title={valid ? "View fee account" : "No valid student or fee record ID"} aria-label={`View fees for ${feeText(row, "studentName")}`} disabled={!valid} onClick={() => setDetailRow(row)}><Eye size={15} /></button></div>;
+      return <div className="cms-actions"><button type="button" className="cms-action-btn" title={valid ? "View fee account" : "No valid student or fee record ID"} aria-label={`View fees for ${feeText(row, "studentName")}`} disabled={!valid} onClick={() => setDetailRow(row)}>{collection ? <WalletCards size={15} /> : <Eye size={15} />}</button></div>;
     } },
   ];
   return <FeeCard title={collection ? "Fee Collection" : "Student Fee Ledger"} action={<span className="cms-badge cms-badge-info">{page.total} of {all.length} accounts</span>} bodyClass="accountant-fee-ledger-body">

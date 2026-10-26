@@ -23,6 +23,7 @@ export function AccountantProfile() {
   const user = useMemo(() => getAuthUser() || {}, []);
   const requestSeq = useRef(0);
   const photoObjectUrl = useRef("");
+  const photoRequestSeq = useRef(0);
   const fileInputRef = useRef(null);
   const [profileState, setProfileState] = useState({
     loading: true,
@@ -65,26 +66,37 @@ export function AccountantProfile() {
     }
   }, []);
 
-  const loadPhoto = useCallback(async (targetStaffId, seq = requestSeq.current) => {
-    if (!targetStaffId) return;
-    cleanupPhotoUrl();
-    setPhotoUrl("");
+  const loadPhoto = useCallback(async (targetStaffId, seq = requestSeq.current, expectedFile = null) => {
+    if (!targetStaffId) return false;
+    const photoSeq = ++photoRequestSeq.current;
     setProfileState((state) => ({ ...state, photoError: "" }));
     try {
       const response = await apiClient.get(apiEndpoints.faculty.getPhoto(targetStaffId), {
         responseType: "blob",
+        params: { _photoVersion: `${Date.now()}-${photoSeq}` },
         skipGlobalLoader: true,
         skipErrorLog: true,
       });
-      if (seq !== requestSeq.current) return;
+      if (seq !== requestSeq.current || photoSeq !== photoRequestSeq.current) return false;
       const type = response?.data?.type || "";
-      if (!response?.data || (type && !type.startsWith("image/"))) throw new Error("Profile photo response was not an image.");
+      if (!(response?.data instanceof Blob) || !response.data.size || !type.startsWith("image/")) throw new Error("Profile photo response was not an image.");
+      // The existing upload stores the file unchanged. A successful image GET
+      // must not replace the confirmed preview with stale/default image bytes.
+      if (expectedFile) {
+        const [stored, uploaded] = await Promise.all([response.data.arrayBuffer(), expectedFile.arrayBuffer()]);
+        const bytes = new Uint8Array(stored), expected = new Uint8Array(uploaded);
+        if (bytes.length !== expected.length || bytes.some((byte, index) => byte !== expected[index])) throw new Error("The stored photo response does not match the confirmed upload. Reload the profile to verify the saved image.");
+      }
+      if (seq !== requestSeq.current || photoSeq !== photoRequestSeq.current) return false;
       const nextUrl = URL.createObjectURL(response.data);
+      cleanupPhotoUrl();
       photoObjectUrl.current = nextUrl;
       setPhotoUrl(nextUrl);
+      return true;
     } catch (error) {
-      if (seq !== requestSeq.current) return;
+      if (seq !== requestSeq.current || photoSeq !== photoRequestSeq.current) return false;
       setProfileState((state) => ({ ...state, photoError: getApiErrorMessage(error) || "Unable to load profile photo." }));
+      return false;
     }
   }, [cleanupPhotoUrl]);
 
@@ -252,24 +264,39 @@ export function AccountantProfile() {
       setPhotoUploadError("Only JPEG and PNG photos are accepted.");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setPhotoUploadError("Photo size must be 5 MB or smaller.");
+    if (!file.size || file.size > 5 * 1024 * 1024) {
+      setPhotoUploadError("Photo must be non-empty and 5 MB or smaller.");
       return;
     }
     const formData = new FormData();
     formData.append("StaffId", String(staffId));
     formData.append("Photo", file);
     photoUploadLock.current = true;
+    const seq = requestSeq.current;
+    // Prevent the initial/profile read from overwriting the confirmed upload.
+    photoRequestSeq.current += 1;
     setPhotoUploading(true);
     try {
       const response = await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData);
-      if ((response.data?.status ?? response.data?.Status) === false) throw new Error(response.data.message || "Photo upload failed.");
-      setPhotoSuccess("Profile photo updated successfully.");
-      await loadPhoto(staffId);
+      if (seq !== requestSeq.current) return;
+      const body = response.data;
+      const saved = unwrapApiData(body);
+      if ([body, saved].some(result => (result?.status ?? result?.Status) === false || (result?.success ?? result?.Success) === false)) throw new Error(body?.message || body?.Message || "Photo upload failed.");
+      if (getNumericId(readAny(saved, ["id", "Id", "staffId", "StaffId"])) !== staffId || !readAny(saved, ["photoPath", "PhotoPath", "photoUrl", "PhotoUrl", "profilePhoto", "ProfilePhoto"])) throw new Error("The server did not confirm the saved photo for this staff member. Refresh the profile before retrying.");
+      // The upload contract confirms a stored staff photo. Display these exact
+      // uploaded bytes immediately while fetching the uncached server image.
+      const nextUrl = URL.createObjectURL(file);
+      cleanupPhotoUrl();
+      photoObjectUrl.current = nextUrl;
+      setPhotoUrl(nextUrl);
+      const refreshed = await loadPhoto(staffId, seq, file);
+      if (seq !== requestSeq.current) return;
+      if (refreshed) setPhotoSuccess("Profile photo updated successfully.");
+      else setPhotoUploadError("The photo was saved, but its server image could not be refreshed. The confirmed upload is shown; retry loading the profile to verify the stored image.");
       const updatedStaff = await loadStaffByIdentifier(staffId).catch(() => null);
-      if (updatedStaff) setProfileState((state) => ({ ...state, staff: updatedStaff }));
+      if (seq === requestSeq.current && updatedStaff) setProfileState((state) => ({ ...state, staff: updatedStaff }));
     } catch (error) {
-      setPhotoUploadError(getApiErrorMessage(error) || "Failed to upload profile photo.");
+      if (seq === requestSeq.current) setPhotoUploadError(getApiErrorMessage(error) || "Failed to upload profile photo.");
       throw error;
     } finally {
       photoUploadLock.current = false;
