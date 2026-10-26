@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Printer, Download, Eye, Pencil, Trash2, RotateCcw, CalendarDays, Clock3, FileText, Sun } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout.jsx';
-import { Modal, ConfirmDialog, Toast } from '@/components/common/Ui.jsx';
+import { Modal, ConfirmDialog, Toast, Skeleton, SkeletonCard, SkeletonTable } from '@/components/common/Ui.jsx';
 import apiClient, { getApiErrorMessage } from '@/api/axios.js';
 import { apiEndpoints } from '@/api/apiEndpoints.js';
 import { useAcademicContext } from '@/context/AcademicContext.jsx';
@@ -48,7 +48,7 @@ export function rowsOf(response) {
     if (Array.isArray(data)) return data;
     if (!data || typeof data !== 'object') break;
     if (data.success === false) throw new Error(data.message || 'The server rejected this request.');
-    data = data.data ?? data.items ?? data.Items ?? data.records ?? data.results ?? data.schedules ?? data.examinationSchedules ?? data.$values;
+    data = data.data ?? data.Data ?? data.items ?? data.Items ?? data.records ?? data.results ?? data.schedules ?? data.examinationSchedules ?? data.$values;
   }
   throw new Error('The server returned an unsupported list response.');
 }
@@ -81,20 +81,29 @@ function event(record, fallback, source, index) {
   if (!start || end < start) return null;
   const title = source === 'holidays' ? r.holidayName || r.name : fallback.examName || fallback.examinationName || fallback.name || r.examName || r.name;
   if (!title) return null;
-  const type = source === 'holidays' ? 'holidays' : /practical/i.test(`${r.examCategory || ''} ${r.examTypeName || ''} ${r.examType || ''}`) ? 'practical' : 'examinations';
+  const type = source === 'holidays' ? 'holidays' : /practical/i.test(`${r.examCategory || ''} ${r.examMode || ''} ${r.examTypeName || ''} ${r.examType || ''}`) ? 'practical' : 'examinations';
   const parentId = fallback.examinationId ?? fallback.examId ?? fallback.id;
-  const recordId = source === 'holidays' ? r.holidayId ?? r.id : record.scheduleId ?? record.examinationScheduleId ?? record.id;
-  const subject = r.subjectName || r.patternName;
+  const recordId = source === 'holidays' ? r.holidayId ?? r.id : record.examScheduleId ?? record.scheduleId ?? record.examinationScheduleId ?? record.id;
+  const subject = source === 'examinations' ? record.subjectName || record.patternName : '';
   const identity = recordId ?? [start, end, title, subject, r.startTime, r.endTime, JSON.stringify(scope)].join('|');
-  return { ...r, ...scope, id: `${source}:${parentId ?? ''}:${identity ?? index}`, title: `${title}${subject ? ` · ${subject}` : ''}`, type, start, end, source };
+  return { ...r, ...scope, allDay: source === 'holidays', startTime: String(r.startTime || '').slice(0, 5), endTime: String(r.endTime || '').slice(0, 5), status: r.status || fallback.status || 'Scheduled', examinationId: source === 'examinations' ? parentId : undefined, examScheduleId: source === 'examinations' ? recordId : undefined, holidayId: source === 'holidays' ? recordId : undefined, location: r.location || r.hall || '', id: `${source}:${parentId ?? ''}:${identity ?? index}`, title: `${title}${subject ? ` · ${subject}` : ''}`, type, start, end, source };
 }
 export function holidayEvents(records) {
-  return records.map((r, i) => event(r, {}, 'holidays', i)).filter(Boolean);
+  return records.filter((r) => !/^(inactive|cancelled|deleted)$/i.test(r.status || '')).map((r, i) => event(r, {}, 'holidays', i)).filter(Boolean);
 }
 export function examEvents(exam, schedules) {
-  return schedules.map((r, i) => event(r, exam, 'examinations', i)).filter(Boolean);
+  if (/^(draft|cancelled|deleted)$/i.test(exam.status || '')) return [];
+  return schedules.filter((r) => r.isActive !== false && !/^(draft|cancelled|deleted)$/i.test(r.status || '')).map((r, i) => event(r, exam, 'examinations', i)).filter(Boolean);
 }
-export const uniqueEvents = (events) => [...new Map(events.map((e) => [e.id, e])).values()].sort((a, b) => a.start.localeCompare(b.start) || String(a.startTime || '').localeCompare(String(b.startTime || '')) || a.title.localeCompare(b.title));
+// Cross-module duplicates require explicit source identifiers, never just matching titles.
+export function uniqueEvents(events) {
+  const external = events.filter((e) => e.source && e.source !== 'calendar');
+  const linked = (e) => external.some((other) =>
+    (e.holidayId != null && String(e.holidayId) === String(other.holidayId)) ||
+    (e.examScheduleId != null && String(e.examScheduleId) === String(other.examScheduleId) && String(e.examinationId) === String(other.examinationId)));
+  return [...new Map(events.filter((e) => e.source !== 'calendar' || !linked(e)).map((e) => [e.source + ':' + e.id, e])).values()]
+    .sort((a, b) => a.start.localeCompare(b.start) || String(a.startTime || '').localeCompare(String(b.startTime || '')) || a.title.localeCompare(b.title));
+}
 export function filterEvents(events, filters) {
   return events.filter((e) => matchesScope(e, filters)
     && (!filters.type || e.type === filters.type)
@@ -111,7 +120,7 @@ export function plannerDays(events, range, includeEmpty = false) {
   }
   return groups;
 }
-export const upcomingEvents = (events, today = todayKey()) => events.filter((event) => event.start >= today && event.status !== 'Cancelled').sort((a, b) => a.start.localeCompare(b.start) || String(a.startTime || '').localeCompare(String(b.startTime || '')));
+export const upcomingEvents = (events, today = todayKey()) => events.filter((event) => event.end >= today && !/^(draft|cancelled|inactive|deleted)$/i.test(event.status)).sort((a, b) => a.start.localeCompare(b.start) || String(a.startTime || '').localeCompare(String(b.startTime || '')));
 
 
 
@@ -157,7 +166,7 @@ export function normalizeCalendarEvent(record) {
   const start = dateKey(row.startDate), end = dateKey(row.endDate) || start;
   const id = row.id ?? row.eventId ?? row.academicCalendarEventId ?? row.calendarEventId;
   if (id == null || !start || !end || end < start || !row.title) throw new Error('The server returned an invalid calendar event.');
-  return { ...row, id, title: row.title, start, end, type: typeKey(row.eventType), apiEventType: row.eventType,
+  return { ...row, source: 'calendar', id, title: row.title, start, end, type: typeKey(row.eventType), apiEventType: row.eventType,
     allDay: row.isAllDay === true, startTime: String(row.startTime || '').slice(0, 5), endTime: String(row.endTime || '').slice(0, 5),
     status: CALENDAR_STATUSES.find((status) => status.toLowerCase() === String(row.status).toLowerCase()) || 'Draft',
     ...Object.fromEntries(Object.keys(scopeFields).map((key) => [key, row[key] == null ? '' : String(row[key])])) };
@@ -186,6 +195,36 @@ export function createAcademicCalendarService() {
       }
       throw new Error('Calendar history exceeds the supported page limit.');
     },
+    async getHolidays(params, signal) {
+      const records = []; let previous = '';
+      for (let page = 1; page <= 1000; page++) {
+        const { data } = await apiClient.get(apiEndpoints.holidays.list, { params: { ...params, Page: page, PageSize: 100 }, signal });
+        const batch = rowsOf(data), fingerprint = JSON.stringify(batch);
+        if (batch.length && fingerprint === previous) throw new Error('The holiday server repeated a page.');
+        records.push(...batch);
+        const pages = Number(data.totalPages);
+        if (!batch.length || (pages > 0 ? page >= pages : batch.length < 100)) return holidayEvents(records);
+        previous = fingerprint;
+      }
+      throw new Error('Holiday history exceeds the supported page limit.');
+    },
+    async getExaminations(params, signal) {
+      const exams = [...new Map(rowsOf((await apiClient.get(apiEndpoints.examinations.list, { params, signal })).data)
+        .filter((exam) => !/^(draft|cancelled|deleted)$/i.test(exam.status || ''))
+        .map((exam) => [exam.examinationId ?? exam.examId, exam])).values()];
+      const events = [], errors = []; let next = 0;
+      // One schedule request per examination per refresh, with bounded concurrency.
+      await Promise.all(Array.from({ length: Math.min(4, exams.length) }, async () => {
+        while (next < exams.length && !signal.aborted) {
+          const exam = exams[next++];
+          try {
+            const schedules = rowsOf((await apiClient.get(apiEndpoints.examinations.schedules(exam.examinationId ?? exam.examId), { signal })).data);
+            events.push(...examEvents(exam, schedules));
+          } catch (error) { if (!signal.aborted) errors.push(exam.examName + ': ' + getApiErrorMessage(error)); }
+        }
+      }));
+      return { events, errors };
+    },
     async getRange(params, signal) { return rowsOf((await apiClient.get(endpoints.range, { params, signal })).data).map(normalizeCalendarEvent); },
     async getMetrics(params, signal) { return unpackCalendar(await apiClient.get(endpoints.metrics, { params, signal })); },
     async getUpcoming(params, signal) { return rowsOf((await apiClient.get(endpoints.upcoming, { params: { ...params, count: 5 }, signal })).data).map(normalizeCalendarEvent); },
@@ -197,8 +236,57 @@ export function createAcademicCalendarService() {
   };
 }
 
-function AcademicCalendarEventForm({ event, defaults, onClose, onSave, eventTypes, masters }) {
+export function normalizeCalendarMaster(record, kind, inherited = {}) {
+  const row = Object.fromEntries(Object.entries(record).map(([key, value]) => [key[0].toLowerCase() + key.slice(1), value]));
+  return { ...inherited, ...row, id: String(row[kind + 'Id'] ?? row.id ?? ''),
+    name: row[kind + 'Name'] || row.levelName || row.programmeName || row.yearName || row.name || '',
+    ...Object.fromEntries(['campusId', 'boardId', 'academicYearId', 'academicLevelId', 'groupId', 'programId'].map((key) => [key, String(row[key] ?? inherited[key] ?? '')])) };
+}
+export async function loadCalendarMasters(scope, signal) {
+  const empty = { levels: [], groups: [], programs: [], sections: [] };
+  if (!scope.boardId || !scope.academicYearId) return empty;
+  const params = { boardId: scope.boardId, academicYearId: scope.academicYearId, isActive: true };
+  const [levels, groups, sections] = await Promise.all([
+    apiClient.get(apiEndpoints.boards.academicLevels, { params: { boardId: scope.boardId }, signal }),
+    apiClient.get(apiEndpoints.groups.list, { params, signal }),
+    apiClient.get(apiEndpoints.sections.list, { params: { ...params, campusId: scope.campusId || undefined }, signal }),
+  ]);
+  const active = (row) => row.isActive !== false && !/^(inactive|deleted)$/i.test(String(row.status || ''));
+  const groupRows = rowsOf(groups.data).map((row) => normalizeCalendarMaster(row, 'group')).filter((row) => active(row) && matchesScope(row, scope));
+  const programs = await Promise.all(groupRows.map(async (group) => rowsOf((await apiClient.get(apiEndpoints.groups.programs(group.id), { signal })).data)
+    .map((row) => normalizeCalendarMaster(row, 'program', { groupId: group.id, boardId: group.boardId, academicYearId: group.academicYearId, academicLevelId: group.academicLevelId })).filter(active)));
+  return { levels: rowsOf(levels.data).map((row) => normalizeCalendarMaster(row, 'academicLevel', { boardId: scope.boardId })),
+    groups: groupRows, programs: programs.flat(), sections: rowsOf(sections.data).map((row) => normalizeCalendarMaster(row, 'section')).filter((row) => active(row) && matchesScope(row, scope)) };
+}
+
+function AcademicCalendarEventForm({ event, defaults, onClose, onSave, eventTypes, masters: baseMasters }) {
   const [values, setValues] = useState(() => event || { title: '', type: '', description: '', start: todayKey(), end: todayKey(), startTime: '09:00', endTime: '10:00', allDay: true, boardId: '', academicYearId: '', academicLevelId: '', groupId: '', programId: '', sectionId: '', location: '', status: 'Draft', ...defaults });
+  const [lookups, setLookups] = useState({ levels: [], groups: [], programs: [], sections: [] });
+  const [years, setYears] = useState([]);
+  const [lookupLoading, setLookupLoading] = useState(true);
+  const [lookupError, setLookupError] = useState('');
+  const [yearsLoading, setYearsLoading] = useState(true);
+  const [yearsError, setYearsError] = useState('');
+  const masters = { ...baseMasters, ...lookups, years };
+  useEffect(() => {
+    let active = true; const request = new AbortController();
+    setYears([]); setYearsLoading(true); setYearsError('');
+    // The active-years endpoint has no Board query parameter; filter its returned scope.
+    apiClient.get(apiEndpoints.academicYears.active, { signal: request.signal }).then((response) => {
+      if (!active) return;
+      setYears(rowsOf(response.data).map((row) => normalizeCalendarMaster(row, 'academicYear')).filter((row) => !row.boardId || row.boardId === values.boardId));
+    }).catch((error) => { if (active) setYearsError(getApiErrorMessage(error)); }).finally(() => { if (active) setYearsLoading(false); });
+    return () => { active = false; request.abort(); };
+  }, [values.boardId]);
+  useEffect(() => {
+    let active = true; const request = new AbortController();
+    setLookups({ levels: [], groups: [], programs: [], sections: [] }); setLookupLoading(true); setLookupError('');
+    loadCalendarMasters({ campusId: values.campusId, boardId: values.boardId, academicYearId: values.academicYearId }, request.signal)
+      .then((data) => { if (active) setLookups(data); })
+      .catch((error) => { if (active) setLookupError(getApiErrorMessage(error)); })
+      .finally(() => { if (active) setLookupLoading(false); });
+    return () => { active = false; request.abort(); };
+  }, [values.campusId, values.boardId, values.academicYearId]);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   useEffect(() => {
@@ -211,14 +299,15 @@ function AcademicCalendarEventForm({ event, defaults, onClose, onSave, eventType
   const change = (key, value) => {
     setValues((current) => ({ ...current, [key]: value,
       ...(key === 'type' ? { apiEventType: undefined } : {}),
-      ...(key === 'boardId' ? { academicLevelId: '', groupId: '', programId: '', sectionId: '' } : {}),
+      ...(key === 'boardId' ? { academicYearId: '', academicLevelId: '', groupId: '', programId: '', sectionId: '' } : {}),
+      ...(key === 'academicYearId' ? { academicLevelId: '', groupId: '', programId: '', sectionId: '' } : {}),
       ...(key === 'academicLevelId' ? { groupId: '', programId: '', sectionId: '' } : {}),
       ...(key === 'groupId' ? { programId: '', sectionId: '' } : {}), ...(key === 'programId' ? { sectionId: '' } : {}),
     }));
     setErrors({});
   };
   const save = async (status) => {
-    if (pending.current) return;
+    if (pending.current || lookupLoading || yearsLoading || lookupError || yearsError) return;
     const payload = { ...values, status };
     const nextErrors = validateCalendarEvent(payload, eventTypes, masters);
     setErrors(nextErrors);
@@ -235,9 +324,9 @@ function AcademicCalendarEventForm({ event, defaults, onClose, onSave, eventType
   const select = (key, label, options, disabled = false, placeholder = 'All') => <label className="cms-field"><span>{label}</span><select name={key} value={values[key]} disabled={disabled} aria-invalid={Boolean(errors[key])} aria-describedby={errors[key] ? `event-error-${key}` : undefined} onChange={(e) => change(key, e.target.value)}><option value="">{placeholder}</option>{options.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select><small className="cms-error" id={`event-error-${key}`}>{errors[key]}</small></label>;
   return <Modal className="academic-calendar-modal" title={event ? 'Edit Event' : 'Add Event'} onClose={saving ? () => {} : onClose} closeOnOverlay={!saving} footer={<>
     <button className="cms-btn cms-btn-ghost" disabled={saving} onClick={onClose}>Cancel</button>
-    <button className="cms-btn cms-btn-ghost" disabled={saving} onClick={() => save('Draft')}>Save as Draft</button>
-    {event && <button className="cms-btn cms-btn-ghost" disabled={saving} onClick={() => save(values.status)}>Save Changes</button>}
-    <button className="cms-btn cms-btn-primary" disabled={saving} onClick={() => save('Published')}>{saving ? 'Saving…' : 'Publish Event'}</button>
+    <button className="cms-btn cms-btn-ghost" disabled={saving || lookupLoading || yearsLoading || Boolean(lookupError || yearsError)} onClick={() => save('Draft')}>Save as Draft</button>
+    {event && <button className="cms-btn cms-btn-ghost" disabled={saving || lookupLoading || yearsLoading || Boolean(lookupError || yearsError)} onClick={() => save(values.status)}>Save Changes</button>}
+    <button className="cms-btn cms-btn-primary" disabled={saving || lookupLoading || yearsLoading || Boolean(lookupError || yearsError)} onClick={() => save('Published')}>{saving ? 'Saving…' : 'Publish Event'}</button>
   </>}>
     <p className="academic-calendar-note">Events are saved to the academic calendar. Publishing sends notifications to the selected audience.</p>
     <form ref={formRef} className="academic-calendar-form" noValidate onSubmit={(e) => { e.preventDefault(); save(values.status); }}>
@@ -250,12 +339,14 @@ function AcademicCalendarEventForm({ event, defaults, onClose, onSave, eventType
       <label className="academic-calendar-checkbox is-wide"><input type="checkbox" checked={values.allDay} onChange={(e) => change('allDay', e.target.checked)} />All day</label>
       {!values.allDay && <>{field('startTime', 'Start Time', 'time', true)}{field('endTime', 'End Time', 'time', true)}</>}
       {select('boardId', 'Board *', masters.boards, false, 'Select board')}
-      {select('academicYearId', 'Academic Year *', masters.years, false, 'Select academic year')}
-      {select('academicLevelId', 'Academic Level', masters.levels.filter((r) => !r.boardId || r.boardId === values.boardId), !values.boardId)}
-      {select('groupId', 'Group', masters.groups.filter((r) => r.academicLevelId === values.academicLevelId), !values.academicLevelId)}
-      {select('programId', 'Programme', masters.programs.filter((r) => r.groupId === values.groupId), !values.groupId)}
-      {select('sectionId', 'Section', masters.sections.filter((r) => r.programId === values.programId), !values.programId)}
+      {select('academicYearId', 'Academic Year *', masters.years, yearsLoading || !values.boardId, 'Select academic year')}
+      {select('academicLevelId', 'Academic Level', masters.levels.filter((r) => !r.boardId || r.boardId === values.boardId), lookupLoading || !values.boardId || !values.academicYearId)}
+      {select('groupId', 'Group', masters.groups.filter((r) => r.academicLevelId === values.academicLevelId), lookupLoading || !values.academicLevelId)}
+      {select('programId', 'Programme', masters.programs.filter((r) => r.groupId === values.groupId), lookupLoading || !values.groupId)}
+      {select('sectionId', 'Section', masters.sections.filter((r) => r.programId === values.programId && r.groupId === values.groupId && r.academicLevelId === values.academicLevelId), lookupLoading || !values.programId)}
       {field('location', 'Location')}
+      {(lookupLoading || yearsLoading) && <div className="is-wide"><Skeleton style={{ width: '100%', height: 36 }} ariaLabel="Loading academic options" /></div>}
+      {(lookupError || yearsError) && <p role="alert" className="cms-error is-wide">{lookupError || yearsError}</p>}
       {errors.form && <p role="alert" className="cms-error is-wide">{errors.form}</p>}
     </form>
   </Modal>;
@@ -268,12 +359,33 @@ function DateBadge({ date }) {
   return <span className="academic-planner-date-badge"><strong>{Number(date.slice(8))}</strong><span>{dayDate(date, { month: 'short' })}</span></span>;
 }
 
-export function PlannerHeader({ filtered, upcoming, loading, busy, exporting, visible, yearName, openEditor, exportFile, selectedDate, metrics }) {
+// Print in a separate document so other modules' global print rules cannot hide the calendar.
+export function calendarPrintDocument({ events, title, subtitle, eventTypes, masterName }) {
+  const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+  const rows = events.map((event) => '<tr>' + [event.title, eventTypes[event.type]?.label || event.type, event.start + (event.end !== event.start ? ' - ' + event.end : ''), event.allDay ? 'All day' : [event.startTime, event.endTime].filter(Boolean).join(' - '), masterName('levels', event.academicLevelId) || event.academicLevelName || 'All', masterName('groups', event.groupId) || event.groupName || 'All', masterName('programs', event.programId) || event.programName || 'All', masterName('sections', event.sectionId) || event.sectionName || 'All', event.status].map((value) => '<td>' + escape(value) + '</td>').join('') + '</tr>').join('');
+  return '<!doctype html><html><head><meta charset="utf-8"><title>Academic Calendar</title><style>' +
+    '@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{margin:0;font:11px Arial,sans-serif;color:#182646;background:white}h1{font-size:20px;margin:0 0 6px}p{margin:0 0 14px}.month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid #cbd5c1;border-left:1px solid #cbd5c1;margin-bottom:16px}.weekday,.day{border-right:1px solid #cbd5c1;border-bottom:1px solid #cbd5c1;padding:6px}.weekday{background:#edf3de;text-align:center;font-weight:bold}.day{min-height:65px;break-inside:avoid}.outside{color:#7b8490}.chip{margin-top:4px;padding:3px;background:#eef4fd;border-left:2px solid #647c18;overflow-wrap:anywhere;font-size:9px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #ccd3c3;padding:6px;text-align:left;overflow-wrap:anywhere}th{background:#edf3de}thead{display:table-header-group}tr{break-inside:avoid}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '</style></head><body><h1>' + escape(title) + '</h1><p>' + escape(subtitle) + '</p><table><thead><tr>' + ['Event', 'Type', 'Dates', 'Time', 'Academic Level', 'Group', 'Programme', 'Section', 'Status'].map((label) => '<th>' + label + '</th>').join('') + '</tr></thead><tbody>' + (rows || '<tr><td colspan="9">No events scheduled for this period.</td></tr>') + '</tbody></table></body></html>';
+}
+
+function CalendarLoadingSkeleton({ view }) {
+  if (view === 'list') return <SkeletonTable columns={8} rows={5} />;
+  return <div className="academic-month-grid" role="status" aria-label="Loading calendar">
+    {Array.from({ length: 7 }, (_, index) => <div className="academic-month-weekday" key={'heading-' + index}><Skeleton style={{ width: '50%', margin: '0 auto' }} /></div>)}
+    {Array.from({ length: view === 'week' ? 7 : 35 }, (_, index) => <div className="academic-month-cell" key={index} aria-hidden="true">
+      <Skeleton style={{ width: 22, height: 14, marginBottom: 16 }} />
+      <Skeleton style={{ width: '85%', height: 14, marginBottom: 8 }} />
+      <Skeleton style={{ width: '65%', height: 14 }} />
+    </div>)}
+  </div>;
+}
+
+export function PlannerHeader({ filtered, upcoming, loading, busy, exporting, visible, yearName, openEditor, exportFile, selectedDate, metrics, onPrint }) {
   return <>
-    <div className="academic-planner-topline"><span className="academic-planner-context-label">Academic planner · {yearName}</span><div className="academic-planner-actions"><button className="cms-btn cms-btn-primary" disabled={busy || loading} onClick={() => openEditor(null, selectedDate)}><Plus size={17} />Add Event</button><button className="cms-btn cms-btn-ghost" disabled={loading} onClick={() => window.print()}><Printer size={16} />Print</button><button className="cms-btn cms-btn-ghost" disabled={loading || exporting || !visible.length} onClick={() => exportFile('pdf')}><Download size={16} />PDF</button><button className="cms-btn cms-btn-ghost" disabled={loading || exporting || !visible.length} onClick={() => exportFile('excel')}><Download size={16} />Excel</button></div></div>
+    <div className="academic-planner-topline"><span className="academic-planner-context-label">Academic planner · {yearName}</span><div className="academic-planner-actions"><button className="cms-btn cms-btn-primary" disabled={busy || loading} onClick={() => openEditor(null, selectedDate)}><Plus size={17} />Add Event</button><button className="cms-btn cms-btn-ghost" disabled={loading} onClick={onPrint}><Printer size={16} />Print</button><button className="cms-btn cms-btn-ghost" disabled={loading || exporting || !visible.length} onClick={() => exportFile('pdf')}><Download size={16} />PDF</button><button className="cms-btn cms-btn-ghost" disabled={loading || exporting || !visible.length} onClick={() => exportFile('excel')}><Download size={16} />Excel</button></div></div>
     <div className="academic-calendar-summary">{[
       ['Total Events', metrics?.totalEvents ?? metrics?.totalCount ?? metrics?.total ?? filtered.length, CalendarDays, 'green'], ['Upcoming Events', metrics?.upcomingEvents ?? metrics?.upcomingCount ?? metrics?.upcoming ?? upcomingEvents(filtered).length, Clock3, 'amber'], ['Examinations', metrics?.examinations ?? metrics?.examinationsCount ?? metrics?.examsCount ?? metrics?.exams ?? filtered.filter((event) => ['examinations', 'practical'].includes(event.type)).length, FileText, 'blue'], ['Holidays', metrics?.holidays ?? metrics?.holidaysCount ?? filtered.filter((event) => event.type === 'holidays').length, Sun, 'red'],
-    ].map(([label, count, Icon, color]) => <div key={label}><span className={`academic-planner-summary-icon is-${color}`}><Icon size={24} /></span><div><span>{label}</span><strong>{loading ? '…' : count}</strong></div><span className="academic-summary-bars" aria-hidden="true"><i/><i/><i/><i/><i/></span></div>)}</div>
+    ].map(([label, count, Icon, color]) => <div key={label}><span className={`academic-planner-summary-icon is-${color}`}><Icon size={24} /></span><div><span>{label}</span><strong>{loading ? <Skeleton style={{ width: 48, height: 28 }} /> : count}</strong></div><span className="academic-summary-bars" aria-hidden="true"><i/><i/><i/><i/><i/></span></div>)}</div>
   </>;
 }
 
@@ -318,10 +430,10 @@ export function PlannerTimeline({ timeline, view, eventButton, openEditor, ancho
 export function PlannerAside({ filtered, upcoming, loading, busy, setDetail, viewAll, reset, eventTypes = EVENT_TYPES, metrics }) {
   return <aside className="academic-planner-side" aria-label="Upcoming events and categories">
     <section className="academic-planner-panel"><div className="academic-planner-panel-heading"><h2>Upcoming Events</h2><button onClick={viewAll}>View All</button></div>
-      {loading ? <p role="status">Loading events…</p> : upcoming.length ? <div className="academic-planner-upcoming">{upcoming.slice(0, 5).map((event) => <button key={event.id} onClick={() => setDetail(event)} style={{ '--event-color': eventTypes[event.type].color }}><DateBadge date={event.start} /><span className="academic-planner-upcoming-copy"><strong><i />{event.title}</strong><span>{event.allDay ? 'All day' : [event.startTime, event.endTime].filter(Boolean).join(' – ')}</span><small>{eventTypes[event.type].label}</small></span></button>)}</div> : <p className="academic-planner-empty-day">No upcoming events</p>}
+      {loading ? <div aria-label="Loading upcoming events">{Array.from({ length: 5 }, (_, index) => <SkeletonCard key={index} lines={2} />)}</div> : upcoming.length ? <div className="academic-planner-upcoming">{upcoming.slice(0, 5).map((event) => <button key={event.id} onClick={() => setDetail(event)} style={{ '--event-color': eventTypes[event.type].color }}><DateBadge date={event.start} /><span className="academic-planner-upcoming-copy"><strong><i />{event.title}</strong><span>{event.allDay ? 'All day' : [event.startTime, event.endTime].filter(Boolean).join(' – ')}</span><small>{eventTypes[event.type].label}</small></span></button>)}</div> : <p className="academic-planner-empty-day">No upcoming events</p>}
     </section>
-    <section className="academic-planner-panel"><div className="academic-planner-panel-heading"><h2>Event Types</h2><span>{metrics?.totalEvents ?? metrics?.total ?? filtered.length} total</span></div><div className="academic-planner-categories">{Object.entries(eventTypes).map(([key, type]) => <div key={key}><i style={{ background: type.color }} /><span>{type.label}</span><strong>{(Array.isArray(metrics?.categories) ? metrics.categories : []).find((category) => typeKey(category.eventType ?? category.type ?? category.name) === key)?.count ?? filtered.filter((event) => event.type === key).length}</strong></div>)}</div></section>
-    <div className="academic-planner-server-note"><span>Events and custom types are loaded from the calendar server.</span><button disabled={busy} onClick={reset}><RotateCcw size={13} />Refresh Calendar</button></div>
+    <section className="academic-planner-panel"><div className="academic-planner-panel-heading"><h2>Event Types</h2><span>{loading ? <Skeleton style={{ width: 40 }} /> : <>{metrics?.totalEvents ?? metrics?.total ?? filtered.length} total</>}</span></div><div className="academic-planner-categories" tabIndex={0} role="region" aria-label="Event types">{Object.entries(eventTypes).map(([key, type]) => <div key={key}><i style={{ background: type.color }} /><span>{type.label}</span><strong>{loading ? <Skeleton style={{ width: 20 }} /> : (Array.isArray(metrics?.categories) ? metrics.categories : []).find((category) => typeKey(category.eventType ?? category.type ?? category.name) === key)?.count ?? filtered.filter((event) => event.type === key).length}</strong></div>)}</div></section>
+
   </aside>;
 }
 
@@ -338,7 +450,7 @@ export default function AcademicCalendarPage() {
   const { selectedCampusId } = useCampusContext();
   const [masterLists, setMasterLists] = useState({ levels: [], groups: [], programs: [], sections: [] });
   const masters = useMemo(() => ({ ...masterLists, boards, years: academicYears }), [masterLists, boards, academicYears]);
-  const masterName = (key, id) => masters[key].find((row) => String(row.id) === String(id))?.name || '';
+  const masterName = (key, id) => (Array.isArray(id) ? id : [id]).map((value) => masters[key].find((row) => String(row.id) === String(value))?.name).filter(Boolean).join(', ');
   const [reload, setReload] = useState(0);
   const [rangeEvents, setRangeEvents] = useState([]);
   const [sidebarEvents, setSidebarEvents] = useState([]);
@@ -383,13 +495,19 @@ export default function AcademicCalendarPage() {
     detailRequest.current += 1; setLoading(true); setError(''); setEvents([]); setRangeEvents([]); setSidebarEvents([]); setMetrics(null); setDetail(null); setEditor(null); setConfirmation(null); setPage(1);
     const scope = Object.fromEntries(['campusId', 'boardId', 'academicYearId'].filter((key) => filters[key]).map((key) => [key, Number(filters[key])]));
     const listScope = Object.fromEntries(Object.entries(scope).map(([key, value]) => [key[0].toUpperCase() + key.slice(1), value]));
-    service.getCalendarEvents(listScope, request.signal).then((data) => { if (active) setEvents(data); }).catch((err) => { if (active) setError(getApiErrorMessage(err)); }).finally(() => { if (active) setLoading(false); });
-    Promise.allSettled([service.getMetrics(scope, request.signal), service.getUpcoming(scope, request.signal)]).then(([counts, upcoming]) => {
-      if (!active) return;
-      setMetrics(counts.status === 'fulfilled' ? counts.value : null);
-      setSidebarEvents(upcoming.status === 'fulfilled' ? upcoming.value : []);
-      setWidgetsError([counts, upcoming].filter((result) => result.status === 'rejected').map((result) => getApiErrorMessage(result.reason)).join(' '));
-    });
+    setWidgetsError('');
+    Promise.allSettled([service.getCalendarEvents(listScope, request.signal), service.getHolidays(listScope, request.signal), service.getExaminations(listScope, request.signal)])
+      .then((results) => {
+        if (!active) return;
+        const labels = ['Calendar', 'Holidays', 'Examinations'];
+        const combined = [], errors = [];
+        results.forEach((result, index) => {
+          if (result.status === 'rejected') errors.push(labels[index] + ': ' + getApiErrorMessage(result.reason));
+          else if (index === 2) { combined.push(...result.value.events); errors.push(...result.value.errors); }
+          else combined.push(...result.value);
+        });
+        setEvents(uniqueEvents(combined)); setError(errors.join(' ')); setLoading(false);
+      });
     return () => { active = false; request.abort(); };
   }, [service, filters, reload]);
   useEffect(() => {
@@ -404,16 +522,12 @@ export default function AcademicCalendarPage() {
     return () => { active = false; request.abort(); };
   }, [service, filters, anchor, view, reload]);
   useEffect(() => {
-    let active = true;
-    const normalizeMaster = (row, kind) => ({ ...row, id: String(row.id ?? row[kind + 'Id']), name: row.name ?? row[kind + 'Name'] ?? row.sectionName ?? '', ...Object.fromEntries(['boardId', 'academicLevelId', 'groupId', 'programId'].map((key) => [key, row[key] == null ? '' : String(row[key])])) });
-    Promise.all([apiClient.get(apiEndpoints.boards.academicLevels), apiClient.get(apiEndpoints.groups.list), apiClient.get(apiEndpoints.sections.list)])
-      .then(async ([levels, groups, sections]) => {
-        const groupRows = rowsOf(groups.data);
-        const programs = await Promise.all(groupRows.map(async (group) => rowsOf((await apiClient.get(apiEndpoints.groups.programs(group.groupId ?? group.id))).data).map((row) => ({ ...row, groupId: group.groupId ?? group.id }))));
-        if (active) setMasterLists({ levels: rowsOf(levels.data).map((row) => normalizeMaster(row, 'academicLevel')), groups: groupRows.map((row) => normalizeMaster(row, 'group')), sections: rowsOf(sections.data).map((row) => normalizeMaster(row, 'section')), programs: programs.flat().map((row) => normalizeMaster(row, 'program')) });
-      }).catch((err) => { if (active) setWidgetsError(getApiErrorMessage(err)); });
-    return () => { active = false; };
-  }, []);
+    let active = true; const request = new AbortController();
+    setMasterLists({ levels: [], groups: [], programs: [], sections: [] });
+    loadCalendarMasters(filters, request.signal).then((data) => { if (active) setMasterLists(data); })
+      .catch((error) => { if (active) setWidgetsError(getApiErrorMessage(error)); });
+    return () => { active = false; request.abort(); };
+  }, [filters, reload]);
 
   useEffect(() => {
     if (!detail && !confirmation) return undefined;
@@ -426,9 +540,10 @@ export default function AcademicCalendarPage() {
   }, [detail, confirmation, busy]);
   const filtered = useMemo(() => filterEvents(events, filters), [events, filters]);
   const range = calendarRange(anchor, view);
-  const periodEvents = rangeEvents.filter((event) => event.start <= range.end && event.end >= range.start);
+  const combinedRangeEvents = uniqueEvents([...events, ...rangeEvents]);
+  const periodEvents = filterEvents(combinedRangeEvents, filters).filter((event) => event.start <= range.end && event.end >= range.start);
   // List view shows all filtered dates; month/week show their selected period.
-  const upcoming = sidebarEvents;
+  const upcoming = upcomingEvents(filtered);
   const visible = view === 'list' ? (upcomingOnly ? upcomingEvents(filtered) : filtered) : periodEvents;
   const timeline = plannerDays(periodEvents, range, true);
   const listEvents = visible.filter((event) => event.title.toLowerCase().includes(listSearch.trim().toLowerCase()));
@@ -445,6 +560,7 @@ export default function AcademicCalendarPage() {
     else { const date = new Date(`${anchor}T12:00:00`); date.setDate(1); date.setMonth(date.getMonth() + amount); selectDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`); }
   };
   const openEditor = async (event = null, date = '') => {
+    if (event?.source && event.source !== 'calendar') return;
     if (event) {
       try { event = await service.getEvent(event.id); }
       catch (err) { setToast({ message: getApiErrorMessage(err), type: 'error' }); return; }
@@ -470,24 +586,25 @@ export default function AcademicCalendarPage() {
     finally { mutationLock.current = false; setBusy(false); }
   };
   const showDetail = async (event) => {
+    if (event.source !== 'calendar') { detailRequest.current += 1; setDetail(event); return; }
     const requestId = ++detailRequest.current;
     try { const current = await service.getEvent(event.id); if (requestId === detailRequest.current) setDetail(current); }
     catch (err) { setToast({ message: getApiErrorMessage(err), type: 'error' }); }
   };
-  const confirmDelete = (event) => { setDetail(null); setConfirmation({ event }); };
+  const confirmDelete = (event) => { if (event.source !== 'calendar') return; setDetail(null); setConfirmation({ event }); };
   const exportFile = async (format) => {
     if (exporting) return;
     setExporting(true);
     try {
       if (format === 'excel') {
-        const params = Object.fromEntries(Object.entries(filters).filter(([key, value]) => Object.hasOwn(scopeFields, key) && value).map(([key, value]) => [key[0].toUpperCase() + key.slice(1), Number(value)]));
-        if (listSearch) params.Search = listSearch;
-        if (view !== 'list') { params.StartDate = range.start + 'T00:00:00'; params.EndDate = range.end + 'T23:59:59'; }
-        const response = await apiClient.get(apiEndpoints.academicCalendar.exportExcel, { params, responseType: 'blob' });
-        if (/json|text\/html/.test(response.data.type)) throw new Error('The server did not return a calendar export.');
-        const url = URL.createObjectURL(response.data); const link = document.createElement('a'); link.href = url;
-        link.download = /csv/.test(response.data.type) ? 'Academic_Calendar.csv' : 'Academic_Calendar.xlsx';
-        document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+        const XLSX = await import('xlsx');
+        const rows = exportEvents.map((e) => ({ Event: e.title, Source: e.source, Type: eventTypes[e.type].label, 'Start Date': e.start, 'End Date': e.end,
+          Time: e.allDay ? 'All day' : e.startTime + ' - ' + e.endTime, 'Academic Level': masterName('levels', e.academicLevelId) || e.academicLevelName || '',
+          Group: masterName('groups', e.groupId) || e.groupName || '', Programme: masterName('programs', e.programId) || e.programName || '',
+          Section: masterName('sections', e.sectionId) || e.sectionName || '', Status: e.status, Description: e.description || '' }));
+        const book = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(rows), 'Academic Calendar');
+        XLSX.writeFile(book, 'Academic_Calendar.xlsx');
       } else {
         const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
         const pdf = new jsPDF({ orientation: 'landscape' });
@@ -499,36 +616,55 @@ export default function AcademicCalendarPage() {
     } catch (err) { setToast({ message: `Export failed: ${err.message}`, type: 'error' }); }
     finally { setExporting(false); }
   };
+  const printCalendar = () => {
+    const frame = document.createElement('iframe');
+    frame.title = 'Academic Calendar print preview';
+    frame.setAttribute('aria-hidden', 'true');
+    Object.assign(frame.style, { position: 'fixed', width: '1px', height: '1px', left: '-10000px', border: '0' });
+    frame.onload = () => {
+      const target = frame.contentWindow;
+      if (!target) { frame.remove(); return; }
+      target.addEventListener('afterprint', () => frame.remove(), { once: true });
+      // Let the isolated document finish layout before opening the print dialog.
+      target.requestAnimationFrame(() => target.requestAnimationFrame(() => {
+        try { target.focus(); target.print(); }
+        catch (error) { frame.remove(); setToast({ message: 'Print failed: ' + error.message, type: 'error' }); }
+      }));
+    };
+    frame.srcdoc = calendarPrintDocument({ events: exportEvents,
+      title: 'Pirnav College - Academic Calendar', subtitle: yearName + ' | ' + periodLabel, eventTypes, masterName });
+    document.body.appendChild(frame);
+  };
   const eventButton = (event) => <button key={event.id} className={`academic-planner-event is-${event.status.toLowerCase()}`} style={{ '--event-color': eventTypes[event.type].color }} onClick={() => showDetail(event)}><span className="academic-planner-event-title">{event.title}</span><span className="academic-planner-event-meta"><span className="academic-planner-category"><i />{eventTypes[event.type].label}</span><span><Clock3 size={13} />{event.allDay ? 'All day' : [event.startTime, event.endTime].filter(Boolean).join(' – ')}</span></span><StatusBadge status={event.status} /></button>;
-  const actions = (event) => <div className="academic-calendar-row-actions"><button aria-label={`View ${event.title}`} title="View" onClick={() => showDetail(event)}><Eye size={15} /></button><button aria-label={`Edit ${event.title}`} title="Edit" onClick={() => openEditor(event)}><Pencil size={15} /></button><button aria-label={`Delete ${event.title}`} title="Delete" onClick={() => confirmDelete(event)}><Trash2 size={15} /></button></div>;
+  const actions = (event) => <div className="academic-calendar-row-actions"><button aria-label={`View ${event.title}`} title="View" onClick={() => showDetail(event)}><Eye size={15} /></button>{event.source === 'calendar' && <><button aria-label={`Edit ${event.title}`} title="Edit" onClick={() => openEditor(event)}><Pencil size={15} /></button><button aria-label={`Delete ${event.title}`} title="Delete" onClick={() => confirmDelete(event)}><Trash2 size={15} /></button></>}</div>;
 
   return <DashboardLayout title="Academic Calendar" subtitle="Manage academic schedules, examinations, holidays, and college events.">
     <div className="academic-calendar">
-      <PlannerHeader filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} exporting={exporting} visible={visible} yearName={yearName} selectedDate={selectedDate} metrics={metrics} openEditor={openEditor} exportFile={exportFile} />
+      <PlannerHeader filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} exporting={exporting} visible={visible} yearName={yearName} selectedDate={selectedDate} metrics={null} onPrint={printCalendar} openEditor={openEditor} exportFile={exportFile} />
       <div className="academic-planner-layout">
       <section className="academic-planner-main" aria-label="Academic event planner">
       <PlannerNavigation view={view} periodLabel={periodLabel} move={move} today={() => selectDate(todayKey())} changeView={(mode) => { setView(mode); setUpcomingOnly(false); setPage(1); }} />
       <div className="academic-calendar-print-heading"><h1>Pirnav College — Academic Calendar </h1><p>{yearName} | {periodLabel}</p></div>
       {(error || widgetsError || rangeError) && <p role="alert">{error || widgetsError || rangeError}</p>}
-      {loading ? <p role="status">Loading events…</p> : <>
+      {loading || (view !== 'list' && rangeLoading) ? <CalendarLoadingSkeleton view={view} /> : <>
         {!visible.length && <p role="status">No events scheduled for this period.</p>}
         {view === 'list' ? <>
-          <div className="academic-calendar-list-toolbar"><label className="academic-calendar-list-search"><span>Search events</span><input type="search" value={listSearch} placeholder="Search event name?" onChange={(event) => { setListSearch(event.target.value); setPage(1); }} /></label><span>{listEvents.length} events</span></div>
-          <div className="academic-calendar-table-wrap"><table className="cms-table academic-calendar-table"><thead><tr>{[['title', 'Event Name'], ['type', 'Event Type'], ['start', 'Start Date'], ['end', 'End Date'], ['level', 'Academic Level'], ['group', 'Group'], ['status', 'Status']].map(([key, label]) => <th key={key} aria-sort={sortKey === key ? (ascending ? 'ascending' : 'descending') : 'none'}><button onClick={() => { setSortKey(key); setAscending(sortKey === key ? !ascending : true); setPage(1); }}>{label}{sortKey === key ? (ascending ? ' ?' : ' ?') : ''}</button></th>)}<th>Actions</th></tr></thead><tbody>{sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((event) => <tr key={event.id}><td data-label="Event Name"><button className="academic-calendar-title-button" onClick={() => showDetail(event)}>{event.title}</button></td><td data-label="Event Type"><span className="academic-list-category" style={{ '--event-color': eventTypes[event.type].color }}><i aria-hidden="true"/>{eventTypes[event.type].label}</span></td><td data-label="Start Date">{displayDate(event.start)}</td><td data-label="End Date">{displayDate(event.end)}</td><td data-label="Academic Level">{masterName('levels', event.academicLevelId) || 'All'}</td><td data-label="Group">{masterName('groups', event.groupId) || 'All'}</td><td data-label="Status"><StatusBadge status={event.status} /></td><td data-label="Actions">{actions(event)}</td></tr>)}{!sorted.length && <tr><td colSpan={8}>No events match your search.</td></tr>}</tbody></table></div>
+          <div className="academic-calendar-list-toolbar"><label className="academic-calendar-list-search"><span>Search events</span><input type="search" value={listSearch} placeholder="Search event name..." onChange={(event) => { setListSearch(event.target.value); setPage(1); }} /></label><span>{listEvents.length} events</span></div>
+          <div className="academic-calendar-table-wrap"><table className="cms-table academic-calendar-table"><thead><tr>{[['title', 'Event Name'], ['type', 'Event Type'], ['start', 'Start Date'], ['end', 'End Date'], ['level', 'Academic Level'], ['group', 'Group'], ['status', 'Status']].map(([key, label]) => <th key={key} aria-sort={sortKey === key ? (ascending ? 'ascending' : 'descending') : 'none'}><button onClick={() => { setSortKey(key); setAscending(sortKey === key ? !ascending : true); setPage(1); }}>{label}</button></th>)}<th>Actions</th></tr></thead><tbody>{sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((event) => <tr key={event.id}><td data-label="Event Name"><button className="academic-calendar-title-button" onClick={() => showDetail(event)}>{event.title}</button></td><td data-label="Event Type"><span className="academic-list-category" style={{ '--event-color': eventTypes[event.type].color }}><i aria-hidden="true"/>{eventTypes[event.type].label}</span></td><td data-label="Start Date">{displayDate(event.start)}</td><td data-label="End Date">{displayDate(event.end)}</td><td data-label="Academic Level">{masterName('levels', event.academicLevelId) || 'All'}</td><td data-label="Group">{masterName('groups', event.groupId) || 'All'}</td><td data-label="Status"><StatusBadge status={event.status} /></td><td data-label="Actions">{actions(event)}</td></tr>)}{!sorted.length && <tr><td colSpan={8}>No events match your search.</td></tr>}</tbody></table></div>
           <footer className="academic-calendar-pagination"><span>Showing {sorted.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-{Math.min(currentPage * PAGE_SIZE, sorted.length)} of {sorted.length} events</span><div className="academic-calendar-pagination-actions"><button className="cms-btn cms-btn-ghost" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><span>Page {currentPage} of {pages}</span><button className="cms-btn cms-btn-ghost" disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>Next</button></div></footer>
           <div className="academic-calendar-print-list">{exportEvents.map((event) => <p key={event.id}>{event.start} – {event.end} | {event.title} | {event.status}</p>)}</div>
-        </> : <PlannerTimeline timeline={timeline} view={view} eventButton={eventButton} openEditor={openEditor} anchor={anchor} events={rangeEvents} selectedDate={selectedDate} onSelectDate={selectDate} onEvent={showDetail} eventTypes={eventTypes} actions={actions} />}
+        </> : <PlannerTimeline timeline={timeline} view={view} eventButton={eventButton} openEditor={openEditor} anchor={anchor} events={combinedRangeEvents} selectedDate={selectedDate} onSelectDate={selectDate} onEvent={showDetail} eventTypes={eventTypes} actions={actions} />}
       </>}
       </section>
-      <PlannerAside filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} setDetail={showDetail} viewAll={() => { setView("list"); setUpcomingOnly(true); setPage(1); }} reset={refresh} eventTypes={eventTypes} metrics={metrics} />
+      <PlannerAside filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} setDetail={showDetail} viewAll={() => { setView("list"); setUpcomingOnly(true); setPage(1); }} reset={refresh} eventTypes={eventTypes} metrics={null} />
       </div>
       {detail && <Modal className="academic-calendar-modal" title={detail.title} onClose={() => setDetail(null)} footer={<>
-        <button className="cms-btn cms-btn-ghost" onClick={() => setDetail(null)}>Close</button><button className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => openEditor(detail)}>Edit</button>
+        <button className="cms-btn cms-btn-ghost" onClick={() => setDetail(null)}>Close</button>{detail.source === 'calendar' && <><button className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => openEditor(detail)}>Edit</button>
         <button className="cms-btn cms-btn-danger" disabled={busy} onClick={() => confirmDelete(detail)}>Delete</button>
         {detail.status !== 'Published' && <button className="cms-btn cms-btn-primary" disabled={busy} onClick={() => mutate(() => service.publishCalendarEvent(detail.id), 'Event published.')}>Publish Event</button>}
-        {detail.status !== 'Cancelled' && <button className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => mutate(() => service.updateCalendarEvent(detail.id, calendarEventPayload({ ...detail, status: 'Cancelled' }, eventTypes)), 'Event cancelled.')}>Cancel Event</button>}
+        {detail.status !== 'Cancelled' && <button className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => mutate(() => service.updateCalendarEvent(detail.id, calendarEventPayload({ ...detail, status: 'Cancelled' }, eventTypes)), 'Event cancelled.')}>Cancel Event</button>}</>}
       </>}><dl className="academic-calendar-details">{[
-        ['Event Type', eventTypes[detail.type].label], ['Status', detail.status], ['Description', detail.description || detail.reason], ['Remarks', detail.remarks], ['Start Date', displayDate(detail.start)], ['End Date', displayDate(detail.end)], ['Time', detail.allDay ? 'All day' : `${detail.startTime} – ${detail.endTime}`], ['Board', masterName('boards', detail.boardId)], ['Academic Year', masterName('years', detail.academicYearId)], ['Academic Level', masterName('levels', detail.academicLevelId)], ['Group', masterName('groups', detail.groupId)], ['Programme', masterName('programs', detail.programId)], ['Section', masterName('sections', detail.sectionId)], ['Location', detail.location],
+        ['Source', detail.source === 'calendar' ? 'Academic Calendar' : detail.source === 'holidays' ? 'Holiday Management (read-only)' : 'Examination Management (read-only)'], ['Holiday Type', detail.holidayType], ['Subject', detail.subjectName], ['Event Type', eventTypes[detail.type].label], ['Status', detail.status], ['Description', detail.description || detail.reason], ['Remarks', detail.remarks], ['Start Date', displayDate(detail.start)], ['End Date', displayDate(detail.end)], ['Time', detail.allDay ? 'All day' : `${detail.startTime} – ${detail.endTime}`], ['Board', masterName('boards', detail.boardId)], ['Academic Year', masterName('years', detail.academicYearId)], ['Academic Level', masterName('levels', detail.academicLevelId) || detail.academicLevelName || detail.academicLevel], ['Group', masterName('groups', detail.groupId) || detail.groupName], ['Programme', masterName('programs', detail.programId) || detail.programName], ['Section', masterName('sections', detail.sectionId) || detail.sectionName], ['Location', detail.location],
       ].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{label === 'Status' ? <StatusBadge status={value} /> : value}</dd></div>)}</dl></Modal>}
       {editor && <AcademicCalendarEventForm event={editor.event} defaults={editor.defaults} onClose={() => setEditor(null)} onSave={saveEvent} eventTypes={eventTypes} masters={masters} />}
       {confirmation && <ConfirmDialog title="Delete event?" message={`Delete "${confirmation.event.title}" from the academic calendar?`} onCancel={() => !busy && setConfirmation(null)} loading={busy} confirmLabel="Delete Event" danger onConfirm={() => mutate(() => service.deleteCalendarEvent(confirmation.event.id), 'Event deleted.')} />}

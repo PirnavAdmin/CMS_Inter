@@ -228,7 +228,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (result.AdmissionId > 0)
             {
                 var initialStatus = request.IsReferral ? "Pending" : "Pending";
-                var admNo = string.IsNullOrWhiteSpace(request.AdmissionNo) ? string.Empty : request.AdmissionNo.Trim();
+                var admNo = !string.IsNullOrWhiteSpace(request.AdmissionNo) ? request.AdmissionNo.Trim() : (request.IsReferral ? null : $"ADM-{result.AdmissionId:D4}");
 
                 await connection.ExecuteAsync(@"
                     UPDATE `StudentAdmissions` 
