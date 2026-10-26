@@ -491,20 +491,75 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
   if (!sectionId) return [];
 
   const studentMap = new Map();
+  const approvedAdmissionMap = new Map();
+
+  // 1. Fetch Authoritative Student Admissions to verify Approved status & exact admissionDate
+  try {
+    const admParams = {
+      campusId: campusId ? Number(campusId) : undefined,
+      boardId: filters.board ? Number(filters.board) : undefined,
+      academicYearId: filters.year ? Number(filters.year) : undefined,
+      ...(filters.level ? { academicLevelId: Number(filters.level) } : {}),
+      ...(filters.group ? { groupId: Number(filters.group) } : {}),
+      ...(filters.program ? { programId: Number(filters.program) } : {}),
+      ...(sectionId ? { sectionId: Number(sectionId) || sectionId } : {}),
+    };
+    const admRes = await apiClient.get(apiEndpoints.studentAdmissions?.getAll || "/api/v1/student-admissions", {
+      params: admParams,
+      skipGlobalLoader: true,
+    });
+    const admPayload = admRes?.data?.data ?? admRes?.data?.items ?? admRes?.data ?? [];
+    const admList = Array.isArray(admPayload) ? admPayload : (admPayload?.items || admPayload?.data || []);
+
+    admList.forEach((adm) => {
+      const status = String(adm.status ?? adm.Status ?? adm.admissionStatus ?? adm.AdmissionStatus ?? "").trim().toLowerCase();
+      const isAppr = adm.isApproved ?? adm.IsApproved;
+      const isRej = adm.isRejected ?? adm.IsRejected;
+      const isAct = adm.isActive ?? adm.IsActive;
+
+      const isRejected = isRej === true || isRej === 1 || ["rejected", "inactive", "cancelled", "denied"].includes(status);
+      const isInactive = isAct === false || isAct === 0;
+      const isApproved = status === "approved" || isAppr === true || isAppr === 1 || (!status && !isRejected);
+
+      if (isRejected || isInactive || !isApproved) return;
+
+      const admSecId = normalizeId(adm.sectionId ?? adm.SectionId ?? adm.allocatedSectionId ?? adm.AllocatedSectionId);
+      if (admSecId && sectionId && admSecId !== normalizeId(sectionId)) return;
+
+      const admId = normalizeId(adm.studentId ?? adm.id);
+      const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? adm.AdmissionNo ?? "").trim();
+      if (admId) approvedAdmissionMap.set(admId, adm);
+      if (admNo) approvedAdmissionMap.set(admNo, adm);
+    });
+  } catch (admErr) {
+    console.warn("Notice: could not query student admissions endpoint in MarksEntryPage:", admErr);
+  }
 
   const addRecords = (records) => {
     (records || []).forEach((s) => {
       const sId = normalizeId(s.studentId ?? s.id);
       if (!sId) return;
       if (s.isActive === false || String(s.status || "").toLowerCase() === "inactive") return;
+      const admNo = String(s.admissionNo ?? s.admissionNumber ?? s.AdmissionNo ?? "").trim();
+
+      // If admissions endpoint provided approved admissions, ensure student is among approved admissions
+      let adm = null;
+      if (approvedAdmissionMap.size > 0) {
+        adm = approvedAdmissionMap.get(sId) || (admNo ? approvedAdmissionMap.get(admNo) : null);
+        if (!adm) return; // Exclude unapproved / ghost student records
+      }
+
+      const admissionDate = s.admissionDate || s.dateOfAdmission || adm?.admissionDate || adm?.AdmissionDate || s.allocatedDate || null;
+
       if (!studentMap.has(sId)) {
         studentMap.set(sId, {
           studentId: sId,
-          admissionNo: s.admissionNo ?? s.admissionNumber ?? "",
-          rollNo: String(s.rollNumber ?? s.rollNo ?? s.roll ?? "").trim(),
-          studentName: s.studentName ?? s.fullName ?? s.name ?? "Student",
+          admissionNo: admNo || adm?.admissionNo || "",
+          rollNo: String(s.rollNumber ?? s.rollNo ?? s.roll ?? adm?.rollNo ?? adm?.rollNumber ?? "").trim(),
+          studentName: s.studentName ?? s.fullName ?? s.name ?? adm?.studentName ?? "Student",
           isActive: true,
-          allocatedDate: s.allocatedDate || s.allocationDate || s.assignedDate || s.createdAt || s.createdDate || s.admissionDate || null,
+          admissionDate: admissionDate ? String(admissionDate).slice(0, 10) : null,
+          allocatedDate: s.allocatedDate || s.allocationDate || s.assignedDate || admissionDate || null,
         });
       }
     });
@@ -557,6 +612,25 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
       console.warn("Fallback student query failed:", err);
     }
   }
+
+  // Fallback directly from approved admissions if student query was empty
+  if (studentMap.size === 0 && approvedAdmissionMap.size > 0) {
+    approvedAdmissionMap.forEach((adm, key) => {
+      const sId = normalizeId(adm.studentId ?? adm.id ?? key);
+      if (!sId || studentMap.has(sId)) return;
+      const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? adm.AdmissionNo ?? "").trim();
+      studentMap.set(sId, {
+        studentId: sId,
+        admissionNo: admNo,
+        rollNo: String(adm.rollNo ?? adm.rollNumber ?? "").trim(),
+        studentName: adm.studentName ?? adm.fullName ?? adm.name ?? "Student",
+        isActive: true,
+        admissionDate: adm.admissionDate ? String(adm.admissionDate).slice(0, 10) : null,
+        allocatedDate: adm.allocatedDate || adm.admissionDate || null,
+      });
+    });
+  }
+
   // Fallback to Attendance Student Roster (accessible by Faculty & Staff roles without 403 Forbidden)
   if (studentMap.size === 0) {
     try {
@@ -591,7 +665,14 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
   return list;
 };
 
-const reconcileRosterWithMarks = (roster = [], marks = [], config = {}, existingRows = []) => {
+const reconcileRosterWithMarks = (
+  roster = [],
+  marks = [],
+  config = {},
+  existingRows = [],
+  evaluationStatus = null,
+  examDate = null
+) => {
   const marksMap = new Map();
   (marks || []).forEach((m) => {
     const sId = normalizeId(m.studentId ?? m.id);
@@ -606,7 +687,61 @@ const reconcileRosterWithMarks = (roster = [], marks = [], config = {}, existing
 
   const isObjective = config?.mode === "OBJECTIVE";
 
-  return (roster || []).map((student) => {
+  // Check if evaluation is frozen (Submitted, Approved, or Published)
+  const statusNorm = String(evaluationStatus ?? config?.status ?? config?.evaluationStatus ?? "").trim().toUpperCase();
+  const isFrozen = ["SUBMITTED", "APPROVED", "PUBLISHED"].includes(statusNorm) ||
+    (marks && marks.length > 0 && marks.some((m) => m.isSubmitted || m.status === 1 || m.status === 3 || ["SUBMITTED", "APPROVED", "PUBLISHED"].includes(String(m.evaluationStatus || "").toUpperCase())));
+
+  // Event Date for Joining Date eligibility
+  const targetExamDate = examDate || config?.examDate || config?.startDate || config?.date;
+
+  // Filter roster
+  let effectiveRoster = [];
+
+  if (isFrozen) {
+    // FROZEN EVALUATION: Strictly show ONLY students who have marks or existing records from submission time
+    effectiveRoster = (roster || []).filter((student) => {
+      const sId = normalizeId(student.studentId ?? student.id);
+      return marksMap.has(sId) || existingMap.has(sId);
+    });
+
+    // If there are marks for students not currently in the section roster (e.g. transferred after exam), ensure they appear
+    marksMap.forEach((mark, sId) => {
+      if (!effectiveRoster.some((s) => normalizeId(s.studentId ?? s.id) === sId)) {
+        effectiveRoster.push({
+          studentId: sId,
+          admissionNo: mark.admissionNo || "",
+          rollNo: String(mark.rollNo || ""),
+          studentName: mark.studentName || "Student",
+          isActive: true,
+        });
+      }
+    });
+  } else {
+    // DRAFT / IN-PROGRESS EVALUATION:
+    // Filter out students who joined AFTER the exam date
+    effectiveRoster = (roster || []).filter((student) => {
+      const sId = normalizeId(student.studentId ?? student.id);
+      // If student already has a mark entered, keep them
+      if (marksMap.has(sId) || (existingMap.has(sId) && (existingMap.get(sId).internal !== "" || existingMap.get(sId).theory !== "" || existingMap.get(sId).absent))) {
+        return true;
+      }
+      // Check joining / admission date vs exam date
+      if (targetExamDate && student.admissionDate) {
+        const adm = String(student.admissionDate).slice(0, 10);
+        const exm = String(targetExamDate).slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(adm) && /^\d{4}-\d{2}-\d{2}$/.test(exm) && !adm.startsWith("0001-")) {
+          if (adm > exm) {
+            // Student joined after the exam; not eligible
+            return false;
+          }
+        }
+      }
+      return true;
+    });
+  }
+
+  return (effectiveRoster || []).map((student) => {
     const sId = normalizeId(student.studentId ?? student.id);
     const existing = existingMap.get(sId);
     const mark = marksMap.get(sId);
@@ -1837,7 +1972,20 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               m.isActive !== false
           );
 
-          const reconciledRows = reconcileRosterWithMarks(studentList, subjMarks, config, prev[key]?.rows);
+          const evalStatusCandidate =
+            ev?.status ||
+            subjMarks[0]?.evaluationStatus ||
+            (subjMarks[0]?.status === 3 ? "APPROVED" : subjMarks[0]?.status === 1 ? "SUBMITTED" : (ev ? "DRAFT" : null));
+          const examDateCandidate = config?.examDate || effectiveExam?.startDate;
+
+          const reconciledRows = reconcileRosterWithMarks(
+            studentList,
+            subjMarks,
+            config,
+            prev[key]?.rows,
+            evalStatusCandidate,
+            examDateCandidate
+          );
 
           const hasRecordedMarks = (reconciledRows || []).some((r) =>
             r.absent ||
@@ -1883,10 +2031,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             highest: ev?.highestMarks !== undefined && ev?.highestMarks !== null ? String(ev.highestMarks) : "—",
             lowestMarks: ev?.lowestMarks,
             lowest: ev?.lowestMarks !== undefined && ev?.lowestMarks !== null ? String(ev.lowestMarks) : "—",
-            totalStudents: studentList.length,
+            totalStudents: reconciledRows.length,
             presentStudents: subjMarks.filter((m) => !m.isAbsent && !m.absent && (m.obtainedMarks !== "" || m.totalMarks !== "" || m.total !== "")).length,
             absentStudents: subjMarks.filter((m) => Boolean(m.isAbsent || m.absent)).length,
-            studentsCount: studentList.length,
+            studentsCount: reconciledRows.length,
             rows: reconciledRows,
             dirty: false,
             validationErrors: {},
@@ -2178,7 +2326,9 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           entryStudents,
           rawMarks,
           config,
-          currentWs?.rows
+          currentWs?.rows,
+          evalStatus,
+          config?.examDate || selectedExam?.startDate
         );
 
         if (fetchId !== activeFetchRef.current) return;
@@ -2217,6 +2367,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               theoryMax: config.theoryMax,
               passPercentage: config.passPercentage,
               rejectionReason: existing.rejectionReason || currentWs?.rejectionReason || "",
+              totalStudents: loadedRows.length,
+              studentsCount: loadedRows.length,
               rows: loadedRows,
               dirty: false,
               validationErrors: {},
@@ -3200,7 +3352,20 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             m.isActive !== false
         );
 
-        const reconciledRows = reconcileRosterWithMarks(studentList, subjMarks, config);
+        const evalStatusCandidate =
+          ev?.status ||
+          subjMarks[0]?.evaluationStatus ||
+          (subjMarks[0]?.status === 3 ? "APPROVED" : subjMarks[0]?.status === 1 ? "SUBMITTED" : (ev ? "DRAFT" : null));
+        const examDateCandidate = config?.examDate || effectiveExam?.startDate;
+
+        const reconciledRows = reconcileRosterWithMarks(
+          studentList,
+          subjMarks,
+          config,
+          [],
+          evalStatusCandidate,
+          examDateCandidate
+        );
 
         const hasRecordedMarks = (reconciledRows || []).some((r) =>
           r.absent ||
@@ -3249,10 +3414,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           highest: ev?.highestMarks !== undefined && ev?.highestMarks !== null ? String(ev.highestMarks) : "—",
           lowestMarks: ev?.lowestMarks,
           lowest: ev?.lowestMarks !== undefined && ev?.lowestMarks !== null ? String(ev.lowestMarks) : "—",
-          totalStudents: studentList.length,
+          totalStudents: reconciledRows.length,
           presentStudents: presentCount,
           absentStudents: absentCount,
-          studentsCount: studentList.length,
+          studentsCount: reconciledRows.length,
           rows: reconciledRows,
           dirty: false,
           validationErrors: {},
@@ -3963,20 +4128,34 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
                           );
                         }
 
-                        const rows = reconcileRosterWithMarks(evalStudents, markItems, item, item.rows);
+                        const evalStatusCandidate =
+                          item.status ||
+                          item.evaluationStatus ||
+                          markItems?.[0]?.evaluationStatus ||
+                          (markItems?.[0]?.status === 3 ? "APPROVED" : markItems?.[0]?.status === 1 ? "SUBMITTED" : null);
+                        const examDateCandidate = item.examDate || item.startDate;
+
+                        const rows = reconcileRosterWithMarks(
+                          evalStudents,
+                          markItems,
+                          item,
+                          item.rows,
+                          evalStatusCandidate,
+                          examDateCandidate
+                        );
                         targetItem = {
                           ...item,
                           rows,
-                          totalStudents: evalStudents.length,
-                          studentsCount: evalStudents.length,
+                          totalStudents: rows.length,
+                          studentsCount: rows.length,
                         };
                         setWorkspaces((all) => ({
                           ...all,
                           [key]: {
                             ...all[key],
                             rows,
-                            totalStudents: evalStudents.length,
-                            studentsCount: evalStudents.length,
+                            totalStudents: rows.length,
+                            studentsCount: rows.length,
                           },
                         }));
                       } catch (err) {

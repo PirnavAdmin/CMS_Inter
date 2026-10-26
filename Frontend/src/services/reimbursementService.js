@@ -354,19 +354,35 @@ export async function submitClaim(claimPayload) {
     throw new Error("Purpose must be at least 5 characters.");
   }
 
+  const targetCategory = claimPayload.expenseCategory || claimPayload.ExpenseCategory || claimPayload.category || claimPayload.Category || "Other";
+  const targetPaymentMethod = claimPayload.preferredPaymentMethod || claimPayload.PreferredPaymentMethod || claimPayload.paymentMethod || claimPayload.PaymentMethod || "Bank Transfer";
+
   const payload = {
-    facultyId: claimPayload.facultyId || "",
-    facultyName: claimPayload.facultyName.trim(),
-    department: claimPayload.department.trim(),
-    designation: claimPayload.designation?.trim() || "",
-    email: claimPayload.email?.trim() || "",
-    category: claimPayload.category || "Teaching Materials",
-    expenseDate: claimPayload.expenseDate,
+    facultyId: claimPayload.facultyId || claimPayload.FacultyId || "",
+    facultyName: (claimPayload.facultyName || claimPayload.FacultyName || "").trim(),
+    department: (claimPayload.department || claimPayload.Department || "").trim(),
+    designation: (claimPayload.designation || claimPayload.Designation || "").trim(),
+    email: (claimPayload.email || claimPayload.Email || "").trim(),
+    expenseCategory: targetCategory,
+    ExpenseCategory: targetCategory,
+    category: targetCategory,
+    Category: targetCategory,
+    expenseDate: claimPayload.expenseDate || claimPayload.ExpenseDate,
+    ExpenseDate: claimPayload.ExpenseDate || claimPayload.expenseDate,
     amount: numAmount,
-    purpose: claimPayload.purpose.trim(),
-    paymentMethod: claimPayload.paymentMethod || "Bank Transfer",
-    notes: claimPayload.notes?.trim() || "",
-    declaration: Boolean(claimPayload.declaration),
+    Amount: numAmount,
+    purpose: (claimPayload.purpose || claimPayload.description || "").trim(),
+    Purpose: (claimPayload.purpose || claimPayload.description || "").trim(),
+    description: (claimPayload.description || claimPayload.purpose || "").trim(),
+    Description: (claimPayload.description || claimPayload.purpose || "").trim(),
+    paymentMethod: targetPaymentMethod,
+    PaymentMethod: targetPaymentMethod,
+    preferredPaymentMethod: targetPaymentMethod,
+    PreferredPaymentMethod: targetPaymentMethod,
+    notes: (claimPayload.notes || claimPayload.Notes || "").trim(),
+    Notes: (claimPayload.notes || claimPayload.Notes || "").trim(),
+    declaration: Boolean(claimPayload.declaration ?? claimPayload.Declaration),
+    Declaration: Boolean(claimPayload.declaration ?? claimPayload.Declaration),
   };
 
   // POST /api/v1/reimbursements
