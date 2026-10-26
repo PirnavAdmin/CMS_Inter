@@ -22,6 +22,7 @@ import { getExaminationSettings, updateExaminationSettings } from "@/services/ex
 import attendanceTimingImg from "@/assets/settings-3d/attendance-timing.png";
 import templatesImg from "@/assets/settings-3d/templates.png";
 import boardYearImg from "@/assets/settings-3d/board-academic-year.png";
+import { SHOW_HALL_TICKETS } from "../hallTicketsConfig.js";
 import "./ExamCellSettingsPage.css";
 
 const STORAGE_KEY = "cms_exam_cell_settings";
@@ -242,6 +243,16 @@ export default function ExamCellSettingsPage() {
             <Award size={16} />
             <span>Grading &amp; Evaluation</span>
           </button>
+          {SHOW_HALL_TICKETS && (
+            <button
+              type="button"
+              className={`ec-settings-tab ${activeTab === "halltickets" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("halltickets")}
+            >
+              <FileText size={16} />
+              <span>Hall Ticket &amp; Attendance</span>
+            </button>
+          )}
           <button
             type="button"
             className={`ec-settings-tab ${activeTab === "results" ? "is-active" : ""}`}
@@ -365,7 +376,7 @@ export default function ExamCellSettingsPage() {
             </div>
           )}
 
-          {activeTab === "halltickets" && (
+          {SHOW_HALL_TICKETS && activeTab === "halltickets" && (
             <div className="ec-settings-section">
               <div className="ec-settings-section-head">
                 <h3>Hall Ticket Issuance &amp; Eligibility Parameters</h3>
