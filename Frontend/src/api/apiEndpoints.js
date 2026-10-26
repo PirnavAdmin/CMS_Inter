@@ -517,6 +517,7 @@ export const apiEndpoints = {
     eligibleSubjects: (id) => `/api/v1/examinations/${id}/eligible-subjects`,
     availableHalls: "/api/v1/examinations/available-halls",
     settings: "/api/v1/examinations/settings",
+    duties: "/api/v1/examinations/duties",
   },
   timetable: {
     getAll: "/api/v1/timetable",

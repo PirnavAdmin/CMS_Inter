@@ -1262,21 +1262,31 @@
   bottom: 24px;
   right: 24px;
   background: #171d15;
-  color: #ffffff;
-  padding: 10px 18px;
+  color: #ffffff !important;
+  padding: 12px 20px;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
   display: flex;
   align-items: center;
-  gap: 8px;
-  z-index: 9999;
+  gap: 10px;
+  z-index: 99999;
+  max-width: 480px;
+  word-break: break-word;
   animation: spToastSlideIn 0.25s ease;
 }
 
 .sp-toast.error {
-  background: #dc2626;
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.sp-toast svg {
+  flex-shrink: 0;
+  stroke: #ffffff !important;
+  color: #ffffff !important;
 }
 
 @keyframes spToastSlideIn {
