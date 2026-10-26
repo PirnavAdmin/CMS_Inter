@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Groups;
 
 namespace CollegeManagement.API.Repositories
@@ -9,11 +11,12 @@ namespace CollegeManagement.API.Repositories
         // =========================================================
 
         Task<List<GroupListItemDto>> GetAllAsync(
-            string? search,
-            int? boardId,
-            int? academicYearId,
-            int? academicLevelId,
-            bool? isActive);
+            string? search = null,
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            bool? isActive = null,
+            int? masterGroupId = null);
 
         // =========================================================
         // GROUP DETAILS
@@ -28,7 +31,9 @@ namespace CollegeManagement.API.Repositories
         // =========================================================
 
         Task<List<GroupListItemDto>> GetByBoardAsync(
-            int boardId);
+            int boardId,
+            int? academicYearId = null,
+            int? academicLevelId = null);
 
         // =========================================================
         // CREATE GROUP
@@ -98,20 +103,13 @@ namespace CollegeManagement.API.Repositories
         // =========================================================
 
         Task<List<GroupDropdownDto>>
-            GetDropdownAsync();
+            GetDropdownAsync(
+                int? boardId = null,
+                int? academicYearId = null,
+                int? academicLevelId = null);
 
         // =========================================================
         // PROGRAMS ASSIGNED TO GROUP
-        // =========================================================
-        //
-        // Example:
-        //
-        // MPC
-        //  ├── Regular
-        //  ├── JEE
-        //  └── EAPCET
-        //
-        // This reads from GroupPrograms.
         // =========================================================
 
         Task<List<CollegeManagement.API.DTOs.Program.GroupProgramDto>>
