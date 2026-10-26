@@ -9,7 +9,7 @@ import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
-import { getStudentResult, getStudentExaminations } from "../services/studentAcademicService.js";
+import { getStudentResult, getStudentExaminations, getPublishedStudentResults } from "../services/studentAcademicService.js";
 
 const unwrap = (input) => {
   let value = input;
@@ -143,11 +143,13 @@ function StudentResultsList({ renderDetails }) {
       setLoading(true); setError(""); setEntries([]); setSelectedId(""); setPage(1);
       try {
         if (!["studentId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => Number(student?.[key]) > 0)) throw new Error("Your student academic placement or section is unavailable. Please contact the college office.");
-        const exams = await getStudentExaminations(student, { allPages: true });
+        const [exams, publishedResults] = await Promise.all([getStudentExaminations(student, { allPages: true }), getPublishedStudentResults(student)]);
+        const publishedExamIds = new Set(publishedResults.map(examKey));
         const unique = [...new Map(exams.filter((exam) => examKey(exam) && isCompletedExamination(exam)).map((exam) => [examKey(exam), exam])).values()];
         const results = [];
         for (let offset = 0; offset < unique.length && active; offset += 5) {
           results.push(...await Promise.all(unique.slice(offset, offset + 5).map(async (exam) => {
+            if (!publishedExamIds.has(examKey(exam))) return { exam, memo: null, notPublished: true };
             if (published(null, exam) === false || ["Upcoming Examination", "Examination in Progress"].includes(resultState(exam, null))) return { exam, memo: null };
             try {
               const memo = validateStudentMemo(await getStudentResult(student, examKey(exam)), student, exam);
