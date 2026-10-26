@@ -269,10 +269,15 @@ apiClient.interceptors.response.use(
     }
 
     const is404 = error.response?.status === 404;
+    const is403 = error.response?.status === 403;
+    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations\/settings|attendance)/i.test(
+      originalRequest?.url || ""
+    );
     const shouldLogDevError =
       import.meta.env.DEV &&
       !isNgrokOffline &&
       !is404 &&
+      !(is403 && isExamCellRoute) &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&

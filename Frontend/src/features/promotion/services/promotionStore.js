@@ -27,6 +27,8 @@ export const getEligibleStudents = async (params = {}) => {
   const res = await apiClient.get(apiEndpoints.promotions.eligible, {
     params: cleanParams(params),
     timeout: 20000,
+    silent: true,
+    skipErrorLog: true,
   });
   return res.data?.data || res.data?.Data || res.data || [];
 };

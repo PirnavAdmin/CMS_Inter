@@ -95,8 +95,8 @@ export default function ExamCellSettingsPage() {
             setLastUpdatedAt(data.updatedAt);
           }
         }
-      } catch (err) {
-        console.warn("Could not load examination settings from backend, using current/cached values:", err);
+      } catch {
+        // Cached default values remain active seamlessly
       } finally {
         if (isMounted) setLoading(false);
       }
