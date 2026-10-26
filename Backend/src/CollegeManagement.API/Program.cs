@@ -130,6 +130,13 @@ builder.Services.AddScoped<IDbConnection>(sp =>
 });
 
 builder.Services.AddMemoryCache();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromHours(2);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
 #endregion
 
 #region AutoMapper & Validators
@@ -518,6 +525,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseStaticFiles();
+app.UseSession();
 app.UseAuthentication();
 
 #region Legacy Route Rewrite Middleware

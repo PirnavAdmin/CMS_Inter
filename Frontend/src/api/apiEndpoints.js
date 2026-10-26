@@ -39,6 +39,7 @@ export const apiEndpoints = {
     getById: (adminId) => `/api/Admin/${adminId}`,
     changePassword: "/api/Admin/change-password",
     updateStatus: (adminId) => `/api/Admin/${adminId}/status`,
+    uploadPhoto: "/api/Admin/profile/photo",
   },
   faculty: {
     dashboardStats: "/api/v1/staff/dashboard-stats",

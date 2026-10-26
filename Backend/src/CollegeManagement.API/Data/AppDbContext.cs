@@ -2116,7 +2116,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     IpConfidence = net.IpConfidence,
                     UserAgent = net.UserAgent,
                     DeviceId = net.DeviceId,
-                    SessionId = httpContext?.Session?.Id,
+                    SessionId = httpContext?.Features?.Get<Microsoft.AspNetCore.Http.Features.ISessionFeature>()?.Session?.Id,
                     RequestMethod = httpContext?.Request?.Method,
                     RouteTemplate = httpContext?.Request?.Path.Value,
                     Action = action,

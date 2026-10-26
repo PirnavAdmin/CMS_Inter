@@ -812,6 +812,9 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     isAdmin,
     assignedCampusIds,
     assignedBoardIds,
+    photoUrl: data.PhotoUrl || data.photoUrl || payload.PhotoUrl || payload.photoUrl || data.PhotoPath || data.photoPath || payload.PhotoPath || payload.photoPath || data.user?.photoUrl || payload.user?.photoUrl || data.user?.photoPath || payload.user?.photoPath || data.user?.photo || payload.user?.photo || null,
+    photoPath: data.PhotoPath || data.photoPath || payload.PhotoPath || payload.photoPath || data.PhotoUrl || data.photoUrl || payload.PhotoUrl || payload.photoUrl || data.user?.photoPath || payload.user?.photoPath || data.user?.photoUrl || payload.user?.photoUrl || null,
+    photo: data.Photo || data.photo || data.PhotoUrl || data.photoUrl || payload.PhotoUrl || payload.photoUrl || data.user?.photo || payload.user?.photo || null,
   };
 
   return {

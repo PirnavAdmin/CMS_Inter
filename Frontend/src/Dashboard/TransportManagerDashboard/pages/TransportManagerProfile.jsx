@@ -719,18 +719,39 @@ export default function TransportManagerProfile() {
       setProfileData((prev) => {
         const updated = { ...prev, photoUrl: croppedDataUrl };
         persistProfile(updated);
+        try {
+          const curUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
+          if (curUser) {
+            const merged = { ...curUser, photoUrl: croppedDataUrl, photoPath: croppedDataUrl, photo: croppedDataUrl };
+            if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged));
+            if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged));
+            window.dispatchEvent(new Event("storage"));
+          }
+        } catch {}
         return updated;
       });
 
       outCanvas.toBlob(async (blob) => {
         if (blob) {
           const formData = new FormData();
+          formData.append("Photo", blob, `staff_${effectiveStaffId || "profile"}.jpg`);
           formData.append("file", blob, `staff_${effectiveStaffId || "profile"}.jpg`);
-          formData.append("staffId", effectiveStaffId);
+          formData.append("StaffId", String(effectiveStaffId));
+          formData.append("staffId", String(effectiveStaffId));
           try {
-            await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, {
+            const uploadRes = await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, {
               headers: { "Content-Type": "multipart/form-data" },
             });
+            const serverPhoto = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || uploadRes?.data?.photoUrl || uploadRes?.data?.profilePhoto;
+            if (serverPhoto) {
+              const curUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
+              if (curUser) {
+                const merged = { ...curUser, photoUrl: serverPhoto, photoPath: serverPhoto, photo: serverPhoto };
+                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged));
+                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged));
+                window.dispatchEvent(new Event("storage"));
+              }
+            }
           } catch (e) {
             console.warn("Could not upload profile photo to server:", e);
           }
