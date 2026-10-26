@@ -50,6 +50,13 @@ using MySqlConnector;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSignalR();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromHours(8);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
@@ -518,6 +525,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseStaticFiles();
+app.UseSession();
 app.UseAuthentication();
 
 #region Legacy Route Rewrite Middleware

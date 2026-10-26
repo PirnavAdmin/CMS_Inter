@@ -2089,6 +2089,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             var net = ClientIpHelper.GetNetworkDetails(httpContext);
             var correlationId = AuditCorrelationHelper.GetOrCreateCorrelationId(httpContext);
             var requestId = AuditCorrelationHelper.GetRequestId(httpContext);
+            var sessionId = GetSessionIdSafely(httpContext);
 
             foreach (var entry in ChangeTracker.Entries())
             {
@@ -2116,7 +2117,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     IpConfidence = net.IpConfidence,
                     UserAgent = net.UserAgent,
                     DeviceId = net.DeviceId,
-                    SessionId = httpContext?.Session?.Id,
+                    SessionId = sessionId,
                     RequestMethod = httpContext?.Request?.Method,
                     RouteTemplate = httpContext?.Request?.Path.Value,
                     Action = action,
@@ -2235,5 +2236,22 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                 _ => "System"
             };
         }
+
+        private static string? GetSessionIdSafely(HttpContext? context)
+        {
+            try
+            {
+                if (context != null && context.Features.Get<Microsoft.AspNetCore.Http.Features.ISessionFeature>()?.Session != null && context.Session.IsAvailable)
+                {
+                    return context.Session.Id;
+                }
+            }
+            catch
+            {
+                // Session middleware not configured or session unavailable
+            }
+            return null;
+        }
     }
 }
+
