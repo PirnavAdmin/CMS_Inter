@@ -448,6 +448,8 @@ namespace CollegeManagement.API.Controllers.V1
                         module = p.ModuleId,
                         moduleId = p.ModuleId,
                         subModule = p.SubModule,
+                        screenId = p.ScreenId,
+                        screenName = p.ScreenName,
                         categoryLabel = p.CategoryLabel,
                         displayOrder = p.DisplayOrder,
                         actions = p.Actions,

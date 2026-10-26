@@ -290,6 +290,11 @@ export default function ProtectedRoute({
   const isParent = !isAdmin && !isWarden && !isTransportManager && isParentRole(role);
   const isStudent = !isAdmin && isStudentRole(role);
 
+  const userPerms = user?.permissions || user?.rolePermissions;
+  const isExplicitlyAllowedModule = Boolean(requiredModule && can(requiredModule, requiredAction, undefined, user, requiredScreen));
+  const hasGrantedDashboardAccess = Array.isArray(userPerms) && userPerms.some((p) => p?.canView || (Array.isArray(p?.actions) && p.actions.includes("view")));
+  const canAccessDashboardParentRoute = Boolean(requireAdmin && (isAdmin || isPrincipal || isExplicitlyAllowedModule || hasGrantedDashboardAccess));
+
   // Transport Manager check
   if (requireTransportManager && !isTransportManager && !isAdmin) {
     const destination = isWarden
@@ -311,7 +316,7 @@ export default function ProtectedRoute({
   }
 
   // If a Transport Manager attempts to access routes restricted to other roles, redirect them to transport manager overview
-  if (isTransportManager && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell || requireWarden || requireNonTeaching)) {
+  if (isTransportManager && !canAccessDashboardParentRoute && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell || requireWarden || requireNonTeaching)) {
     return <Navigate to="/transport-manager/overview" replace />;
   }
 
@@ -336,7 +341,7 @@ export default function ProtectedRoute({
   }
 
   // If a Non-Teaching Staff attempts to access other restricted dashboards, redirect to non-teaching dashboard
-  if (isNonTeaching && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell || requireWarden || requireTransportManager)) {
+  if (isNonTeaching && !canAccessDashboardParentRoute && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell || requireWarden || requireTransportManager)) {
     return <Navigate to="/non-teaching-dashboard" replace />;
   }
 
@@ -359,7 +364,7 @@ export default function ProtectedRoute({
   }
 
   // If a Warden attempts to access routes restricted to other roles, redirect them to warden dashboard
-  if (isWarden && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell || requireTransportManager)) {
+  if (isWarden && !canAccessDashboardParentRoute && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireExamCell || requireTransportManager)) {
     return <Navigate to="/warden-dashboard" replace />;
   }
 
@@ -381,7 +386,7 @@ export default function ProtectedRoute({
       : "/student-dashboard";
     return <Navigate to={destination} replace />;
   }
-  if (isExamCell && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireWarden || requireTransportManager)) {
+  if (isExamCell && !canAccessDashboardParentRoute && (requireAdmin || requireFaculty || requireStudent || requireParent || requireAccountant || requirePrincipal || requireWarden || requireTransportManager)) {
     return <Navigate to="/exam-cell-dashboard" replace />;
   }
 
@@ -394,7 +399,7 @@ export default function ProtectedRoute({
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
   }
-  if (requireAdmin && !isAdmin && !isPrincipal) {
+  if (requireAdmin && !canAccessDashboardParentRoute && !isAdmin && !isPrincipal) {
     if (isTransportManager) return <Navigate to="/transport-manager/overview" replace />;
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
