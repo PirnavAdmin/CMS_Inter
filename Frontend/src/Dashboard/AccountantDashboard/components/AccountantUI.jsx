@@ -31,10 +31,12 @@ export function FeeTable({ rows, columns, className = "", empty = "No records av
   </tbody></table></div>;
 }
 
-export function FeePagination({ page, onPage }) {
+export function FeePagination({ page, onPage, numbered = false }) {
+  const start = Math.max(1, Math.min(page.current - 2, page.pages - 4));
+  const numbers = Array.from({ length: Math.min(5, page.pages) }, (_, index) => start + index);
   return <nav className="cms-fee-pagination" aria-label="Table pagination"><span className="cms-fee-pagination-info" aria-live="polite">Showing {page.start}-{page.end} of {page.total} records</span><div className="cms-fee-pagination-actions">
     <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={page.current <= 1} onClick={() => onPage(page.current - 1)}>Previous</button>
-    <span className="cms-btn cms-btn-primary cms-fee-mini-btn" aria-current="page" aria-label={`Page ${page.current} of ${page.pages}`}>{page.current}</span>
+    {numbered ? numbers.map((number) => <button key={number} type="button" className={`cms-btn ${number === page.current ? "cms-btn-primary" : "cms-btn-ghost"} cms-fee-mini-btn`} aria-current={number === page.current ? "page" : undefined} aria-label={`Page ${number} of ${page.pages}`} onClick={() => onPage(number)}>{number}</button>) : <span className="cms-btn cms-btn-primary cms-fee-mini-btn" aria-current="page" aria-label={`Page ${page.current} of ${page.pages}`}>{page.current}</span>}
     <span className="accountant-fee-page-count">of {page.pages}</span>
     <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={page.current >= page.pages} onClick={() => onPage(page.current + 1)}>Next</button>
   </div></nav>;
