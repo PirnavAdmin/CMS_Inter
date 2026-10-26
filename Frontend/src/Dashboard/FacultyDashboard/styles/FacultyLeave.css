@@ -283,9 +283,13 @@
 }
 
 .sp-toast.error {
-  background: var(--cms-red-soft, #fdecec);
-  border-color: var(--cms-red, #d93636);
-  color: var(--cms-red, #d93636);
+  background: var(--cms-red, #dc2626) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+.sp-toast.error svg {
+  stroke: #ffffff !important;
+  color: #ffffff !important;
 }
 
 /* ---------- Custom Leave Type Field ---------- */

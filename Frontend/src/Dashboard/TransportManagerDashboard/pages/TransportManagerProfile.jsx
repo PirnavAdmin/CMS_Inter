@@ -254,7 +254,7 @@ function SearchSelectInput({
 }
 
 export default function TransportManagerProfile() {
-  const { profile = {}, updateProfile = () => {}, showToast = () => {}, authorizedBoards = [], selectedBoardId } = useTransportManager();
+  const { profile = {}, updateProfile = () => { }, showToast = () => { }, authorizedBoards = [], selectedBoardId } = useTransportManager();
   const { boards = [], selectedAcademicYear } = useAcademicContext?.() || {};
   const { selectedCampus } = useCampusContext?.() || {};
 
@@ -300,7 +300,7 @@ export default function TransportManagerProfile() {
         localStorage.removeItem("staff_profile_photo");
         localStorage.removeItem(`staff_profile_${effectiveStaffId}_photo`);
       }
-    } catch {}
+    } catch { }
 
     if (Object.keys(savedParsed).length > 0) {
       return {
@@ -467,7 +467,7 @@ export default function TransportManagerProfile() {
               delete toPersist.photoPath;
               delete toPersist.profilePhoto;
               localStorage.setItem(STORAGE_KEY, JSON.stringify(toPersist));
-            } catch {}
+            } catch { }
             return merged;
           });
 
@@ -563,7 +563,7 @@ export default function TransportManagerProfile() {
           personalEmail: updated.email,
         }).catch(() => null);
       }
-    } catch {}
+    } catch { }
   };
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -815,6 +815,23 @@ export default function TransportManagerProfile() {
       ctx.drawImage(img, -w / 2, -h / 2, w, h);
       ctx.restore();
 
+      const croppedDataUrl = outCanvas.toDataURL("image/jpeg", 0.92);
+
+      setProfileData((prev) => {
+        const updated = { ...prev, photoUrl: croppedDataUrl };
+        persistProfile(updated);
+        try {
+          const curUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
+          if (curUser) {
+            const merged = { ...curUser, photoUrl: croppedDataUrl, photoPath: croppedDataUrl, photo: croppedDataUrl };
+            if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged));
+            if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged));
+            window.dispatchEvent(new Event("storage"));
+          }
+        } catch { }
+        return updated;
+      });
+
       outCanvas.toBlob(async (blob) => {
         if (blob) {
           // Provide instant in-memory preview without touching localStorage
@@ -823,39 +840,23 @@ export default function TransportManagerProfile() {
 
           // Exactly matching AccountantProfile contract: single StaffId and single Photo form fields
           const formData = new FormData();
-          formData.append("StaffId", String(effectiveStaffId));
           formData.append("Photo", blob, `staff_${effectiveStaffId || "profile"}.jpg`);
-
+          formData.append("file", blob, `staff_${effectiveStaffId || "profile"}.jpg`);
+          formData.append("StaffId", String(effectiveStaffId));
+          formData.append("staffId", String(effectiveStaffId));
           try {
-            const uploadRes = await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData);
-            const body = uploadRes?.data?.data ?? uploadRes?.data;
-            const serverPath =
-              body?.photoUrl ||
-              body?.photoPath ||
-              body?.profilePhoto ||
-              uploadRes?.data?.photoUrl ||
-              uploadRes?.data?.photoPath ||
-              uploadRes?.data?.profilePhoto ||
-              uploadRes?.data?.url;
-
-            if (serverPath) {
-              const finalPhoto = resolvePhotoUrl(serverPath);
-              setProfileData((prev) => ({
-                ...prev,
-                photoUrl: finalPhoto,
-                photoPath: serverPath,
-                profilePhoto: serverPath,
-              }));
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(
-                  new CustomEvent("cms-staff-photo-updated", {
-                    detail: { photoUrl: finalPhoto, staffId: effectiveStaffId },
-                  })
-                );
+            const uploadRes = await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, {
+              headers: { "Content-Type": "multipart/form-data" },
+            });
+            const serverPhoto = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || uploadRes?.data?.photoUrl || uploadRes?.data?.profilePhoto;
+            if (serverPhoto) {
+              const curUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
+              if (curUser) {
+                const merged = { ...curUser, photoUrl: serverPhoto, photoPath: serverPhoto, photo: serverPhoto };
+                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged));
+                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged));
+                window.dispatchEvent(new Event("storage"));
               }
-              showToast("Profile photo uploaded to backend successfully!", "success");
-            } else {
-              showToast("Profile photo updated!", "success");
             }
           } catch (e) {
             console.warn("Could not upload profile photo to server:", e);

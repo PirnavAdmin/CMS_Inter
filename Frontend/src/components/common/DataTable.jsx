@@ -4,6 +4,7 @@ import Search3DIcon from "./Search3DIcon.jsx";
 import { StatusBadge, SkeletonRow } from "./Ui.jsx";
 
 const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 const textValue = (value) => {
   if (value == null) return "";
@@ -213,7 +214,7 @@ export default function DataTable({
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={colCount} />)
+              Array.from({ length: effectivePageSize }, (_, index) => <SkeletonRow key={index} columns={colCount} />)
             ) : pageRows.length === 0 ? (
               <tr>
                 <td colSpan={colCount}>

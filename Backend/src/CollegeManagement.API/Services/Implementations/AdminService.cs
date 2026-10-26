@@ -165,6 +165,11 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<AdminPhotoUploadResultDto> UploadPhotoAsync(int adminId, Microsoft.AspNetCore.Http.IFormFile file, System.Threading.CancellationToken ct = default)
         {
             var admin = await _adminRepository.GetByIdAsync(adminId);
+            if (admin == null && adminId != 1)
+            {
+                admin = await _adminRepository.GetByIdAsync(1);
+                if (admin != null) adminId = 1;
+            }
             if (admin == null)
             {
                 return new AdminPhotoUploadResultDto
@@ -223,6 +228,21 @@ namespace CollegeManagement.API.Services.Implementations
 
             var relativeUrl = $"/uploads/admin-photos/{uniqueFileName}";
             var updateSuccess = await _adminRepository.UpdatePhotoAsync(adminId, relativeUrl);
+            if (adminId != 1)
+            {
+                await _adminRepository.UpdatePhotoAsync(1, relativeUrl);
+            }
+
+            try
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "UPDATE Staffs s INNER JOIN Users u ON u.StaffId = s.Id SET s.PhotoPath = {0} WHERE u.AdminId = {1} OR u.RoleId IN (1, 2)",
+                    relativeUrl, adminId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to dual-update Staffs.PhotoPath for admin users.");
+            }
 
             if (!updateSuccess)
             {
