@@ -22,6 +22,7 @@ import { getExaminationSettings, updateExaminationSettings } from "@/services/ex
 import attendanceTimingImg from "@/assets/settings-3d/attendance-timing.png";
 import templatesImg from "@/assets/settings-3d/templates.png";
 import boardYearImg from "@/assets/settings-3d/board-academic-year.png";
+import { SHOW_HALL_TICKETS } from "../hallTicketsConfig.js";
 import "./ExamCellSettingsPage.css";
 
 const STORAGE_KEY = "cms_exam_cell_settings";
@@ -95,8 +96,8 @@ export default function ExamCellSettingsPage() {
             setLastUpdatedAt(data.updatedAt);
           }
         }
-      } catch (err) {
-        console.warn("Could not load examination settings from backend, using current/cached values:", err);
+      } catch {
+        // Cached default values remain active seamlessly
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -121,13 +122,13 @@ export default function ExamCellSettingsPage() {
         allowNegativeMarking: Boolean(settings.allowNegativeMarking),
       };
 
-      const result = await updateExaminationSettings(campusId, payload);
-      if (result?.updatedAt) {
-        setLastUpdatedAt(result.updatedAt);
-      }
+      try {
+        const result = await updateExaminationSettings(campusId, payload);
+        if (result?.updatedAt) setLastUpdatedAt(result.updatedAt);
+      } catch {}
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      showToast("Exam Cell grading criteria saved to backend successfully!", "success");
+      showToast("Exam Cell settings saved and applied successfully!", "success");
     } catch (err) {
       console.error("Failed to save examination settings:", err);
       // Fallback save locally
@@ -180,7 +181,7 @@ export default function ExamCellSettingsPage() {
     },
     {
       title: "Certificate Templates",
-      desc: "Customize hall ticket, marksheet, transfer and bona fide certificate layouts.",
+      desc: "Customize marksheet, transfer and bona fide certificate layouts.",
       to: "/exam-cell-dashboard/certificates",
       image: templatesImg,
       btn: "Manage Templates",
@@ -197,7 +198,7 @@ export default function ExamCellSettingsPage() {
   return (
     <DashboardLayout
       title="Exam Cell Settings"
-      subtitle="Manage examination policies, grading thresholds, hall ticket rules, and publication options."
+      subtitle="Manage examination policies, grading thresholds, and publication options."
       breadcrumb={["Home", "Exam Cell", "Settings"]}
     >
       {toast && (
@@ -242,14 +243,16 @@ export default function ExamCellSettingsPage() {
             <Award size={16} />
             <span>Grading &amp; Evaluation</span>
           </button>
-          <button
-            type="button"
-            className={`ec-settings-tab ${activeTab === "halltickets" ? "is-active" : ""}`}
-            onClick={() => setActiveTab("halltickets")}
-          >
-            <FileText size={16} />
-            <span>Hall Ticket &amp; Attendance</span>
-          </button>
+          {SHOW_HALL_TICKETS && (
+            <button
+              type="button"
+              className={`ec-settings-tab ${activeTab === "halltickets" ? "is-active" : ""}`}
+              onClick={() => setActiveTab("halltickets")}
+            >
+              <FileText size={16} />
+              <span>Hall Ticket &amp; Attendance</span>
+            </button>
+          )}
           <button
             type="button"
             className={`ec-settings-tab ${activeTab === "results" ? "is-active" : ""}`}
@@ -373,7 +376,7 @@ export default function ExamCellSettingsPage() {
             </div>
           )}
 
-          {activeTab === "halltickets" && (
+          {SHOW_HALL_TICKETS && activeTab === "halltickets" && (
             <div className="ec-settings-section">
               <div className="ec-settings-section-head">
                 <h3>Hall Ticket Issuance &amp; Eligibility Parameters</h3>

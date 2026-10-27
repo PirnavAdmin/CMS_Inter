@@ -15,13 +15,20 @@ import { PageState, FeePagination } from "../components/AccountantUI.jsx";
 import { pageOf } from "../utils/feeViewData.js";
 import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 import { feeCollectionAccess } from "../services/accountantService.js";
+import { feeReceiptAccess } from "../services/accountantService.js";
+import { readFee } from "../utils/feeViewData.js";
+import { FeeReceiptActions, SavedPaymentReceipt } from "./AccountantFeeManagement.jsx";
 
 export function AccountantPayments() {
   const campusParams = useFinanceParams();
   const permissions = useEffectivePermissions();
   const canReadHistory = feeCollectionAccess(permissions);
+  const canReadReceipt = feeReceiptAccess(permissions);
+  const [receiptSelection, setReceiptSelection] = useState(null);
+  const receiptScope = JSON.stringify(campusParams);
   const [query] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => query.get("tab") === "fees" ? "fees" : "reimbursements"); // "reimbursements" | "fees"
+  useEffect(() => { setReceiptSelection(null); }, [receiptScope, activeTab]);
   const [feePageNumber, setFeePageNumber] = useState(1);
   const [search, setSearch] = useState("");
   const [reimbFilter, setReimbFilter] = useState("all");
@@ -80,7 +87,13 @@ export function AccountantPayments() {
   }, [campusParams, activeTab, permissions.loading, canReadHistory]);
   const state = useFinancePage(load);
   const reloadFees = state.reload;
-  const feeRows = (state.data?.payments || []).map(normalizePayment).sort((a, b) => String(b.date).localeCompare(String(a.date))).filter((row) => !search || `${row.studentName} ${row.admissionNo} ${row.reference}`.toLowerCase().includes(search.toLowerCase()));
+  const feeRows = (state.data?.payments || []).map(payment => ({
+    ...normalizePayment(payment),
+    id: readFee(payment, "feePaymentId"),
+    receiptNumber: readFee(payment, "receiptNumber") || "-",
+    reference: readFee(payment, "transactionReference") || "-",
+    payment,
+  })).sort((a, b) => String(b.date).localeCompare(String(a.date))).filter((row) => !search || `${row.studentName} ${row.admissionNo} ${row.reference} ${row.receiptNumber}`.toLowerCase().includes(search.toLowerCase()));
   const feePage = pageOf(feeRows, feePageNumber, "", "", 5);
   const currentFeePage = feePage.current;
   useEffect(() => { if (feePageNumber !== currentFeePage) setFeePageNumber(currentFeePage); }, [feePageNumber, currentFeePage]);
@@ -342,9 +355,10 @@ export function AccountantPayments() {
                 </div>
               </div>
               <StudentDataTable
-                columns={["Student", "Admission No", "Type", "Amount", "Date", "Method", "Reference", "Status"]}
+                columns={["Student", "Admission No", "Type", "Amount", "Date", "Method", "Reference", "Status", "Receipt Number", "Actions"]}
                 statusColumns={[7]}
                 rows={feePage.rows.map((row) => ({
+                  id: row.id,
                   Student: row.studentName,
                   "Admission No": row.admissionNo,
                   Type: row.type,
@@ -353,15 +367,21 @@ export function AccountantPayments() {
                   Method: row.method,
                   Reference: row.reference,
                   Status: row.status,
+                  "Receipt Number": row.receiptNumber,
+                  Actions: <FeeReceiptActions payment={row.payment} allowed={canReadReceipt} onSelect={selection => setReceiptSelection({ ...selection, scope: receiptScope })} />,
                 }))}
                 empty={state.data?.errors?.length ? "No verified transactions are available. Resolve the history errors above." : "No payment transactions available."}
               />
               <FeePagination page={feePage} onPage={setFeePageNumber} numbered />
-              <p className="sp-muted">Historical receipt retrieval is unavailable for the Accountant role. New collection receipts can be printed immediately after payment.</p>
             </StudentCard>
           ) : null}
         </>
       )}
+
+      {activeTab === "fees" && receiptSelection?.scope === receiptScope && canReadReceipt ? <SavedPaymentReceipt
+        key={`${readFee(receiptSelection.payment, "feePaymentId")}-${receiptSelection.autoPrint}-${receiptScope}`}
+        payment={receiptSelection.payment} autoPrint={receiptSelection.autoPrint} onClose={() => setReceiptSelection(null)}
+      /> : null}
 
       {/* Disburse Payment Modal Dialog */}
       {disburseModal ? (

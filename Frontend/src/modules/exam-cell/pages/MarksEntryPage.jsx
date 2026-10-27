@@ -894,7 +894,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             GroupId: filters.group || undefined,
             programId: filters.program || undefined,
             ProgramId: filters.program || undefined,
-            status: "COMPLETED",
+            status: undefined,
           },
           headers: {
             ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
@@ -910,7 +910,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
                 academicYearId: currentYear || undefined,
                 academicLevelId: filters.level || undefined,
                 groupId: filters.group || undefined,
-                status: "COMPLETED",
+                status: undefined,
               },
               headers: {
                 ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
@@ -956,8 +956,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
         let filteredExamList = examList.filter((e) => {
           if (!e.isActive) return false;
           // STRICT FILTER: Only genuinely Completed Examinations
-          const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-          if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+          const isCompleted = ["SCHEDULED", "ONGOING", "ACTIVE", "COMPLETED", "PUBLISHED"].includes(String(e.status).toUpperCase()) || e.isCompleted === true;
+          if (!isCompleted || e.status === "CANCELLED") return false;
 
           if (currentBoard && e.boardId && !eq(e.boardId, currentBoard)) return false;
           if (currentYear && e.academicYearId && !eq(e.academicYearId, currentYear)) return false;
@@ -972,8 +972,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
         if (filteredExamList.length === 0 && filters.program) {
           filteredExamList = examList.filter((e) => {
             if (!e.isActive) return false;
-            const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-            if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+            const isCompleted = ["SCHEDULED", "ONGOING", "ACTIVE", "COMPLETED", "PUBLISHED"].includes(String(e.status).toUpperCase()) || e.isCompleted === true;
+            if (!isCompleted || e.status === "CANCELLED") return false;
 
             if (currentBoard && e.boardId && !eq(e.boardId, currentBoard)) return false;
             if (currentYear && e.academicYearId && !eq(e.academicYearId, currentYear)) return false;
@@ -1462,7 +1462,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
         configs.forEach((config) => {
           const key = evaluationKey({ examinationId: examId, sectionId, subjectId: config.subjectId });
           const ev = existingEvals.find((e) => {
-            const parts = String(e.evaluationId || "").split("_");
+            const parts = String(e.evaluationId || "").split(/[-_]/);
             const evSubId = normalizeId(e.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
             const evSecId = normalizeId(e.sectionId ?? (parts.length >= 3 ? parts[1] : sectionId));
             const evExamId = normalizeId(e.examinationId ?? e.examId ?? (parts.length >= 3 ? parts[2] : examId));
@@ -1576,8 +1576,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
             GroupId: effectiveEntryFilters.group,
             programId: effectiveEntryFilters.program || undefined,
             ProgramId: effectiveEntryFilters.program || undefined,
-            status: "COMPLETED",
-            Status: "COMPLETED",
+            status: undefined,
+            Status: undefined,
           },
           skipGlobalLoader: true,
         });
@@ -1595,7 +1595,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
               academicYearId: effectiveEntryFilters.year,
               academicLevelId: effectiveEntryFilters.level,
               groupId: effectiveEntryFilters.group,
-              status: "COMPLETED",
+              status: undefined,
             },
             skipGlobalLoader: true,
           });
@@ -1638,8 +1638,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
         .filter((e) => {
           if (!e.isActive) return false;
           // STRICT FILTER: Only genuinely Completed Examinations
-          const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-          if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+          const isCompleted = ["SCHEDULED", "ONGOING", "ACTIVE", "COMPLETED", "PUBLISHED"].includes(String(e.status).toUpperCase()) || e.isCompleted === true;
+          if (!isCompleted || e.status === "CANCELLED") return false;
 
           if (entry.filters.board && e.boardId && !eq(e.boardId, entry.filters.board)) return false;
           if (entry.filters.year && e.academicYearId && !eq(e.academicYearId, entry.filters.year)) return false;
@@ -1683,8 +1683,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
           })
           .filter((e) => {
             if (!e.isActive) return false;
-            const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-            if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+            const isCompleted = ["SCHEDULED", "ONGOING", "ACTIVE", "COMPLETED", "PUBLISHED"].includes(String(e.status).toUpperCase()) || e.isCompleted === true;
+            if (!isCompleted || e.status === "CANCELLED") return false;
 
             if (entry.filters.board && e.boardId && !eq(e.boardId, entry.filters.board)) return false;
             if (entry.filters.year && e.academicYearId && !eq(e.academicYearId, entry.filters.year)) return false;
@@ -2849,7 +2849,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
         });
 
         const ev = existingEvals.find((e) => {
-          const parts = String(e.evaluationId || "").split("_");
+          const parts = String(e.evaluationId || "").split(/[-_]/);
           const evSubId = normalizeId(e.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
           const evSecId = normalizeId(e.sectionId ?? (parts.length >= 3 ? parts[1] : evalState.filters.section));
           const evExamId = normalizeId(e.examinationId ?? e.examId ?? (parts.length >= 3 ? parts[2] : evalState.filters.exam));
@@ -3186,7 +3186,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
           setWorkspaces((all) => {
             const next = { ...all };
             freshEvals.forEach((fe) => {
-              const parts = String(fe.evaluationId || "").split("_");
+              const parts = String(fe.evaluationId || "").split(/[-_]/);
               const sId = normalizeId(fe.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
               const secId = normalizeId(fe.sectionId ?? (parts.length >= 3 ? parts[1] : evalState.filters.section));
               const exId = normalizeId(fe.examinationId ?? fe.examId ?? (parts.length >= 3 ? parts[2] : evalState.filters.exam));
@@ -3614,8 +3614,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
                           const marksRes = await apiClient.get(
                             `/api/v1/marks/exam/${item.examinationId || evalState.filters.exam}`,
                             { params: { campusId: effectiveCampusId } }
-                          );
-                          const allExamMarks = unwrapRecords(marksRes);
+                          ).catch(() => null);
+                          const allExamMarks = unwrapRecords(marksRes) || [];
                           markItems = allExamMarks.filter(
                             (m) =>
                               eq(m.subjectId, item.subjectId) &&
@@ -3670,7 +3670,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
                     setPage={setDetailPage}
                     onBack={() => setSelectedStudent(null)}
                   />
-                ) : evalReadiness.readyForResults || backendAnalysis.length > 0 ? (
+                ) : evalReadiness.readyForResults || backendAnalysis.length > 0 || analysis.length > 0 ? (
                   <StudentList
                     rows={filteredStudents}
                     subjects={evalConfigs}

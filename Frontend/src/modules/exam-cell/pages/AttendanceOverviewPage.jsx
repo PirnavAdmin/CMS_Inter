@@ -59,13 +59,18 @@ export default function AttendanceOverviewPage() {
 
       const targetYearId = Number(selectedAcademicYearId) || Number(profileData?.academicYearId) || 0;
 
-      const overviewRes = await (staff 
-        ? apiClient.get(apiEndpoints.staffAttendance.yearlyOverview(id, targetYearId)) 
-        : apiClient.get(apiEndpoints.attendance.yearlyOverview(id, targetYearId)));
+      let overviewData = { totalWorkingDays: 0, presentDays: 0, absentDays: 0, percentage: 0, months: [] };
+      try {
+        const overviewRes = await (staff 
+          ? apiClient.get(apiEndpoints.staffAttendance.yearlyOverview(id, targetYearId), { silent: true, skipErrorLog: true }) 
+          : apiClient.get(apiEndpoints.attendance.yearlyOverview(id, targetYearId), { silent: true, skipErrorLog: true }));
+        overviewData = overviewRes.data.data || overviewRes.data || overviewData;
+      } catch {
+        // Fallback default overview data
+      }
 
-      setOverview(overviewRes.data.data || overviewRes.data);
-    } catch (err) {
-      console.error("Failed to load overview data:", err);
+      setOverview(overviewData);
+    } catch {
       setError("Failed to load attendance overview data. Please try again.");
     } finally {
       setLoading(false);

@@ -391,6 +391,14 @@ export default function HallAllocation({ initialTab = "rooms" }) {
     return location?.state?.activeTab || initialTab || "rooms";
   });
 
+  useEffect(() => {
+    if (location?.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    } else if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [location?.state?.activeTab, initialTab]);
+
   const { selectedCampusId } = useCampusContext();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
 
@@ -576,7 +584,13 @@ export default function HallAllocation({ initialTab = "rooms" }) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Invigilation Duties");
     const dateStr = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Invigilation_Duties_${dateStr}.xlsx`);
+    try {
+      XLSX.writeFile(wb, `Invigilation_Duties_${dateStr}.xlsx`);
+    } catch (err) {
+      console.error("Failed to export duties Excel:", err);
+      showToast("Failed to export Excel file. Please try again.", "error");
+      return;
+    }
     showToast("Invigilation duties exported to Excel!", "success");
   };
 
@@ -613,9 +627,9 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         }));
 
         // Fallback to campus-level exams if strict filters yielded empty
-        if (list.length === 0 && selectedCampusId) {
+        if (list.length === 0) {
           apiClient
-            .get("/api/v1/examinations", { params: { campusId: selectedCampusId } })
+            .get("/api/v1/examinations", { params: selectedCampusId ? { campusId: selectedCampusId } : {} })
             .then((fallbackRes) => {
               if (!active) return;
               const fbRaw = unwrap(fallbackRes);
@@ -963,7 +977,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
       currentExam?.totalCandidates ||
       currentExam?.studentCount ||
       detectedStrength ||
-      25
+      0
     );
     const availableRoomsCount = rooms.length;
     let allocatedSlots = 0;
@@ -1016,7 +1030,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
 
     setAllocating(true);
     try {
-      const candidateStrength = metrics.totalStudents || 25;
+      const defaultCandidateStrength = Number(metrics.totalStudents || currentExam?.totalCandidates || 0);
       const sortedRooms = [...rooms].sort((a, b) => Number(b.capacity || 40) - Number(a.capacity || 40));
       const activeFaculty = [...faculty].filter((f) => f.isActive !== false);
 
@@ -1035,7 +1049,9 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         const bookedFaculty = facultyBookingMap.get(slotKey) || new Set();
 
         // Find available room with capacity >= candidateStrength and no time conflict
-        let assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId)) && Number(r.capacity || 40) >= candidateStrength);
+        const slotCandidates = Number(sch.candidateCount || sch.candidatesCount || sch.allocatedStudents || defaultCandidateStrength || 0);
+        const requiredCap = slotCandidates > 0 ? slotCandidates : 1;
+        let assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId)) && Number(r.capacity || 40) >= requiredCap);
         if (!assignedRoom) {
           // If no single room has sufficient capacity, pick largest available room without conflict
           assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId))) || sortedRooms[index % sortedRooms.length];
@@ -1058,15 +1074,15 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           facultyBookingMap.set(slotKey, bookedFaculty);
         }
 
-        const roomCap = Number(assignedRoom?.capacity || candidateStrength);
-        const allocatedCount = Math.min(candidateStrength, roomCap);
+        const roomCap = Number(assignedRoom?.capacity || (slotCandidates > 0 ? slotCandidates : 40));
+        const allocatedCount = slotCandidates > 0 ? Math.min(slotCandidates, roomCap) : roomCap;
 
-        if (roomCap < candidateStrength) {
+        if (slotCandidates > 0 && roomCap < slotCandidates) {
           capacityShortages.push({
             subject: sch.subjectName,
             room: assignedRoom?.roomNumber || `Hall-${chosenRoomId}`,
             capacity: roomCap,
-            needed: candidateStrength,
+            needed: slotCandidates,
           });
         }
 
@@ -1117,6 +1133,10 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           invigilatorName: sch.invigilatorName,
           examMode: sch.mode || sch.examMode || "Written",
           maxMarks: Number(sch.totalMarks || sch.maxMarks || 100),
+          passingMarks: Number(sch.passingMarks ?? 35),
+          patternName: sch.patternName || "",
+          groupId: sch.groupId ? Number(sch.groupId) : null,
+          includedSubjectIds: Array.isArray(sch.includedSubjectIds) ? sch.includedSubjectIds : [],
           candidateCount: sch.allocatedStudents,
           candidatesCount: sch.allocatedStudents,
           capacity: sch.capacity,
@@ -1269,6 +1289,10 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         invigilatorName: facObj?.name,
         examMode: editSlot.mode || editSlot.examMode || "Written",
         maxMarks: Number(editSlot.totalMarks || editSlot.maxMarks || 100),
+        passingMarks: Number(editSlot.passingMarks ?? 35),
+        patternName: editSlot.patternName || "",
+        groupId: editSlot.groupId ? Number(editSlot.groupId) : null,
+        includedSubjectIds: Array.isArray(editSlot.includedSubjectIds) ? editSlot.includedSubjectIds : [],
         candidateCount: selectedRoomId ? candCount : 0,
         candidatesCount: selectedRoomId ? candCount : 0,
         capacity: roomCap,
@@ -1337,7 +1361,13 @@ export default function HallAllocation({ initialTab = "rooms" }) {
     XLSX.utils.book_append_sheet(wb, ws, "Hall Allocation");
     const examLabel = currentExam?.name ? currentExam.name.replace(/\s+/g, "_") : "Report";
     const dateStr = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Hall_Allocation_${examLabel}_${dateStr}.xlsx`);
+    try {
+      XLSX.writeFile(wb, `Hall_Allocation_${examLabel}_${dateStr}.xlsx`);
+    } catch (err) {
+      console.error("Failed to export Excel:", err);
+      showToast("Failed to export Excel. Please try again.", "error");
+      return;
+    }
     showToast("Hall allocation chart exported to Excel!", "success");
   };
 

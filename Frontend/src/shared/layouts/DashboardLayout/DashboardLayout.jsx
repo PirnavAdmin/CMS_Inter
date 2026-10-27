@@ -20,6 +20,7 @@ import { env } from "@/config/env.js";
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
+import { SHOW_HALL_TICKETS } from "@/modules/exam-cell/hallTicketsConfig.js";
 import { can, hasRole } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
@@ -323,7 +324,9 @@ export const examCellMenu = [
     items: [
       { to: "/exam-cell-dashboard/exams", label: "Examination", icon: examinationIcon, moduleKey: "examinations" },
       { to: "/exam-cell-dashboard/hall-allocation", label: "Hall Allocation", icon: sectionsIcon, moduleKey: "examinations", screenKey: "hall-allocation" },
-      { to: "/exam-cell-dashboard/hall-tickets", label: "Hall Tickets", icon: certificatesIcon, moduleKey: "examinations", screenKey: "hall-tickets" },
+      ...(SHOW_HALL_TICKETS
+        ? [{ to: "/exam-cell-dashboard/hall-tickets", label: "Hall Tickets", icon: certificatesIcon, moduleKey: "examinations", screenKey: "hall-tickets" }]
+        : []),
     ],
   },
   {
@@ -467,12 +470,12 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
   const activeMenus = pathname.startsWith("/parent-dashboard")
     ? parentMenu
     : pathname.startsWith("/principal-dashboard")
-    ? principalMenu
-    : pathname.startsWith("/warden")
-    ? wardenMenu
-    : pathname.startsWith("/exam-cell-dashboard")
-    ? examCellMenu
-    : menu;
+      ? principalMenu
+      : pathname.startsWith("/warden")
+        ? wardenMenu
+        : pathname.startsWith("/exam-cell-dashboard")
+          ? examCellMenu
+          : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
@@ -610,7 +613,7 @@ export default function DashboardLayout({
               for (const storage of [window.localStorage, window.sessionStorage]) {
                 if (storage.getItem("user")) storage.setItem("user", JSON.stringify(updated));
               }
-            } catch {}
+            } catch { }
             setCurrentUser(updated);
           }
         })
@@ -649,11 +652,11 @@ export default function DashboardLayout({
               try {
                 if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updated));
                 if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updated));
-              } catch {}
+              } catch { }
               setCurrentUser(updated);
             }
           }
-        }).catch(() => {});
+        }).catch(() => { });
       } else if (u.staffId) {
         apiClient.get(`/api/v1/staff/${u.staffId}`).then(res => {
           if (!active) return;
@@ -666,11 +669,11 @@ export default function DashboardLayout({
               try {
                 if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updated));
                 if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updated));
-              } catch {}
+              } catch { }
               setCurrentUser(updated);
             }
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     };
 
@@ -858,7 +861,7 @@ export default function DashboardLayout({
     let disposed = false;
     if (!canReviewReimbursements && !canReviewCertificates) {
       if (hubConnectionRef.current) {
-        hubConnectionRef.current.stop().catch(() => {});
+        hubConnectionRef.current.stop().catch(() => { });
         hubConnectionRef.current = null;
       }
       return;
@@ -889,7 +892,7 @@ export default function DashboardLayout({
     connection.start()
       .then(() => {
         if (!disposed && reimbursementCampusId && connection.state === "Connected") {
-          connection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
+          connection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => { });
         }
       })
       .catch(() => {
@@ -901,7 +904,7 @@ export default function DashboardLayout({
       if (hubConnectionRef.current) {
         const conn = hubConnectionRef.current;
         hubConnectionRef.current = null;
-        conn.stop().catch(() => {});
+        conn.stop().catch(() => { });
       }
     };
   }, [canReviewReimbursements, canReviewCertificates]);
@@ -909,7 +912,7 @@ export default function DashboardLayout({
   // Synchronize Campus Join/Leave dynamically without tearing down SignalR socket
   useEffect(() => {
     if (reimbursementCampusId && hubConnectionRef.current?.state === "Connected") {
-      hubConnectionRef.current.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
+      hubConnectionRef.current.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => { });
     }
   }, [reimbursementCampusId]);
 
@@ -919,7 +922,7 @@ export default function DashboardLayout({
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
   const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : isExamCell ? "Exam Cell" : "CMS Admin"));
   const profileRole = isWarden ? (user?.designation || "Hostel Warden") : isExamCell ? (user?.designation || "Exam Cell") : (user?.designation || user?.role || "admin");
-  
+
   const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
   const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
 
@@ -928,7 +931,7 @@ export default function DashboardLayout({
     let savedAdminProfile = null;
     try {
       savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
-    } catch {}
+    } catch { }
     const rawPhoto = (
       user?.photoUrl ||
       user?.photoPath ||
@@ -1124,7 +1127,7 @@ export default function DashboardLayout({
     <div className={`cms-shell ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`}>
       <aside className={`cms-sidebar ${ready && navOpen ? "is-open" : ""}`}>
         <div className="cms-brand">
-          <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges"  />
+          <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
         </div>
         <nav className="cms-nav" ref={sidebarNavRef} onScroll={rememberSidebarScroll}>
           {activeMenu.map((group) => (
@@ -1154,7 +1157,7 @@ export default function DashboardLayout({
                   const isAttendanceMenu = item.to === "/dashboard/attendance" || item.to === "/exam-cell-dashboard/attendance" || item.to.includes("attendance");
                   const isSettingsMenu = item.to === "/dashboard/settings";
                   const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : false;
-                  const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : () => {};
+                  const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : () => { };
                   const childIsActive = (child) => isActive(child.to);
                   return (
                     <div key={item.to} className={isAttendanceMenu || isSettingsMenu ? "cms-nav-branch cms-attendance-branch" : "cms-nav-branch"}>
@@ -1190,19 +1193,19 @@ export default function DashboardLayout({
                       </div>
                       {isOpen
                         ? item.children.map((child) => {
-                            return (
-                              <Link
-                                key={child.to}
-                                to={child.to}
-                                title={navOpen ? undefined : child.label}
-                                className={`cms-nav-link cms-nav-sub ${childIsActive(child) ? "is-active" : ""}`}
-                                onClick={closeOnMobile}
-                              >
-                                <SidebarIcon icon={child.icon} sub />
-                                <span className="cms-nav-label">{child.label}</span>
-                              </Link>
-                            );
-                          })
+                          return (
+                            <Link
+                              key={child.to}
+                              to={child.to}
+                              title={navOpen ? undefined : child.label}
+                              className={`cms-nav-link cms-nav-sub ${childIsActive(child) ? "is-active" : ""}`}
+                              onClick={closeOnMobile}
+                            >
+                              <SidebarIcon icon={child.icon} sub />
+                              <span className="cms-nav-label">{child.label}</span>
+                            </Link>
+                          );
+                        })
                         : null}
                     </div>
                   );

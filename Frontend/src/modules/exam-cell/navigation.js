@@ -15,6 +15,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 
+import { SHOW_HALL_TICKETS } from "./hallTicketsConfig.js";
+
 export const examCellBase = "/exam-cell-dashboard";
 
 export const examCellMenu = [
@@ -25,7 +27,7 @@ export const examCellMenu = [
       ["exams", "Examination", CalendarDays],
       ["hall-allocation", "Hall Allocation", Building2],
       ["invigilation-duties", "Invigilation Duties", ShieldAlert],
-      ["hall-tickets", "Hall Tickets", Ticket],
+      ...(SHOW_HALL_TICKETS ? [["hall-tickets", "Hall Tickets", Ticket]] : []),
     ],
   ],
   [
