@@ -14,7 +14,6 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/departments")]
     [EnableCors("AllowFrontend")]
-    [AllowAnonymous]
     [Produces("application/json")]
     [Authorize]
     public class DepartmentController : ControllerBase

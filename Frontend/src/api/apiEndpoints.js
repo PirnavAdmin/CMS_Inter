@@ -39,6 +39,7 @@ export const apiEndpoints = {
     getById: (adminId) => `/api/Admin/${adminId}`,
     changePassword: "/api/Admin/change-password",
     updateStatus: (adminId) => `/api/Admin/${adminId}/status`,
+    uploadPhoto: "/api/Admin/profile/photo",
   },
   faculty: {
     dashboardStats: "/api/v1/staff/dashboard-stats",
@@ -137,6 +138,14 @@ export const apiEndpoints = {
   },
   breakTypes: {
     list: "/api/v1/break-types",
+  },
+  masterGroups: {
+    list: "/api/v1/master-groups",
+    create: "/api/v1/master-groups",
+    getById: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
+    update: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
+    delete: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
+    status: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}/status`,
   },
   groups: {
     getAll: "/api/v1/groups",
@@ -293,7 +302,7 @@ export const apiEndpoints = {
     getById: (id) => `/api/v1/designations/${id}`,
     update: (id) => `/api/v1/designations/${id}`,
     delete: (id) => `/api/v1/designations/${id}`,
-    importExcel: "/api/v1/departments/import-excel",
+    importExcel: "/api/v1/designations/import-excel",
     exportExcel: "/api/v1/designations/export-excel",
     template: "/api/v1/designations/template",
     exportTemplate: "/api/v1/designations/template",
@@ -828,6 +837,14 @@ export const apiEndpoints = {
     assignUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/assign`,
     removeUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/remove`,
     myPermissions: "/api/v1/roles/my-permissions",
+  },
+  numberSeries: {
+    getAll: "/api/v1/settings/number-series",
+    getByCode: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
+    update: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
+    generateNext: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/generate-next`,
+    preview: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/preview`,
+    delete: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
   },
 };
 

@@ -20,7 +20,6 @@ namespace CollegeManagement.API.Controllers.V1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/certificates")]
 [EnableCors("AllowFrontend")]
-[AllowAnonymous]
 [Produces("application/json")]
 [Authorize]
 public class CertificatesController : ControllerBase
@@ -32,6 +31,31 @@ public class CertificatesController : ControllerBase
     {
         _service = service;
         _templateService = templateService;
+    }
+
+    private int? GetCampusIdFromRequest(int? queryCampusId)
+    {
+        if (queryCampusId.HasValue && queryCampusId.Value > 0)
+            return queryCampusId.Value;
+
+        if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+            int.TryParse(headerVal.FirstOrDefault(), out var campusId) && campusId > 0)
+        {
+            return campusId;
+        }
+
+        var campusClaim = User.FindFirst("CampusId")?.Value ?? User.FindFirst("campusId")?.Value;
+        if (!string.IsNullOrEmpty(campusClaim) && int.TryParse(campusClaim, out var claimCampusId) && claimCampusId > 0)
+        {
+            return claimCampusId;
+        }
+
+        return null;
+    }
+
+    private string GetCurrentUserName(string? fallback = "Admin")
+    {
+        return User.Identity?.Name ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? User.FindFirst("name")?.Value ?? fallback ?? "Admin";
     }
 
     // =========================================================
@@ -108,6 +132,7 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? academicYearId = null,
         CancellationToken ct = default)
     {
+        campusId = GetCampusIdFromRequest(campusId);
         var result = await _service.GetAllAsync(search, status, certificateType, campusId, boardId, academicYearId, ct);
         return Ok(result);
     }
@@ -122,6 +147,7 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+        campusId = GetCampusIdFromRequest(campusId);
         var stats = await _service.GetWorkflowStatsAsync(campusId, ct);
         return Ok(stats);
     }
@@ -138,6 +164,7 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? academicYearId = null,
         CancellationToken ct = default)
     {
+        campusId = GetCampusIdFromRequest(campusId);
         var students = await _service.GetStudentsDropdownAsync(campusId, boardId, academicYearId, ct);
         return Ok(students);
     }
@@ -313,10 +340,11 @@ public class CertificatesController : ControllerBase
     // PATCH /api/v1/certificates/bulk-review
     // =========================================================
     [HttpPatch("bulk-review")]
-    public async Task<IActionResult> BulkReview(CancellationToken ct = default)
+    public async Task<IActionResult> BulkReview([FromQuery] int? campusId = null, CancellationToken ct = default)
     {
-        var userName = User.Identity?.Name ?? "Admin";
-        var affected = await _service.BulkReviewAsync(userName, ct);
+        campusId = GetCampusIdFromRequest(campusId);
+        var userName = GetCurrentUserName("Admin");
+        var affected = await _service.BulkReviewAsync(userName, campusId, ct);
         return Ok(new { success = true, count = affected, message = $"{affected} certificate(s) reviewed successfully." });
     }
 
@@ -325,10 +353,11 @@ public class CertificatesController : ControllerBase
     // PATCH /api/v1/certificates/bulk-approve
     // =========================================================
     [HttpPatch("bulk-approve")]
-    public async Task<IActionResult> BulkApprove(CancellationToken ct = default)
+    public async Task<IActionResult> BulkApprove([FromQuery] int? campusId = null, CancellationToken ct = default)
     {
-        var userName = User.Identity?.Name ?? "Principal";
-        var affected = await _service.BulkApproveAsync(userName, ct);
+        campusId = GetCampusIdFromRequest(campusId);
+        var userName = GetCurrentUserName("Principal");
+        var affected = await _service.BulkApproveAsync(userName, campusId, ct);
         return Ok(new { success = true, count = affected, message = $"{affected} certificate(s) approved successfully." });
     }
 
@@ -337,10 +366,11 @@ public class CertificatesController : ControllerBase
     // PATCH /api/v1/certificates/bulk-issue
     // =========================================================
     [HttpPatch("bulk-issue")]
-    public async Task<IActionResult> BulkIssue([FromQuery] string? issuedBy = null, CancellationToken ct = default)
+    public async Task<IActionResult> BulkIssue([FromQuery] string? issuedBy = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
     {
-        var issuer = issuedBy ?? User.Identity?.Name ?? "Principal";
-        var affected = await _service.BulkIssueAsync(issuer, ct);
+        campusId = GetCampusIdFromRequest(campusId);
+        var issuer = issuedBy ?? GetCurrentUserName("Principal");
+        var affected = await _service.BulkIssueAsync(issuer, campusId, ct);
         return Ok(new { success = true, count = affected, message = $"{affected} certificate(s) issued successfully." });
     }
 
@@ -387,6 +417,7 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+        campusId = GetCampusIdFromRequest(campusId);
         var students = await _service.GetBulkEligibleStudentsAsync(academicYearId, boardId, groupId, sectionId, search, campusId, ct);
         return Ok(students);
     }
@@ -419,6 +450,44 @@ public class CertificatesController : ControllerBase
         if (!success) return NotFound(new { message = "Certificate not found" });
 
         return Ok(new { success = true, message = "Certificate deleted successfully" });
+    }
+
+    // =========================================================
+    // 13.1. UPDATE FEE CLEARANCE STATUS
+    // PATCH /api/v1/certificates/{id}/fee-clearance
+    // =========================================================
+    [HttpPatch("{id:int}/fee-clearance")]
+    public async Task<IActionResult> UpdateFeeClearance(
+        int id, 
+        [FromBody] CollegeManagement.API.DTOs.Certificate.CertificateFeeClearanceRequestDto request, 
+        CancellationToken ct = default)
+    {
+        if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
+        if (request == null) return BadRequest(new { message = "Request body is required" });
+
+        var success = await _service.UpdateFeeClearanceAsync(id, request, ct);
+        if (!success) return NotFound(new { message = "Certificate not found or fee clearance could not be updated." });
+
+        return Ok(new { success = true, message = "Fee clearance updated successfully." });
+    }
+
+    // =========================================================
+    // 13.2. GRANT FEE EXEMPTION / PRINCIPAL PERMISSION
+    // PATCH /api/v1/certificates/{id}/fee-exemption
+    // =========================================================
+    [HttpPatch("{id:int}/fee-exemption")]
+    public async Task<IActionResult> GrantFeeExemption(
+        int id, 
+        [FromBody] CollegeManagement.API.DTOs.Certificate.CertificateFeeClearanceRequestDto request, 
+        CancellationToken ct = default)
+    {
+        if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
+        if (request == null) return BadRequest(new { message = "Request body is required" });
+
+        var success = await _service.GrantFeeExemptionAsync(id, request, ct);
+        if (!success) return NotFound(new { message = "Certificate not found or fee exemption could not be recorded." });
+
+        return Ok(new { success = true, message = "Principal permission / fee exemption granted successfully." });
     }
 
     // =========================================================
@@ -494,6 +563,7 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+        campusId = GetCampusIdFromRequest(campusId);
         var certificates = await _service.GetAllAsync(search, status, certificateType, campusId, null, null, ct);
 
         var sb = new System.Text.StringBuilder();
@@ -525,6 +595,7 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+        campusId = GetCampusIdFromRequest(campusId);
         var certificates = await _service.GetAllAsync(search, status, certificateType, campusId, null, null, ct);
 
         var crestPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "pirnav-college-crest.png");

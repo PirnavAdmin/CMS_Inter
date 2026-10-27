@@ -721,7 +721,17 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     jwtClaims.roles ||
     jwtClaims["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
     jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"];
-  const role = data.Role || data.role || payload.Role || payload.role || jwtRole;
+  const roleNames = [
+    data.Role, data.role, data.RoleName, data.roleName, data.Roles, data.roles,
+    data.user?.role, data.user?.roleName, data.user?.roles,
+    payload.Role, payload.role, payload.RoleName, payload.roleName,
+    payload.user?.role, payload.user?.roleName, payload.user?.roles, jwtRole,
+  ].flatMap((value) => Array.isArray(value) ? value : [value])
+    .map((value) => typeof value === "object" && value ? value.roleName || value.RoleName || value.name || value.Name || value.code : value)
+    .filter((value) => typeof value === "string" && value.trim())
+    .map((value) => value.trim());
+  const inventoryRole = roleNames.find((name) => /inventory/i.test(name) || ["storemanager", "storekeeper"].includes(name.toLowerCase().replace(/[\s_-]/g, "")));
+  const role = inventoryRole ? "Inventory Manager" : roleNames[0];
   if (!role) {
     throw new Error("Authentication failed because the server returned an invalid user response.");
   }
@@ -795,6 +805,27 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     ? rawAssignedBoardIds.map(Number).filter(Boolean)
     : [];
 
+  const photoUrl =
+    data.PhotoUrl ||
+    data.photoUrl ||
+    data.PhotoPath ||
+    data.photoPath ||
+    data.ProfilePhoto ||
+    data.profilePhoto ||
+    data.photo ||
+    data.Photo ||
+    payload.PhotoUrl ||
+    payload.photoUrl ||
+    payload.PhotoPath ||
+    payload.photoPath ||
+    data.user?.photoUrl ||
+    payload.user?.photoUrl ||
+    data.user?.photoPath ||
+    payload.user?.photoPath ||
+    data.user?.photo ||
+    payload.user?.photo ||
+    "";
+
   const user = {
     id: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || data.AdminId || data.adminId || data.id || data.Id || payload.AdminId || payload.adminId || payload.id || payload.Id,
     userId: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || (isTransportManager ? 928 : null),
@@ -805,6 +836,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     fullName: userName,
     email: userEmail,
     role: Array.isArray(role) ? role[0] : role,
+    roles: [...new Set(roleNames)],
     designation,
     department: data.Department || data.department || payload.Department || payload.department || (isTransportManager ? "Transport" : ""),
     campusId: data.CampusId || data.campusId || payload.CampusId || payload.campusId || (assignedCampusIds[0] || (isTransportManager ? 1 : null)),
@@ -812,12 +844,17 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     isAdmin,
     assignedCampusIds,
     assignedBoardIds,
+    photoUrl: photoUrl || null,
+    photoPath: photoUrl || null,
+    profilePhoto: photoUrl || null,
+    photo: photoUrl || null,
   };
+
 
   return {
     token,
     user,
-    roleType: isTransportManager ? "transport_manager" : isWarden ? "warden" : isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
+    roleType: inventoryRole ? "inventory" : isWarden ? "warden" : isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
     message: getMessage(payload, data, "Login successful."),
   };
 }

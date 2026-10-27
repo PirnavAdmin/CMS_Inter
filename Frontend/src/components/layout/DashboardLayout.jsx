@@ -626,11 +626,71 @@ export default function DashboardLayout({
 
     const handleUpdate = () => fetchPerms();
     window.addEventListener("roles-updated", handleUpdate);
-    window.addEventListener("storage", handleUpdate);
     return () => {
       isMounted = false;
       window.removeEventListener("roles-updated", handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  // Live profile photo and storage synchronization across sessions and tabs
+  useEffect(() => {
+    let active = true;
+
+    const fetchLiveUserPhoto = () => {
+      const u = readUser();
+      if (!u) return;
+      const isAdminUser = u.isAdmin || String(u.role || "").toLowerCase().includes("admin") || u.roleType === "admin";
+      if (isAdminUser) {
+        apiClient.get("/api/Admin/1").then(res => {
+          if (!active) return;
+          const dataObj = res.data?.data || res.data?.Data || res.data;
+          const photo = dataObj?.photoPath || dataObj?.PhotoPath || dataObj?.photoUrl || dataObj?.PhotoUrl;
+          if (photo) {
+            const current = readUser() || u;
+            if (current.photoUrl !== photo) {
+              const updated = { ...current, photoUrl: photo, photoPath: photo, photo: photo };
+              try {
+                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updated));
+                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updated));
+              } catch {}
+              setCurrentUser(updated);
+            }
+          }
+        }).catch(() => {});
+      } else if (u.staffId) {
+        apiClient.get(`/api/v1/staff/${u.staffId}`).then(res => {
+          if (!active) return;
+          const dataObj = res.data?.data || res.data?.Data || res.data;
+          const photo = dataObj?.photoUrl || dataObj?.PhotoUrl || dataObj?.profilePhoto || dataObj?.ProfilePhoto || dataObj?.photoPath || dataObj?.PhotoPath;
+          if (photo) {
+            const current = readUser() || u;
+            if (current.photoUrl !== photo) {
+              const updated = { ...current, photoUrl: photo, photoPath: photo, photo: photo };
+              try {
+                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updated));
+                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updated));
+              } catch {}
+              setCurrentUser(updated);
+            }
+          }
+        }).catch(() => {});
+      }
+    };
+
+    fetchLiveUserPhoto();
+
+    const handleStorageUpdate = () => {
+      if (!active) return;
+      setCurrentUser(readUser());
+    };
+
+    window.addEventListener("storage", handleStorageUpdate);
+    window.addEventListener("user-profile-updated", handleStorageUpdate);
+
+    return () => {
+      active = false;
+      window.removeEventListener("storage", handleStorageUpdate);
+      window.removeEventListener("user-profile-updated", handleStorageUpdate);
     };
   }, []);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
@@ -681,6 +741,10 @@ export default function DashboardLayout({
   const userRoleStr = String(user?.role || "").trim().toLowerCase();
   const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
   const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
+  const hubConnectionRef = useRef(null);
+  const fetchLiveNotifsRef = useRef(null);
+
+  // Fetch live notifications count for badges
   useEffect(() => {
     let disposed = false;
     if (canReviewReimbursements || canReviewCertificates) {
@@ -752,41 +816,8 @@ export default function DashboardLayout({
         }
       };
 
+      fetchLiveNotifsRef.current = fetchLiveNotifications;
       fetchLiveNotifications();
-
-      // SignalR Push Connection: ONLY fetch when server pushes a real notification event
-      let hubConnection = null;
-      try {
-        const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
-        if (token) {
-          const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
-          hubConnection = new HubConnectionBuilder()
-            .withUrl(`${base}/hubs/notifications`, {
-              accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
-              headers: { "ngrok-skip-browser-warning": "true" },
-            })
-            .withAutomaticReconnect()
-            .configureLogging(LogLevel.None)
-            .build();
-
-          hubConnection.on("NotificationReceived", () => {
-            if (!disposed) {
-              setHasViewedNotifications(false);
-              fetchLiveNotifications(true);
-            }
-          });
-
-          hubConnection.start()
-            .then(() => {
-              if (reimbursementCampusId && hubConnection) {
-                hubConnection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
-              }
-            })
-            .catch(() => {});
-        }
-      } catch {
-        // Fallback
-      }
 
       // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
       let channel = null;
@@ -818,15 +849,72 @@ export default function DashboardLayout({
       return () => {
         disposed = true;
         if (channel) channel.close();
-        if (hubConnection) {
-          hubConnection.stop().catch(() => {});
-        }
         window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
         window.removeEventListener("cms-certificates-updated", handleLocalAction);
       };
     }
     setLiveNotifications([]);
   }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
+
+  // SignalR Push Connection: Persistent across campus changes with safe reconnect backoff
+  useEffect(() => {
+    let disposed = false;
+    if (!canReviewReimbursements && !canReviewCertificates) {
+      if (hubConnectionRef.current) {
+        hubConnectionRef.current.stop().catch(() => {});
+        hubConnectionRef.current = null;
+      }
+      return;
+    }
+
+    const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
+    if (!token) return;
+
+    const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
+    const connection = new HubConnectionBuilder()
+      .withUrl(`${base}/hubs/notifications`, {
+        accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
+        headers: { "ngrok-skip-browser-warning": "true" },
+      })
+      .withAutomaticReconnect([2000, 5000, 10000, 30000])
+      .configureLogging(LogLevel.None)
+      .build();
+
+    hubConnectionRef.current = connection;
+
+    connection.on("NotificationReceived", () => {
+      if (!disposed) {
+        setHasViewedNotifications(false);
+        fetchLiveNotifsRef.current?.(true);
+      }
+    });
+
+    connection.start()
+      .then(() => {
+        if (!disposed && reimbursementCampusId && connection.state === "Connected") {
+          connection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
+        }
+      })
+      .catch(() => {
+        // Graceful catch: withAutomaticReconnect will retry with backoff if server is restarting
+      });
+
+    return () => {
+      disposed = true;
+      if (hubConnectionRef.current) {
+        const conn = hubConnectionRef.current;
+        hubConnectionRef.current = null;
+        conn.stop().catch(() => {});
+      }
+    };
+  }, [canReviewReimbursements, canReviewCertificates]);
+
+  // Synchronize Campus Join/Leave dynamically without tearing down SignalR socket
+  useEffect(() => {
+    if (reimbursementCampusId && hubConnectionRef.current?.state === "Connected") {
+      hubConnectionRef.current.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
+    }
+  }, [reimbursementCampusId]);
 
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 
@@ -844,7 +932,7 @@ export default function DashboardLayout({
     try {
       savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
     } catch {}
-    return (
+    const rawPhoto = (
       user?.photoUrl ||
       user?.photoPath ||
       user?.photo ||
@@ -852,6 +940,14 @@ export default function DashboardLayout({
       (typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
       null
     );
+    if (!rawPhoto || typeof rawPhoto !== "string") return null;
+    const trimmed = rawPhoto.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+      return trimmed;
+    }
+    const apiBase = (env.apiBaseUrl || "http://localhost:5167").replace(/\/$/, "");
+    return `${apiBase}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
   }, [user]);
 
   useEffect(() => {

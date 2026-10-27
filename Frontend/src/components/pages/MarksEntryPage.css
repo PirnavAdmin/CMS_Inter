@@ -152,11 +152,12 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 8px;
-  font-size: 0.8rem;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 0.78rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   cursor: pointer;
   border: 1px solid transparent;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
@@ -616,28 +617,29 @@
 .cms-entry-selects {
   display: flex;
   align-items: flex-end;
-  gap: 16px;
-  flex: 1;
-  max-width: 860px;
+  gap: 12px;
+  flex: 1 1 480px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .cms-entry-selects .cms-field-group {
-  flex: 1;
-  min-width: 220px;
-  max-width: 440px;
+  flex: 1 1 220px;
+  min-width: 160px;
+  max-width: 380px;
 }
 
 .cms-entry-select-compact {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  flex: 0 1 200px;
+  flex: 0 1 190px;
   max-width: 220px;
-  min-width: 160px;
+  min-width: 150px;
 }
 
 .cms-entry-select-compact .cms-custom-select-trigger {
-  height: 34px;
+  height: 32px;
   padding: 0 10px;
   font-size: 0.78rem;
 }
@@ -648,16 +650,28 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
+  row-gap: 12px;
   margin-bottom: 14px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .cms-bulk-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: nowrap;
-  height: 34px;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  min-height: 32px;
+}
+
+.cms-bulk-actions .cms-btn {
+  height: 32px;
+  padding: 0 11px;
+  font-size: 0.77rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .cms-file-input-hidden {
@@ -859,9 +873,11 @@
   outline-offset: 2px;
 }
 
-.cms-table-container {
+.cms-table-container,
+.cms-table-wrap {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--cms-border, #e6e7de);
   border-radius: 10px;
   background: var(--cms-surface, #ffffff);
@@ -869,6 +885,7 @@
 
 .cms-table {
   width: 100%;
+  min-width: 620px;
   border-collapse: collapse;
   font-size: 0.8rem;
 }
@@ -932,8 +949,8 @@
 
 /* ---------- Marks Entry Table Inputs (Theme-Based Borders) ---------- */
 .cms-number-input {
-  width: 76px;
-  height: 32px;
+  width: 72px;
+  height: 30px;
   padding: 0 6px;
   border: 1.5px solid rgba(111, 132, 0, 0.45) !important;
   border-radius: 6px;
@@ -966,8 +983,9 @@
 
 .cms-remarks-input {
   width: 100%;
-  min-width: 130px;
-  height: 32px;
+  min-width: 110px;
+  max-width: 220px;
+  height: 30px;
   padding: 0 8px;
   border: 1.5px solid rgba(111, 132, 0, 0.45) !important;
   border-radius: 6px;
@@ -1212,19 +1230,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
+  row-gap: 8px;
   margin-top: 14px;
   padding: 8px 12px;
   background: var(--cms-subtle, #f7f8ef);
   border: 1px solid var(--cms-border, #e6e7de);
   border-radius: 8px;
   box-sizing: border-box;
+  flex-wrap: wrap;
 }
 
 .cms-pagination-summary-left {
   display: flex;
   align-items: center;
   min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .cms-eval-summary-text {
@@ -1236,24 +1258,25 @@
 .cms-pagination-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
+  flex-wrap: wrap;
 }
 
 .cms-page-info {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--cms-text, #171a17);
   padding: 0 4px;
 }
 
 .cms-page-btn {
-  height: 30px;
-  padding: 0 12px;
+  height: 28px;
+  padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--cms-border, #e6e7de);
   background: var(--cms-surface, #ffffff);
-  font-size: 0.78rem;
+  font-size: 0.77rem;
   font-weight: 600;
   cursor: pointer;
   color: var(--cms-text, #171a17);
@@ -1347,6 +1370,20 @@
   .cms-detail-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .cms-workspace-actions {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+
+  .cms-entry-selects {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .cms-bulk-actions {
+    margin-left: auto;
+  }
 }
 
 @media (max-width: 992px) {
@@ -1358,8 +1395,25 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .cms-table-container {
+  .cms-table-container,
+  .cms-table-wrap {
     overflow-x: auto;
+  }
+
+  .cms-workspace-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .cms-entry-selects {
+    flex: 1 1 100%;
+    max-width: 100%;
+    gap: 10px;
+  }
+
+  .cms-bulk-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 

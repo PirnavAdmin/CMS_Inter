@@ -321,6 +321,9 @@ export default function ProtectedRoute({
   }
 
   // Non-Teaching check
+  if (String(role || "").toLowerCase().includes("inventory")) {
+    return <Navigate to="/inventory-dashboard" replace />;
+  }
   if (requireNonTeaching && !isNonTeaching && !isAdmin && !isPrincipal) {
     const destination = isTransportManager
       ? "/transport-manager/overview"
@@ -475,6 +478,10 @@ export function PublicOnlyRoute({ children }) {
   const isStudent = !isAdmin && isStudentRole(role);
 
   if (isTokenValid && (user || role)) {
+    if (String(role || "").toLowerCase().includes("inventory")) return <Navigate to="/inventory-dashboard" replace />;
+    if (isWarden) return <Navigate to="/warden-dashboard" replace />;
+    if (isNonTeaching) return <Navigate to="/non-teaching-dashboard" replace />;
+    if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isTransportManager) return <Navigate to="/transport-manager/overview" replace />;
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;

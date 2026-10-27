@@ -559,17 +559,16 @@ export default function DashboardPage() {
         const monthMap = new Map();
         filteredAdmissions.forEach((a) => {
           const rawDate = a.admissionDate || a.createdAt;
-          if (rawDate) {
-            const d = new Date(rawDate);
-            if (!isNaN(d.getTime()) && d.getFullYear() > 2000) {
-              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-              const entry = monthMap.get(key) || { total: 0, boys: 0, girls: 0 };
-              entry.total += 1;
-              if (isMale(a.gender)) entry.boys += 1;
-              else entry.girls += 1;
-              monthMap.set(key, entry);
-            }
+          let d = rawDate ? new Date(rawDate) : null;
+          if (!d || isNaN(d.getTime()) || d.getFullYear() <= 2000) {
+            d = new Date();
           }
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+          const entry = monthMap.get(key) || { total: 0, boys: 0, girls: 0 };
+          entry.total += 1;
+          if (isMale(a.gender)) entry.boys += 1;
+          else entry.girls += 1;
+          monthMap.set(key, entry);
         });
 
         let calculatedTrend = [];
@@ -799,6 +798,9 @@ export default function DashboardPage() {
         });
 
         const totalCount = rows.length;
+        if (absentCount === 0 && totalCount > 0 && (presentCount + lateCount + onLeaveCount < totalCount)) {
+          absentCount = Math.max(0, totalCount - presentCount - lateCount - onLeaveCount);
+        }
         const percentage = totalCount ? Math.round(((presentCount + 0.5 * lateCount) * 100) / totalCount) : 0;
 
         setStaffAttState({
@@ -1325,12 +1327,18 @@ export default function DashboardPage() {
     const data = staffAttState.data || {};
     const total = Number(metric(data, ["total", "totalStaff", "totalCount"]) ?? 0);
     const present = Number(metric(data, ["present", "presentCount"]) ?? 0);
-    const absent = Number(metric(data, ["absent", "absentCount"]) ?? 0);
+    let absent = metric(data, ["absent", "absentCount"]);
     const late = Number(metric(data, ["late", "lateCount"]) ?? 0);
     const onLeave = Number(metric(data, ["onLeave", "onLeaveCount", "leaveCount"]) ?? 0);
     let percentage = metric(data, ["percentage", "attendancePercentage"]);
     const teachingCount = metric(data, ["teachingCount", "teachingStaffCount"]);
     const nonTeachingCount = metric(data, ["nonTeachingCount", "nonTeachingStaffCount"]);
+
+    if ((absent === undefined || absent === null || (present === 0 && Number(absent) === 0 && late === 0 && onLeave === 0) || (present + Number(absent) + late + onLeave < total)) && total > 0) {
+      absent = Math.max(0, total - present - late - onLeave);
+    } else {
+      absent = Number(absent ?? 0);
+    }
 
     if (percentage === undefined || percentage === null || percentage === 0) {
       percentage = total > 0 ? Number((((present + 0.5 * late) / total) * 100).toFixed(1)) : 0;
@@ -1496,8 +1504,8 @@ export default function DashboardPage() {
                 <div className="dashboard-area-chart-container">
                   {/* Fixed Y-Axis column (pinned on the left) */}
                   <div className="dashboard-area-chart-yaxis" style={{ width: yMax >= 1000 ? 40 : yMax >= 100 ? 34 : 28, flexShrink: 0 }}>
-                    <ResponsiveContainer width="100%" height={156}>
-                      <AreaChart data={overviewChartData} margin={{ top: 12, right: 4, left: 0, bottom: 6 }}>
+                    <ResponsiveContainer width="100%" height={118}>
+                      <AreaChart data={overviewChartData} margin={{ top: 6, right: 4, left: 0, bottom: 2 }}>
                         <YAxis
                           width={yMax >= 1000 ? 36 : yMax >= 100 ? 30 : 24}
                           domain={[0, yMax]}
@@ -1507,7 +1515,7 @@ export default function DashboardPage() {
                           axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
                           tick={{ fontSize: 9.5, fill: "var(--cms-muted, #64748b)" }}
                         />
-                        <XAxis height={26} tick={false} axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }} tickLine={false} />
+                        <XAxis height={20} tick={false} axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }} tickLine={false} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -1526,12 +1534,12 @@ export default function DashboardPage() {
                       style={{
                         width: overviewChartData.length > 5 ? `${Math.round((overviewChartData.length / 5) * 100)}%` : "100%",
                         minWidth: "100%",
-                        height: 156,
+                        height: 118,
                         position: "relative"
                       }}
                     >
-                      <ResponsiveContainer width="100%" height={156}>
-                        <AreaChart data={overviewChartData} margin={{ top: 12, right: 10, left: 15, bottom: 6 }}>
+                      <ResponsiveContainer width="100%" height={118}>
+                        <AreaChart data={overviewChartData} margin={{ top: 6, right: 10, left: 15, bottom: 2 }}>
                           <defs>
                             <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
@@ -1543,10 +1551,10 @@ export default function DashboardPage() {
                             dataKey="period"
                             tickLine={false}
                             axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
-                            height={26}
+                            height={20}
                             tick={renderAreaXAxisTick}
                             interval={0}
-                            padding={{ left: 20, right: 20 }}
+                            padding={{ left: 16, right: 16 }}
                           />
                           <YAxis hide domain={[0, yMax]} ticks={yTicks} />
                           <Tooltip formatter={(val) => [formatNumber(val), "Students Admitted"]} />
@@ -1588,7 +1596,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="dashboard-card-footer">
                   <Link to="/dashboard/admission" className="dashboard-footer-btn">
-                    View Admissions <ChevronRight size={14} />
+                    View Student Admissions <ChevronRight size={14} />
                   </Link>
                 </div>
               </div>
@@ -1607,16 +1615,16 @@ export default function DashboardPage() {
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-chart dashboard-bar-chart-wrap" style={{ overflowX: groupChartData.length > 5 ? "auto" : "visible", width: "100%" }}>
-                  <div style={{ width: groupChartData.length > 5 ? `${Math.max(100, Math.round((groupChartData.length / 5) * 100))}%` : "100%", minWidth: "100%", height: 152 }}>
-                    <ResponsiveContainer width="100%" height={152}>
-                      <BarChart data={groupChartData} margin={{ top: 16, right: 10, left: -6, bottom: 6 }}>
+                  <div style={{ width: groupChartData.length > 5 ? `${Math.max(100, Math.round((groupChartData.length / 5) * 100))}%` : "100%", minWidth: "100%", height: 126 }}>
+                    <ResponsiveContainer width="100%" height={126}>
+                      <BarChart data={groupChartData} margin={{ top: 10, right: 10, left: -6, bottom: 2 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
                         <XAxis
                           dataKey="name"
                           tickLine={false}
                           axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
-                          height={26}
-                          tick={{ fontSize: 10.5, fontWeight: 700, fill: "var(--cms-text, #334155)", dy: 3 }}
+                          height={20}
+                          tick={{ fontSize: 10, fontWeight: 700, fill: "var(--cms-text, #334155)", dy: 2 }}
                           interval={0}
                         />
                         <YAxis

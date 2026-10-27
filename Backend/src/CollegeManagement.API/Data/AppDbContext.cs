@@ -303,6 +303,8 @@ namespace CollegeManagement.API.Data
         public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<OTP> OTPs { get; set; }
         public DbSet<AcademicYear> AcademicYears { get; set; }
+        public DbSet<MasterGroup> MasterGroups { get; set; }
+        public DbSet<MasterGroupProgram> MasterGroupPrograms { get; set; }
         public DbSet<Group> Groups { get; set; }
         public DbSet<AcademicProgram> Programs { get; set; }
 
@@ -628,6 +630,78 @@ namespace CollegeManagement.API.Data
             modelBuilder.Entity<GroupProgram>()
                 .HasIndex(gp => new { gp.GroupId, gp.ProgramId })
                 .IsUnique();
+
+            modelBuilder.Entity<Group>()
+                .HasIndex(g => g.MasterGroupId);
+
+            modelBuilder.Entity<Group>()
+                .HasIndex(g => new { g.MasterGroupId, g.AcademicYearId, g.AcademicLevelId });
+
+            modelBuilder.Entity<Group>()
+                .HasOne(g => g.MasterGroupNavigation)
+                .WithMany(mg => mg.ContextualGroups)
+                .HasForeignKey(g => g.MasterGroupId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            #region MasterGroup
+            modelBuilder.Entity<MasterGroup>(entity =>
+            {
+                entity.ToTable("MasterGroups");
+                entity.HasKey(mg => mg.MasterGroupId);
+
+                entity.Property(mg => mg.GroupName)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(mg => mg.GroupCode)
+                    .HasMaxLength(30)
+                    .IsRequired();
+
+                entity.Property(mg => mg.Description)
+                    .HasMaxLength(500);
+
+                entity.Property(mg => mg.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(mg => mg.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(mg => mg.UpdatedAt)
+                    .IsRequired(false);
+
+                entity.HasIndex(mg => new { mg.BoardId, mg.GroupCode }).IsUnique();
+                entity.HasIndex(mg => new { mg.BoardId, mg.GroupName }).IsUnique();
+
+                entity.HasOne(mg => mg.BoardNavigation)
+                    .WithMany()
+                    .HasForeignKey(mg => mg.BoardId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<MasterGroupProgram>(entity =>
+            {
+                entity.ToTable("MasterGroupPrograms");
+                entity.HasKey(mgp => mgp.MasterGroupProgramId);
+
+                entity.Property(mgp => mgp.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(mgp => mgp.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(mgp => new { mgp.MasterGroupId, mgp.ProgramId }).IsUnique();
+
+                entity.HasOne(mgp => mgp.MasterGroup)
+                    .WithMany(mg => mg.MasterGroupPrograms)
+                    .HasForeignKey(mgp => mgp.MasterGroupId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(mgp => mgp.AcademicProgram)
+                    .WithMany()
+                    .HasForeignKey(mgp => mgp.ProgramId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+            #endregion
 
             modelBuilder.Entity<AcademicProgram>(entity =>
             {
@@ -1546,7 +1620,7 @@ namespace CollegeManagement.API.Data
             {
                 entity.ToTable("NumberSeriesConfigurations");
                 entity.HasKey(n => n.Id);
-                entity.HasIndex(n => n.SeriesCode).IsUnique();
+                entity.HasIndex(n => new { n.SeriesCode, n.CampusId }).IsUnique();
             });
             #endregion
 

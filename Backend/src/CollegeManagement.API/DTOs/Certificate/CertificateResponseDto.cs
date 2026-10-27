@@ -75,4 +75,7 @@ public class CertificateResponseDto
     public bool IsActive { get; set; } = true;
     public int? CampusId { get; set; }
     public string? CampusName { get; set; }
+    public string? FeeClearanceStatus { get; set; } = "Cleared";
+    public decimal? FeeDueAmount { get; set; } = 0;
+    public string? FeeExemptionReason { get; set; }
 }

@@ -3758,16 +3758,49 @@ export default function ExaminationPage() {
   // Robust Student Fetching & Enrichment from Students, Admissions, and Active Endpoints
   const fetchStudentsList = useCallback(async (signal) => {
     try {
-      const [studentsRes, admissionsRes, activeStudentsRes] = await Promise.allSettled([
-        apiClient.get("/api/v1/students", { signal }),
-        apiClient.get("/api/v1/student-admissions", { signal }),
-        apiClient.get("/api/v1/students/active", { signal }),
-      ]);
-      if (signal?.aborted) return [];
+      const scopeParams = {
+        campusId: effectiveCampusId ? Number(effectiveCampusId) : undefined,
+        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+      };
 
-      const rawStudents = studentsRes.status === "fulfilled" ? unwrap(studentsRes.value) : [];
-      const rawAdmissions = admissionsRes.status === "fulfilled" ? unwrap(admissionsRes.value) : [];
-      const rawActive = activeStudentsRes.status === "fulfilled" ? unwrap(activeStudentsRes.value) : [];
+      // Fetch all students across pages with academic scope
+      const allStudents = [];
+      const fetchPageSize = 100;
+      for (let pageNumber = 1; ; pageNumber += 1) {
+        if (signal?.aborted) return [];
+        try {
+          const res = await apiClient.get("/api/v1/students", {
+            params: { ...scopeParams, pageNumber, pageSize: fetchPageSize },
+            signal,
+            skipGlobalLoader: true,
+          });
+          const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
+          const batch = Array.isArray(payload)
+            ? payload
+            : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
+          allStudents.push(...batch);
+          const totalCount = payload.totalCount ?? payload.TotalCount;
+          if (!batch.length || (totalCount != null ? allStudents.length >= Number(totalCount) : batch.length < fetchPageSize)) break;
+          if (pageNumber >= 15) break; // Safeguard
+        } catch (fetchErr) {
+          console.warn("Notice: could not query page of students:", fetchErr);
+          break;
+        }
+      }
+
+      // Fetch admissions matching the academic scope
+      let rawAdmissions = [];
+      try {
+        const admissionsRes = await apiClient.get("/api/v1/student-admissions", {
+          params: scopeParams,
+          signal,
+          skipGlobalLoader: true,
+        });
+        rawAdmissions = unwrap(admissionsRes) || [];
+      } catch (admErr) {
+        console.warn("Notice: could not query student admissions:", admErr);
+      }
 
       const admissionsByStudentId = new Map();
       const admissionsByNumber = new Map();
@@ -3775,24 +3808,21 @@ export default function ExaminationPage() {
 
       ensureArray(rawAdmissions).forEach((adm) => {
         const sId = normalizeId(adm.studentId ?? adm.id);
-        const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? "").trim();
+        const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? adm.AdmissionNo ?? "").trim();
         const admName = String(adm.studentName ?? adm.fullName ?? adm.name ?? "").trim().toLowerCase();
         if (sId) admissionsByStudentId.set(sId, adm);
         if (admNo) admissionsByNumber.set(admNo, adm);
         if (admName) admissionsByName.set(admName, adm);
       });
 
-      const combinedRaw = [...ensureArray(rawStudents), ...ensureArray(rawActive)];
-      if (combinedRaw.length === 0 && rawAdmissions.length > 0) {
-        combinedRaw.push(...ensureArray(rawAdmissions));
-      }
+      const combinedRaw = allStudents.length > 0 ? allStudents : ensureArray(rawAdmissions);
 
       const seenIds = new Set();
       const normalizedStudents = [];
 
       for (const s of combinedRaw) {
         const id = normalizeId(s.studentId ?? s.id ?? s._id);
-        const admNo = String(s.admissionNo ?? s.admissionNumber ?? "").trim();
+        const admNo = String(s.admissionNo ?? s.admissionNumber ?? s.AdmissionNo ?? "").trim();
         const sName = String(s.studentName ?? s.fullName ?? s.name ?? "Student").trim();
         const dedupKey = id || admNo || sName.toLowerCase();
         if (!dedupKey || seenIds.has(dedupKey)) continue;
@@ -3811,6 +3841,8 @@ export default function ExaminationPage() {
         const rawCampus = s.campusId ?? s.CampusId ?? s.campus?.id ?? s.campus?.campusId ?? adm.campusId ?? adm.CampusId;
         const sCampusId = normalizeId(rawCampus);
 
+        const admissionDate = s.admissionDate || s.dateOfAdmission || adm.admissionDate || adm.AdmissionDate || s.allocatedDate || null;
+
         normalizedStudents.push({
           id: id || admNo || `student-${dedupKey}`,
           studentId: id || admNo,
@@ -3825,48 +3857,18 @@ export default function ExaminationPage() {
           programId,
           programName,
           status,
+          admissionDate: admissionDate ? String(admissionDate).slice(0, 10) : null,
           isActive: s.isActive !== false && normalizeStatus(status) !== "INACTIVE" && normalizeStatus(status) !== "SUSPENDED",
-        });
-      }
-
-      // If admissions had records and students list was completely empty, add them as fallback
-      if (combinedRaw.length === 0) {
-        ensureArray(rawAdmissions).forEach((adm) => {
-          const id = normalizeId(adm.studentId ?? adm.id);
-          const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? "").trim();
-          const admFullName = `${adm.firstName ?? ""} ${adm.lastName ?? ""}`.trim();
-          const sName = String(adm.studentName ?? adm.fullName ?? adm.name ?? (admFullName || "Student")).trim();
-          const dedupKey = id || admNo || sName.toLowerCase();
-          if (dedupKey && !seenIds.has(dedupKey)) {
-            seenIds.add(dedupKey);
-            const admCampusId = normalizeId(adm.campusId ?? adm.CampusId ?? adm.campus?.id);
-            normalizedStudents.push({
-              id: id || admNo || `adm-${dedupKey}`,
-              studentId: id || admNo,
-              campusId: admCampusId,
-              name: sName,
-              admissionNo: admNo,
-              rollNo: adm.rollNo ?? adm.rollNumber ?? "",
-              academicLevelId: normalizeId(adm.academicLevelId ?? adm.levelId),
-              academicYearId: normalizeId(adm.academicYearId),
-              groupId: normalizeId(adm.groupId ?? adm.group?.id),
-              groupName: adm.groupName ?? "",
-              programId: normalizeId(adm.programId ?? adm.programmeId ?? adm.program?.id),
-              programName: adm.programName ?? adm.programmeName ?? "",
-              status: adm.status ?? "Active",
-              isActive: adm.isActive !== false && normalizeStatus(adm.status) !== "INACTIVE",
-            });
-          }
         });
       }
 
       setStudents(normalizedStudents);
       return normalizedStudents;
     } catch (e) {
-      console.warn("fetchStudentsList encountered an issue:", e);
+      console.warn("fetchStudentsList error:", e);
       return [];
     }
-  }, []);
+  }, [effectiveCampusId, selectedBoardId, selectedAcademicYearId]);
 
   // Robust Room & Exam Hall Fetching via GET /api/v1/rooms
   const fetchRoomsList = useCallback(async (filters = {}, signal, targetCampusId = effectiveCampusId) => {
@@ -5450,6 +5452,7 @@ export default function ExaminationPage() {
                       examStatus === "ACTIVE" ||
                       examStatus === "PUBLISHED";
                     const isCompleted = examStatus === "COMPLETED";
+                    const isCancelled = examStatus === "CANCELLED";
 
                     return (
                       <tr key={e.id}>
@@ -5529,6 +5532,17 @@ export default function ExaminationPage() {
                                 onClick={() => printSchedule(e)}
                               >
                                 <Printer size={15} />
+                              </button>
+                            )}
+                            {(isCancelled || isDraft) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn danger delete"
+                                title={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
+                                aria-label={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
+                                onClick={() => setRemove(e)}
+                              >
+                                <Trash2 size={15} />
                               </button>
                             )}
                             {(isDraft || isScheduled) && (
@@ -6100,7 +6114,7 @@ export default function ExaminationPage() {
 
       {remove && (
         <ConfirmDialog
-          title={remove.status === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
+          title={normalizeStatus(remove.status) === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
           message={`Delete ${remove.name}? All associated schedules will be removed.`}
           onCancel={() => !deleteLoading && setRemove(null)}
           onConfirm={handleDeleteExam}
@@ -6147,6 +6161,7 @@ export default function ExaminationPage() {
               rowStatus === "ONGOING" ||
               rowStatus === "ACTIVE" ||
               rowStatus === "PUBLISHED";
+            const rowIsCancelled = rowStatus === "CANCELLED";
 
             return (
               <>
@@ -6240,6 +6255,20 @@ export default function ExaminationPage() {
                       <Trash2 size={16} aria-hidden="true" /> Delete Examination
                     </button>
                   </>
+                )}
+
+                {rowIsCancelled && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    onClick={() => {
+                      setMoreMenu(null);
+                      setRemove(rowExam);
+                    }}
+                  >
+                    <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                  </button>
                 )}
               </>
             );
@@ -9725,8 +9754,8 @@ function ScheduleSection({
                   assignments={sch.hallAssignments}
                   rooms={eligibleRooms}
                   faculty={eligibleInvigilators}
-                  required={getRequiredCandidateStrength(exam, selectedGroupId, programs, false, students)}
-                  enrolledStudentCount={getGroupStudents(exam, selectedGroupId, programs, students).length}
+                  required={getScopedCandidateStrength(exam, selectedGroupId, programs, students)}
+                  enrolledStudentCount={getScopedGroupStudents(exam, selectedGroupId, programs, students).length}
                   onRefreshStudents={onRefreshStudents}
                   onRefreshRooms={onRefreshRooms}
                   onChange={(hallAssignments) => setSch((x) => ({ ...x, hallAssignments }))}

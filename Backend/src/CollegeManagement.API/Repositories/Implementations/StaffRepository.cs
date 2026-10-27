@@ -380,15 +380,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
             
-            using var conn = _context.Database.GetDbConnection();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_SeriesCode", seriesCode, System.Data.DbType.String);
-            parameters.Add("p_CampusId", campusId, System.Data.DbType.Int32);
+            string? nextId = null;
+            try
+            {
+                using var conn = _context.Database.GetDbConnection();
+                var parameters = new DynamicParameters();
+                parameters.Add("p_SeriesCode", seriesCode, System.Data.DbType.String);
+                parameters.Add("p_CampusId", campusId, System.Data.DbType.Int32);
 
-            var nextId = await conn.QueryFirstOrDefaultAsync<string>(
-                "sp_GenerateNextNumberSeries",
-                parameters,
-                commandType: System.Data.CommandType.StoredProcedure);
+                nextId = await conn.QueryFirstOrDefaultAsync<string>(
+                    "sp_GenerateNextNumberSeries",
+                    parameters,
+                    commandType: System.Data.CommandType.StoredProcedure);
+            }
+            catch
+            {
+                // Stored procedure call failed or procedure unavailable; proceed to fallback
+            }
 
             if (string.IsNullOrWhiteSpace(nextId))
             {
@@ -483,13 +491,29 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task UpdatePhotoPathAsync(int id, string photoPath)
         {
-            var parameters = new DynamicParameters();
-            parameters.Add("@p_Id", id);
-            parameters.Add("@p_PhotoPath", photoPath);
+            var cleanPath = photoPath?.Trim() ?? string.Empty;
+            try
+            {
+                using var connection = _context.Database.GetDbConnection();
+                await connection.ExecuteAsync(
+                    "sp_UpdateStaffPhotoPath", 
+                    new { p_Id = id, p_PhotoPath = cleanPath }, 
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                // Stored procedure fallback to direct EF Core update below
+            }
 
-            using var connection = _context.Database.GetDbConnection();
-            await connection.ExecuteAsync("sp_UpdateStaffPhotoPath", parameters, commandType: CommandType.StoredProcedure);
+            var staff = await _context.Staffs.FindAsync(id);
+            if (staff != null)
+            {
+                staff.PhotoPath = cleanPath;
+                staff.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
         }
+
 
         public async Task SoftDeleteAsync(Staff staff)
         {

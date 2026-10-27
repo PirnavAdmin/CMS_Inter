@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
 
@@ -5,7 +6,6 @@ namespace CollegeManagement.API.DTOs.Staff
 {
     public class UploadStaffPhotoDto
     {
-        [Required(ErrorMessage = "Staff ID is required.")]
         public int StaffId { get; set; }
 
         public int FacultyId
@@ -14,7 +14,34 @@ namespace CollegeManagement.API.DTOs.Staff
             set => StaffId = value;
         }
 
-        [Required(ErrorMessage = "Photo file is required.")]
-        public IFormFile Photo { get; set; } = null!;
+        public int Id
+        {
+            get => StaffId;
+            set => StaffId = value;
+        }
+
+        private IFormFile? _photo;
+
+        public IFormFile? Photo
+        {
+            get => _photo;
+            set => _photo = value ?? _photo;
+        }
+
+        public IFormFile? File
+        {
+            get => _photo;
+            set => _photo = value ?? _photo;
+        }
+
+        public IFormFile? ProfilePhoto
+        {
+            get => _photo;
+            set => _photo = value ?? _photo;
+        }
+
+        public IFormFile? GetFile() => _photo;
     }
 }
+
+

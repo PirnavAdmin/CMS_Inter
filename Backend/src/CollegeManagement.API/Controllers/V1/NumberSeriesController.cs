@@ -124,6 +124,26 @@ namespace CollegeManagement.API.Controllers.V1
             var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix, campusId, board, academicYear);
             return Ok(preview);
         }
+
+        /// <summary>
+        /// 6. DELETE /api/v1/settings/number-series/{seriesCode}
+        /// Deletes or deactivates the specified series configuration.
+        /// </summary>
+        [HttpDelete("{seriesCode}")]
+        [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> Delete(string seriesCode, [FromQuery] int? campusId = null)
+        {
+            campusId = GetCampusIdFromRequest(campusId);
+            var deleted = await _numberSeriesService.DeleteSeriesAsync(seriesCode, campusId);
+            if (!deleted)
+            {
+                return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });
+            }
+
+            return Ok(new { message = $"Number series configuration '{seriesCode}' deleted successfully." });
+        }
         private int? GetCampusIdFromRequest(int? queryCampusId)
         {
             if (queryCampusId.HasValue && queryCampusId > 0)

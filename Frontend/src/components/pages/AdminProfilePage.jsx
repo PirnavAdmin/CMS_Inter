@@ -18,6 +18,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { getAuthUser, getAuthToken } from "@/features/authStorage.js";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { env } from "@/config/env.js";
 import "./AdminProfilePage.css";
 
 const CAMPUS_OPTIONS = [
@@ -44,6 +45,7 @@ export default function AdminProfilePage() {
   const [campus, setCampus] = useState("Main Campus");
   const [role, setRole] = useState("Admin");
   const [profilePhoto, setProfilePhoto] = useState(null);
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
 
   // Security / Password State
   const [currentPassword, setCurrentPassword] = useState("");
@@ -75,7 +77,12 @@ export default function AdminProfilePage() {
     const initialPhone = savedProfile?.phoneNumber || authUser?.phoneNumber || authUser?.mobile || "9905852577";
     const initialCampus = savedProfile?.campus || "Main Campus";
     const initialRole = savedProfile?.role || authUser?.role || "Admin";
-    const initialPhoto = savedProfile?.photo || authUser?.photo || null;
+    const rawInitialPhoto = savedProfile?.photo || authUser?.photoUrl || authUser?.photoPath || authUser?.photo || null;
+    let initialPhoto = rawInitialPhoto;
+    if (rawInitialPhoto && typeof rawInitialPhoto === "string" && !rawInitialPhoto.startsWith("http") && !rawInitialPhoto.startsWith("data:") && !rawInitialPhoto.startsWith("blob:")) {
+      const apiBase = (env?.apiBaseUrl || "http://localhost:5167").replace(/\/$/, "");
+      initialPhoto = `${apiBase}${rawInitialPhoto.startsWith("/") ? "" : "/"}${rawInitialPhoto}`;
+    }
 
     setFullName(initialName);
     setEmail(initialEmail);
@@ -103,6 +110,7 @@ export default function AdminProfilePage() {
     }
 
     setBasicError("");
+    setSelectedPhotoFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       setProfilePhoto(reader.result);
@@ -112,6 +120,7 @@ export default function AdminProfilePage() {
 
   const handleRemovePhoto = () => {
     setProfilePhoto(null);
+    setSelectedPhotoFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -136,18 +145,39 @@ export default function AdminProfilePage() {
     setBasicLoading(true);
 
     try {
+      let serverPhotoUrl = profilePhoto;
+      if (selectedPhotoFile) {
+        try {
+          const formData = new FormData();
+          formData.append("file", selectedPhotoFile);
+          formData.append("photo", selectedPhotoFile);
+          const photoRes = await apiClient.post(apiEndpoints.admin.uploadPhoto, formData);
+          const uploadedUrl = photoRes.data?.photoUrl || photoRes.data?.PhotoUrl;
+          if (uploadedUrl) {
+            serverPhotoUrl = uploadedUrl;
+          }
+        } catch (uploadErr) {
+          console.warn("Could not upload admin photo to server:", uploadErr?.message || uploadErr);
+        }
+      }
+
       const updatedProfile = {
         fullName: fullName.trim(),
         email: email.trim(),
         phoneNumber: phoneNumber.trim(),
         campus,
         role,
-        photo: profilePhoto,
+        photo: serverPhotoUrl,
+        photoUrl: serverPhotoUrl,
+        photoPath: serverPhotoUrl,
         updatedAt: new Date().toISOString()
       };
 
       // Save to localStorage
       localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(updatedProfile));
+      if (serverPhotoUrl) {
+        localStorage.setItem("cms_admin_photo", serverPhotoUrl);
+      }
 
       // Update auth user session storage if available
       try {
@@ -159,7 +189,9 @@ export default function AdminProfilePage() {
           email: updatedProfile.email,
           phoneNumber: updatedProfile.phoneNumber,
           role: updatedProfile.role,
-          photo: updatedProfile.photo
+          photo: updatedProfile.photo,
+          photoUrl: updatedProfile.photo,
+          photoPath: updatedProfile.photo,
         };
         if (localStorage.getItem("user")) {
           localStorage.setItem("user", JSON.stringify(mergedUser));

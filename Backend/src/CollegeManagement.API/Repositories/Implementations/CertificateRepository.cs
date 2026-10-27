@@ -53,8 +53,20 @@ public class CertificateRepository : ICertificateRepository
             var results = rawRows.Select(MapDynamicToDto).ToList();
             if (campusId.HasValue)
             {
-                // If CampusId is missing from the DB response, we include it to avoid hiding all legacy history
-                results = results.Where(r => r.CampusId == null || r.CampusId == campusId.Value).ToList();
+                var cParams = new DynamicParameters();
+                cParams.Add("CampusId", campusId.Value);
+                string campusStudentQuery = @"
+                    SELECT DISTINCT AdmissionNo FROM (
+                        SELECT AdmissionNo FROM StudentAdmissions WHERE CampusId = @CampusId
+                        UNION
+                        SELECT AdmissionNo FROM Students WHERE CampusId = @CampusId
+                    ) AS c_students WHERE AdmissionNo IS NOT NULL AND AdmissionNo != ''";
+                var campusAdmissionNos = (await connection.QueryAsync<string>(campusStudentQuery, cParams)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                results = results.Where(r => 
+                    (r.CampusId.HasValue && r.CampusId.Value == campusId.Value) ||
+                    (!string.IsNullOrEmpty(r.AdmissionNo) && campusAdmissionNos.Contains(r.AdmissionNo))
+                ).ToList();
             }
             
             if (boardId.HasValue || academicYearId.HasValue)
@@ -730,10 +742,25 @@ public class CertificateRepository : ICertificateRepository
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId, DbType.Int32);
 
+            string sql = @"
+                SELECT
+                    COUNT(*) AS TotalCount,
+                    COALESCE(SUM(CASE WHEN c.Status = 'Requested' THEN 1 ELSE 0 END), 0) AS RequestedCount,
+                    COALESCE(SUM(CASE WHEN (c.Status = 'Generated' OR c.Status = 'Active') AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS GeneratedCount,
+                    COALESCE(SUM(CASE WHEN c.Status = 'Reviewed' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS ReviewedCount,
+                    COALESCE(SUM(CASE WHEN c.Status = 'Approved' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS ApprovedCount,
+                    COALESCE(SUM(CASE WHEN c.Status = 'Issued' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS IssuedCount,
+                    COALESCE(SUM(CASE WHEN c.Status = 'Cancelled' OR c.Status = 'Deleted' OR c.IsActive = 0 THEN 1 ELSE 0 END), 0) AS CancelledCount
+                FROM `certificates` c
+                LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
+                LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
+                WHERE (@p_CampusId IS NULL OR @p_CampusId = 0 OR COALESCE(sa.CampusId, s.CampusId) = @p_CampusId);
+            ";
+
             var stats = await connection.QueryFirstOrDefaultAsync<CertificateWorkflowStatsDto>(new CommandDefinition(
-                "sp_GetCertificateWorkflowStats",
+                sql,
                 parameters,
-                commandType: CommandType.StoredProcedure,
+                commandType: CommandType.Text,
                 cancellationToken: ct));
 
             return stats ?? new CertificateWorkflowStatsDto();
@@ -987,73 +1014,157 @@ public class CertificateRepository : ICertificateRepository
 
     public async Task<int> BulkReviewAsync(
         string reviewedBy,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
-
         var parameters = new DynamicParameters();
         parameters.Add("p_ReviewedBy", reviewedBy.Trim(), DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "sp_BulkReviewCertificates",
-                parameters,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
-            return (int)affected;
+            string sql = @"
+                UPDATE `certificates` c
+                LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
+                LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
+                SET c.`Status` = 'Reviewed',
+                    c.`ReviewedAt` = NOW(),
+                    c.`UpdatedAt` = NOW()
+                WHERE c.`Status` IN ('Generated', 'Requested', 'Pending', 'Active')
+                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR COALESCE(sa.CampusId, s.CampusId) = @p_CampusId);
+            ";
+            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+            return affected;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"[CertificateRepository.BulkReviewAsync] Error: {ex.Message}");
             return 0;
         }
     }
 
     public async Task<int> BulkApproveAsync(
         string approvedBy,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
-
         var parameters = new DynamicParameters();
         parameters.Add("p_ApprovedBy", approvedBy.Trim(), DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "sp_BulkApproveCertificates",
-                parameters,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
-            return (int)affected;
+            string sql = @"
+                UPDATE `certificates` c
+                LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
+                LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
+                SET c.`Status` = 'Approved',
+                    c.`ApprovedAt` = NOW(),
+                    c.`UpdatedAt` = NOW()
+                WHERE c.`Status` = 'Reviewed'
+                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR COALESCE(sa.CampusId, s.CampusId) = @p_CampusId);
+            ";
+            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+            return affected;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"[CertificateRepository.BulkApproveAsync] Error: {ex.Message}");
             return 0;
         }
     }
 
     public async Task<int> BulkIssueAsync(
         string issuedBy,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
-
         var parameters = new DynamicParameters();
         parameters.Add("p_IssuedBy", issuedBy.Trim(), DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "sp_BulkIssueCertificates",
-                parameters,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
-            return (int)affected;
+            string sql = @"
+                UPDATE `certificates` c
+                LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
+                LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
+                SET c.`Status` = 'Issued',
+                    c.`IssuedAt` = NOW(),
+                    c.`IssueDate` = COALESCE(c.`IssueDate`, NOW()),
+                    c.`IssuedBy` = COALESCE(NULLIF(TRIM(@p_IssuedBy), ''), 'Admin'),
+                    c.`UpdatedAt` = NOW()
+                WHERE c.`Status` = 'Approved'
+                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR COALESCE(sa.CampusId, s.CampusId) = @p_CampusId);
+            ";
+            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+            return affected;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"[CertificateRepository.BulkIssueAsync] Error: {ex.Message}");
             return 0;
+        }
+    }
+
+    public async Task<bool> UpdateFeeClearanceAsync(
+        int id,
+        CertificateFeeClearanceRequestDto request,
+        CancellationToken ct = default)
+    {
+        if (id <= 0) return false;
+        using var connection = _database.CreateConnection();
+        try
+        {
+            var note = request?.ExemptionReason ?? "Cleared";
+            var clearedBy = request?.ClearedBy ?? "Accounts Desk";
+            var status = request?.Status ?? "Cleared";
+            var remarksAddition = $" [Fee Clearance: {status} by {clearedBy} on {DateTime.UtcNow:dd/MM/yyyy}]";
+            string sql = @"
+                UPDATE `certificates`
+                SET `Remarks` = CONCAT(COALESCE(`Remarks`, ''), @RemarksAddition),
+                    `UpdatedAt` = NOW()
+                WHERE `Id` = @Id;
+            ";
+            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, new { Id = id, RemarksAddition = remarksAddition }, cancellationToken: ct));
+            return affected > 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateRepository.UpdateFeeClearanceAsync] Error: {ex.Message}");
+            return false;
+        }
+    }
+
+    public async Task<bool> GrantFeeExemptionAsync(
+        int id,
+        CertificateFeeClearanceRequestDto request,
+        CancellationToken ct = default)
+    {
+        if (id <= 0) return false;
+        using var connection = _database.CreateConnection();
+        try
+        {
+            var reason = request?.ExemptionReason ?? "Principal verbal permission";
+            var authorizedBy = request?.ClearedBy ?? "Principal";
+            var dueAmt = request?.DueAmount ?? 0;
+            var remarksAddition = $" [Principal Permission Granted: {reason} (Due: Rs.{dueAmt}) by {authorizedBy} on {DateTime.UtcNow:dd/MM/yyyy}]";
+            string sql = @"
+                UPDATE `certificates`
+                SET `Remarks` = CONCAT(COALESCE(`Remarks`, ''), @RemarksAddition),
+                    `UpdatedAt` = NOW()
+                WHERE `Id` = @Id;
+            ";
+            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, new { Id = id, RemarksAddition = remarksAddition }, cancellationToken: ct));
+            return affected > 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateRepository.GrantFeeExemptionAsync] Error: {ex.Message}");
+            return false;
         }
     }
 
@@ -1272,7 +1383,7 @@ public class CertificateRepository : ICertificateRepository
         else if (dict.ContainsKey("S_FatherName") && dict["S_FatherName"] != null && !string.IsNullOrWhiteSpace(dict["S_FatherName"].ToString()))
             fatherName = dict["S_FatherName"].ToString()!.Trim();
 
-        string motherName = "Anita Devi";
+        string motherName = "";
         if (dict.ContainsKey("MotherName") && dict["MotherName"] != null && !string.IsNullOrWhiteSpace(dict["MotherName"].ToString()))
             motherName = dict["MotherName"].ToString()!.Trim();
         else if (dict.ContainsKey("S_MotherName") && dict["S_MotherName"] != null && !string.IsNullOrWhiteSpace(dict["S_MotherName"].ToString()))
@@ -1344,15 +1455,14 @@ public class CertificateRepository : ICertificateRepository
     public static string DeriveFatherName(string? studentName)
     {
         if (string.IsNullOrWhiteSpace(studentName) || studentName.Equals("Student", StringComparison.OrdinalIgnoreCase))
-            return "Parent Name";
+            return "Parent / Guardian";
         var parts = studentName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length > 1)
         {
             var last = parts[^1];
-            if (last.Length == 1) return $"{last}. Raghava Rao";
-            return $"Ramesh {last}";
+            return $"{last}";
         }
-        return $"K. {studentName.Trim()} Rao";
+        return "Parent / Guardian";
     }
 
     public static string ExtractCleanCertificateBody(string rawContent)

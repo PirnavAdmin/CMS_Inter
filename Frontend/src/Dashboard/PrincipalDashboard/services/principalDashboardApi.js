@@ -1,4 +1,5 @@
-import apiClient from "@/api/axios.js";
+import axios from "axios";
+import sharedApiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getStudentOverviewMetrics } from "@/api/studentApi.js";
 import { summarizeStudentAttendance } from "@/components/pages/dashboardStudentAttendance.js";
@@ -41,6 +42,24 @@ const contextParams = ({ campusId, boardId, academicYearId, date }) => ({
   ...(academicYearId ? { academicYearId: Number(academicYearId) || academicYearId } : {}),
   ...(date ? { date } : {}),
 });
+
+// Match Admin Dashboard behavior: dashboard requests must use the live API,
+// even when the shared client would otherwise select the demo/mock adapter.
+const serverConfig = (config = {}) => ({
+  ...config,
+  _isMockFallback: true,
+  transformRequest: [
+    ...sharedApiClient.defaults.transformRequest,
+    function requireServer(data) {
+      this.adapter = axios.getAdapter(["xhr", "http", "fetch"]);
+      return data;
+    },
+  ],
+});
+const apiClient = {
+  get: (url, config) => sharedApiClient.get(url, serverConfig(config)),
+  post: (url, data, config) => sharedApiClient.post(url, data, serverConfig(config)),
+};
 
 const resolvedResult = (result, fallback = null) => (
   result.status === "fulfilled" ? unwrap(result.value?.data) ?? fallback : fallback
@@ -93,6 +112,7 @@ const toActivities = (value) => rowsOf(value).map((item) => {
   };
 }).slice(0, 5);
 
+// Keep this in sync with DashboardPage.fetchSummary.
 const activeStaffCount = (payload) => rowsOf(payload)
   .filter((row) => !row?.status || row.status === "Active").length;
 
@@ -134,6 +154,9 @@ const toNotices = (value) => rowsOf(value).map((notice, index) => ({
 }));
 
 export async function getPrincipalDashboardData({ campusId, boardId, academicYearId, endDate }) {
+  if (campusId === undefined || campusId === null || campusId === "") {
+    throw new Error("The principal's assigned campus is not available.");
+  }
   const todayParams = contextParams({ campusId, boardId, academicYearId, date: endDate });
   const contextOnlyParams = contextParams({ campusId, boardId, academicYearId });
   const staffParams = {
@@ -168,11 +191,17 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
   const resultStats = resolvedResult(resultStatsResult, {}) || {};
 
   let studentAttendance = null;
+  let sectionAttendance = null;
   if (studentAttendanceResult.status === "fulfilled") {
     try {
-      studentAttendance = summarizeStudentAttendance(studentAttendanceResult.value.data, "Section");
+      // Admin Dashboard uses Overall for its primary attendance figures.
+      studentAttendance = summarizeStudentAttendance(studentAttendanceResult.value.data, "Overall");
+      // Keep the Principal-only class bars, while deriving their groups from
+      // the same campus-scoped attendance response.
+      sectionAttendance = summarizeStudentAttendance(studentAttendanceResult.value.data, "Section");
     } catch {
       studentAttendance = null;
+      sectionAttendance = null;
     }
   }
 
@@ -185,12 +214,10 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
     }
   }
 
-  const studentTotal = studentMetrics?.totalStudents ?? numberOf(summary, ["totalStudents", "TotalStudents", "studentCount", "StudentCount"], 0);
+  const studentTotal = studentMetrics?.totalStudents ?? numberOf(summary, ["totalStudents", "TotalStudents", "studentCount", "StudentCount"]);
   const staffTotal = staffResult.status === "fulfilled"
     ? activeStaffCount(staffResult.value.data)
-    : numberOf(summary, ["totalStaff", "TotalStaff"], 0);
-  const fallbackStudentAttendance = unwrap(principalData.studentAttendance) || {};
-  const fallbackStaffAttendance = unwrap(principalData.staffAttendance) || {};
+    : undefined;
   const attendance = studentAttendance ? {
     present: studentAttendance.present,
     absent: studentAttendance.absent,
@@ -198,25 +225,20 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
     total: studentAttendance.total,
     percentage: studentAttendance.percentage,
   } : {
-    present: numberOf(fallbackStudentAttendance, ["present", "Present", "presentCount", "PresentCount"], 0),
-    absent: numberOf(fallbackStudentAttendance, ["absent", "Absent", "absentCount", "AbsentCount"], 0),
-    leave: numberOf(fallbackStudentAttendance, ["halfDay", "HalfDay", "late", "Late", "halfDayCount", "HalfDayCount"], 0),
-    total: numberOf(fallbackStudentAttendance, ["totalStudents", "TotalStudents", "total", "Total", "totalCount", "TotalCount"], 0),
-    percentage: numberOf(fallbackStudentAttendance, ["attendancePercentage", "AttendancePercentage", "percentage", "Percentage"]),
+    present: undefined,
+    absent: undefined,
+    leave: undefined,
+    total: undefined,
+    percentage: undefined,
   };
   const staff = staffAttendance ? {
     present: staffAttendance.present,
     absent: staffAttendance.absent,
-    leave: staffAttendance.leave + staffAttendance.late,
+    late: staffAttendance.late,
+    leave: staffAttendance.leave,
     total: staffAttendance.total,
     percentage: staffAttendance.percentage,
-  } : {
-    present: numberOf(fallbackStaffAttendance, ["present", "Present", "presentCount", "PresentCount"], 0),
-    absent: numberOf(fallbackStaffAttendance, ["absent", "Absent", "absentCount", "AbsentCount"], 0),
-    leave: numberOf(fallbackStaffAttendance, ["onLeave", "OnLeave", "leaveCount", "LeaveCount"], 0),
-    total: numberOf(fallbackStaffAttendance, ["totalStaff", "TotalStaff", "total", "Total", "totalCount", "TotalCount"], 0),
-    percentage: numberOf(fallbackStaffAttendance, ["attendancePercentage", "AttendancePercentage", "percentage", "Percentage"]),
-  };
+  } : { present: undefined, absent: undefined, late: undefined, leave: undefined, total: undefined, percentage: undefined };
 
   const feeCollected = numberOf(fee, ["totalCollected", "TotalCollected", "collected", "Collected", "totalPaid", "TotalPaid"]);
   const feePending = numberOf(fee, ["totalOutstanding", "TotalOutstanding", "outstanding", "Outstanding", "pendingAmount", "PendingAmount", "dueFees", "DueFees"]);
@@ -228,12 +250,12 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
   const performance = performanceStreams.length
     ? performanceStreams.map((stream) => ({
         label: textOf(stream, ["label", "Label", "streamName", "StreamName"]),
-        current: numberOf(stream, ["current", "Current", "passPercentage", "PassPercentage"], 85),
-        previous: numberOf(stream, ["previous", "Previous"], 80),
-      }))
+        current: numberOf(stream, ["current", "Current", "passPercentage", "PassPercentage"]),
+        previous: numberOf(stream, ["previous", "Previous"]),
+      })).filter((stream) => stream.current !== undefined)
     : (passPercentage === undefined ? [] : [{ label: "Overall", current: passPercentage }]);
   const exams = toExams(resolvedResult(examsResult, []));
-  const classes = studentAttendance ? toClasses(studentAttendance.breakdownList) : [];
+  const classes = sectionAttendance ? toClasses(sectionAttendance.breakdownList) : [];
 
   return {
     partial: results.some((result) => result.status === "rejected"),
@@ -255,8 +277,8 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
       collectionRate,
       chart: groupFeeCollection(rowsOf(resolvedResult(paymentsResult, []))),
     },
-    activeClasses: numberOf(summary, ["totalSections", "TotalSections", "sectionsCount", "SectionsCount"], classes.length),
-    upcomingExamCount: numberOf(summary, ["upcomingExams", "UpcomingExams", "upcomingExaminations", "UpcomingExaminations"], exams.length),
-    admissions: numberOf(highlights, ["admissionsToday", "AdmissionsToday", "admissions", "Admissions"], 0),
+    activeClasses: numberOf(summary, ["totalSections", "TotalSections", "sectionsCount", "SectionsCount"]),
+    upcomingExamCount: examsResult.status === "fulfilled" ? exams.length : undefined,
+    admissions: numberOf(highlights, ["admissionsToday", "AdmissionsToday", "admissions", "Admissions"]),
   };
 }

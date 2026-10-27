@@ -240,10 +240,11 @@ public class CertificateService : ICertificateService
 
     public async Task<int> BulkReviewAsync(
         string reviewedBy,
+        int? campusId = null,
         CancellationToken ct = default)
     {
-        var count = await _repository.BulkReviewAsync(reviewedBy, ct);
-        if (count > 0)
+        var count = await _repository.BulkReviewAsync(reviewedBy, campusId, ct);
+        if (count > 0 && _hubContext != null)
         {
             try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
         }
@@ -252,10 +253,11 @@ public class CertificateService : ICertificateService
 
     public async Task<int> BulkApproveAsync(
         string approvedBy,
+        int? campusId = null,
         CancellationToken ct = default)
     {
-        var count = await _repository.BulkApproveAsync(approvedBy, ct);
-        if (count > 0)
+        var count = await _repository.BulkApproveAsync(approvedBy, campusId, ct);
+        if (count > 0 && _hubContext != null)
         {
             try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
         }
@@ -264,14 +266,33 @@ public class CertificateService : ICertificateService
 
     public async Task<int> BulkIssueAsync(
         string issuedBy,
+        int? campusId = null,
         CancellationToken ct = default)
     {
-        var count = await _repository.BulkIssueAsync(issuedBy, ct);
-        if (count > 0)
+        var count = await _repository.BulkIssueAsync(issuedBy, campusId, ct);
+        if (count > 0 && _hubContext != null)
         {
             try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
         }
         return count;
+    }
+
+    public async Task<bool> UpdateFeeClearanceAsync(
+        int id,
+        CertificateFeeClearanceRequestDto request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return await _repository.UpdateFeeClearanceAsync(id, request, ct);
+    }
+
+    public async Task<bool> GrantFeeExemptionAsync(
+        int id,
+        CertificateFeeClearanceRequestDto request,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return await _repository.GrantFeeExemptionAsync(id, request, ct);
     }
 
     public async Task<IReadOnlyList<CertificateResponseDto>> BulkGenerateAsync(

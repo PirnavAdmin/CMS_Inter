@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Users,
@@ -144,8 +144,8 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         // Final deduplication by seriesCode to prevent duplicate cards
         const uniqueMerged = [];
         const seenCodes = new Set();
-        // Hide legacy/junk cards that bleed from the DB.
-        const hiddenCodes = ['EMPLOYEE_ID', 'STUDENT_ID', 'SECTION_NAME', 'LIBRARY_ID', 'HOSTEL_ID'];
+        // Hide legacy redundant cards that bleed from the DB.
+        const hiddenCodes = ['EMPLOYEE_ID', 'STUDENT_ID', 'SECTION_NAME'];
 
         for (const item of mergedValues) {
           const rawCode = item.seriesCode || item.slug || item.id || "";
@@ -331,6 +331,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         {previewModalSeries && (
           <PreviewNextModal availableGroups={availableGroups}
             series={previewModalSeries}
+            activeCampusId={activeCampusId}
             onClose={() => setPreviewModalSeries(null)}
             onSequenceGenerated={handleSequenceGenerated}
             setToast={setToast}
@@ -354,6 +355,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
       {previewModalSeries && (
         <PreviewNextModal availableGroups={availableGroups}
           series={previewModalSeries}
+          activeCampusId={activeCampusId}
           onClose={() => setPreviewModalSeries(null)}
           onSequenceGenerated={handleSequenceGenerated}
           setToast={setToast}
@@ -581,9 +583,11 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                           className="cms-btn cms-btn-ghost" 
                           style={{ padding: '4px', color: 'var(--error)' }} 
                           title="Delete Series"
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to completely delete "${series.name || series.seriesName}"? This action removes the configuration permanently.`)) {
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to delete "${series.name || series.seriesName}"?`)) {
                               try {
+                                const code = series.seriesCode || series.slug || series.id;
+                                await numberSeriesApi.deleteNumberSeries(code, selectedCampusId);
                                 const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
                                 const existingRaw = localStorage.getItem('NumberSeries_Deleted');
                                 let arr = [];
@@ -593,8 +597,8 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                                 setToast({ message: "Series deleted successfully.", type: "success" });
                                 if (forceSyncLocal) forceSyncLocal();
                                 else onRefresh();
-                              } catch {
-                                setToast({ message: "Unable to update the saved series configuration.", type: "error" });
+                              } catch (err) {
+                                setToast({ message: "Failed to delete series: " + (err?.message || "Error"), type: "error" });
                               }
                             }
                           }}
@@ -963,6 +967,21 @@ function RenderTableHead({ seriesId }) {
           <th>Generated On</th>
         </tr>
       );
+    case "roll-no":
+    case "ROLL_NO":
+    case "student-roll-no":
+      return (
+        <tr>
+          <th>#</th>
+          <th>Roll Number</th>
+          <th>Student Name</th>
+          <th>Academic Year</th>
+          <th>Board</th>
+          <th>Program</th>
+          <th>Group</th>
+          <th>Created On</th>
+        </tr>
+      );
     default:
       return (
         <tr>
@@ -1050,6 +1069,21 @@ function RenderTableRow({ seriesId, row, index }) {
           <td>{row.date}</td>
         </tr>
       );
+    case "roll-no":
+    case "ROLL_NO":
+    case "student-roll-no":
+      return (
+        <tr>
+          <td>{index}</td>
+          <td><span className="ns-code-badge font-bold">{row.val || row.rollNo}</span></td>
+          <td><strong>{row.name}</strong></td>
+          <td>{row.year}</td>
+          <td>{row.board}</td>
+          <td>{row.program || "Intermediate"}</td>
+          <td>{row.group}</td>
+          <td>{row.date}</td>
+        </tr>
+      );
     default:
       return (
         <tr>
@@ -1129,12 +1163,30 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
   }, [formState.format, formState.numberLength, formState.prefix, series, selectedCampusId, selectedCampus?.campusCode, liveValidation.valid]);
 
   const livePreviewVal = apiPreview || localLivePreviewVal;
+  const formatInputRef = useRef(null);
 
   const handleTokenClick = (token) => {
+    const input = formatInputRef.current;
+    if (!input) {
+      setFormState((prev) => ({
+        ...prev,
+        format: prev.format + token,
+      }));
+      return;
+    }
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const currentVal = formState.format;
+    const nextVal = currentVal.substring(0, start) + token + currentVal.substring(end);
     setFormState((prev) => ({
       ...prev,
-      format: prev.format + token,
+      format: nextVal,
     }));
+    setTimeout(() => {
+      input.focus();
+      const newPos = start + token.length;
+      input.setSelectionRange(newPos, newPos);
+    }, 0);
   };
 
   const handleApplySample = (sampleFormat) => {
@@ -1246,6 +1298,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                 <div className="ns-field">
                   <label>Format Pattern *</label>
                   <input
+                    ref={formatInputRef}
                     type="text"
                     value={formState.format}
                     onChange={(e) => {
@@ -1271,6 +1324,10 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                       <option value={4}>4 (e.g. 0001)</option>
                       <option value={5}>5 (e.g. 00001)</option>
                       <option value={6}>6 (e.g. 000001)</option>
+                      <option value={7}>7 (e.g. 0000001)</option>
+                      <option value={8}>8 (e.g. 00000001)</option>
+                      <option value={9}>9 (e.g. 000000001)</option>
+                      <option value={10}>10 (e.g. 0000000001)</option>
                     </select>
                   </div>
 
@@ -1323,10 +1380,12 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                     type="button"
                     className="cms-btn cms-btn-ghost"
                     style={{ color: "var(--error)" }}
-                    title="Delete Series Permanently"
-                    onClick={() => {
-                      if (window.confirm(`Are you sure you want to completely delete "${series.name || series.seriesName}"?`)) {
+                    title="Delete Series"
+                    onClick={async () => {
+                      if (window.confirm(`Are you sure you want to delete "${series.name || series.seriesName}"?`)) {
                         try {
+                          const code = series.seriesCode || series.slug || series.id;
+                          await numberSeriesApi.deleteNumberSeries(code, selectedCampusId);
                           const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
                           const existingRaw = localStorage.getItem('NumberSeries_Deleted');
                           let arr = [];
@@ -1335,9 +1394,9 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                           localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
                           setToast({ message: "Series deleted successfully.", type: "success" });
                           if (forceSyncLocal) forceSyncLocal();
-                          setTimeout(() => navigate("/dashboard/settings/number-series"), 50);
-                        } catch {
-                          setToast({ message: "Unable to update the saved series configuration.", type: "error" });
+                          setTimeout(() => navigate("/dashboard/settings/number-series"), 200);
+                        } catch (err) {
+                          setToast({ message: "Failed to delete series: " + (err?.message || "Error"), type: "error" });
                         }
                       }
                     }}
@@ -1421,14 +1480,14 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
 // ======================================================================
 // 4. PREVIEW NEXT NUMBER MODAL (NON-MUTATING & TEST GENERATE)
 // ======================================================================
-function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, availableGroups = [] }) {
+function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, availableGroups = [], activeCampusId }) {
     const { selectedCampus } = useCampusContext();
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [liveGeneratedNumber, setLiveGeneratedNumber] = useState(null);
   const isInactive = series?.isActive === false;
 
-  const isRollNo = series?.id === "student-roll-no" || series?.id === "ROLL_NO" || series?.seriesCode === "ROLL_NO";
+  const isRollNo = series?.id === "roll-no" || series?.id === "student-roll-no" || series?.id === "ROLL_NO" || series?.seriesCode === "ROLL_NO";
   const [selectedGroup, setSelectedGroup] = useState(isRollNo ? "[GRP]" : "");
   const [selectedProgram, setSelectedProgram] = useState(isRollNo ? "[PRG]" : "");
   const [selectedBoard, setSelectedBoard] = useState(isRollNo ? "[BRD]" : "");
@@ -1459,12 +1518,17 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
         group: selectedGroup !== "[GRP]" ? selectedGroup : "MPC",
         groupCode: selectedGroup !== "[GRP]" ? selectedGroup : "MPC",
         campusCode: selectedCampus?.campusCode || "MC",
-      }, undefined, selectedCampus?.campusCode);
+      }, activeCampusId, selectedCampus?.campusCode);
       if (res?.generatedNumber) {
         nextGenerated = res.generatedNumber;
       }
     } catch (err) {
-      console.warn("POST /api/v1/settings/number-series/{seriesCode}/generate-next fallback:", err?.message || err);
+      console.warn("POST /api/v1/settings/number-series/{seriesCode}/generate-next error:", err?.message || err);
+      if (setToast) {
+        setToast({ message: `Failed to generate: ${err?.message || "Server Error"}`, type: "error" });
+      }
+      setGenerating(false);
+      return;
     }
 
     const simulated = nextGenerated || getNextNumberPreview(series, null, customPreviewTokens);
