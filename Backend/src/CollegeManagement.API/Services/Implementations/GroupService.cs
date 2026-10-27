@@ -1,14 +1,17 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Groups;
 using CollegeManagement.API.Repositories;
+using CollegeManagement.API.Services.Interfaces;
 
 namespace CollegeManagement.API.Services
 {
     public class GroupService : IGroupService
     {
         private readonly IGroupRepository _groupRepository;
-        private readonly CollegeManagement.API.Services.Interfaces.ILookupCacheService _cache;
+        private readonly ILookupCacheService _cache;
 
-        public GroupService(IGroupRepository groupRepository, CollegeManagement.API.Services.Interfaces.ILookupCacheService cache)
+        public GroupService(IGroupRepository groupRepository, ILookupCacheService cache)
         {
             _groupRepository = groupRepository;
             _cache = cache;
@@ -19,13 +22,14 @@ namespace CollegeManagement.API.Services
         // =========================================================
 
         public Task<List<GroupListItemDto>> GetAllAsync(
-            string? search,
-            int? boardId,
-            int? academicYearId,
-            int? academicLevelId,
-            bool? isActive)
+            string? search = null,
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            bool? isActive = null,
+            int? masterGroupId = null)
         {
-            if (string.IsNullOrWhiteSpace(search))
+            if (string.IsNullOrWhiteSpace(search) && !masterGroupId.HasValue)
             {
                 string key = $"lookup:groups:all:{boardId}:{academicYearId}:{academicLevelId}:{isActive}";
                 return _cache.GetOrCreateAsync(key, () => _groupRepository.GetAllAsync(
@@ -33,7 +37,8 @@ namespace CollegeManagement.API.Services
                     boardId,
                     academicYearId,
                     academicLevelId,
-                    isActive));
+                    isActive,
+                    masterGroupId));
             }
 
             return _groupRepository.GetAllAsync(
@@ -41,7 +46,8 @@ namespace CollegeManagement.API.Services
                 boardId,
                 academicYearId,
                 academicLevelId,
-                isActive);
+                isActive,
+                masterGroupId);
         }
 
         // =========================================================
@@ -59,9 +65,16 @@ namespace CollegeManagement.API.Services
         // =========================================================
 
         public Task<List<GroupListItemDto>> GetByBoardAsync(
-            int boardId)
+            int boardId,
+            int? academicYearId = null,
+            int? academicLevelId = null)
         {
-            return _cache.GetOrCreateAsync($"lookup:groups:board:{boardId}", () => _groupRepository.GetByBoardAsync(boardId));
+            if (!academicYearId.HasValue && !academicLevelId.HasValue)
+            {
+                return _cache.GetOrCreateAsync($"lookup:groups:board:{boardId}", () => _groupRepository.GetByBoardAsync(boardId, null, null));
+            }
+
+            return _groupRepository.GetByBoardAsync(boardId, academicYearId, academicLevelId);
         }
 
         // =========================================================
@@ -102,20 +115,22 @@ namespace CollegeManagement.API.Services
         }
 
         // =========================================================
-        // ACTIVATE / DEACTIVATE
+        // ACTIVATE / DEACTIVATE GROUP
         // =========================================================
 
         public async Task<bool> ActivateAsync(
             int groupId,
             bool isActive = true)
         {
-            var res = await _groupRepository.ActivateAsync(groupId, isActive);
-            _cache.RemoveByPrefix("lookup:groups");
+            var res = await _groupRepository.ActivateAsync(
+                groupId,
+                isActive);
+            if (res) _cache.RemoveByPrefix("lookup:groups");
             return res;
         }
 
         // =========================================================
-        // GROUP CODE EXISTS
+        // GROUP CODE VALIDATION
         // =========================================================
 
         public Task<bool> GroupCodeExistsAsync(
@@ -128,7 +143,7 @@ namespace CollegeManagement.API.Services
         }
 
         // =========================================================
-        // GET STUDENTS
+        // STUDENTS OF GROUP
         // =========================================================
 
         public Task<List<CollegeManagement.API.DTOs.Students.StudentListItemDto>>
@@ -140,7 +155,7 @@ namespace CollegeManagement.API.Services
         }
 
         // =========================================================
-        // GET SUBJECTS
+        // SUBJECTS OF GROUP
         // =========================================================
 
         public Task<List<CollegeManagement.API.Models.Subject>>
@@ -152,7 +167,7 @@ namespace CollegeManagement.API.Services
         }
 
         // =========================================================
-        // GET GROUP SUMMARY
+        // GROUP SUMMARY
         // =========================================================
 
         public Task<GroupSummaryDto?>
@@ -168,22 +183,16 @@ namespace CollegeManagement.API.Services
         // =========================================================
 
         public Task<List<GroupDropdownDto>>
-            GetDropdownAsync()
+            GetDropdownAsync(
+                int? boardId = null,
+                int? academicYearId = null,
+                int? academicLevelId = null)
         {
-            return _groupRepository.GetDropdownAsync();
+            return _groupRepository.GetDropdownAsync(boardId, academicYearId, academicLevelId);
         }
 
         // =========================================================
         // GET PROGRAMS BY GROUP
-        // =========================================================
-        //
-        // Example:
-        //
-        // MPC
-        //   ├── Regular
-        //   ├── JEE
-        //   └── EAPCET
-        //
         // =========================================================
 
         public Task<List<CollegeManagement.API.DTOs.Program.GroupProgramDto>>

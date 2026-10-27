@@ -84,6 +84,7 @@ namespace CollegeManagement.API.DTOs.Staff
         public string Status { get; set; } = "Active";
         public string? PhotoPath { get; set; }
         public string? ProfilePhoto => PhotoPath;
+        public string? PhotoUrl => PhotoPath;
 
         public string ProfileStatus { get; set; } = "PendingLink";
         public int ProfileCompletion

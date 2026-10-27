@@ -6,7 +6,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/transport/dashboard")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     public class TransportDashboardController : ControllerBase
     {
         private readonly ITransportDashboardService _service;
@@ -18,7 +18,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetDashboard()
         {
             try
@@ -43,7 +43,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("operations/{assignmentId}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetOperationDetails(long assignmentId)
         {
             try

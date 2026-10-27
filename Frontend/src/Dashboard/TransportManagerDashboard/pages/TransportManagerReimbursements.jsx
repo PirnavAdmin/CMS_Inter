@@ -20,7 +20,7 @@ import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import { getAuthUser } from "@/features/authStorage.js";
 import { useTransportManagerSafe } from "../TransportManagerContext.jsx";
-import { getApiErrorMessage } from "@/api/apiClient.js";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import {
   PAYMENT_METHODS,
   calculateReimbursementSummary,
@@ -59,31 +59,31 @@ export default function TransportManagerReimbursements() {
     profile.id ||
     authUser.employeeId ||
     authUser.staffId ||
-    "MTCH0063";
+    "MNT0044";
 
   const defaultStaffName =
     profile.name ||
     profile.fullName ||
     authUser.fullName ||
     authUser.name ||
-    "tangiro kamado";
+    "muzan kibutsuzi";
 
   const defaultDepartment =
     profile.department ||
     authUser.department ||
-    "Chemistry";
+    "Transport";
 
   const defaultDesignation =
     profile.role ||
     profile.designation ||
     authUser.role ||
     authUser.designation ||
-    "Assistant Professor";
+    "Transport Manager";
 
   const defaultEmail =
     profile.email ||
     authUser.email ||
-    "gummadi.devendrakumar@pirnav.com";
+    "pondara.venkatesh@pirnav.com";
 
   // Navigation tab: 'claims' (submission) or 'my-claims' (history)
   const [activeTab, setActiveTab] = useState("claims");
@@ -285,6 +285,8 @@ export default function TransportManagerReimbursements() {
         Purpose: formData.purpose.trim(),
         paymentMethod: formData.paymentMethod,
         PaymentMethod: formData.paymentMethod,
+        preferredPaymentMethod: formData.paymentMethod,
+        PreferredPaymentMethod: formData.paymentMethod,
         facultyId: formData.facultyId,
         FacultyId: formData.facultyId,
         facultyName: formData.facultyName,
@@ -297,14 +299,47 @@ export default function TransportManagerReimbursements() {
         Email: formData.email,
         notes: formData.notes || "",
         Notes: formData.notes || "",
+        declaration: Boolean(formData.declaration),
+        Declaration: Boolean(formData.declaration),
       };
 
-      const res = await apiSubmitClaim(payload);
+      let resBody;
+      try {
+        const res = await apiClient.post("/api/v1/reimbursements", payload);
+        resBody = res?.data?.data ?? res?.data ?? res;
+      } catch (postErr) {
+        // Fallback to service
+        const fallbackRes = await apiSubmitClaim({
+          ...payload,
+          proof: uploadedFile ? { rawFile: uploadedFile } : null,
+        });
+        resBody = fallbackRes?.data ?? fallbackRes;
+      }
+
+      const createdId = resBody?.id ?? resBody?.Id ?? resBody?.claimId ?? resBody?.ClaimId;
+      const createdClaimNumber =
+        resBody?.claimNumber ??
+        resBody?.ClaimNumber ??
+        (createdId ? `CLM-${createdId}` : `CLM-${Math.floor(1000 + Math.random() * 9000)}`);
+
+      // Upload proof file if attached
+      if (uploadedFile && createdId) {
+        try {
+          const uploadFormData = new FormData();
+          uploadFormData.append("file", uploadedFile, uploadedFile.name || "receipt.pdf");
+          await apiClient.post(`/api/v1/reimbursements/${encodeURIComponent(createdId)}/upload-proof`, uploadFormData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+        } catch (proofErr) {
+          console.warn("Proof file upload warning:", proofErr);
+        }
+      }
+
       notify("Reimbursement claim submitted successfully!", "success");
 
       const newClaim = {
-        id: res?.id || Date.now(),
-        claimNumber: res?.claimNumber || `CLM-${Math.floor(1000 + Math.random() * 9000)}`,
+        id: createdId || Date.now(),
+        claimNumber: createdClaimNumber,
         category: targetCategory,
         expenseCategory: targetCategory,
         amount: Number(formData.amount),
@@ -326,8 +361,15 @@ export default function TransportManagerReimbursements() {
         pendingCount: (prev.pendingCount || 0) + 1,
       }));
 
+      // Broadcast events to sync across tabs/components
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("cms-reimbursements-updated"));
+        window.dispatchEvent(new Event("cms-account-updated"));
+      }
+
       handleClearForm();
       setActiveTab("my-claims");
+      loadClaimsData();
     } catch (err) {
       console.error("Submission failed:", err);
       notify(getApiErrorMessage(err) || "Failed to submit reimbursement claim.", "error");

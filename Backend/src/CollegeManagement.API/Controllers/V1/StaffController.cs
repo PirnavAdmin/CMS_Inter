@@ -599,6 +599,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Stream staff member profile photo.
         /// </summary>
         [HttpGet("photo/{id:int}")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetStaffPhoto(int id)
         {
             var (physicalPath, contentType) = await _staffService.GetPhotoAsync(id);

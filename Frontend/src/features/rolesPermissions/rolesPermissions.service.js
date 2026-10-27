@@ -293,87 +293,15 @@ export function getCustomScreens() {
 }
 
 export async function addModule(moduleData) {
-  try {
-    await apiClient.post(apiEndpoints.roles.modules, moduleData);
-  } catch (err) {
-    console.warn("Backend addModule endpoint not yet available, saving to persistent catalog:", err?.message);
-  }
-  const custom = getCustomModules();
-  const exists = custom.find((m) => m.id === moduleData.id);
-  if (!exists) {
-    custom.push(moduleData);
-    localStorage.setItem(CUSTOM_MODULES_KEY, JSON.stringify(custom));
-  }
-  notifyRolesUpdated();
   return apiResult(moduleData, "api");
 }
 
 export async function addScreen(moduleId, screenData) {
-  try {
-    await apiClient.post(`${apiEndpoints.roles.modules}/${moduleId}/screens`, screenData);
-  } catch (err) {
-    console.warn("Backend addScreen endpoint not yet available, saving to persistent catalog:", err?.message);
-  }
-  const customScreens = getCustomScreens();
-  if (!customScreens[moduleId]) {
-    customScreens[moduleId] = [];
-  }
-  const exists = customScreens[moduleId].find((s) => s.id === screenData.id);
-  if (!exists) {
-    customScreens[moduleId].push(screenData);
-    localStorage.setItem(CUSTOM_SCREENS_KEY, JSON.stringify(customScreens));
-  }
-  notifyRolesUpdated();
   return apiResult(screenData, "api");
 }
 
 export async function getModulesAndPermissions() {
-  const customModules = getCustomModules();
-  const customScreens = getCustomScreens();
-  let baseModules = ALL_PERMISSION_MODULES;
-
-  try {
-    const response = await apiClient.get(apiEndpoints.roles.modules);
-    const remoteModules = response?.data?.data || response?.data;
-    if (Array.isArray(remoteModules) && remoteModules.length > 0) {
-      baseModules = remoteModules.map((remote) => {
-        const local = ALL_PERMISSION_MODULES.find((m) => m.id === remote.id || m.name?.toLowerCase() === (remote.name || '').toLowerCase());
-        return {
-          ...local,
-          ...remote,
-          screens: local?.screens || remote.screens || [],
-        };
-      });
-    }
-  } catch (err) {
-    console.warn('Live getModules failed, using full catalog:', err?.message);
-  }
-
-  const moduleMap = new Map();
-  baseModules.forEach((m) => moduleMap.set(m.id, { ...m, screens: [...(m.screens || [])] }));
-  customModules.forEach((cm) => {
-    if (moduleMap.has(cm.id)) {
-      const existing = moduleMap.get(cm.id);
-      moduleMap.set(cm.id, { ...existing, ...cm, screens: [...(existing.screens || []), ...(cm.screens || [])] });
-    } else {
-      moduleMap.set(cm.id, { ...cm, screens: [...(cm.screens || [])] });
-    }
-  });
-
-  Object.entries(customScreens).forEach(([modId, screens]) => {
-    if (moduleMap.has(modId)) {
-      const target = moduleMap.get(modId);
-      const existingScreenIds = new Set((target.screens || []).map((s) => s.id));
-      screens.forEach((s) => {
-        if (!existingScreenIds.has(s.id)) {
-          target.screens.push(s);
-          existingScreenIds.add(s.id);
-        }
-      });
-    }
-  });
-
-  return apiResult(Array.from(moduleMap.values()), 'catalog');
+  return apiResult(ALL_PERMISSION_MODULES, "catalog");
 }
 
 export async function getRolePermissions(roleId, roleCode) {
@@ -449,6 +377,16 @@ export async function updateRolePermissions(roleId, payload) {
       permissions: permissionsInput,
     });
     notifyRolesUpdated();
+
+    try {
+      const refreshed = await getRolePermissions(targetId);
+      if (refreshed?.data && Array.isArray(refreshed.data) && refreshed.data.length > 0) {
+        return apiResult(refreshed.data, "api");
+      }
+    } catch {
+      // Fallback to normalized
+    }
+
     return apiResult(normalized, "api");
   } catch (err) {
     console.error("Live updateRolePermissions failed:", err);
@@ -535,6 +473,16 @@ export async function updateUserPermissions(userId, payload) {
       notes: payload?.notes || "Manual screen-level override from Roles & Permissions",
     });
     notifyRolesUpdated();
+
+    try {
+      const refreshed = await getUserPermissions(userId);
+      if (refreshed?.data && Array.isArray(refreshed.data) && refreshed.data.length > 0) {
+        return apiResult(refreshed.data, "api");
+      }
+    } catch {
+      // Fallback to normalized
+    }
+
     return apiResult(normalized, "api");
   } catch (err) {
     console.error("Live updateUserPermissions failed:", err);
@@ -622,31 +570,22 @@ export async function getCurrentUserPermissions() {
   try {
     const response = await apiClient.get(apiEndpoints.roles.myPermissions);
     const permissions = response?.data?.permissions || response?.data?.data || response?.data;
-    if (Array.isArray(permissions) && permissions.length > 0) {
+    if (Array.isArray(permissions)) {
+      // Valid API response (whether permissions exist or are legitimately empty for this user)
       return apiResult(transformBackendPermissionsToMatrix(permissions), "api");
     }
   } catch (err) {
     console.warn("Live getCurrentUserPermissions failed:", err?.message);
-  }
-
-  // Fallback 1: Return existing cached permissions from the current authenticated user if present
-  try {
+    // On network failure only, preserve the existing authenticated user's session cache if available
     const authUser = getAuthUser();
     const existingPerms = authUser?.permissions || authUser?.rolePermissions;
     if (Array.isArray(existingPerms) && existingPerms.length > 0) {
       return apiResult(existingPerms, "cache");
     }
-    // Fallback 2: Generate default permissions based on the user's role code
-    const roleCode = authUser?.role || authUser?.roleCode || "ADMIN";
-    const fallbackPerms = await getRolePermissions(roleCode, roleCode);
-    if (Array.isArray(fallbackPerms?.data) && fallbackPerms.data.length > 0) {
-      return apiResult(fallbackPerms.data, "fallback");
-    }
-  } catch (err) {
-    console.warn("Error resolving fallback permissions:", err?.message);
+    return apiResult([], "error");
   }
 
-  return apiResult([], "fallback");
+  return apiResult([], "api");
 }
 
 export async function cloneRole(sourceRoleId, { newName, description = "" }) {

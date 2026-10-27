@@ -48,6 +48,26 @@ function todayIso() {
   return `${year}-${month}-${day}`;
 }
 
+// Display ordering is calculated from dates, independently of API lifecycle labels.
+export function compareHolidayDisplayOrder(left, right, today = todayIso()) {
+  const dateKey = (value) => {
+    const key = String(value || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return '';
+    const parsed = new Date(key + 'T00:00:00Z');
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === key ? key : '';
+  };
+  const period = (holiday) => {
+    const start = dateKey(getHolidayStartDate(holiday));
+    const end = dateKey(getHolidayEndDate(holiday));
+    if (!start || !end || end < start) return { rank: 3, start: '', end: '' };
+    return { rank: end < today ? 2 : start > today ? 1 : 0, start, end };
+  };
+  const a = period(left), b = period(right);
+  return a.rank - b.rank || (a.rank === 2
+    ? b.end.localeCompare(a.end) || b.start.localeCompare(a.start)
+    : a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+}
+
 function getHolidayLifecycleStatus(holiday) {
   if (holiday.lifecycleStatus && holiday.lifecycleStatus !== "Active") return holiday.lifecycleStatus;
   if (holiday.status === "Inactive") return "Inactive";
@@ -226,14 +246,9 @@ export default function HolidayManagementPage() {
     loadData();
   }, [loadData]);
 
-  // Chronological sort
-  const sortedHolidays = useMemo(() => {
-    return [...holidays].sort((a, b) => {
-      const dateA = getHolidayStartDate(a);
-      const dateB = getHolidayStartDate(b);
-      return dateA.localeCompare(dateB);
-    });
-  }, [holidays]);
+  // Sort the complete loaded list before filtering and slicing into pages.
+  const today = todayIso();
+  const sortedHolidays = useMemo(() => [...holidays].sort((a, b) => compareHolidayDisplayOrder(a, b, today)), [holidays, today]);
 
   // Comprehensive client-side filter
   const filteredHolidays = useMemo(() => {
@@ -538,16 +553,17 @@ export default function HolidayManagementPage() {
 
           <div className="holiday-pagination">
             <span>
-              Showing {totalCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0} to {Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} holiday{totalCount === 1 ? "" : "s"}
+              Showing {totalCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-{Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} holiday{totalCount === 1 ? "" : "s"}
             </span>
-            <div>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage === 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label="Previous Page">
                 Prev
               </button>
-              <b>{currentPage}</b>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage === totalPages || loading} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>
+              <span>Page {currentPage} of {totalPages}</span>
+              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages || loading} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} aria-label="Next Page">
                 Next
               </button>
+              <span style={{ marginLeft: '4px' }}>Page {currentPage} of {totalPages}</span>
             </div>
           </div>
         </section>

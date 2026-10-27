@@ -1127,8 +1127,8 @@ export default function PromotionPage({ screen = "promotion" }) {
                 </button>
                 <button
                   className="cms-btn cms-btn-ghost"
-                  onClick={() => setSelectedIds(visibleStudents.map((student) => student.id))}
-                  disabled={!visibleStudents.length}
+                  onClick={() => setSelectedIds([...new Set(students.map((student) => student.id))])}
+                  disabled={studentsLoading || !students.length}
                 >
                   Select All
                 </button>

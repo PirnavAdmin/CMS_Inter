@@ -1,4 +1,14 @@
 export const apiEndpoints = {
+  academicCalendar: {
+    list: '/api/v1/academic-calendar',
+    create: '/api/v1/academic-calendar',
+    range: '/api/v1/academic-calendar/range',
+    metrics: '/api/v1/academic-calendar/metrics',
+    upcoming: '/api/v1/academic-calendar/upcoming',
+    byId: (id) => `/api/v1/academic-calendar/${encodeURIComponent(id)}`,
+    publish: (id) => `/api/v1/academic-calendar/${encodeURIComponent(id)}/publish`,
+    exportExcel: '/api/v1/academic-calendar/export/excel',
+  },
   dashboard: {
     summary: "/api/v1/dashboard/summary",
     principal: "/api/v1/dashboard/principal",
@@ -29,6 +39,7 @@ export const apiEndpoints = {
     getById: (adminId) => `/api/Admin/${adminId}`,
     changePassword: "/api/Admin/change-password",
     updateStatus: (adminId) => `/api/Admin/${adminId}/status`,
+    uploadPhoto: "/api/Admin/profile/photo",
   },
   faculty: {
     dashboardStats: "/api/v1/staff/dashboard-stats",
@@ -224,8 +235,13 @@ export const apiEndpoints = {
   // },
   results: {
     list: "/api/v1/results",
+    getAll: "/api/v1/results",
     process: "/api/v1/results/process",
     publish: "/api/v1/results/publish",
+    readiness: "/api/v1/results/readiness",
+    published: "/api/v1/results/published",
+    sections: (sectionId) => `/api/v1/results/sections/${sectionId}`,
+    sectionResults: (sectionId) => `/api/v1/results/sections/${sectionId}`,
     byStudent: (studentId) => `/api/v1/results/students/${studentId}`,
     studentResult: "/api/v1/results/student-result",
     rankList: "/api/v1/results/rank-list",
@@ -491,7 +507,17 @@ export const apiEndpoints = {
     issue: (id) => `/api/certificates/${id}/issue`,
   },
   examinations: {
+    list: "/api/v1/examinations",
     getAll: "/api/v1/examinations",
+    create: "/api/v1/examinations",
+    getById: (id) => `/api/v1/examinations/${id}`,
+    update: (id) => `/api/v1/examinations/${id}`,
+    delete: (id) => `/api/v1/examinations/${id}`,
+    schedules: (id) => `/api/v1/examinations/${id}/schedules`,
+    eligibleSubjects: (id) => `/api/v1/examinations/${id}/eligible-subjects`,
+    availableHalls: "/api/v1/examinations/available-halls",
+    settings: "/api/v1/examinations/settings",
+    duties: "/api/v1/examinations/duties",
   },
   timetable: {
     getAll: "/api/v1/timetable",
@@ -559,7 +585,11 @@ export const apiEndpoints = {
   },
   evaluations: {
     search: "/api/v1/evaluations/search",
+    readiness: "/api/v1/evaluations/readiness",
+    export: "/api/v1/evaluations/export",
     students: (evalId) => `/api/v1/evaluations/${evalId}/students`,
+    facultyEvaluations: "/api/v1/faculty/evaluations",
+    facultyStudents: (evalId) => `/api/v1/faculty/evaluations/${evalId}/students`,
     saveMarks: (evalId) => `/api/v1/faculty/evaluations/${evalId}/marks`,
     submit: (evalId) => `/api/v1/faculty/evaluations/${evalId}/submit`,
     verify: (evalId) => `/api/v1/evaluations/${evalId}/verify`,
@@ -567,6 +597,10 @@ export const apiEndpoints = {
     reject: (evalId) => `/api/v1/evaluations/${evalId}/reject`,
     verifyAll: "/api/v1/evaluations/verify-all",
     approveAll: "/api/v1/evaluations/approve-all",
+  },
+  marks: {
+    summary: (examinationId) => `/api/v1/marks/summary/${examinationId}`,
+    exportCsv: "/api/v1/marks/export/csv",
   },
   studentAnalysis: {
     getAll: "/api/v1/student-analysis",

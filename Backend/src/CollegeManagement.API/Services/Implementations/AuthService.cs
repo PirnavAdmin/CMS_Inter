@@ -248,7 +248,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
                     staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType FROM Staffs WHERE Id = @Id", 
+                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType, PhotoPath FROM Staffs WHERE Id = @Id", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
@@ -278,6 +278,31 @@ namespace CollegeManagement.API.Services.Implementations
                         if (pBId > 0) assignedBoardIds.Add(pBId);
                     }
                 }
+                string? resolvedPhotoPath = (string?)staffInfo?.PhotoPath;
+                if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.AdminId.HasValue && user.AdminId.Value > 0)
+                {
+                    resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT PhotoPath FROM admins WHERE id = @Id",
+                        new { Id = user.AdminId.Value });
+                }
+                if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && (string.Equals(user.Role?.RoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(user.Role?.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)))
+                {
+                    resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT PhotoPath FROM admins WHERE Email = @Email AND PhotoPath IS NOT NULL AND PhotoPath != '' LIMIT 1",
+                        new { Email = user.Email });
+                    if (string.IsNullOrWhiteSpace(resolvedPhotoPath))
+                    {
+                        resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                            "SELECT PhotoPath FROM admins WHERE PhotoPath IS NOT NULL AND PhotoPath != '' ORDER BY id ASC LIMIT 1");
+                    }
+                }
+                if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.StudentId.HasValue && user.StudentId.Value > 0)
+                {
+                    resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT Photo FROM Students WHERE StudentId = @Id",
+                        new { Id = user.StudentId.Value });
+                }
+
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
 
                 await _auditService.LogAsync(
@@ -302,9 +327,13 @@ namespace CollegeManagement.API.Services.Implementations
                     Designation = user.Designation,
                     EmployeeId = user.EmployeeId,
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
-                    StaffType = staffInfo?.StaffType ?? (user.StudentId.HasValue ? "Student" : (user.AdminId.HasValue ? "Admin" : "Non-Teaching")),
+                    StaffType = (user.AdminId.HasValue && user.AdminId.Value > 0) || string.Equals(user.Role?.RoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(user.Role?.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)
+                        ? "Admin"
+                        : (user.StudentId.HasValue ? "Student" : (staffInfo?.StaffType ?? "Non-Teaching")),
                     AssignedCampusIds = assignedCampusIds,
-                    AssignedBoardIds = assignedBoardIds
+                    AssignedBoardIds = assignedBoardIds,
+                    PhotoPath = resolvedPhotoPath,
+                    PhotoUrl = resolvedPhotoPath
                 };
             }
 
@@ -890,6 +919,17 @@ namespace CollegeManagement.API.Services.Implementations
 
             _logger.LogInformation("Password reset successfully for UserId: {UserId}", user.UserId);
 
+            await _auditService.LogAsync(
+                action: "Password Reset Completed",
+                module: "Authentication",
+                target: user.Email,
+                severity: "Info",
+                status: "Success",
+                details: $"Password reset successfully completed for user {user.Email}",
+                overrideUser: user.FullName ?? user.Email,
+                overrideRole: user.Role?.RoleName ?? "User"
+            );
+
             if (_emailService != null)
             {
                 try
@@ -1001,6 +1041,14 @@ namespace CollegeManagement.API.Services.Implementations
             // 3. Verify OldPassword strictly against Users.PasswordHash
             if (!PasswordHasher.VerifyPassword(oldPassword, user.PasswordHash))
             {
+                await _auditService.LogAsync(
+                    action: "Failed Password Change Attempt",
+                    module: "Authentication",
+                    target: user.Email,
+                    severity: "Warning",
+                    status: "Failed",
+                    details: $"User {user.Email} provided an incorrect old password."
+                );
                 return (false, "Old password is incorrect.");
             }
 
@@ -1027,6 +1075,16 @@ namespace CollegeManagement.API.Services.Implementations
                     }
 
                     transaction.Commit();
+
+                    await _auditService.LogAsync(
+                        action: "Password Changed",
+                        module: "Authentication",
+                        target: user.Email,
+                        severity: "Info",
+                        status: "Success",
+                        details: $"User {user.Email} (ID: {user.UserId}) successfully changed their account password."
+                    );
+
                     return (true, "Password changed successfully.");
                 }
                 catch (Exception ex)
@@ -1192,7 +1250,9 @@ namespace CollegeManagement.API.Services.Implementations
                 StudentId = user.StudentId,
                 AdminId = user.AdminId,
                 Role = canonicalRoleName,
-                StaffType = staffType ?? (user.StudentId.HasValue ? "Student" : (user.AdminId.HasValue ? "Admin" : "Non-Teaching")),
+                StaffType = (user.AdminId.HasValue && user.AdminId.Value > 0) || string.Equals(canonicalRoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(canonicalRoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)
+                    ? "Admin"
+                    : (staffType ?? (user.StudentId.HasValue ? "Student" : "Non-Teaching")),
                 Designation = user.Designation,
                 EmployeeId = user.EmployeeId
             };

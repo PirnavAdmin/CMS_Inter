@@ -20,10 +20,22 @@ import {
   RefreshCw,
   Plus,
 } from "lucide-react";
-import { useTransportManager } from "../TransportManagerContext.jsx";
+import { useTransportManager, DEFAULT_TRANSPORT_MANAGER_PROFILE } from "../TransportManagerContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import * as staffApi from "@/api/staffApi.js";
+import apiClient from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { env } from "@/config/env.js";
 import "../styles/TransportManagerProfile.css";
+
+const resolvePhotoUrl = (value) => {
+  const path = String(value ?? "").trim();
+  if (!path) return "";
+  if (/^(?:https?:|blob:|data:)/i.test(path)) return path;
+  const baseUrl = (env?.apiBaseUrl || "").replace(/\/+$/, "");
+  return baseUrl ? `${baseUrl}/${path.replace(/^\/+/, "")}` : path;
+};
 
 const PIN_LOOKUP = {
   "522": { district: "Guntur", state: "Andhra Pradesh", country: "India" },
@@ -242,7 +254,7 @@ function SearchSelectInput({
 }
 
 export default function TransportManagerProfile() {
-  const { profile = {}, showToast = () => {}, authorizedBoards = [], selectedBoardId } = useTransportManager();
+  const { profile = {}, updateProfile = () => { }, showToast = () => { }, authorizedBoards = [], selectedBoardId } = useTransportManager();
   const { boards = [], selectedAcademicYear } = useAcademicContext?.() || {};
   const { selectedCampus } = useCampusContext?.() || {};
 
@@ -256,51 +268,76 @@ export default function TransportManagerProfile() {
     return match?.code || match?.name || "BIEAP";
   }, [authorizedBoards, boards, selectedBoardId]);
 
-  // Dynamic user name decomposition (DO NOT hardcode name)
-  const initialName = profile?.name || "Transport Manager";
+  const effectiveStaffId = profile.staffId || profile.id || 1125;
+
+  // Dynamic user name decomposition
+  const initialName = profile?.name || DEFAULT_TRANSPORT_MANAGER_PROFILE.fullName;
   const nameParts = initialName.trim().split(/\s+/);
-  const initialFirstName = nameParts[0] || "Transport";
-  const initialMiddleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : "—";
-  const initialLastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : "Manager";
+  const initialFirstName = profile?.firstName || nameParts[0] || DEFAULT_TRANSPORT_MANAGER_PROFILE.firstName;
+  const initialMiddleName = profile?.middleName || (nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : "—");
+  const initialLastName = profile?.lastName || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : DEFAULT_TRANSPORT_MANAGER_PROFILE.lastName);
 
   // State management with LocalStorage persistence for mock data
   const STORAGE_KEY = "tm_profile_data";
 
   const [profileData, setProfileData] = useState(() => {
+    let savedParsed = {};
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          ...parsed,
-          employeeId: parsed.employeeId || profile.employeeId || "MTCH0063",
-          email: parsed.email || profile.email || "gummadi.devendrakumar@pirnav.com",
-          department: parsed.department || profile.department || "Transport Operations",
-          designation: parsed.designation || profile.role || "Transport Manager",
-        };
+        savedParsed = JSON.parse(saved) || {};
+        // Remove any local storage photo so the photo is strictly managed by the backend
+        delete savedParsed.photoUrl;
+        delete savedParsed.photoPath;
+        delete savedParsed.profilePhoto;
       }
     } catch (e) {
       console.warn("Failed to read tm_profile_data from localStorage:", e);
     }
 
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("staff_profile_photo");
+        localStorage.removeItem(`staff_profile_${effectiveStaffId}_photo`);
+      }
+    } catch { }
+
+    if (Object.keys(savedParsed).length > 0) {
+      return {
+        ...DEFAULT_TRANSPORT_MANAGER_PROFILE,
+        ...profile,
+        ...savedParsed,
+        employeeId: savedParsed.employeeId || profile.employeeId || DEFAULT_TRANSPORT_MANAGER_PROFILE.employeeId,
+        email: savedParsed.email || profile.email || DEFAULT_TRANSPORT_MANAGER_PROFILE.email,
+        department: savedParsed.department || profile.department || DEFAULT_TRANSPORT_MANAGER_PROFILE.department,
+        designation: savedParsed.designation || profile.role || DEFAULT_TRANSPORT_MANAGER_PROFILE.designation,
+        photoUrl: "",
+        photoPath: "",
+        profilePhoto: "",
+      };
+    }
+
     return {
-      id: profile.id || "TM-1",
-      employeeId: profile.employeeId || "MTCH0063",
+      ...DEFAULT_TRANSPORT_MANAGER_PROFILE,
+      ...profile,
+      id: profile.id || DEFAULT_TRANSPORT_MANAGER_PROFILE.id,
+      staffId: profile.staffId || DEFAULT_TRANSPORT_MANAGER_PROFILE.staffId,
+      employeeId: profile.employeeId || DEFAULT_TRANSPORT_MANAGER_PROFILE.employeeId,
       firstName: initialFirstName,
       middleName: initialMiddleName,
       lastName: initialLastName,
       fullName: initialName,
-      dob: "1992-08-14",
-      gender: "Male",
-      maritalStatus: "Single",
-      mobile: profile.phone || "8374498633",
-      email: profile.email || "gummadi.devendrakumar@pirnav.com",
-      department: profile.department || "Transport Operations",
-      designation: profile.role || "Transport Manager",
-      bloodGroup: "O+",
-      dateOfJoining: "2022-06-15",
-      aadhaar: "8492 1092 3841",
-      pan: "ABCDE1234F",
+      dob: profile.dob || DEFAULT_TRANSPORT_MANAGER_PROFILE.dob,
+      gender: profile.gender || DEFAULT_TRANSPORT_MANAGER_PROFILE.gender,
+      maritalStatus: profile.maritalStatus || DEFAULT_TRANSPORT_MANAGER_PROFILE.maritalStatus,
+      mobile: profile.mobile || profile.phone || DEFAULT_TRANSPORT_MANAGER_PROFILE.mobile,
+      email: profile.email || DEFAULT_TRANSPORT_MANAGER_PROFILE.email,
+      department: profile.department || DEFAULT_TRANSPORT_MANAGER_PROFILE.department,
+      designation: profile.role || DEFAULT_TRANSPORT_MANAGER_PROFILE.designation,
+      bloodGroup: profile.bloodGroup || DEFAULT_TRANSPORT_MANAGER_PROFILE.bloodGroup,
+      dateOfJoining: profile.dateOfJoining || DEFAULT_TRANSPORT_MANAGER_PROFILE.dateOfJoining,
+      aadhaar: profile.aadhaar || DEFAULT_TRANSPORT_MANAGER_PROFILE.aadhaar,
+      pan: profile.pan || DEFAULT_TRANSPORT_MANAGER_PROFILE.pan,
       staffType: "Non-Teaching",
       board: boardName,
       photoUrl: "",
@@ -318,11 +355,11 @@ export default function TransportManagerProfile() {
       // Address Info
       houseNumber: "12-4-88/2",
       street: "Transport Colony, Beside Bus Depot",
-      city: "Guntur",
-      pin: "522007",
-      district: "Guntur",
-      state: "Andhra Pradesh",
-      country: "India",
+      city: profile.city || DEFAULT_TRANSPORT_MANAGER_PROFILE.city,
+      pin: profile.pin || profile.pincode || DEFAULT_TRANSPORT_MANAGER_PROFILE.pin,
+      district: profile.district || DEFAULT_TRANSPORT_MANAGER_PROFILE.district,
+      state: profile.state || DEFAULT_TRANSPORT_MANAGER_PROFILE.state,
+      country: profile.country || DEFAULT_TRANSPORT_MANAGER_PROFILE.country,
 
       // Experience Records
       experience: [
@@ -349,7 +386,7 @@ export default function TransportManagerProfile() {
       ],
 
       // Uploaded Documents
-      documents: [
+      documents: DEFAULT_TRANSPORT_MANAGER_PROFILE.documents || [
         {
           id: 1,
           name: "Aadhaar Card",
@@ -370,29 +407,104 @@ export default function TransportManagerProfile() {
           status: "Verified",
           url: "",
         },
-        {
-          id: 3,
-          name: "Commercial Heavy Vehicle Driving License",
-          type: "Transport Certification",
-          format: "PDF",
-          size: "2.8 MB",
-          date: "2023-11-20",
-          status: "Verified",
-          url: "",
-        },
-        {
-          id: 4,
-          name: "Fleet Safety & Regulatory Compliance Certificate",
-          type: "Professional Certification",
-          format: "PDF",
-          size: "1.9 MB",
-          date: "2023-08-10",
-          status: "Verified",
-          url: "",
-        },
       ],
     };
   });
+
+  // Query live staff profile from API by ID
+  useEffect(() => {
+    let active = true;
+    const fetchLiveProfile = async () => {
+      try {
+        let res;
+        try {
+          res = await staffApi.getStaffById(effectiveStaffId);
+        } catch {
+          res = await apiClient.get("/api/v1/staff/me");
+        }
+        const data = res?.data?.data || res?.data;
+        if (active && data && typeof data === "object") {
+          const fullName = data.fullName || (data.firstName ? `${data.firstName} ${data.lastName || ""}`.trim() : "muzan kibutsuzi");
+          const nParts = fullName.split(/\s+/);
+          const rawServerPhoto = data.photoUrl || data.photoPath || data.profilePhoto || "";
+          const resolvedPhoto = rawServerPhoto ? resolvePhotoUrl(rawServerPhoto) : "";
+
+          setProfileData((prev) => {
+            const merged = {
+              ...prev,
+              ...data,
+              id: data.id || data.staffId || prev.id,
+              staffId: data.staffId || data.id || prev.staffId,
+              employeeId: data.employeeId || prev.employeeId,
+              firstName: data.firstName || nParts[0] || prev.firstName,
+              middleName: data.middleName || (nParts.length > 2 ? nParts.slice(1, -1).join(" ") : prev.middleName),
+              lastName: data.lastName || (nParts.length > 1 ? nParts[nParts.length - 1] : prev.lastName),
+              fullName,
+              email: data.email || prev.email,
+              mobile: data.mobile || prev.mobile,
+              dob: data.dateOfBirth ? data.dateOfBirth.split("T")[0] : (data.dob || prev.dob),
+              gender: data.gender || prev.gender,
+              maritalStatus: data.maritalStatus || prev.maritalStatus,
+              aadhaar: data.aadhaar || prev.aadhaar,
+              department: data.department || prev.department,
+              designation: data.designation || prev.designation,
+              city: data.city || prev.city,
+              district: data.district || prev.district,
+              state: data.state || prev.state,
+              pin: data.pin || data.pincode || prev.pin,
+              country: data.country || prev.country,
+              dateOfJoining: data.dateOfJoining ? data.dateOfJoining.split("T")[0] : prev.dateOfJoining,
+              isDriver: Boolean(data.isDriver ?? prev.isDriver),
+              drivingLicenseNumber: data.drivingLicenseNumber || prev.drivingLicenseNumber,
+              drivingLicenseExpiryDate: data.drivingLicenseExpiryDate || prev.drivingLicenseExpiryDate,
+              photoUrl: resolvedPhoto || prev.photoUrl,
+              photoPath: data.photoPath || rawServerPhoto || prev.photoPath,
+              profilePhoto: data.profilePhoto || rawServerPhoto || prev.profilePhoto,
+            };
+            try {
+              const toPersist = { ...merged };
+              delete toPersist.photoUrl;
+              delete toPersist.photoPath;
+              delete toPersist.profilePhoto;
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(toPersist));
+            } catch { }
+            return merged;
+          });
+
+          // If no photo path was returned in staff object, query backend GET /api/v1/staff/photo/{id}
+          if (!resolvedPhoto && effectiveStaffId) {
+            apiClient.get(apiEndpoints.faculty.getPhoto(effectiveStaffId), {
+              responseType: "blob",
+              skipGlobalLoader: true,
+              skipErrorLog: true,
+            }).then((photoRes) => {
+              if (!active) return;
+              if (photoRes?.data instanceof Blob && photoRes.data.size > 0 && (photoRes.data.type || "").startsWith("image/")) {
+                const blobUrl = URL.createObjectURL(photoRes.data);
+                setProfileData((prev) => ({
+                  ...prev,
+                  photoUrl: blobUrl,
+                }));
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(
+                    new CustomEvent("cms-staff-photo-updated", {
+                      detail: { photoUrl: blobUrl, staffId: effectiveStaffId },
+                    })
+                  );
+                }
+              }
+            }).catch(() => null);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch live staff profile in TransportManagerProfile:", err);
+      }
+    };
+    fetchLiveProfile();
+    return () => {
+      active = false;
+    };
+  }, [effectiveStaffId]);
 
   // Keep full name updated whenever first/middle/last name changes
   useEffect(() => {
@@ -405,13 +517,53 @@ export default function TransportManagerProfile() {
     }
   }, [profileData.firstName, profileData.middleName, profileData.lastName, profileData.fullName]);
 
-  // Sync to local storage
+  // Helper to format documents as C# Dictionary<string, string>
+  const formatDocumentsDictionary = (docs) => {
+    if (!docs) return {};
+    if (Array.isArray(docs)) {
+      const map = {};
+      docs.forEach((doc, idx) => {
+        const key = String(doc?.type || doc?.name || `Document_${idx + 1}`).trim();
+        const val = String(doc?.url || doc?.name || doc?.fileName || "").trim();
+        if (key) map[key] = val;
+      });
+      return map;
+    }
+    if (typeof docs === "object") {
+      const map = {};
+      Object.entries(docs).forEach(([k, v]) => {
+        map[String(k)] = typeof v === "string" ? v : String(v?.url || v?.name || "");
+      });
+      return map;
+    }
+    return {};
+  };
+
+  // Sync to local storage and backend API
   const persistProfile = (updated) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      const toStore = { ...updated };
+      // Remove any photo fields so image is strictly persisted on the backend, not in localStorage
+      delete toStore.photoUrl;
+      delete toStore.photoPath;
+      delete toStore.profilePhoto;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
     } catch (e) {
       console.warn("Could not persist tm_profile_data:", e);
     }
+    if (typeof updateProfile === "function") {
+      updateProfile(updated);
+    }
+    try {
+      if (updated?.mobile) {
+        apiClient.put("/api/v1/staff/me/contact", { mobile: updated.mobile }).catch(() => null);
+        apiClient.put(apiEndpoints.faculty.updateProfileSettings, {
+          fullName: updated.fullName,
+          mobile: updated.mobile,
+          personalEmail: updated.email,
+        }).catch(() => null);
+      }
+    } catch { }
   };
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -558,12 +710,19 @@ export default function TransportManagerProfile() {
 
   const handleRemovePhoto = () => {
     setProfileData((prev) => {
-      const updated = { ...prev, photoUrl: "" };
+      const updated = { ...prev, photoUrl: "", photoPath: "", profilePhoto: "" };
       persistProfile(updated);
       return updated;
     });
     if (avatarRef.current) {
       avatarRef.current.value = "";
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("cms-staff-photo-updated", {
+          detail: { photoUrl: "", staffId: effectiveStaffId },
+        })
+      );
     }
     showToast("Profile photo removed.");
   };
@@ -661,10 +820,51 @@ export default function TransportManagerProfile() {
       setProfileData((prev) => {
         const updated = { ...prev, photoUrl: croppedDataUrl };
         persistProfile(updated);
+        try {
+          const curUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
+          if (curUser) {
+            const merged = { ...curUser, photoUrl: croppedDataUrl, photoPath: croppedDataUrl, photo: croppedDataUrl };
+            if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged));
+            if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged));
+            window.dispatchEvent(new Event("storage"));
+          }
+        } catch { }
         return updated;
       });
 
-      showToast("Profile photo updated successfully!");
+      outCanvas.toBlob(async (blob) => {
+        if (blob) {
+          // Provide instant in-memory preview without touching localStorage
+          const tempObjectUrl = URL.createObjectURL(blob);
+          setProfileData((prev) => ({ ...prev, photoUrl: tempObjectUrl }));
+
+          // Exactly matching AccountantProfile contract: single StaffId and single Photo form fields
+          const formData = new FormData();
+          formData.append("Photo", blob, `staff_${effectiveStaffId || "profile"}.jpg`);
+          formData.append("file", blob, `staff_${effectiveStaffId || "profile"}.jpg`);
+          formData.append("StaffId", String(effectiveStaffId));
+          formData.append("staffId", String(effectiveStaffId));
+          try {
+            const uploadRes = await apiClient.post(apiEndpoints.faculty.uploadPhoto, formData, {
+              headers: { "Content-Type": "multipart/form-data" },
+            });
+            const serverPhoto = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || uploadRes?.data?.photoUrl || uploadRes?.data?.profilePhoto;
+            if (serverPhoto) {
+              const curUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
+              if (curUser) {
+                const merged = { ...curUser, photoUrl: serverPhoto, photoPath: serverPhoto, photo: serverPhoto };
+                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged));
+                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged));
+                window.dispatchEvent(new Event("storage"));
+              }
+            }
+          } catch (e) {
+            console.warn("Could not upload profile photo to server:", e);
+            showToast("Failed to upload profile photo to backend.", "error");
+          }
+        }
+      }, "image/jpeg", 0.92);
+
       setIsCropModalOpen(false);
       setRawImageToCrop(null);
     };
@@ -930,9 +1130,123 @@ export default function TransportManagerProfile() {
     }
   };
 
-  const handleSaveAndNext = () => {
+  const handleSaveAndNext = async () => {
     if (isEditingProfile) {
       persistProfile(profileData);
+      try {
+        let sectionName = "";
+        let payload = {};
+        switch (profileStep) {
+          case 1:
+            sectionName = "Personal";
+            payload = {
+              Personal: {
+                maritalStatus: profileData.maritalStatus,
+                mobile: profileData.mobile,
+              },
+              personal: {
+                maritalStatus: profileData.maritalStatus,
+                mobile: profileData.mobile,
+              },
+              maritalStatus: profileData.maritalStatus,
+              mobile: profileData.mobile,
+            };
+            if (profileData.mobile) {
+              apiClient.put("/api/v1/staff/me/contact", { mobile: profileData.mobile }).catch(() => null);
+              apiClient.put(apiEndpoints.faculty.updateProfileSettings, {
+                fullName: profileData.fullName,
+                mobile: profileData.mobile,
+                personalEmail: profileData.email,
+              }).catch(() => null);
+            }
+            break;
+          case 2:
+            sectionName = "Bank";
+            payload = {
+              Bank: {
+                bankName: profileData.bankName,
+                accountHolderName: profileData.accountHolder,
+                accountNumber: profileData.accountNumber,
+                ifscCode: profileData.ifsc,
+                branch: profileData.branch,
+                accountType: profileData.accountType,
+                uanNumber: profileData.uanNumber,
+                pfNumber: profileData.pfNumber,
+              },
+              bank: {
+                bankName: profileData.bankName,
+                accountHolder: profileData.accountHolder,
+                accountNumber: profileData.accountNumber,
+                ifsc: profileData.ifsc,
+                branch: profileData.branch,
+                accountType: profileData.accountType,
+                uanNumber: profileData.uanNumber,
+                pfNumber: profileData.pfNumber,
+              },
+            };
+            break;
+          case 3:
+            sectionName = "Address";
+            payload = {
+              Address: {
+                currentAddress: profileData.houseNumber,
+                city: profileData.city,
+                district: profileData.district,
+                state: profileData.state,
+                pincode: profileData.pin,
+                country: profileData.country,
+              },
+              address: {
+                houseNumber: profileData.houseNumber,
+                street: profileData.street,
+                city: profileData.city,
+                district: profileData.district,
+                state: profileData.state,
+                pin: profileData.pin,
+                country: profileData.country,
+              },
+            };
+            break;
+          case 4:
+            sectionName = "Experience";
+            payload = {
+              Experience: (profileData.experience || []).map((e) => ({
+                institutionName: e.institution,
+                designation: e.designation,
+                fromDate: e.fromDate || null,
+                toDate: e.toDate || null,
+                subjectsTaught: e.subjectsTeached,
+              })),
+              experience: (profileData.experience || []).map((e) => ({
+                institutionName: e.institution,
+                designation: e.designation,
+                fromDate: e.fromDate || null,
+                toDate: e.toDate || null,
+                subjectsTaught: e.subjectsTeached,
+              })),
+            };
+            break;
+          case 5:
+            sectionName = "Documents";
+            payload = {
+              documents: formatDocumentsDictionary(profileData.documents),
+            };
+            break;
+          default:
+            break;
+        }
+
+        if (sectionName && effectiveStaffId) {
+          await apiClient.post(apiEndpoints.faculty.saveProfileDraft(effectiveStaffId), {
+            sectionName,
+            ...payload,
+          }).catch((err) => {
+            console.warn("Save profile draft endpoint notice:", err?.message || err);
+          });
+        }
+      } catch (e) {
+        console.warn("Failed to save profile draft to server:", e);
+      }
       showToast(`Step ${profileStep} (${PROFILE_STEPS[profileStep - 1].title}) saved.`);
     }
     if (profileStep < 6) {
@@ -940,14 +1254,23 @@ export default function TransportManagerProfile() {
     }
   };
 
-  const handleFinalProfileSave = () => {
+  const handleFinalProfileSave = async () => {
     setIsSavingProfile(true);
-    setTimeout(() => {
+    try {
+      if (effectiveStaffId) {
+        await apiClient.post(apiEndpoints.faculty.submitProfile(effectiveStaffId));
+      }
       persistProfile(profileData);
       setIsSavingProfile(false);
       setIsEditingProfile(false);
-      showToast("Complete profile updated and saved locally!", "success");
-    }, 500);
+      showToast("Complete staff profile updated and verified successfully!", "success");
+    } catch (e) {
+      console.warn("Failed to submit profile to server:", e);
+      persistProfile(profileData);
+      setIsSavingProfile(false);
+      setIsEditingProfile(false);
+      showToast("Profile updated and saved locally!", "success");
+    }
   };
 
   return (
@@ -1111,8 +1434,8 @@ export default function TransportManagerProfile() {
                   <input
                     type="text"
                     value={profileData.firstName || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="cms-field">
@@ -1120,8 +1443,8 @@ export default function TransportManagerProfile() {
                   <input
                     type="text"
                     value={profileData.middleName || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, middleName: e.target.value })}
+                    readOnly
+                    disabled
                     placeholder="—"
                   />
                 </div>
@@ -1134,8 +1457,8 @@ export default function TransportManagerProfile() {
                   <input
                     type="text"
                     value={profileData.lastName || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="cms-field">
@@ -1145,8 +1468,8 @@ export default function TransportManagerProfile() {
                   <input
                     type="date"
                     value={profileData.dob || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, dob: e.target.value })}
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="cms-field">
@@ -1155,10 +1478,9 @@ export default function TransportManagerProfile() {
                   </label>
                   <SelectInput
                     value={profileData.gender || "Male"}
-                    disabled={!isEditingProfile}
+                    disabled={true}
                     placeholder="Select Gender"
                     options={["Male", "Female", "Other"]}
-                    onChange={(e) => setProfileData({ ...profileData, gender: e.target.value })}
                   />
                 </div>
 
@@ -1168,10 +1490,19 @@ export default function TransportManagerProfile() {
                     Marital Status <span className="req">*</span>
                   </label>
                   <SelectInput
-                    value={profileData.maritalStatus || "Single"}
+                    value={
+                      profileData.maritalStatus
+                        ? profileData.maritalStatus.charAt(0).toUpperCase() + profileData.maritalStatus.slice(1).toLowerCase()
+                        : "Single"
+                    }
                     disabled={!isEditingProfile}
                     placeholder="Select Marital Status"
-                    options={["Single", "Married", "Divorced", "Widowed"]}
+                    options={[
+                      { value: "Single", label: "Single" },
+                      { value: "Married", label: "Married" },
+                      { value: "Divorced", label: "Divorced" },
+                      { value: "Widowed", label: "Widowed" },
+                    ]}
                     onChange={(e) => setProfileData({ ...profileData, maritalStatus: e.target.value })}
                   />
                 </div>
@@ -1193,8 +1524,8 @@ export default function TransportManagerProfile() {
                   <input
                     type="email"
                     value={profileData.email || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                    readOnly
+                    disabled
                   />
                 </div>
 
@@ -1215,8 +1546,7 @@ export default function TransportManagerProfile() {
                       "IT & Operations",
                     ]}
                     value={profileData.department || "Transport Operations"}
-                    disabled={!isEditingProfile}
-                    onChange={(val) => setProfileData({ ...profileData, department: val })}
+                    disabled={true}
                   />
                 </div>
                 <div className="cms-field">
@@ -1234,18 +1564,16 @@ export default function TransportManagerProfile() {
                       "Senior Transport Officer",
                     ]}
                     value={profileData.designation || "Transport Manager"}
-                    disabled={!isEditingProfile}
-                    onChange={(val) => setProfileData({ ...profileData, designation: val })}
+                    disabled={true}
                   />
                 </div>
                 <div className="cms-field">
                   <label>Blood Group</label>
                   <SelectInput
                     value={profileData.bloodGroup || "O+"}
-                    disabled={!isEditingProfile}
+                    disabled={true}
                     placeholder="Select Blood Group"
                     options={["O-", "O+", "A+", "A-", "B+", "B-", "AB+", "AB-"]}
-                    onChange={(e) => setProfileData({ ...profileData, bloodGroup: e.target.value })}
                   />
                 </div>
 
@@ -1257,8 +1585,8 @@ export default function TransportManagerProfile() {
                   <input
                     type="date"
                     value={profileData.dateOfJoining || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, dateOfJoining: e.target.value })}
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="cms-field">
@@ -1269,8 +1597,8 @@ export default function TransportManagerProfile() {
                     type="text"
                     maxLength={14}
                     value={profileData.aadhaar || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, aadhaar: e.target.value })}
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="cms-field">
@@ -1281,8 +1609,8 @@ export default function TransportManagerProfile() {
                     type="text"
                     maxLength={10}
                     value={profileData.pan || ""}
-                    disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, pan: e.target.value.toUpperCase() })}
+                    readOnly
+                    disabled
                   />
                 </div>
               </div>

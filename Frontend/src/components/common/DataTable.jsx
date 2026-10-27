@@ -3,7 +3,8 @@ import { Plus, Pencil, Trash2, Eye, Printer, FileSpreadsheet, FileText, ChevronD
 import Search3DIcon from "./Search3DIcon.jsx";
 import { StatusBadge, SkeletonRow } from "./Ui.jsx";
 
-const PAGE_SIZE = 5;
+const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 const textValue = (value) => {
   if (value == null) return "";
@@ -41,6 +42,7 @@ export default function DataTable({
   toolbarExtra,
   emptyMessage,
   paginationCurrentOnly = false,
+  pageSize = DEFAULT_PAGE_SIZE,
   enableExport = true,
   enablePdfExport = false,
   enableTablePrint = true,
@@ -49,6 +51,7 @@ export default function DataTable({
   const [page, setPage] = useState(1);
   const [exportOpen, setExportOpen] = useState(false);
 
+  const effectivePageSize = Math.max(1, Number(pageSize) || DEFAULT_PAGE_SIZE);
   const safeColumns = useMemo(() => (Array.isArray(columns) ? columns : []), [columns]);
   const hasActions = useMemo(() => Boolean(onView || onPrint || onEdit || onDelete), [onView, onPrint, onEdit, onDelete]);
   const colCount = useMemo(() => safeColumns.length + (hasActions ? 1 : 0), [safeColumns.length, hasActions]);
@@ -58,6 +61,10 @@ export default function DataTable({
     if (Array.isArray(data)) return data;
     return [];
   }, [rows, data]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, effectiveRows.length]);
 
   useEffect(() => {
     if (!onSearchChange) return undefined;
@@ -73,9 +80,9 @@ export default function DataTable({
     );
   }, [effectiveRows, query, onSearchChange]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / effectivePageSize));
   const current = Math.min(page, totalPages);
-  const pageRows = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const pageRows = filtered.slice((current - 1) * effectivePageSize, current * effectivePageSize);
 
   const exportExcel = async () => {
     const exportColumns = safeColumns.filter((column) => column.exportable !== false);
@@ -207,7 +214,7 @@ export default function DataTable({
           </thead>
           <tbody>
             {loading ? (
-              Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={colCount} />)
+              Array.from({ length: effectivePageSize }, (_, index) => <SkeletonRow key={index} columns={colCount} />)
             ) : pageRows.length === 0 ? (
               <tr>
                 <td colSpan={colCount}>
@@ -270,8 +277,8 @@ export default function DataTable({
 
       <div className="cms-pagination">
         <span className="cms-page-info">
-          Showing {filtered.length === 0 ? 0 : (current - 1) * PAGE_SIZE + 1}-
-          {Math.min(current * PAGE_SIZE, filtered.length)} of {filtered.length} records
+          Showing {filtered.length === 0 ? 0 : (current - 1) * effectivePageSize + 1}-
+          {Math.min(current * effectivePageSize, filtered.length)} of {filtered.length} records
         </span>
         <button className="cms-page-btn" disabled={current === 1} onClick={() => setPage(current - 1)}>
           Prev

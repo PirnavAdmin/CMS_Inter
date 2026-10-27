@@ -1,5 +1,6 @@
 // Examination Management Component
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   CalendarDays,
@@ -25,6 +26,8 @@ import {
   Users,
   Ban,
   RefreshCw,
+  FileSpreadsheet,
+  MoreVertical,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -104,6 +107,9 @@ const isCombinedExamination = (examOrForm) => {
   const mode = normalizeStatus(examOrForm.scheduleMode);
   if (mode === "PATTERN_WISE" || mode === "COMBINED_OBJECTIVE") return true;
 
+  const examMode = normalizeStatus(examOrForm.examMode || examOrForm.mode);
+  if (examMode === "OBJECTIVE") return true;
+
   const cat = String(
     examOrForm.examCategory ||
     examOrForm.category ||
@@ -120,7 +126,7 @@ const isCombinedExamination = (examOrForm) => {
   }
 
   // Check pattern indicator (Mains pattern, JEE Main, NEET, etc.)
-  const pat = String(examOrForm.examPattern || examOrForm.pattern || "").trim().toLowerCase();
+  const pat = String(examOrForm.examPattern || examOrForm.pattern || examOrForm.patternName || "").trim().toLowerCase();
   if (pat && pat !== "regular" && pat !== "regular pattern" && pat !== "regular academic pattern" && pat !== "none") {
     return true;
   }
@@ -139,9 +145,15 @@ const isCombinedExamination = (examOrForm) => {
   const name = String(examOrForm.name || examOrForm.examName || examOrForm.code || examOrForm.examCode || "").trim().toLowerCase();
   if (name.includes("objective") || name.includes("combined")) return true;
 
-  // Check schedules if any schedule has PATTERN_WISE or patternName
+  // Check schedules if any schedule has PATTERN_WISE, patternName, examMode === Objective, or includedSubjectIds
   if (Array.isArray(examOrForm.schedules) && examOrForm.schedules.length > 0) {
-    if (examOrForm.schedules.some((s) => s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName))) {
+    if (examOrForm.schedules.some((s) =>
+      s.scheduleMode === "PATTERN_WISE" ||
+      Boolean(s.patternName) ||
+      normalizeStatus(s.examMode) === "OBJECTIVE" ||
+      normalizeStatus(s.mode) === "OBJECTIVE" ||
+      (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0)
+    )) {
       return true;
     }
   }
@@ -1107,7 +1119,9 @@ function formatDDMMYYYY(val) {
       const year = dObj.getFullYear();
       return `${day}-${month}-${year}`;
     }
-  } catch (_) { }
+  } catch (_) {
+    /* ignore date format error */
+  }
   return String(val);
 }
 
@@ -1183,7 +1197,8 @@ function directExportScheduleExcel(
   // 1. Top Title Row: "Examination Schedules" (Dark blue banner)
   const titleRowIdx = aoa.length;
   titleRowIndices.push(titleRowIdx);
-  aoa.push(["Examination Schedules", "", "", "", ""]);
+  const mainTitleText = safeExams.length === 1 ? `${safeExams[0].name || safeExams[0].code || "Examination"} Schedule` : "Examination Schedules";
+  aoa.push([mainTitleText, "", "", "", ""]);
   merges.push({ s: { r: titleRowIdx, c: 0 }, e: { r: titleRowIdx, c: 4 } });
 
   // 2. Subheader Row: "Generated On" | Date
@@ -1333,6 +1348,180 @@ function directExportScheduleExcel(
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Examination_Schedules");
   XLSX.writeFile(workbook, `${filename.replace(/\s+/g, "_")}.xlsx`);
+  return true;
+}
+
+// Exports examination schedules to PDF matching the reference schedule layout
+async function directExportSchedulePdf(
+  targetExams,
+  schedules,
+  groupsList = [],
+  filename = "Examination_Schedules",
+  programsList = [],
+  academicYearsList = []
+) {
+  const safeExams = ensureArray(targetExams);
+  const safeSchedules = ensureArray(schedules);
+  if (!safeExams.length) return false;
+
+  const [{ jsPDF }, autoTableModule] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  const autoTable = autoTableModule?.default || autoTableModule;
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 24;
+  const contentWidth = pageWidth - margin * 2;
+  let currentY = margin;
+
+  const THEMES = [
+    { headerBg: [204, 227, 253], thBg: [226, 239, 254], border: [158, 197, 247], text: [15, 53, 103] }, // Blue
+    { headerBg: [203, 235, 212], thBg: [227, 246, 234], border: [153, 219, 171], text: [19, 78, 40] }, // Green
+    { headerBg: [253, 226, 202], thBg: [255, 240, 226], border: [248, 190, 140], text: [122, 49, 12] }, // Orange
+    { headerBg: [229, 219, 248], thBg: [242, 237, 252], border: [198, 180, 239], text: [76, 29, 149] }, // Purple
+  ];
+
+  // 1. Dark Blue Title Banner
+  doc.setFillColor(32, 64, 112); // #204070
+  doc.roundedRect(margin, currentY, contentWidth, 30, 3, 3, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(255, 255, 255);
+  const pdfTitleText = safeExams.length === 1 ? `${safeExams[0].name || safeExams[0].code || "Examination"} Schedule` : "Examination Schedules";
+  doc.text(pdfTitleText, pageWidth / 2, currentY + 20, { align: "center" });
+  currentY += 36;
+
+  // 2. Subheader Row: Generated On
+  const genH = 22;
+  doc.setDrawColor(148, 163, 184); // #94a3b8
+  doc.setLineWidth(0.75);
+  doc.setFillColor(255, 255, 255);
+  doc.rect(margin, currentY, contentWidth, genH, "FD");
+
+  const labelW = 140;
+  doc.line(margin + labelW, currentY, margin + labelW, currentY + genH);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text("Generated On", margin + 10, currentY + 15);
+
+  const todayFormatted = formatDDMMYYYY(new Date());
+  doc.setFont("helvetica", "bold");
+  doc.text(todayFormatted, margin + labelW + 10, currentY + 15);
+  currentY += genH + 14;
+
+  // 3. Examination Blocks
+  safeExams.forEach((exam, examIdx) => {
+    let examSchedules = safeSchedules.filter((s) => {
+      const sExamId = normalizeId(s.examId ?? s.examinationId);
+      const eExamId = normalizeId(exam.id ?? exam.examinationId);
+      return sExamId && eExamId ? sExamId === eExamId : true;
+    });
+    if (examSchedules.length === 0 && safeExams.length === 1) {
+      examSchedules = safeSchedules;
+    }
+
+    const theme = THEMES[examIdx % THEMES.length];
+    const examTitle = exam.name || exam.examName || "Examination";
+    const yearName =
+      nameOf(academicYearsList, exam.yearId || exam.academicYearId) !== "—"
+        ? nameOf(academicYearsList, exam.yearId || exam.academicYearId)
+        : exam.academicYearName || exam.yearName || "";
+
+    const examBanner =
+      yearName && !examTitle.includes(yearName)
+        ? `${examTitle} (${yearName})`
+        : examTitle;
+
+    // Check page overflow
+    if (currentY + 70 > pageHeight - margin) {
+      doc.addPage();
+      currentY = margin + 10;
+    }
+
+    // Exam Card Header
+    const cardHeaderH = 22;
+    doc.setFillColor(theme.headerBg[0], theme.headerBg[1], theme.headerBg[2]);
+    doc.setDrawColor(theme.border[0], theme.border[1], theme.border[2]);
+    doc.setLineWidth(0.75);
+    doc.rect(margin, currentY, contentWidth, cardHeaderH, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(theme.text[0], theme.text[1], theme.text[2]);
+    doc.text(examBanner, margin + 10, currentY + 15);
+    currentY += cardHeaderH;
+
+    // Table Data
+    const tableBody =
+      examSchedules.length > 0
+        ? examSchedules.map((s) => [
+            resolveSubjectDisplay(s),
+            resolveExamDateDisplay(s, exam),
+            resolveInvigilatorDisplay(s),
+            resolveRoomDisplay(s),
+            resolveModeDisplay(s),
+          ])
+        : [
+            [
+              {
+                content: "No sessions scheduled for this examination",
+                colSpan: 5,
+                styles: { halign: "center", fontStyle: "italic", textColor: [100, 116, 139] },
+              },
+            ],
+          ];
+
+    const tableConfig = {
+      startY: currentY,
+      margin: { left: margin, right: margin },
+      head: [["Subject", "Exam Date", "Invigilator", "Exam Hall / Room", "Exam Mode"]],
+      body: tableBody,
+      theme: "plain",
+      headStyles: {
+        fillColor: theme.thBg,
+        textColor: theme.text,
+        fontStyle: "bold",
+        fontSize: 9,
+        lineColor: theme.border,
+        lineWidth: 0.5,
+        cellPadding: 5,
+      },
+      bodyStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [30, 41, 59],
+        fontSize: 8.5,
+        lineColor: theme.border,
+        lineWidth: 0.5,
+        cellPadding: 5,
+      },
+      columnStyles: {
+        0: { cellWidth: contentWidth * 0.24 },
+        1: { cellWidth: contentWidth * 0.16 },
+        2: { cellWidth: contentWidth * 0.24 },
+        3: { cellWidth: contentWidth * 0.22 },
+        4: { cellWidth: contentWidth * 0.14 },
+      },
+      styles: {
+        overflow: "linebreak",
+      },
+    };
+
+    if (typeof autoTable === "function") {
+      autoTable(doc, tableConfig);
+    } else if (typeof doc.autoTable === "function") {
+      doc.autoTable(tableConfig);
+    }
+
+    currentY = (doc.lastAutoTable?.finalY || currentY) + 14;
+  });
+
+  const dateStr = new Date().toISOString().split("T")[0];
+  doc.save(`${filename.replace(/\s+/g, "_")}_${dateStr}.pdf`);
   return true;
 }
 
@@ -2099,7 +2288,7 @@ const normalizeScheduleRecord = (
   const totalCandidatesAlloc = hallAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0);
   const finalCandidateCount = totalCandidatesAlloc > 0 ? totalCandidatesAlloc : (fallbackStrength > 0 ? fallbackStrength : 0);
 
-  const combined = ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) || isCombinedExamination(examContext);
+  const combined = ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) || normalizeStatus(s?.examMode) === "OBJECTIVE" || normalizeStatus(s?.mode) === "OBJECTIVE" || (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 0) || isCombinedExamination(examContext);
   const configuredPattern = ensureArray(examContext?.selectedGroupPatterns?.[resolvedGroupId])[0] || examContext?.examPattern || "";
   const patternName = s?.patternName || (combined ? configuredPattern : "");
 
@@ -2263,7 +2452,7 @@ const validateSchedulePayload = (dto, isObj = false) => {
 
 // Format schedule entry to strict backend API DTO matching CreateExamScheduleRequest contract
 const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = [], targetCampusId = null, examContext = null, masterPatterns = []) => {
-  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName);
+  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName) || normalizeStatus(s.examMode) === "OBJECTIVE" || normalizeStatus(s.mode) === "OBJECTIVE" || (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0) || isCombinedExamination(examContext);
 
   // 1. Examination ID (Number > 0)
   const examNumericId = Number(targetExamId || s.examId || s.examinationId || examContext?.id);
@@ -2982,22 +3171,35 @@ const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList =
     e?.categoryName ??
     e?.rawCategory;
 
+  const pat = e?.examPattern ?? e?.pattern ?? e?.patternName ?? "";
+  const isPatObjective = Boolean(pat && String(pat).trim() !== "" && !["regular", "regular pattern", "regular academic pattern", "none"].includes(String(pat).trim().toLowerCase()));
+  const hasObjectiveSched = Array.isArray(rawSchedules) && rawSchedules.some((s) =>
+    normalizeStatus(s?.scheduleMode) === "PATTERN_WISE" ||
+    normalizeStatus(s?.examMode) === "OBJECTIVE" ||
+    normalizeStatus(s?.mode) === "OBJECTIVE" ||
+    (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 0) ||
+    Boolean(s?.patternName)
+  );
+
   let resolvedExamCategory = "Regular";
   const catCandidate = rawCat ? String(rawCat).trim() : "";
-  if (isCombinedExamination(e) || catCandidate.toLowerCase() === "objective" || catCandidate.toLowerCase().includes("objective")) {
+  if (
+    isCombinedExamination(e) ||
+    catCandidate.toLowerCase() === "objective" ||
+    catCandidate.toLowerCase().includes("objective") ||
+    isPatObjective ||
+    hasObjectiveSched ||
+    normalizeStatus(e?.scheduleMode) === "PATTERN_WISE" ||
+    normalizeStatus(e?.scheduleMode) === "COMBINED_OBJECTIVE" ||
+    normalizeStatus(e?.examMode) === "OBJECTIVE" ||
+    (e?.examName && String(e.examName).toLowerCase().includes("objective")) ||
+    (e?.name && String(e.name).toLowerCase().includes("objective"))
+  ) {
     resolvedExamCategory = "Objective";
   } else if (catCandidate.toLowerCase() === "others") {
     resolvedExamCategory = "Others";
-  } else if (catCandidate.toLowerCase() === "regular") {
-    resolvedExamCategory = "Regular";
   } else {
-    resolvedExamCategory = catCandidate || "Regular";
-  }
-
-  const pat = e?.examPattern ?? e?.pattern ?? "";
-  const isPatObjective = pat && pat !== "Regular" && pat !== "Regular Academic Pattern" && pat !== "None";
-  if (isPatObjective || (e?.examName && String(e.examName).toLowerCase().includes("objective")) || (e?.name && String(e.name).toLowerCase().includes("objective"))) {
-    resolvedExamCategory = "Objective";
+    resolvedExamCategory = "Regular";
   }
 
   const rawGroupPatterns = e?.selectedGroupPatterns || {};
@@ -3149,6 +3351,25 @@ export default function ExaminationPage() {
   const [deleteScheduleLoading, setDeleteScheduleLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editing, setEditing] = useState(null);
+
+  const [moreMenu, setMoreMenu] = useState(null);
+  const moreMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!moreMenu) return;
+    const handleOutside = (event) => {
+      if (!moreMenuRef.current || !moreMenuRef.current.contains(event.target)) {
+        setMoreMenu(null);
+      }
+    };
+    const handleScroll = () => setMoreMenu(null);
+    window.addEventListener("mousedown", handleOutside);
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      window.removeEventListener("mousedown", handleOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [moreMenu]);
 
   const [sch, setSch] = useState({
     groupId: "",
@@ -3417,8 +3638,16 @@ export default function ExaminationPage() {
         return finalExams.map((exam) => {
           const existing = prevMap.get(normalizeId(exam.id));
           if (existing) {
+            const isObj =
+              exam.examCategory === "Objective" ||
+              existing.examCategory === "Objective" ||
+              isCombinedExamination(exam) ||
+              isCombinedExamination(existing);
             return {
               ...exam,
+              examCategory: isObj ? "Objective" : exam.examCategory,
+              category: isObj ? "Objective" : exam.category,
+              scheduleMode: isObj ? "PATTERN_WISE" : exam.scheduleMode,
               selectedSubjectIds: (exam.selectedSubjectIds && exam.selectedSubjectIds.length > 0)
                 ? exam.selectedSubjectIds
                 : (!exam.needsSubjectSelection ? [] : (existing.selectedSubjectIds || [])),
@@ -3529,16 +3758,49 @@ export default function ExaminationPage() {
   // Robust Student Fetching & Enrichment from Students, Admissions, and Active Endpoints
   const fetchStudentsList = useCallback(async (signal) => {
     try {
-      const [studentsRes, admissionsRes, activeStudentsRes] = await Promise.allSettled([
-        apiClient.get("/api/v1/students", { signal }),
-        apiClient.get("/api/v1/student-admissions", { signal }),
-        apiClient.get("/api/v1/students/active", { signal }),
-      ]);
-      if (signal?.aborted) return [];
+      const scopeParams = {
+        campusId: effectiveCampusId ? Number(effectiveCampusId) : undefined,
+        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+      };
 
-      const rawStudents = studentsRes.status === "fulfilled" ? unwrap(studentsRes.value) : [];
-      const rawAdmissions = admissionsRes.status === "fulfilled" ? unwrap(admissionsRes.value) : [];
-      const rawActive = activeStudentsRes.status === "fulfilled" ? unwrap(activeStudentsRes.value) : [];
+      // Fetch all students across pages with academic scope
+      const allStudents = [];
+      const fetchPageSize = 100;
+      for (let pageNumber = 1; ; pageNumber += 1) {
+        if (signal?.aborted) return [];
+        try {
+          const res = await apiClient.get("/api/v1/students", {
+            params: { ...scopeParams, pageNumber, pageSize: fetchPageSize },
+            signal,
+            skipGlobalLoader: true,
+          });
+          const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
+          const batch = Array.isArray(payload)
+            ? payload
+            : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
+          allStudents.push(...batch);
+          const totalCount = payload.totalCount ?? payload.TotalCount;
+          if (!batch.length || (totalCount != null ? allStudents.length >= Number(totalCount) : batch.length < fetchPageSize)) break;
+          if (pageNumber >= 15) break; // Safeguard
+        } catch (fetchErr) {
+          console.warn("Notice: could not query page of students:", fetchErr);
+          break;
+        }
+      }
+
+      // Fetch admissions matching the academic scope
+      let rawAdmissions = [];
+      try {
+        const admissionsRes = await apiClient.get("/api/v1/student-admissions", {
+          params: scopeParams,
+          signal,
+          skipGlobalLoader: true,
+        });
+        rawAdmissions = unwrap(admissionsRes) || [];
+      } catch (admErr) {
+        console.warn("Notice: could not query student admissions:", admErr);
+      }
 
       const admissionsByStudentId = new Map();
       const admissionsByNumber = new Map();
@@ -3546,24 +3808,21 @@ export default function ExaminationPage() {
 
       ensureArray(rawAdmissions).forEach((adm) => {
         const sId = normalizeId(adm.studentId ?? adm.id);
-        const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? "").trim();
+        const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? adm.AdmissionNo ?? "").trim();
         const admName = String(adm.studentName ?? adm.fullName ?? adm.name ?? "").trim().toLowerCase();
         if (sId) admissionsByStudentId.set(sId, adm);
         if (admNo) admissionsByNumber.set(admNo, adm);
         if (admName) admissionsByName.set(admName, adm);
       });
 
-      const combinedRaw = [...ensureArray(rawStudents), ...ensureArray(rawActive)];
-      if (combinedRaw.length === 0 && rawAdmissions.length > 0) {
-        combinedRaw.push(...ensureArray(rawAdmissions));
-      }
+      const combinedRaw = allStudents.length > 0 ? allStudents : ensureArray(rawAdmissions);
 
       const seenIds = new Set();
       const normalizedStudents = [];
 
       for (const s of combinedRaw) {
         const id = normalizeId(s.studentId ?? s.id ?? s._id);
-        const admNo = String(s.admissionNo ?? s.admissionNumber ?? "").trim();
+        const admNo = String(s.admissionNo ?? s.admissionNumber ?? s.AdmissionNo ?? "").trim();
         const sName = String(s.studentName ?? s.fullName ?? s.name ?? "Student").trim();
         const dedupKey = id || admNo || sName.toLowerCase();
         if (!dedupKey || seenIds.has(dedupKey)) continue;
@@ -3582,6 +3841,8 @@ export default function ExaminationPage() {
         const rawCampus = s.campusId ?? s.CampusId ?? s.campus?.id ?? s.campus?.campusId ?? adm.campusId ?? adm.CampusId;
         const sCampusId = normalizeId(rawCampus);
 
+        const admissionDate = s.admissionDate || s.dateOfAdmission || adm.admissionDate || adm.AdmissionDate || s.allocatedDate || null;
+
         normalizedStudents.push({
           id: id || admNo || `student-${dedupKey}`,
           studentId: id || admNo,
@@ -3596,48 +3857,18 @@ export default function ExaminationPage() {
           programId,
           programName,
           status,
+          admissionDate: admissionDate ? String(admissionDate).slice(0, 10) : null,
           isActive: s.isActive !== false && normalizeStatus(status) !== "INACTIVE" && normalizeStatus(status) !== "SUSPENDED",
-        });
-      }
-
-      // If admissions had records and students list was completely empty, add them as fallback
-      if (combinedRaw.length === 0) {
-        ensureArray(rawAdmissions).forEach((adm) => {
-          const id = normalizeId(adm.studentId ?? adm.id);
-          const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? "").trim();
-          const admFullName = `${adm.firstName ?? ""} ${adm.lastName ?? ""}`.trim();
-          const sName = String(adm.studentName ?? adm.fullName ?? adm.name ?? (admFullName || "Student")).trim();
-          const dedupKey = id || admNo || sName.toLowerCase();
-          if (dedupKey && !seenIds.has(dedupKey)) {
-            seenIds.add(dedupKey);
-            const admCampusId = normalizeId(adm.campusId ?? adm.CampusId ?? adm.campus?.id);
-            normalizedStudents.push({
-              id: id || admNo || `adm-${dedupKey}`,
-              studentId: id || admNo,
-              campusId: admCampusId,
-              name: sName,
-              admissionNo: admNo,
-              rollNo: adm.rollNo ?? adm.rollNumber ?? "",
-              academicLevelId: normalizeId(adm.academicLevelId ?? adm.levelId),
-              academicYearId: normalizeId(adm.academicYearId),
-              groupId: normalizeId(adm.groupId ?? adm.group?.id),
-              groupName: adm.groupName ?? "",
-              programId: normalizeId(adm.programId ?? adm.programmeId ?? adm.program?.id),
-              programName: adm.programName ?? adm.programmeName ?? "",
-              status: adm.status ?? "Active",
-              isActive: adm.isActive !== false && normalizeStatus(adm.status) !== "INACTIVE",
-            });
-          }
         });
       }
 
       setStudents(normalizedStudents);
       return normalizedStudents;
     } catch (e) {
-      console.warn("fetchStudentsList encountered an issue:", e);
+      console.warn("fetchStudentsList error:", e);
       return [];
     }
-  }, []);
+  }, [effectiveCampusId, selectedBoardId, selectedAcademicYearId]);
 
   // Robust Room & Exam Hall Fetching via GET /api/v1/rooms
   const fetchRoomsList = useCallback(async (filters = {}, signal, targetCampusId = effectiveCampusId) => {
@@ -4114,155 +4345,132 @@ export default function ExaminationPage() {
   };
 
   const handleExportExaminationList = () => {
-    if (!list.length) {
-      showToast("No examinations found to export.", "warning");
-      return;
-    }
-
-    const exportData = list.map((e) => ({
-      "Exam Code": e.code || "",
-      "Exam Name": e.name || "",
-      "Academic Level(s)": getLevelNames(e, academicLevels),
-      "Group(s)": getGroupNames(e, groups),
-      "Program(s)": getProgramNames(e, programs),
-      "Exam Category": e.examCategory || "Regular",
-      "Exam Pattern(s)": e.examPattern || "Standard Pattern",
-      "Start Date": d(e.startDate),
-      "End Date": d(e.endDate),
-      "Status": normalizeStatus(e.status) || "DRAFT",
-      "Total Marks": e.totalMarks || "—",
-      "Pass Percentage": e.passPercentage ? `${e.passPercentage}%` : "—",
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws["!cols"] = [
-      { wch: 16 },
-      { wch: 28 },
-      { wch: 20 },
-      { wch: 22 },
-      { wch: 22 },
-      { wch: 16 },
-      { wch: 20 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 12 },
-      { wch: 16 },
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Examinations");
-    const dateStr = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Examinations_List_${dateStr}.xlsx`);
-    showToast("Examination list exported successfully.", "success");
+    printSchedule();
   };
 
   const printSchedule = async (targetExam = null) => {
-    const targetExams = targetExam
-      ? [targetExam]
-      : exams.filter((item) => normalizeStatus(item.status) === "SCHEDULED");
-    const filename = targetExam ? `${targetExam.name}_Schedule` : "Examination_Schedules";
+    let targetExams = [];
+    if (targetExam) {
+      targetExams = [targetExam];
+    } else {
+      const activeInList = (list.length > 0 ? list : exams).filter(
+        (item) => normalizeStatus(item.status) !== "CANCELLED"
+      );
+      const scheduledInList = activeInList.filter(
+        (item) => normalizeStatus(item.status) === "SCHEDULED"
+      );
+      targetExams = scheduledInList.length > 0 ? scheduledInList : activeInList;
+    }
 
     if (!targetExams.length) {
-      showToast("No scheduled examinations are available to export.", "warning");
+      showToast("No examinations are available to export.", "warning");
       return;
     }
 
-    if (!targetExam) {
-      // Global schedule export: Open preview modal styled like reference; only download when user clicks modal download button
+    // Open preview modal styled like reference template with Download Excel and Download PDF buttons
+    setGlobalPreviewModal({
+      targetExams,
+      schedules: [],
+      loading: true,
+    });
+
+    try {
+      const results = await Promise.all(
+        targetExams.map(async (e) => {
+          if (Array.isArray(e.schedules) && e.schedules.length > 0) {
+            return e.schedules.map((entry) => ({
+              ...normalizeScheduleRecord(
+                entry,
+                e.groupIds?.[0] || e.groupId || groups[0]?.id,
+                e,
+                groups,
+                eligibleSubjects,
+                rooms,
+                faculty,
+                programs,
+                students
+              ),
+              examId: e.id,
+              examinationId: e.id,
+              examCode: e.code,
+              examName: e.name,
+              examCategory: e.examCategory,
+              startDate: e.startDate,
+              endDate: e.endDate,
+              programId: entry.programId || e.programIds?.[0] || e.programId,
+              programName: entry.programName || e.programName || resolveProgramText(entry, e, programs),
+              groupId: entry.groupId || e.groupIds?.[0] || e.groupId,
+              groupName: entry.groupName || e.groupName || resolveGroupText(entry, e, groups),
+            }));
+          }
+          const inState = schedules.filter(
+            (s) => normalizeId(s.examId ?? s.examinationId) === normalizeId(e.id)
+          );
+          if (inState.length > 0) {
+            return inState;
+          }
+          try {
+            let schedRes;
+            try {
+              schedRes = await apiClient.get(`/api/v1/examinations/${e.id}/schedules`, {
+                params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
+                headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+              });
+            } catch {
+              schedRes = await apiClient.get(`/api/v1/examinations/${e.id}/schedules`);
+            }
+            return unwrap(schedRes).map((entry) => ({
+              ...normalizeScheduleRecord(
+                entry,
+                e.groupIds?.[0] || e.groupId || groups[0]?.id,
+                e,
+                groups,
+                eligibleSubjects,
+                rooms,
+                faculty,
+                programs,
+                students
+              ),
+              examId: e.id,
+              examinationId: e.id,
+              examCode: e.code,
+              examName: e.name,
+              examCategory: e.examCategory,
+              startDate: e.startDate,
+              endDate: e.endDate,
+              programId: entry.programId || e.programIds?.[0] || e.programId,
+              programName: entry.programName || e.programName || resolveProgramText(entry, e, programs),
+              groupId: entry.groupId || e.groupIds?.[0] || e.groupId,
+              groupName: entry.groupName || e.groupName || resolveGroupText(entry, e, groups),
+            }));
+          } catch {
+            return [];
+          }
+        })
+      );
+
+      const currentSchedules = results.flat();
+
+      if (currentSchedules.length > 0) {
+        setSchedules((prev) => [
+          ...prev.filter(
+            (entry) =>
+              !targetExams.some(
+                (te) => normalizeId(te.id) === normalizeId(entry.examId ?? entry.examinationId)
+              )
+          ),
+          ...currentSchedules,
+        ]);
+      }
+
       setGlobalPreviewModal({
         targetExams,
-        schedules: [],
-        loading: true,
+        schedules: currentSchedules,
+        loading: false,
       });
-
-      try {
-        const results = await Promise.all(
-          targetExams.map((e) =>
-            apiClient.get(`/api/v1/examinations/${e.id}/schedules`, {
-              params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
-              headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-            }).then((res) =>
-              unwrap(res).map((entry) => ({
-                ...normalizeScheduleRecord(
-                  entry,
-                  e.groupIds?.[0] || e.groupId || groups[0]?.id,
-                  e,
-                  groups,
-                  eligibleSubjects,
-                  rooms,
-                  faculty,
-                  programs,
-                  students
-                ),
-                examId: e.id,
-                examinationId: e.id,
-                examCode: e.code,
-                examName: e.name,
-                examCategory: e.examCategory,
-                startDate: e.startDate,
-                endDate: e.endDate,
-                programId: entry.programId || e.programIds?.[0] || e.programId,
-                programName: entry.programName || e.programName || resolveProgramText(entry, e, programs),
-                groupId: entry.groupId || e.groupIds?.[0] || e.groupId,
-                groupName: entry.groupName || e.groupName || resolveGroupText(entry, e, groups),
-              }))
-            ).catch(() => [])
-          )
-        );
-
-        const currentSchedules = results.flat();
-
-        setGlobalPreviewModal({
-          targetExams,
-          schedules: currentSchedules,
-          loading: false,
-        });
-      } catch (err) {
-        setGlobalPreviewModal(null);
-        showToast(getApiErrorMessage(err) || "Failed to load global schedules.", "error");
-      }
-      return;
-    }
-
-    // Single exam export flow
-    let currentSchedules = schedules.filter((s) => normalizeId(s.examId ?? s.examinationId) === normalizeId(targetExam.id));
-    if (currentSchedules.length === 0 && targetExam.id) {
-      try {
-        const schedRes = await apiClient.get(`/api/v1/examinations/${targetExam.id}/schedules`, {
-          params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
-          headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-        });
-        currentSchedules = unwrap(schedRes).map((entry) => ({
-          ...normalizeScheduleRecord(
-            entry,
-            targetExam.groupIds?.[0] || targetExam.groupId || groups[0]?.id,
-            targetExam,
-            groups,
-            eligibleSubjects,
-            rooms,
-            faculty,
-            programs,
-            students
-          ),
-          examinationId: targetExam.id,
-          examCode: targetExam.code,
-          examName: targetExam.name,
-        }));
-      } catch (_) { }
-    }
-
-    const ok = directExportScheduleExcel(
-      [targetExam],
-      currentSchedules,
-      groups,
-      filename,
-      programs,
-      academicYears.length > 0 ? academicYears : contextAcademicYears
-    );
-    if (!ok) {
-      showToast("No schedules are available to export for this examination.", "warning");
-    } else {
-      showToast("Schedule exported to Excel successfully.", "success");
+    } catch (err) {
+      setGlobalPreviewModal(null);
+      showToast(getApiErrorMessage(err) || "Failed to load examination schedules.", "error");
     }
   };
 
@@ -4582,6 +4790,35 @@ export default function ExaminationPage() {
         }
       }
     } finally { mutationRef.current = false; }
+  };
+
+  const handleScheduleExam = (targetExam) => {
+    if (!targetExam) return;
+    const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
+    const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
+    if (targetExam.boardId && currentCtxBoardId && normalizeId(targetExam.boardId) !== currentCtxBoardId && setSelectedBoard) {
+      setSelectedBoard(targetExam.boardId);
+    }
+    if (targetExam.yearId && currentCtxYearId && normalizeId(targetExam.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
+      setSelectedAcademicYear(targetExam.yearId);
+    }
+    setExamId(String(targetExam.id));
+    setActiveTab("schedule");
+    setEditing(null);
+  };
+
+  const handleEditExamScope = (targetExam) => {
+    if (!targetExam) return;
+    const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
+    const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
+    if (targetExam.boardId && currentCtxBoardId && normalizeId(targetExam.boardId) !== currentCtxBoardId && setSelectedBoard) {
+      setSelectedBoard(targetExam.boardId);
+    }
+    if (targetExam.yearId && currentCtxYearId && normalizeId(targetExam.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
+      setSelectedAcademicYear(targetExam.yearId);
+    }
+    setEditingExamId(String(targetExam.id));
+    setViewMode("edit");
   };
 
   // Delete Examination API Call
@@ -5206,128 +5443,141 @@ export default function ExaminationPage() {
                 {examsLoading ? (
                   <ExaminationTableSkeleton />
                 ) : shownExams.length ? (
-                  shownExams.map((e) => (
-                    <tr key={e.id}>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.code}>
-                          {e.code}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.name}>
-                          {e.name}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines exam-cell-academic-level" title={getLevelNames(e, academicLevels)}>
-                          {getLevelNames(e, academicLevels)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={getGroupNames(e, groups)}>
-                          {getGroupNames(e, groups)}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className="exam-cell-two-lines"
-                          title={getProgramNames(e, programs)}
-                        >
-                          {getProgramNames(e, programs)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines">{e.examCategory || "Regular"}</span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.examPattern || "Standard Pattern"}>
-                          {e.examPattern || "Standard Pattern"}
-                        </span>
-                      </td>
-                      <td>
-                        {d(e.startDate)}
-                        <small className="exam-muted"> to {d(e.endDate)}</small>
-                      </td>
-                      <td className="exam-status-cell">
-                        <span className={`cms-badge exam-status-badge exam-status-${normalizeStatus(e.status).toLowerCase()}`}>
-                          {normalizeStatus(e.status) || "DRAFT"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="cms-actions">
-                          <button
-                            type="button"
-                            className="cms-action-btn view"
-                            title="View Details"
-                            onClick={() => handleOpenDetails(e)}
+                  shownExams.map((e) => {
+                    const examStatus = normalizeStatus(e.status) || "DRAFT";
+                    const isDraft = examStatus === "DRAFT";
+                    const isScheduled =
+                      examStatus === "SCHEDULED" ||
+                      examStatus === "ONGOING" ||
+                      examStatus === "ACTIVE" ||
+                      examStatus === "PUBLISHED";
+                    const isCompleted = examStatus === "COMPLETED";
+                    const isCancelled = examStatus === "CANCELLED";
+
+                    return (
+                      <tr key={e.id}>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.code}>
+                            {e.code}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.name}>
+                            {e.name}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines exam-cell-academic-level" title={getLevelNames(e, academicLevels)}>
+                            {getLevelNames(e, academicLevels)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={getGroupNames(e, groups)}>
+                            {getGroupNames(e, groups)}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className="exam-cell-two-lines"
+                            title={getProgramNames(e, programs)}
                           >
-                            <Eye size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn"
-                            title={e.status === "COMPLETED" ? "View Examination Schedule" : "Schedule / Reschedule Examination"}
-                            onClick={() => {
-                              const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
-                              const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
-                              if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
-                                setSelectedBoard(e.boardId);
-                              }
-                              if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
-                                setSelectedAcademicYear(e.yearId);
-                              }
-                              setExamId(String(e.id));
-                              setActiveTab("schedule");
-                              setEditing(null);
-                            }}
-                          >
-                            <CalendarDays size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn edit"
-                            title="Edit Examination Scope"
-                            onClick={() => {
-                              const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
-                              const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
-                              if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
-                                setSelectedBoard(e.boardId);
-                              }
-                              if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
-                                setSelectedAcademicYear(e.yearId);
-                              }
-                              setEditingExamId(String(e.id));
-                              setViewMode("edit");
-                            }}
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn warning"
-                            title={normalizeStatus(e.status) === "CANCELLED" ? "Examination already cancelled" : "Cancel Examination"}
-                            onClick={() => {
-                              if (normalizeStatus(e.status) === "CANCELLED") {
-                                showToast(`Examination "${e.name}" is already cancelled.`, "info");
-                                return;
-                              }
-                              setCancelExamTarget(e);
-                            }}
-                          >
-                            <Ban size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn danger"
-                            title="Delete Examination"
-                            onClick={() => setRemove(e)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {getProgramNames(e, programs)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines">{e.examCategory || "Regular"}</span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.examPattern || "Standard Pattern"}>
+                            {e.examPattern || "Standard Pattern"}
+                          </span>
+                        </td>
+                        <td>
+                          {d(e.startDate)}
+                          <small className="exam-muted"> to {d(e.endDate)}</small>
+                        </td>
+                        <td className="exam-status-cell">
+                          <span className={`cms-badge exam-status-badge exam-status-${examStatus.toLowerCase()}`}>
+                            {examStatus}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="cms-actions">
+                            <button
+                              type="button"
+                              className="cms-action-btn view"
+                              title="View Details"
+                              aria-label="View Details"
+                              onClick={() => handleOpenDetails(e)}
+                            >
+                              <Eye size={15} />
+                            </button>
+                            {isDraft && (
+                              <button
+                                type="button"
+                                className="cms-action-btn edit"
+                                title="Edit Examination Scope"
+                                aria-label="Edit Examination Scope"
+                                onClick={() => handleEditExamScope(e)}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            )}
+                            {(isScheduled || isCompleted) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn print"
+                                title="Print / Export Examination Schedule"
+                                aria-label="Print / Export Examination Schedule"
+                                onClick={() => printSchedule(e)}
+                              >
+                                <Printer size={15} />
+                              </button>
+                            )}
+                            {(isCancelled || isDraft) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn danger delete"
+                                title={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
+                                aria-label={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
+                                onClick={() => setRemove(e)}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                            {(isDraft || isScheduled) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn more"
+                                aria-label="More actions"
+                                title="More actions"
+                                aria-haspopup="menu"
+                                aria-expanded={moreMenu?.id === String(e.id)}
+                                onClick={(event) => {
+                                  const id = String(e.id);
+                                  if (moreMenu?.id === id) {
+                                    setMoreMenu(null);
+                                    return;
+                                  }
+                                  const rect = event.currentTarget.getBoundingClientRect();
+                                  const openAbove = rect.bottom + 190 > window.innerHeight;
+                                  setMoreMenu({
+                                    id,
+                                    exam: e,
+                                    style: openAbove
+                                      ? { bottom: window.innerHeight - rect.top + 6, right: window.innerWidth - rect.right }
+                                      : { top: rect.bottom + 6, right: window.innerWidth - rect.right },
+                                  });
+                                }}
+                              >
+                                <MoreVertical size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan="10">
@@ -5605,16 +5855,56 @@ export default function ExaminationPage() {
           programs={programs}
           academicYears={academicYears.length > 0 ? academicYears : contextAcademicYears}
           onClose={() => setGlobalPreviewModal(null)}
-          onExport={(filteredSchedules) => {
+          onExportExcel={(filteredSchedules) => {
+            const isSingle = globalPreviewModal.targetExams.length === 1;
+            const singleExam = isSingle ? globalPreviewModal.targetExams[0] : null;
+            const baseName = singleExam
+              ? (singleExam.name || singleExam.code || "Examination")
+              : "Examination_Schedules";
+            const safeFileName = `${baseName.replace(/[\/\\?%*:|"<>]/g, "_")}${isSingle ? "_Schedule" : ""}`;
+
             directExportScheduleExcel(
               globalPreviewModal.targetExams,
               filteredSchedules || globalPreviewModal.schedules,
               groups,
-              "Examination_Schedules",
+              safeFileName,
               programs,
               academicYears.length > 0 ? academicYears : contextAcademicYears
             );
-            showToast("Examination schedules exported successfully.", "success");
+            showToast(
+              isSingle
+                ? `Examination "${singleExam.name || singleExam.code}" schedule exported to Excel successfully.`
+                : "Examination schedules exported to Excel successfully.",
+              "success"
+            );
+          }}
+          onExportPdf={async (filteredSchedules) => {
+            const isSingle = globalPreviewModal.targetExams.length === 1;
+            const singleExam = isSingle ? globalPreviewModal.targetExams[0] : null;
+            const baseName = singleExam
+              ? (singleExam.name || singleExam.code || "Examination")
+              : "Examination_Schedules";
+            const safeFileName = `${baseName.replace(/[\/\\?%*:|"<>]/g, "_")}${isSingle ? "_Schedule" : ""}`;
+
+            try {
+              await directExportSchedulePdf(
+                globalPreviewModal.targetExams,
+                filteredSchedules || globalPreviewModal.schedules,
+                groups,
+                safeFileName,
+                programs,
+                academicYears.length > 0 ? academicYears : contextAcademicYears
+              );
+              showToast(
+                isSingle
+                  ? `Examination "${singleExam.name || singleExam.code}" schedule downloaded as PDF successfully.`
+                  : "Examination schedules downloaded as PDF successfully.",
+                "success"
+              );
+            } catch (err) {
+              console.error("PDF generation error:", err);
+              showToast("Failed to generate PDF schedule.", "error");
+            }
           }}
         />
       )}
@@ -5824,7 +6114,7 @@ export default function ExaminationPage() {
 
       {remove && (
         <ConfirmDialog
-          title={remove.status === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
+          title={normalizeStatus(remove.status) === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
           message={`Delete ${remove.name}? All associated schedules will be removed.`}
           onCancel={() => !deleteLoading && setRemove(null)}
           onConfirm={handleDeleteExam}
@@ -5859,6 +6149,133 @@ export default function ExaminationPage() {
           danger={true}
         />
       )}
+
+      {moreMenu ? createPortal(
+        <div ref={moreMenuRef} className="exam-row-more-menu" style={moreMenu.style} role="menu">
+          {(() => {
+            const rowExam = moreMenu.exam;
+            const rowStatus = normalizeStatus(rowExam?.status) || "DRAFT";
+            const rowIsDraft = rowStatus === "DRAFT";
+            const rowIsScheduled =
+              rowStatus === "SCHEDULED" ||
+              rowStatus === "ONGOING" ||
+              rowStatus === "ACTIVE" ||
+              rowStatus === "PUBLISHED";
+            const rowIsCancelled = rowStatus === "CANCELLED";
+
+            return (
+              <>
+                {rowIsScheduled && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        handleScheduleExam(rowExam);
+                      }}
+                    >
+                      <CalendarDays size={16} aria-hidden="true" /> Reschedule Examination
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        printSchedule(rowExam);
+                      }}
+                    >
+                      <Printer size={16} aria-hidden="true" /> Print / Export Schedule
+                    </button>
+                    <div className="exam-row-more-divider" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="is-danger"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        if (normalizeStatus(rowExam.status) === "CANCELLED") {
+                          showToast(`Examination "${rowExam.name}" is already cancelled.`, "info");
+                          return;
+                        }
+                        setCancelExamTarget(rowExam);
+                      }}
+                    >
+                      <Ban size={16} aria-hidden="true" /> Cancel Examination
+                    </button>
+                  </>
+                )}
+
+                {rowIsDraft && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        handleScheduleExam(rowExam);
+                      }}
+                    >
+                      <CalendarDays size={16} aria-hidden="true" /> Schedule Examination
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        handleEditExamScope(rowExam);
+                      }}
+                    >
+                      <Pencil size={16} aria-hidden="true" /> Edit Examination Scope
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        if (normalizeStatus(rowExam.status) === "CANCELLED") {
+                          showToast(`Examination "${rowExam.name}" is already cancelled.`, "info");
+                          return;
+                        }
+                        setCancelExamTarget(rowExam);
+                      }}
+                    >
+                      <Ban size={16} aria-hidden="true" /> Cancel Examination
+                    </button>
+                    <div className="exam-row-more-divider" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="is-danger"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        setRemove(rowExam);
+                      }}
+                    >
+                      <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                    </button>
+                  </>
+                )}
+
+                {rowIsCancelled && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    onClick={() => {
+                      setMoreMenu(null);
+                      setRemove(rowExam);
+                    }}
+                  >
+                    <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                  </button>
+                )}
+              </>
+            );
+          })()}
+        </div>,
+        document.body,
+      ) : null}
 
       <Toast
         message={typeof toast === "string" ? toast : toast.message}
@@ -6063,7 +6480,7 @@ function SearchableSingleSelect({
 
         {open && !disabled && (
           <div
-            className="cms-searchable-select-dropdown staff-search-dropdown-menu"
+            className="cms-searchable-select-dropdown"
             style={{
               backgroundColor: "#ffffff",
               background: "#ffffff",
@@ -8222,14 +8639,14 @@ function ScheduleSection({
   const [readinessErrors, setReadinessErrors] = useState([]);
   const [editingHallsSchedule, setEditingHallsSchedule] = useState(null);
 
-  // Draft schedules can be created; scheduled, ongoing, completed, active, published or cancelled examinations can be viewed or managed.
+  // Scheduled and draft examinations only in schedule dropdown (removing completed, cancelled)
   const schedulableExams = useMemo(
-    () => exams.filter((ex) => ["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED", "ACTIVE", "PUBLISHED", "CANCELLED"].includes(normalizeStatus(ex.status))),
+    () => exams.filter((ex) => ["DRAFT", "SCHEDULED"].includes(normalizeStatus(ex.status))),
     [exams],
   );
 
   useEffect(() => {
-    if (examId && (!exam || !["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED", "ACTIVE", "PUBLISHED", "CANCELLED"].includes(normalizeStatus(exam.status)))) {
+    if (examId && (!exam || !["DRAFT", "SCHEDULED"].includes(normalizeStatus(exam.status)))) {
       const stillValid = schedulableExams.some((e) => normalizeId(e.id) === normalizeId(examId));
       if (!stillValid) setExamId("");
     }
@@ -8254,9 +8671,26 @@ function ScheduleSection({
     if (editing && sch.groupId && normalizeId(sch.groupId) !== normalizeId(selectedGroupId)) {
       setSelectedGroupId(sch.groupId);
     } else if (!editing && selectedGroupId && normalizeId(sch.groupId) !== normalizeId(selectedGroupId)) {
-      setSch((prev) => ({ ...prev, groupId: selectedGroupId, subjectId: "", patternName: "", hallAssignments: [] }));
+      setSch((prev) => ({
+        ...prev,
+        groupId: selectedGroupId,
+        subjectId: "",
+        patternName: "",
+        hallAssignments: [],
+        ...(isCombined ? {
+          mode: "Objective",
+          examMode: "Objective",
+          totalMarks: sch.totalMarks && sch.totalMarks !== "100" ? sch.totalMarks : (exam?.totalMarks ? String(exam.totalMarks) : "300"),
+          passPercentage: sch.passPercentage && sch.passPercentage !== "35" ? sch.passPercentage : "40",
+          date: exam?.startDate || prev.date,
+        } : {
+          mode: prev.mode || "Written",
+          totalMarks: prev.totalMarks || "100",
+          passingMarks: prev.passingMarks || "35",
+        }),
+      }));
     }
-  }, [selectedGroupId, sch.groupId, editing, setSch]);
+  }, [selectedGroupId, sch.groupId, editing, isCombined, exam?.startDate, exam?.totalMarks, setSch]);
 
   // Auto-fetch active classrooms and examination halls if not yet loaded
   useEffect(() => {
@@ -8395,9 +8829,12 @@ function ScheduleSection({
         startTime: anyCombinedSessionForExam ? anyCombinedSessionForExam.startTime : (prev.startTime || defaultSessionStartTime),
         endTime: anyCombinedSessionForExam ? anyCombinedSessionForExam.endTime : (prev.endTime || defaultSessionEndTime),
         includedSubjectIds: subjectIds.length > 0 ? subjectIds : (prev.includedSubjectIds || []),
+        mode: "Objective",
+        totalMarks: prev.totalMarks && prev.totalMarks !== "100" ? prev.totalMarks : (exam.totalMarks ? String(exam.totalMarks) : "300"),
+        passPercentage: prev.passPercentage && prev.passPercentage !== "35" ? prev.passPercentage : "40",
       }));
     }
-  }, [isCombined, exam?.startDate, anyCombinedSessionForExam, defaultSessionStartTime, defaultSessionEndTime, editing, activeGroupSubjects, setSch]);
+  }, [isCombined, exam?.startDate, exam?.totalMarks, anyCombinedSessionForExam, defaultSessionStartTime, defaultSessionEndTime, editing, activeGroupSubjects, setSch]);
 
   useEffect(() => {
     if (isCombined && activeGroupSubjects.length > 0) {
@@ -8854,8 +9291,8 @@ function ScheduleSection({
             date: entry.date,
             startTime: entry.startTime,
             endTime: entry.endTime,
-            totalMarks: sch.totalMarks,
-            passPercentage: sch.passPercentage,
+            totalMarks: sch.totalMarks && sch.totalMarks !== "100" ? sch.totalMarks : (exam.totalMarks ? String(exam.totalMarks) : "300"),
+            passPercentage: sch.passPercentage || "40",
             candidateCount: enrichedAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
             hallAssignments: enrichedAssignments,
             roomId: validFirstRoom,
@@ -8867,7 +9304,8 @@ function ScheduleSection({
             invigilatorId: validFirstInv,
             invigilator: firstInvName || invigilatorNames,
             invigilatorName: invigilatorNames,
-            mode: sch.mode || (isObjective ? "Objective" : (exam.examCategory || "Combined")),
+            mode: "Objective",
+            examMode: "Objective",
             scheduleMode: "PATTERN_WISE",
             sessionId: sch.sessionId || (sch.patternName ? `SESSION-${sch.patternName}-${selectedGroupId}` : undefined),
             subjectId: sch.subjectId ? Number(sch.subjectId) : validSubId,
@@ -8922,7 +9360,7 @@ function ScheduleSection({
     <>
       <div className="exam-toolbar">
         <div>
-          <h2>Exam Schedule Editor</h2>
+          <h2>Exam Schedule & Postponement Editor</h2>
           <p>Configure or reschedule subject dates, timings, halls, and invigilator faculty group-wise.</p>
         </div>
         {exam && entries.length > 0 && (
@@ -8977,30 +9415,43 @@ function ScheduleSection({
                 className="exam-context"
                 style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
               >
-                <div>
-                  <strong>
-                    {exam.name} ({exam.code})
-                  </strong>
-                  <span>
-                    {nameOf(boards, exam.boardId)} · Category: {exam.examCategory} · Levels:{" "}
-                    {getLevelNames(exam, academicLevels)} · Groups: {getGroupNames(exam, groups)}
-                  </span>
-                  <span style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "4px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", color: "var(--cms-text, #1e293b)", fontSize: "13px" }}>
+                    <strong style={{ fontWeight: "700", color: "var(--cms-text, #0f172a)" }}>
+                      {exam.name} ({exam.code})
+                    </strong>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>{nameOf(boards, exam.boardId)}</span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
                     <span>
-                      Pattern: {exam.examPattern} · Period: {d(exam.startDate)} – {d(exam.endDate)}
+                      Category: <strong style={{ fontWeight: "700" }}>{exam.examCategory}</strong>
+                    </span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>
+                      Levels: {getLevelNames(exam, academicLevels)}
+                    </span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>
+                      Groups: <strong style={{ fontWeight: "700" }}>{getGroupNames(exam, groups)}</strong>
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", color: "var(--cms-text, #1e293b)", fontSize: "13px" }}>
+                    <span>
+                      Pattern: <strong style={{ fontWeight: "700" }}>{exam.examPattern}</strong>
+                      <span style={{ margin: "0 8px", color: "#94a3b8" }}>·</span>
+                      Period: <strong style={{ fontWeight: "700" }}>{d(exam.startDate)} – {d(exam.endDate)}</strong>
                     </span>
                     {onEditPeriod && (
                       <button
                         type="button"
                         className="cms-btn cms-btn-primary exam-edit-period-btn"
-                        style={{ padding: "4px 10px", fontSize: "11px", height: "auto", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "600" }}
                         onClick={() => onEditPeriod(exam)}
                         title="Change examination time period dates"
                       >
-                        <Pencil size={12} style={{ marginRight: "3px" }} /> Edit Period
+                        <Pencil size={11} style={{ marginRight: "2px" }} /> Edit Period
                       </button>
                     )}
-                  </span>
+                  </div>
                 </div>
                 <span className={`cms-badge exam-status-badge exam-status-${normalizeStatus(exam.status).toLowerCase()}`}>
                   {normalizeStatus(exam.status) || "DRAFT"}
@@ -9265,8 +9716,8 @@ function ScheduleSection({
                   <Field
                     label="Total Marks *"
                     type="number"
-                    placeholder="e.g. 100 or 300"
-                    value={sch.totalMarks}
+                    placeholder={isCombined ? "e.g. 300" : "e.g. 100"}
+                    value={sch.totalMarks || (isCombined ? "300" : "100")}
                     onChange={(v) => {
                       setSch((x) => ({ ...x, totalMarks: v }));
                       setErrors((x) => ({ ...x, totalMarks: undefined }));
@@ -9278,7 +9729,7 @@ function ScheduleSection({
                     label={isCombined ? "Pass Percentage (%) *" : "Passing Marks *"}
                     type="number"
                     placeholder={isCombined ? "e.g. 40" : "e.g. 35"}
-                    value={isCombined ? sch.passPercentage : sch.passingMarks}
+                    value={isCombined ? (sch.passPercentage || "40") : (sch.passingMarks || "35")}
                     onChange={(v) => {
                       setSch((x) => ({ ...x, [isCombined ? "passPercentage" : "passingMarks"]: v }));
                       setErrors((x) => ({ ...x, [isCombined ? "passPercentage" : "passingMarks"]: undefined }));
@@ -9287,7 +9738,7 @@ function ScheduleSection({
                   />
 
                   {isCombined ? (
-                    <Field label="Exam Mode" value={sch.mode || (isObjective ? "Objective" : (exam?.examCategory || "Combined"))} readOnly />
+                    <Field label="Exam Mode" value={isCombined || isObjective ? "Objective" : (sch.mode || exam?.examCategory || "Combined")} readOnly />
 
                   ) : (
                     <SearchableSingleSelect
@@ -9303,8 +9754,8 @@ function ScheduleSection({
                   assignments={sch.hallAssignments}
                   rooms={eligibleRooms}
                   faculty={eligibleInvigilators}
-                  required={getRequiredCandidateStrength(exam, selectedGroupId, programs, false, students)}
-                  enrolledStudentCount={getGroupStudents(exam, selectedGroupId, programs, students).length}
+                  required={getScopedCandidateStrength(exam, selectedGroupId, programs, students)}
+                  enrolledStudentCount={getScopedGroupStudents(exam, selectedGroupId, programs, students).length}
                   onRefreshStudents={onRefreshStudents}
                   onRefreshRooms={onRefreshRooms}
                   onChange={(hallAssignments) => setSch((x) => ({ ...x, hallAssignments }))}
@@ -9372,7 +9823,7 @@ function ScheduleSection({
               <div className="exam-print-area" aria-hidden="true">
                 <div style={{ textAlign: "center", marginBottom: "16px" }}>
                   <h1 style={{ fontSize: "18px", margin: "0 0 4px", fontWeight: "bold" }}>
-                    COLLEGE EXAMINATION SCHEDULE
+                    COLLEGE EXAMINATION TIMETABLE / SCHEDULE
                   </h1>
                   <h2 style={{ fontSize: "14px", margin: "0 0 6px" }}>
                     {exam.name} ({exam.code}) — {nameOf(boards, exam.boardId)}
@@ -10710,13 +11161,19 @@ function GlobalSchedulePreviewModal({
   academicYears = [],
   onClose,
   onExport,
+  onExportExcel,
+  onExportPdf,
 }) {
   const todayFormatted = useMemo(() => formatDDMMYYYY(new Date()), []);
   const THEMES = ["ref-theme-blue", "ref-theme-green", "ref-theme-orange", "ref-theme-purple"];
 
   return (
     <Modal
-      title="Examination Schedules Preview"
+      title={
+        targetExams.length === 1
+          ? `${targetExams[0]?.name || targetExams[0]?.code || "Examination"} Schedule Preview`
+          : "Examination Schedules Preview"
+      }
       onClose={onClose}
       className="exam-modal exam-preview-modal"
     >
@@ -10724,27 +11181,54 @@ function GlobalSchedulePreviewModal({
         {/* Top Action & Summary Bar */}
         <div className="exam-preview-action-bar">
           <div className="exam-preview-meta-info">
-            <span className="exam-preview-meta-text">
-              Scheduled Examinations: <strong>{targetExams.length}</strong>
-            </span>
-            <span className="exam-preview-meta-sep">•</span>
-            <span className="exam-preview-meta-text">
-              Total Sessions: <strong>{schedules.length}</strong>
-            </span>
+            {targetExams.length === 1 ? (
+              <>
+                <span className="exam-preview-meta-text">
+                  Examination: <strong>{targetExams[0]?.name || targetExams[0]?.code}</strong>
+                </span>
+                <span className="exam-preview-meta-sep">•</span>
+                <span className="exam-preview-meta-text">
+                  Status: <strong>{normalizeStatus(targetExams[0]?.status) || "SCHEDULED"}</strong>
+                </span>
+                <span className="exam-preview-meta-sep">•</span>
+                <span className="exam-preview-meta-text">
+                  Total Sessions: <strong>{schedules.length}</strong>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="exam-preview-meta-text">
+                  Scheduled Examinations: <strong>{targetExams.length}</strong>
+                </span>
+                <span className="exam-preview-meta-sep">•</span>
+                <span className="exam-preview-meta-text">
+                  Total Sessions: <strong>{schedules.length}</strong>
+                </span>
+              </>
+            )}
           </div>
           <div className="exam-preview-action-buttons">
             <button
               type="button"
-              className="cms-btn cms-btn-primary exam-preview-download-btn"
-              onClick={() => onExport(schedules)}
-              disabled={loading || schedules.length === 0}
+              className="cms-btn cms-btn-primary exam-preview-excel-btn"
+              onClick={() => (onExportExcel ? onExportExcel(schedules) : onExport?.(schedules))}
+              disabled={loading || targetExams.length === 0}
               title="Download Excel spreadsheet matching this layout"
             >
-              <Award size={16} /> Download Excel (.xlsx)
+              <FileSpreadsheet size={16} /> Download Excel
             </button>
             <button
               type="button"
-              className="cms-btn cms-btn-ghost"
+              className="cms-btn cms-btn-primary exam-preview-pdf-btn"
+              onClick={() => onExportPdf && onExportPdf(schedules)}
+              disabled={loading || targetExams.length === 0}
+              title="Download PDF document matching this layout"
+            >
+              <Printer size={16} /> Download PDF
+            </button>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost exam-preview-close-btn"
               onClick={onClose}
             >
               Close
@@ -10767,7 +11251,9 @@ function GlobalSchedulePreviewModal({
           <div className="ref-doc-wrapper">
             {/* 1. Main Blue Title Banner */}
             <div className="ref-main-title-banner">
-              Examination Schedules
+              {targetExams.length === 1
+                ? `${targetExams[0]?.name || targetExams[0]?.code || "Examination"} Schedule`
+                : "Examination Schedules"}
             </div>
 
             {/* 2. Subheader Row: Generated On */}
@@ -10781,11 +11267,14 @@ function GlobalSchedulePreviewModal({
             <div className="ref-exams-container">
               {targetExams.map((exam, idx) => {
                 const themeClass = THEMES[idx % THEMES.length];
-                const examSchedules = schedules.filter((s) => {
+                let examSchedules = schedules.filter((s) => {
                   const sExamId = normalizeId(s.examId ?? s.examinationId);
                   const eExamId = normalizeId(exam.id ?? exam.examinationId);
                   return sExamId && eExamId ? sExamId === eExamId : true;
                 });
+                if (examSchedules.length === 0 && targetExams.length === 1) {
+                  examSchedules = schedules;
+                }
 
                 const examTitle = exam.name || exam.examName || "Examination";
                 const yearName = nameOf(academicYears, exam.yearId || exam.academicYearId) !== "—"

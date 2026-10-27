@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport/drivers")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     public class TransportDriverController : ControllerBase
     {
         private readonly ITransportDriverService _service;

@@ -194,20 +194,10 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new KeyNotFoundException($"Role with ID {roleId} was not found.");
             }
 
-            var applicableSubModules = await _permissionRepository.GetApplicableSubModulesForRoleAsync(roleId);
-            var applicableSet = new HashSet<string>(applicableSubModules, StringComparer.OrdinalIgnoreCase);
-
             var normalizedModules = request.GetNormalizedModules();
 
-            // Filter to only modules applicable to this role
-            var filteredModules = normalizedModules
-                .Where(m => applicableSet.Count == 0 || 
-                            applicableSet.Contains(m.SubModule) || 
-                            applicableSet.Contains(ModulePermissionMatrixDto.NormalizeToKebabCase(m.SubModule)))
-                .ToList();
-
             // Enforce dependencies: Add/Edit/Delete require View
-            foreach (var item in filteredModules)
+            foreach (var item in normalizedModules)
             {
                 if (item.CanAdd || item.CanEdit || item.CanDelete)
                 {
@@ -221,7 +211,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            await _permissionRepository.UpdateRolePermissionsAsync(roleId, filteredModules);
+            await _permissionRepository.UpdateRolePermissionsAsync(roleId, normalizedModules);
             return true;
         }
 

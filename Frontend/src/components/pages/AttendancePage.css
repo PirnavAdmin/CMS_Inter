@@ -1774,9 +1774,9 @@
 .attendance-module:not(.att-overview-page) .att-pagination,
 .attendance-module:not(.att-overview-page) .att-staff-table-card > .att-pagination,
 .attendance-module:not(.att-overview-page) .att-month-card > .att-pagination {
-  min-height: 44px;
+  min-height: 46px;
   margin: 0;
-  padding: 4px 12px;
+  padding: 5px 14px;
 }
 .attendance-module .att-defaulter-threshold { margin: 0 0 10px; padding: 12px 16px; }
 .attendance-module .att-defaulter-threshold .att-field { width: min(260px, 100%); gap: 6px; }

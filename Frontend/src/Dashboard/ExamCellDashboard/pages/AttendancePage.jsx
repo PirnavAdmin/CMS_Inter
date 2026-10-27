@@ -140,21 +140,50 @@ function AttendancePagination({ page, totalRows, onPageChange, unit = "records" 
   const currentPage = Math.min(page, totalPages);
   const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
   const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
+
+  const pageNumbers = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
+  } else {
+    pageNumbers.push(1);
+    if (currentPage > 3) pageNumbers.push('...');
+    const pStart = Math.max(2, currentPage - 1);
+    const pEnd = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = pStart; i <= pEnd; i += 1) pageNumbers.push(i);
+    if (currentPage < totalPages - 2) pageNumbers.push('...');
+    pageNumbers.push(totalPages);
+  }
+
   return (
     <nav className="att-pagination" aria-label="Attendance pages">
       <span className="att-pagination-summary">
         Showing {start}-{end} of {totalRows} {unit}
       </span>
       <div className="att-pagination-controls">
-        <button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>
+        <button type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
           Previous
         </button>
-        <span>
-          Page {currentPage} of {totalPages}
-        </span>
-        <button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>
+        {pageNumbers.map((p, idx) =>
+          p === '...' ? (
+            <span key={`dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
+          ) : (
+            <button
+              key={`page-${p}`}
+              type="button"
+              className={p === currentPage ? "active is-active" : ""}
+              onClick={() => onPageChange(p)}
+              aria-label={`Page ${p}`}
+            >
+              {p}
+            </button>
+          )
+        )}
+        <button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
           Next
         </button>
+        <span style={{ marginLeft: '4px' }}>
+          Page {currentPage} of {totalPages}
+        </span>
       </div>
     </nav>
   );
@@ -589,10 +618,29 @@ function Screen({ say }) {
           });
           setReport(body(r));
         } else if (currentView === "Defaulters") {
-          const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, {
-            params: { ...monthParams(), threshold: 75 },
-          });
-          setRows(asList(body(r)));
+          try {
+            const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, {
+              params: { ...monthParams(), threshold: attendanceThreshold || 75 },
+              silent: true,
+              skipErrorLog: true,
+            });
+            setRows(asList(body(r)));
+          } catch {
+            // Fallback: derive defaulters list from monthly report if defaulters endpoint has role restrictions
+            const r = await apiClient.get(apiEndpoints.attendance.studentMonthlyReport, {
+              params: monthParams(),
+            });
+            const rep = body(r);
+            const studentList = rep.studentRows || rep.students || rep.rows || rep.items || [];
+            const threshold = attendanceThreshold || 75;
+            const defaulters = asList(studentList)
+              .map((s) => ({
+                ...s,
+                attendancePercentage: s.attendancePercentage ?? s.percentage ?? 0,
+              }))
+              .filter((s) => Number(String(s.attendancePercentage).replace("%", "")) < threshold);
+            setRows(defaulters);
+          }
         } else {
           const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
             params: {

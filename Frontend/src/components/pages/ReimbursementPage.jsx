@@ -278,7 +278,6 @@ export default function ReimbursementPage({ isAccountantView = false }) {
         size: file.size,
         type: file.type,
         dataUrl: reader.result,
-        rawFile: file,
         uploadedAt: new Date().toISOString(),
       });
       setFormErrors((prev) => ({ ...prev, file: null, proof: null }));

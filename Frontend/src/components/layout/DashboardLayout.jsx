@@ -9,6 +9,7 @@ import {
 import ChangePasswordModal from "@/Dashboard/ExamCellDashboard/components/ChangePasswordModal.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
+import TransparentAvatar from "@/components/common/TransparentAvatar.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useSidebar } from "@/hooks/useSidebar.js";
@@ -622,11 +623,71 @@ export default function DashboardLayout({
 
     const handleUpdate = () => fetchPerms();
     window.addEventListener("roles-updated", handleUpdate);
-    window.addEventListener("storage", handleUpdate);
     return () => {
       isMounted = false;
       window.removeEventListener("roles-updated", handleUpdate);
-      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  // Live profile photo and storage synchronization across sessions and tabs
+  useEffect(() => {
+    let active = true;
+
+    const fetchLiveUserPhoto = () => {
+      const u = readUser();
+      if (!u) return;
+      const isAdminUser = u.isAdmin || String(u.role || "").toLowerCase().includes("admin") || u.roleType === "admin";
+      if (isAdminUser) {
+        apiClient.get("/api/Admin/1").then(res => {
+          if (!active) return;
+          const dataObj = res.data?.data || res.data?.Data || res.data;
+          const photo = dataObj?.photoPath || dataObj?.PhotoPath || dataObj?.photoUrl || dataObj?.PhotoUrl;
+          if (photo) {
+            const current = readUser() || u;
+            if (current.photoUrl !== photo) {
+              const updated = { ...current, photoUrl: photo, photoPath: photo, photo: photo };
+              try {
+                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updated));
+                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updated));
+              } catch {}
+              setCurrentUser(updated);
+            }
+          }
+        }).catch(() => {});
+      } else if (u.staffId) {
+        apiClient.get(`/api/v1/staff/${u.staffId}`).then(res => {
+          if (!active) return;
+          const dataObj = res.data?.data || res.data?.Data || res.data;
+          const photo = dataObj?.photoUrl || dataObj?.PhotoUrl || dataObj?.profilePhoto || dataObj?.ProfilePhoto || dataObj?.photoPath || dataObj?.PhotoPath;
+          if (photo) {
+            const current = readUser() || u;
+            if (current.photoUrl !== photo) {
+              const updated = { ...current, photoUrl: photo, photoPath: photo, photo: photo };
+              try {
+                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updated));
+                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updated));
+              } catch {}
+              setCurrentUser(updated);
+            }
+          }
+        }).catch(() => {});
+      }
+    };
+
+    fetchLiveUserPhoto();
+
+    const handleStorageUpdate = () => {
+      if (!active) return;
+      setCurrentUser(readUser());
+    };
+
+    window.addEventListener("storage", handleStorageUpdate);
+    window.addEventListener("user-profile-updated", handleStorageUpdate);
+
+    return () => {
+      active = false;
+      window.removeEventListener("storage", handleStorageUpdate);
+      window.removeEventListener("user-profile-updated", handleStorageUpdate);
     };
   }, []);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
@@ -833,6 +894,34 @@ export default function DashboardLayout({
   
   const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
   const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
+
+  const [adminPhotoError, setAdminPhotoError] = useState(false);
+  const activeAdminPhoto = useMemo(() => {
+    let savedAdminProfile = null;
+    try {
+      savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
+    } catch {}
+    const rawPhoto = (
+      user?.photoUrl ||
+      user?.photoPath ||
+      user?.photo ||
+      savedAdminProfile?.photo ||
+      (typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
+      null
+    );
+    if (!rawPhoto || typeof rawPhoto !== "string") return null;
+    const trimmed = rawPhoto.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+      return trimmed;
+    }
+    const apiBase = (env.apiBaseUrl || "http://localhost:5167").replace(/\/$/, "");
+    return `${apiBase}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+  }, [user]);
+
+  useEffect(() => {
+    setAdminPhotoError(false);
+  }, [activeAdminPhoto]);
 
   const rememberSidebarScroll = () => {
     const scrollTop = sidebarNavRef.current?.scrollTop || 0;
@@ -1416,7 +1505,17 @@ export default function DashboardLayout({
               </button>
             )}
             <button className="cms-profile-btn" onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}>
-              <span className="cms-avatar">{initials(profileName)}</span>
+              {activeAdminPhoto && !adminPhotoError ? (
+                <img
+                  src={activeAdminPhoto}
+                  alt={profileName}
+                  className="cms-avatar"
+                  style={{ objectFit: 'cover' }}
+                  onError={() => setAdminPhotoError(true)}
+                />
+              ) : (
+                <TransparentAvatar size={34} className="cms-avatar" />
+              )}
               <span className="cms-profile-meta"><strong>{profileName}</strong><span>{profileRole}</span></span>
             </button>
 

@@ -28,8 +28,13 @@ Frontend/.env
 Backend/src/CollegeManagement.API/wwwroot/uploads/student-documents/*
 Backend/src/CollegeManagement.API/wwwroot/uploads/student-photos/*
 Backend/src/CollegeManagement.API/wwwroot/uploads/staff-photos/*
+Backend/src/CollegeManagement.API/wwwroot/uploads/admin-photos/*
+Backend/src/CollegeManagement.API/Uploads/
 !Backend/src/CollegeManagement.API/wwwroot/uploads/.gitkeep
 
 # Screenshots & Reference Images
 hostel screens/
 
+# Scratch & Local Development Agents
+scratch/
+.agents/

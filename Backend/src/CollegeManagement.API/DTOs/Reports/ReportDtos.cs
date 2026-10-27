@@ -28,6 +28,14 @@ public class DashboardReportDto
     public int StudentStrength { get; set; }
     public decimal PassPercentage { get; set; }
     public int ToppersIdentified { get; set; }
+
+    // Intermediate College Compliance & Board Rules (75% Attendance & Fee Clearance)
+    public int AttendanceEligibleCount { get; set; }
+    public int AttendanceCondonationCount { get; set; }
+    public int AttendanceDetainedCount { get; set; }
+    public int StudentsWithDuesCount { get; set; }
+    public int StudentsClearedCount { get; set; }
+
     public IReadOnlyList<TrendPointDto> AdmissionsVsTarget { get; set; } = [];
     public IReadOnlyList<TrendPointDto> AttendanceTrend { get; set; } = [];
     public IReadOnlyList<TrendPointDto> FeeCollectedVsDue { get; set; } = [];
@@ -125,6 +133,7 @@ public class AttendanceReportDto
     public int Late { get; set; }
     public int Leave { get; set; }
     public decimal AttendancePercentage { get; set; }
+    public string? StatusCategory { get; set; } = "Eligible";
 }
 
 public class FacultyAttendanceReportDto
@@ -338,15 +347,31 @@ public class AuditLogDto
     public long AuditLogId { get; set; }
     public string Id => $"AUD-{CreatedAt:yyyyMMdd}-{AuditLogId:D3}";
     public string Time => CreatedAt.ToString("dd MMM yyyy, hh:mm tt");
+    public string? EventId { get; set; }
+    public string? CorrelationId { get; set; }
+    public string? RequestId { get; set; }
     public string? Actor { get; set; }
     public string? Role { get; set; }
+    public string? ActorType { get; set; } = "User";
+    public int? UserId { get; set; }
+    public int? StaffId { get; set; }
     public string? Action { get; set; } = string.Empty;
     public string? Module { get; set; }
     public string? Target { get; set; }
     public string? Severity { get; set; } = "Info";
     public string? Status { get; set; } = "Success";
     public string? Ip { get; set; }
+    public string? RemoteIpAddress { get; set; }
+    public string? ForwardedClientIp { get; set; }
+    public string IpSource { get; set; } = "Unknown";
+    public string IpConfidence { get; set; } = "Unknown";
     public string? Device { get; set; }
+    public string? DeviceId { get; set; }
+    public string? SessionId { get; set; }
+    public string? RequestMethod { get; set; }
+    public string? RouteTemplate { get; set; }
+    public int? HttpStatusCode { get; set; }
+    public double? DurationMs { get; set; }
     public string? Details { get; set; }
     public List<AuditFieldChangeDto>? Changes { get; set; }
     public Dictionary<string, object?>? UserInput { get; set; }
@@ -367,8 +392,13 @@ public class ActiveAdminInfoDto
 public class AuditLogStatsDto
 {
     public int EventsToday { get; set; }
-    public int SecurityAlerts { get; set; }
-    public int ActiveAdministrators { get; set; }
+    public int FailedOperationsToday { get; set; }
+    public int SecurityAlertsToday { get; set; }
+    public int SecurityAlerts { get; set; } // Backward compatibility
+    public int ActiveUsersToday { get; set; }
+    public int RegisteredDevicesToday { get; set; }
+    public int DistinctPublicIpsToday { get; set; }
+    public int ActiveAdministrators { get; set; } // Backward compatibility
     public List<ActiveAdminInfoDto> Administrators { get; set; } = new();
 }
 

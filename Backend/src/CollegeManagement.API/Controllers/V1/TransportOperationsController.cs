@@ -10,7 +10,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/transport/operations")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     public class TransportOperationsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -23,7 +23,7 @@ namespace CollegeManagement.API.Controllers.V1
         private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
         [HttpGet("trips")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         [ProducesResponseType(typeof(VehicleTripsResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetTrips(
             [FromQuery] long? routeId,
@@ -97,7 +97,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("trips")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> CreateTrip([FromBody] VehicleTripCardDto dto)
         {
             try
@@ -131,7 +131,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPut("trips/{tripId}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> UpdateTrip(long tripId, [FromBody] VehicleTripCardDto dto)
         {
             try
@@ -159,7 +159,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpDelete("trips/{tripId}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> DeleteTrip(long tripId)
         {
             try
@@ -179,7 +179,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("gps")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetGpsTracking()
         {
             try

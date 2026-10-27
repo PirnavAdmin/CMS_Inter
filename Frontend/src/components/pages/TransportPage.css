@@ -819,21 +819,35 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding-top: 12px;
+  min-height: 46px;
+  padding: 5px 14px;
+  border-top: 1px solid var(--cms-border);
+  background: var(--cms-subtle);
   color: var(--cms-muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .cms-transport-pagination > div {
   display: inline-flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
 .cms-transport-pagination .cms-btn {
-  min-height: 32px;
-  padding: 6px 12px;
+  min-width: 36px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 9px;
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.cms-transport-pagination > div > span {
+  color: var(--cms-text);
+  white-space: nowrap;
 }
 
 .cms-transport-trip-list,

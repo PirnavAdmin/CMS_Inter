@@ -272,12 +272,23 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { success = false, message = "Valid Student ID is required." });
             }
             _logger.LogInformation("Retrieving student marks memo for StudentId: {StudentId}, ExamId: {ExamId}", studentId, examId);
-            var memo = await _resultService.GetStudentMemoAsync(studentId, examId);
-            if (memo == null)
+            try
+            {
+                var memo = await _resultService.GetStudentMemoAsync(studentId, examId);
+                if (memo == null)
+                {
+                    return NotFound(new { success = false, message = "Student result memo not found." });
+                }
+                return Ok(memo);
+            }
+            catch (KeyNotFoundException)
             {
                 return NotFound(new { success = false, message = "Student result memo not found." });
             }
-            return Ok(memo);
+            catch (NotFoundException)
+            {
+                return NotFound(new { success = false, message = "Student result memo not found." });
+            }
         }
 
         /// <summary>
@@ -307,17 +318,29 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { success = false, message = "Valid Student ID is required." });
             }
             _logger.LogInformation("Retrieving student result. StudentId: {StudentId}, ExamId: {ExamId}", studentId, examId);
-            var result = await _resultService.GetStudentMemoAsync(studentId, examId);
-            if (result != null) return Ok(result);
 
-            if (boardId.HasValue && academicYearId.HasValue && academicLevelId.HasValue && groupId.HasValue && examId.HasValue)
+            try
             {
-                var repoResult = await _resultService.GetStudentResultAsync(
-                    studentId, boardId.Value, academicYearId.Value, academicLevelId.Value, groupId.Value, examId.Value);
-                return Ok(repoResult);
-            }
+                var result = await _resultService.GetStudentMemoAsync(studentId, examId);
+                if (result != null) return Ok(result);
 
-            return NotFound(new { success = false, message = "Student result not found." });
+                if (boardId.HasValue && academicYearId.HasValue && academicLevelId.HasValue && groupId.HasValue && examId.HasValue)
+                {
+                    var repoResult = await _resultService.GetStudentResultAsync(
+                        studentId, boardId.Value, academicYearId.Value, academicLevelId.Value, groupId.Value, examId.Value);
+                    if (repoResult != null) return Ok(repoResult);
+                }
+
+                return NotFound(new { success = false, message = "Student result not found." });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { success = false, message = "Student result not found." });
+            }
+            catch (NotFoundException)
+            {
+                return NotFound(new { success = false, message = "Student result not found." });
+            }
         }
 
         // =========================================================================

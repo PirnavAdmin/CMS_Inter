@@ -336,3 +336,110 @@ export function Loader({ label = 'Loading...', fullScreen = false }) {
   return content;
 }
 
+export function Pagination({
+  currentPage = 1,
+  page,
+  pages,
+  totalPages: propTotalPages,
+  totalRecords,
+  totalCount,
+  total,
+  pageSize = 10,
+  onPageChange,
+  setPage,
+  unit = "records",
+  className = "",
+  showPageNumbers = true,
+}) {
+  const current = Number(page ?? currentPage ?? 1) || 1;
+  const handlePageChange = onPageChange || setPage || (() => {});
+  const resolvedTotal = Number(totalRecords ?? totalCount ?? total);
+  const limit = Math.max(1, Number(pageSize) || 10);
+
+  const computedTotalPages = !isNaN(resolvedTotal) && resolvedTotal >= 0
+    ? Math.max(1, Math.ceil(resolvedTotal / limit))
+    : Math.max(1, Number(pages ?? propTotalPages ?? 1) || 1);
+
+  const totalPages = Math.max(1, computedTotalPages);
+  const activePage = Math.min(Math.max(1, current), totalPages);
+
+  const hasExplicitCount = !isNaN(resolvedTotal) && resolvedTotal >= 0;
+  const start = hasExplicitCount ? (resolvedTotal === 0 ? 0 : (activePage - 1) * limit + 1) : (activePage - 1) * limit + 1;
+  const end = hasExplicitCount ? Math.min(activePage * limit, resolvedTotal) : activePage * limit;
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const list = [];
+    if (activePage <= 4) {
+      for (let i = 1; i <= 5; i++) list.push(i);
+      list.push("...");
+      list.push(totalPages);
+    } else if (activePage >= totalPages - 3) {
+      list.push(1);
+      list.push("...");
+      for (let i = totalPages - 4; i <= totalPages; i++) list.push(i);
+    } else {
+      list.push(1);
+      list.push("...");
+      list.push(activePage - 1);
+      list.push(activePage);
+      list.push(activePage + 1);
+      list.push("...");
+      list.push(totalPages);
+    }
+    return list;
+  };
+
+  const pageNumbers = getPageNumbers();
+
+  return (
+    <div className={`cms-pagination ${className}`.trim()} role="navigation" aria-label="Pagination">
+      <span className="cms-page-info">
+        {hasExplicitCount
+          ? `Showing ${start}–${end} of ${resolvedTotal} ${unit} · Page ${activePage} of ${totalPages}`
+          : `Page ${activePage} of ${totalPages}`}
+      </span>
+      <button
+        type="button"
+        className="cms-page-btn"
+        disabled={activePage <= 1 || (hasExplicitCount && resolvedTotal === 0)}
+        onClick={() => handlePageChange(activePage - 1)}
+        aria-label="Previous Page"
+      >
+        Previous
+      </button>
+      {showPageNumbers && pageNumbers.map((p, idx) =>
+        p === "..." ? (
+          <span key={`ellipsis-${idx}`} className="cms-page-ellipsis" style={{ padding: "0 6px", alignSelf: "center", color: "var(--cms-muted, #64748b)" }}>
+            …
+          </span>
+        ) : (
+          <button
+            key={`page-${p}`}
+            type="button"
+            className={`cms-page-btn ${p === activePage ? "is-active" : ""}`}
+            onClick={() => handlePageChange(p)}
+            aria-current={p === activePage ? "page" : undefined}
+          >
+            {p}
+          </button>
+        )
+      )}
+      <button
+        type="button"
+        className="cms-page-btn"
+        disabled={activePage >= totalPages || (hasExplicitCount && resolvedTotal === 0)}
+        onClick={() => handlePageChange(activePage + 1)}
+        aria-label="Next Page"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
+export const ExamCellPagination = Pagination;
+
+

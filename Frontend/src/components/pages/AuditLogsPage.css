@@ -1109,3 +1109,122 @@
     align-items: flex-start;
   }
 }
+
+/* Advanced Audit Logs Extended Tones & Grid */
+.audit-stat-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+}
+
+@media (max-width: 1400px) {
+  .audit-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 800px) {
+  .audit-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 500px) {
+  .audit-stat-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.audit-stat-red .audit-stat-icon-wrap {
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+}
+.audit-stat-red svg { color: #dc2626; }
+
+.audit-stat-purple .audit-stat-icon-wrap {
+  background: rgba(147, 51, 234, 0.1);
+  color: #9333ea;
+}
+.audit-stat-purple svg { color: #9333ea; }
+
+.audit-stat-teal .audit-stat-icon-wrap {
+  background: rgba(13, 148, 136, 0.1);
+  color: #0d9488;
+}
+.audit-stat-teal svg { color: #0d9488; }
+
+.audit-stat-indigo .audit-stat-icon-wrap {
+  background: rgba(79, 70, 229, 0.1);
+  color: #4f46e5;
+}
+.audit-stat-indigo svg { color: #4f46e5; }
+
+/* Modal tabs and provenance styling */
+.audit-modal-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--cms-muted);
+  margin-top: 14px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audit-badge-provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+}
+
+.audit-badge-trusted {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.audit-badge-direct {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.audit-related-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.audit-related-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--cms-subtle);
+  border: 1px solid var(--cms-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.audit-copy-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  background: var(--cms-subtle);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--cms-border);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.audit-copy-tag:hover {
+  background: var(--cms-border);
+}

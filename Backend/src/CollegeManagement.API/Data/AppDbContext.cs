@@ -24,11 +24,24 @@ namespace CollegeManagement.API.Data
     {
         public EntityEntry Entry { get; }
         public EntityState OriginalState { get; set; }
+        public string? EventId { get; set; }
+        public string? CorrelationId { get; set; }
+        public string? RequestId { get; set; }
         public string? UserName { get; set; }
         public int? UserId { get; set; }
+        public int? StaffId { get; set; }
         public string? ActorRole { get; set; }
+        public string? ActorType { get; set; }
         public string? IpAddress { get; set; }
+        public string? RemoteIpAddress { get; set; }
+        public string? ForwardedClientIp { get; set; }
+        public string IpSource { get; set; } = "Unknown";
+        public string IpConfidence { get; set; } = "Unknown";
         public string? UserAgent { get; set; }
+        public string? DeviceId { get; set; }
+        public string? SessionId { get; set; }
+        public string? RequestMethod { get; set; }
+        public string? RouteTemplate { get; set; }
         public string Action { get; set; } = string.Empty;
         public string EntityName { get; set; } = string.Empty;
         public int? EntityId { get; set; }
@@ -52,21 +65,27 @@ namespace CollegeManagement.API.Data
             {
                 OldValues.TryGetValue(col, out var oldVal);
                 NewValues.TryGetValue(col, out var newVal);
+
+                bool isSensitive = AuditDataSanitizer.IsSensitivePropertyName(col);
                 changesList.Add(new
                 {
                     field = col,
-                    old = FormatValue(oldVal),
-                    @new = FormatValue(newVal)
+                    old = isSensitive ? "[REDACTED]" : FormatValue(oldVal),
+                    @new = isSensitive ? "[REDACTED]" : FormatValue(newVal)
                 });
             }
 
             var humanSummary = GenerateHumanReadableSummary();
 
+            var safeUserInput = UserInput.Count > 0
+                ? AuditDataSanitizer.SanitizeDictionary(UserInput)
+                : (OriginalState == EntityState.Added ? AuditDataSanitizer.SanitizeDictionary(NewValues) : null);
+
             var payloadObj = new
             {
                 summary = humanSummary,
                 changes = changesList,
-                userInput = UserInput.Count > 0 ? UserInput : (OriginalState == EntityState.Added ? NewValues : null)
+                userInput = safeUserInput
             };
 
             var jsonOptions = new JsonSerializerOptions
@@ -79,11 +98,24 @@ namespace CollegeManagement.API.Data
 
             return new AuditLog
             {
+                EventId = EventId ?? Guid.NewGuid().ToString("N"),
+                CorrelationId = CorrelationId,
+                RequestId = RequestId,
                 UserName = UserName ?? "System",
                 UserId = UserId,
+                StaffId = StaffId,
                 ActorRole = ActorRole ?? "System",
+                ActorType = ActorType ?? (UserId.HasValue ? "User" : "System"),
                 IpAddress = IpAddress ?? "0.0.0.0",
+                RemoteIpAddress = RemoteIpAddress,
+                ForwardedClientIp = ForwardedClientIp,
+                IpSource = IpSource,
+                IpConfidence = IpConfidence,
                 UserAgent = UserAgent,
+                DeviceId = DeviceId,
+                SessionId = SessionId,
+                RequestMethod = RequestMethod,
+                RouteTemplate = RouteTemplate,
                 Action = Action,
                 EntityName = EntityName,
                 EntityId = EntityId,
@@ -271,6 +303,8 @@ namespace CollegeManagement.API.Data
         public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<OTP> OTPs { get; set; }
         public DbSet<AcademicYear> AcademicYears { get; set; }
+        public DbSet<MasterGroup> MasterGroups { get; set; }
+        public DbSet<MasterGroupProgram> MasterGroupPrograms { get; set; }
         public DbSet<Group> Groups { get; set; }
         public DbSet<AcademicProgram> Programs { get; set; }
 
@@ -295,13 +329,13 @@ namespace CollegeManagement.API.Data
         public DbSet<Board> Boards { get; set; }
         public DbSet<BoardAcademicLevel> BoardAcademicLevels { get; set; }
         public DbSet<BoardAssessment> BoardAssessments { get; set; }
-        
+
         public DbSet<Campus> Campuses { get; set; }
         public DbSet<CampusBoard> CampusBoards { get; set; }
         public DbSet<Student> Students { get; set; }
         public DbSet<StudentAdmission> StudentAdmissions { get; set; }
         public DbSet<Designation> Designations { get; set; }
-        
+
         // Multi-Campus / Multi-Board Staff Assignments
         public DbSet<StaffCampusAssignment> StaffCampusAssignments { get; set; }
         public DbSet<StaffBoardAssignment> StaffBoardAssignments { get; set; }
@@ -369,8 +403,7 @@ namespace CollegeManagement.API.Data
         public DbSet<FeePayment> FeePayments { get; set; }
 
         public DbSet<FeeReceipt> FeeReceipts { get; set; }
-
-     
+        public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
 
 
         public DbSet<BreakType> BreakTypes { get; set; }
@@ -394,6 +427,9 @@ namespace CollegeManagement.API.Data
         public DbSet<InventoryItem> InventoryItems { get; set; }
         public DbSet<InventoryTransaction> InventoryTransactions { get; set; }
         public DbSet<InventoryActivity> InventoryActivities { get; set; }
+
+        public DbSet<AcademicCalendarEvent> AcademicCalendarEvents { get; set; } = null!;
+        public DbSet<Notification> Notifications { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -595,6 +631,78 @@ namespace CollegeManagement.API.Data
                 .HasIndex(gp => new { gp.GroupId, gp.ProgramId })
                 .IsUnique();
 
+            modelBuilder.Entity<Group>()
+                .HasIndex(g => g.MasterGroupId);
+
+            modelBuilder.Entity<Group>()
+                .HasIndex(g => new { g.MasterGroupId, g.AcademicYearId, g.AcademicLevelId });
+
+            modelBuilder.Entity<Group>()
+                .HasOne(g => g.MasterGroupNavigation)
+                .WithMany(mg => mg.ContextualGroups)
+                .HasForeignKey(g => g.MasterGroupId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            #region MasterGroup
+            modelBuilder.Entity<MasterGroup>(entity =>
+            {
+                entity.ToTable("MasterGroups");
+                entity.HasKey(mg => mg.MasterGroupId);
+
+                entity.Property(mg => mg.GroupName)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(mg => mg.GroupCode)
+                    .HasMaxLength(30)
+                    .IsRequired();
+
+                entity.Property(mg => mg.Description)
+                    .HasMaxLength(500);
+
+                entity.Property(mg => mg.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(mg => mg.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(mg => mg.UpdatedAt)
+                    .IsRequired(false);
+
+                entity.HasIndex(mg => new { mg.BoardId, mg.GroupCode }).IsUnique();
+                entity.HasIndex(mg => new { mg.BoardId, mg.GroupName }).IsUnique();
+
+                entity.HasOne(mg => mg.BoardNavigation)
+                    .WithMany()
+                    .HasForeignKey(mg => mg.BoardId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<MasterGroupProgram>(entity =>
+            {
+                entity.ToTable("MasterGroupPrograms");
+                entity.HasKey(mgp => mgp.MasterGroupProgramId);
+
+                entity.Property(mgp => mgp.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(mgp => mgp.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.HasIndex(mgp => new { mgp.MasterGroupId, mgp.ProgramId }).IsUnique();
+
+                entity.HasOne(mgp => mgp.MasterGroup)
+                    .WithMany(mg => mg.MasterGroupPrograms)
+                    .HasForeignKey(mgp => mgp.MasterGroupId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(mgp => mgp.AcademicProgram)
+                    .WithMany()
+                    .HasForeignKey(mgp => mgp.ProgramId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+            #endregion
+
             modelBuilder.Entity<AcademicProgram>(entity =>
             {
                 entity.ToTable("Programs");
@@ -724,7 +832,7 @@ namespace CollegeManagement.API.Data
                       .HasForeignKey(ia => ia.InvigilatorId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
-          
+
 
 
 
@@ -1521,7 +1629,7 @@ namespace CollegeManagement.API.Data
                 .HasKey(sc => new { sc.SupplierId, sc.CategoryId });
             #endregion
         }
-    
+
 private static void ConfigureTransportRoute(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<TransportRoute>(entity =>
@@ -1985,25 +2093,77 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     .HasForeignKey(e => e.RoleId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
+
+            // Academic Calendar Events
+            modelBuilder.Entity<AcademicCalendarEvent>(entity =>
+            {
+                entity.ToTable("AcademicCalendarEvents");
+                entity.HasKey(e => e.EventId);
+                entity.HasOne(e => e.Board)
+                    .WithMany()
+                    .HasForeignKey(e => e.BoardId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.AcademicYear)
+                    .WithMany()
+                    .HasForeignKey(e => e.AcademicYearId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Notifications
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.ToTable("Notifications");
+                entity.HasKey(e => e.NotificationId);
+                entity.HasOne(e => e.User)
+                    .WithMany()
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+        }
+
+        public override int SaveChanges()
+        {
+            return SaveChangesAsync(CancellationToken.None).GetAwaiter().GetResult();
         }
 
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
-            var auditEntries = OnBeforeSaveChanges();
-            var result = await base.SaveChangesAsync(cancellationToken);
-            await OnAfterSaveChanges(auditEntries, cancellationToken);
-            return result;
+            if (Database.CurrentTransaction != null)
+            {
+                var auditEntries = OnBeforeSaveChanges();
+                var result = await base.SaveChangesAsync(cancellationToken);
+                await OnAfterSaveChanges(auditEntries, cancellationToken);
+                return result;
+            }
+            else
+            {
+                var strategy = Database.CreateExecutionStrategy();
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    using var transaction = await Database.BeginTransactionAsync(cancellationToken);
+                    var auditEntries = OnBeforeSaveChanges();
+                    var result = await base.SaveChangesAsync(cancellationToken);
+                    await OnAfterSaveChanges(auditEntries, cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    return result;
+                });
+            }
         }
 
         private List<AuditEntry> OnBeforeSaveChanges()
         {
             var auditEntries = new List<AuditEntry>();
             var httpContext = _httpContextAccessor?.HttpContext;
-            var userId = httpContext?.User?.FindFirstValue("UserId");
-            var role = httpContext?.User?.FindFirstValue(ClaimTypes.Role) ?? httpContext?.User?.FindFirstValue("role");
-            var ip = ClientIpHelper.GetClientIpAddress(httpContext);
-            var agent = httpContext?.Request?.Headers["User-Agent"].ToString();
-            var userName = httpContext?.User?.Identity?.Name ?? httpContext?.User?.FindFirstValue(ClaimTypes.Email);
+            var user = httpContext?.User;
+            var userIdStr = user?.FindFirstValue(ClaimTypes.NameIdentifier) ?? user?.FindFirstValue("UserId") ?? user?.FindFirstValue("sub");
+            var staffIdStr = user?.FindFirstValue("StaffId");
+            var role = user?.FindFirstValue(ClaimTypes.Role) ?? user?.FindFirstValue("role");
+            var userName = user?.Identity?.Name ?? user?.FindFirstValue(ClaimTypes.Email);
+
+            var net = ClientIpHelper.GetNetworkDetails(httpContext);
+            var correlationId = AuditCorrelationHelper.GetOrCreateCorrelationId(httpContext);
+            var requestId = AuditCorrelationHelper.GetRequestId(httpContext);
+            var sessionId = GetSessionIdSafely(httpContext);
 
             foreach (var entry in ChangeTracker.Entries())
             {
@@ -2016,11 +2176,24 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
 
                 var auditEntry = new AuditEntry(entry)
                 {
-                    UserName = userName ?? "Unknown",
-                    UserId = int.TryParse(userId, out var uid) ? uid : null,
-                    ActorRole = role ?? "Unknown",
-                    IpAddress = ip,
-                    UserAgent = agent,
+                    EventId = Guid.NewGuid().ToString("N"),
+                    CorrelationId = correlationId,
+                    RequestId = requestId,
+                    UserName = userName ?? "System",
+                    UserId = int.TryParse(userIdStr, out var uid) ? uid : null,
+                    StaffId = int.TryParse(staffIdStr, out var sid) ? sid : null,
+                    ActorRole = role ?? "System",
+                    ActorType = (userIdStr != null) ? "User" : "System",
+                    IpAddress = net.EffectiveIpAddress,
+                    RemoteIpAddress = net.RemoteIpAddress,
+                    ForwardedClientIp = net.ForwardedClientIp,
+                    IpSource = net.IpSource,
+                    IpConfidence = net.IpConfidence,
+                    UserAgent = net.UserAgent,
+                    DeviceId = net.DeviceId,
+                    SessionId = sessionId,
+                    RequestMethod = httpContext?.Request?.Method,
+                    RouteTemplate = httpContext?.Request?.Path.Value,
                     Action = action,
                     EntityName = entityName,
                     Module = GetModuleFromEntity(entityName)
@@ -2047,39 +2220,43 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     if (prop.Metadata.IsPrimaryKey())
                         continue;
 
-                    // Exclude internal security and sensitive hash fields
-                    if (propName.Contains("PasswordHash") || propName.Contains("PasswordSalt") || propName.Contains("SecurityStamp"))
-                        continue;
+                    bool isSensitive = AuditDataSanitizer.IsSensitivePropertyName(propName);
 
                     switch (entry.State)
                     {
                         case EntityState.Added:
-                            auditEntry.NewValues[propName] = prop.CurrentValue;
-                            auditEntry.UserInput[propName] = prop.CurrentValue;
+                            auditEntry.NewValues[propName] = isSensitive ? "[REDACTED]" : prop.CurrentValue;
+                            auditEntry.UserInput[propName] = isSensitive ? "[REDACTED]" : prop.CurrentValue;
                             break;
 
                         case EntityState.Deleted:
-                            auditEntry.OldValues[propName] = prop.OriginalValue;
+                            auditEntry.OldValues[propName] = isSensitive ? "[REDACTED]" : prop.OriginalValue;
                             break;
 
                         case EntityState.Modified:
-                            if (prop.IsModified)
+                            if (prop.IsModified && !object.Equals(prop.OriginalValue, prop.CurrentValue))
                             {
-                                auditEntry.OldValues[propName] = prop.OriginalValue;
-                                auditEntry.NewValues[propName] = prop.CurrentValue;
+                                auditEntry.OldValues[propName] = isSensitive ? "[REDACTED]" : prop.OriginalValue;
+                                auditEntry.NewValues[propName] = isSensitive ? "[REDACTED]" : prop.CurrentValue;
                                 auditEntry.ChangedColumns.Add(propName);
-                                auditEntry.UserInput[propName] = prop.CurrentValue;
+                                auditEntry.UserInput[propName] = isSensitive ? "[REDACTED]" : prop.CurrentValue;
                             }
                             else
                             {
                                 // Preserve key contextual fields in NewValues even if unmodified
                                 if (propName == "StudentId" || propName == "StaffId" || propName == "AttendanceDate" || propName == "Session" || propName == "Status")
                                 {
-                                    auditEntry.NewValues[propName] = prop.CurrentValue;
+                                    auditEntry.NewValues[propName] = isSensitive ? "[REDACTED]" : prop.CurrentValue;
                                 }
                             }
                             break;
                     }
+                }
+
+                // Skip no-op updates where no actual properties were changed
+                if (entry.State == EntityState.Modified && auditEntry.ChangedColumns.Count == 0)
+                {
+                    continue;
                 }
 
                 auditEntries.Add(auditEntry);
@@ -2087,7 +2264,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
 
             return auditEntries;
         }
-        
+
         private async Task OnAfterSaveChanges(List<AuditEntry> auditEntries, CancellationToken cancellationToken)
         {
             if (auditEntries == null || auditEntries.Count == 0)
@@ -2127,9 +2304,28 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                 "FeePayment" or "StudentFee" => "Finance",
                 "Staff" or "Student" => "Administration",
                 "Holiday" => "Holiday Management",
+                "AcademicCalendarEvent" => "Academic Calendar",
+                "Notification" => "Notifications",
                 "TransportRoute" or "TransportVehicle" => "Transport",
                 _ => "System"
             };
         }
+
+        private static string? GetSessionIdSafely(HttpContext? context)
+        {
+            try
+            {
+                if (context != null && context.Features.Get<Microsoft.AspNetCore.Http.Features.ISessionFeature>()?.Session != null && context.Session.IsAvailable)
+                {
+                    return context.Session.Id;
+                }
+            }
+            catch
+            {
+                // Session middleware not configured or session unavailable
+            }
+            return null;
+        }
     }
 }
+

@@ -29,6 +29,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -188,8 +189,8 @@ function parseMonthYearKey(str) {
   for (let m = 0; m < 12; m++) {
     const shortName = MONTH_NAMES[m];
     const fullName = FULL_MONTH_NAMES[m];
-    const regex = new RegExp(`(?:${shortName}|${fullName})[\\s,.-]+(\\d{4})`, "i");
-    const mMatch = str.match(regex);
+    const regex = new RegExp(`^\\s*(?:${shortName}|${fullName})\\s*(\\d{4})`, "i");
+    const mMatch = str.match(regex) || str.match(new RegExp(`(?:${shortName}|${fullName})\\s+(\\d{4})`, "i"));
     if (mMatch) {
       const y = parseInt(mMatch[1], 10);
       return { year: y, month: m, key: `${y}-${String(m + 1).padStart(2, "0")}` };
@@ -277,6 +278,21 @@ function CustomDonutTooltip({ active, payload }) {
         <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
         <span className="tooltip-name">{data.name}:</span>
         <span className="tooltip-val">{formatNumber(data.value)}</span>
+      </div>
+    );
+  }
+  return null;
+}
+
+function CustomBarTooltip({ active, payload }) {
+  if (active && payload && payload.length) {
+    const data = payload[0];
+    const dotColor = data.payload?.fill || data.color || "#2563eb";
+    return (
+      <div className="dashboard-custom-donut-tooltip">
+        <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
+        <span className="tooltip-name">{data.payload?.name || data.name}:</span>
+        <span className="tooltip-val">{formatNumber(data.value)} Students</span>
       </div>
     );
   }
@@ -487,6 +503,10 @@ export default function DashboardPage() {
             totalStudentCount: studentMetrics.totalStudents,
             studentCount: studentMetrics.totalStudents,
             admissions: studentMetrics.totalStudents,
+            boys: studentMetrics.boysCount,
+            boysCount: studentMetrics.boysCount,
+            girls: studentMetrics.girlsCount,
+            girlsCount: studentMetrics.girlsCount,
           } : {}),
         };
 
@@ -691,11 +711,21 @@ export default function DashboardPage() {
         const finalItems = Array.from(groupsMap.values());
         finalItems.sort((a, b) => (b.value - a.value) || a.name.localeCompare(b.name));
 
-        if (groupData?.items) groupData.items = finalItems;
-        else if (groupData?.groups) groupData.groups = finalItems;
-        else groupData = finalItems;
+        const totalEnrolled = finalItems.reduce((acc, curr) => acc + (curr.value || 0), 0) || (studentMetrics?.totalStudents ?? 0);
+        const boysVal = studentMetrics?.boysCount ?? studentMetrics?.boys ?? (summaryState.data?.boysCount ?? 0);
+        const girlsVal = studentMetrics?.girlsCount ?? studentMetrics?.girls ?? (summaryState.data?.girlsCount ?? 0);
 
-        setGroupState({ loading: false, error: null, data: groupData });
+        const groupPayload = {
+          items: finalItems,
+          groups: finalItems,
+          totalStudents: totalEnrolled,
+          boys: boysVal,
+          boysCount: boysVal,
+          girls: girlsVal,
+          girlsCount: girlsVal,
+        };
+
+        setGroupState({ loading: false, error: null, data: groupPayload });
       }
     } catch (err) {
       if (groupSeq.current === seq) {
@@ -1070,21 +1100,8 @@ export default function DashboardPage() {
 
     const maxCount = Math.max(...overviewChartData.map((d) => Number(d.studentsJoined) || 0), 0);
 
-    if (maxCount <= 5) {
-      return { yMax: 5, yTicks: [0, 1, 2, 3, 4, 5] };
-    }
-    if (maxCount <= 15) {
-      const ceilMax = Math.ceil(maxCount / 5) * 5;
-      const ticks = [];
-      const step = ceilMax <= 10 ? 2 : 5;
-      for (let i = 0; i <= ceilMax; i += step) ticks.push(i);
-      return { yMax: ceilMax, yTicks: ticks };
-    }
-    if (maxCount <= 30) {
-      const ceilMax = Math.ceil(maxCount / 5) * 5;
-      const ticks = [0, 5, 10, 15, 20, 25, 30].filter((t) => t <= ceilMax);
-      if (ticks[ticks.length - 1] < ceilMax) ticks.push(ceilMax);
-      return { yMax: ceilMax, yTicks: ticks };
+    if (maxCount <= 10) {
+      return { yMax: 10, yTicks: [0, 5, 10] };
     }
     if (maxCount <= 60) {
       const ceilMax = Math.ceil(maxCount / 10) * 10;
@@ -1171,15 +1188,102 @@ export default function DashboardPage() {
     }
   };
 
+  // Explicit custom tick renderer for Area Chart X-Axis so labels are never omitted by Recharts heuristics
+  const renderAreaXAxisTick = useCallback(({ x, y, payload }) => {
+    if (!payload || !payload.value) return null;
+    return (
+      <text
+        x={x}
+        y={y + 13}
+        textAnchor="middle"
+        fill="var(--cms-text, #334155)"
+        fontSize={10}
+        fontWeight={700}
+        style={{ pointerEvents: "none" }}
+      >
+        {payload.value}
+      </text>
+    );
+  }, []);
+
   // Group Distribution Normalized Data
   const groupChartData = useMemo(() => {
     const raw = groupState.data?.items || groupState.data?.groups || (Array.isArray(groupState.data) ? groupState.data : []);
     if (!Array.isArray(raw)) return [];
-    return raw.map((item) => ({
+    return raw.map((item, index) => ({
       name: item.name || item.groupName || item.code || "Group",
       value: Number(item.value ?? item.studentCount ?? item.count ?? 0),
+      students: Number(item.value ?? item.studentCount ?? item.count ?? 0),
+      fill: GROUP_COLORS[index % GROUP_COLORS.length],
     }));
   }, [groupState.data]);
+
+  // Dynamic Y-Axis scale calculation for Students by Group (Matching Admission Overview: step of 10 for clean spacing)
+  const { groupYMax, groupYTicks } = useMemo(() => {
+    if (!groupChartData || groupChartData.length === 0) {
+      return { groupYMax: 10, groupYTicks: [0, 10] };
+    }
+
+    const maxCount = Math.max(...groupChartData.map((d) => Number(d.value) || 0), 0);
+
+    if (maxCount <= 10) {
+      return { groupYMax: 10, groupYTicks: [0, 5, 10] };
+    }
+    if (maxCount <= 60) {
+      const ceilMax = Math.ceil((maxCount + 3) / 10) * 10;
+      const ticks = [];
+      for (let i = 0; i <= ceilMax; i += 10) ticks.push(i);
+      return { groupYMax: ceilMax, groupYTicks: ticks };
+    }
+    if (maxCount <= 120) {
+      const ceilMax = Math.ceil((maxCount + 10) / 20) * 20;
+      const ticks = [];
+      for (let i = 0; i <= ceilMax; i += 20) ticks.push(i);
+      return { groupYMax: ceilMax, groupYTicks: ticks };
+    }
+
+    const roughStep = maxCount / 5;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const normalizedStep = roughStep / magnitude;
+    let step = 10;
+    if (normalizedStep <= 1) step = 1 * magnitude;
+    else if (normalizedStep <= 2) step = 2 * magnitude;
+    else if (normalizedStep <= 5) step = 5 * magnitude;
+    else step = 10 * magnitude;
+
+    const ceilMax = Math.ceil((maxCount + step * 0.7) / step) * step;
+    const ticks = [];
+    for (let i = 0; i <= ceilMax; i += step) ticks.push(i);
+    return { groupYMax: ceilMax, groupYTicks: ticks };
+  }, [groupChartData]);
+
+  // Group Summary Stats for Bottom Chips (Total Students, Boys, Girls)
+  const groupStats = useMemo(() => {
+    const totalGroupStudents = groupChartData.reduce((sum, g) => sum + (Number(g.value) || 0), 0) || Number(summaryState.data?.totalStudents ?? 0);
+    let boys = Number(groupState.data?.boysCount ?? groupState.data?.boys ?? summaryState.data?.boysCount ?? 0);
+    let girls = Number(groupState.data?.girlsCount ?? groupState.data?.girls ?? summaryState.data?.girlsCount ?? 0);
+
+    if (boys === 0 && girls === 0) {
+      if (overviewState.data?.totalAdmissions > 0) {
+        const admTotal = overviewState.data.totalAdmissions;
+        const admBoys = overviewState.data.boysCount || 0;
+        const ratio = admBoys / admTotal;
+        boys = Math.round(totalGroupStudents * ratio);
+        girls = Math.max(0, totalGroupStudents - boys);
+      }
+    } else if (boys + girls !== totalGroupStudents && totalGroupStudents > 0) {
+      const diff = totalGroupStudents - (boys + girls);
+      if (diff > 0) {
+        girls += diff;
+      }
+    }
+
+    return {
+      totalStudents: totalGroupStudents,
+      boys,
+      girls,
+    };
+  }, [groupChartData, groupState.data, summaryState.data, overviewState.data]);
 
   // Student Attendance Normalized Values
   const studentAttData = useMemo(() => {
@@ -1380,7 +1484,7 @@ export default function DashboardPage() {
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Main Analytics">
           {/* Card 1: Admission Overview */}
           <article className="dashboard-card dashboard-students-overview-card">
-            <CardHeader title="Admission Overview" action={<Link to="/dashboard/admission" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>} />
+            <CardHeader title="Admission Overview" />
             {overviewState.loading ? (
               <LoadingState label="Loading overview..." />
             ) : overviewState.error ? (
@@ -1392,18 +1496,18 @@ export default function DashboardPage() {
                 <div className="dashboard-area-chart-container">
                   {/* Fixed Y-Axis column (pinned on the left) */}
                   <div className="dashboard-area-chart-yaxis" style={{ width: yMax >= 1000 ? 40 : yMax >= 100 ? 34 : 28, flexShrink: 0 }}>
-                    <ResponsiveContainer width="100%" height={142}>
-                      <AreaChart data={overviewChartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+                    <ResponsiveContainer width="100%" height={156}>
+                      <AreaChart data={overviewChartData} margin={{ top: 12, right: 4, left: 0, bottom: 6 }}>
                         <YAxis
                           width={yMax >= 1000 ? 36 : yMax >= 100 ? 30 : 24}
                           domain={[0, yMax]}
                           ticks={yTicks}
                           allowDecimals={false}
                           tickLine={false}
-                          axisLine={false}
-                          tick={{ fontSize: 10, fill: "var(--cms-muted, #64748b)" }}
+                          axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
+                          tick={{ fontSize: 9.5, fill: "var(--cms-muted, #64748b)" }}
                         />
-                        <XAxis height={22} tick={false} axisLine={false} tickLine={false} />
+                        <XAxis height={26} tick={false} axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }} tickLine={false} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -1422,12 +1526,12 @@ export default function DashboardPage() {
                       style={{
                         width: overviewChartData.length > 5 ? `${Math.round((overviewChartData.length / 5) * 100)}%` : "100%",
                         minWidth: "100%",
-                        height: 142,
+                        height: 156,
                         position: "relative"
                       }}
                     >
-                      <ResponsiveContainer width="100%" height={142}>
-                        <AreaChart data={overviewChartData} margin={{ top: 8, right: 0, left: 15, bottom: 0 }}>
+                      <ResponsiveContainer width="100%" height={156}>
+                        <AreaChart data={overviewChartData} margin={{ top: 12, right: 10, left: 15, bottom: 6 }}>
                           <defs>
                             <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
@@ -1438,9 +1542,9 @@ export default function DashboardPage() {
                           <XAxis
                             dataKey="period"
                             tickLine={false}
-                            axisLine={false}
-                            height={22}
-                            tick={{ fontSize: 10, fill: "var(--cms-muted, #64748b)" }}
+                            axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
+                            height={26}
+                            tick={renderAreaXAxisTick}
                             interval={0}
                             padding={{ left: 20, right: 20 }}
                           />
@@ -1482,13 +1586,18 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
+                <div className="dashboard-card-footer">
+                  <Link to="/dashboard/admission" className="dashboard-footer-btn">
+                    View Admissions <ChevronRight size={14} />
+                  </Link>
+                </div>
               </div>
             )}
           </article>
 
           {/* Card 2: Students by Group */}
           <article className="dashboard-card dashboard-group-card">
-            <CardHeader title="Students by Group" action={<Link to="/dashboard/courses" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>} />
+            <CardHeader title="Students by Group" />
             {groupState.loading ? (
               <LoadingState label="Loading groups..." />
             ) : groupState.error ? (
@@ -1497,20 +1606,73 @@ export default function DashboardPage() {
               <EmptyState message="No group distribution data available." />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-chart dashboard-bar-chart-wrap">
-                  <ResponsiveContainer width="100%" height={175}>
-                    <BarChart data={groupChartData} margin={{ top: 15, right: 5, left: -22, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border)" />
-                      <XAxis dataKey="name" tickLine={false} axisLine={false} height={20} tick={{ fontSize: 10, fontWeight: 700 }} />
-                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
-                      <Tooltip formatter={(val) => [formatNumber(val), "Students"]} />
-                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                        {groupChartData.map((entry, index) => (
-                          <Cell key={entry.name || index} fill={GROUP_COLORS[index % GROUP_COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="dashboard-chart dashboard-bar-chart-wrap" style={{ overflowX: groupChartData.length > 5 ? "auto" : "visible", width: "100%" }}>
+                  <div style={{ width: groupChartData.length > 5 ? `${Math.max(100, Math.round((groupChartData.length / 5) * 100))}%` : "100%", minWidth: "100%", height: 152 }}>
+                    <ResponsiveContainer width="100%" height={152}>
+                      <BarChart data={groupChartData} margin={{ top: 16, right: 10, left: -6, bottom: 6 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
+                        <XAxis
+                          dataKey="name"
+                          tickLine={false}
+                          axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
+                          height={26}
+                          tick={{ fontSize: 10.5, fontWeight: 700, fill: "var(--cms-text, #334155)", dy: 3 }}
+                          interval={0}
+                        />
+                        <YAxis
+                          domain={[0, groupYMax]}
+                          ticks={groupYTicks}
+                          interval={0}
+                          allowDecimals={false}
+                          width={26}
+                          tickLine={false}
+                          axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
+                          tick={{ fontSize: 9.5, fill: "var(--cms-muted, #64748b)" }}
+                        />
+                        <Tooltip content={<CustomBarTooltip />} />
+                        <Bar dataKey="value" maxBarSize={38} radius={[4, 4, 0, 0]}>
+                          <LabelList
+                            dataKey="value"
+                            position="top"
+                            formatter={(val) => (val > 0 ? val : "0")}
+                            style={{ fontSize: 10.5, fontWeight: 800, fill: "var(--cms-text, #334155)" }}
+                            offset={4}
+                          />
+                          {groupChartData.map((entry, index) => (
+                            <Cell key={entry.name || index} fill={entry.fill || GROUP_COLORS[index % GROUP_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <div className="dashboard-students-chips">
+                  <div className="dashboard-student-chip chip-total">
+                    <span className="chip-icon"><Users size={15} /></span>
+                    <div>
+                      <strong>{formatNumber(groupStats.totalStudents)}</strong>
+                      <small>Total Students</small>
+                    </div>
+                  </div>
+                  <div className="dashboard-student-chip chip-boys">
+                    <span className="chip-icon"><Users size={15} /></span>
+                    <div>
+                      <strong>{formatNumber(groupStats.boys)}</strong>
+                      <small>Boys</small>
+                    </div>
+                  </div>
+                  <div className="dashboard-student-chip chip-girls">
+                    <span className="chip-icon"><Users size={15} /></span>
+                    <div>
+                      <strong>{formatNumber(groupStats.girls)}</strong>
+                      <small>Girls</small>
+                    </div>
+                  </div>
+                </div>
+                <div className="dashboard-card-footer">
+                  <Link to="/dashboard/courses" className="dashboard-footer-btn">
+                    View All Groups <ChevronRight size={14} />
+                  </Link>
                 </div>
               </div>
             )}
@@ -1518,7 +1680,7 @@ export default function DashboardPage() {
 
           {/* Card 3: Students Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-attendance-today-card">
-            <CardHeader title="Students Attendance Overview (Today)" action={<Link to="/dashboard/attendance/student" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>} />
+            <CardHeader title="Students Attendance Overview (Today)" />
 
             {studentAttState.loading ? (
               <LoadingState label="Updating attendance..." />
@@ -1630,7 +1792,7 @@ export default function DashboardPage() {
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Secondary Analytics">
           {/* Card 1: Staff Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-staff-attendance-card">
-            <CardHeader title="Staff Attendance Overview (Today)" action={<Link to="/dashboard/attendance/staff?tab=staff-attendance" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>} />
+            <CardHeader title="Staff Attendance Overview (Today)" />
 
             {staffAttState.loading ? (
               <LoadingState label="Updating staff attendance..." />
@@ -1752,7 +1914,6 @@ export default function DashboardPage() {
           <article className="dashboard-card dashboard-holiday-card">
             <CardHeader
               title={`Upcoming Holidays (${holidaysList.length})`}
-              action={<Link to="/dashboard/holidays" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>}
             />
             {holidayState.loading ? (
               <LoadingState label="Loading holidays..." />
@@ -1783,6 +1944,11 @@ export default function DashboardPage() {
                     </div>
                   ))}
                 </div>
+                <div className="dashboard-card-footer">
+                  <Link to="/dashboard/holidays" className="dashboard-footer-btn">
+                    View Holiday Calendar <ChevronRight size={14} />
+                  </Link>
+                </div>
               </div>
             )}
           </article>
@@ -1791,7 +1957,6 @@ export default function DashboardPage() {
           <article className="dashboard-card dashboard-exams-card">
             <CardHeader
               title={`Upcoming Examinations (${examsList.length})`}
-              action={<Link to="/dashboard/examinations" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>}
             />
             {examState.loading ? (
               <LoadingState label="Loading exams..." />
@@ -1819,6 +1984,11 @@ export default function DashboardPage() {
                       <span className={`dashboard-days-badge exam-badge badge-${item.tone}`}>{item.badge}</span>
                     </div>
                   ))}
+                </div>
+                <div className="dashboard-card-footer">
+                  <Link to="/dashboard/examinations" className="dashboard-footer-btn">
+                    View Exam Schedule <ChevronRight size={14} />
+                  </Link>
                 </div>
               </div>
             )}

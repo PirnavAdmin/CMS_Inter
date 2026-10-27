@@ -129,7 +129,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
                 else if (timingConfig != null && markedEntry?.InTime != null)
                 {
-                    var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
+                    var lateThreshold = timingConfig.LateThreshold > timingConfig.WorkStartTime
+                        ? timingConfig.LateThreshold
+                        : timingConfig.WorkStartTime.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
                     isLate = markedEntry.InTime.Value > lateThreshold;
                 }
                 if (timingConfig != null && markedEntry?.OutTime != null && markedEntry == null)
@@ -247,7 +249,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     if (entry.InTime.HasValue)
                     {
-                        var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
+                        var lateThreshold = timingConfig.LateThreshold > timingConfig.WorkStartTime
+                            ? timingConfig.LateThreshold
+                            : timingConfig.WorkStartTime.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
                         if (entry.InTime.Value > lateThreshold && effectiveStatus == AttendanceStatus.Present)
                         {
                             effectiveStatus = AttendanceStatus.Late;
@@ -773,9 +777,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var shiftStart = timingConfig?.WorkStartTime ?? new TimeSpan(9, 0, 0);
             var shiftEnd = timingConfig?.WorkEndTime ?? new TimeSpan(16, 30, 0);
+            var graceMins = timingConfig?.GracePeriodMinutes ?? 15;
             var lateThreshold = timingConfig != null
-                ? timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes))
+                ? (timingConfig.LateThreshold > timingConfig.WorkStartTime ? timingConfig.LateThreshold : shiftStart.Add(TimeSpan.FromMinutes(graceMins)))
                 : new TimeSpan(9, 15, 0);
+            var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(graceMins));
 
             var attendance = await _context.StaffAttendances
                 .Include(a => a.StaffAttendanceSession)
@@ -815,17 +821,32 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 if (attendance.OutTime.HasValue)
                 {
-                    status = "punched_out";
                     outTimeStr = DateTime.Today.Add(attendance.OutTime.Value).ToString("hh:mm tt");
 
                     var diff = attendance.OutTime.Value - attendance.InTime.Value;
                     if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                     durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+
+                    if (attendance.OutTime.Value > checkoutCutoff)
+                    {
+                        status = "missed_checkout";
+                    }
+                    else
+                    {
+                        status = "punched_out";
+                    }
                 }
                 else
                 {
-                    status = "punched_in";
                     var nowTime = DateTime.Now.TimeOfDay;
+                    if (nowTime > checkoutCutoff)
+                    {
+                        status = "missed_checkout";
+                    }
+                    else
+                    {
+                        status = "punched_in";
+                    }
                     var diff = nowTime - attendance.InTime.Value;
                     if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                     durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
@@ -835,21 +856,17 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     todayStatus = "Present";
                 }
-                else if (attendance.Status == AttendanceStatus.Late)
+                else if (status == "missed_checkout")
+                {
+                    todayStatus = "Missed Checkout";
+                }
+                else if (isLate || attendance.Status == AttendanceStatus.Late)
                 {
                     todayStatus = "Late";
                 }
                 else if (attendance.Status == AttendanceStatus.HalfDay)
                 {
                     todayStatus = "Half Day";
-                }
-                else if (attendance.Status == AttendanceStatus.Present)
-                {
-                    todayStatus = "Present";
-                }
-                else if (isLate)
-                {
-                    todayStatus = "Late";
                 }
                 else
                 {
@@ -864,7 +881,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 else todayStatus = "Absent";
             }
 
-            bool canRegularize = (todayStatus == "Late" || todayStatus == "Absent" || todayStatus == "Half Day")
+            bool canRegularize = (todayStatus == "Late" || todayStatus == "Absent" || todayStatus == "Half Day" || todayStatus == "Missed Checkout")
                                  && (regularization == null || regularization.Status != "Approved");
 
             return new MyAttendanceTodayResponse
@@ -966,8 +983,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 ?? timingConfigs.FirstOrDefault(c => c.StaffType == null)
                 ?? timingConfigs.FirstOrDefault();
 
+            var shiftStart = timingConfig?.WorkStartTime ?? new TimeSpan(9, 0, 0);
+            var graceMins = timingConfig?.GracePeriodMinutes ?? 15;
             var lateThreshold = timingConfig != null
-                ? timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes))
+                ? (timingConfig.LateThreshold > timingConfig.WorkStartTime ? timingConfig.LateThreshold : shiftStart.Add(TimeSpan.FromMinutes(graceMins)))
                 : new TimeSpan(9, 15, 0);
 
             var currentTime = DateTime.Now.TimeOfDay;
@@ -1053,10 +1072,17 @@ namespace CollegeManagement.API.Repositories.Implementations
                 ?? timingConfigs.FirstOrDefault(c => c.StaffType == null)
                 ?? timingConfigs.FirstOrDefault();
 
+            var shiftEnd = timingConfig?.WorkEndTime ?? new TimeSpan(16, 30, 0);
+            var graceMins = timingConfig?.GracePeriodMinutes ?? 15;
+            var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(graceMins));
+
+            var isMissedCheckout = currentTime > checkoutCutoff;
             var earlyCheckoutThreshold = timingConfig?.EarlyCheckoutThreshold ?? new TimeSpan(16, 30, 0);
             var isEarlyCheckout = currentTime < earlyCheckoutThreshold;
 
-            var outRemarks = isEarlyCheckout ? "Early checkout logged" : "Web Portal Check-Out";
+            var outRemarks = isMissedCheckout 
+                ? "Missed Checkout (Punched out after cutoff window)"
+                : (isEarlyCheckout ? "Early checkout logged" : "Web Portal Check-Out");
             if (!string.IsNullOrWhiteSpace(request.Remarks))
             {
                 outRemarks += $" | {request.Remarks}";
@@ -1144,6 +1170,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var shiftStart = timingConfig?.WorkStartTime ?? new TimeSpan(9, 0, 0);
             var shiftEnd = timingConfig?.WorkEndTime ?? new TimeSpan(16, 30, 0);
+            var graceMins = timingConfig?.GracePeriodMinutes ?? 15;
+            var lateThreshold = timingConfig != null
+                ? (timingConfig.LateThreshold > timingConfig.WorkStartTime ? timingConfig.LateThreshold : shiftStart.Add(TimeSpan.FromMinutes(graceMins)))
+                : new TimeSpan(9, 15, 0);
+            var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(graceMins));
             string shiftLabel = $"{DateTime.Today.Add(shiftStart):hh:mm tt} – {DateTime.Today.Add(shiftEnd):hh:mm tt}";
 
             var logs = new List<MyAttendanceLogItemDto>();
@@ -1178,12 +1209,70 @@ namespace CollegeManagement.API.Repositories.Implementations
                     inTimeStr = DateTime.Today.Add(att.InTime.Value).ToString("hh:mm tt");
                     device = string.IsNullOrWhiteSpace(att.DeviceId) ? "Web Portal" : att.DeviceId;
 
+                    bool isLatePunch = att.InTime.Value > lateThreshold || att.Status == AttendanceStatus.Late;
+                    bool isMissedCheckout = false;
+
                     if (att.OutTime.HasValue)
                     {
                         outTimeStr = DateTime.Today.Add(att.OutTime.Value).ToString("hh:mm tt");
                         var diff = att.OutTime.Value - att.InTime.Value;
                         if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                         hoursStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+
+                        // If punched out after checkout cutoff (e.g. Thursday 09:49 PM)
+                        if (att.OutTime.Value > checkoutCutoff)
+                        {
+                            isMissedCheckout = true;
+                        }
+                    }
+                    else
+                    {
+                        // No OutTime recorded
+                        if (d.Date == now.Date)
+                        {
+                            var nowTime = DateTime.Now.TimeOfDay;
+                            if (nowTime > checkoutCutoff)
+                            {
+                                isMissedCheckout = true;
+                            }
+                            var diff = nowTime - att.InTime.Value;
+                            if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                            hoursStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                        }
+                        else if (d.Date < now.Date)
+                        {
+                            // Past day: missed checkout
+                            isMissedCheckout = true;
+
+                            // Calculate worked duration until next check-in or shift end
+                            var nextAtt = attendances
+                                .Where(a => a.StaffAttendanceSession.AttendanceDate.Date > d.Date && a.InTime.HasValue)
+                                .OrderBy(a => a.StaffAttendanceSession.AttendanceDate)
+                                .FirstOrDefault();
+
+                            if (nextAtt != null && nextAtt.InTime.HasValue)
+                            {
+                                var nextDateTime = nextAtt.StaffAttendanceSession.AttendanceDate.Date.Add(nextAtt.InTime.Value);
+                                var currentDateTime = d.Date.Add(att.InTime.Value);
+                                var diff = nextDateTime - currentDateTime;
+                                if (diff.TotalMinutes > 0 && diff.TotalHours <= 36)
+                                {
+                                    hoursStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                                }
+                                else
+                                {
+                                    var shiftDiff = shiftEnd - att.InTime.Value;
+                                    if (shiftDiff.TotalMinutes < 0) shiftDiff = shiftDiff.Add(TimeSpan.FromHours(24));
+                                    hoursStr = $"{(int)shiftDiff.TotalHours}h {shiftDiff.Minutes}m";
+                                }
+                            }
+                            else
+                            {
+                                var shiftDiff = shiftEnd - att.InTime.Value;
+                                if (shiftDiff.TotalMinutes < 0) shiftDiff = shiftDiff.Add(TimeSpan.FromHours(24));
+                                hoursStr = $"{(int)shiftDiff.TotalHours}h {shiftDiff.Minutes}m";
+                            }
+                        }
                     }
 
                     if (reg?.Status == "Approved")
@@ -1191,7 +1280,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                         status = "Present";
                         presentCount++;
                     }
-                    else if (att.Status == AttendanceStatus.Late)
+                    else if (isMissedCheckout)
+                    {
+                        status = "Missed Checkout";
+                        presentCount++;
+                    }
+                    else if (isLatePunch)
                     {
                         status = "Late";
                         presentCount++;
@@ -1236,7 +1330,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     }
                 }
 
-                bool canRegularize = isPastOrToday && (status == "Late" || status == "Absent" || status == "Half Day")
+                bool canRegularize = isPastOrToday && (status == "Late" || status == "Missed Checkout" || status == "Absent" || status == "Half Day")
                                      && (reg == null || reg.Status != "Approved");
 
                 logs.Add(new MyAttendanceLogItemDto

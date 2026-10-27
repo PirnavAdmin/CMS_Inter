@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport/reports")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     [Tags("Transport Management Reports")]
     public class TransportReportController : ControllerBase
     {
@@ -20,7 +20,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("dashboard")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetDashboardReport([FromQuery] ReportFilterDto filter)
         {
             var result = await _service.GetDashboardReportAsync(filter);
@@ -36,7 +36,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("trips")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetTripReports([FromQuery] ReportFilterDto filter)
         {
             try
@@ -64,7 +64,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("vehicles")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetVehicleReports([FromQuery] ReportFilterDto filter)
         {
             try
@@ -85,7 +85,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("drivers")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetDriverReports([FromQuery] ReportFilterDto filter)
         {
             try
@@ -106,7 +106,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("routes")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetRouteReports([FromQuery] ReportFilterDto filter)
         {
             try
@@ -127,7 +127,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("students")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetStudentTransportReports([FromQuery] ReportFilterDto filter)
         {
             try
@@ -148,7 +148,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("pickup-wise")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetPickupPointWise([FromQuery] ReportFilterDto filter)
         {
             try
@@ -163,7 +163,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("seat-occupancy")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetSeatOccupancy([FromQuery] ReportFilterDto filter)
         {
             try
@@ -178,7 +178,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("maintenance")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetMaintenance([FromQuery] ReportFilterDto filter)
         {
             try
@@ -193,7 +193,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("monthly-cost")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetMonthlyCost([FromQuery] ReportFilterDto filter)
         {
             try
@@ -208,7 +208,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("print")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> PrintReport(string? reportType, [FromQuery] ReportFilterDto filter)
         {
             try
@@ -224,7 +224,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("export/pdf")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> ExportPdf(string? reportType, [FromQuery] ReportFilterDto filter)
         {
             try
@@ -240,7 +240,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("export/csv")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> DownloadCsv(string? reportType, [FromQuery] ReportFilterDto filter)
         {
             try
