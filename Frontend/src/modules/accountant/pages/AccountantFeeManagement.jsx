@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Eye, History, Pencil, Plus, Printer, RefreshCw, Trash2, WalletCards } from "lucide-react";
 import { ConfirmDialog, Modal } from "@/shared/components/Ui.jsx";
-import { PAYMENT_METHODS } from "../../../data/feeManagementData.js";
-import { ConfirmDialog, Modal } from "@/components/common/Ui.jsx";
 import { COLLEGE_NAME, PAYMENT_METHODS } from "../../../data/feeManagementData.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
