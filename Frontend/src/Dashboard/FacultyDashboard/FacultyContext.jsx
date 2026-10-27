@@ -71,6 +71,16 @@ export const persistStaffProfile = (data) => {
       localStorage.removeItem("staff_profile_photo");
       if (key) localStorage.removeItem(`${key}_photo`);
     }
+
+    // Synchronize photo with auth user in localStorage and sessionStorage so reloads retain it
+    try {
+      const authUser = getAuthUser();
+      if (authUser && data?.photoUrl) {
+        const updatedAuth = { ...authUser, photoUrl: data.photoUrl, photoPath: data.photoUrl, profilePhoto: data.photoUrl };
+        if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updatedAuth));
+        if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updatedAuth));
+      }
+    } catch {}
   } catch {}
 };
 
@@ -132,17 +142,20 @@ const getInitialProfileData = () => {
       }
     } catch {}
 
-    const userKey = getStaffStorageKey(mergedUser);
-    const cachedUserPhoto = userKey ? localStorage.getItem(`${userKey}_photo`) : null;
-    const savedPhoto = localStorage.getItem("staff_profile_photo") || cachedUserPhoto;
-    if (savedPhoto && !mergedUser.photoUrl) {
-      mergedUser.photoUrl = savedPhoto;
-    }
-    if ((mergedUser.photoPath || mergedUser.profilePhoto) && !mergedUser.photoUrl) {
-      mergedUser.photoUrl = mergedUser.photoPath || mergedUser.profilePhoto;
+    const serverPhoto = mergedUser.photoPath || mergedUser.profilePhoto || mergedUser.photoUrl;
+    if (serverPhoto && !String(serverPhoto).startsWith("data:")) {
+      mergedUser.photoUrl = serverPhoto;
+    } else {
+      const userKey = getStaffStorageKey(mergedUser);
+      const cachedUserPhoto = userKey ? localStorage.getItem(`${userKey}_photo`) : null;
+      const savedPhoto = localStorage.getItem("staff_profile_photo") || cachedUserPhoto;
+      if (savedPhoto) {
+        mergedUser.photoUrl = savedPhoto;
+      }
     }
 
     return mergedUser;
+
   } catch {
     return {};
   }

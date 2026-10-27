@@ -178,19 +178,58 @@ export const isNonTeachingDesigName = (name) => {
 };
 
 export const DEFAULT_TEACHING_DEPARTMENTS = [];
-
 export const DEFAULT_NON_TEACHING_DEPARTMENTS = [];
-
 export const DEFAULT_TEACHING_DESIGNATIONS = [];
-
 export const DEFAULT_NON_TEACHING_DESIGNATIONS = [];
 
 export const loadCachedDepartments = () => {
+  try {
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      const stored = window.sessionStorage.getItem("cms_cached_departments");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    }
+  } catch {
+    // Fall back if sessionStorage unavailable
+  }
   return [...DEFAULT_TEACHING_DEPARTMENTS, ...DEFAULT_NON_TEACHING_DEPARTMENTS];
 };
 
 export const loadCachedDesignations = () => {
+  try {
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      const stored = window.sessionStorage.getItem("cms_cached_designations");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    }
+  } catch {
+    // Fall back if sessionStorage unavailable
+  }
   return [...DEFAULT_TEACHING_DESIGNATIONS, ...DEFAULT_NON_TEACHING_DESIGNATIONS];
+};
+
+export const setCachedDepartments = (depts) => {
+  try {
+    if (typeof window !== "undefined" && window.sessionStorage && Array.isArray(depts)) {
+      window.sessionStorage.setItem("cms_cached_departments", JSON.stringify(depts));
+    }
+  } catch {
+    // Silently continue
+  }
+};
+
+export const setCachedDesignations = (desigs) => {
+  try {
+    if (typeof window !== "undefined" && window.sessionStorage && Array.isArray(desigs)) {
+      window.sessionStorage.setItem("cms_cached_designations", JSON.stringify(desigs));
+    }
+  } catch {
+    // Silently continue
+  }
 };
 
 const unwrapRows = (payload) => {
@@ -329,6 +368,7 @@ const formDefinitions = {
       "select",
       ["Teaching", "Non-Teaching", "Both"],
     ],
+    ["description", "Description", false, "Enter department description", "textarea"],
     ["status", "Status", true, "Select status", "select", ["Active", "Inactive"]],
   ],
   designation: [
@@ -839,6 +879,7 @@ export default function DepartmentManagementPage() {
       if (requestSeqRef.current === currentSeq) {
         const rows = unwrapRows(deptRes.data).map(normalizeDepartment).filter((d) => d.name);
         setDepartments(rows);
+        setCachedDepartments(rows);
         deptSuccess = true;
       }
     } catch (err) {
@@ -866,6 +907,7 @@ export default function DepartmentManagementPage() {
       if (requestSeqRef.current === currentSeq) {
         const rows = unwrapRows(desigRes.data).map(normalizeDesignation).filter((d) => d.name);
         setDesignations(rows);
+        setCachedDesignations(rows);
         desigSuccess = true;
       }
     } catch (err) {
@@ -1032,12 +1074,20 @@ export default function DepartmentManagementPage() {
     try {
       await apiClient.delete(apiEndpoints.departments.delete(pendingDeleteDept.id));
       setToast(`Department "${pendingDeleteDept.name}" deleted successfully.`);
-      setDepartments((prev) => prev.filter((d) => d.id !== pendingDeleteDept.id));
+      setDepartments((prev) => {
+        const next = prev.filter((d) => d.id !== pendingDeleteDept.id);
+        setCachedDepartments(next);
+        return next;
+      });
     } catch (error) {
       const status = error?.response?.status;
       if (status === 404) {
         setToast("Department was not found on the server.");
-        setDepartments((prev) => prev.filter((d) => d.id !== pendingDeleteDept.id));
+        setDepartments((prev) => {
+          const next = prev.filter((d) => d.id !== pendingDeleteDept.id);
+          setCachedDepartments(next);
+          return next;
+        });
       } else {
         const msg = getApiErrorMessage(
           error,
@@ -1058,12 +1108,20 @@ export default function DepartmentManagementPage() {
     try {
       await apiClient.delete(apiEndpoints.designations.delete(pendingDeleteDesig.id));
       setToast({ message: `Designation "${pendingDeleteDesig.name}" deleted successfully.`, type: "success" });
-      setDesignations((prev) => prev.filter((d) => d.id !== pendingDeleteDesig.id));
+      setDesignations((prev) => {
+        const next = prev.filter((d) => d.id !== pendingDeleteDesig.id);
+        setCachedDesignations(next);
+        return next;
+      });
     } catch (error) {
       const status = error?.response?.status;
       if (status === 404) {
         setToast({ message: "Designation was not found on the server.", type: "warning" });
-        setDesignations((prev) => prev.filter((d) => d.id !== pendingDeleteDesig.id));
+        setDesignations((prev) => {
+          const next = prev.filter((d) => d.id !== pendingDeleteDesig.id);
+          setCachedDesignations(next);
+          return next;
+        });
       } else {
         const msg = getApiErrorMessage(
           error,
@@ -1423,7 +1481,11 @@ export default function DepartmentManagementPage() {
       {pendingDeleteDept ? (
         <ConfirmDialog
           title="Delete department?"
-          message={`Are you sure you want to delete department "${pendingDeleteDept.name}"? This action cannot be undone.`}
+          message={
+            (pendingDeleteDept.designationCount > 0 || pendingDeleteDept.staffCount > 0)
+              ? `Warning: Department "${pendingDeleteDept.name}" has ${pendingDeleteDept.designationCount || 0} active designation(s) and ${pendingDeleteDept.staffCount || 0} assigned staff member(s). You must reassign or remove them before deleting.`
+              : `Are you sure you want to delete department "${pendingDeleteDept.name}"? This action cannot be undone.`
+          }
           confirmLabel={deletingDept ? "Deleting..." : "Delete"}
           onCancel={() => setPendingDeleteDept(null)}
           onConfirm={handleDeleteDepartment}
@@ -1434,7 +1496,11 @@ export default function DepartmentManagementPage() {
       {pendingDeleteDesig ? (
         <ConfirmDialog
           title="Delete designation?"
-          message={`Are you sure you want to delete designation "${pendingDeleteDesig.name}"? This action cannot be undone.`}
+          message={
+            pendingDeleteDesig.assignedStaffCount > 0
+              ? `Warning: Designation "${pendingDeleteDesig.name}" is currently assigned to ${pendingDeleteDesig.assignedStaffCount} staff member(s). You must reassign them before deleting.`
+              : `Are you sure you want to delete designation "${pendingDeleteDesig.name}"? This action cannot be undone.`
+          }
           confirmLabel={deletingDesig ? "Deleting..." : "Delete"}
           onCancel={() => setPendingDeleteDesig(null)}
           onConfirm={handleDeleteDesignation}
@@ -1454,9 +1520,17 @@ export default function DepartmentManagementPage() {
             setToast(msg);
             if (newItem) {
               if (createKind === "department") {
-                setDepartments((prev) => [newItem, ...prev]);
+                setDepartments((prev) => {
+                  const next = [newItem, ...prev];
+                  setCachedDepartments(next);
+                  return next;
+                });
               } else {
-                setDesignations((prev) => [newItem, ...prev]);
+                setDesignations((prev) => {
+                  const next = [newItem, ...prev];
+                  setCachedDesignations(next);
+                  return next;
+                });
               }
             }
           }}
@@ -2137,9 +2211,9 @@ export function MasterImportPage({ kind = "department" }) {
   const download = async () => {
     try {
       const endpoint =
-        apiEndpoints.departments.exportTemplate ||
-        apiEndpoints.departments.template ||
-        "/api/v1/departments/export-template";
+        kind === "designation"
+          ? (apiEndpoints.designations.exportTemplate || "/api/v1/designations/template")
+          : (apiEndpoints.departments.exportTemplate || apiEndpoints.departments.template || "/api/v1/departments/template");
 
       const res = await apiClient.get(endpoint, {
         responseType: "blob",
@@ -2337,8 +2411,9 @@ export function MasterImportPage({ kind = "department" }) {
       formData.append("DefaultStaffType", "Teaching");
 
       const endpoint =
-        apiEndpoints.departments.importExcel ||
-        "/api/v1/departments/import-excel";
+        kind === "designation"
+          ? (apiEndpoints.designations.importExcel || "/api/v1/designations/import-excel")
+          : (apiEndpoints.departments.importExcel || "/api/v1/departments/import-excel");
 
       const response = await apiClient.post(endpoint, formData, {
         headers: { "Content-Type": "multipart/form-data" },

@@ -171,6 +171,7 @@ public class ReportService : IReportService
         var request = new CustomReportRequestDto
         {
             ReportType = reportType,
+            CampusId = filter.CampusId,
             BoardId = filter.BoardId,
             AcademicYearId = filter.AcademicYearId,
             AcademicLevelId = filter.AcademicLevelId,

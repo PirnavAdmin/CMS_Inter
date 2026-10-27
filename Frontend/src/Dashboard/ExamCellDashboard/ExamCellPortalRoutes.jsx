@@ -2,6 +2,8 @@ import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ExamCellLayout from "./layout/ExamCellLayout.jsx";
 
+import { SHOW_HALL_TICKETS } from "./hallTicketsConfig.js";
+
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Examinations = lazy(() => import("./pages/ExaminationPage.jsx"));
 const HallAllocation = lazy(() => import("./pages/HallAllocation.jsx"));
@@ -31,8 +33,10 @@ export default function ExamCellPortalRoutes() {
       <Route path="dashboard" element={<Navigate to="/exam-cell-dashboard" replace />} />
       <Route path="exams" element={<Examinations key="management" />} />
       <Route path="exam-timetable" element={<ExamTimetable key="timetable" />} />
-      <Route path="hall-allocation" element={<HallAllocation />} />
-      <Route path="hall-tickets" element={<HallTickets />} />
+      <Route path="hall-allocation" element={<HallAllocation key="hall-allocation" initialTab="rooms" />} />
+      <Route path="invigilation-duties" element={<HallAllocation key="invigilation-duties" initialTab="duties" />} />
+      <Route path="duties" element={<HallAllocation key="duties" initialTab="duties" />} />
+      <Route path="hall-tickets" element={SHOW_HALL_TICKETS ? <HallTickets /> : <Navigate to="/exam-cell-dashboard" replace />} />
       <Route path="marks-entry" element={<Marks key="entry" initialTab="entry" />} />
       <Route path="marks-verification" element={<Marks key="verification" initialTab="evaluation" />} />
       <Route path="results" element={<Results key="results" />} />

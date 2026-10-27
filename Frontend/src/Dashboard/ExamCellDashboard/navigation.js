@@ -12,7 +12,10 @@ import {
   CalendarOff,
   BarChart3,
   UserRound,
+  ShieldAlert,
 } from "lucide-react";
+
+import { SHOW_HALL_TICKETS } from "./hallTicketsConfig.js";
 
 export const examCellBase = "/exam-cell-dashboard";
 
@@ -23,7 +26,8 @@ export const examCellMenu = [
     [
       ["exams", "Examination", CalendarDays],
       ["hall-allocation", "Hall Allocation", Building2],
-      ["hall-tickets", "Hall Tickets", Ticket],
+      ["invigilation-duties", "Invigilation Duties", ShieldAlert],
+      ...(SHOW_HALL_TICKETS ? [["hall-tickets", "Hall Tickets", Ticket]] : []),
     ],
   ],
   [

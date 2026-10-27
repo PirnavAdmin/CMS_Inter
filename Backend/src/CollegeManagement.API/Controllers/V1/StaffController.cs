@@ -193,13 +193,6 @@ namespace CollegeManagement.API.Controllers.V1
                 }
             }
 
-            var ntsStaff = await _db.Staffs.FirstOrDefaultAsync(s => s.EmployeeId == "NTS001" || s.Email == "nts001@cms.com");
-            if (ntsStaff != null)
-            {
-                var profile = await _staffService.GetStaffProfileFullAsync(ntsStaff.Id);
-                return Ok(profile);
-            }
-
             return NotFound(new { message = "Staff profile not linked to current authenticated user." });
         }
 
@@ -234,11 +227,6 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     staff = await _db.Staffs.FirstOrDefaultAsync(s => s.Email == emailClaim);
                 }
-            }
-
-            if (staff == null)
-            {
-                staff = await _db.Staffs.FirstOrDefaultAsync(s => s.EmployeeId == "NTS001" || s.Email == "nts001@cms.com");
             }
 
             if (staff == null)
@@ -328,6 +316,23 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> CreateStaff([FromBody] CreateStaffDto dto)
         {
+            if (!dto.CampusId.HasValue || dto.CampusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    dto.CampusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        dto.CampusId = claimCampusId;
+                    }
+                }
+            }
+
             var result = await _staffService.CreateStaffAsync(dto);
             return StatusCode(StatusCodes.Status201Created, result);
         }
@@ -489,6 +494,23 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffImportResultDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> ImportExcel([FromForm] StaffImportExcelRequestDto dto)
         {
+            if (!dto.CampusId.HasValue || dto.CampusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    dto.CampusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        dto.CampusId = claimCampusId;
+                    }
+                }
+            }
+
             var result = await _staffService.ImportStaffFromExcelAsync(dto.File, dto.DefaultStaffType, dto.CampusId);
             return Ok(result);
         }
@@ -590,6 +612,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadPhoto([FromForm] UploadStaffPhotoDto dto)
         {
+            if (dto.StaffId <= 0)
+            {
+                var staffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId");
+                if (staffClaim != null && int.TryParse(staffClaim.Value, out int claimStaffId) && claimStaffId > 0)
+                {
+                    dto.StaffId = claimStaffId;
+                }
+            }
+
             var result = await _staffService.UploadPhotoAsync(dto);
             return Ok(result);
         }
@@ -599,12 +630,15 @@ namespace CollegeManagement.API.Controllers.V1
         /// Stream staff member profile photo.
         /// </summary>
         [HttpGet("photo/{id:int}")]
+        [HttpGet("{id:int}/photo")]
+        [HttpGet("{id:int}/profile-photo")]
         [AllowAnonymous]
         public async Task<IActionResult> GetStaffPhoto(int id)
         {
             var (physicalPath, contentType) = await _staffService.GetPhotoAsync(id);
             return PhysicalFile(physicalPath, contentType);
         }
+
 
         // =========================================================================
         // LOOKUP ENDPOINTS (Blood Groups, Boards, Departments, Designations)

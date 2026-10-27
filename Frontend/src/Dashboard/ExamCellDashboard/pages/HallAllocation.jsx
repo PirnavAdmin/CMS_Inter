@@ -19,11 +19,22 @@ import {
   Check,
   RotateCcw,
   X,
+  ShieldAlert,
+  FileText,
+  Eye,
+  LayoutGrid,
+  Table as TableIcon,
+  CheckCircle,
+  XCircle,
+  Clock4,
+  Download,
+  BookOpen,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getExamDuties } from "@/services/examinationService.js";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import { Modal, Toast, Pagination } from "@/components/common/Ui.jsx";
 import {
@@ -37,6 +48,247 @@ import {
   hasTimeOverlap,
 } from "@/utils/examinationUtils.js";
 import "./HallAllocation.css";
+
+const printDutiesRegister = (duties = [], campusId = 1) => {
+  if (!duties || duties.length === 0) return;
+  const popup = window.open("", "_blank", "width=1050,height=800");
+  if (!popup) {
+    alert("Please allow popups for printing invigilation duties register.");
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Official Invigilation Duties Register</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm 12mm; }
+    @media print {
+      body { margin: 0; padding: 0; background: #fff !important; color: #000 !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+      .no-print { display: none !important; }
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; margin: 0; padding: 18px; background: #f8fafc; }
+    .sheet { max-width: 1050px; margin: 0 auto; padding: 20px; background: #fff; border: 2px solid #1A2114; border-radius: 4px; box-sizing: border-box; }
+    .header { text-align: center; border-bottom: 2px solid #1A2114; padding-bottom: 10px; margin-bottom: 14px; }
+    .college-name { font-size: 18px; font-weight: 800; text-transform: uppercase; margin: 0 0 4px; color: #1A2114; letter-spacing: 0.5px; }
+    .sub-title { font-size: 13px; font-weight: 700; color: #15803d; text-transform: uppercase; margin: 0 0 4px; }
+    .meta { font-size: 11px; color: #475569; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+    th { background: #f1f5f9; text-transform: uppercase; font-size: 10px; font-weight: 700; color: #334155; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 36px; padding-top: 14px; border-top: 1px dashed #cbd5e1; }
+    .sig-block { text-align: center; width: 180px; }
+    .sig-line { border-top: 1px solid #334155; padding-top: 4px; font-size: 11px; font-weight: 600; color: #0f172a; }
+    .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9.5px; font-weight: 700; }
+    .badge-upcoming { background: #dcfce7; color: #15803d; }
+    .badge-cancelled { background: #fee2e2; color: #dc2626; }
+    .badge-completed { background: #f1f5f9; color: #475569; }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="header">
+      <h1 class="college-name">COLLEGE EXAMINATION CELL</h1>
+      <h2 class="sub-title">Official Invigilation Duties Register & Proctoring Roster</h2>
+      <div class="meta">Campus ID: ${campusId || 1} · Generated on: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} · Total Duties: ${duties.length}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 5%; text-align: center;">#</th>
+          <th style="width: 14%;">Date & Hours</th>
+          <th style="width: 16%;">Examination</th>
+          <th style="width: 18%;">Subject</th>
+          <th style="width: 10%;">Venue</th>
+          <th style="width: 15%;">Invigilator</th>
+          <th style="width: 8%; text-align: center;">Candidates</th>
+          <th style="width: 8%; text-align: center;">Status</th>
+          <th style="width: 6%; text-align: center;">Sign</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${duties.map((r, i) => `
+          <tr>
+            <td style="text-align: center; color: #64748b;">${i + 1}</td>
+            <td>
+              <strong>${r.date || r.examDate || "—"}</strong><br />
+              <span style="font-size: 10px; color: #64748b;">${r.examHours || `${r.startTime || ""} – ${r.endTime || ""}`}</span>
+            </td>
+            <td>
+              <strong>${r.examName || "Examination"}</strong><br />
+              <span style="font-size: 10px; color: #64748b;">${r.examCode || ""} · ${r.examType || "Regular"}</span>
+            </td>
+            <td>
+              <strong>${r.subject || "—"}</strong><br />
+              <span style="font-size: 10px; color: #64748b;">${r.subjectCode || ""}</span>
+            </td>
+            <td>
+              <strong>${r.venue || "TBA"}</strong><br />
+              <span style="font-size: 9.5px; color: #64748b;">${r.reportingTime || ""}</span>
+            </td>
+            <td>
+              <strong>${r.invigilator || "Unassigned"}</strong><br />
+              <span style="font-size: 9.5px; color: #64748b;">ID: ${r.invigilatorId || "—"} · ${r.role || "Invigilator"}</span>
+            </td>
+            <td style="text-align: center; font-weight: 700;">
+              ${r.totalEnrolled ?? r.candidates ?? 30}
+            </td>
+            <td style="text-align: center;">
+              <span class="badge badge-${(r.status || 'upcoming').toLowerCase()}">${r.status || "Upcoming"}</span>
+            </td>
+            <td>&nbsp;</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <div class="sig-row">
+      <div class="sig-block">
+        <div style="height: 35px;"></div>
+        <div class="sig-line">Exam Cell Officer</div>
+      </div>
+      <div class="sig-block">
+        <div style="height: 35px;"></div>
+        <div class="sig-line">Chief Superintendent</div>
+      </div>
+      <div class="sig-block">
+        <div style="height: 35px;"></div>
+        <div class="sig-line">Controller of Examinations</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("load", () => {
+      window.focus();
+      setTimeout(() => { window.print(); }, 250);
+    });
+  </script>
+</body>
+</html>`;
+
+  popup.document.open();
+  popup.document.write(html);
+  popup.document.close();
+};
+
+const printDutyOrderSlip = (duty, campusId = 1) => {
+  if (!duty) return;
+  const popup = window.open("", "_blank", "width=850,height=750");
+  if (!popup) {
+    alert("Please allow popups for printing duty order slip.");
+    return;
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Invigilation Duty Order - ${duty.invigilator || "Faculty"}</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm; }
+    @media print {
+      body { margin: 0; padding: 0; background: #fff !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; margin: 0; padding: 24px; background: #f8fafc; }
+    .sheet { max-width: 750px; margin: 0 auto; padding: 28px; background: #fff; border: 2px solid #1A2114; border-radius: 4px; }
+    .header { text-align: center; border-bottom: 2px solid #1A2114; padding-bottom: 12px; margin-bottom: 20px; }
+    .college-name { font-size: 19px; font-weight: 800; text-transform: uppercase; margin: 0 0 4px; color: #1A2114; }
+    .sub-title { font-size: 13.5px; font-weight: 700; color: #15803d; text-transform: uppercase; margin: 0 0 4px; }
+    .meta { font-size: 11px; color: #64748b; }
+    .order-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    .order-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; background: #f8fafc; }
+    .order-label { font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+    .order-val { font-size: 13.5px; font-weight: 700; color: #0f172a; }
+    .sop-section { margin-top: 24px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px 18px; }
+    .sop-title { font-size: 12.5px; font-weight: 800; text-transform: uppercase; color: #0f172a; margin: 0 0 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+    .sop-list { margin: 0; padding-left: 20px; font-size: 12px; color: #334155; line-height: 1.6; }
+    .sop-list li { margin-bottom: 6px; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 48px; padding-top: 16px; border-top: 1px dashed #cbd5e1; }
+    .sig-block { text-align: center; width: 200px; }
+    .sig-line { border-top: 1px solid #334155; padding-top: 5px; font-size: 11.5px; font-weight: 600; color: #0f172a; }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="header">
+      <h1 class="college-name">COLLEGE EXAMINATION CELL</h1>
+      <h2 class="sub-title">Invigilation Duty Order & SOP Compliance Memorandum</h2>
+      <div class="meta">Order Ref: DUTY-${duty.id} · Issued for Campus ID: ${campusId || 1}</div>
+    </div>
+
+    <div class="order-grid">
+      <div class="order-box">
+        <div class="order-label">Appointed Invigilator</div>
+        <div class="order-val">${duty.invigilator || "Faculty Member"}</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Staff ID: ${duty.invigilatorId || "—"} · Role: ${duty.role || "Invigilator"}</div>
+      </div>
+      <div class="order-box">
+        <div class="order-label">Allocated Examination Hall</div>
+        <div class="order-val" style="color: #15803d;">Room / Hall: ${duty.venue || "TBA"}</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Reporting Time: ${duty.reportingTime || "08:30 AM (Mandatory 30 mins prior)"}</div>
+      </div>
+      <div class="order-box">
+        <div class="order-label">Examination & Code</div>
+        <div class="order-val">${duty.examName || "Academic Examination"}</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Code: ${duty.examCode || "—"} (${duty.examType || "Regular"})</div>
+      </div>
+      <div class="order-box">
+        <div class="order-label">Subject & Schedule</div>
+        <div class="order-val">${duty.subject || "—"} (${duty.subjectCode || ""})</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">${duty.date || duty.examDate || "—"} · ${duty.examHours || duty.session || "Morning"}</div>
+      </div>
+      <div class="order-box">
+        <div class="order-label">Seated Candidates</div>
+        <div class="order-val">${duty.totalEnrolled ?? duty.candidates ?? 30} Candidates</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Present: ${duty.present ?? 30} · Absent: ${duty.absent ?? 0}</div>
+      </div>
+      <div class="order-box">
+        <div class="order-label">Duty Assignment Status</div>
+        <div class="order-val" style="color: ${duty.status === 'Cancelled' ? '#dc2626' : '#15803d'};">${duty.status || "Upcoming"}</div>
+        <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Schedule ID: ${duty.examScheduleId || "—"}</div>
+      </div>
+    </div>
+
+    <div class="sop-section">
+      <div class="sop-title">Standard Operating Procedures (SOPs) for Invigilators</div>
+      <ol class="sop-list">
+        ${(duty.sops && duty.sops.length > 0 ? duty.sops : [
+          "Collect sealed Question Paper packets from Chief Superintendent room.",
+          "Verify Student Hall Tickets and prohibit unauthorized gadgets / smart watches.",
+          "Cross-verify candidate signature on Nominal Roll & OMR Barcode.",
+          "Hand over signed absentee statement within 30 minutes of start."
+        ]).map(s => `<li>${s}</li>`).join("")}
+      </ol>
+    </div>
+
+    <div class="sig-row">
+      <div class="sig-block">
+        <div style="height: 45px;"></div>
+        <div class="sig-line">Invigilator's Signature</div>
+      </div>
+      <div class="sig-block">
+        <div style="height: 45px;"></div>
+        <div class="sig-line">Chief Superintendent</div>
+      </div>
+      <div class="sig-block">
+        <div style="height: 45px;"></div>
+        <div class="sig-line">Controller of Examinations</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    window.addEventListener("load", () => {
+      window.focus();
+      setTimeout(() => { window.print(); }, 250);
+    });
+  </script>
+</body>
+</html>`;
+
+  popup.document.open();
+  popup.document.write(html);
+  popup.document.close();
+};
 
 const printSeatingPlan = (rows = [], currentExam = null, campusId = 1) => {
   if (!rows || rows.length === 0) return;
@@ -130,9 +382,22 @@ const printSeatingPlan = (rows = [], currentExam = null, campusId = 1) => {
   popup.document.close();
 };
 
-export default function HallAllocation() {
+export default function HallAllocation({ initialTab = "rooms" }) {
   const location = useLocation();
   const navExamId = location?.state?.examId ? String(location.state.examId) : "";
+
+  // Tab State: "rooms" | "duties"
+  const [activeTab, setActiveTab] = useState(() => {
+    return location?.state?.activeTab || initialTab || "rooms";
+  });
+
+  useEffect(() => {
+    if (location?.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    } else if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [location?.state?.activeTab, initialTab]);
 
   const { selectedCampusId } = useCampusContext();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
@@ -144,11 +409,22 @@ export default function HallAllocation() {
   const [faculty, setFaculty] = useState([]);
   const [schedulingContext, setSchedulingContext] = useState(null);
 
-  // Filters
+  // Filters for Rooms tab
   const [dateFilter, setDateFilter] = useState("");
   const [sessionFilter, setSessionFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Invigilation Duties state
+  const [duties, setDuties] = useState([]);
+  const [loadingDuties, setLoadingDuties] = useState(false);
+  const [dutyStaffFilter, setDutyStaffFilter] = useState("all");
+  const [dutyStatusFilter, setDutyStatusFilter] = useState("all");
+  const [dutySearch, setDutySearch] = useState("");
+  const [dutyViewMode, setDutyViewMode] = useState("table"); // 'table' | 'cards'
+  const [selectedDutyForModal, setSelectedDutyForModal] = useState(null);
+  const [dutyPage, setDutyPage] = useState(1);
+  const DUTIES_PER_PAGE = 10;
 
   // UI state
   const [loadingExams, setLoadingExams] = useState(false);
@@ -168,6 +444,154 @@ export default function HallAllocation() {
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  // Fetch Invigilation Duties from GET /api/v1/examinations/duties
+  const fetchDuties = useCallback(async () => {
+    setLoadingDuties(true);
+    try {
+      const params = {};
+      if (dutyStaffFilter && dutyStaffFilter !== "all") {
+        params.staffId = dutyStaffFilter;
+      }
+      if (dutyStatusFilter && dutyStatusFilter !== "all") {
+        params.status = dutyStatusFilter;
+      }
+      if (selectedCampusId) {
+        params.campusId = selectedCampusId;
+      }
+      const data = await getExamDuties(params);
+      const list = ensureArray(data);
+      setDuties(list);
+    } catch (err) {
+      showToast(getApiErrorMessage(err) || "Failed to load invigilation duties.", "error");
+    } finally {
+      setLoadingDuties(false);
+    }
+  }, [dutyStaffFilter, dutyStatusFilter, selectedCampusId]);
+
+  useEffect(() => {
+    if (activeTab === "duties") {
+      fetchDuties();
+    }
+  }, [activeTab, fetchDuties]);
+
+  // Invigilation Duty Metrics
+  const dutyMetrics = useMemo(() => {
+    const total = duties.length;
+    const upcoming = duties.filter((d) => (d.status || "").toLowerCase() === "upcoming").length;
+    const cancelled = duties.filter((d) => (d.status || "").toLowerCase() === "cancelled").length;
+    const completed = duties.filter((d) => (d.status || "").toLowerCase() === "completed").length;
+    const uniqueInvigilators = new Set(
+      duties.map((d) => d.invigilator || d.invigilatorId).filter(Boolean)
+    ).size;
+    return { total, upcoming, cancelled, completed, uniqueInvigilators };
+  }, [duties]);
+
+  // Dynamic list of staff from duties & faculty
+  const staffOptions = useMemo(() => {
+    const map = new Map();
+    duties.forEach((d) => {
+      if (d.invigilatorId && d.invigilator) {
+        map.set(String(d.invigilatorId), d.invigilator);
+      }
+    });
+    faculty.forEach((f) => {
+      if (f.id && f.name) {
+        map.set(String(f.id), f.name);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [duties, faculty]);
+
+  // Filtered duties by search
+  const filteredDuties = useMemo(() => {
+    let result = duties;
+    if (dutySearch.trim()) {
+      const q = dutySearch.toLowerCase().trim();
+      result = result.filter(
+        (d) =>
+          String(d.examName || "").toLowerCase().includes(q) ||
+          String(d.examCode || "").toLowerCase().includes(q) ||
+          String(d.subject || "").toLowerCase().includes(q) ||
+          String(d.subjectCode || "").toLowerCase().includes(q) ||
+          String(d.venue || "").toLowerCase().includes(q) ||
+          String(d.invigilator || "").toLowerCase().includes(q) ||
+          String(d.session || "").toLowerCase().includes(q) ||
+          String(d.date || "").toLowerCase().includes(q) ||
+          String(d.role || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [duties, dutySearch]);
+
+  // Paginated duties
+  const paginatedDuties = useMemo(() => {
+    const start = (dutyPage - 1) * DUTIES_PER_PAGE;
+    return filteredDuties.slice(start, start + DUTIES_PER_PAGE);
+  }, [filteredDuties, dutyPage]);
+
+  // Excel Export for Duties
+  const handleExportDutiesExcel = () => {
+    if (filteredDuties.length === 0) {
+      showToast("No invigilation duties to export.", "error");
+      return;
+    }
+    const data = filteredDuties.map((d, idx) => ({
+      "Sl No": idx + 1,
+      "Duty ID": d.id,
+      "Exam Code": d.examCode || "—",
+      "Exam Name": d.examName || "—",
+      "Category": d.category || "—",
+      "Exam Type": d.examType || "—",
+      "Subject": d.subject || "—",
+      "Subject Code": d.subjectCode || "—",
+      "Exam Date": d.date || d.examDate || "—",
+      "Session": d.session || "—",
+      "Exam Hours": d.examHours || `${d.startTime || ""} – ${d.endTime || ""}`,
+      "Venue / Hall": d.venue || "—",
+      "Invigilator Name": d.invigilator || "—",
+      "Invigilator ID": d.invigilatorId || "—",
+      "Role": d.role || "Invigilator",
+      "Reporting Time": d.reportingTime || "—",
+      "Total Enrolled": d.totalEnrolled ?? d.candidates ?? "—",
+      "Status": d.status || "—",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws["!cols"] = [
+      { wch: 6 },
+      { wch: 10 },
+      { wch: 16 },
+      { wch: 24 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 24 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 16 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 22 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 24 },
+      { wch: 14 },
+      { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Invigilation Duties");
+    const dateStr = new Date().toISOString().split("T")[0];
+    try {
+      XLSX.writeFile(wb, `Invigilation_Duties_${dateStr}.xlsx`);
+    } catch (err) {
+      console.error("Failed to export duties Excel:", err);
+      showToast("Failed to export Excel file. Please try again.", "error");
+      return;
+    }
+    showToast("Invigilation duties exported to Excel!", "success");
   };
 
   // 1. Fetch Examinations
@@ -203,9 +627,9 @@ export default function HallAllocation() {
         }));
 
         // Fallback to campus-level exams if strict filters yielded empty
-        if (list.length === 0 && selectedCampusId) {
+        if (list.length === 0) {
           apiClient
-            .get("/api/v1/examinations", { params: { campusId: selectedCampusId } })
+            .get("/api/v1/examinations", { params: selectedCampusId ? { campusId: selectedCampusId } : {} })
             .then((fallbackRes) => {
               if (!active) return;
               const fbRaw = unwrap(fallbackRes);
@@ -553,7 +977,7 @@ export default function HallAllocation() {
       currentExam?.totalCandidates ||
       currentExam?.studentCount ||
       detectedStrength ||
-      25
+      0
     );
     const availableRoomsCount = rooms.length;
     let allocatedSlots = 0;
@@ -606,7 +1030,7 @@ export default function HallAllocation() {
 
     setAllocating(true);
     try {
-      const candidateStrength = metrics.totalStudents || 25;
+      const defaultCandidateStrength = Number(metrics.totalStudents || currentExam?.totalCandidates || 0);
       const sortedRooms = [...rooms].sort((a, b) => Number(b.capacity || 40) - Number(a.capacity || 40));
       const activeFaculty = [...faculty].filter((f) => f.isActive !== false);
 
@@ -625,7 +1049,9 @@ export default function HallAllocation() {
         const bookedFaculty = facultyBookingMap.get(slotKey) || new Set();
 
         // Find available room with capacity >= candidateStrength and no time conflict
-        let assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId)) && Number(r.capacity || 40) >= candidateStrength);
+        const slotCandidates = Number(sch.candidateCount || sch.candidatesCount || sch.allocatedStudents || defaultCandidateStrength || 0);
+        const requiredCap = slotCandidates > 0 ? slotCandidates : 1;
+        let assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId)) && Number(r.capacity || 40) >= requiredCap);
         if (!assignedRoom) {
           // If no single room has sufficient capacity, pick largest available room without conflict
           assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId))) || sortedRooms[index % sortedRooms.length];
@@ -648,15 +1074,15 @@ export default function HallAllocation() {
           facultyBookingMap.set(slotKey, bookedFaculty);
         }
 
-        const roomCap = Number(assignedRoom?.capacity || candidateStrength);
-        const allocatedCount = Math.min(candidateStrength, roomCap);
+        const roomCap = Number(assignedRoom?.capacity || (slotCandidates > 0 ? slotCandidates : 40));
+        const allocatedCount = slotCandidates > 0 ? Math.min(slotCandidates, roomCap) : roomCap;
 
-        if (roomCap < candidateStrength) {
+        if (slotCandidates > 0 && roomCap < slotCandidates) {
           capacityShortages.push({
             subject: sch.subjectName,
             room: assignedRoom?.roomNumber || `Hall-${chosenRoomId}`,
             capacity: roomCap,
-            needed: candidateStrength,
+            needed: slotCandidates,
           });
         }
 
@@ -707,6 +1133,10 @@ export default function HallAllocation() {
           invigilatorName: sch.invigilatorName,
           examMode: sch.mode || sch.examMode || "Written",
           maxMarks: Number(sch.totalMarks || sch.maxMarks || 100),
+          passingMarks: Number(sch.passingMarks ?? 35),
+          patternName: sch.patternName || "",
+          groupId: sch.groupId ? Number(sch.groupId) : null,
+          includedSubjectIds: Array.isArray(sch.includedSubjectIds) ? sch.includedSubjectIds : [],
           candidateCount: sch.allocatedStudents,
           candidatesCount: sch.allocatedStudents,
           capacity: sch.capacity,
@@ -859,6 +1289,10 @@ export default function HallAllocation() {
         invigilatorName: facObj?.name,
         examMode: editSlot.mode || editSlot.examMode || "Written",
         maxMarks: Number(editSlot.totalMarks || editSlot.maxMarks || 100),
+        passingMarks: Number(editSlot.passingMarks ?? 35),
+        patternName: editSlot.patternName || "",
+        groupId: editSlot.groupId ? Number(editSlot.groupId) : null,
+        includedSubjectIds: Array.isArray(editSlot.includedSubjectIds) ? editSlot.includedSubjectIds : [],
         candidateCount: selectedRoomId ? candCount : 0,
         candidatesCount: selectedRoomId ? candCount : 0,
         capacity: roomCap,
@@ -927,15 +1361,25 @@ export default function HallAllocation() {
     XLSX.utils.book_append_sheet(wb, ws, "Hall Allocation");
     const examLabel = currentExam?.name ? currentExam.name.replace(/\s+/g, "_") : "Report";
     const dateStr = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Hall_Allocation_${examLabel}_${dateStr}.xlsx`);
+    try {
+      XLSX.writeFile(wb, `Hall_Allocation_${examLabel}_${dateStr}.xlsx`);
+    } catch (err) {
+      console.error("Failed to export Excel:", err);
+      showToast("Failed to export Excel. Please try again.", "error");
+      return;
+    }
     showToast("Hall allocation chart exported to Excel!", "success");
   };
 
   return (
     <DashboardLayout
-      title="Hall Allocation"
-      subtitle="Assign examination halls, check room capacity, and manage exam seating arrangements."
-      breadcrumb={["Examinations", "Hall Allocation"]}
+      title={activeTab === "duties" ? "Invigilation Duties Roster" : "Hall Allocation"}
+      subtitle={
+        activeTab === "duties"
+          ? "Monitor faculty invigilation assignments, exam duties schedule, venue distribution, and SOP compliance."
+          : "Assign examination halls, check room capacity, and manage exam seating arrangements."
+      }
+      breadcrumb={["Examinations", activeTab === "duties" ? "Invigilation Duties" : "Hall Allocation"]}
     >
       {toast && (
         <Toast
@@ -946,8 +1390,43 @@ export default function HallAllocation() {
       )}
 
       <div className="hall-allocation-container">
-        {/* 1. EXAMINATION SELECTION & HALL FILTERS PANEL */}
-        <section className="hall-filter-card">
+        {/* TOP LEVEL NAVIGATION TABS */}
+        <div className="hall-main-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "rooms"}
+            className={`hall-main-tab ${activeTab === "rooms" ? "active" : ""}`}
+            onClick={() => setActiveTab("rooms")}
+          >
+            <Building2 size={16} />
+            <span>Room & Hall Allocation</span>
+            {metrics.totalSlots > 0 && (
+              <span className="hall-tab-count">
+                {metrics.allocatedSlots}/{metrics.totalSlots}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "duties"}
+            className={`hall-main-tab ${activeTab === "duties" ? "active" : ""}`}
+            onClick={() => setActiveTab("duties")}
+          >
+            <ShieldAlert size={16} />
+            <span>Invigilation Duties Roster</span>
+            {duties.length > 0 && (
+              <span className="hall-tab-count">{duties.length}</span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "rooms" && (
+          <>
+            {/* 1. EXAMINATION SELECTION & HALL FILTERS PANEL */}
+            <section className="hall-filter-card">
           <div className="hall-filter-header">
             <div>
               <h2 className="hall-filter-title">Examination Selection & Hall Filters</h2>
@@ -1354,6 +1833,409 @@ export default function HallAllocation() {
             />
           )}
         </section>
+      </>
+    )}
+
+    {/* ========================================================
+       INVIGILATION DUTIES ROSTER TAB VIEW
+       ======================================================== */}
+    {activeTab === "duties" && (
+      <div className="duties-roster-view">
+        {/* 1. DUTY SUMMARY METRICS CARDS */}
+        <section className="hall-summary-grid" aria-label="Invigilation Duties Summary">
+          {/* Card 1: Total Duties */}
+          <article className="hall-summary-card tone-blue">
+            <span className="hall-summary-icon">
+              <CalendarDays size={18} strokeWidth={2.2} />
+            </span>
+            <div className="hall-summary-info">
+              <span className="hall-summary-label">Total Duties</span>
+              <div className="hall-summary-value-row">
+                <strong className="hall-summary-value">{dutyMetrics.total}</strong>
+                <span className="hall-summary-badge">All</span>
+              </div>
+              <span className="hall-summary-subtext">Invigilation Sessions</span>
+            </div>
+          </article>
+
+          {/* Card 2: Upcoming */}
+          <article className="hall-summary-card tone-green">
+            <span className="hall-summary-icon">
+              <CheckCircle2 size={18} strokeWidth={2.2} />
+            </span>
+            <div className="hall-summary-info">
+              <span className="hall-summary-label">Upcoming Duties</span>
+              <div className="hall-summary-value-row">
+                <strong className="hall-summary-value">{dutyMetrics.upcoming}</strong>
+                <span className="hall-summary-badge">Scheduled</span>
+              </div>
+              <span className="hall-summary-subtext">Active Assignments</span>
+            </div>
+          </article>
+
+          {/* Card 3: Cancelled */}
+          <article className="hall-summary-card tone-orange">
+            <span className="hall-summary-icon">
+              <AlertCircle size={18} strokeWidth={2.2} />
+            </span>
+            <div className="hall-summary-info">
+              <span className="hall-summary-label">Cancelled Duties</span>
+              <div className="hall-summary-value-row">
+                <strong className="hall-summary-value">{dutyMetrics.cancelled}</strong>
+                <span className="hall-summary-badge" style={{ background: "rgba(239, 68, 68, 0.12)", color: "#dc2626" }}>Cancelled</span>
+              </div>
+              <span className="hall-summary-subtext">Rescheduled / Revoked</span>
+            </div>
+          </article>
+
+          {/* Card 4: Invigilators */}
+          <article className="hall-summary-card tone-violet">
+            <span className="hall-summary-icon">
+              <Users size={18} strokeWidth={2.2} />
+            </span>
+            <div className="hall-summary-info">
+              <span className="hall-summary-label">Deployed Faculty</span>
+              <div className="hall-summary-value-row">
+                <strong className="hall-summary-value">{dutyMetrics.uniqueInvigilators}</strong>
+                <span className="hall-summary-badge">Assigned</span>
+              </div>
+              <span className="hall-summary-subtext">Active Invigilators</span>
+            </div>
+          </article>
+        </section>
+
+        {/* 2. DUTIES FILTERS & CONTROLS PANEL */}
+        <section className="hall-filter-card">
+          <div className="hall-filter-header">
+            <div>
+              <h2 className="hall-filter-title">Invigilation Duties Roster</h2>
+              <p className="hall-filter-subtitle">
+                Manage proctoring schedules, filter by faculty or venue, and inspect SOP instructions.
+              </p>
+            </div>
+            <div className="hall-filter-actions">
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                onClick={fetchDuties}
+                disabled={loadingDuties}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                title="Reload duties from backend server"
+              >
+                <RefreshCw size={15} className={loadingDuties ? "cms-spin" : ""} />
+                <span>{loadingDuties ? "Refreshing..." : "Refresh"}</span>
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                onClick={() => printDutiesRegister(filteredDuties, selectedCampusId)}
+                disabled={filteredDuties.length === 0}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                title="Print official invigilation register with signature blocks"
+              >
+                <Printer size={15} />
+                <span>Print Duties Roster</span>
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                onClick={handleExportDutiesExcel}
+                disabled={filteredDuties.length === 0}
+                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                title="Export duties to Excel spreadsheet"
+              >
+                <FileSpreadsheet size={15} />
+                <span>Export Excel</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Filter Controls */}
+          <div className="hall-secondary-filter-row" style={{ marginTop: "10px" }}>
+            <div className="hall-search-wrap">
+              <Search size={15} className="hall-search-icon" />
+              <input
+                className="hall-search-input"
+                type="text"
+                placeholder="Search by exam, subject, hall/venue, or invigilator..."
+                value={dutySearch}
+                onChange={(e) => {
+                  setDutySearch(e.target.value);
+                  setDutyPage(1);
+                }}
+              />
+            </div>
+
+            <div className="hall-room-filter-wrap" style={{ flex: "0 0 280px" }}>
+              <select
+                className="hall-select"
+                value={dutyStaffFilter}
+                onChange={(e) => {
+                  setDutyStaffFilter(e.target.value);
+                  setDutyPage(1);
+                }}
+              >
+                <option value="all">All Faculty Invigilators ({staffOptions.length})</option>
+                {staffOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} (ID: {s.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Secondary Status & View Toggle Toolbar */}
+          <div className="duty-filter-toolbar">
+            <div className="duty-status-pills">
+              {["all", "Upcoming", "Cancelled", "Completed"].map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  className={`duty-pill-btn ${dutyStatusFilter === st ? "active" : ""}`}
+                  onClick={() => {
+                    setDutyStatusFilter(st);
+                    setDutyPage(1);
+                  }}
+                >
+                  {st === "all" ? "All Duties" : st}
+                  {st === "all" && ` (${duties.length})`}
+                  {st === "Upcoming" && ` (${dutyMetrics.upcoming})`}
+                  {st === "Cancelled" && ` (${dutyMetrics.cancelled})`}
+                  {st === "Completed" && ` (${dutyMetrics.completed})`}
+                </button>
+              ))}
+            </div>
+
+            <div className="duty-view-toggle">
+              <button
+                type="button"
+                className={`duty-toggle-btn ${dutyViewMode === "table" ? "active" : ""}`}
+                onClick={() => setDutyViewMode("table")}
+                title="Switch to detailed Table view"
+              >
+                <TableIcon size={14} />
+                <span>Table</span>
+              </button>
+              <button
+                type="button"
+                className={`duty-toggle-btn ${dutyViewMode === "cards" ? "active" : ""}`}
+                onClick={() => setDutyViewMode("cards")}
+                title="Switch to Cards view"
+              >
+                <LayoutGrid size={14} />
+                <span>Cards</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* 3. DUTIES LIST (Table or Cards) */}
+        <section className="hall-table-card">
+          {loadingDuties ? (
+            <div style={{ textAlign: "center", padding: "48px 0" }}>
+              <RefreshCw size={24} className="cms-spin" style={{ color: "var(--cms-primary, #15803d)", marginBottom: "8px" }} />
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--cms-muted, #64748b)" }}>Loading invigilation duties...</p>
+            </div>
+          ) : filteredDuties.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "48px 20px" }}>
+              <ShieldAlert size={36} style={{ color: "var(--cms-muted, #94a3b8)", marginBottom: "10px" }} />
+              <h3 style={{ margin: "0 0 6px", fontSize: "16px", color: "var(--cms-text, #0f172a)" }}>No Invigilation Duties Found</h3>
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--cms-muted, #64748b)" }}>
+                No duties match your current filter parameters. Try changing the faculty member, status, or search query.
+              </p>
+            </div>
+          ) : dutyViewMode === "table" ? (
+            <div className="hall-table-responsive">
+              <table className="hall-table" aria-label="Invigilation Duties Register Table">
+                <thead>
+                  <tr>
+                    <th style={{ width: "4%", textAlign: "center" }}>#</th>
+                    <th style={{ width: "16%" }}>Date & Session</th>
+                    <th style={{ width: "18%" }}>Examination</th>
+                    <th style={{ width: "16%" }}>Subject</th>
+                    <th style={{ width: "12%" }}>Venue / Hall</th>
+                    <th style={{ width: "16%" }}>Invigilator</th>
+                    <th style={{ width: "8%", textAlign: "center" }}>Candidates</th>
+                    <th style={{ width: "10%", textAlign: "center" }}>Status</th>
+                    <th style={{ width: "10%", textAlign: "center" }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedDuties.map((d, index) => {
+                    const statusLower = (d.status || "").toLowerCase();
+                    return (
+                      <tr key={d.id || index}>
+                        <td style={{ textAlign: "center", color: "var(--cms-muted, #64748b)", fontWeight: 600 }}>
+                          {(dutyPage - 1) * DUTIES_PER_PAGE + index + 1}
+                        </td>
+                        <td>
+                          <strong style={{ color: "var(--cms-text, #0f172a)" }}>
+                            {d.date || d.examDate || "—"}
+                          </strong>
+                          <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", marginTop: "2px" }}>
+                            {d.examHours || `${d.startTime || ""} – ${d.endTime || ""}`} · {d.session || "Morning"}
+                          </div>
+                        </td>
+                        <td>
+                          <strong style={{ color: "var(--cms-text, #0f172a)" }}>
+                            {d.examName || "Examination"}
+                          </strong>
+                          <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", marginTop: "2px" }}>
+                            <span style={{ fontFamily: "monospace" }}>{d.examCode || "—"}</span> · {d.examType || "Regular"}
+                          </div>
+                        </td>
+                        <td>
+                          <strong style={{ color: "var(--cms-text, #0f172a)" }}>
+                            {d.subject || "—"}
+                          </strong>
+                          <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", marginTop: "2px" }}>
+                            Code: <strong>{d.subjectCode || "—"}</strong>
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontWeight: 700, color: "var(--cms-text, #0f172a)" }}>
+                            <Building2 size={13} style={{ color: "var(--cms-primary, #15803d)" }} />
+                            <span>{d.venue || "TBA"}</span>
+                          </div>
+                          <div style={{ fontSize: "10.5px", color: "var(--cms-muted, #64748b)", marginTop: "2px" }}>
+                            {d.reportingTime || "08:30 AM (Mandatory 30 mins prior)"}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ fontWeight: 700, color: "var(--cms-text, #0f172a)" }}>
+                            {d.invigilator || "Unassigned"}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", marginTop: "2px" }}>
+                            ID: {d.invigilatorId || "—"} · <span style={{ textTransform: "capitalize" }}>{d.role || "Invigilator"}</span>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <strong style={{ color: "var(--cms-text, #0f172a)" }}>
+                            {d.totalEnrolled ?? d.candidates ?? 30}
+                          </strong>
+                          <div style={{ fontSize: "10.5px", color: "var(--cms-muted, #64748b)", marginTop: "2px" }}>
+                            P: {d.present ?? 30} · A: {d.absent ?? 0}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className={`duty-status-badge ${statusLower}`}>
+                            {statusLower === "upcoming" && <CheckCircle size={11} />}
+                            {statusLower === "cancelled" && <XCircle size={11} />}
+                            {statusLower === "completed" && <CheckCircle2 size={11} />}
+                            <span>{d.status || "Upcoming"}</span>
+                          </span>
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <button
+                            type="button"
+                            className="duty-sop-btn"
+                            onClick={() => setSelectedDutyForModal(d)}
+                            title="View SOP instructions and duty order memo"
+                          >
+                            <FileText size={12} />
+                            <span>SOPs</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* Cards View */
+            <div className="duty-cards-grid" style={{ padding: "16px" }}>
+              {paginatedDuties.map((d, index) => {
+                const statusLower = (d.status || "").toLowerCase();
+                return (
+                  <div key={d.id || index} className={`duty-card tone-${statusLower}`}>
+                    <div className="duty-card-top">
+                      <div>
+                        <h4 className="duty-card-exam-title">{d.examName || "Examination"}</h4>
+                        <span className="duty-card-code">{d.examCode || ""} · {d.examType || "Regular"}</span>
+                      </div>
+                      <span className={`duty-status-badge ${statusLower}`}>
+                        {d.status || "Upcoming"}
+                      </span>
+                    </div>
+
+                    <div className="duty-card-subject-row">
+                      <BookOpen size={14} style={{ color: "var(--cms-primary, #15803d)" }} />
+                      <span>{d.subject || "Subject"} ({d.subjectCode || "—"})</span>
+                    </div>
+
+                    <div className="duty-card-details-grid">
+                      <div className="duty-detail-item">
+                        <span className="duty-detail-label">Exam Date</span>
+                        <span className="duty-detail-value">
+                          <CalendarDays size={12} />
+                          {d.date || d.examDate || "—"}
+                        </span>
+                      </div>
+                      <div className="duty-detail-item">
+                        <span className="duty-detail-label">Exam Timing</span>
+                        <span className="duty-detail-value">
+                          <Clock size={12} />
+                          {d.examHours || `${d.startTime || ""} – ${d.endTime || ""}`}
+                        </span>
+                      </div>
+                      <div className="duty-detail-item">
+                        <span className="duty-detail-label">Hall / Venue</span>
+                        <span className="duty-detail-value" style={{ color: "var(--cms-primary, #15803d)" }}>
+                          <Building2 size={12} />
+                          {d.venue || "TBA"}
+                        </span>
+                      </div>
+                      <div className="duty-detail-item">
+                        <span className="duty-detail-label">Candidates</span>
+                        <span className="duty-detail-value">
+                          <Users size={12} />
+                          {d.totalEnrolled ?? d.candidates ?? 30} Students
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="duty-card-footer">
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: "12.5px", color: "var(--cms-text, #0f172a)" }}>
+                          {d.invigilator || "Unassigned"}
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)" }}>
+                          Staff ID: {d.invigilatorId || "—"} · {d.role || "Invigilator"}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="duty-sop-btn"
+                        onClick={() => setSelectedDutyForModal(d)}
+                        title="View Duty Order & SOPs"
+                      >
+                        <FileText size={12} />
+                        <span>View SOP</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Duties Pagination */}
+          {filteredDuties.length > DUTIES_PER_PAGE && (
+            <div style={{ padding: "0 16px 16px" }}>
+              <Pagination
+                currentPage={dutyPage}
+                totalRecords={filteredDuties.length}
+                pageSize={DUTIES_PER_PAGE}
+                onPageChange={setDutyPage}
+                unit="duties"
+              />
+            </div>
+          )}
+        </section>
+      </div>
+    )}
 
         {/* 4. EDIT HALL / INVIGILATOR MODAL */}
         {editSlot && (
@@ -1570,6 +2452,146 @@ export default function HallAllocation() {
                 >
                   <Printer size={15} />
                   <span>Print Seating Plan</span>
+                </button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
+        {/* 6. INVIGILATION DUTY SOP & ORDER SLIP MODAL */}
+        {selectedDutyForModal && (
+          <Modal
+            title={`Invigilation Duty Order & SOPs: Duty #${selectedDutyForModal.id}`}
+            isOpen={Boolean(selectedDutyForModal)}
+            onClose={() => setSelectedDutyForModal(null)}
+            maxWidth="640px"
+          >
+            <div className="sop-modal-card">
+              {/* Summary grid */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "10px",
+                  padding: "12px",
+                  background: "var(--cms-surface-subtle, #f8fafc)",
+                  borderRadius: "8px",
+                  border: "1px solid var(--cms-border)",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: 600, textTransform: "uppercase" }}>
+                    Examination
+                  </div>
+                  <strong style={{ fontSize: "13px", color: "var(--cms-text, #0f172a)" }}>
+                    {selectedDutyForModal.examName || "Examination"}
+                  </strong>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)" }}>
+                    {selectedDutyForModal.examCode || ""} ({selectedDutyForModal.examType || "Regular"})
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: 600, textTransform: "uppercase" }}>
+                    Subject
+                  </div>
+                  <strong style={{ fontSize: "13px", color: "var(--cms-text, #0f172a)" }}>
+                    {selectedDutyForModal.subject || "—"}
+                  </strong>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)" }}>
+                    Code: {selectedDutyForModal.subjectCode || "—"}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: 600, textTransform: "uppercase" }}>
+                    Assigned Invigilator
+                  </div>
+                  <strong style={{ fontSize: "13px", color: "var(--cms-text, #0f172a)" }}>
+                    {selectedDutyForModal.invigilator || "Unassigned"}
+                  </strong>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)" }}>
+                    Staff ID: {selectedDutyForModal.invigilatorId || "—"} · {selectedDutyForModal.role || "Invigilator"}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: 600, textTransform: "uppercase" }}>
+                    Hall & Timing
+                  </div>
+                  <strong style={{ fontSize: "13px", color: "var(--cms-primary, #15803d)" }}>
+                    Venue: {selectedDutyForModal.venue || "TBA"}
+                  </strong>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)" }}>
+                    {selectedDutyForModal.date || selectedDutyForModal.examDate || "—"} · {selectedDutyForModal.examHours || selectedDutyForModal.session}
+                  </div>
+                </div>
+
+                <div style={{ gridColumn: "span 2" }}>
+                  <div style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: 600, textTransform: "uppercase" }}>
+                    Reporting Requirement
+                  </div>
+                  <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#d97706", marginTop: "2px" }}>
+                    {selectedDutyForModal.reportingTime || "08:30 AM (Mandatory 30 mins prior)"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Standard Operating Procedures */}
+              <div style={{ marginTop: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <h4 style={{ margin: 0, fontSize: "13.5px", fontWeight: 700, color: "var(--cms-text, #0f172a)" }}>
+                    Standard Operating Procedures (SOPs)
+                  </h4>
+                  <span className="sop-badge-pill">Mandatory Protocol</span>
+                </div>
+
+                <ul className="sop-checklist">
+                  {(selectedDutyForModal.sops && selectedDutyForModal.sops.length > 0
+                    ? selectedDutyForModal.sops
+                    : [
+                        "Collect sealed Question Paper packets from Chief Superintendent room.",
+                        "Verify Student Hall Tickets and prohibit unauthorized gadgets / smart watches.",
+                        "Cross-verify candidate signature on Nominal Roll & OMR Barcode.",
+                        "Hand over signed absentee statement within 30 minutes of start.",
+                      ]
+                  ).map((sop, idx) => (
+                    <li key={idx} className="sop-item">
+                      <CheckCircle2 size={16} style={{ color: "var(--cms-primary, #15803d)", flexShrink: 0, marginTop: "2px" }} />
+                      <span>{sop}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Modal Actions */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "10px",
+                  marginTop: "20px",
+                  paddingTop: "14px",
+                  borderTop: "1px solid var(--cms-border)",
+                }}
+              >
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  onClick={() => setSelectedDutyForModal(null)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary"
+                  onClick={() => {
+                    printDutyOrderSlip(selectedDutyForModal, selectedCampusId);
+                  }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                >
+                  <Printer size={15} />
+                  <span>Print Duty Order Slip</span>
                 </button>
               </div>
             </div>

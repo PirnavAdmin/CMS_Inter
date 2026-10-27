@@ -242,15 +242,77 @@ export async function loadCollectionAccounts(params, signal) {
 }
 
 export async function loadCollectionDetails(row, signal) {
-  const id = readFee(row, "studentFeeId");
-  if (!validId(id) || !validId(readFee(row, "studentId"))) throw invalid("Valid student and fee account IDs are required.");
-  const detail = checkedFeeData(await apiClient.get(apiEndpoints.fee.getStudentFee(id), { signal }));
-  if (Number(readFee(detail, "studentFeeId")) !== Number(id) || Number(readFee(detail, "studentId")) !== Number(readFee(row, "studentId"))) throw invalid("The returned fee account does not match the selected student.");
+  const feeId = readFee(row, "studentFeeId");
+  if (feeId != null && feeId !== "" && !validId(feeId)) throw invalid("The selected fee account ID is invalid. Refresh the collection list.");
+  // Match Admin: use the student-specific details route whenever a valid
+  // student ID is present. The shared loader validates IDs and response identity,
+  // preserves backend errors, and only uses the fee route for a real fee ID.
+  const detail = await loadLedgerDetails(row, signal);
+  if (!validId(readFee(detail, "studentId")) || !validId(readFee(detail, "studentFeeId"))) throw invalid("The returned fee account is missing valid student or fee account IDs. Payment collection is unavailable.");
+  if (validId(feeId) && Number(readFee(detail, "studentFeeId")) !== Number(feeId)) throw invalid("The returned fee account does not match the selected student. Refresh the collection list before collecting payment.");
   return detail;
 }
 
 export function feeCollectionAccess(permissions) {
   return Boolean(!permissions.loading && !permissions.error && (permissions.isSuperOrAdmin || permissions.canDo("fee-management", ACTIONS.CREATE, "fee-collection")));
+}
+
+export function feeReceiptAccess(permissions) {
+  return Boolean(!permissions.loading && !permissions.error && (permissions.isSuperOrAdmin
+    || permissions.canView?.("fee-management", "fee-collection") || permissions.canView?.("fee-management")));
+}
+
+export function feeReceiptUnavailableReason(payment) {
+  if (!["feePaymentId", "studentId", "studentFeeId"].every(key => validId(readFee(payment, key)))) return "Receipt unavailable: payment identifiers are missing.";
+  if (!["success", "paid", "completed"].includes(String(readFee(payment, "status") || "").trim().toLowerCase())) return "Receipt unavailable: this payment is not confirmed as paid.";
+  return "";
+}
+
+export async function loadSavedFeePayment(selected, signal, authorize = () => false) {
+  signal?.throwIfAborted();
+  if (!authorize()) throw invalid("Fee Management view permission is required to view or print saved receipts.");
+  const unavailable = feeReceiptUnavailableReason(selected);
+  if (unavailable) throw invalid(unavailable);
+  let saved;
+  try {
+    saved = checkedFeeData(await apiClient.get(apiEndpoints.fee.paymentDetails(Number(readFee(selected, "feePaymentId"))), { signal }));
+  } catch (error) {
+    if (error.response?.status === 404) throw invalid("The saved payment was not found. Refresh the history before retrying.");
+    throw error;
+  }
+  signal?.throwIfAborted();
+  if (!authorize()) throw invalid("Receipt permission is no longer available.");
+  if (!saved) throw invalid("The saved payment was not found.");
+  for (const key of ["feePaymentId", "studentId", "studentFeeId"]) {
+    if (!validId(readFee(saved, key)) || Number(readFee(saved, key)) !== Number(readFee(selected, key))) throw invalid("The returned payment does not match the selected transaction. No receipt was opened.");
+  }
+  const receiptNo = readFee(saved, "receiptNumber");
+  const selectedReceipt = readFee(selected, "receiptNumber");
+  if (selectedReceipt && selectedReceipt !== "-" && String(receiptNo) !== String(selectedReceipt)) throw invalid("The returned receipt number does not match the selected transaction.");
+  const required = ["receiptNumber", "studentName", "admissionNumber", "paymentDate", "paymentMethod"];
+  if (required.some(key => !String(readFee(saved, key) ?? "").trim() || readFee(saved, key) === "-")
+    || !Number.isFinite(Date.parse(readFee(saved, "paymentDate")))
+    || readFee(saved, "amount") == null || !Number.isFinite(Number(readFee(saved, "amount"))) || Number(readFee(saved, "amount")) <= 0
+    || feeReceiptUnavailableReason(saved)) throw invalid("The saved payment has incomplete receipt details. No receipt was opened. Contact your administrator.");
+  // Do not merge current ledger/student summaries into a historical payment.
+  return saved;
+}
+
+export async function loadFeeAccountPayments(account, signal, authorize = () => false) {
+  signal?.throwIfAborted();
+  const studentId = readFee(account, "studentId"), feeId = readFee(account, "studentFeeId");
+  if (!validId(studentId) || !validId(feeId)) throw invalid("The selected fee account has invalid identifiers.");
+  let payments = readFee(account, "paymentHistory");
+  if (!Array.isArray(payments) || !payments.length) {
+    if (!authorize()) throw invalid("Loading account payment history requires Fee Management create permission for the existing bulk-history endpoint.");
+    const data = checkedFeeData(await apiClient.post("/api/v1/fees/bulk-history", [Number(studentId)], { signal }));
+    signal?.throwIfAborted();
+    if (!authorize()) throw invalid("History permission is no longer available.");
+    if (data?.[String(studentId)] == null) throw invalid("The backend did not return the selected student's payment history.");
+    payments = checkedFeeRows(data[String(studentId)]);
+  }
+  if (payments.some(payment => Number(readFee(payment, "studentId")) !== Number(studentId) || !validId(readFee(payment, "studentFeeId")) || !validId(readFee(payment, "feePaymentId")))) throw invalid("Payment history contains invalid or mismatched transaction identifiers.");
+  return payments.filter(payment => Number(readFee(payment, "studentFeeId")) === Number(feeId));
 }
 
 export function paymentPayload(account, draft) {

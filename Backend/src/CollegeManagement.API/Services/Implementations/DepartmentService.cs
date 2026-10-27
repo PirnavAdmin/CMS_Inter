@@ -175,7 +175,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException("Excel file contains no worksheets.");
 
             var existingDepts = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true, campusId: campusId)).ToList();
-            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true)).ToList(); // Update when designation repository supports campusId
+            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true, campusId: campusId)).ToList();
 
             // In-memory lookup maps for resolving department references during designation import
             var resolvedDeptsByName = new Dictionary<string, Department>(StringComparer.OrdinalIgnoreCase);

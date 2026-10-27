@@ -40,7 +40,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<NumberSeriesConfiguration>> GetAllAsync(int? campusId = null, bool includeSubCounters = false)
         {
             var query = _context.Set<NumberSeriesConfiguration>().AsNoTracking()
-                .Where(n => n.IsActive && (n.CampusId == campusId || n.CampusId == null));
+                .Where(n => n.CampusId == campusId || n.CampusId == null);
 
             if (!includeSubCounters)
             {
@@ -273,6 +273,36 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
                 
             return max;
+        }
+
+        public async Task<bool> DeleteByCodeAsync(string seriesCode, int? campusId = null)
+        {
+            var existing = await _context.Set<NumberSeriesConfiguration>()
+                .Where(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
+                .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
+                .FirstOrDefaultAsync();
+
+            if (existing == null) return false;
+
+            // If it's a campus-specific custom series, remove it completely; otherwise deactivate it
+            if (campusId.HasValue && existing.CampusId == campusId && !IsCoreFixedSeries(existing.SeriesCode))
+            {
+                _context.Set<NumberSeriesConfiguration>().Remove(existing);
+            }
+            else
+            {
+                existing.IsActive = false;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        private static bool IsCoreFixedSeries(string seriesCode)
+        {
+            var upper = seriesCode.Trim().ToUpperInvariant();
+            return upper is "TEACHING_STAFF_ID" or "NON_TEACHING_STAFF_ID" or "ADMISSION_NO" or "ROLL_NO" or "EXAM_CODE" or "CERTIFICATE_NO" or "RECEIPT_NO";
         }
     }
 }

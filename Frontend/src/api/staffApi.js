@@ -8,46 +8,74 @@ export const getStaffPaged = (params) => {
   return api.get("/api/v1/staff", { params });
 };
 
-// 2. Generate the next employee ID through the number-series endpoint.
-// The staff next-employee-id endpoint uses a stored-procedure parameter name
-// that does not match the deployed database procedure.
-export const getNextEmployeeId = async (staffType = "Teaching") => {
+// 2. Generate the next employee ID through the number-series endpoint or direct staff endpoint.
+export const getNextEmployeeId = async (staffType = "Teaching", campusId = null) => {
   const normalizedType = String(staffType || "Teaching").replace(/[^a-z]/gi, "").toLowerCase();
   const isNonTeaching = normalizedType === "nonteaching";
   const seriesCode = isNonTeaching ? "NON_TEACHING_STAFF_ID" : "TEACHING_STAFF_ID";
-  const response = await api.post(apiEndpoints.numberSeries.generateNext(seriesCode), {
-    board: "",
-    dept: "",
-    type: staffType,
-    staff: "",
-    desig: "",
-    cert: "",
-    academicYear: "",
-    group: "",
-    section: "",
-    level: "",
-    exam: "",
-  });
-  const payload = response?.data?.data ?? response?.data ?? {};
-  const nextEmployeeId = typeof payload === "string"
-    ? payload
-    : payload.generatedNumber || payload.nextEmployeeId || payload.employeeId || payload.code;
+  try {
+    const response = await api.post(
+      apiEndpoints.numberSeries.generateNext(seriesCode),
+      {
+        board: "",
+        dept: "",
+        type: staffType,
+        staff: "",
+        desig: "",
+        cert: "",
+        academicYear: "",
+        group: "",
+        section: "",
+        level: "",
+        exam: "",
+        campusId: campusId || undefined,
+      },
+      { params: campusId ? { campusId } : {} }
+    );
+    const payload = response?.data?.data ?? response?.data ?? {};
+    const nextEmployeeId = typeof payload === "string"
+      ? payload
+      : payload.generatedNumber || payload.nextEmployeeId || payload.employeeId || payload.code;
 
+    if (nextEmployeeId) {
+      return {
+        ...response,
+        data: {
+          ...(typeof payload === "object" ? payload : {}),
+          nextEmployeeId,
+          employeeId: nextEmployeeId,
+        },
+      };
+    }
+  } catch (err) {
+    console.warn("Number series endpoint failed, falling back to staff next-employee-id endpoint:", err);
+  }
+
+  // Direct Staff endpoint fallback
+  const fallbackRes = await api.get("/api/v1/staff/next-employee-id", {
+    params: {
+      staffType,
+      ...(campusId ? { campusId } : {}),
+    },
+  });
+  const data = fallbackRes?.data ?? {};
+  const nextId = data.nextEmployeeId || data.employeeId;
   return {
-    ...response,
+    ...fallbackRes,
     data: {
-      ...(typeof payload === "object" ? payload : {}),
-      nextEmployeeId,
-      employeeId: nextEmployeeId,
+      ...data,
+      nextEmployeeId: nextId,
+      employeeId: nextId,
     },
   };
 };
 
-// 3. Get staff for dropdown
-export const getStaffDropdown = (staffType) => {
-  return api.get("/api/v1/staff/dropdown", {
-    params: staffType ? { staffType } : {},
-  });
+// 3. Get staff for dropdown with campus isolation
+export const getStaffDropdown = (staffType, campusId = null) => {
+  const params = {};
+  if (staffType) params.staffType = staffType;
+  if (campusId) params.campusId = campusId;
+  return api.get("/api/v1/staff/dropdown", { params });
 };
 
 // 4. Get single staff by ID
@@ -60,9 +88,41 @@ export const createStaff = (data) => {
   return api.post("/api/v1/staff", data);
 };
 
+// Helper to safely format documents into C# Dictionary<string, string>
+const formatDocumentsDictionary = (docs) => {
+  if (!docs) return {};
+  if (Array.isArray(docs)) {
+    const map = {};
+    docs.forEach((doc, idx) => {
+      const key = String(doc?.type || doc?.name || `Document_${idx + 1}`).trim();
+      const val = String(doc?.url || doc?.name || doc?.fileName || "").trim();
+      if (key) map[key] = val;
+    });
+    return map;
+  }
+  if (typeof docs === "object") {
+    const map = {};
+    Object.entries(docs).forEach(([k, v]) => {
+      map[String(k)] = typeof v === "string" ? v : String(v?.url || v?.name || "");
+    });
+    return map;
+  }
+  return {};
+};
+
 // 6. Update staff member
 export const updateStaff = (id, data) => {
-  return api.put(`/api/v1/staff/${id}`, data);
+  let sanitized = data;
+  if (data && typeof data === "object") {
+    sanitized = { ...data };
+    if (sanitized.documents !== undefined) {
+      sanitized.documents = formatDocumentsDictionary(sanitized.documents);
+    }
+    if (Array.isArray(sanitized.experience)) {
+      sanitized.experience = sanitized.experience.length * 1.0;
+    }
+  }
+  return api.put(`/api/v1/staff/${id}`, sanitized);
 };
 
 // 7. Delete staff member (soft delete)
@@ -80,10 +140,11 @@ export const uploadStaffPhoto = (formData) => {
 // ==================== MASTER LOOKUP APIs ====================
 
 // 9. Get departments (filtered by Teaching / Non-Teaching)
-export const getDepartments = (staffType) => {
-  return api.get("/api/v1/departments", {
-    params: staffType ? { staffType } : {},
-  });
+export const getDepartments = (staffType, campusId = null) => {
+  const params = {};
+  if (staffType) params.staffType = staffType;
+  if (campusId) params.campusId = campusId;
+  return api.get("/api/v1/departments", { params });
 };
 
 // 10. Add new custom department
@@ -91,11 +152,12 @@ export const createDepartment = (data) => {
   return api.post("/api/v1/departments", data);
 };
 
-// 11. Get designations (filtered by Teaching / Non-Teaching)
-export const getDesignations = (staffType) => {
-  return api.get("/api/v1/designations", {
-    params: staffType ? { staffType } : {},
-  });
+// 11. Get designations (filtered by Teaching / Non-Teaching & department)
+export const getDesignations = (staffType, departmentId = null) => {
+  const params = {};
+  if (staffType) params.staffType = staffType;
+  if (departmentId) params.departmentId = departmentId;
+  return api.get("/api/v1/designations", { params });
 };
 
 // 12. Add new custom designation
@@ -123,6 +185,12 @@ export const updateStaffSubjectAllocation = (id, data) => {
 // 16. Delete subject allocation
 export const deleteStaffSubjectAllocation = (id) => {
   return api.delete(`/api/v1/staff/assign-subject/${id}`);
+};
+
+// 16b. Unassign subject from staff by name or subjectId
+export const unassignStaffSubject = (staffId, subjectNameOrId) => {
+  const params = typeof subjectNameOrId === "number" ? { subjectId: subjectNameOrId } : { subjectName: subjectNameOrId };
+  return api.delete(`/api/v1/staff/${staffId}/unassign-subject`, { params });
 };
 
 // 17. Get staff workload

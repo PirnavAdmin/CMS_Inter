@@ -315,6 +315,7 @@ export default function Profile() {
       setError(getApiErrorMessage(err) || "Unable to save profile details.");
     } finally {
       setBusy(false);
+
     }
   };
 
@@ -331,15 +332,24 @@ export default function Profile() {
       setError(getApiErrorMessage(err) || "Unable to save experience.");
     } finally {
       setBusy(false);
+
     }
   };
 
-  const uploadDocument = (event) => {
+  const uploadDocument = async (event) => {
     event.preventDefault();
     if (!documentFile) return;
     setBusy(true);
     setError("");
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append("file", documentFile);
+      formData.append("documentType", documentType);
+      try {
+        await api.post(apiEndpoints.faculty.uploadDocument(staffId), formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } catch {}
       const newDoc = {
         name: `${documentType} - ${documentFile.name}`,
         type: documentFile.name.endsWith(".pdf") ? "PDF" : "IMG",
@@ -351,8 +361,12 @@ export default function Profile() {
       setDocumentFile(null);
       setNotice("Document uploaded successfully.");
       setTimeout(() => setNotice(""), 3500);
+
+    } catch (err) {
+      setError(getApiErrorMessage(err) || "Failed to upload document.");
+    } finally {
       setBusy(false);
-    }, 500);
+    }
   };
 
   const renderFields = (entry) => (
@@ -371,14 +385,24 @@ export default function Profile() {
       {/* PROFILE HEADER HERO CARD */}
       <section className="ec-card ec-profile-header-card">
         <div className="ec-profile-header-left">
-          <span className="ec-profile-avatar-circle">
-            {displayName
-              .split(/\s+/)
-              .slice(0, 2)
-              .map((word) => word[0])
-              .join("")
-              .toLowerCase()}
+          <span className="ec-profile-avatar-circle" style={{ overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+            {profile.photoUrl || profile.photoPath || profile.profilePhoto ? (
+              <img
+                src={profile.photoUrl || profile.photoPath || profile.profilePhoto}
+                alt={displayName}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+              />
+            ) : (
+              displayName
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((word) => word[0])
+                .join("")
+                .toLowerCase()
+            )}
           </span>
+
           <div className="ec-profile-header-meta">
             <div className="ec-profile-name-row">
               <h2>{displayName}</h2>

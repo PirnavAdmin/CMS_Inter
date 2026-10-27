@@ -200,6 +200,7 @@ const isEligible = (student) => {
 export default function PromotionPage({ screen = "promotion" }) {
   const navigate = useNavigate();
   const [localTab, setLocalTab] = useState("");
+  useEffect(() => { setLocalTab(screen); }, [screen]);
   const activeTab = localTab || screen;
 
   // Consume global Board & Academic Year from Navbar Context
@@ -555,6 +556,7 @@ export default function PromotionPage({ screen = "promotion" }) {
       AcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
       BoardId: numericId(setup.board || selectedBoardId),
       AcademicLevel: academicLevelLabel(setup.fromLevel),
+      AcademicLevelId: numericId(setup.fromLevel),
       GroupId: numericId(setup.group),
       // Allocation changes these fields. Keeping the old program/section
       // filter would remove updated students from the refreshed table.
@@ -562,6 +564,7 @@ export default function PromotionPage({ screen = "promotion" }) {
       Section: activeTab === "allocation" ? undefined : setup.fromSection,
       TargetAcademicYearId: numericId(setup.toYear || nextAcademicYearObj?.value),
       TargetAcademicLevel: academicLevelLabel(setup.toLevel),
+      TargetAcademicLevelId: numericId(setup.toLevel),
       TargetGroupId: numericId(setup.toGroup),
       TargetSection: setup.toSection,
       PageNumber: pageNumber,
@@ -1532,23 +1535,56 @@ function CampusTransferScreen({ onSuccess }) {
     if (!selectedCampus) return;
     const loadStudents = async () => {
       try {
-        const res = await apiClient.get('/api/v1/promotions/eligible', { params: { campusId: selectedCampus.id || selectedCampus.campusId } });
+        const res = await apiClient.get('/api/v1/promotions/eligible', {
+          params: { campusId: selectedCampus.id || selectedCampus.campusId },
+          silent: true,
+          skipErrorLog: true,
+        });
         const data = unwrap(res);
-        setLiveStudents(data.map(item => ({
-          id: item.studentId || item.id,
-          admissionNo: item.admissionNumber || item.admissionNo || item.studentCode || "-",
+        if (Array.isArray(data) && data.length > 0) {
+          setLiveStudents(data.map(item => ({
+            id: item.studentId || item.id,
+            admissionNo: item.admissionNumber || item.admissionNo || item.studentCode || "-",
             name: item.studentName || item.name || "-",
             rollNo: item.rollNumber || item.rollNo || "-",
+            campus: selectedCampus.name || selectedCampus.campusName,
+            level: item.academicLevel || item.level || "-",
+            group: item.groupName || item.group || "-",
+            program: item.programName || item.program || "-",
+            section: item.sectionName || item.section || "-",
+            board: item.boardName || item.board || "Not configured",
+            status: "Active"
+          })));
+          return;
+        }
+      } catch {
+        // Handled silently
+      }
+
+      // Clean fallback to students endpoint
+      try {
+        const sRes = await apiClient.get('/api/v1/students', {
+          params: { campusId: selectedCampus.id || selectedCampus.campusId, pageSize: 50 },
+          silent: true,
+          skipErrorLog: true,
+        });
+        const sData = unwrap(sRes);
+        setLiveStudents((Array.isArray(sData) ? sData : []).map(item => ({
+          id: item.studentId || item.id,
+          admissionNo: item.admissionNo || item.admissionNumber || item.studentCode || "-",
+          name: item.studentName || item.fullName || item.name || "-",
+          rollNo: item.rollNo || item.rollNumber || "-",
           campus: selectedCampus.name || selectedCampus.campusName,
-          level: item.academicLevel || item.level || "-",
+          level: item.academicLevelName || item.academicLevel || item.level || "-",
           group: item.groupName || item.group || "-",
           program: item.programName || item.program || "-",
           section: item.sectionName || item.section || "-",
           board: item.boardName || item.board || "Not configured",
           status: "Active"
         })));
-      } catch (err) {
-        console.error(err);
+      } catch {
+        // Fallback to empty list
+        setLiveStudents([]);
       }
     };
     loadStudents();
@@ -1559,8 +1595,8 @@ function CampusTransferScreen({ onSuccess }) {
     setLoadingRequests(true);
     try {
       const [sentRes, receivedRes] = await Promise.allSettled([
-        apiClient.get(apiEndpoints.campusTransfers.sent),
-        apiClient.get(apiEndpoints.campusTransfers.received),
+        apiClient.get(apiEndpoints.campusTransfers.sent, { silent: true, skipErrorLog: true }),
+        apiClient.get(apiEndpoints.campusTransfers.received, { silent: true, skipErrorLog: true }),
       ]);
       const sent = sentRes.status === "fulfilled" ? unwrap(sentRes.value) : [];
       const received = receivedRes.status === "fulfilled" ? unwrap(receivedRes.value) : [];

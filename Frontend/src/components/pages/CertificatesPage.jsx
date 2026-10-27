@@ -52,11 +52,18 @@ const CERTIFICATE_API = {
     const base = `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/issue`;
     return issuedBy ? `${base}?issuedBy=${encodeURIComponent(issuedBy)}` : base;
   },
-  bulkReview: `${CERTIFICATE_BASE}/bulk-review`,
-  bulkApprove: `${CERTIFICATE_BASE}/bulk-approve`,
-  bulkIssue: (issuedBy) => {
-    const base = `${CERTIFICATE_BASE}/bulk-issue`;
-    return issuedBy ? `${base}?issuedBy=${encodeURIComponent(issuedBy)}` : base;
+  bulkReview: (campusId) => {
+    return campusId ? `${CERTIFICATE_BASE}/bulk-review?campusId=${encodeURIComponent(campusId)}` : `${CERTIFICATE_BASE}/bulk-review`;
+  },
+  bulkApprove: (campusId) => {
+    return campusId ? `${CERTIFICATE_BASE}/bulk-approve?campusId=${encodeURIComponent(campusId)}` : `${CERTIFICATE_BASE}/bulk-approve`;
+  },
+  bulkIssue: (issuedBy, campusId) => {
+    const params = new URLSearchParams();
+    if (issuedBy) params.set("issuedBy", issuedBy);
+    if (campusId) params.set("campusId", campusId);
+    const qs = params.toString();
+    return qs ? `${CERTIFICATE_BASE}/bulk-issue?${qs}` : `${CERTIFICATE_BASE}/bulk-issue`;
   },
   bulkGenerate: `${CERTIFICATE_BASE}/bulk-generate`,
   bulkEligibleStudents: `${CERTIFICATE_BASE}/bulk-eligible-students`,
@@ -572,8 +579,8 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
           aria-controls={open ? "certificate-student-options" : undefined}
           aria-activedescendant={open && matches[highlighted] ? getOptionId(matches[highlighted], highlighted) : undefined}
           value={value}
-          disabled={loading || !students.length}
-          placeholder={loading ? "Loading admissions..." : (students.length ? "Search admission no., student, or roll no." : "No students available")}
+          disabled={loading}
+          placeholder={loading ? "Loading admissions..." : (students.length ? "Search admission no., student, or roll no." : "Search admission no., student, or roll no.")}
           autoComplete="off"
           onFocus={() => setOpen(true)}
           onChange={(event) => {
@@ -812,8 +819,8 @@ export const FALLBACK_PLACEHOLDERS = {
   student_id: "518",
   admission_no: "ADM-2026-0000",
   roll_no: "101",
-  father_name: "Parent Name",
-  mother_name: "Anita Devi",
+  father_name: "Parent / Guardian",
+  mother_name: "Parent / Guardian",
   group_name: "MPC",
   academic_level: "I / II Year",
   academic_year: "2026-2027",
@@ -823,7 +830,7 @@ export const FALLBACK_PLACEHOLDERS = {
   issue_date: "11 Sep 2026",
   place: "Vijayawada",
   purpose: "Higher Education / Official Purpose",
-  principal_name: "Dr. S. K. Rao",
+  principal_name: "Principal",
   study_from: "June 2025",
   study_to: "May 2027",
   conduct_rating: "Good",
@@ -1291,7 +1298,6 @@ function getCertificateTemplate(type, record) {
 }
 
 const CERTIFICATE_PRINT_CSS = `
-  @page { size: A4 landscape; margin: 0; }
   body {
     margin: 0;
     font-family: Georgia, "Times New Roman", serif;
@@ -1947,25 +1953,55 @@ export default function CertificatesPage() {
     setLoadingStudents(true);
     try {
       let raw = null;
+      const params = {};
+      if (selectedCampusId) params.campusId = selectedCampusId;
+      if (selectedBoardId) params.boardId = selectedBoardId;
+      if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
+
       try {
-        const params = {};
-        if (selectedCampusId) params.campusId = selectedCampusId;
-        if (selectedBoardId) params.boardId = selectedBoardId;
-        if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
-        
-        const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { params, skipGlobalLoader: true });
-        raw = response?.data;
+        const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { params, skipGlobalLoader: true, silent: true, skipErrorLog: true });
+        const list = unwrapStudentPayload(response?.data);
+        if (list.length > 0) raw = response?.data;
       } catch {
+        // Fall through
+      }
+
+      if (!raw) {
         try {
-          const sRes = await apiClient.get("/api/v1/students", { skipGlobalLoader: true });
-          raw = sRes?.data;
+          const bRes = await apiClient.get(CERTIFICATE_API.bulkEligibleStudents, { params, skipGlobalLoader: true, silent: true, skipErrorLog: true });
+          const bList = unwrapStudentPayload(bRes?.data);
+          if (bList.length > 0) raw = bRes?.data;
         } catch {
-          try {
-            const aRes = await apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true });
-            raw = aRes?.data;
-          } catch {
-            raw = mockStudents;
-          }
+          // Fall through
+        }
+      }
+
+      if (!raw) {
+        try {
+          const sRes = await apiClient.get("/api/v1/students", {
+            params: { campusId: selectedCampusId || 1, pageSize: 500 },
+            skipGlobalLoader: true,
+            silent: true,
+            skipErrorLog: true,
+          });
+          const sList = unwrapStudentPayload(sRes?.data);
+          if (sList.length > 0) raw = sRes?.data;
+        } catch {
+          // Fall through
+        }
+      }
+
+      if (!raw) {
+        try {
+          const aRes = await apiClient.get("/api/v1/student-admissions", {
+            params: { campusId: selectedCampusId || 1, pageSize: 500 },
+            skipGlobalLoader: true,
+            silent: true,
+            skipErrorLog: true,
+          });
+          raw = aRes?.data;
+        } catch {
+          raw = mockStudents;
         }
       }
       const rawList = unwrapStudentPayload(raw).map(normalizeStudentRecord).filter((student) => student.admissionNo);
@@ -2070,6 +2106,7 @@ export default function CertificatesPage() {
       if (channel) channel.close();
       clearInterval(polling);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -2480,7 +2517,9 @@ export default function CertificatesPage() {
         const list = storedMock ? JSON.parse(storedMock) : [];
         list.unshift(createdCertificate);
         localStorage.setItem("cms_mock_store_certificates", JSON.stringify(list));
-      } catch {}
+      } catch {
+        // Ignore mock storage error
+      }
 
       setWorkflowStats((prev) => ({
         ...prev,
@@ -2853,7 +2892,9 @@ export default function CertificatesPage() {
             timestamp: new Date().toISOString(),
           });
           channel.close();
-        } catch {}
+        } catch {
+          // Ignore broadcast notification error
+        }
       }
       setToast(`Certificate ${row.number || ""} ${selected.success}`);
     } catch (error) {
@@ -2892,8 +2933,13 @@ export default function CertificatesPage() {
       const serverEligible = eligibleRows.filter((r) => hasServerCertificateId(r));
       if (serverEligible.length) {
         try {
-          const requestConfig = action === "issue" && getIssuedBy() ? { params: { issuedBy: getIssuedBy() } } : undefined;
-          const url = typeof selected.endpoint === "function" ? selected.endpoint(getIssuedBy()) : selected.endpoint;
+          const params = {};
+          if (selectedCampusId) params.campusId = selectedCampusId;
+          if (action === "issue" && getIssuedBy()) params.issuedBy = getIssuedBy();
+          const requestConfig = Object.keys(params).length ? { params } : undefined;
+          const url = typeof selected.endpoint === "function" 
+            ? (action === "issue" ? selected.endpoint(getIssuedBy(), selectedCampusId) : selected.endpoint(selectedCampusId))
+            : selected.endpoint;
           await apiClient.patch(url, null, requestConfig);
         } catch {
           // Graceful fallback to local update
@@ -2933,7 +2979,9 @@ export default function CertificatesPage() {
             });
           });
           channel.close();
-        } catch {}
+        } catch {
+          // Ignore broadcast notification error
+        }
       }
       setToast(`${completedCount} eligible certificate${completedCount === 1 ? "" : "s"} ${selected.label}.`);
     } catch (error) {
@@ -3414,6 +3462,9 @@ export default function CertificatesPage() {
       try {
         setToast("Preparing certificates export...");
         const params = {};
+        if (selectedCampusId) params.campusId = selectedCampusId;
+        if (selectedBoardId) params.boardId = selectedBoardId;
+        if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
         if (query.trim()) params.search = query.trim();
         if (status !== "All") params.status = status;
         if (typeFilter !== "All") params.certificateType = typeFilter;

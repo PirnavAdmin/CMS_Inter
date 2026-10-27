@@ -3,12 +3,12 @@ import api from "./axios";
 // ==================== REPORTS & ANALYTICS API ====================
 
 // --- 1. Cascading Filters ---
-export const getReportBoards = () => {
-  return api.get("/api/v1/reports/filters/boards");
+export const getReportBoards = (params) => {
+  return api.get("/api/v1/reports/filters/boards", { params });
 };
 
-export const getReportAcademicYears = () => {
-  return api.get("/api/v1/reports/filters/academic-years");
+export const getReportAcademicYears = (params) => {
+  return api.get("/api/v1/reports/filters/academic-years", { params });
 };
 
 export const getReportAcademicLevels = (params) => {

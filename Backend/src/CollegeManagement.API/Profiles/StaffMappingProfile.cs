@@ -86,7 +86,8 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.ExperienceList, opt => opt.MapFrom(src => DeserializeList<StaffExperienceItem>(src.ExperienceJson)))
                 .ForMember(dest => dest.DocumentsList, opt => opt.MapFrom(src => DeserializeDocuments(src.DocumentsJson)))
                 .ForMember(dest => dest.BankDetails, opt => opt.MapFrom(src => DeserializeObject<StaffBankDetails>(src.BankDetailsJson) ?? new StaffBankDetails()))
-                .ForMember(dest => dest.EmergencyContact, opt => opt.MapFrom(src => DeserializeObject<StaffEmergencyContact>(src.EmergencyContactJson) ?? new StaffEmergencyContact()));
+                .ForMember(dest => dest.EmergencyContact, opt => opt.MapFrom(src => DeserializeObject<StaffEmergencyContact>(src.EmergencyContactJson) ?? new StaffEmergencyContact()))
+                .ForMember(dest => dest.PhotoUrl, opt => opt.MapFrom(src => src.PhotoPath));
 
             // StaffDocumentItem <-> StaffDocumentPayloadItem Type Maps
             CreateMap<StaffDocumentItem, StaffDocumentPayloadItem>()

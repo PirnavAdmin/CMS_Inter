@@ -3484,4 +3484,61 @@
   to { opacity: 1; transform: scale(1); }
 }
 
+/* ==========================================================================
+   Responsive Media Queries for Mobile & Tablet Devices
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .cert-header-grid {
+    grid-template-columns: 50px 1fr 140px;
+    gap: 8px;
+  }
+  .visual-certificate-canvas {
+    max-width: 100% !important;
+    overflow-x: auto;
+  }
+  .cert-primary-tabs {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .cert-header-grid {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 12px;
+  }
+  .cert-header-left,
+  .cert-header-right {
+    justify-content: center;
+    text-align: center;
+  }
+  .cert-ref-row {
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+  }
+  .cert-footer-area {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+  }
+  .cert-footer-col.left,
+  .cert-footer-col.center,
+  .cert-footer-col.right {
+    text-align: center !important;
+    align-items: center !important;
+  }
+  .cert-sig-line {
+    align-items: center !important;
+  }
+  .cert-fee-modal-content {
+    margin: 10px;
+    width: calc(100% - 20px) !important;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
 

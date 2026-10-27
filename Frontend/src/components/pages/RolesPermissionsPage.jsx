@@ -37,8 +37,6 @@ import {
   PRESET_LABELS,
 } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import {
-  addModule,
-  addScreen,
   assignRoleToUser,
   cloneRole,
   createRole,
@@ -401,309 +399,6 @@ function EditRoleModal({ role, onClose, onEditSuccess }) {
 }
 
 
-function AddModuleModal({ onClose, onAddSuccess }) {
-  const [name, setName] = useState("");
-  const [key, setKey] = useState("");
-  const [section, setSection] = useState("Operations");
-  const [description, setDescription] = useState("");
-  const [actions, setActions] = useState(["view", "create", "edit", "delete"]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleNameChange = (val) => {
-    setName(val);
-    if (!key || key === name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")) {
-      setKey(val.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
-    }
-  };
-
-  const toggleAction = (act) => {
-    setActions((prev) => (prev.includes(act) ? prev.filter((a) => a !== act) : [...prev, act]));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!name.trim() || !key.trim()) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const moduleData = {
-        id: key.trim().toLowerCase(),
-        name: name.trim(),
-        section: section.trim(),
-        description: description.trim(),
-        availableActions: actions,
-        screens: [],
-      };
-      await addModule(moduleData);
-      onAddSuccess(moduleData);
-    } catch (err) {
-      setError(err?.message || "Failed to add module.");
-      setSaving(false);
-    }
-  };
-
-  return createPortal(
-    <div className="rbac-dialog-backdrop" onClick={onClose}>
-      <section
-        className="rbac-dialog rbac-clone-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-module-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="rbac-dialog-head">
-          <div>
-            <h3 id="add-module-title">Add Permission Module</h3>
-            <p>Create a new high-level functional module in the permissions matrix.</p>
-          </div>
-          <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="rbac-clone-form">
-          {error ? <div className="rbac-alert-error">{error}</div> : null}
-          <div className="rbac-form-field">
-            <label htmlFor="add-module-name">Module Name *</label>
-            <input
-              id="add-module-name"
-              type="text"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="e.g. Alumni Portal, Research & Publications"
-              required
-              autoFocus
-            />
-          </div>
-          <div className="rbac-form-field">
-            <label htmlFor="add-module-key">Module Key / Identifier *</label>
-            <input
-              id="add-module-key"
-              type="text"
-              value={key}
-              onChange={(e) => setKey(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-              placeholder="e.g. alumni-portal"
-              required
-            />
-          </div>
-          <div className="rbac-form-field">
-            <label htmlFor="add-module-section">Section Category</label>
-            <select
-              id="add-module-section"
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
-            >
-              <option value="Administration">Administration</option>
-              <option value="Academic">Academic</option>
-              <option value="Student">Student</option>
-              <option value="Staff">Staff</option>
-              <option value="Examinations">Examinations</option>
-              <option value="Finance">Finance</option>
-              <option value="Documents & Reports">Documents & Reports</option>
-              <option value="Hostel Management">Hostel Management</option>
-              <option value="Operations">Operations</option>
-              <option value="Overview">Overview</option>
-            </select>
-          </div>
-          <div className="rbac-form-field">
-            <label htmlFor="add-module-desc">Description</label>
-            <input
-              id="add-module-desc"
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Scope and purpose of this module"
-            />
-          </div>
-
-          <div className="rbac-form-field">
-            <label>Supported Actions</label>
-            <div style={{ display: "flex", gap: "1rem", marginTop: "0.25rem" }}>
-              {["view", "create", "edit", "delete"].map((act) => (
-                <label key={act} style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: "0.9rem", textTransform: "capitalize" }}>
-                  <input
-                    type="checkbox"
-                    checked={actions.includes(act)}
-                    onChange={() => toggleAction(act)}
-                  />
-                  {act === "create" ? "Add/Create" : act}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="rbac-dialog-actions">
-            <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
-            <button type="submit" className="cms-btn cms-btn-primary" disabled={saving || !name.trim() || !key.trim()}>
-              {saving ? "Adding..." : "Add Module"}
-            </button>
-          </div>
-        </form>
-      </section>
-    </div>,
-    document.body,
-  );
-}
-
-function AddScreenModal({ module, modules = [], onClose, onAddSuccess }) {
-  const [selectedModuleId, setSelectedModuleId] = useState(module?.id || modules[0]?.id || "");
-  const [name, setName] = useState("");
-  const [key, setKey] = useState("");
-  const [description, setDescription] = useState("");
-  const [actions, setActions] = useState(["view", "create", "edit", "delete"]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-
-  const activeModule = module || modules.find((m) => m.id === selectedModuleId);
-
-  const handleNameChange = (val) => {
-    setName(val);
-    if (!key || key === name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")) {
-      setKey(val.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
-    }
-  };
-
-  const toggleAction = (act) => {
-    setActions((prev) => (prev.includes(act) ? prev.filter((a) => a !== act) : [...prev, act]));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!name.trim() || !key.trim() || !selectedModuleId) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const screenData = {
-        id: key.trim().toLowerCase(),
-        name: name.trim(),
-        description: description.trim() || name.trim(),
-        availableActions: actions,
-      };
-      await addScreen(selectedModuleId, screenData);
-      onAddSuccess(selectedModuleId, screenData);
-    } catch (err) {
-      setError(err?.message || "Failed to add screen.");
-      setSaving(false);
-    }
-  };
-
-  return createPortal(
-    <div className="rbac-dialog-backdrop" onClick={onClose}>
-      <section
-        className="rbac-dialog rbac-clone-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-screen-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="rbac-dialog-head">
-          <div>
-            <h3 id="add-screen-title">Add Screen to Module</h3>
-            <p>
-              {module
-                ? `Add a new sub-screen under ${module.name}.`
-                : "Add a new sub-screen under a chosen module."}
-            </p>
-          </div>
-          <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="rbac-clone-form">
-          {error ? <div className="rbac-alert-error">{error}</div> : null}
-
-          {!module ? (
-            <div className="rbac-form-field">
-              <label htmlFor="add-screen-module-select">Target Module *</label>
-              <select
-                id="add-screen-module-select"
-                value={selectedModuleId}
-                onChange={(e) => setSelectedModuleId(e.target.value)}
-                required
-              >
-                {modules.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.section})
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="rbac-form-field">
-              <label>Target Module</label>
-              <input type="text" value={`${module.name} (${module.section})`} disabled style={{ background: "#f8fafc" }} />
-            </div>
-          )}
-
-          <div className="rbac-form-field">
-            <label htmlFor="add-screen-name">Screen Name *</label>
-            <input
-              id="add-screen-name"
-              type="text"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="e.g. My Attendance, Apply Leave, Room Setup"
-              required
-              autoFocus
-            />
-          </div>
-          <div className="rbac-form-field">
-            <label htmlFor="add-screen-key">Screen Key / Identifier *</label>
-            <input
-              id="add-screen-key"
-              type="text"
-              value={key}
-              onChange={(e) => setKey(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-              placeholder="e.g. my-attendance"
-              required
-            />
-          </div>
-          <div className="rbac-form-field">
-            <label htmlFor="add-screen-desc">Description / Route</label>
-            <input
-              id="add-screen-desc"
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Staff individual check-in and monthly logs"
-            />
-          </div>
-
-          <div className="rbac-form-field">
-            <label>Supported Actions</label>
-            <div style={{ display: "flex", gap: "1rem", marginTop: "0.25rem" }}>
-              {["view", "create", "edit", "delete"].map((act) => (
-                <label key={act} style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", fontSize: "0.9rem", textTransform: "capitalize" }}>
-                  <input
-                    type="checkbox"
-                    checked={actions.includes(act)}
-                    onChange={() => toggleAction(act)}
-                  />
-                  {act === "create" ? "Add/Create" : act}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="rbac-dialog-actions">
-            <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
-            <button type="submit" className="cms-btn cms-btn-primary" disabled={saving || !name.trim() || !key.trim()}>
-              {saving ? "Adding..." : "Add Screen"}
-            </button>
-          </div>
-        </form>
-      </section>
-    </div>,
-    document.body,
-  );
-}
-
 function CloneRoleModal({ role, onClose, onCloneSuccess }) {
   const [name, setName] = useState(role ? `${role.name} (Copy)` : "");
   const [description, setDescription] = useState(role ? `Cloned permissions from ${role.name}` : "");
@@ -922,7 +617,7 @@ function RoleMembersDialog({ role, members, loading, error, onRetry, onSelectMem
               <h3 id="rbac-member-dialog-title">{role.name} Members</h3>
               <strong className="rbac-member-dialog-count">{dialogCount}</strong>
             </span>
-            <p>Members currently assigned to this role.</p>
+            <p>Select a member below to configure individual overrides for that user.</p>
           </div>
           <button type="button" className="rbac-icon-action" onClick={onClose} aria-label="Close members dialog">
             <X size={16} aria-hidden="true" />
@@ -999,8 +694,6 @@ function PermissionMatrix({
   onExportCsv,
   statusFilter = "all",
   onStatusFilterChange,
-  onAddModule,
-  onAddScreen,
 }) {
   const permissionStructure = useMemo(() => {
     const map = new Map();
@@ -1194,24 +887,7 @@ function PermissionMatrix({
               <Download size={14} aria-hidden="true" />
               <span>Export CSV</span>
             </button>
-            <button
-              type="button"
-              className="rbac-export-btn rbac-btn-add-module"
-              onClick={onAddModule}
-              title="Add a new functional module to permissions"
-            >
-              <Plus size={14} aria-hidden="true" />
-              <span>Add Module</span>
-            </button>
-            <button
-              type="button"
-              className="rbac-export-btn rbac-btn-add-screen"
-              onClick={() => onAddScreen && onAddScreen(null)}
-              title="Add a new screen under a module"
-            >
-              <Plus size={14} aria-hidden="true" />
-              <span>Add Screen</span>
-            </button>
+            
           </div>
         </div>
         <div className="rbac-permission-toolbar-bottom">
@@ -1407,18 +1083,7 @@ function PermissionMatrix({
                     </div>
                   );
                 })}
-                {isExpanded && (
-                  <div className="rbac-matrix-add-screen-row">
-                    <button
-                      type="button"
-                      className="rbac-add-screen-btn"
-                      onClick={() => onAddScreen && onAddScreen(module)}
-                      title={`Add a new screen under ${module.name}`}
-                    >
-                      <Plus size={13} aria-hidden="true" /> Add screen to {module.name}
-                    </button>
-                  </div>
-                )}
+                
               </div>
             );
           })}
@@ -1744,19 +1409,57 @@ function RoleDetails({
             <div className="rbac-selected-title">
               <h2>{selectedRole.name}</h2>
               {selectedRole.isProtected ? <span className="rbac-pill is-protected">Protected</span> : null}
-              {selectedMember ? <span className="rbac-pill">Member Override</span> : null}
+              {selectedMember ? <span className="rbac-pill" style={{ background: "#dbeafe", color: "#1d4ed8", borderColor: "#93c5fd" }}>Member Override</span> : null}
             </div>
-            <p>{selectedMember ? `${selectedMember.name} - ${selectedMember.userId}` : selectedRole.description}</p>
+            <p>{selectedMember ? `${selectedMember.name} (${selectedMember.userId || selectedMember.id})` : selectedRole.description}</p>
           </div>
         </div>
         <div className="rbac-detail-actions">
           {selectedMember ? (
             <button type="button" className="cms-btn cms-btn-ghost" onClick={onUseRolePermissions} disabled={loading || saving}>
-              Role Default
+              ← Return to {selectedRole.name} Role
             </button>
           ) : null}
         </div>
       </div>
+
+      {selectedMember ? (
+        <div
+          className="rbac-override-banner"
+          style={{
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: "8px",
+            padding: "12px 16px",
+            marginBottom: "16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <Users size={20} style={{ color: "#2563eb", flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: "14px", color: "#1e3a8a" }}>
+                Member Override Active: {selectedMember.name} ({selectedMember.userId || selectedMember.id})
+              </div>
+              <div style={{ fontSize: "12px", color: "#3b82f6" }}>
+                You are configuring individual permissions for this specific user. These settings override base "{selectedRole.name}" permissions.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="cms-btn cms-btn-outline cms-btn-sm"
+            onClick={onUseRolePermissions}
+            disabled={loading || saving}
+            style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+          >
+            ← Return to Role Permissions
+          </button>
+        </div>
+      ) : null}
 
       {selectedRole.isProtected ? (
         <div className="rbac-protected-note">
@@ -1783,8 +1486,6 @@ function RoleDetails({
             onExportCsv={handleExportCsv}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
-            onAddModule={onAddModule}
-            onAddScreen={onAddScreen}
           />
           <div className="rbac-savebar">
             <span>{dirty ? "You have unsaved permission changes." : "Permissions are up to date."}</span>
@@ -2270,8 +1971,6 @@ export default function RolesPermissionsPage() {
   const [saving, setSaving] = useState(false);
   const [cloningRole, setCloningRole] = useState(null);
   const [creatingRole, setCreatingRole] = useState(false);
-  const [addingModule, setAddingModule] = useState(false);
-  const [addingScreen, setAddingScreen] = useState(null);
   const [editingRole, setEditingRole] = useState(null);
   const [deletingRole, setDeletingRole] = useState(null);
   const [error, setError] = useState("");
@@ -2343,10 +2042,12 @@ export default function RolesPermissionsPage() {
           ? { ...current, assignedUserCount: role.assignedUserCount }
           : current
       ));
+      return members;
     } catch (err) {
       setRoleMembers([]);
       setMembersError(err?.message || "Unable to load role members.");
       setToast({ type: "error", message: err?.message || "Unable to load role members." });
+      return [];
     } finally {
       setMembersLoading(false);
     }
@@ -2385,11 +2086,43 @@ export default function RolesPermissionsPage() {
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
       setModules(modulesResponse.data);
-      const role = nextAllRoles.find((r) => String(r.id) === String(selectedRoleIdRef.current)) || nextAllRoles[0] || null;
+      const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      const persistedRoleId = searchParams?.get("roleId") || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rbac_selected_role_id") : null) || selectedRoleIdRef.current;
+      const persistedUserId = searchParams?.get("userId") || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rbac_selected_user_id") : null);
+
+      const role = (persistedRoleId
+        ? nextAllRoles.find((r) => String(r.id) === String(persistedRoleId) || String(r.roleId) === String(persistedRoleId) || String(r.code).toLowerCase() === String(persistedRoleId).toLowerCase())
+        : null) || nextAllRoles[0] || null;
+
+      if (role) {
+        try {
+          const roleIdStr = String(role.id || role.roleId || role.code);
+          sessionStorage.setItem("rbac_selected_role_id", roleIdStr);
+          const url = new URL(window.location.href);
+          url.searchParams.set("roleId", roleIdStr);
+          if (persistedUserId) {
+            url.searchParams.set("userId", String(persistedUserId));
+          } else {
+            url.searchParams.delete("userId");
+          }
+          window.history.replaceState({}, "", url.toString());
+        } catch {}
+      }
       setSelectedRole(role);
       if (role) {
-        await loadPermissions(role);
-        await loadRoleMembers(role);
+        const members = await loadRoleMembers(role);
+        if (persistedUserId && members && members.length > 0) {
+          const targetMember = members.find((m) => String(m.id) === String(persistedUserId) || String(m.userId) === String(persistedUserId));
+          if (targetMember) {
+            await loadMemberPermissions(targetMember, role);
+          } else {
+            setSelectedMember(null);
+            await loadPermissions(role);
+          }
+        } else {
+          setSelectedMember(null);
+          await loadPermissions(role);
+        }
       }
     } catch (err) {
       if (pageRequestRef.current === requestId) setError(err?.message || "Unable to load roles and permissions.");
@@ -2427,8 +2160,17 @@ export default function RolesPermissionsPage() {
   const guardDirty = () => !dirty || window.confirm("Discard unsaved permission changes?");
 
   const selectRole = async (role) => {
-    if (String(role.id) === String(selectedRole?.id)) return;
+    if (String(role.id) === String(selectedRole?.id) && !selectedMember) return;
     if (!guardDirty()) return;
+    try {
+      const roleIdStr = String(role.id || role.roleId || role.code);
+      sessionStorage.setItem("rbac_selected_role_id", roleIdStr);
+      sessionStorage.removeItem("rbac_selected_user_id");
+      const url = new URL(window.location.href);
+      url.searchParams.set("roleId", roleIdStr);
+      url.searchParams.delete("userId");
+      window.history.replaceState({}, "", url.toString());
+    } catch {}
     setSelectedRole(role);
     setSelectedMember(null);
     await loadPermissions(role);
@@ -2449,6 +2191,12 @@ export default function RolesPermissionsPage() {
   const useRolePermissions = async () => {
     if (!selectedRole) return;
     if (!guardDirty()) return;
+    try {
+      sessionStorage.removeItem("rbac_selected_user_id");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("userId");
+      window.history.replaceState({}, "", url.toString());
+    } catch {}
     setSelectedMember(null);
     await loadPermissions(selectedRole);
     setMembersDialogOpen(false);
@@ -2461,6 +2209,16 @@ export default function RolesPermissionsPage() {
       return;
     }
     if (!guardDirty()) return;
+    try {
+      const roleIdStr = String(role.id || role.roleId || role.code);
+      const userIdStr = String(member.id || member.userId);
+      sessionStorage.setItem("rbac_selected_role_id", roleIdStr);
+      sessionStorage.setItem("rbac_selected_user_id", userIdStr);
+      const url = new URL(window.location.href);
+      url.searchParams.set("roleId", roleIdStr);
+      url.searchParams.set("userId", userIdStr);
+      window.history.replaceState({}, "", url.toString());
+    } catch {}
     setSelectedRole(role);
     await loadMemberPermissions(member, role);
   };
@@ -2588,8 +2346,6 @@ export default function RolesPermissionsPage() {
               setQuery={setPermissionQuery}
               onSave={savePermissions}
               onReset={() => setPermissions(lastSavedPermissions)}
-              onAddModule={() => setAddingModule(true)}
-              onAddScreen={(targetMod) => setAddingScreen(targetMod || true)}
             />
           </div>
         ) : null}
@@ -2659,28 +2415,7 @@ export default function RolesPermissionsPage() {
             }}
           />
         ) : null}
-        {addingModule ? (
-          <AddModuleModal
-            onClose={() => setAddingModule(false)}
-            onAddSuccess={async (newModule) => {
-              setAddingModule(false);
-              setToast({ type: "success", message: `Module "${newModule.name}" added successfully!` });
-              await loadPage();
-            }}
-          />
-        ) : null}
-        {addingScreen ? (
-          <AddScreenModal
-            module={typeof addingScreen === "object" ? addingScreen : null}
-            modules={modules}
-            onClose={() => setAddingScreen(null)}
-            onAddSuccess={async (modId, newScreen) => {
-              setAddingScreen(null);
-              setToast({ type: "success", message: `Screen "${newScreen.name}" added successfully!` });
-              await loadPage();
-            }}
-          />
-        ) : null}
+        
       </main>
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
     </DashboardLayout>

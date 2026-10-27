@@ -239,6 +239,19 @@
   padding: 16px;
 }
 
+.reports-summary-card:hover {
+  transform: translateY(-2px);
+  border-color: #93c5fd;
+  box-shadow: 0 10px 24px rgba(25, 47, 89, 0.1);
+}
+
+.reports-summary-card.is-selected {
+  border-color: #2563eb;
+  background: #f8faff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3), 0 10px 24px rgba(37, 99, 235, 0.12);
+  transform: translateY(-2px);
+}
+
 .reports-summary-card-head {
   display: flex;
   align-items: center;

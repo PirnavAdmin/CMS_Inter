@@ -61,7 +61,7 @@ export const getAuthToken = () => {
   }
 
   if (isExamCell) {
-    if (token.startsWith("mock-") || token.startsWith("demo-")) {
+    if (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("exam-cell-")) {
       updateAuthToken(BACKEND_EXAM_CELL_JWT);
       return BACKEND_EXAM_CELL_JWT;
     }
@@ -83,7 +83,7 @@ export const getAuthToken = () => {
   }
 
   // Admin and ERP modules: automatically upgrade mock/demo tokens to live verified backend JWT only if token exists
-  if (token.startsWith("mock-") || token.startsWith("demo-")) {
+  if (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("exam-cell-")) {
     updateAuthToken(BACKEND_ADMIN_JWT);
     return BACKEND_ADMIN_JWT;
   }

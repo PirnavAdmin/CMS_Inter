@@ -14,7 +14,6 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/designations")]
     [EnableCors("AllowFrontend")]
-    [AllowAnonymous]
     [Produces("application/json")]
     [Authorize]
     public class DesignationController : ControllerBase

@@ -108,7 +108,7 @@
 .principal-legend > div { gap: 7px; color: var(--principal-muted); font-size: 11px; }
 .principal-legend strong { margin-left: auto; color: var(--principal-deep); font-size: 12px; }
 .principal-dot { width: 8px; height: 8px; border-radius: 50%; }
-.is-present { background: #168a52; }.is-absent { background: #ef6b62; }.is-leave { background: #e8b938; }
+.is-present { background: #168a52; }.is-absent { background: #ef6b62; }.is-leave { background: #e8b938; }.principal-staff-stat .is-late { background: #e8b938; }.principal-staff-stat .is-leave { background: #7c3aed; }
 .principal-class-bars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px 16px; padding: 12px 17px 17px; border-top: 1px solid #edf3ed; }
 .principal-class-bar > div:first-child { display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--principal-muted); font-size: 10px; }.principal-class-bar strong { color: var(--principal-deep); }
 .principal-progress { height: 5px; overflow: hidden; border-radius: 9px; background: #edf2ec; }.principal-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5dbc79, #168a52); }

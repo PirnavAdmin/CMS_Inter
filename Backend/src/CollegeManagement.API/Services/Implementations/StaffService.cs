@@ -56,7 +56,7 @@ namespace CollegeManagement.API.Services.Implementations
         private const decimal HoursPerClassPeriod = 1.0m;
         private const long MaxPhotoFileSizeBytes = 5 * 1024 * 1024; // 5 MB
         private const long MaxDocFileSizeBytes = 10 * 1024 * 1024; // 10 MB
-        private static readonly string[] AllowedPhotoExtensions = { ".jpg", ".jpeg", ".png" };
+        private static readonly string[] AllowedPhotoExtensions = { ".jpg", ".jpeg", ".png", ".webp" };
         private static readonly string[] AllowedDocExtensions = { ".pdf", ".jpg", ".jpeg", ".png" };
 
         public StaffService(
@@ -737,37 +737,59 @@ namespace CollegeManagement.API.Services.Implementations
                 existingStaff.CampusId = dto.CampusId.Value;
             }
 
-            // Multi-Campus / Multi-Board Assignments Update
-            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+            // Multi-Campus / Multi-Board Assignments Update (Diff synchronization to avoid EF Core unique constraint / concurrency issues)
+            var targetCampusIds = (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+                ? dto.AssignedCampusIds.Distinct().ToList()
+                : (dto.CampusId.HasValue && dto.CampusId.Value > 0 ? new List<int> { dto.CampusId.Value } : new List<int>());
+
+            if (targetCampusIds.Any())
             {
-                existingStaff.StaffCampusAssignments.Clear();
-                foreach (var cId in dto.AssignedCampusIds.Distinct())
+                var toRemove = existingStaff.StaffCampusAssignments
+                    .Where(a => !targetCampusIds.Contains(a.CampusId))
+                    .ToList();
+                foreach (var rem in toRemove)
                 {
-                    existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId, StaffId = existingStaff.Id });
+                    existingStaff.StaffCampusAssignments.Remove(rem);
                 }
+
+                var existingCampusIds = existingStaff.StaffCampusAssignments.Select(a => a.CampusId).ToHashSet();
+                foreach (var cId in targetCampusIds)
+                {
+                    if (!existingCampusIds.Contains(cId))
+                    {
+                        existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId, StaffId = existingStaff.Id });
+                    }
+                }
+
                 if (!existingStaff.CampusId.HasValue || existingStaff.CampusId <= 0)
-                    existingStaff.CampusId = dto.AssignedCampusIds.First();
-            }
-            else if (dto.CampusId.HasValue)
-            {
-                existingStaff.StaffCampusAssignments.Clear();
-                existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = dto.CampusId.Value, StaffId = existingStaff.Id });
+                    existingStaff.CampusId = targetCampusIds.First();
             }
 
-            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+            var targetBoardIds = (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+                ? dto.AssignedBoardIds.Distinct().ToList()
+                : (resolvedBoardId.HasValue && resolvedBoardId.Value > 0 ? new List<int> { resolvedBoardId.Value } : new List<int>());
+
+            if (targetBoardIds.Any())
             {
-                existingStaff.StaffBoardAssignments.Clear();
-                foreach (var bId in dto.AssignedBoardIds.Distinct())
+                var toRemove = existingStaff.StaffBoardAssignments
+                    .Where(a => !targetBoardIds.Contains(a.BoardId))
+                    .ToList();
+                foreach (var rem in toRemove)
                 {
-                    existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId, StaffId = existingStaff.Id });
+                    existingStaff.StaffBoardAssignments.Remove(rem);
                 }
+
+                var existingBoardIds = existingStaff.StaffBoardAssignments.Select(a => a.BoardId).ToHashSet();
+                foreach (var bId in targetBoardIds)
+                {
+                    if (!existingBoardIds.Contains(bId))
+                    {
+                        existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId, StaffId = existingStaff.Id });
+                    }
+                }
+
                 if (!existingStaff.BoardId.HasValue || existingStaff.BoardId <= 0)
-                    existingStaff.BoardId = dto.AssignedBoardIds.First();
-            }
-            else if (resolvedBoardId.HasValue)
-            {
-                existingStaff.StaffBoardAssignments.Clear();
-                existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = resolvedBoardId.Value, StaffId = existingStaff.Id });
+                    existingStaff.BoardId = targetBoardIds.First();
             }
 
             if (dto.JoiningDate.HasValue || dto.DateOfJoining.HasValue)
@@ -852,7 +874,8 @@ namespace CollegeManagement.API.Services.Implementations
                 var connection = _context.Database.GetDbConnection();
 
                 existingStaff.UpdatedAt = DateTime.UtcNow;
-                _context.Staffs.Update(existingStaff);
+                // Note: existingStaff is already tracked by EF Core from _staffRepository.GetByIdAsync(id).
+                // Do not call _context.Staffs.Update(existingStaff) as it marks all loaded navigation properties (Campuses, Boards, Departments) as Modified.
                 await _context.SaveChangesAsync();
 
                 if (emailChanged)
@@ -1294,6 +1317,8 @@ namespace CollegeManagement.API.Services.Implementations
 
             result.TotalRowsRead = rows.Count - 1;
             var toAdd = new List<Staff>();
+            string? lastGeneratedTeachingEmpId = null;
+            string? lastGeneratedNonTeachingEmpId = null;
 
             for (int i = 1; i < rows.Count; i++)
             {
@@ -1338,13 +1363,6 @@ namespace CollegeManagement.API.Services.Implementations
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
-                {
-                    result.Errors.Add(new StaffImportRowError { RowNumber = rowNumber, StaffName = fName, ErrorMessage = "Valid Email address is required." });
-                    result.FailedRowsCount++;
-                    continue;
-                }
-
                 if (string.IsNullOrWhiteSpace(mobile))
                 {
                     result.Errors.Add(new StaffImportRowError { RowNumber = rowNumber, StaffName = fName, ErrorMessage = "Mobile number is required." });
@@ -1352,29 +1370,89 @@ namespace CollegeManagement.API.Services.Implementations
                     continue;
                 }
 
-                // Uniqueness check in DB & in current batch
-                if (toAdd.Any(x => x.Email.Equals(email, StringComparison.OrdinalIgnoreCase)) || !await _staffRepository.IsEmailUniqueAsync(email))
+                // Auto-generate employee ID if empty or validate uniqueness
+                if (string.IsNullOrWhiteSpace(empId))
                 {
-                    result.Errors.Add(new StaffImportRowError { RowNumber = rowNumber, StaffName = fName, ErrorMessage = $"Email '{email}' is already registered." });
+                    var isTeaching = !string.Equals(sType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+                    var prefix = isTeaching ? "PCTCH" : "PCNT";
+                    var lastGen = isTeaching ? lastGeneratedTeachingEmpId : lastGeneratedNonTeachingEmpId;
+
+                    if (string.IsNullOrWhiteSpace(lastGen))
+                    {
+                        lastGen = await GetNextEmployeeIdAsync(sType, campusId ?? 1);
+                    }
+                    else
+                    {
+                        var match = Regex.Match(lastGen, @"\d+");
+                        if (match.Success && int.TryParse(match.Value, out int seqNum))
+                        {
+                            var numLen = match.Value.Length;
+                            lastGen = $"{prefix}{(seqNum + 1).ToString($"D{numLen}")}";
+                        }
+                        else
+                        {
+                            lastGen = await GetNextEmployeeIdAsync(sType, campusId ?? 1);
+                        }
+                    }
+
+                    while (toAdd.Any(x => string.Equals(x.EmployeeId, lastGen, StringComparison.OrdinalIgnoreCase)) || !await _staffRepository.IsEmployeeIdUniqueAsync(lastGen))
+                    {
+                        var match = Regex.Match(lastGen, @"\d+");
+                        if (match.Success && int.TryParse(match.Value, out int seqNum))
+                        {
+                            var numLen = match.Value.Length;
+                            lastGen = $"{prefix}{(seqNum + 1).ToString($"D{numLen}")}";
+                        }
+                        else
+                        {
+                            lastGen = $"{prefix}{Guid.NewGuid().ToString("N").Substring(0, 4).ToUpperInvariant()}";
+                        }
+                    }
+
+                    empId = lastGen;
+                    if (isTeaching) lastGeneratedTeachingEmpId = empId;
+                    else lastGeneratedNonTeachingEmpId = empId;
+                }
+                else if (toAdd.Any(x => string.Equals(x.EmployeeId, empId, StringComparison.OrdinalIgnoreCase)) || !await _staffRepository.IsEmployeeIdUniqueAsync(empId))
+                {
+                    result.Errors.Add(new StaffImportRowError { RowNumber = rowNumber, EmployeeId = empId, StaffName = fName, ErrorMessage = $"Employee ID '{empId}' already exists." });
                     result.FailedRowsCount++;
                     continue;
+                }
+
+                // Email validation & Non-Teaching fallback handling
+                if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+                {
+                    if (string.Equals(sType, "Non-Teaching", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var cleanEmp = Regex.Replace((empId ?? fName).ToLowerInvariant(), @"[^a-z0-9]", "");
+                        if (string.IsNullOrWhiteSpace(cleanEmp)) cleanEmp = "staff";
+                        email = $"{cleanEmp}@college.local";
+                        while (toAdd.Any(x => x.Email.Equals(email, StringComparison.OrdinalIgnoreCase)) || !await _staffRepository.IsEmailUniqueAsync(email))
+                        {
+                            email = $"{cleanEmp}_{Guid.NewGuid().ToString("N").Substring(0, 4)}@college.local";
+                        }
+                    }
+                    else
+                    {
+                        result.Errors.Add(new StaffImportRowError { RowNumber = rowNumber, StaffName = fName, ErrorMessage = "Valid Email address is required." });
+                        result.FailedRowsCount++;
+                        continue;
+                    }
+                }
+                else
+                {
+                    if (toAdd.Any(x => x.Email.Equals(email, StringComparison.OrdinalIgnoreCase)) || !await _staffRepository.IsEmailUniqueAsync(email))
+                    {
+                        result.Errors.Add(new StaffImportRowError { RowNumber = rowNumber, StaffName = fName, ErrorMessage = $"Email '{email}' is already registered." });
+                        result.FailedRowsCount++;
+                        continue;
+                    }
                 }
 
                 if (toAdd.Any(x => x.Mobile == mobile) || !await _staffRepository.IsMobileUniqueAsync(mobile))
                 {
                     result.Errors.Add(new StaffImportRowError { RowNumber = rowNumber, StaffName = fName, ErrorMessage = $"Mobile '{mobile}' is already registered." });
-                    result.FailedRowsCount++;
-                    continue;
-                }
-
-                // Auto-generate employee ID if empty or validate uniqueness
-                if (string.IsNullOrWhiteSpace(empId))
-                {
-                    empId = await GetNextEmployeeIdAsync(sType, campusId ?? 1);
-                }
-                else if (toAdd.Any(x => x.EmployeeId == empId) || !await _staffRepository.IsEmployeeIdUniqueAsync(empId))
-                {
-                    result.Errors.Add(new StaffImportRowError { RowNumber = rowNumber, EmployeeId = empId, StaffName = fName, ErrorMessage = $"Employee ID '{empId}' already exists." });
                     result.FailedRowsCount++;
                     continue;
                 }
@@ -1479,6 +1557,14 @@ namespace CollegeManagement.API.Services.Implementations
                 };
 
                 toAdd.Add(staff);
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    staff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = campusId.Value });
+                }
+                if (boardId.HasValue && boardId.Value > 0)
+                {
+                    staff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = boardId.Value });
+                }
                 if (sType == "Teaching") result.TeachingImported++;
                 else result.NonTeachingImported++;
             }
@@ -1821,29 +1907,58 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<StaffResponseDto> UploadPhotoAsync(UploadStaffPhotoDto dto)
         {
+            if (dto == null)
+                throw new ValidationException("Invalid photo upload request.");
+
             var staff = await _staffRepository.GetByIdAsync(dto.StaffId);
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {dto.StaffId} not found.");
 
-            if (dto.Photo == null || dto.Photo.Length == 0)
+            var file = dto.GetFile();
+            if (file == null || file.Length == 0)
                 throw new ValidationException("Please choose a photo file.");
 
-            var ext = Path.GetExtension(dto.Photo.FileName).ToLowerInvariant();
-            if (!AllowedPhotoExtensions.Contains(ext))
-                throw new ValidationException("Only JPEG and PNG photos are accepted.");
+            if (file.Length > MaxPhotoFileSizeBytes)
+                throw new ValidationException("Photo file size cannot exceed 5 MB.");
 
-            var uploadDir = Path.Combine(_environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "staff-photos");
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(ext) || !AllowedPhotoExtensions.Contains(ext))
+                throw new ValidationException("Only JPEG, PNG, and WEBP photos are accepted.");
+
+            var rootPath = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadDir = Path.Combine(rootPath, "uploads", "staff-photos");
             if (!Directory.Exists(uploadDir))
             {
                 Directory.CreateDirectory(uploadDir);
             }
 
-            var fileName = $"photo_staff_{staff.Id}_{Guid.NewGuid().ToString("N").Substring(0, 8)}{ext}";
+            // Cleanup previous photo file if it exists and belongs to uploads/staff-photos
+            if (!string.IsNullOrWhiteSpace(staff.PhotoPath))
+            {
+                try
+                {
+                    var oldRel = staff.PhotoPath.TrimStart('/').Replace('\\', '/');
+                    if (oldRel.StartsWith("uploads/staff-photos/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var oldPhysicalPath = Path.Combine(rootPath, oldRel.Replace('/', Path.DirectorySeparatorChar));
+                        if (File.Exists(oldPhysicalPath))
+                        {
+                            File.Delete(oldPhysicalPath);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete previous staff photo file for staff {StaffId}", staff.Id);
+                }
+            }
+
+            var fileName = $"photo_staff_{staff.Id}_{Guid.NewGuid():N}{ext}";
             var physicalPath = Path.Combine(uploadDir, fileName);
 
             using (var stream = new FileStream(physicalPath, FileMode.Create))
             {
-                await dto.Photo.CopyToAsync(stream);
+                await file.CopyToAsync(stream);
             }
 
             var newPhotoPath = $"/uploads/staff-photos/{fileName}";
@@ -1860,11 +1975,17 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (!string.IsNullOrWhiteSpace(photoPath))
             {
-                var fullPath = Path.Combine(webRoot, photoPath.TrimStart('/'));
+                var cleanRel = photoPath.TrimStart('/').Replace('\\', '/');
+                var fullPath = Path.Combine(webRoot, cleanRel.Replace('/', Path.DirectorySeparatorChar));
                 if (File.Exists(fullPath))
                 {
                     var ext = Path.GetExtension(fullPath).ToLowerInvariant();
-                    var contentType = ext == ".png" ? "image/png" : "image/jpeg";
+                    var contentType = ext switch
+                    {
+                        ".png" => "image/png",
+                        ".webp" => "image/webp",
+                        _ => "image/jpeg"
+                    };
                     return (fullPath, contentType);
                 }
             }

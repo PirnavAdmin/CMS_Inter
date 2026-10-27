@@ -1,7 +1,6 @@
 .group-management {
   width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
+  min-width: 0;
 }
 
 .group-management > .cms-card {
@@ -18,10 +17,16 @@
 .group-management .cms-table-wrap {
   position: relative;
   z-index: 1;
+  min-width: 0;
+}
+
+.group-management .cms-search {
+  flex: 1 1 280px;
+  min-width: 0;
 }
 
 .group-management .cms-toolbar-right {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
   margin-left: auto;
@@ -32,6 +37,58 @@
   padding: 7px 12px;
   border-radius: 8px;
   font-size: 12.5px;
+}
+
+.group-management .cms-table {
+  min-width: 600px;
+  table-layout: fixed;
+}
+
+.group-management .cms-table th:nth-child(1) {
+  width: 17%;
+}
+
+.group-management .cms-table th:nth-child(2) {
+  width: 16%;
+}
+
+.group-management .cms-table th:nth-child(4) {
+  width: 15%;
+}
+
+.group-management .cms-table th:nth-child(5) {
+  width: 15%;
+  text-align: center;
+}
+
+.group-management .group-available-levels {
+  display: block;
+  color: var(--cms-muted);
+  margin-top: 4px;
+}
+
+.group-management .cms-pagination > .cms-page-btn {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .group-management .cms-search,
+  .group-management .cms-toolbar-right {
+    flex-basis: 100%;
+  }
+
+  .group-management .cms-search {
+    max-width: none;
+  }
+
+  .group-management .cms-pagination .cms-page-info {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .group-management .cms-page-info + .cms-page-btn {
+    margin-left: auto;
+  }
 }
 
 .course-group-form-page {
