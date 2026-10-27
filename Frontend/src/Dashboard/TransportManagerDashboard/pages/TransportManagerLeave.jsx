@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import "@/Dashboard/FacultyDashboard/styles/FacultyLeave.css";
+import "../styles/TransportManagerLeave.css";
 import { useTransportManagerSafe } from "../TransportManagerContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -480,103 +481,141 @@ export default function TransportManagerLeave() {
       </div>
 
       {/* Apply Leave Modal */}
-      {showLeaveModal && (
-        <div className="cms-modal-overlay">
-          <div className="cms-modal leave-modal-content">
+      {showLeaveModal && typeof document !== "undefined" && createPortal(
+        <div
+          className="cms-overlay tm-leave-modal-overlay"
+          onClick={(e) => e.target === e.currentTarget && setShowLeaveModal(false)}
+        >
+          <form
+            className="cms-modal sm tm-leave-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tm-leave-modal-title"
+            onSubmit={handleApplyLeave}
+          >
             <div className="cms-modal-head">
-              <h3>Apply For Leave</h3>
+              <h3 id="tm-leave-modal-title">Apply for Staff Leave</h3>
               <button
                 type="button"
                 className="cms-icon-btn"
+                aria-label="Close"
+                disabled={leaveSubmitting}
                 onClick={() => setShowLeaveModal(false)}
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
-            <form onSubmit={handleApplyLeave} className="cms-modal-body">
-              <div className="leave-form-group">
-                <label>Leave Category</label>
-                <select
-                  value={leaveForm.categoryId}
-                  onChange={(e) => setLeaveForm((prev) => ({ ...prev, categoryId: e.target.value }))}
-                  className="cms-select"
-                >
-                  {categories.length > 0 ? (
-                    categories.map((c) => (
-                      <option key={c.leaveCategoryId || c.id} value={c.leaveCategoryId || c.id}>
-                        {c.categoryName || c.name}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="1">Casual Leave (CL)</option>
-                      <option value="2">Sick Leave (SL)</option>
-                      <option value="3">Earned Leave (EL)</option>
-                      <option value="4">On-Duty (OD)</option>
-                    </>
-                  )}
-                </select>
-              </div>
+            <div className="cms-modal-body">
+              <div className="cms-form-grid">
+                <div className="cms-field full">
+                  <label htmlFor="tm-leave-type">
+                    LEAVE TYPE <span className="req">*</span>
+                  </label>
+                  <select
+                    id="tm-leave-type"
+                    required
+                    value={leaveForm.categoryId}
+                    disabled={leaveSubmitting}
+                    onChange={(e) =>
+                      setLeaveForm((prev) => ({ ...prev, categoryId: e.target.value }))
+                    }
+                  >
+                    <option value="">Select leave type</option>
+                    {categories.length > 0 ? (
+                      categories.map((c) => (
+                        <option
+                          key={c.leaveCategoryId || c.id}
+                          value={c.leaveCategoryId || c.id}
+                        >
+                          {c.categoryName || c.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="1">Casual Leave (CL)</option>
+                        <option value="2">Sick Leave (SL)</option>
+                        <option value="3">Earned Leave (EL)</option>
+                        <option value="4">On-Duty (OD)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div className="leave-form-group">
-                  <label>From Date</label>
+                <div className="cms-field">
+                  <label htmlFor="tm-leave-from">
+                    FROM DATE <span className="req">*</span>
+                  </label>
                   <input
+                    id="tm-leave-from"
                     type="date"
+                    required
                     value={leaveForm.fromDate}
-                    onChange={(e) => setLeaveForm((prev) => ({ ...prev, fromDate: e.target.value }))}
-                    className="cms-input"
-                    required
+                    disabled={leaveSubmitting}
+                    onChange={(e) =>
+                      setLeaveForm((prev) => ({ ...prev, fromDate: e.target.value }))
+                    }
                   />
                 </div>
-                <div className="leave-form-group">
-                  <label>To Date</label>
+
+                <div className="cms-field">
+                  <label htmlFor="tm-leave-to">
+                    TO DATE <span className="req">*</span>
+                  </label>
                   <input
+                    id="tm-leave-to"
                     type="date"
-                    value={leaveForm.toDate}
-                    onChange={(e) => setLeaveForm((prev) => ({ ...prev, toDate: e.target.value }))}
-                    className="cms-input"
                     required
+                    min={leaveForm.fromDate || undefined}
+                    value={leaveForm.toDate}
+                    disabled={leaveSubmitting}
+                    onChange={(e) =>
+                      setLeaveForm((prev) => ({ ...prev, toDate: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="cms-field full">
+                  <label htmlFor="tm-leave-reason">
+                    REASON FOR LEAVE <span className="req">*</span>
+                  </label>
+                  <textarea
+                    id="tm-leave-reason"
+                    rows={2}
+                    required
+                    placeholder="State reason clearly..."
+                    value={leaveForm.reason}
+                    disabled={leaveSubmitting}
+                    onChange={(e) =>
+                      setLeaveForm((prev) => ({ ...prev, reason: e.target.value }))
+                    }
                   />
                 </div>
               </div>
+            </div>
 
-              <div className="leave-form-group">
-                <label>Reason for Leave</label>
-                <textarea
-                  rows={3}
-                  value={leaveForm.reason}
-                  onChange={(e) => setLeaveForm((prev) => ({ ...prev, reason: e.target.value }))}
-                  placeholder="Provide reason for leave..."
-                  className="cms-textarea"
-                  required
-                />
-              </div>
-
-              <div className="cms-modal-foot" style={{ padding: "12px 0 0", borderTop: "none" }}>
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-ghost"
-                  onClick={() => setShowLeaveModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="cms-btn cms-btn-primary"
-                  disabled={leaveSubmitting}
-                >
-                  {leaveSubmitting ? (
-                    <Loader2 size={14} className="leave-spin" />
-                  ) : (
-                    <Plus size={14} />
-                  )}
-                  <span>Submit Leave Application</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="cms-modal-foot">
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                disabled={leaveSubmitting}
+                onClick={() => setShowLeaveModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="cms-btn cms-btn-primary"
+                disabled={leaveSubmitting}
+              >
+                {leaveSubmitting && (
+                  <Loader2 size={14} className="tm-leave-spin" style={{ marginRight: 6 }} />
+                )}
+                Submit Leave
+              </button>
+            </div>
+          </form>
+        </div>,
+        document.body
       )}
 
       {toast && (
