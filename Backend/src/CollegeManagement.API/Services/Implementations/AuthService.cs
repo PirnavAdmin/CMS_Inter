@@ -313,13 +313,6 @@ namespace CollegeManagement.API.Services.Implementations
                     status: "Success",
                     details: $"Successful login for {user.Email}", overrideUser: user.FullName ?? user.Email, overrideRole: user.Role?.RoleName ?? "Unknown");
 
-                string? resolvedPhotoPath = (string?)staffInfo?.PhotoPath;
-                if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.AdminId.HasValue && user.AdminId.Value > 0)
-                {
-                    resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
-                        "SELECT PhotoPath FROM Admins WHERE Id = @Id", new { Id = user.AdminId.Value });
-                }
-
                 return new AuthResult
                 {
                     Status = true,
