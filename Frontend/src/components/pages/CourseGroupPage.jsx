@@ -68,8 +68,8 @@ const normalizeProgram = (item) => {
 };
 const normalizeSelectedProgramIds = (ids = []) => Array.from(new Set(ids.map(String)));
 const normalizeLevels = (levels) => {
-  if (!Array.isArray(levels)) throw new Error("The API did not return academic-level eligibility.");
-  return levels
+  const list = Array.isArray(levels) ? levels : [];
+  return list
     .map((level) => ({
       id: read(level, "academicLevelId", "AcademicLevelId"),
       name: read(level, "academicLevelName", "AcademicLevelName", "levelName", "LevelName") || "",
@@ -91,7 +91,7 @@ const normalizeGroup = (item) => {
     name: item.groupName || "-",
     code: item.groupCode || "-",
     description: item.description ?? "",
-    availableLevels: normalizeLevels(item.eligibleAcademicLevels),
+    availableLevels: normalizeLevels(item.eligibleAcademicLevels ?? item.eligibleLevels ?? []), levels: item.eligibleAcademicLevels ?? item.eligibleLevels ?? [],
     status: item.isActive ? "Active" : "Inactive",
   };
 };
