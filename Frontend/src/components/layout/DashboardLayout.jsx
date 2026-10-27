@@ -738,6 +738,10 @@ export default function DashboardLayout({
   const userRoleStr = String(user?.role || "").trim().toLowerCase();
   const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
   const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
+  const hubConnectionRef = useRef(null);
+  const fetchLiveNotifsRef = useRef(null);
+
+  // Fetch live notifications count for badges
   useEffect(() => {
     let disposed = false;
     if (canReviewReimbursements || canReviewCertificates) {
@@ -809,41 +813,8 @@ export default function DashboardLayout({
         }
       };
 
+      fetchLiveNotifsRef.current = fetchLiveNotifications;
       fetchLiveNotifications();
-
-      // SignalR Push Connection: ONLY fetch when server pushes a real notification event
-      let hubConnection = null;
-      try {
-        const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
-        if (token) {
-          const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
-          hubConnection = new HubConnectionBuilder()
-            .withUrl(`${base}/hubs/notifications`, {
-              accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
-              headers: { "ngrok-skip-browser-warning": "true" },
-            })
-            .withAutomaticReconnect()
-            .configureLogging(LogLevel.None)
-            .build();
-
-          hubConnection.on("NotificationReceived", () => {
-            if (!disposed) {
-              setHasViewedNotifications(false);
-              fetchLiveNotifications(true);
-            }
-          });
-
-          hubConnection.start()
-            .then(() => {
-              if (reimbursementCampusId && hubConnection) {
-                hubConnection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
-              }
-            })
-            .catch(() => {});
-        }
-      } catch {
-        // Fallback
-      }
 
       // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
       let channel = null;
@@ -875,15 +846,72 @@ export default function DashboardLayout({
       return () => {
         disposed = true;
         if (channel) channel.close();
-        if (hubConnection) {
-          hubConnection.stop().catch(() => {});
-        }
         window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
         window.removeEventListener("cms-certificates-updated", handleLocalAction);
       };
     }
     setLiveNotifications([]);
   }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
+
+  // SignalR Push Connection: Persistent across campus changes with safe reconnect backoff
+  useEffect(() => {
+    let disposed = false;
+    if (!canReviewReimbursements && !canReviewCertificates) {
+      if (hubConnectionRef.current) {
+        hubConnectionRef.current.stop().catch(() => {});
+        hubConnectionRef.current = null;
+      }
+      return;
+    }
+
+    const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
+    if (!token) return;
+
+    const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
+    const connection = new HubConnectionBuilder()
+      .withUrl(`${base}/hubs/notifications`, {
+        accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
+        headers: { "ngrok-skip-browser-warning": "true" },
+      })
+      .withAutomaticReconnect([2000, 5000, 10000, 30000])
+      .configureLogging(LogLevel.None)
+      .build();
+
+    hubConnectionRef.current = connection;
+
+    connection.on("NotificationReceived", () => {
+      if (!disposed) {
+        setHasViewedNotifications(false);
+        fetchLiveNotifsRef.current?.(true);
+      }
+    });
+
+    connection.start()
+      .then(() => {
+        if (!disposed && reimbursementCampusId && connection.state === "Connected") {
+          connection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
+        }
+      })
+      .catch(() => {
+        // Graceful catch: withAutomaticReconnect will retry with backoff if server is restarting
+      });
+
+    return () => {
+      disposed = true;
+      if (hubConnectionRef.current) {
+        const conn = hubConnectionRef.current;
+        hubConnectionRef.current = null;
+        conn.stop().catch(() => {});
+      }
+    };
+  }, [canReviewReimbursements, canReviewCertificates]);
+
+  // Synchronize Campus Join/Leave dynamically without tearing down SignalR socket
+  useEffect(() => {
+    if (reimbursementCampusId && hubConnectionRef.current?.state === "Connected") {
+      hubConnectionRef.current.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
+    }
+  }, [reimbursementCampusId]);
 
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 
