@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "../config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken } from "../modules/auth/authStorage.js";
 
 let activeApiRequests = 0;
 import { handleMockApiRequest } from "./mockApiAdapter.js";
