@@ -24,7 +24,9 @@ namespace CollegeManagement.API.DTOs.Roles
             {
                 return Permissions.Select(p => new ModulePermissionUpdateItem
                 {
-                    SubModule = MapModuleIdToSubModule(p.Module),
+                    SubModule = MapModuleIdToSubModule(p.ResolvedModule),
+                    ScreenId = p.ScreenId ?? string.Empty,
+                    ScreenName = p.ScreenName ?? string.Empty,
                     CanView = p.Actions.Any(a => a.Equals("view", StringComparison.OrdinalIgnoreCase)),
                     CanAdd = p.Actions.Any(a => a.Equals("create", StringComparison.OrdinalIgnoreCase) || a.Equals("add", StringComparison.OrdinalIgnoreCase)),
                     CanEdit = p.Actions.Any(a => a.Equals("edit", StringComparison.OrdinalIgnoreCase)),

@@ -209,15 +209,33 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPost("profile/photo")]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> UploadProfilePhoto(IFormFile file, CancellationToken ct = default)
+        public async Task<IActionResult> UploadProfilePhoto(
+            [FromForm] IFormFile? file,
+            [FromForm] IFormFile? photo,
+            CancellationToken ct = default)
         {
+            var targetFile = file ?? photo;
+            if (targetFile == null && Request.HasFormContentType && Request.Form.Files.Count > 0)
+            {
+                targetFile = Request.Form.Files[0];
+            }
+
+            if (targetFile == null || targetFile.Length == 0)
+            {
+                return BadRequest(new
+                {
+                    Status = false,
+                    Message = "Please choose a photo file to upload."
+                });
+            }
+
             var targetAdminId = _jwtTokenHelper.GetAdminId(User);
             if (!targetAdminId.HasValue || targetAdminId.Value <= 0)
             {
                 targetAdminId = 1;
             }
 
-            var result = await _adminService.UploadPhotoAsync(targetAdminId.Value, file, ct);
+            var result = await _adminService.UploadPhotoAsync(targetAdminId.Value, targetFile, ct);
             if (!result.Status)
             {
                 return BadRequest(new

@@ -143,7 +143,12 @@ apiClient.interceptors.request.use(
   (config) => {
     if (typeof FormData !== "undefined" && config.data instanceof FormData) {
       // Preserve file bodies and let the browser supply the multipart boundary.
-      config.headers.delete("Content-Type");
+      try { config.headers?.delete?.("Content-Type"); } catch {}
+      try { config.headers?.delete?.("content-type"); } catch {}
+      if (config.headers) {
+        delete config.headers["Content-Type"];
+        delete config.headers["content-type"];
+      }
     }
     beginApiLoading(config);
 

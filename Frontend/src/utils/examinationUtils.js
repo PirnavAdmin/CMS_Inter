@@ -262,12 +262,12 @@ export const getGroupStudents = (
       pIds = match ? ensureArray(match.programIds) : [];
     }
     if (pIds.length === 0) {
-      const isAllPrograms = !exam.programId || String(exam.programName || "").trim().toLowerCase() === "all programs";
-      if (!isAllPrograms) {
-        const directProgramId = exam.programId || exam.program?.id || exam.academicProgramId;
-        const rawPids = ensureArray(exam.programIds).map(normalizeId).filter(Boolean);
-        pIds = rawPids.length > 0 ? rawPids : (directProgramId ? [directProgramId] : []);
-      }
+      const directProgramId = exam.programId || exam.program?.id || exam.academicProgramId;
+      const rawPids = ensureArray(
+        exam.programIds ||
+        (Array.isArray(exam.programs) ? exam.programs.map((p) => p.id || p.programId) : [])
+      ).map(normalizeId).filter(Boolean);
+      pIds = rawPids.length > 0 ? rawPids : (directProgramId ? [directProgramId] : []);
     }
     targetProgramIds = [...new Set(pIds.map(normalizeId).filter(Boolean))];
   }
@@ -311,6 +311,22 @@ export const getGroupStudents = (
       const matchesByName = sPName && selectedProgNames.has(sPName);
 
       if (!matchesById && !matchesByCode && !matchesByName) return false;
+    }
+
+    // Joining / Admission Date match: Student MUST have joined on or before exam start date
+    const examStartDate = exam.startDate || exam.examStartDate || exam.date || exam.examDate;
+    if (examStartDate) {
+      const admDate = s.admissionDate || s.dateOfAdmission || s.joiningDate || s.allocatedDate;
+      if (admDate) {
+        const admStr = String(admDate).slice(0, 10);
+        const examStr = String(examStartDate).slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(admStr) && /^\d{4}-\d{2}-\d{2}$/.test(examStr) && !admStr.startsWith("0001-")) {
+          if (admStr > examStr) {
+            // Student joined after the exam started; not eligible for this examination
+            return false;
+          }
+        }
+      }
     }
 
     seenStudentIds.add(sId);

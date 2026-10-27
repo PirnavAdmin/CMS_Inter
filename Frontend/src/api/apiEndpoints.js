@@ -1,4 +1,14 @@
 export const apiEndpoints = {
+  academicCalendar: {
+    list: '/api/v1/academic-calendar',
+    create: '/api/v1/academic-calendar',
+    range: '/api/v1/academic-calendar/range',
+    metrics: '/api/v1/academic-calendar/metrics',
+    upcoming: '/api/v1/academic-calendar/upcoming',
+    byId: (id) => `/api/v1/academic-calendar/${encodeURIComponent(id)}`,
+    publish: (id) => `/api/v1/academic-calendar/${encodeURIComponent(id)}/publish`,
+    exportExcel: '/api/v1/academic-calendar/export/excel',
+  },
   dashboard: {
     summary: "/api/v1/dashboard/summary",
     principal: "/api/v1/dashboard/principal",
@@ -29,6 +39,7 @@ export const apiEndpoints = {
     getById: (adminId) => `/api/Admin/${adminId}`,
     changePassword: "/api/Admin/change-password",
     updateStatus: (adminId) => `/api/Admin/${adminId}/status`,
+    uploadPhoto: "/api/Admin/profile/photo",
   },
   faculty: {
     dashboardStats: "/api/v1/staff/dashboard-stats",
@@ -506,6 +517,7 @@ export const apiEndpoints = {
     eligibleSubjects: (id) => `/api/v1/examinations/${id}/eligible-subjects`,
     availableHalls: "/api/v1/examinations/available-halls",
     settings: "/api/v1/examinations/settings",
+    duties: "/api/v1/examinations/duties",
   },
   timetable: {
     getAll: "/api/v1/timetable",

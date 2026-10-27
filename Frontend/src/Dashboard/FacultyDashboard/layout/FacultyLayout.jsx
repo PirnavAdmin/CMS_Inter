@@ -40,7 +40,7 @@ export default function FacultyLayout({ children }) {
       {toast && (
         <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`}>
           {toast.type === "error" ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-          {toast.text}
+          <span>{toast.text}</span>
         </div>
       )}
 

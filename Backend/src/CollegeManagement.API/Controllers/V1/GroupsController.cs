@@ -32,7 +32,8 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? boardId = null,
             [FromQuery] int? academicYearId = null,
             [FromQuery] int? academicLevelId = null,
-            [FromQuery] bool? isActive = null)
+            [FromQuery] bool? isActive = null,
+            [FromQuery] int? masterGroupId = null)
         {
             return Ok(
                 await _groupRepository.GetAllAsync(
@@ -40,7 +41,8 @@ namespace CollegeManagement.API.Controllers
                     boardId,
                     academicYearId,
                     academicLevelId,
-                    isActive));
+                    isActive,
+                    masterGroupId));
         }
 
         // =========================================================
@@ -49,10 +51,16 @@ namespace CollegeManagement.API.Controllers
 
         [HttpGet("dropdown")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetDropdown()
+        public async Task<IActionResult> GetDropdown(
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null,
+            [FromQuery] int? academicLevelId = null)
         {
             return Ok(
-                await _groupRepository.GetDropdownAsync());
+                await _groupRepository.GetDropdownAsync(
+                    boardId,
+                    academicYearId,
+                    academicLevelId));
         }
 
         // =========================================================
@@ -182,7 +190,9 @@ namespace CollegeManagement.API.Controllers
 
         [HttpGet("board/{boardId:int}")]
         public async Task<IActionResult> GetGroupsByBoard(
-            int boardId)
+            int boardId,
+            [FromQuery] int? academicYearId = null,
+            [FromQuery] int? academicLevelId = null)
         {
             if (boardId <= 0)
                 throw new ValidationException(
@@ -190,7 +200,9 @@ namespace CollegeManagement.API.Controllers
 
             return Ok(
                 await _groupRepository.GetByBoardAsync(
-                    boardId));
+                    boardId,
+                    academicYearId,
+                    academicLevelId));
         }
 
         // =========================================================

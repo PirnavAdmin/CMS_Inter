@@ -206,7 +206,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_Medium = request.Medium,
                     p_SecondLanguage = request.SecondLanguage,
                     p_StudentType = request.StudentType,
-                    p_TransportRequired = request.TransportRequired == true ? "Yes" : "No",
+                    p_TransportRequired = request.TransportRequired == true ? "1" : "0",
                     p_BusRoute = request.BusRoute,
                     p_PickupPoint = request.PickupPoint,
                     p_HostelBlock = request.HostelBlock,
@@ -228,7 +228,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (result.AdmissionId > 0)
             {
                 var initialStatus = request.IsReferral ? "Pending" : "Pending";
-                var admNo = string.IsNullOrWhiteSpace(request.AdmissionNo) ? string.Empty : request.AdmissionNo.Trim();
+                var admNo = !string.IsNullOrWhiteSpace(request.AdmissionNo) ? request.AdmissionNo.Trim() : (request.IsReferral ? null : $"ADM-{result.AdmissionId:D4}");
 
                 await connection.ExecuteAsync(@"
                     UPDATE `StudentAdmissions` 
@@ -424,7 +424,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_Medium = request.Medium,
                     p_SecondLanguage = request.SecondLanguage,
                     p_StudentType = request.StudentType,
-                    p_TransportRequired = request.TransportRequired == true ? "Yes" : "No",
+                    p_TransportRequired = request.TransportRequired == true ? "1" : "0",
                     p_BusRoute = request.BusRoute,
                     p_PickupPoint = request.PickupPoint,
                     p_HostelBlock = request.HostelBlock,

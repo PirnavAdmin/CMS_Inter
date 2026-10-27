@@ -242,10 +242,14 @@ export async function loadCollectionAccounts(params, signal) {
 }
 
 export async function loadCollectionDetails(row, signal) {
-  const id = readFee(row, "studentFeeId");
-  if (!validId(id) || !validId(readFee(row, "studentId"))) throw invalid("Valid student and fee account IDs are required.");
-  const detail = checkedFeeData(await apiClient.get(apiEndpoints.fee.getStudentFee(id), { signal }));
-  if (Number(readFee(detail, "studentFeeId")) !== Number(id) || Number(readFee(detail, "studentId")) !== Number(readFee(row, "studentId"))) throw invalid("The returned fee account does not match the selected student.");
+  const feeId = readFee(row, "studentFeeId");
+  if (feeId != null && feeId !== "" && !validId(feeId)) throw invalid("The selected fee account ID is invalid. Refresh the collection list.");
+  // Match Admin: use the student-specific details route whenever a valid
+  // student ID is present. The shared loader validates IDs and response identity,
+  // preserves backend errors, and only uses the fee route for a real fee ID.
+  const detail = await loadLedgerDetails(row, signal);
+  if (!validId(readFee(detail, "studentId")) || !validId(readFee(detail, "studentFeeId"))) throw invalid("The returned fee account is missing valid student or fee account IDs. Payment collection is unavailable.");
+  if (validId(feeId) && Number(readFee(detail, "studentFeeId")) !== Number(feeId)) throw invalid("The returned fee account does not match the selected student. Refresh the collection list before collecting payment.");
   return detail;
 }
 
