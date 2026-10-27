@@ -206,12 +206,86 @@ function FeeDetails({ row, onClose, collection = false, authorize = () => false,
   </section>;
 }
 
+// Use explicit API plan names only. Admin also reads these aliases, but its
+// schedule-count fallback is intentionally excluded: it is not an assignment.
+function collectionPaymentPlan(account, depth = 0) {
+  if (!account || typeof account !== "object" || depth > 3) return undefined;
+  let empty;
+  for (const key of ["paymentPlan", "planName", "paymentPlanName", "plan"]) {
+    const value = account[key] !== undefined ? account[key] : account[key[0].toUpperCase() + key.slice(1)];
+    if (value === undefined) continue;
+    if (value == null || value === "") { empty = ""; continue; }
+    if (typeof value === "string") {
+      if (value.trim()) return value.trim();
+      empty = "";
+    } else if (typeof value === "object") {
+      const nested = collectionPaymentPlan(value, depth + 1);
+      const name = readFee(value, "name");
+      if (nested) return nested;
+      if (typeof name === "string" && name.trim()) return name.trim();
+      if (nested === "" || name === "") empty = "";
+    }
+  }
+  for (const key of ["studentFee", "feeAccount", "assignment"]) {
+    const nested = collectionPaymentPlan(readFee(account, key), depth + 1);
+    if (nested) return nested;
+    if (nested === "") empty = "";
+  }
+  return empty;
+}
+
+const collectionAdmissionOrder = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+function compareCollectionAdmissions(left, right) {
+  const admission = row => {
+    const value = readFee(row, "admissionNumber");
+    return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+  };
+  const a = admission(left), b = admission(right);
+  const partsA = a.match(/^(.*?)(\d+)$/), partsB = b.match(/^(.*?)(\d+)$/);
+  if (!partsA || !partsB) return partsA ? -1 : partsB ? 1 : collectionAdmissionOrder.compare(a, b);
+  // Fallback display order only, not student creation order.
+  return collectionAdmissionOrder.compare(partsA[1], partsB[1])
+    || collectionAdmissionOrder.compare(partsB[2], partsA[2])
+    || Number(readFee(left, "studentId")) - Number(readFee(right, "studentId"))
+    || Number(readFee(left, "studentFeeId")) - Number(readFee(right, "studentFeeId"));
+}
+
+async function loadCollectionTable(params, signal) {
+  const rows = await loadCollectionAccounts(params, signal);
+  if (!rows.length) return [];
+  const details = new Map();
+  const accounts = [];
+  // Bound detail reads instead of starting a request for every student at once.
+  for (let offset = 0; offset < rows.length; offset += 4) {
+    signal?.throwIfAborted();
+    accounts.push(...await Promise.all(rows.slice(offset, offset + 4).map(async row => {
+      let plan = collectionPaymentPlan(row);
+      if (plan === undefined) {
+        const endpoint = ledgerDetailEndpoint(row);
+        if (!details.has(endpoint)) details.set(endpoint, loadCollectionDetails(row, signal));
+        try {
+          const detail = await details.get(endpoint);
+          // Validate each row, even when the same student request is shared.
+          if (Number(readFee(detail, "studentFeeId")) !== Number(readFee(row, "studentFeeId"))) throw new Error("The returned fee account does not match the selected account.");
+          plan = collectionPaymentPlan(detail);
+          if (plan === undefined) throw new Error("The fee-details API did not return an assigned payment-plan field.");
+        } catch (error) {
+          signal?.throwIfAborted();
+          throw Object.assign(new Error(`Payment plan unavailable for ${readFee(row, "admissionNumber") || "this student"}: ${requestError(error)}`), { code: "ACCOUNTANT_DATA_ERROR" });
+        }
+      }
+      return { ...row, paymentPlan: plan || "Not assigned" };
+    })));
+  }
+  return accounts.sort(compareCollectionAdmissions);
+}
+
 function FeeLedger({ params, collection = false, authorize }) {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ groupName: "", sectionName: "", paymentPlan: "", status: "" });
   const [pageNumber, setPageNumber] = useState(1);
   const [detailRow, setDetailRow] = useState(null);
-  const load = useCallback((signal) => collection ? loadCollectionAccounts(params, signal) : loadScopedLedger(params, signal), [params, collection]);
+  const load = useCallback((signal) => collection ? loadCollectionTable(params, signal) : loadScopedLedger(params, signal), [params, collection]);
   const state = useFinancePage(load);
   const all = state.data || [];
   const page = ledgerPage(all, pageNumber, search, filters);

@@ -4,6 +4,8 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import * as staffApi from "@/api/staffApi.js";
 import apiClient from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { env } from "@/config/env.js";
 import { attendanceService } from "@/api/attendanceService.js";
 import { getVehicles } from "./services/transportVehicleApi.js";
 import { getDrivers } from "./services/transportDriverManagementApi.js";
@@ -17,6 +19,14 @@ import {
   getTrips,
   getStudentAssignments,
 } from "./services/transportManagerApi.js";
+
+const resolvePhotoUrl = (value) => {
+  const path = String(value ?? "").trim();
+  if (!path) return "";
+  if (/^(?:https?:|blob:|data:)/i.test(path)) return path;
+  const baseUrl = (env?.apiBaseUrl || "").replace(/\/+$/, "");
+  return baseUrl ? `${baseUrl}/${path.replace(/^\/+/, "")}` : path;
+};
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr) return null;
@@ -174,6 +184,9 @@ export const DEFAULT_TRANSPORT_MANAGER_PROFILE = {
   experienceList: [],
   customFields: {},
   departmentSpecific: {},
+  photoUrl: "",
+  photoPath: "",
+  profilePhoto: "",
 };
 
 const TransportManagerContext = createContext(null);
@@ -252,6 +265,8 @@ export function TransportManagerProvider({ children }) {
         }
         const data = res?.data?.data || res?.data;
         if (active && data && typeof data === "object") {
+          const rawPhoto = data.photoUrl || data.photoPath || data.profilePhoto || "";
+          const resolvedPhoto = rawPhoto ? resolvePhotoUrl(rawPhoto) : "";
           setStaffProfile((prev) => {
             const fullName = data.fullName || (data.firstName ? `${data.firstName} ${data.lastName || ""}`.trim() : prev.name);
             const merged = {
@@ -270,12 +285,36 @@ export function TransportManagerProvider({ children }) {
               campusId: data.campusId || prev.campusId || 1,
               boardId: data.boardId || prev.boardId || 1,
               boardCode: data.boardCode || prev.boardCode || "BIEAP",
+              photoUrl: resolvedPhoto || prev.photoUrl || "",
+              photoPath: data.photoPath || rawPhoto || prev.photoPath || "",
+              profilePhoto: data.profilePhoto || rawPhoto || prev.profilePhoto || "",
             };
             try {
-              localStorage.setItem("tm_profile_data", JSON.stringify(merged));
+              const toPersist = { ...merged };
+              delete toPersist.photoUrl;
+              delete toPersist.photoPath;
+              delete toPersist.profilePhoto;
+              localStorage.setItem("tm_profile_data", JSON.stringify(toPersist));
             } catch {}
             return merged;
           });
+
+          if (!resolvedPhoto && effectiveStaffId) {
+            apiClient.get(apiEndpoints.faculty.getPhoto(effectiveStaffId), {
+              responseType: "blob",
+              skipGlobalLoader: true,
+              skipErrorLog: true,
+            }).then((photoRes) => {
+              if (!active) return;
+              if (photoRes?.data instanceof Blob && photoRes.data.size > 0 && (photoRes.data.type || "").startsWith("image/")) {
+                const blobUrl = URL.createObjectURL(photoRes.data);
+                setStaffProfile((prev) => ({
+                  ...prev,
+                  photoUrl: blobUrl,
+                }));
+              }
+            }).catch(() => null);
+          }
         }
       } catch (err) {
         console.warn("Could not fetch staff profile by ID:", err?.message || err);
@@ -327,7 +366,11 @@ export function TransportManagerProvider({ children }) {
     const handleStorage = (e) => {
       if (e.key === "tm_profile_data" && e.newValue) {
         try {
-          setStaffProfile((prev) => ({ ...prev, ...JSON.parse(e.newValue) }));
+          const parsed = JSON.parse(e.newValue);
+          delete parsed.photoUrl;
+          delete parsed.photoPath;
+          delete parsed.profilePhoto;
+          setStaffProfile((prev) => ({ ...prev, ...parsed }));
         } catch {}
       }
     };
@@ -335,11 +378,32 @@ export function TransportManagerProvider({ children }) {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
+  // Listen to in-memory photo update events
+  useEffect(() => {
+    const handlePhotoUpdated = (e) => {
+      const nextPhoto = e.detail?.photoUrl;
+      if (nextPhoto !== undefined) {
+        setStaffProfile((prev) => ({
+          ...prev,
+          photoUrl: nextPhoto,
+          photoPath: nextPhoto,
+          profilePhoto: nextPhoto,
+        }));
+      }
+    };
+    window.addEventListener("cms-staff-photo-updated", handlePhotoUpdated);
+    return () => window.removeEventListener("cms-staff-photo-updated", handlePhotoUpdated);
+  }, []);
+
   const updateProfile = useCallback((patch) => {
     setStaffProfile((prev) => {
       const updated = { ...prev, ...patch };
       try {
-        localStorage.setItem("tm_profile_data", JSON.stringify(updated));
+        const toPersist = { ...updated };
+        delete toPersist.photoUrl;
+        delete toPersist.photoPath;
+        delete toPersist.profilePhoto;
+        localStorage.setItem("tm_profile_data", JSON.stringify(toPersist));
       } catch {}
       return updated;
     });
@@ -366,6 +430,9 @@ export function TransportManagerProvider({ children }) {
       campusId: staffProfile.campusId || authUser.campusId || 1,
       boardId: staffProfile.boardId || authUser.boardId || 1,
       boardCode: staffProfile.boardCode || authUser.boardCode || "BIEAP",
+      photoUrl: staffProfile.photoUrl || "",
+      photoPath: staffProfile.photoPath || "",
+      profilePhoto: staffProfile.profilePhoto || "",
     };
   }, [staffProfile, authUser]);
 

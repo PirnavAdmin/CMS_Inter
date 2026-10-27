@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
 
@@ -19,11 +20,28 @@ namespace CollegeManagement.API.DTOs.Staff
             set => StaffId = value;
         }
 
-        public IFormFile? Photo { get; set; }
-        public IFormFile? File { get; set; }
-        public IFormFile? ProfilePhoto { get; set; }
+        private IFormFile? _photo;
 
-        public IFormFile? GetFile() => Photo ?? File ?? ProfilePhoto;
+        public IFormFile? Photo
+        {
+            get => _photo;
+            set => _photo = value ?? _photo;
+        }
+
+        public IFormFile? File
+        {
+            get => _photo;
+            set => _photo = value ?? _photo;
+        }
+
+        public IFormFile? ProfilePhoto
+        {
+            get => _photo;
+            set => _photo = value ?? _photo;
+        }
+
+        public IFormFile? GetFile() => _photo;
     }
 }
+
 

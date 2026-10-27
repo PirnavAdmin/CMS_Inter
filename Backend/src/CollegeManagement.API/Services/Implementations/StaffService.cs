@@ -737,37 +737,59 @@ namespace CollegeManagement.API.Services.Implementations
                 existingStaff.CampusId = dto.CampusId.Value;
             }
 
-            // Multi-Campus / Multi-Board Assignments Update
-            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+            // Multi-Campus / Multi-Board Assignments Update (Diff synchronization to avoid EF Core unique constraint / concurrency issues)
+            var targetCampusIds = (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+                ? dto.AssignedCampusIds.Distinct().ToList()
+                : (dto.CampusId.HasValue && dto.CampusId.Value > 0 ? new List<int> { dto.CampusId.Value } : new List<int>());
+
+            if (targetCampusIds.Any())
             {
-                existingStaff.StaffCampusAssignments.Clear();
-                foreach (var cId in dto.AssignedCampusIds.Distinct())
+                var toRemove = existingStaff.StaffCampusAssignments
+                    .Where(a => !targetCampusIds.Contains(a.CampusId))
+                    .ToList();
+                foreach (var rem in toRemove)
                 {
-                    existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId, StaffId = existingStaff.Id });
+                    existingStaff.StaffCampusAssignments.Remove(rem);
                 }
+
+                var existingCampusIds = existingStaff.StaffCampusAssignments.Select(a => a.CampusId).ToHashSet();
+                foreach (var cId in targetCampusIds)
+                {
+                    if (!existingCampusIds.Contains(cId))
+                    {
+                        existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId, StaffId = existingStaff.Id });
+                    }
+                }
+
                 if (!existingStaff.CampusId.HasValue || existingStaff.CampusId <= 0)
-                    existingStaff.CampusId = dto.AssignedCampusIds.First();
-            }
-            else if (dto.CampusId.HasValue)
-            {
-                existingStaff.StaffCampusAssignments.Clear();
-                existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = dto.CampusId.Value, StaffId = existingStaff.Id });
+                    existingStaff.CampusId = targetCampusIds.First();
             }
 
-            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+            var targetBoardIds = (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+                ? dto.AssignedBoardIds.Distinct().ToList()
+                : (resolvedBoardId.HasValue && resolvedBoardId.Value > 0 ? new List<int> { resolvedBoardId.Value } : new List<int>());
+
+            if (targetBoardIds.Any())
             {
-                existingStaff.StaffBoardAssignments.Clear();
-                foreach (var bId in dto.AssignedBoardIds.Distinct())
+                var toRemove = existingStaff.StaffBoardAssignments
+                    .Where(a => !targetBoardIds.Contains(a.BoardId))
+                    .ToList();
+                foreach (var rem in toRemove)
                 {
-                    existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId, StaffId = existingStaff.Id });
+                    existingStaff.StaffBoardAssignments.Remove(rem);
                 }
+
+                var existingBoardIds = existingStaff.StaffBoardAssignments.Select(a => a.BoardId).ToHashSet();
+                foreach (var bId in targetBoardIds)
+                {
+                    if (!existingBoardIds.Contains(bId))
+                    {
+                        existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId, StaffId = existingStaff.Id });
+                    }
+                }
+
                 if (!existingStaff.BoardId.HasValue || existingStaff.BoardId <= 0)
-                    existingStaff.BoardId = dto.AssignedBoardIds.First();
-            }
-            else if (resolvedBoardId.HasValue)
-            {
-                existingStaff.StaffBoardAssignments.Clear();
-                existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = resolvedBoardId.Value, StaffId = existingStaff.Id });
+                    existingStaff.BoardId = targetBoardIds.First();
             }
 
             if (dto.JoiningDate.HasValue || dto.DateOfJoining.HasValue)
@@ -852,7 +874,8 @@ namespace CollegeManagement.API.Services.Implementations
                 var connection = _context.Database.GetDbConnection();
 
                 existingStaff.UpdatedAt = DateTime.UtcNow;
-                _context.Staffs.Update(existingStaff);
+                // Note: existingStaff is already tracked by EF Core from _staffRepository.GetByIdAsync(id).
+                // Do not call _context.Staffs.Update(existingStaff) as it marks all loaded navigation properties (Campuses, Boards, Departments) as Modified.
                 await _context.SaveChangesAsync();
 
                 if (emailChanged)

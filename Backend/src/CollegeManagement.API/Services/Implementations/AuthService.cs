@@ -278,6 +278,31 @@ namespace CollegeManagement.API.Services.Implementations
                         if (pBId > 0) assignedBoardIds.Add(pBId);
                     }
                 }
+                string? resolvedPhotoPath = (string?)staffInfo?.PhotoPath;
+                if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.AdminId.HasValue && user.AdminId.Value > 0)
+                {
+                    resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT PhotoPath FROM admins WHERE id = @Id",
+                        new { Id = user.AdminId.Value });
+                }
+                if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && (string.Equals(user.Role?.RoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(user.Role?.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)))
+                {
+                    resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT PhotoPath FROM admins WHERE Email = @Email AND PhotoPath IS NOT NULL AND PhotoPath != '' LIMIT 1",
+                        new { Email = user.Email });
+                    if (string.IsNullOrWhiteSpace(resolvedPhotoPath))
+                    {
+                        resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                            "SELECT PhotoPath FROM admins WHERE PhotoPath IS NOT NULL AND PhotoPath != '' ORDER BY id ASC LIMIT 1");
+                    }
+                }
+                if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.StudentId.HasValue && user.StudentId.Value > 0)
+                {
+                    resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT Photo FROM Students WHERE StudentId = @Id",
+                        new { Id = user.StudentId.Value });
+                }
+
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
 
                 await _auditService.LogAsync(

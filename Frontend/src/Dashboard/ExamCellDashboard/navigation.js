@@ -12,6 +12,7 @@ import {
   CalendarOff,
   BarChart3,
   UserRound,
+  ShieldAlert,
 } from "lucide-react";
 
 export const examCellBase = "/exam-cell-dashboard";
@@ -23,6 +24,7 @@ export const examCellMenu = [
     [
       ["exams", "Examination", CalendarDays],
       ["hall-allocation", "Hall Allocation", Building2],
+      ["invigilation-duties", "Invigilation Duties", ShieldAlert],
       ["hall-tickets", "Hall Tickets", Ticket],
     ],
   ],

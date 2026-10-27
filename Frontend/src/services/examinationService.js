@@ -108,6 +108,16 @@ export async function updateExaminationSettings(campusId, payload) {
 }
 
 /**
+ * 7c. GET /api/v1/examinations/duties
+ * Retrieves invigilation exam duties for a faculty/staff member or all staff members.
+ * Params: staffId (integer), status (string: 'Upcoming' | 'Cancelled' | 'Completed'), campusId (integer)
+ */
+export async function getExamDuties(params = {}) {
+  const res = await apiClient.get(apiEndpoints.examinations.duties, { params });
+  return unwrapResponse(res);
+}
+
+/**
  * 8. GET /api/v1/evaluations/readiness
  * Retrieves marks evaluation readiness status for an examination and section before results processing.
  * Params: boardId, academicYearId, academicLevelId, groupId, programId, sectionId, examinationId

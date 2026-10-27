@@ -54,6 +54,12 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
+        "/uploads": {
+          target: apiBaseUrl,
+          changeOrigin: true,
+          secure: !isHttpsApi ? true : false,
+          agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
+        },
         "/hubs": {
           target: apiBaseUrl,
           changeOrigin: true,
@@ -94,6 +100,3 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
-
-
-

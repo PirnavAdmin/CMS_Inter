@@ -435,3 +435,330 @@
     display: none !important;
   }
 }
+
+/* ========================================================
+   INVIGILATION DUTIES & UNIFIED TABS STYLING
+   ======================================================== */
+
+.hall-main-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--cms-border, #e2e8f0);
+  padding-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.hall-main-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 8px 8px 0 0;
+  font-weight: 600;
+  font-size: 13.5px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  color: var(--cms-muted, #64748b);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  top: 2px;
+}
+
+.hall-main-tab:hover {
+  background: var(--cms-surface-subtle, rgba(0, 0, 0, 0.03));
+  color: var(--cms-text, #1e293b);
+}
+
+.hall-main-tab.active {
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-primary, #15803d);
+  border-color: var(--cms-border, #e2e8f0);
+  border-bottom: 2px solid var(--cms-surface, #ffffff);
+  font-weight: 700;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.hall-tab-count {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--cms-muted, #64748b);
+  font-weight: 700;
+}
+
+.hall-main-tab.active .hall-tab-count {
+  background: var(--cms-primary, #15803d);
+  color: #ffffff;
+}
+
+/* Status Badges for Duties */
+.duty-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+.duty-status-badge.upcoming {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.duty-status-badge.cancelled {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.duty-status-badge.completed {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+}
+
+/* Duty Toolbar Controls */
+.duty-filter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.duty-status-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.duty-pill-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--cms-border, #cbd5e1);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-muted, #475569);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.duty-pill-btn:hover {
+  background: var(--cms-surface-subtle, #f1f5f9);
+  color: var(--cms-text, #0f172a);
+}
+
+.duty-pill-btn.active {
+  background: var(--cms-primary, #15803d);
+  color: #ffffff;
+  border-color: var(--cms-primary, #15803d);
+}
+
+.duty-view-toggle {
+  display: inline-flex;
+  background: var(--cms-surface-subtle, #f1f5f9);
+  border-radius: 8px;
+  padding: 3px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.duty-toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--cms-muted, #64748b);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.duty-toggle-btn.active {
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #0f172a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Duty Cards Grid */
+.duty-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.duty-card {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.duty-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.duty-card.tone-upcoming {
+  border-left: 4px solid #16a34a;
+}
+
+.duty-card.tone-cancelled {
+  border-left: 4px solid #dc2626;
+}
+
+.duty-card.tone-completed {
+  border-left: 4px solid #64748b;
+}
+
+.duty-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.duty-card-exam-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cms-text, #0f172a);
+  margin: 0 0 2px 0;
+  line-height: 1.3;
+}
+
+.duty-card-code {
+  font-size: 11px;
+  color: var(--cms-muted, #64748b);
+  font-family: monospace;
+}
+
+.duty-card-subject-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--cms-surface-subtle, #f8fafc);
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cms-text, #0f172a);
+}
+
+.duty-card-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 11.5px;
+}
+
+.duty-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.duty-detail-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+  text-transform: uppercase;
+}
+
+.duty-detail-value {
+  color: var(--cms-text, #0f172a);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.duty-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px dashed var(--cms-border, #e2e8f0);
+}
+
+.duty-sop-btn {
+  background: transparent;
+  border: 1px solid var(--cms-border, #cbd5e1);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--cms-primary, #15803d);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.duty-sop-btn:hover {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: var(--cms-primary, #15803d);
+}
+
+/* SOP Checklist in Modal */
+.sop-modal-card {
+  padding: 8px 4px;
+}
+
+.sop-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sop-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--cms-surface-subtle, #f8fafc);
+  border-left: 3px solid var(--cms-primary, #15803d);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--cms-text, #1e293b);
+}
+
+.sop-badge-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+

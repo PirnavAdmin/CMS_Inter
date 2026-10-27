@@ -298,8 +298,8 @@
     color: color-mix(in srgb, var(--event-color) 65%, var(--cal-ink));
     background: color-mix(in srgb, var(--event-color) 18%, var(--cal-base)); border: 1px solid color-mix(in srgb, var(--event-color) 25%, var(--cal-border));
   }
-  .academic-calendar .academic-planner-categories { gap: 0; }
-  .academic-calendar .academic-planner-categories > div { padding: 7px 4px; border-bottom: 1px solid var(--cal-border); }
+  .academic-calendar .academic-planner-categories { gap: 0; grid-auto-rows: 40px; max-height: 200px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--cms-primary) transparent; }
+  .academic-calendar .academic-planner-categories > div { box-sizing: border-box; min-height: 0; padding: 7px 4px; border-bottom: 1px solid var(--cal-border); }
   .academic-calendar .academic-planner-categories > div:last-child { border-bottom: 0; }
   .academic-calendar .academic-planner-categories i { width: 9px; height: 9px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--cal-sky) 80%, transparent); }
   .academic-calendar .academic-selected-events { padding: 12px; border: 1px solid var(--cal-border); border-radius: 10px; background: linear-gradient(120deg, var(--cal-mint), var(--cal-surface)); }

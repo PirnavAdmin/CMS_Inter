@@ -27,12 +27,57 @@ namespace CollegeManagement.API.Repositories
         // =========================================================
 
         public async Task<List<GroupListItemDto>> GetAllAsync(
-            string? search,
-            int? boardId,
-            int? academicYearId,
-            int? academicLevelId,
-            bool? isActive)
+            string? search = null,
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            bool? isActive = null,
+            int? masterGroupId = null)
         {
+            if (masterGroupId.HasValue && masterGroupId.Value > 0)
+            {
+                var query = _context.Groups
+                    .AsNoTracking()
+                    .Include(g => g.BoardNavigation)
+                    .Include(g => g.AcademicYear)
+                    .Include(g => g.AcademicLevelNavigation)
+                    .Where(g => g.MasterGroupId == masterGroupId.Value);
+
+                if (boardId.HasValue && boardId.Value > 0) query = query.Where(g => g.BoardId == boardId.Value);
+                if (academicYearId.HasValue && academicYearId.Value > 0) query = query.Where(g => g.AcademicYearId == academicYearId.Value);
+                if (academicLevelId.HasValue && academicLevelId.Value > 0) query = query.Where(g => g.AcademicLevelId == academicLevelId.Value);
+                if (isActive.HasValue) query = query.Where(g => g.IsActive == isActive.Value);
+                if (!string.IsNullOrWhiteSpace(search))
+                {
+                    var term = search.Trim();
+                    query = query.Where(g => g.GroupName.Contains(term) || g.GroupCode.Contains(term));
+                }
+
+                var entities = await query.OrderByDescending(g => g.GroupId).ToListAsync();
+                var items = entities.Select(g => new GroupListItemDto
+                {
+                    GroupId = g.GroupId,
+                    MasterGroupId = g.MasterGroupId,
+                    BoardId = g.BoardId,
+                    BoardName = g.BoardNavigation != null ? g.BoardNavigation.BoardName : string.Empty,
+                    AcademicYearId = g.AcademicYearId,
+                    AcademicYearName = g.AcademicYear != null ? g.AcademicYear.AcademicYearName : string.Empty,
+                    AcademicLevelId = g.AcademicLevelId,
+                    AcademicLevelName = g.AcademicLevelNavigation != null ? g.AcademicLevelNavigation.LevelName : string.Empty,
+                    GroupName = g.GroupName,
+                    GroupCode = g.GroupCode,
+                    Description = g.Description,
+                    IsActive = g.IsActive,
+                    Status = g.IsActive ? "Active" : "Inactive",
+                    CreatedAt = g.CreatedAt,
+                    UpdatedAt = g.UpdatedAt,
+                    Programs = new List<GroupProgramDto>()
+                }).ToList();
+
+                await LoadProgramsForGroupsAsync(items);
+                return items;
+            }
+
             var connection = _context.Database.GetDbConnection();
 
             if (connection.State != ConnectionState.Open)
@@ -169,8 +214,51 @@ namespace CollegeManagement.API.Repositories
         // =========================================================
 
         public async Task<List<GroupListItemDto>> GetByBoardAsync(
-            int boardId)
+            int boardId,
+            int? academicYearId = null,
+            int? academicLevelId = null)
         {
+            if (academicYearId.HasValue || academicLevelId.HasValue)
+            {
+                var query = _context.Groups
+                    .AsNoTracking()
+                    .Where(g => g.BoardId == boardId && g.IsActive)
+                    .Include(g => g.BoardNavigation)
+                    .Include(g => g.AcademicYear)
+                    .Include(g => g.AcademicLevelNavigation)
+                    .AsQueryable();
+
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                    query = query.Where(g => g.AcademicYearId == academicYearId.Value);
+
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    query = query.Where(g => g.AcademicLevelId == academicLevelId.Value);
+
+                var groups = await query.OrderByDescending(g => g.GroupId).ToListAsync();
+                var result = groups.Select(g => new GroupListItemDto
+                {
+                    GroupId = g.GroupId,
+                    MasterGroupId = g.MasterGroupId,
+                    BoardId = g.BoardId,
+                    BoardName = g.BoardNavigation != null ? g.BoardNavigation.BoardName : string.Empty,
+                    AcademicYearId = g.AcademicYearId,
+                    AcademicYearName = g.AcademicYear != null ? g.AcademicYear.AcademicYearName : string.Empty,
+                    AcademicLevelId = g.AcademicLevelId,
+                    AcademicLevelName = g.AcademicLevelNavigation != null ? g.AcademicLevelNavigation.LevelName : string.Empty,
+                    GroupName = g.GroupName,
+                    GroupCode = g.GroupCode,
+                    Description = g.Description,
+                    IsActive = g.IsActive,
+                    Status = g.IsActive ? "Active" : "Inactive",
+                    CreatedAt = g.CreatedAt,
+                    UpdatedAt = g.UpdatedAt,
+                    Programs = new List<GroupProgramDto>()
+                }).ToList();
+
+                await LoadProgramsForGroupsAsync(result);
+                return result;
+            }
+
             try
             {
                 var connection =
@@ -918,8 +1006,48 @@ namespace CollegeManagement.API.Repositories
         // =========================================================
 
         public async Task<List<GroupDropdownDto>>
-            GetDropdownAsync()
+            GetDropdownAsync(
+                int? boardId = null,
+                int? academicYearId = null,
+                int? academicLevelId = null)
         {
+            if (boardId.HasValue || academicYearId.HasValue || academicLevelId.HasValue)
+            {
+                var query = _context.Groups
+                    .AsNoTracking()
+                    .Where(g => g.IsActive)
+                    .Include(g => g.BoardNavigation)
+                    .Include(g => g.AcademicYear)
+                    .Include(g => g.AcademicLevelNavigation)
+                    .AsQueryable();
+
+                if (boardId.HasValue && boardId.Value > 0)
+                    query = query.Where(g => g.BoardId == boardId.Value);
+
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                    query = query.Where(g => g.AcademicYearId == academicYearId.Value);
+
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    query = query.Where(g => g.AcademicLevelId == academicLevelId.Value);
+
+                return await query
+                    .OrderBy(g => g.GroupName)
+                    .Select(g => new GroupDropdownDto
+                    {
+                        GroupId = g.GroupId,
+                        MasterGroupId = g.MasterGroupId,
+                        GroupName = g.GroupName,
+                        GroupCode = g.GroupCode,
+                        BoardId = g.BoardId,
+                        BoardName = g.BoardNavigation != null ? g.BoardNavigation.BoardName : string.Empty,
+                        AcademicYearId = g.AcademicYearId,
+                        AcademicYearName = g.AcademicYear != null ? g.AcademicYear.AcademicYearName : string.Empty,
+                        AcademicLevelId = g.AcademicLevelId,
+                        AcademicLevelName = g.AcademicLevelNavigation != null ? g.AcademicLevelNavigation.LevelName : string.Empty
+                    })
+                    .ToListAsync();
+            }
+
             try
             {
                 var connection =
@@ -951,6 +1079,9 @@ namespace CollegeManagement.API.Repositories
                         {
                             GroupId =
                                 g.GroupId,
+
+                            MasterGroupId =
+                                g.MasterGroupId,
 
                             GroupName =
                                 g.GroupName,

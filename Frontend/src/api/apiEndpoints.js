@@ -39,6 +39,7 @@ export const apiEndpoints = {
     getById: (adminId) => `/api/Admin/${adminId}`,
     changePassword: "/api/Admin/change-password",
     updateStatus: (adminId) => `/api/Admin/${adminId}/status`,
+    uploadPhoto: "/api/Admin/profile/photo",
   },
   faculty: {
     dashboardStats: "/api/v1/staff/dashboard-stats",
@@ -137,6 +138,14 @@ export const apiEndpoints = {
   },
   breakTypes: {
     list: "/api/v1/break-types",
+  },
+  masterGroups: {
+    list: "/api/v1/master-groups",
+    create: "/api/v1/master-groups",
+    getById: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
+    update: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
+    delete: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
+    status: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}/status`,
   },
   groups: {
     getAll: "/api/v1/groups",
@@ -516,6 +525,7 @@ export const apiEndpoints = {
     eligibleSubjects: (id) => `/api/v1/examinations/${id}/eligible-subjects`,
     availableHalls: "/api/v1/examinations/available-halls",
     settings: "/api/v1/examinations/settings",
+    duties: "/api/v1/examinations/duties",
   },
   timetable: {
     getAll: "/api/v1/timetable",
