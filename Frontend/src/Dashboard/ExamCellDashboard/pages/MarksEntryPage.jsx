@@ -894,7 +894,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             GroupId: filters.group || undefined,
             programId: filters.program || undefined,
             ProgramId: filters.program || undefined,
-            status: "COMPLETED",
+            status: undefined,
           },
           headers: {
             ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
@@ -910,7 +910,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
                 academicYearId: currentYear || undefined,
                 academicLevelId: filters.level || undefined,
                 groupId: filters.group || undefined,
-                status: "COMPLETED",
+                status: undefined,
               },
               headers: {
                 ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
@@ -956,8 +956,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
         let filteredExamList = examList.filter((e) => {
           if (!e.isActive) return false;
           // STRICT FILTER: Only genuinely Completed Examinations
-          const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-          if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+          const isCompleted = ["SCHEDULED", "ONGOING", "ACTIVE", "COMPLETED", "PUBLISHED"].includes(String(e.status).toUpperCase()) || e.isCompleted === true;
+          if (!isCompleted || e.status === "CANCELLED") return false;
 
           if (currentBoard && e.boardId && !eq(e.boardId, currentBoard)) return false;
           if (currentYear && e.academicYearId && !eq(e.academicYearId, currentYear)) return false;
@@ -972,8 +972,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
         if (filteredExamList.length === 0 && filters.program) {
           filteredExamList = examList.filter((e) => {
             if (!e.isActive) return false;
-            const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-            if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+            const isCompleted = ["SCHEDULED", "ONGOING", "ACTIVE", "COMPLETED", "PUBLISHED"].includes(String(e.status).toUpperCase()) || e.isCompleted === true;
+            if (!isCompleted || e.status === "CANCELLED") return false;
 
             if (currentBoard && e.boardId && !eq(e.boardId, currentBoard)) return false;
             if (currentYear && e.academicYearId && !eq(e.academicYearId, currentYear)) return false;
@@ -1576,8 +1576,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
             GroupId: effectiveEntryFilters.group,
             programId: effectiveEntryFilters.program || undefined,
             ProgramId: effectiveEntryFilters.program || undefined,
-            status: "COMPLETED",
-            Status: "COMPLETED",
+            status: undefined,
+            Status: undefined,
           },
           skipGlobalLoader: true,
         });
@@ -1595,7 +1595,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
               academicYearId: effectiveEntryFilters.year,
               academicLevelId: effectiveEntryFilters.level,
               groupId: effectiveEntryFilters.group,
-              status: "COMPLETED",
+              status: undefined,
             },
             skipGlobalLoader: true,
           });
@@ -1638,8 +1638,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
         .filter((e) => {
           if (!e.isActive) return false;
           // STRICT FILTER: Only genuinely Completed Examinations
-          const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-          if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+          const isCompleted = ["SCHEDULED", "ONGOING", "ACTIVE", "COMPLETED", "PUBLISHED"].includes(String(e.status).toUpperCase()) || e.isCompleted === true;
+          if (!isCompleted || e.status === "CANCELLED") return false;
 
           if (entry.filters.board && e.boardId && !eq(e.boardId, entry.filters.board)) return false;
           if (entry.filters.year && e.academicYearId && !eq(e.academicYearId, entry.filters.year)) return false;
@@ -1683,8 +1683,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
           })
           .filter((e) => {
             if (!e.isActive) return false;
-            const isCompleted = e.status === "COMPLETED" || e.isCompleted === true;
-            if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT" || e.status === "PUBLISHED") return false;
+            const isCompleted = ["SCHEDULED", "ONGOING", "ACTIVE", "COMPLETED", "PUBLISHED"].includes(String(e.status).toUpperCase()) || e.isCompleted === true;
+            if (!isCompleted || e.status === "CANCELLED") return false;
 
             if (entry.filters.board && e.boardId && !eq(e.boardId, entry.filters.board)) return false;
             if (entry.filters.year && e.academicYearId && !eq(e.academicYearId, entry.filters.year)) return false;

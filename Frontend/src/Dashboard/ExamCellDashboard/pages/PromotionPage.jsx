@@ -200,6 +200,7 @@ const isEligible = (student) => {
 export default function PromotionPage({ screen = "promotion" }) {
   const navigate = useNavigate();
   const [localTab, setLocalTab] = useState("");
+  useEffect(() => { setLocalTab(screen); }, [screen]);
   const activeTab = localTab || screen;
 
   // Consume global Board & Academic Year from Navbar Context
@@ -555,6 +556,7 @@ export default function PromotionPage({ screen = "promotion" }) {
       AcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
       BoardId: numericId(setup.board || selectedBoardId),
       AcademicLevel: academicLevelLabel(setup.fromLevel),
+      AcademicLevelId: numericId(setup.fromLevel),
       GroupId: numericId(setup.group),
       // Allocation changes these fields. Keeping the old program/section
       // filter would remove updated students from the refreshed table.
@@ -562,6 +564,7 @@ export default function PromotionPage({ screen = "promotion" }) {
       Section: activeTab === "allocation" ? undefined : setup.fromSection,
       TargetAcademicYearId: numericId(setup.toYear || nextAcademicYearObj?.value),
       TargetAcademicLevel: academicLevelLabel(setup.toLevel),
+      TargetAcademicLevelId: numericId(setup.toLevel),
       TargetGroupId: numericId(setup.toGroup),
       TargetSection: setup.toSection,
       PageNumber: pageNumber,

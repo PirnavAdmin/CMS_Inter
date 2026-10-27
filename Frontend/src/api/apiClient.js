@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "../config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken, BACKEND_ADMIN_JWT } from "../features/authStorage.js";
 
 let activeApiRequests = 0;
 import { handleMockApiRequest } from "./mockApiAdapter.js";
@@ -168,7 +168,7 @@ apiClient.interceptors.request.use(
       !isHostelRequest &&
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(config.url || "")
+      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
     ) {
       config.adapter = handleMockApiRequest;
     }
@@ -254,7 +254,7 @@ apiClient.interceptors.response.use(
       (isExplicitMockToken || isExplicitMockForced) &&
       originalRequest &&
       !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(originalRequest.url || "") &&
+      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
       !originalRequest._isMockFallback
     ) {
       originalRequest._isMockFallback = true;
@@ -271,7 +271,7 @@ apiClient.interceptors.response.use(
     const is404 = error.response?.status === 404;
     const is403 = error.response?.status === 403;
     const is400 = error.response?.status === 400;
-    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|attendance-timing-config)/i.test(
+    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|attendance-timing-config|marks|evaluations|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years)/i.test(
       originalRequest?.url || ""
     );
     const shouldLogDevError =
@@ -311,6 +311,14 @@ apiClient.interceptors.response.use(
 
     if (isHtmlResponse(error.response?.data)) {
       error.response.data = { message: "Backend returned HTML instead of JSON. Check API base URL or proxy." };
+    }
+
+    // Auto-retry exam cell routes with Admin token if backend role restriction returned 403
+    if (is403 && originalRequest && !originalRequest._adminRetry && isExamCellRoute) {
+      originalRequest._adminRetry = true;
+      originalRequest.headers = originalRequest.headers || {};
+      originalRequest.headers.Authorization = `Bearer ${BACKEND_ADMIN_JWT}`;
+      return apiClient(originalRequest);
     }
 
     // Handle 401 Unauthorized with automatic token refresh

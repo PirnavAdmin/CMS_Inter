@@ -1677,6 +1677,9 @@ export default function CertificatesPage({ initialTab = "generate" }) {
   const [showRecordFilters, setShowRecordFilters] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(initialTab);
+  useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab]);
   const [page, setPage] = useState(1);
   const [workflowStatusFilter, setWorkflowStatusFilter] = useState("All");
   const [workflowQuery, setWorkflowQuery] = useState("");

@@ -239,6 +239,7 @@ export default function ExamReports() {
       campusId,
       boardId,
       academicYearId,
+      examinationId: examId,
       examId,
       groupId: selectedExam?.groupId,
       academicLevelId: selectedExam?.academicLevelId,
@@ -260,27 +261,6 @@ export default function ExamReports() {
       let finalRanks = loadedRanks;
       let finalAnalytics = loadedAnalytics;
 
-      if (!hasRealRanks) {
-        const group = selectedExam?.groupName || "MPC";
-        finalRanks = [
-          { rank: 1, studentId: 101, studentName: "Rahul Sharma", rollNumber: "260101", sectionName: `${group} - Sec A`, totalMarks: 388, maxMarks: 400, percentage: 97.0, result: "PASS" },
-          { rank: 2, studentId: 102, studentName: "Priya Varma", rollNumber: "260102", sectionName: `${group} - Sec A`, totalMarks: 382, maxMarks: 400, percentage: 95.5, result: "PASS" },
-          { rank: 3, studentId: 103, studentName: "Venkata Sai", rollNumber: "260103", sectionName: `${group} - Sec A`, totalMarks: 374, maxMarks: 400, percentage: 93.5, result: "PASS" },
-          { rank: 4, studentId: 104, studentName: "Ananya Reddy", rollNumber: "260104", sectionName: `${group} - Sec A`, totalMarks: 366, maxMarks: 400, percentage: 91.5, result: "PASS" },
-          { rank: 5, studentId: 105, studentName: "Karthik Kumar", rollNumber: "260105", sectionName: `${group} - Sec B`, totalMarks: 358, maxMarks: 400, percentage: 89.5, result: "PASS" },
-          { rank: 6, studentId: 106, studentName: "Sneha Patel", rollNumber: "260106", sectionName: `${group} - Sec B`, totalMarks: 349, maxMarks: 400, percentage: 87.25, result: "PASS" },
-          { rank: 7, studentId: 107, studentName: "Rohan Gupta", rollNumber: "260107", sectionName: `${group} - Sec B`, totalMarks: 342, maxMarks: 400, percentage: 85.5, result: "PASS" },
-          { rank: 8, studentId: 108, studentName: "Meghana Rao", rollNumber: "260108", sectionName: `${group} - Sec B`, totalMarks: 335, maxMarks: 400, percentage: 83.75, result: "PASS" },
-          { rank: 9, studentId: 109, studentName: "Harish Teja", rollNumber: "260109", sectionName: `${group} - Sec C`, totalMarks: 328, maxMarks: 400, percentage: 82.0, result: "PASS" },
-          { rank: 10, studentId: 110, studentName: "Deepika Nair", rollNumber: "260110", sectionName: `${group} - Sec C`, totalMarks: 320, maxMarks: 400, percentage: 80.0, result: "PASS" },
-          { rank: 11, studentId: 111, studentName: "Tarun Sandeep", rollNumber: "260111", sectionName: `${group} - Sec C`, totalMarks: 304, maxMarks: 400, percentage: 76.0, result: "PASS" },
-          { rank: 12, studentId: 112, studentName: "Bhavana K", rollNumber: "260112", sectionName: `${group} - Sec C`, totalMarks: 290, maxMarks: 400, percentage: 72.5, result: "PASS" },
-          { rank: 13, studentId: 113, studentName: "Suresh Babu", rollNumber: "260113", sectionName: `${group} - Sec D`, totalMarks: 275, maxMarks: 400, percentage: 68.75, result: "PASS" },
-          { rank: 14, studentId: 114, studentName: "Divya Sri", rollNumber: "260114", sectionName: `${group} - Sec D`, totalMarks: 255, maxMarks: 400, percentage: 63.75, result: "PASS" },
-          { rank: 15, studentId: 115, studentName: "Akhil V", rollNumber: "260115", sectionName: `${group} - Sec D`, totalMarks: 132, maxMarks: 400, percentage: 33.0, result: "FAIL" },
-        ];
-      }
-
       if (!hasRealAnalytics) {
         const total = finalRanks.length;
         const passed = finalRanks.filter((r) => String(r.result).toUpperCase() === "PASS").length;
@@ -293,7 +273,7 @@ export default function ExamReports() {
           failed,
           passPercentage,
           averagePercentage: avg,
-          highestPercentage: finalRanks[0]?.percentage || 97,
+          highestPercentage: finalRanks[0]?.percentage || 0,
         };
       }
 

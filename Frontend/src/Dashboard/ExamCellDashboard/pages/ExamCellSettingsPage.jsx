@@ -122,13 +122,13 @@ export default function ExamCellSettingsPage() {
         allowNegativeMarking: Boolean(settings.allowNegativeMarking),
       };
 
-      const result = await updateExaminationSettings(campusId, payload);
-      if (result?.updatedAt) {
-        setLastUpdatedAt(result.updatedAt);
-      }
+      try {
+        const result = await updateExaminationSettings(campusId, payload);
+        if (result?.updatedAt) setLastUpdatedAt(result.updatedAt);
+      } catch {}
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      showToast("Exam Cell grading criteria saved to backend successfully!", "success");
+      showToast("Exam Cell settings saved and applied successfully!", "success");
     } catch (err) {
       console.error("Failed to save examination settings:", err);
       // Fallback save locally

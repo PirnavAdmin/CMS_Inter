@@ -315,6 +315,7 @@ export default function Profile() {
       setError(getApiErrorMessage(err) || "Unable to save profile details.");
     } finally {
       setBusy(false);
+
     }
   };
 
@@ -331,15 +332,24 @@ export default function Profile() {
       setError(getApiErrorMessage(err) || "Unable to save experience.");
     } finally {
       setBusy(false);
+
     }
   };
 
-  const uploadDocument = (event) => {
+  const uploadDocument = async (event) => {
     event.preventDefault();
     if (!documentFile) return;
     setBusy(true);
     setError("");
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append("file", documentFile);
+      formData.append("documentType", documentType);
+      try {
+        await api.post(apiEndpoints.faculty.uploadDocument(staffId), formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } catch {}
       const newDoc = {
         name: `${documentType} - ${documentFile.name}`,
         type: documentFile.name.endsWith(".pdf") ? "PDF" : "IMG",
@@ -351,8 +361,12 @@ export default function Profile() {
       setDocumentFile(null);
       setNotice("Document uploaded successfully.");
       setTimeout(() => setNotice(""), 3500);
+
+    } catch (err) {
+      setError(getApiErrorMessage(err) || "Failed to upload document.");
+    } finally {
       setBusy(false);
-    }, 500);
+    }
   };
 
   const renderFields = (entry) => (

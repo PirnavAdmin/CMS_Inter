@@ -237,10 +237,12 @@ export default function CheckInOut() {
       try {
         const myRes = await apiClient.get(apiEndpoints.staffAttendance.myToday, { silent: true });
         const myData = myRes.data?.data || myRes.data;
-        if (myData && myData.punchInTime && myData.punchInTime !== "--") {
-          const inT = formatDisplayTime(myData.punchInTime);
-          const outT = myData.punchOutTime && myData.punchOutTime !== "--" ? formatDisplayTime(myData.punchOutTime) : null;
-          const status = outT ? "Present" : inT ? "Present" : "Not Checked In";
+        const rawIn = myData?.inTime || myData?.punchInTime || myData?.checkIn;
+        const rawOut = myData?.outTime || myData?.punchOutTime || myData?.checkOut;
+        if (myData && (rawIn || rawOut || myData.status === "punched_in" || myData.status === "punched_out")) {
+          const inT = rawIn && rawIn !== "--" ? formatDisplayTime(rawIn) : null;
+          const outT = rawOut && rawOut !== "--" ? formatDisplayTime(rawOut) : null;
+          const status = outT ? "Present" : inT ? "Present" : myData.todayStatus || (myData.status === "punched_in" ? "Present" : "Not Checked In");
           const record = { inTime: inT, outTime: outT, status, remarks: myData.todayStatus || "" };
           setTodayRecord(record);
           try { localStorage.setItem(`staff_today_punch_${authUser.staffId}_${date}`, JSON.stringify(record)); } catch {}

@@ -2480,6 +2480,9 @@ const sanitizeUpdateScheduleDto = (dto) => {
     "endTime",
     "sessionId",
     "scheduleMode",
+    "patternName",
+    "groupId",
+    "includedSubjectIds",
     "roomId",
     "invigilatorId",
     "hall",
@@ -4075,31 +4078,45 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
 
     // 2. Board isolation
     if (selectedBoardId && exam.boardId) {
-      if (normalizeId(exam.boardId) !== normalizeId(selectedBoardId)) return false;
+      const hasBoardMatches = exams.some((e) => e.boardId && normalizeId(e.boardId) === normalizeId(selectedBoardId));
+      if (hasBoardMatches && normalizeId(exam.boardId) !== normalizeId(selectedBoardId)) return false;
     }
 
     // 3. Academic Year isolation
     if (selectedAcademicYearId) {
-      const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
       const selYearId = normalizeId(selectedAcademicYearId);
       const selYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.code || "").trim().toLowerCase();
-      const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+      const hasYearMatches = exams.some((e) => {
+        const yId = normalizeId(e.yearId ?? e.academicYearId);
+        const yName = String(e.academicYearName || e.academicYear || "").trim().toLowerCase();
+        return (yId && yId === selYearId) || (selYearName && yName && (yName === selYearName || yName.includes(selYearName) || selYearName.includes(yName)));
+      });
 
-      const idMatches = examYearId && examYearId === selYearId;
-      const nameMatches = selYearName && examYearName && (examYearName === selYearName || examYearName.includes(selYearName) || selYearName.includes(examYearName));
-      if (examYearId && !idMatches && !nameMatches) {
-        return false;
+      if (hasYearMatches) {
+        const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
+        const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+        const idMatches = examYearId && examYearId === selYearId;
+        const nameMatches = selYearName && examYearName && (examYearName === selYearName || examYearName.includes(selYearName) || selYearName.includes(examYearName));
+        if (examYearId && !idMatches && !nameMatches) {
+          return false;
+        }
       }
     }
 
     if (filters.groupId && !(exam.groupIds || [exam.groupId]).map(normalizeId).includes(filters.groupId)) return false;
-    if (filters.programId && !(exam.programIds || [exam.programId]).map(normalizeId).includes(filters.programId)) return false;
+    if (filters.programId) {
+      const pIds = (exam.programIds || (exam.programId ? [exam.programId] : [])).map(normalizeId).filter(Boolean);
+      if (pIds.length > 0 && !pIds.includes(filters.programId)) return false;
+    }
     if (filters.levelId && !(exam.levelIds || [exam.levelId]).map(normalizeId).includes(filters.levelId)) return false;
 
     if (query) {
       const matchesSearch = [
         exam.code,
+        exam.examCode,
         exam.name,
+        exam.examName,
+        exam.boardName,
         codeOf(boards, exam.boardId),
         getGroupNames(exam, groups),
         getLevelNames(exam, academicLevels),
@@ -4130,14 +4147,19 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
 
   const handleOpenDetails = async (exam) => {
     try {
-      const response = await apiClient.get("/api/v1/examinations/" + exam.id + "/schedules");
-      const fallbackGid = exam.groupIds?.[0] || exam.groupId || groups[0]?.id;
-      const entries = unwrap(response).map((entry) => ({
-        ...normalizeScheduleRecord(entry, fallbackGid, exam, groups, eligibleSubjects, rooms, faculty, programs, students),
+      const [examRes, schedRes] = await Promise.all([
+        apiClient.get(`/api/v1/examinations/${exam.id}`).catch(() => null),
+        apiClient.get(`/api/v1/examinations/${exam.id}/schedules`),
+      ]);
+      const fetchedExam = examRes ? (unwrap(examRes) || exam) : exam;
+      const detailedExam = { ...exam, ...fetchedExam };
+      const fallbackGid = detailedExam.groupIds?.[0] || detailedExam.groupId || groups[0]?.id;
+      const entries = unwrap(schedRes).map((entry) => ({
+        ...normalizeScheduleRecord(entry, fallbackGid, detailedExam, groups, eligibleSubjects, rooms, faculty, programs, students),
         examId: exam.id,
       }));
       setSchedules((previous) => [...previous.filter((entry) => entry.examId !== exam.id), ...entries]);
-      setDetail({ exam, schedules: entries });
+      setDetail({ exam: detailedExam, schedules: entries });
     } catch (error) {
       showToast(getApiErrorMessage(error) || "Failed to load examination details.", "error");
     }
@@ -4223,11 +4245,16 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
       { wch: 12 },
       { wch: 16 },
     ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Examinations");
-    const dateStr = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Examinations_List_${dateStr}.xlsx`);
-    showToast("Examination list exported successfully.", "success");
+    try {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Examinations");
+      const dateStr = new Date().toISOString().split("T")[0];
+      XLSX.writeFile(wb, `Examinations_List_${dateStr}.xlsx`);
+      showToast("Examination list exported successfully.", "success");
+    } catch (exportErr) {
+      console.error("Export Examination List error:", exportErr);
+      showToast("Failed to export examination list.", "error");
+    }
   };
 
   const printSchedule = async (targetExam = null) => {

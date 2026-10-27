@@ -114,6 +114,12 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
   const [applied, setApplied] = useState(emptyFilters);
   const [viewMode, setViewMode] = useState(initialView);
 
+  useEffect(() => {
+    if (initialView) {
+      setViewMode(initialView);
+    }
+  }, [initialView]);
+
   // Cascading Master Data State
   const [campusesList, setCampusesList] = useState([]);
   const [boards, setBoards] = useState([]);
@@ -715,7 +721,7 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
               AcademicLevelId: levelNum,
               GroupId: groupNum,
               ProgramId: progStr,
-              status: "COMPLETED",
+              // status: "COMPLETED",
             },
             headers: {
               ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
@@ -861,6 +867,8 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
           const isDirectlyApproved =
             String(e.status || e.evaluationStatus || "").toUpperCase() === "APPROVED" ||
             String(e.status || "").toUpperCase() === "COMPLETED" ||
+            String(e.status || "").toUpperCase() === "SCHEDULED" ||
+            String(e.status || "").toUpperCase() === "ACTIVE" ||
             e.status === 3 ||
             e.isApproved === true ||
             e.evaluationsApproved === true;
@@ -1516,7 +1524,11 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
       }
 
       const selGroup = groups.find((g) => String(g.groupId || g.id) === String(filters.group));
-      showToast(`Results for ${examTitle} (${selGroup ? selGroup.groupName || selGroup.name : "Group"}) loaded successfully!`);
+      if (mappedSections.length === 0) {
+        showToast("No student records or sections available to generate results for the selected scope.", "warning");
+      } else {
+        showToast(`Results for ${examTitle} (${selGroup ? selGroup.groupName || selGroup.name : "Group"}) loaded successfully!`);
+      }
     } catch (err) {
       console.error("Result generation error:", err);
       showToast(getApiErrorMessage(err) || "Failed to generate results.", "error");
@@ -2213,7 +2225,7 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
   }, [applied, filters, rankSearch]);
 
   useEffect(() => {
-    if (viewMode === "rankList" && resultsGenerated) {
+    if (viewMode === "rankList" && (resultsGenerated || Boolean(filters.exam || applied.exam))) {
       fetchRankList();
     }
   }, [viewMode, resultsGenerated, fetchRankList]);
@@ -2315,7 +2327,7 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
   }, [applied, filters, effectiveCampusId]);
 
   useEffect(() => {
-    if (viewMode === "analytics" && resultsGenerated) {
+    if (viewMode === "analytics" && (resultsGenerated || Boolean(filters.exam || applied.exam))) {
       fetchAnalyticsData();
     }
   }, [viewMode, resultsGenerated, fetchAnalyticsData]);
@@ -3329,7 +3341,7 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
 
         {/* TAB 3: RANK LIST (With Pass/Fail Filter) */}
         {viewMode === "rankList" && !selectedStudentMemo && (
-          !resultsGenerated ? (
+          (!resultsGenerated && apiRankRecords.length === 0 && rankListRecords.length === 0) ? (
             <PreGenerateNotice mode="rank" onGoToGenerate={() => setViewMode("table")} />
           ) : (
             <RankListView
