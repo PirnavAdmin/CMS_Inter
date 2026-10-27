@@ -173,7 +173,7 @@ apiClient.interceptors.request.use(
       !isHostelRequest &&
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
+      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
     ) {
       config.adapter = handleMockApiRequest;
     }
@@ -259,7 +259,7 @@ apiClient.interceptors.response.use(
       (isExplicitMockToken || isExplicitMockForced) &&
       originalRequest &&
       !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
+      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
       !originalRequest._isMockFallback
     ) {
       originalRequest._isMockFallback = true;
@@ -276,7 +276,7 @@ apiClient.interceptors.response.use(
     const is404 = error.response?.status === 404;
     const is403 = error.response?.status === 403;
     const is400 = error.response?.status === 400;
-    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|attendance-timing-config|marks|evaluations|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years)/i.test(
+    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|attendance-timing-config|marks|evaluations|student-analysis|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years)/i.test(
       originalRequest?.url || ""
     );
     const shouldLogDevError =
