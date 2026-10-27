@@ -1647,7 +1647,7 @@ await describe("Accountant homepage", async () => {
     const start = homeSource.indexOf("function useAccountantLoader");
     homeSource = homeSource.slice(0, start) + homeSource.slice(homeSource.indexOf("function HomeIcon", start));
     const compiled = await transformWithOxc(homeSource, "AccountantDashboard.jsx", { lang: "jsx", jsx: { runtime: "classic" } });
-    const finance = { loading: false, data: { dashboard: { totalCollected: 1200, totalOutstanding: 300, recentPayments: [] }, payments: [], dues: [], payroll: { totalNetSalary: 900, processedCount: 0, pendingCount: 0 }, payrollRows: [], errors: [] } };
+    const finance = { loading: false, data: { dashboard: { totalCollected: 1200, totalOutstanding: 300, recentPayments: [] }, payments: [], dues: [], payroll: { totalNetSalary: 900, paidPayslips: 0, pendingPayslips: 2, onHoldPayslips: 1, totalPayslips: 3 }, payrollRows: [], errors: [] } };
     const personal = { loading: false, data: { profile: fixture, today: { todayStatus: "Present", inTime: "09:00", shiftDuration: "3h 0m" }, attendance: { metrics: { presentDays: 0, workingDays: 5 } }, leaves: [], categories: [], errors: {} } };
     const iconAssets = { feeManagement: "fee.png", paymentHistory: "history.png", payroll: { src: "sprite.png", position: "0% 100%" }, financialReports: "reports.png" };
     let permission = true;
@@ -1664,7 +1664,15 @@ await describe("Accountant homepage", async () => {
     assert.match(html, /sprite\.png/);
     assert.match(html, /href="\/accountant-dashboard\/payments\?tab=fees"/);
     assert.match(html, /Open punch controls/);
-    assert.match(html, /The overview API does not supply a daily total/);
+    assert.match(html, /Individual leave balances: Unavailable/);
+    assert.match(html, /Approved days used \/ policy quota|No eligible leave categories/);
+    assert.match(html, /Paid payslips<\/dt><dd>0/);
+    assert.match(html, /Pending payslips<\/dt><dd>2/);
+    assert.equal((html.match(/class="sp-summary /g) || []).length, 4);
+    assert.equal((html.match(/class="sp-card accountant-home-widget/g) || []).length, 6);
+    assert.ok(html.indexOf('aria-label="Financial overview"') < html.indexOf('id="accountant-home-actions-title"'));
+    assert.ok(html.indexOf('id="accountant-home-actions-title"') < html.indexOf('accountant-home-widget-grid'));
+    assert.doesNotMatch(html, /accountant-home-track|Today's Fee Collections/);
     permission = false;
     loaderIndex = 0;
     // A newly unauthorized view has no loaded finance or personal records.
@@ -1673,5 +1681,15 @@ await describe("Accountant homepage", async () => {
     const denied = renderToStaticMarkup(createElement(context.AccountantDashboard));
     assert.doesNotMatch(denied, /Collect Student Fee|Open punch controls|Manage leaves|View history/);
     assert.match(denied, /Attendance access is unavailable/);
+    permission = true;
+    loaderIndex = 0;
+    personal.data = { today: null, errors: {} };
+    const missing = renderToStaticMarkup(createElement(context.AccountantDashboard));
+    assert.match(missing, /No record available/);
+    assert.doesNotMatch(missing, />Absent</);
+    personal.data = { errors: { today: "HTTP 403: Forbidden" } };
+    loaderIndex = 0;
+    const failed = renderToStaticMarkup(createElement(context.AccountantDashboard));
+    assert.match(failed, /HTTP 403: Forbidden/);
   });
 });
