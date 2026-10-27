@@ -24,6 +24,8 @@ function examCellShieldPlugin(apiBaseUrl) {
         const isAttendanceTimingEffective = urlStr.startsWith("/api/v1/attendance-timing-config/effective");
         const isResultsGenerateOrProcess = urlStr.startsWith("/api/v1/results/generate") || urlStr.startsWith("/api/v1/results/process");
         const isPunchOut = urlStr.startsWith("/api/v1/staff-attendance/punch-out");
+        const isEvaluationStudents = urlStr.startsWith("/api/v1/evaluations/") && urlStr.includes("/students");
+        const isStudentAnalysisDetails = urlStr.startsWith("/api/v1/student-analysis/") && urlStr.includes("/details");
 
         if (
           !isPromotions &&
@@ -35,7 +37,9 @@ function examCellShieldPlugin(apiBaseUrl) {
           !isCertStudentsDropdown &&
           !isAttendanceTimingEffective &&
           !isResultsGenerateOrProcess &&
-          !isPunchOut
+          !isPunchOut &&
+          !isEvaluationStudents &&
+          !isStudentAnalysisDetails
         ) {
           return next();
         }
@@ -346,6 +350,156 @@ function examCellShieldPlugin(apiBaseUrl) {
             return res.end(JSON.stringify({
               success: true,
               message: "Shift completed successfully via Exam Cell Portal.",
+            }));
+          }
+
+          // 17. /api/v1/evaluations/:evaluationId/students
+          if (isEvaluationStudents) {
+            try {
+              const match = urlStr.match(/\/api\/v1\/evaluations\/([^/?]+)\/students/);
+              const evalId = match ? decodeURIComponent(match[1]) : "";
+              const parts = evalId.split(/[-_]/);
+              const subjectId = Number(parts[0]) || 0;
+              const sectionId = Number(parts[1]) || 0;
+              const examId = Number(parts[2]) || 0;
+
+              let students = [];
+              if (sectionId > 0) {
+                try {
+                  const sRes = await fetch(`${apiBaseUrl}/api/v1/students?sectionId=${sectionId}&campusId=1&pageSize=100`, {
+                    headers: forwardHeaders,
+                  });
+                  if (sRes.ok) {
+                    const sJson = await sRes.json();
+                    const sList = sJson.items || sJson.data || (Array.isArray(sJson) ? sJson : []);
+                    students = sList.filter((s) => !sectionId || Number(s.sectionId || s.section?.sectionId || 0) === sectionId);
+                    if (!students.length && sList.length > 0) {
+                      students = sList;
+                    }
+                  }
+                } catch {}
+              }
+
+              let subjectName = `Subject #${subjectId}`;
+              let subjectCode = `SUB${subjectId}`;
+              if (subjectId > 0) {
+                try {
+                  const subRes = await fetch(`${apiBaseUrl}/api/v1/subjects/${subjectId}`, { headers: forwardHeaders });
+                  if (subRes.ok) {
+                    const subObj = await subRes.json();
+                    subjectName = subObj.subjectName || subObj.name || subjectName;
+                    subjectCode = subObj.subjectCode || subObj.code || subjectCode;
+                  }
+                } catch {}
+              }
+
+              return res.end(JSON.stringify({
+                evaluationId: evalId,
+                subjectId,
+                subjectName,
+                subjectCode,
+                sectionId,
+                examinationId: examId,
+                facultyId: null,
+                facultyName: "Unassigned",
+                facultyCode: "FAC1001",
+                groupName: "General",
+                programName: "Regular Academic",
+                sectionName: `Section ${sectionId || ""}`.trim(),
+                examinationName: "Examination",
+                examPattern: "REGULAR_ACADEMIC",
+                examType: "Written",
+                examTotalMarks: 100,
+                examPassPercentage: 35,
+                subjectMaxMarks: 100,
+                isPractical: false,
+                subjectType: "Theory",
+                totalStudents: students.length,
+                averageMarks: 0,
+                highestMarks: 0,
+                lowestMarks: 0,
+                status: "NOT STARTED",
+                statusCode: 0,
+                isLocked: false,
+                adminReviewMessage: null,
+                rejectionReason: null,
+                students: students.map((s) => ({
+                  markId: null,
+                  studentId: s.studentId || s.id,
+                  admissionNo: s.admissionNo || s.admissionNumber || "N/A",
+                  rollNo: s.rollNo || s.rollNumber || `ROLL${s.studentId || s.id}`,
+                  studentName: s.studentName || s.fullName || s.name || "Student",
+                  internal: null,
+                  practical: null,
+                  theory: null,
+                  totalMarks: 0,
+                  obtainedMarks: 0,
+                  maxMarks: 100,
+                  percentage: 0,
+                  isAbsent: false,
+                  remarks: null,
+                })),
+              }));
+            } catch {}
+            return res.end(JSON.stringify({
+              evaluationId: "",
+              totalStudents: 0,
+              status: "NOT STARTED",
+              statusCode: 0,
+              students: [],
+            }));
+          }
+
+          // 18. /api/v1/student-analysis/:studentId/details
+          if (isStudentAnalysisDetails) {
+            try {
+              const match = urlStr.match(/\/api\/v1\/student-analysis\/([^/?]+)\/details/);
+              const studentId = match ? Number(match[1]) : 0;
+              let studentObj = null;
+              if (studentId > 0) {
+                try {
+                  const sRes = await fetch(`${apiBaseUrl}/api/v1/students/${studentId}`, {
+                    headers: forwardHeaders,
+                  });
+                  if (sRes.ok) {
+                    studentObj = await sRes.json();
+                  }
+                } catch {}
+              }
+
+              return res.end(JSON.stringify({
+                studentId,
+                rollNo: studentObj?.rollNo || studentObj?.rollNumber || `ROLL${studentId}`,
+                rollNumber: studentObj?.rollNo || studentObj?.rollNumber || `ROLL${studentId}`,
+                studentName: studentObj?.studentName || studentObj?.fullName || studentObj?.name || "Student",
+                groupName: studentObj?.groupName || "MPC",
+                group: studentObj?.groupName || "MPC",
+                programName: studentObj?.programName || "Regular Academic",
+                program: studentObj?.programName || "Regular Academic",
+                sectionName: studentObj?.sectionName || "Section A",
+                section: studentObj?.sectionName || "Section A",
+                examName: "Examination",
+                examination: "Examination",
+                examType: "Written",
+                examPattern: "REGULAR_ACADEMIC",
+                requiredSubjectCount: 0,
+                subjects: [],
+                totalMarks: 0,
+                maxMarks: 100,
+                percentage: 0,
+                grade: "—",
+                result: "N/A",
+                status: "NOT STARTED",
+              }));
+            } catch {}
+            return res.end(JSON.stringify({
+              studentId: 0,
+              subjects: [],
+              totalMarks: 0,
+              maxMarks: 100,
+              percentage: 0,
+              grade: "—",
+              result: "N/A",
             }));
           }
 

@@ -1,0 +1,726 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Bus, ClipboardList, GraduationCap, Mail, MapPin, School, User, Users } from "lucide-react";
+import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import { SkeletonPage, Toast } from "@/shared/components/Ui.jsx";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getHostelBlocks, getRoomTypes, getRooms } from "@/api/hostelApi.js";
+import { env } from "@/config/env.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
+import "./StudentManagementPage.css";
+
+const emptyForm = () => ({ admissionId: "", admissionNo: "", admissionNumber: "", admissionDate: "", admissionType: "", admissionQuota: "", campusId: "", medium: "", secondLanguage: "", studentName: "", photo: "", gender: "", dateOfBirth: "", bloodGroup: "", email: "", mobileNumber: "", aadhaarNumber: "", nationality: "", religion: "", category: "", address: "", city: "", district: "", state: "", pincode: "", boardId: "", academicYearId: "", academicLevelId: "", groupId: "", programId: "", sectionId: "", rollNo: "", rollNumber: "", feeStructureId: "", paymentPlan: "", studentType: "", transportRequired: "", busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", hostelBlock: "", hostelBlockName: "", hostelRoom: "", hostelRoomName: "", previousSchool: "", previousHallTicketNumber: "", previousBoard: "", previousYearOfPassing: "", previousPercentage: "", studentCategory: "", scholarshipStatus: "", scholarshipAmount: "", fatherName: "", fatherOccupation: "", fatherMobile: "", fatherEmail: "", motherName: "", motherOccupation: "", motherMobile: "", motherEmail: "", guardianName: "", guardianMobile: "", parentGuardianEmail: "", annualIncome: "", remarks: "" });
+const valueOf = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value !== undefined && value !== null) ?? "";
+const asList = (value, depth = 0) => {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object" || depth > 6) return [];
+  for (const key of ["items", "Items", "records", "Records", "rows", "Rows", "results", "Results", "$values"]) {
+    if (Array.isArray(value[key])) return value[key];
+  }
+  for (const key of ["data", "Data", "result", "Result", "response", "Response", "payload", "Payload"]) {
+    const rows = asList(value[key], depth + 1);
+    if (rows.length) return rows;
+  }
+  return [];
+};
+const optionsFrom = (response, idKeys, labelKeys) => asList(response).map((item) => ({
+  value: String(valueOf(item, ...idKeys)),
+  label: String(valueOf(item, ...labelKeys)),
+})).filter((item) => item.value && item.label);
+const academicLookupFields = {
+  boards: [["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "fullName", "FullName", "name", "Name"]],
+  years: [["academicYearId", "AcademicYearId", "id", "Id"], ["academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name"]],
+  levels: [["academicLevelId", "AcademicLevelId", "id", "Id"], ["academicLevelName", "AcademicLevelName", "levelName", "LevelName", "name", "Name"]],
+  groups: [["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]],
+  programs: [["programId", "ProgramId", "programmeId", "ProgrammeId", "id", "Id"], ["programName", "ProgramName", "programmeName", "ProgrammeName", "name", "Name"]],
+  sections: [["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]],
+};
+const academicDependencies = {
+  campusId: ["boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"],
+  boardId: ["academicYearId", "academicLevelId", "groupId", "programId", "sectionId"],
+  academicYearId: ["academicLevelId", "groupId", "programId", "sectionId"],
+  academicLevelId: ["groupId", "programId", "sectionId"],
+  groupId: ["programId", "sectionId"],
+  programId: ["sectionId"],
+};
+async function loadAcademicLookup(endpoint, scope, signal) {
+  if (scope.PageSize === undefined) {
+    return asList((await apiClient.get(endpoint, { params: scope, signal })).data);
+  }
+  const records = [];
+  let previousPage = "";
+  for (let pageNumber = 1; pageNumber <= 100; pageNumber += 1) {
+    const response = await apiClient.get(endpoint, {
+      params: { ...scope, PageSize: 100, PageNumber: pageNumber }, signal,
+    });
+    const rows = asList(response.data);
+    const fingerprint = JSON.stringify(rows);
+    if (rows.length && fingerprint === previousPage) throw new Error("Unable to load all academic options: the server repeated a page.");
+    records.push(...rows);
+    if (rows.length < 100) return records;
+    previousPage = fingerprint;
+  }
+  throw new Error("Unable to load all academic options. Please narrow the academic selection.");
+}
+function useAcademicLookup(key, endpoint, params, enabled, setLookups, setLookupState) {
+  const requestKey = JSON.stringify(params);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLookups((current) => ({ ...current, [key]: [] }));
+    setLookupState((current) => ({ ...current, [key]: { loading: Boolean(enabled), error: "" } }));
+    if (!enabled) return () => controller.abort();
+    const scope = JSON.parse(requestKey);
+    loadAcademicLookup(endpoint, scope, controller.signal).then((records) => {
+      if (controller.signal.aborted) return;
+      const scoped = records.filter((record) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((field) => {
+        const expected = scope[field] ?? scope[field[0].toUpperCase() + field.slice(1)];
+        const actual = valueOf(record, field, field[0].toUpperCase() + field.slice(1));
+        return !expected || actual === "" || String(actual) === String(expected);
+      }));
+      setLookups((current) => ({ ...current, [key]: optionsFrom(scoped, ...academicLookupFields[key]) }));
+    }).catch((error) => {
+      if (!controller.signal.aborted) setLookupState((current) => ({ ...current, [key]: { loading: false, error: getApiErrorMessage(error) } }));
+    }).finally(() => {
+      if (!controller.signal.aborted) setLookupState((current) => ({ ...current, [key]: { ...current[key], loading: false } }));
+    });
+    return () => controller.abort();
+  }, [key, endpoint, requestKey, enabled, setLookups, setLookupState]);
+}
+const asDateInput = (value) => value ? String(value).slice(0, 10) : "";
+const stringValue = (value) => String(value ?? "");
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const personNamePattern = /^[\p{L}][\p{L} .'-]*$/u;
+const placePattern = /^[\p{L}][\p{L} .,'()-]*$/u;
+const digitsOnly = (value, maximum) => String(value).replace(/\D/g, "").slice(0, maximum);
+const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const imageUrl = (value) => {
+  const path = String(value ?? "").trim().replace(/\\/g, "/").replace(/^~\//, "/").replace(/^\/?wwwroot\//i, "/");
+  if (!path || /^(?:https?:|blob:|data:)/i.test(path)) return path;
+  return `${env.apiBaseUrl.replace(/\/$/, "")}/${path.replace(/^\/+/, "")}`;
+};
+const initialsOf = (name) => String(name ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "ST";
+const fieldKeys = ["admissionNo", "admissionNumber", "admissionDate", "campusId", "studentName", "gender", "dateOfBirth", "email", "mobileNumber", "aadhaarNumber", "nationality", "address", "city", "district", "state", "pincode", "studentType", "transportRequired", "busType", "busRoute", "pickupPoint", "hostelBlock", "hostelRoom", "previousYearOfPassing", "previousPercentage", "fatherName", "fatherOccupation", "fatherMobile", "fatherEmail", "motherName", "motherOccupation", "motherMobile", "motherEmail", "guardianName", "guardianMobile", "parentGuardianEmail"];
+const studentUpdateError = (error) => {
+  const response = error?.response?.data ?? error?.data ?? {};
+  const details = String(response?.details ?? response?.Details ?? "");
+  if (/UX_Students_AadhaarNumber|duplicate entry.*aadhaar/i.test(details)) return "This Aadhaar number is already assigned to another student.";
+  return getApiErrorMessage(error) || "Unable to update the student profile.";
+};
+const unwrapStudent = (payload) => {
+  let current = payload;
+  for (let index = 0; index < 4 && current && typeof current === "object" && !Array.isArray(current); index += 1) {
+    const next = current.data ?? current.Data ?? current.result ?? current.Result;
+    if (!next || typeof next !== "object" || next === current) break;
+    current = next;
+  }
+  return current;
+};
+const numberOrZero = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const normalizeStudentType = (value) => {
+  const text = String(value ?? "").trim();
+  if (["true", "2", "yes", "residential", "hostel", "hosteller"].includes(text.toLowerCase())) return "Residential";
+  if (["false", "1", "0", "no", "non-residential", "non residential", "day scholar", "dayscholar"].includes(text.toLowerCase())) return "Non-Residential";
+  return text;
+};
+const normalizeYesNo = (value) => {
+  const text = String(value ?? "").trim();
+  if (["true", "1", "yes"].includes(text.toLowerCase())) return "Yes";
+  if (["false", "0", "no"].includes(text.toLowerCase())) return "No";
+  return text;
+};
+const normalizeBusType = (value) => {
+  const text = String(value ?? "").trim();
+  if (["true", "1", "yes", "ac"].includes(text.toLowerCase())) return "AC";
+  if (["false", "0", "no", "non-ac", "non ac", "nonac"].includes(text.toLowerCase())) return "Non-AC";
+  return text;
+};
+const isActiveMaster = (record = {}) => {
+  const status = valueOf(record, "status", "Status", "isActive", "IsActive", "active", "Active");
+  if (status === "" || status === undefined || status === null) return true;
+  if (typeof status === "boolean") return status;
+  if (typeof status === "number") return status === 1;
+  return !["inactive", "deleted", "false", "0"].includes(String(status).trim().toLowerCase());
+};
+const transportRouteFrom = (route = {}) => {
+  const id = valueOf(route, "routeId", "RouteId", "id", "Id");
+  const code = stringValue(valueOf(route, "routeNumber", "RouteNumber", "routeCode", "RouteCode", "code", "Code")).trim();
+  const value = id !== "" ? String(id) : code;
+  if (!value) return null;
+  const routeName = stringValue(valueOf(route, "routeName", "RouteName", "name", "Name") || code || value);
+  return { value, label: code && code !== routeName ? `${code} - ${routeName}` : routeName, routeName, active: isActiveMaster(route) };
+};
+const pickupPointFrom = (point = {}) => {
+  const id = valueOf(point, "pickupPointId", "PickupPointId", "id", "Id");
+  const label = stringValue(valueOf(point, "stopName", "StopName", "pickupPointName", "PickupPointName", "pickupName", "PickupName", "name", "Name")).trim();
+  const value = id !== "" ? String(id) : label;
+  if (!value) return null;
+  const routeId = valueOf(point, "routeId", "RouteId");
+  return {
+    value,
+    label: label || value,
+    routeId: routeId === "" ? "" : String(routeId),
+    monthlyFee: Number(valueOf(point, "monthlyFee", "MonthlyFee", "monthlyFare", "MonthlyFare", "feeAmount", "FeeAmount")) || 0,
+    active: isActiveMaster(point),
+  };
+};
+const vehicleFrom = (vehicle = {}) => {
+  const id = valueOf(vehicle, "vehicleId", "VehicleId", "id", "Id");
+  if (id === "") return null;
+  return { value: String(id), busType: normalizeBusType(valueOf(vehicle, "isAC", "IsAC", "isAc", "IsAc", "ac", "AC", "busType", "BusType")), active: isActiveMaster(vehicle) };
+};
+const vehicleAssignmentFrom = (assignment = {}) => {
+  const routeId = valueOf(assignment, "routeId", "RouteId");
+  const vehicleId = valueOf(assignment, "vehicleId", "VehicleId");
+  if (routeId === "" || vehicleId === "") return null;
+  return { routeId: String(routeId), vehicleId: String(vehicleId), busType: normalizeBusType(valueOf(assignment, "isAC", "IsAC", "isAc", "IsAc", "ac", "AC", "busType", "BusType")), active: isActiveMaster(assignment) };
+};
+const studentTransportAssignmentId = (assignment = {}) => {
+  const id = valueOf(assignment, "studentTransportAssignmentId", "StudentTransportAssignmentId", "studentAssignmentId", "StudentAssignmentId", "assignmentId", "AssignmentId", "id", "Id");
+  return id === "" ? null : id;
+};
+const hostelBlockFrom = (block = {}) => {
+  const id = valueOf(block, "hostelId", "HostelId", "id", "Id");
+  const code = stringValue(valueOf(block, "hostelCode", "HostelCode", "code", "Code")).trim();
+  const value = id !== "" ? String(id) : code;
+  if (!value) return null;
+  const name = stringValue(valueOf(block, "hostelName", "HostelName", "name", "Name") || code || value);
+  return { value, hostelId: id === "" ? "" : String(id), code, name, label: code && code !== name ? `${code} - ${name}` : name, active: isActiveMaster(block) };
+};
+const hostelRoomFrom = (room = {}) => {
+  const roomId = valueOf(room, "roomId", "RoomId", "id", "Id");
+  const roomTypeId = valueOf(room, "roomTypeId", "RoomTypeId");
+  const hostelId = valueOf(room, "hostelId", "HostelId");
+  const roomNo = stringValue(valueOf(room, "roomNumber", "RoomNumber", "roomNo", "RoomNo")).trim();
+  if (roomId === "" && roomTypeId === "" && !roomNo) return null;
+  const roomTypeName = stringValue(valueOf(room, "roomTypeSpecification", "RoomTypeSpecification", "roomTypeName", "RoomTypeName", "type", "Type")).trim();
+  return { value: roomId !== "" ? String(roomId) : roomNo, roomId: roomId === "" ? "" : String(roomId), roomTypeId: roomTypeId === "" ? "" : String(roomTypeId), hostelId: hostelId === "" ? "" : String(hostelId), blockValue: hostelId === "" ? stringValue(valueOf(room, "hostelCode", "HostelCode", "block", "Block")) : String(hostelId), roomTypeName, roomNo, active: isActiveMaster(room) };
+};
+const hostelRoomTypeFrom = (roomType = {}) => {
+  const id = valueOf(roomType, "roomTypeId", "RoomTypeId", "hostelRoomTypeId", "HostelRoomTypeId", "id", "Id");
+  const name = stringValue(valueOf(roomType, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification", "name", "Name")).trim();
+  const value = id !== "" ? String(id) : name;
+  const rawBlocks = valueOf(roomType, "hostelIds", "HostelIds", "blockIds", "BlockIds", "hostelId", "HostelId", "blocks", "Blocks", "hostelBlocks", "HostelBlocks");
+  const blockRefs = (Array.isArray(rawBlocks) ? rawBlocks : String(rawBlocks || "").split(","))
+    .flatMap((block) => block && typeof block === "object"
+      ? [valueOf(block, "hostelId", "HostelId", "id", "Id"), valueOf(block, "hostelCode", "HostelCode", "code", "Code"), valueOf(block, "hostelName", "HostelName", "name", "Name")]
+      : [block]).map((block) => String(block).trim().toLowerCase()).filter(Boolean);
+  return value ? { value, roomTypeId: id === "" ? "" : String(id), label: name || value, name: name || value, blockRefs, active: isActiveMaster(roomType) } : null;
+};
+const hostelFeeFrom = (fee = {}) => {
+  const hostelId = valueOf(fee, "hostelId", "HostelId");
+  const roomTypeId = valueOf(fee, "roomTypeId", "RoomTypeId");
+  if (hostelId === "" || roomTypeId === "") return null;
+  return { hostelId: String(hostelId), roomTypeId: String(roomTypeId), roomTypeName: stringValue(valueOf(fee, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification")), active: isActiveMaster(fee) };
+};
+const allocationFrom = (source = {}) => {
+  const allocation = valueOf(source, "allocation", "Allocation", "residentialAllocation", "ResidentialAllocation", "studentAllocation", "StudentAllocation") || {};
+  const transport = valueOf(source, "transport", "Transport", "transportDetails", "TransportDetails", "transportAllocation", "TransportAllocation", "studentTransport", "StudentTransport") || {};
+  const route = valueOf(source, "route", "Route", "busRoute", "BusRoute") || valueOf(transport, "route", "Route", "busRoute", "BusRoute") || {};
+  const pickup = valueOf(source, "pickup", "Pickup", "pickupPoint", "PickupPoint") || valueOf(transport, "pickup", "Pickup", "pickupPoint", "PickupPoint") || {};
+  const hostel = valueOf(source, "hostel", "Hostel", "hostelDetails", "HostelDetails", "hostelAllocation", "HostelAllocation", "studentHostel", "StudentHostel") || {};
+  const block = valueOf(source, "hostelBlock", "HostelBlock") || valueOf(hostel, "block", "Block", "hostelBlock", "HostelBlock") || {};
+  const room = valueOf(source, "hostelRoom", "HostelRoom", "room", "Room") || valueOf(hostel, "room", "Room", "hostelRoom", "HostelRoom") || {};
+  const values = [source, allocation, transport, hostel];
+  const fromValues = (...keys) => values.map((item) => valueOf(item, ...keys)).find((item) => item !== undefined && item !== null && item !== "");
+  return {
+    studentType: normalizeStudentType(fromValues("studentType", "StudentType", "residentialType", "ResidentialType", "residenceType", "ResidenceType", "isResidential", "IsResidential")),
+    transportRequired: normalizeYesNo(fromValues("transportRequired", "TransportRequired", "isTransportRequired", "IsTransportRequired", "requiresTransport", "RequiresTransport")),
+    busType: normalizeBusType(fromValues("busType", "BusType", "vehicleType", "VehicleType", "isAC", "IsAC", "isAc", "IsAc")),
+    busRoute: stringValue(valueOf(route, "routeId", "RouteId", "busRouteId", "BusRouteId", "id", "Id") || fromValues("routeId", "RouteId", "busRouteId", "BusRouteId", "busRoute", "BusRoute")),
+    busRouteName: stringValue(valueOf(route, "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber", "routeCode", "RouteCode") || fromValues("busRouteName", "BusRouteName", "routeName", "RouteName")),
+    pickupPoint: stringValue(valueOf(pickup, "pickupPointId", "PickupPointId", "pickupId", "PickupId", "id", "Id") || fromValues("pickupPointId", "PickupPointId", "pickupId", "PickupId", "pickupPoint", "PickupPoint")),
+    pickupPointName: stringValue(valueOf(pickup, "stopName", "StopName", "pickupPointName", "PickupPointName", "pickupName", "PickupName", "name", "Name") || fromValues("pickupPointName", "PickupPointName", "pickupName", "PickupName")),
+    hostelBlock: stringValue(valueOf(block, "hostelId", "HostelId", "id", "Id") || fromValues("hostelId", "HostelId", "hostelBlock", "HostelBlock", "hostelCode", "HostelCode")),
+    hostelBlockName: stringValue(valueOf(block, "hostelName", "HostelName", "name", "Name", "hostelCode", "HostelCode") || fromValues("hostelBlockName", "HostelBlockName", "hostelName", "HostelName")),
+    hostelRoom: stringValue(valueOf(room, "roomTypeId", "RoomTypeId", "hostelRoomTypeId", "HostelRoomTypeId") || fromValues("roomTypeId", "RoomTypeId", "hostelRoom", "HostelRoom", "roomTypeName", "RoomTypeName")),
+    hostelRoomName: stringValue(valueOf(room, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification", "name", "Name") || fromValues("hostelRoomName", "HostelRoomName", "roomTypeName", "RoomTypeName", "hostelRoom", "HostelRoom")),
+  };
+};
+
+const formFromStudent = (record) => {
+  const nested = record?.student ?? record?.Student ?? record?.profile ?? record?.Profile ?? {};
+  const admission = record?.admission ?? record?.Admission ?? {};
+  const academic = record?.academicDetails ?? record?.AcademicDetails ?? record?.academic ?? record?.Academic ?? {};
+  const source = { ...record, ...admission, ...academic, ...nested };
+  // Placement comes from the current student, not the historical admission.
+  ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId", "rollNo", "rollNumber"].forEach((key) => {
+    const keys = [key, key[0].toUpperCase() + key.slice(1)];
+    const current = [nested, academic, record].find((entry) => keys.some((alias) => entry?.[alias] != null));
+    if (current) keys.forEach((alias) => { source[alias] = valueOf(current, ...keys); });
+  });
+  const text = (...keys) => stringValue(valueOf(source, ...keys));
+  // Prefer current student allocation over the historical admission snapshot.
+  // Keep facility fields together, including empty values after a type change.
+  const allocation = [nested, record, admission].map(allocationFrom).find((item) => item.studentType) || allocationFrom(source);
+  return {
+    admissionId: text("admissionId", "AdmissionId"), admissionNo: text("admissionNo", "AdmissionNo"), admissionNumber: text("admissionNumber", "AdmissionNumber"), admissionDate: asDateInput(valueOf(source, "admissionDate", "AdmissionDate")), admissionType: text("admissionType", "AdmissionType"), admissionQuota: text("admissionQuota", "AdmissionQuota"), campusId: text("campusId", "CampusId"), medium: text("medium", "Medium"), secondLanguage: text("secondLanguage", "SecondLanguage"),
+    studentName: text("studentName", "StudentName", "fullName", "name"), photo: text("photo", "Photo", "photoPath", "PhotoPath", "photoUrl", "PhotoUrl", "studentPhotoUrl", "StudentPhotoUrl", "studentPhoto", "StudentPhoto", "profilePhotoUrl", "ProfilePhotoUrl", "profilePhoto", "ProfilePhoto"), gender: text("gender", "Gender"), dateOfBirth: asDateInput(valueOf(source, "dateOfBirth", "DateOfBirth", "dob", "DOB")), bloodGroup: text("bloodGroup", "BloodGroup"), email: text("email", "Email", "studentEmail", "StudentEmail"), mobileNumber: text("mobileNumber", "MobileNumber", "mobile", "Mobile"), aadhaarNumber: text("aadhaarNumber", "AadhaarNumber", "aadhaar", "Aadhaar"), nationality: text("nationality", "Nationality"), religion: text("religion", "Religion"), category: text("category", "Category"), address: text("address", "Address", "addressLine1", "AddressLine1"), city: text("city", "City"), district: text("district", "District"), state: text("state", "State"), pincode: text("pincode", "Pincode", "pinCode", "PinCode"),
+    boardId: text("boardId", "BoardId"), academicYearId: text("academicYearId", "AcademicYearId"), academicLevelId: text("academicLevelId", "AcademicLevelId"), groupId: text("groupId", "GroupId"), programId: text("programId", "ProgramId"), sectionId: text("sectionId", "SectionId"), rollNo: text("rollNo", "RollNo"), rollNumber: text("rollNumber", "RollNumber"), feeStructureId: text("feeStructureId", "FeeStructureId"), paymentPlan: text("paymentPlan", "PaymentPlan"), ...allocation,
+    previousSchool: text("previousSchool", "PreviousSchool"), previousHallTicketNumber: text("previousHallTicketNumber", "PreviousHallTicketNumber"), previousBoard: text("previousBoard", "PreviousBoard"), previousYearOfPassing: text("previousYearOfPassing", "PreviousYearOfPassing"), previousPercentage: text("previousPercentage", "PreviousPercentage"), studentCategory: text("studentCategory", "StudentCategory"), scholarshipStatus: text("scholarshipStatus", "ScholarshipStatus"), scholarshipAmount: text("scholarshipAmount", "ScholarshipAmount"),
+    fatherName: text("fatherName", "FatherName"), fatherOccupation: text("fatherOccupation", "FatherOccupation"), fatherMobile: text("fatherMobile", "FatherMobile"), fatherEmail: text("fatherEmail", "FatherEmail"), motherName: text("motherName", "MotherName"), motherOccupation: text("motherOccupation", "MotherOccupation"), motherMobile: text("motherMobile", "MotherMobile"), motherEmail: text("motherEmail", "MotherEmail"), guardianName: text("guardianName", "GuardianName"), guardianMobile: text("guardianMobile", "GuardianMobile"), parentGuardianEmail: text("parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail", "parentParentGuardianEmail", "ParentParentGuardianEmail"), annualIncome: text("annualIncome", "AnnualIncome"), remarks: text("remarks", "Remarks"),
+  };
+};
+
+const validate = (form) => {
+  const errors = {};
+  const person = (key, label, required = false) => {
+    const value = form[key].trim();
+    if (required && !value) errors[key] = "Student name is required.";
+    else if (value && value.length > 100) errors[key] = `${label} cannot exceed 100 characters.`;
+    else if (value && !personNamePattern.test(value)) errors[key] = required ? "Enter a valid student name." : `Enter a valid ${label.toLowerCase()}.`;
+  };
+  const mobile = (key, label) => { if (form[key].trim() && !/^\d{10}$/.test(form[key].trim())) errors[key] = `${label} must be exactly 10 digits.`; };
+  person("studentName", "Student name", true);
+  if (!form.gender) errors.gender = "Gender is required.";
+  if (!form.dateOfBirth) errors.dateOfBirth = "Date of birth is required.";
+  else if (new Date(`${form.dateOfBirth}T00:00:00`) > new Date()) errors.dateOfBirth = "Date of birth cannot be in the future.";
+  if (form.email.trim() && !emailPattern.test(form.email.trim())) errors.email = "Enter a valid email address.";
+  mobile("mobileNumber", "Mobile number");
+  if (form.aadhaarNumber.trim() && !/^\d{12}$/.test(form.aadhaarNumber.trim())) errors.aadhaarNumber = "Aadhaar number must be exactly 12 digits.";
+  if (form.nationality.trim() && (form.nationality.trim().length > 100 || !/^[\p{L} ]+$/u.test(form.nationality.trim()))) errors.nationality = "Enter a valid nationality.";
+  if (form.address.trim().length > 250) errors.address = "Address cannot exceed 250 characters.";
+  [["city", "city"], ["district", "district"], ["state", "state"]].forEach(([key, label]) => { const value = form[key].trim(); if (value && (value.length > 100 || !placePattern.test(value))) errors[key] = `Enter a valid ${label}.`; });
+  if (form.pincode.trim() && !/^\d{6}$/.test(form.pincode.trim())) errors.pincode = "Pincode must be exactly 6 digits.";
+  if (!form.campusId) errors.campusId = "Campus is required.";
+  if (!form.studentType) errors.studentType = "Student Type is required.";
+  if (form.studentType === "Non-Residential" && !form.transportRequired) errors.transportRequired = "School Transport Facility Required is required.";
+  if (form.studentType === "Non-Residential" && form.transportRequired === "Yes") {
+    if (!form.busType) errors.busType = "Bus Type is required.";
+    if (!form.busRoute) errors.busRoute = "Route is required.";
+    if (!form.pickupPoint) errors.pickupPoint = "Pickup Point is required.";
+  }
+  if (form.studentType === "Residential") {
+    if (!form.hostelBlock) errors.hostelBlock = "Hostel Block is required.";
+    if (!form.hostelRoom) errors.hostelRoom = "Room Type is required.";
+  }
+  person("fatherName", "Father name"); person("motherName", "Mother name"); person("guardianName", "Guardian name");
+  [["fatherOccupation", "Father occupation"], ["motherOccupation", "Mother occupation"]].forEach(([key, label]) => { if (form[key].trim().length > 100) errors[key] = `${label} cannot exceed 100 characters.`; });
+  mobile("fatherMobile", "Father mobile number"); mobile("motherMobile", "Mother mobile number"); mobile("guardianMobile", "Guardian mobile number");
+  if (form.fatherEmail.trim() && !emailPattern.test(form.fatherEmail.trim())) errors.fatherEmail = "Enter a valid father email address.";
+  if (form.motherEmail.trim() && !emailPattern.test(form.motherEmail.trim())) errors.motherEmail = "Enter a valid mother email address.";
+  if (form.parentGuardianEmail.trim() && !emailPattern.test(form.parentGuardianEmail.trim())) errors.parentGuardianEmail = "Enter a valid guardian email address.";
+  if (form.previousYearOfPassing && (!/^\d{4}$/.test(form.previousYearOfPassing) || Number(form.previousYearOfPassing) > new Date().getFullYear())) errors.previousYearOfPassing = "Enter a valid passing year.";
+  if (form.previousPercentage && (Number(form.previousPercentage) < 0 || Number(form.previousPercentage) > 100)) errors.previousPercentage = "Percentage must be between 0 and 100.";
+  return errors;
+};
+
+export default function StudentEnrollmentPage({ id, embedded = false, onCancel, onSaved, onValidationError, onBusyChange }) {
+  const navigate = useNavigate();
+  const { campuses, selectedCampusId } = useCampusContext();
+  const redirectTimer = useRef(null);
+  const photoInputRef = useRef(null);
+  const [savedPhotoUrl, setSavedPhotoUrl] = useState("");
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const [academicLookupState, setAcademicLookupState] = useState({});
+  const [placementChanged, setPlacementChanged] = useState(false);
+  const [initialAllocation, setInitialAllocation] = useState(null);
+  const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] }), [allocationLookups, setAllocationLookups] = useState({ routes: [], pickupPoints: [], vehicles: [], vehicleAssignments: [], hostelBlocks: [], hostelRoomTypes: [], hostelRooms: [], hostelFees: [] }), [allocationLookupError, setAllocationLookupError] = useState("");
+  const loadStudent = useCallback(async () => {
+    setLoading(true); setLoadError("");
+    try {
+      if (!/^\d+$/.test(String(id))) throw new Error("Invalid student ID.");
+      const [{ data }, summaryResponse] = await Promise.all([
+        apiClient.get(apiEndpoints.students.getById(id)),
+        apiClient.get(apiEndpoints.students.getAll).catch(() => null),
+      ]);
+      const record = unwrapStudent(data);
+      if (!record || typeof record !== "object") throw new Error("Student record was not found.");
+      const summary = asList(summaryResponse?.data).find((item) => String(valueOf(item, "studentId", "StudentId", "id", "Id")) === String(id)
+        || String(valueOf(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")) === String(valueOf(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")));
+      const enrichedRecord = { ...record };
+      Object.entries(summary || {}).forEach(([key, value]) => {
+        if ((enrichedRecord[key] == null || enrichedRecord[key] === "") && value != null && value !== "") enrichedRecord[key] = value;
+      });
+      const nested = enrichedRecord.student ?? enrichedRecord.Student ?? enrichedRecord.profile ?? enrichedRecord.Profile ?? {};
+      const admission = enrichedRecord.admission ?? enrichedRecord.Admission ?? {};
+      const academic = enrichedRecord.academicDetails ?? enrichedRecord.AcademicDetails ?? enrichedRecord.academic ?? enrichedRecord.Academic ?? {};
+      const source = { ...enrichedRecord, ...admission, ...academic, ...nested };
+      setStudent({ name: stringValue(valueOf(source, "studentName", "StudentName", "fullName", "name")) || "Student", rollNo: stringValue(valueOf(source, "rollNo", "RollNo", "rollNumber", "RollNumber")) || "—", admissionNo: stringValue(valueOf(source, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")) || "-" });
+      const nextForm = formFromStudent(enrichedRecord);
+      setInitialAllocation({ studentType: nextForm.studentType, transportRequired: nextForm.transportRequired });
+      ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].forEach((key) => {
+        if (!Number.isInteger(Number(nextForm[key])) || Number(nextForm[key]) <= 0) nextForm[key] = "";
+      });
+      setForm(nextForm); setPlacementChanged(false); setErrors({}); setTouched({}); setPhotoFile(null); setPhotoPreview(""); setPhotoError("");
+    } catch (error) { setLoadError(getApiErrorMessage(error) || "Unable to load the student profile."); }
+    finally { setLoading(false); }
+  }, [id]);
+  useEffect(() => {
+    onBusyChange?.(saving);
+    return () => onBusyChange?.(false);
+  }, [saving, onBusyChange]);
+  useEffect(() => { loadStudent(); }, [loadStudent]);
+  // Fetch saved photos through the authenticated API client, as the profile view does.
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    setSavedPhotoUrl("");
+    setPhotoFailed(false);
+    const url = imageUrl(form.photo);
+    if (!url) return () => { active = false; };
+    if (/^(?:blob:|data:image\/)/i.test(url)) {
+      setSavedPhotoUrl(url);
+      return () => { active = false; };
+    }
+    apiClient.get(url, { responseType: "blob", headers: { Accept: "image/*" }, skipGlobalLoader: true })
+      .then((response) => {
+        if (!active) return;
+        const type = String(response.headers?.["content-type"] ?? response.data?.type ?? "");
+        if (!type.toLowerCase().startsWith("image/")) throw new Error("Photo response is not an image.");
+        objectUrl = URL.createObjectURL(response.data);
+        setSavedPhotoUrl(objectUrl);
+      })
+      .catch(() => { if (active) setPhotoFailed(true); });
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [form.photo]);
+  const campusOptions = useMemo(() => (campuses || [])
+    .filter((campus) => campus?.isActive !== false && campus?.status !== "Inactive")
+    .map((campus) => {
+      const value = campus?.campusId ?? campus?.id;
+      const name = campus?.name || campus?.campusName || "";
+      const code = campus?.code || campus?.campusCode || "";
+      return value == null || value === "" ? null : { value: String(value), label: code ? `${name || code} (${code})` : name || String(value) };
+    })
+    .filter(Boolean), [campuses]);
+  useAcademicLookup("boards", apiEndpoints.boards.list, { Status: true, PageSize: 1000 }, true, setLookups, setAcademicLookupState);
+  useAcademicLookup("years", apiEndpoints.academicYears.list, { CampusId: form.campusId, BoardId: form.boardId, Status: true, PageSize: 1000 }, Boolean(form.campusId && form.boardId), setLookups, setAcademicLookupState);
+  useAcademicLookup("levels", apiEndpoints.boards.academicLevels, { boardId: form.boardId }, Boolean(form.boardId), setLookups, setAcademicLookupState);
+  useAcademicLookup("groups", apiEndpoints.groups.getByBoard(form.boardId || 0), { boardId: form.boardId, academicYearId: form.academicYearId, academicLevelId: form.academicLevelId, isActive: true, PageSize: 1000 }, Boolean(form.boardId && form.academicYearId && form.academicLevelId), setLookups, setAcademicLookupState);
+  useAcademicLookup("programs", apiEndpoints.groups.programs(form.groupId || 0), {}, Boolean(form.groupId), setLookups, setAcademicLookupState);
+  useAcademicLookup("sections", apiEndpoints.sections.search, { CampusId: form.campusId, BoardId: form.boardId, AcademicYearId: form.academicYearId, AcademicLevelId: form.academicLevelId, GroupId: form.groupId, ProgramId: form.programId, IsActive: true, PageSize: 1000 }, Boolean(form.campusId && form.boardId && form.academicYearId && form.academicLevelId && form.groupId && form.programId), setLookups, setAcademicLookupState);
+  useEffect(() => {
+    let active = true;
+    const loadAllocationLookups = async () => {
+      if (!Number(selectedCampusId)) return;
+      setAllocationLookupError("");
+      const results = await Promise.allSettled([
+        apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
+        apiClient.get(apiEndpoints.transport.pickupPoints, {
+          params: { CampusId: Number(selectedCampusId), PageNumber: 1, PageSize: 1000 },
+        }),
+        apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
+        getHostelBlocks(),
+        getRoomTypes(),
+        getRooms(),
+        apiClient.get(apiEndpoints.hostel.fees),
+      ]);
+      if (!active) return;
+      const normalizers = [transportRouteFrom, pickupPointFrom, vehicleFrom, vehicleAssignmentFrom, hostelBlockFrom, hostelRoomTypeFrom, hostelRoomFrom, hostelFeeFrom];
+      const data = results.map((result, index) => result.status === "fulfilled" ? asList(result.value.data).map(normalizers[index]).filter(Boolean) : []);
+      // Match Hostel Management's identifiers even when the shared service
+      // returns room associations as block codes and room-type names.
+      data[6] = data[6].map((room) => {
+        const block = data[4].find((item) => [item.value, item.hostelId, item.code, item.name].some((value) => value && String(value) === String(room.hostelId || room.blockValue)));
+        const type = data[5].find((item) => (room.roomTypeId && item.roomTypeId === room.roomTypeId)
+          || (room.roomTypeName && item.name.toLowerCase() === room.roomTypeName.toLowerCase()));
+        return { ...room, hostelId: block?.hostelId || room.hostelId, blockValue: block?.value || room.blockValue, roomTypeId: type?.roomTypeId || room.roomTypeId };
+      });
+      data[7] = data[7].filter((fee) => data[4].some((block) => block.hostelId === fee.hostelId));
+      setAllocationLookups({ routes: data[0], pickupPoints: data[1], vehicles: data[2], vehicleAssignments: data[3], hostelBlocks: data[4], hostelRoomTypes: data[5], hostelRooms: data[6], hostelFees: data[7] });
+      if (results.some((result) => result.status === "rejected")) setAllocationLookupError("Some allocation options could not be loaded. Please refresh and try again.");
+    };
+    loadAllocationLookups();
+    return () => { active = false; };
+  }, [selectedCampusId]);
+  useEffect(() => {
+    let active = true;
+    const selections = [
+      ["routes", form.busRoute, apiEndpoints.transport.routeById, transportRouteFrom, "route"],
+      ["pickupPoints", form.pickupPoint, apiEndpoints.transport.pickupPointById, pickupPointFrom, "pickupPoint"],
+    ];
+    Promise.allSettled(selections.map(async ([key, id, endpoint, normalize, wrapper]) => {
+      if (!/^\d+$/.test(String(id))) return;
+      const response = await apiClient.get(endpoint(id), { skipGlobalLoader: true });
+      const data = response.data?.data ?? response.data?.Data ?? response.data;
+      const option = normalize(data?.[wrapper] ?? data?.[wrapper[0].toUpperCase() + wrapper.slice(1)] ?? data);
+      if (!active || !option) return;
+      setAllocationLookups((current) => ({ ...current, [key]: [
+        ...current[key].filter((item) => item.value !== option.value), option,
+      ] }));
+    })).then((results) => {
+      if (active && results.some((result) => result.status === "rejected"))
+        setAllocationLookupError("The saved route or pickup point could not be loaded. Please check the transport configuration.");
+    });
+    return () => { active = false; };
+  }, [form.busRoute, form.pickupPoint, selectedCampusId]);
+  const routeBusTypes = useMemo(() => {
+    const vehicleTypes = new Map(allocationLookups.vehicles.filter((vehicle) => vehicle.active && vehicle.busType).map((vehicle) => [vehicle.value, vehicle.busType]));
+    return allocationLookups.vehicleAssignments.filter((assignment) => assignment.active).reduce((map, assignment) => {
+      const type = assignment.busType || vehicleTypes.get(assignment.vehicleId);
+      if (!type) return map;
+      if (!map.has(assignment.routeId)) map.set(assignment.routeId, new Set());
+      map.get(assignment.routeId).add(type);
+      return map;
+    }, new Map());
+  }, [allocationLookups.vehicleAssignments, allocationLookups.vehicles]);
+  const routeOptions = useMemo(() => allocationLookups.routes.filter((route) => {
+    const types = routeBusTypes.get(route.value);
+    return route.value === String(form.busRoute) || (route.active && (!form.busType || !types?.size || types.has(form.busType)));
+  }), [allocationLookups.routes, form.busType, form.busRoute, routeBusTypes]);
+  const pickupOptions = useMemo(() => {
+    const linked = allocationLookups.pickupPoints.some((point) => point.routeId);
+    return allocationLookups.pickupPoints.filter((point) => point.value === String(form.pickupPoint) || (point.active && (!linked || point.routeId === String(form.busRoute || ""))));
+  }, [allocationLookups.pickupPoints, form.busRoute, form.pickupPoint]);
+  const hostelBlockOptions = useMemo(() => allocationLookups.hostelBlocks.filter((block) => block.active), [allocationLookups.hostelBlocks]);
+  const hostelRoomOptions = useMemo(() => {
+    const block = allocationLookups.hostelBlocks.find((item) => item.value === String(form.hostelBlock));
+    if (!block) return [];
+    const roomTypeIds = new Set(allocationLookups.hostelRooms.filter((room) => room.active && (room.blockValue === String(form.hostelBlock) || (block?.hostelId && room.hostelId === block.hostelId))).map((room) => room.roomTypeId).filter(Boolean));
+    const blockRefs = [block.value, block.hostelId, block.code, block.name, block.label].filter(Boolean).map((value) => String(value).trim().toLowerCase());
+    allocationLookups.hostelRoomTypes.filter((type) => type.active && type.blockRefs?.some((ref) => blockRefs.includes(ref)))
+      .forEach((type) => roomTypeIds.add(String(type.roomTypeId || type.value)));
+    allocationLookups.hostelFees.filter((fee) => fee.active && fee.hostelId === String(block?.hostelId || form.hostelBlock)).forEach((fee) => roomTypeIds.add(fee.roomTypeId));
+    const types = allocationLookups.hostelRoomTypes.length ? allocationLookups.hostelRoomTypes : [...roomTypeIds].map((roomTypeId) => {
+      const room = allocationLookups.hostelRooms.find((item) => item.roomTypeId === roomTypeId);
+      const fee = allocationLookups.hostelFees.find((item) => item.roomTypeId === roomTypeId);
+      const label = room?.roomTypeName || fee?.roomTypeName || `Room Type ${roomTypeId}`;
+      return { value: roomTypeId, roomTypeId, label, name: label, active: true };
+    });
+    return types.filter((type) => type.active && roomTypeIds.has(String(type.roomTypeId || type.value)));
+  }, [allocationLookups.hostelBlocks, allocationLookups.hostelFees, allocationLookups.hostelRooms, allocationLookups.hostelRoomTypes, form.hostelBlock]);
+  useEffect(() => {
+    if (form.busType || !form.busRoute) return;
+    const types = routeBusTypes.get(String(form.busRoute));
+    if (types?.size === 1) setForm((current) => ({ ...current, busType: [...types][0] }));
+  }, [form.busRoute, form.busType, routeBusTypes]);
+  useEffect(() => {
+    if (!allocationLookups.routes.length && !allocationLookups.hostelBlocks.length) return;
+    setForm((current) => {
+      const matches = (value, ...candidates) => Boolean(String(value || "").trim()) && candidates.some((candidate) => String(candidate || "").trim().toLowerCase() === String(value || "").trim().toLowerCase());
+      const next = { ...current };
+      let changed = false;
+      const route = allocationLookups.routes.find((item) => (matches(current.busRoute, item.value, item.routeName, item.label) || (!current.busRoute && matches(current.busRouteName, item.routeName, item.label))));
+      if (route && current.busRoute !== route.value) { next.busRoute = route.value; next.busRouteName = route.routeName; changed = true; }
+      const pickup = allocationLookups.pickupPoints.find((item) => (!route || !item.routeId || item.routeId === route.value) && (matches(current.pickupPoint, item.value, item.label) || (!current.pickupPoint && matches(current.pickupPointName, item.label))));
+      if (pickup && current.pickupPoint !== pickup.value) { next.pickupPoint = pickup.value; next.pickupPointName = pickup.label; changed = true; }
+      const block = allocationLookups.hostelBlocks.find((item) => matches(current.hostelBlock, item.value, item.hostelId, item.code, item.name, item.label));
+      if (block && (current.hostelBlock !== block.value || current.hostelBlockName !== block.name)) { next.hostelBlock = block.value; next.hostelBlockName = block.name; changed = true; }
+      const room = allocationLookups.hostelRooms.find((item) => (!block || item.blockValue === block.value || item.hostelId === block.hostelId) && matches(current.hostelRoom, item.roomTypeId, item.roomTypeName, item.value, item.roomNo));
+      const type = allocationLookups.hostelRoomTypes.find((item) => matches(current.hostelRoom, item.value, item.roomTypeId, item.name, item.label) || (room?.roomTypeId && item.roomTypeId === room.roomTypeId));
+      const roomTypeId = type?.roomTypeId || room?.roomTypeId || type?.value;
+      if (roomTypeId && current.hostelRoom !== roomTypeId) { next.hostelRoom = roomTypeId; next.hostelRoomName = type?.name || room?.roomTypeName || ""; changed = true; }
+      return changed ? next : current;
+    });
+  }, [allocationLookups.hostelBlocks, allocationLookups.hostelRoomTypes, allocationLookups.hostelRooms, allocationLookups.pickupPoints, allocationLookups.routes]);
+  useEffect(() => () => window.clearTimeout(redirectTimer.current), []);
+  useEffect(() => () => { if (photoPreview) URL.revokeObjectURL(photoPreview); }, [photoPreview]);
+  const updateField = (key, value) => setForm((current) => {
+    const next = { ...current, [key]: value };
+    if (current[key] !== value && academicDependencies[key]) {
+      academicDependencies[key].forEach((dependent) => { next[dependent] = ""; });
+      setPlacementChanged(true);
+      setErrors((currentErrors) => Object.fromEntries(Object.entries(currentErrors).filter(([field]) => field !== key && !academicDependencies[key].includes(field))));
+    }
+    if (key === "sectionId" && current[key] !== value) setPlacementChanged(true);
+    if (touched[key]) setErrors((currentErrors) => ({ ...currentErrors, [key]: validate(next)[key] || "" }));
+    return next;
+  });
+  const change = (key) => (event) => updateField(key, event.target.value);
+  const changeAllocation = (key) => (event) => {
+    const value = event.target.value;
+    setForm((current) => {
+      if (key === "studentType") return { ...current, studentType: value, transportRequired: "", busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", hostelBlock: "", hostelBlockName: "", hostelRoom: "", hostelRoomName: "" };
+      if (key === "transportRequired") return { ...current, transportRequired: value, ...(value === "Yes" ? {} : { busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "" }) };
+      if (key === "busType") {
+        const types = routeBusTypes.get(String(current.busRoute));
+        const keepRoute = current.busRoute && (!types?.size || types.has(value));
+        return { ...current, busType: value, ...(keepRoute ? { pickupPoint: "", pickupPointName: "" } : { busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "" }) };
+      }
+      if (key === "busRoute") {
+        const route = allocationLookups.routes.find((item) => item.value === value);
+        return { ...current, busRoute: value, busRouteName: route?.routeName || "", pickupPoint: "", pickupPointName: "" };
+      }
+      if (key === "pickupPoint") {
+        const point = allocationLookups.pickupPoints.find((item) => item.value === value && (!item.routeId || item.routeId === String(current.busRoute)));
+        return { ...current, pickupPoint: value, pickupPointName: point?.label || "" };
+      }
+      if (key === "hostelBlock") {
+        const block = allocationLookups.hostelBlocks.find((item) => item.value === value);
+        return { ...current, hostelBlock: value, hostelBlockName: block?.name || "", hostelRoom: "", hostelRoomName: "" };
+      }
+      if (key === "hostelRoom") {
+        const type = allocationLookups.hostelRoomTypes.find((item) => item.value === value || item.roomTypeId === value);
+        const room = allocationLookups.hostelRooms.find((item) => item.roomTypeId === value && (item.blockValue === String(current.hostelBlock) || item.hostelId === String(current.hostelBlock)));
+        return { ...current, hostelRoom: value, hostelRoomName: type?.name || room?.roomTypeName || "" };
+      }
+      return current;
+    });
+    setErrors((current) => ({ ...current, studentType: undefined, transportRequired: undefined, busType: undefined, busRoute: undefined, pickupPoint: undefined, hostelBlock: undefined, hostelRoom: undefined }));
+  };
+  const syncStudentTransport = async () => {
+    if (!form.studentType) return;
+    const transportSelected = form.studentType === "Non-Residential" && form.transportRequired === "Yes";
+    const studentId = Number(id);
+    const assignmentsResponse = await apiClient.get(`${apiEndpoints.transport.studentAssignments}?PageNumber=1&PageSize=1000`);
+    const existingAssignment = asList(assignmentsResponse.data).find((assignment) =>
+      String(valueOf(assignment, "studentId", "StudentId")) === String(studentId));
+    const existingAssignmentId = studentTransportAssignmentId(existingAssignment);
+
+    if (!transportSelected) {
+      if (existingAssignmentId !== null) await apiClient.delete(apiEndpoints.transport.studentAssignmentById(existingAssignmentId));
+      return;
+    }
+
+    const vehicleAssignment = allocationLookups.vehicleAssignments.find((assignment) =>
+      assignment.active
+      && assignment.routeId === String(form.busRoute)
+      && (!form.busType || !assignment.busType || assignment.busType === form.busType));
+    if (!vehicleAssignment?.vehicleId) {
+      throw new Error("No active vehicle assignment is available for the selected transport route and bus type.");
+    }
+
+    const pickupPoint = allocationLookups.pickupPoints.find((point) => point.value === String(form.pickupPoint));
+    const transportPayload = {
+      studentId,
+      studentName: form.studentName.trim(),
+      admissionNo: form.admissionNo.trim() || form.admissionNumber.trim(),
+      routeId: Number(form.busRoute),
+      pickupPointId: Number(form.pickupPoint),
+      pickupPointName: form.pickupPointName || pickupPoint?.label || "",
+      vehicleId: Number(vehicleAssignment.vehicleId),
+      monthlyFee: pickupPoint?.monthlyFee || 0,
+      status: true,
+    };
+    if (existingAssignmentId !== null) {
+      await apiClient.put(apiEndpoints.transport.studentAssignmentById(existingAssignmentId), transportPayload);
+    } else {
+      await apiClient.post(apiEndpoints.transport.studentAssignments, transportPayload);
+    }
+  };
+  const numericChange = (key, maximum) => (event) => updateField(key, digitsOnly(event.target.value, maximum));
+  const choosePhoto = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) return;
+    if (!["image/jpeg", "image/jpg", "image/png"].includes(file.type)) {
+      setPhotoFile(null); setPhotoPreview(""); setPhotoError("Only JPG, JPEG and PNG images are allowed."); event.target.value = "";
+      return;
+    }
+    setPhotoError(""); setPhotoFailed(false); setPhotoFile(file); setPhotoPreview(URL.createObjectURL(file));
+  };
+  const blur = (key) => () => { setTouched((current) => ({ ...current, [key]: true })); setErrors((current) => ({ ...current, [key]: validate(form)[key] || "" })); };
+  const submit = async (event) => {
+    event.preventDefault();
+    const nextErrors = validate(form);
+    if (form.studentType === "Residential") {
+      if (!hostelBlockOptions.some((block) => block.value === String(form.hostelBlock))) {
+        nextErrors.hostelBlock = "Select an active block from Hostel Management.";
+      }
+      if (!hostelRoomOptions.some((type) => type.value === String(form.hostelRoom))) {
+        nextErrors.hostelRoom = "Select a room type available in the selected hostel block.";
+      }
+    }
+    if (placementChanged) {
+      Object.entries({ boardId: "Board", academicYearId: "Academic Year", academicLevelId: "Academic Level", groupId: "Group", programId: "Program", sectionId: "Section" }).forEach(([key, label]) => {
+        const lookupKey = { boardId: "boards", academicYearId: "years", academicLevelId: "levels", groupId: "groups", programId: "programs", sectionId: "sections" }[key];
+        if (!form[key]) nextErrors[key] = `Select ${label}.`;
+        else if (academicLookupState[lookupKey]?.loading) nextErrors[key] = `Wait for ${label} options to load.`;
+        else if (academicLookupState[lookupKey]?.error || !lookups[lookupKey].some((option) => option.value === form[key])) nextErrors[key] = `Select an available ${label}.`;
+      });
+    }
+    setTouched(Object.fromEntries(fieldKeys.map((key) => [key, true]))); setErrors(nextErrors);
+    const firstInvalid = [...fieldKeys, "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].find((key) => nextErrors[key]);
+    if (firstInvalid) {
+      onValidationError?.();
+      window.requestAnimationFrame(() => document.querySelector(".student-profile-edit .cms-field.is-invalid input, .student-profile-edit .cms-field.is-invalid select, .student-profile-edit .cms-field.is-invalid textarea")?.focus());
+      return;
+    }
+    const optionalEmail = (value) => value.trim() || null;
+    const payload = {
+      admissionId: numberOrZero(form.admissionId), admissionNo: form.admissionNo.trim(), admissionNumber: form.admissionNumber.trim(), admissionDate: form.admissionDate || null, admissionType: form.admissionType.trim(), admissionQuota: form.admissionQuota.trim(), campusId: numberOrZero(form.campusId), medium: form.medium.trim(), secondLanguage: form.secondLanguage.trim(),
+      studentName: form.studentName.trim(), photo: form.photo.trim(), gender: form.gender, dateOfBirth: form.dateOfBirth || null, bloodGroup: form.bloodGroup, email: optionalEmail(form.email), mobileNumber: form.mobileNumber.trim(), aadhaarNumber: form.aadhaarNumber.trim(), nationality: form.nationality.trim(), religion: form.religion.trim(), category: form.category.trim(), address: form.address.trim(), city: form.city.trim(), district: form.district.trim(), state: form.state.trim(), pincode: form.pincode.trim(),
+      boardId: numberOrZero(form.boardId), academicYearId: numberOrZero(form.academicYearId), academicLevelId: numberOrZero(form.academicLevelId), groupId: numberOrZero(form.groupId), programId: numberOrZero(form.programId), sectionId: numberOrZero(form.sectionId), rollNo: form.rollNo.trim(), rollNumber: form.rollNumber.trim(), feeStructureId: numberOrZero(form.feeStructureId), paymentPlan: form.paymentPlan.trim(),
+      studentType: form.studentType,
+      transportRequired: form.studentType === "Non-Residential" && form.transportRequired === "Yes",
+      ...(form.studentType === "Non-Residential" && form.transportRequired === "Yes"
+        ? { busType: form.busType, routeId: numberOrZero(form.busRoute), pickupPointId: numberOrZero(form.pickupPoint) }
+        : {}),
+      ...(form.studentType === "Residential" ? { hostelId: Number.isInteger(Number(form.hostelBlock)) && Number(form.hostelBlock) > 0 ? Number(form.hostelBlock) : null, hostelBlock: allocationLookups.hostelBlocks.find((block) => block.value === String(form.hostelBlock))?.name || form.hostelBlockName || null, hostelRoom: form.hostelRoomName || form.hostelRoom } : {}),
+      previousSchool: form.previousSchool.trim(), previousHallTicketNumber: form.previousHallTicketNumber.trim(), previousBoard: form.previousBoard.trim(), previousYearOfPassing: numberOrZero(form.previousYearOfPassing), previousPercentage: numberOrZero(form.previousPercentage), studentCategory: form.studentCategory.trim(), scholarshipStatus: form.scholarshipStatus.trim(), scholarshipAmount: numberOrZero(form.scholarshipAmount),
+      fatherName: form.fatherName.trim(), fatherOccupation: form.fatherOccupation.trim(), fatherMobile: form.fatherMobile.trim(), fatherEmail: optionalEmail(form.fatherEmail), motherName: form.motherName.trim(), motherOccupation: form.motherOccupation.trim(), motherMobile: form.motherMobile.trim(), motherEmail: optionalEmail(form.motherEmail), guardianName: form.guardianName.trim(), guardianMobile: form.guardianMobile.trim(), parentGuardianEmail: optionalEmail(form.parentGuardianEmail), annualIncome: numberOrZero(form.annualIncome), remarks: form.remarks.trim(),
+    };
+    if (import.meta.env.DEV) console.info("Student profile update payload:", payload);
+    setSaving(true);
+    let saved = false;
+    try {
+      await apiClient.put(apiEndpoints.students.update(id), payload);
+      await syncStudentTransport();
+      if (photoFile) {
+        const photoData = new FormData();
+        photoData.append("file", photoFile);
+        await apiClient.post(apiEndpoints.students.uploadPhoto(id), photoData, { headers: { "Content-Type": "multipart/form-data" } });
+      }
+      saved = true;
+      setMessage(photoFile ? "Student profile and photo updated successfully." : "Student profile updated successfully.");
+      if (embedded && onSaved) await onSaved();
+      else redirectTimer.current = window.setTimeout(() => navigate(`/dashboard/students/${id}`), 1400);
+    }
+    catch (error) { setMessage(studentUpdateError(error)); }
+    finally { if (!saved) setSaving(false); }
+  };
+  const field = (key, props = {}) => ({ ...props, error: errors[key], onBlur: blur(key) });
+  if (loading) return embedded ? <div className="cms-card"><SkeletonPage variant="form" rows={8} /></div> : <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><SkeletonPage variant="form" rows={8} /></div></DashboardLayout>;
+  if (!student) return embedded ? <div className="cms-card"><div className="cms-empty">{loadError || "Student record was not found."}</div></div> : <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{loadError || "Student record was not found."}</div></div></DashboardLayout>;
+  const editor = <form onSubmit={submit} className="cms-card student-profile-edit" noValidate>
+    {!embedded ? <div className="student-profile-edit-summary"><span><small>Student Name</small><b>{student.name}</b></span><span><small>Roll No.</small><b>{student.rollNo}</b></span><span><small>Admission No.</small><b>{student.admissionNo}</b></span></div> : null}
+    <ProfileSection title="Admission Details">
+      <Field label="Admission No." {...field("admissionNo")}><input value={form.admissionNo} onChange={change("admissionNo")} /></Field><Field label="Admission Number" {...field("admissionNumber")}><input value={form.admissionNumber} onChange={change("admissionNumber")} /></Field><Field label="Admission Date" {...field("admissionDate")}><input type="date" value={form.admissionDate} onChange={change("admissionDate")} /></Field><SelectField label="Campus" required value={form.campusId} onChange={change("campusId")} onBlur={blur("campusId")} error={errors.campusId} options={campusOptions} placeholder="Select Campus" /><Field label="Medium"><input value={form.medium} onChange={change("medium")} /></Field><Field label="Second Language"><input value={form.secondLanguage} onChange={change("secondLanguage")} /></Field>
+    </ProfileSection>
+    <ProfileSection title="Personal Information">
+      <Field label="Student Name" required {...field("studentName")}><input value={form.studentName} onChange={change("studentName")} maxLength="100" /></Field>
+      <Field label="Photo" error={photoError}><div className="student-profile-photo-upload"><div className="student-profile-photo-preview">{(photoPreview || savedPhotoUrl) && !photoFailed ? <img src={photoPreview || savedPhotoUrl} alt={`${student.name}'s profile`} onError={() => setPhotoFailed(true)} /> : <span>{initialsOf(student.name)}</span>}</div><input ref={photoInputRef} className="student-profile-photo-input" type="file" accept="image/jpeg,image/jpg,image/png" onChange={choosePhoto} /><button className="cms-btn cms-btn-ghost" type="button" onClick={() => photoInputRef.current?.click()}>{form.photo || photoPreview ? "Replace Photo" : "Upload Photo"}</button><small>JPG, JPEG or PNG</small></div></Field>
+      <Field label="Gender" required {...field("gender")}><select value={form.gender} onChange={change("gender")}><option value="">Select gender</option><option>Male</option><option>Female</option><option>Other</option></select></Field><Field label="Date of Birth" required {...field("dateOfBirth")}><input type="date" value={form.dateOfBirth} onChange={change("dateOfBirth")} /></Field><Field label="Blood Group"><select value={form.bloodGroup} onChange={change("bloodGroup")}><option value="">Select Blood Group</option>{bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select></Field><Field label="Nationality" {...field("nationality")}><input value={form.nationality} onChange={change("nationality")} maxLength="100" /></Field><Field label="Religion"><input value={form.religion} onChange={change("religion")} /></Field><Field label="Category"><input value={form.category} onChange={change("category")} /></Field>
+    </ProfileSection>
+    <ProfileSection title="Contact Information"><Field label="Email" {...field("email")}><input type="email" value={form.email} onChange={change("email")} maxLength="254" /></Field><Field label="Mobile Number" {...field("mobileNumber")}><input type="tel" inputMode="numeric" maxLength="10" value={form.mobileNumber} onChange={numericChange("mobileNumber", 10)} /></Field><Field label="Aadhaar Number" {...field("aadhaarNumber")}><input type="text" inputMode="numeric" maxLength="12" value={form.aadhaarNumber} onChange={numericChange("aadhaarNumber", 12)} /></Field></ProfileSection>
+    <ProfileSection title="Academic Placement">
+      {[["Board", "boardId", "boards", true], ["Academic Year", "academicYearId", "years", Boolean(form.campusId && form.boardId)], ["Academic Level", "academicLevelId", "levels", Boolean(form.academicYearId)], ["Group", "groupId", "groups", Boolean(form.academicLevelId && form.academicYearId)], ["Program", "programId", "programs", Boolean(form.groupId)], ["Section", "sectionId", "sections", Boolean(form.programId)]].map(([label, key, lookupKey, enabled]) => <SelectField key={key} label={label} value={form[key]} onChange={change(key)} options={lookups[lookupKey]} placeholder={`Select ${label.toLowerCase()}`} loading={academicLookupState[lookupKey]?.loading} disabled={saving || !enabled} error={errors[key] || academicLookupState[lookupKey]?.error} onBlur={blur(key)} />)}
+      <Field label="Roll No."><input value={form.rollNo || form.rollNumber} readOnly /><small>Roll numbers are assigned in Section Allocation.</small></Field>
+      {placementChanged && !form.rollNo && !form.rollNumber ? <small className="student-profile-full">After saving the new placement, assign a roll number in Section Allocation.</small> : null}
+    </ProfileSection>
+    <ProfileSection title="Student Type & Residential Allocation">
+      {initialAllocation?.studentType === "Residential" && form.studentType === "Non-Residential" ? (
+        <small className="student-profile-full" style={{ color: "#b45309", background: "rgba(245, 158, 11, 0.1)", padding: "8px 12px", borderRadius: "6px", border: "1px solid rgba(245, 158, 11, 0.3)" }}>
+          ℹ️ Note: If this student currently holds an active hostel bed, please vacate the bed in Hostel Management before assigning bus transport.
+        </small>
+      ) : null}
+      {initialAllocation?.studentType === "Non-Residential" && initialAllocation?.transportRequired === "Yes" && form.studentType === "Residential" ? (
+        <small className="student-profile-full" style={{ color: "#b45309", background: "rgba(245, 158, 11, 0.1)", padding: "8px 12px", borderRadius: "6px", border: "1px solid rgba(245, 158, 11, 0.3)" }}>
+          ℹ️ Note: If this student currently has an active bus transport allotment, please unassign bus transport in Transport Management before allocating a hostel bed.
+        </small>
+      ) : null}
+      <AllocationSelectField label="Student Type" value={form.studentType} onChange={changeAllocation("studentType")} onBlur={blur("studentType")} error={errors.studentType} options={["Non-Residential", "Residential"]} placeholder="Select Type" />
+      {form.studentType === "Non-Residential" ? <AllocationSelectField label="School Transport Facility Required?" value={form.transportRequired} onChange={changeAllocation("transportRequired")} onBlur={blur("transportRequired")} error={errors.transportRequired} options={["Yes", "No"]} placeholder="Select option" /> : null}
+      {form.studentType === "Non-Residential" && form.transportRequired === "Yes" ? <><AllocationSelectField label="Bus Type" value={form.busType} onChange={changeAllocation("busType")} onBlur={blur("busType")} error={errors.busType} options={["AC", "Non-AC"]} placeholder="Select Bus Type" /><AllocationSelectField label="Route" value={form.busRoute} onChange={changeAllocation("busRoute")} onBlur={blur("busRoute")} error={errors.busRoute} options={routeOptions} placeholder={form.busType ? "Select Route" : "Select Bus Type first"} /><AllocationSelectField label="Pickup Point" value={form.pickupPoint} onChange={changeAllocation("pickupPoint")} onBlur={blur("pickupPoint")} error={errors.pickupPoint} options={pickupOptions} placeholder={form.busRoute ? "Select Pickup Point" : "Select Route first"} /></> : null}
+      {form.studentType === "Residential" ? <><AllocationSelectField label="Hostel Block" value={form.hostelBlock} onChange={changeAllocation("hostelBlock")} onBlur={blur("hostelBlock")} error={errors.hostelBlock} options={hostelBlockOptions} unavailableLabel={form.hostelBlockName && !/^\d+$/.test(form.hostelBlockName) ? `${form.hostelBlockName} (unavailable — select a block)` : "Saved hostel block unavailable — select a block"} placeholder="Select Hostel Block" /><AllocationSelectField label="Room Type" value={form.hostelRoom} onChange={changeAllocation("hostelRoom")} onBlur={blur("hostelRoom")} error={errors.hostelRoom} options={hostelRoomOptions} placeholder={form.hostelBlock ? "Select Room Type" : "Select Hostel Block first"} /></> : null}
+      {allocationLookupError && (form.studentType === "Residential" || (form.studentType === "Non-Residential" && form.transportRequired === "Yes")) ? <small className="student-allocation-lookup-error student-profile-full">{allocationLookupError}</small> : null}
+    </ProfileSection>
+    <ProfileSection title="Previous Education">
+      <Field label="Previous School"><input value={form.previousSchool} onChange={change("previousSchool")} /></Field><Field label="Previous Hall Ticket Number"><input value={form.previousHallTicketNumber} onChange={change("previousHallTicketNumber")} /></Field><Field label="Previous Board"><input value={form.previousBoard} onChange={change("previousBoard")} /></Field><Field label="Previous Year of Passing" {...field("previousYearOfPassing")}><input type="number" min="1900" max={new Date().getFullYear()} value={form.previousYearOfPassing} onChange={change("previousYearOfPassing")} /></Field><Field label="Previous Percentage" {...field("previousPercentage")}><input type="number" min="0" max="100" step="0.01" value={form.previousPercentage} onChange={change("previousPercentage")} /></Field>
+    </ProfileSection>
+    <ProfileSection title="Address"><Field label="Address" className="student-profile-full" {...field("address")}><textarea value={form.address} onChange={change("address")} rows="3" maxLength="250" /></Field><Field label="City" {...field("city")}><input value={form.city} onChange={change("city")} maxLength="100" /></Field><Field label="District" {...field("district")}><input value={form.district} onChange={change("district")} maxLength="100" /></Field><Field label="State" {...field("state")}><input value={form.state} onChange={change("state")} maxLength="100" /></Field><Field label="Pincode" {...field("pincode")}><input type="text" inputMode="numeric" maxLength="6" value={form.pincode} onChange={numericChange("pincode", 6)} /></Field></ProfileSection>
+    <ProfileSection title="Parent Details"><Field label="Father Name" {...field("fatherName")}><input value={form.fatherName} onChange={change("fatherName")} maxLength="100" /></Field><Field label="Father Occupation" {...field("fatherOccupation")}><input value={form.fatherOccupation} onChange={change("fatherOccupation")} maxLength="100" /></Field><Field label="Father Mobile" {...field("fatherMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.fatherMobile} onChange={numericChange("fatherMobile", 10)} /></Field><Field label="Mother Name" {...field("motherName")}><input value={form.motherName} onChange={change("motherName")} maxLength="100" /></Field><Field label="Mother Occupation" {...field("motherOccupation")}><input value={form.motherOccupation} onChange={change("motherOccupation")} maxLength="100" /></Field><Field label="Mother Mobile" {...field("motherMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.motherMobile} onChange={numericChange("motherMobile", 10)} /></Field><Field label="Guardian Name" {...field("guardianName")}><input value={form.guardianName} onChange={change("guardianName")} maxLength="100" /></Field><Field label="Guardian Mobile" {...field("guardianMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.guardianMobile} onChange={numericChange("guardianMobile", 10)} /></Field><Field label="Parent/Guardian Email" {...field("parentGuardianEmail")}><input type="email" value={form.parentGuardianEmail} onChange={change("parentGuardianEmail")} maxLength="254" /></Field></ProfileSection>
+    <div className="student-profile-edit-actions">{embedded ? <button type="button" className="cms-btn cms-btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button> : <Link to={`/dashboard/students/${id}`} className="cms-btn cms-btn-ghost">Cancel</Link>}<button className="cms-btn cms-btn-primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button></div>
+  </form>;
+  if (embedded) return <>{editor}<Toast message={message} onClose={() => setMessage("")} /></>;
+  return <DashboardLayout title="EDIT STUDENT PROFILE" subtitle="Update student personal and family information." breadcrumb={["People", "Students"]}>{editor}<Toast message={message} onClose={() => setMessage("")} /></DashboardLayout>;
+}
+
+const profileSectionIcons = { "Admission Details": ClipboardList, "Personal Information": User, "Contact Information": Mail, "Academic Placement": GraduationCap, "Student Type & Residential Allocation": Bus, "Previous Education": School, Address: MapPin, "Parent Details": Users };
+function ProfileSection({ title, children }) { const Icon = profileSectionIcons[title]; return <section data-profile-section={({ "Admission Details": "academic", "Personal Information": "personal", "Contact Information": "contact", "Academic Placement": "academic", "Student Type & Residential Allocation": "transport", "Previous Education": "academic", Address: "contact", "Parent Details": "parent" })[title]} className="student-profile-section"><header className="student-profile-section-head">{Icon ? <span className="student-profile-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
+function Field({ label, required = false, error, className = "", children, onBlur }) { return <label className={`cms-field ${className}${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span>{children}{error ? <small className="cms-field-error">{error}</small> : null}</label>; }
+function SelectField({ label, value, onChange, options, placeholder, disabled = false, required = false, error, onBlur, loading = false }) {
+  const selected = String(value ?? "");
+  const hasSelectedOption = options.some((option) => option.value === selected);
+  return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span><select value={selected} onChange={onChange} disabled={disabled} aria-busy={loading}><option value="">{loading ? `Loading ${label.toLowerCase()}…` : placeholder}</option>{selected && !hasSelectedOption ? <option value={selected}>{loading ? `Loading ${label.toLowerCase()}…` : `${label} ${selected} (unavailable)`}</option> : null}{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
+}
+function AllocationSelectField({ label, value, onChange, onBlur, error, options, placeholder, unavailableLabel }) {
+  const selected = String(value ?? "");
+  const hasSelectedOption = options.some((option) => String(typeof option === "string" ? option : option.value) === selected);
+  return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label} <span className="req">*</span></span><select value={selected} onChange={onChange}><option value="">{placeholder}</option>{selected && !hasSelectedOption ? <option value={selected} disabled={Boolean(unavailableLabel)}>{unavailableLabel || selected}</option> : null}{options.map((option) => { const optionValue = typeof option === "string" ? option : option.value; const optionLabel = typeof option === "string" ? option : option.label; return <option key={optionValue} value={optionValue}>{optionLabel}</option>; })}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
+}
+
