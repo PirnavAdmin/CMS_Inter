@@ -886,15 +886,16 @@ await describe("Fee Management - collection", async () => {
   const nodes = node => node && typeof node === "object" ? [node, ...(node.props?.children || []).flat(Infinity).flatMap(nodes)] : [];
   const React = { createElement: (type, props, ...children) => ({ type, props: { ...props, children: children.flat(Infinity) } }), Fragment: "Fragment" };
   async function mount(name, bindings, props) {
-    const end = name === "CollectPayment" ? "function PaymentReceipt" : "function FeeLedger";
-    const { code } = await transformWithOxc(source.slice(source.indexOf(`function ${name}`), source.indexOf(end)), "Collection.jsx", { jsx: { runtime: "classic" } });
-    let cursor = 0, hooks = [], tree;
-    const context = vm.createContext({ React, ...feeView, ...service, PAYMENT_METHODS: ["Cash", "UPI", "Card", "Net Banking", "Cheque"], Modal: "Modal", FeeNotice: "FeeNotice", FeeLoadState: "LoadState", FeeTable: "FeeTable", FeeBadge: "FeeBadge", Link: "Link", ArrowLeft: "ArrowLeft", History: "History", WalletCards: "WalletCards", Printer: "Printer", field: () => ({}), CollectPayment: function CollectPayment() {}, PaymentReceipt: function PaymentReceipt() {},
+    const start = name === "PaymentReceipt" ? "const amountToWords" : `function ${name}`;
+    const end = name === "CollectPayment" ? "const amountToWords" : name === "PaymentReceipt" ? "export function FeeReceiptActions" : name === "FeeReceiptActions" ? "export function SavedPaymentReceipt" : name === "SavedPaymentReceipt" ? "function FeeDetails" : "function FeeLedger";
+    const { code } = await transformWithOxc(source.slice(source.indexOf(start), source.indexOf(end)).replace(/^export /gm, ""), "Collection.jsx", { jsx: { runtime: "classic" } });
+    let cursor = 0, hooks = [], tree, effects = [];
+    const context = vm.createContext({ React, ...feeView, ...service, PAYMENT_METHODS: ["Cash", "UPI", "Card", "Net Banking", "Cheque"], Modal: "Modal", FeeNotice: "FeeNotice", FeeLoadState: "LoadState", FeeTable: "FeeTable", FeeBadge: "FeeBadge", Link: "Link", ArrowLeft: "ArrowLeft", ChevronDown: "ChevronDown", Eye: "Eye", History: "History", WalletCards: "WalletCards", Printer: "Printer", COLLEGE_NAME: "Pirnav College", collegeLogo: "/logo.png", AbortController, DOMException, useEffectivePermissions: () => ({ loading: false, canView: () => true, canDo: () => true }), field: () => ({}), CollectPayment: function CollectPayment() {}, PaymentReceipt: function PaymentReceipt() {},
       useState: initial => { const index = cursor++; hooks[index] ??= { value: typeof initial === "function" ? initial() : initial }; return [hooks[index].value, value => { hooks[index].value = typeof value === "function" ? value(hooks[index].value) : value; }]; },
-      useRef: initial => { const index = cursor++; return hooks[index] ??= { current: initial }; }, useCallback: fn => fn, useEffect: () => {}, ...bindings });
+      useRef: initial => { const index = cursor++; return hooks[index] ??= { current: initial }; }, useCallback: fn => fn, useEffect: effect => { effects.push(effect); }, ...bindings });
     vm.runInContext(`${code};globalThis.Component=${name}`, context);
-    const render = () => { cursor = 0; tree = context.Component(props); return nodes(tree); };
-    return { render, all: () => nodes(tree) };
+    const render = () => { cursor = 0; effects = []; tree = context.Component(props); return nodes(tree); };
+    return { render, all: () => nodes(tree), runEffects: () => effects.map(effect => effect()) };
   }
 
   test("modal blocks double clicks and repeat submissions after an unconfirmed response", async () => {
@@ -939,20 +940,178 @@ await describe("Fee Management - collection", async () => {
 
   test("receipt renders confirmed values and prints only its own document without a retrieval request", async () => {
     let printed = 0, cloned;
-    const printDocument = { body: { appendChild: node => { cloned = node; } }, head: { appendChild() {} }, createElement: () => ({}), importNode: node => node };
-    const frame = { style: {}, contentDocument: printDocument, contentWindow: { addEventListener() {}, focus() {}, print: () => { printed++; } }, remove() {} };
-    const view = await mount("PaymentReceipt", { document: { createElement: () => frame, body: { appendChild() {} } } }, { payment: saved, account, onClose() {} });
+    const printDocument = { open() {}, write() {}, close() {}, images: [], body: { appendChild: node => { cloned = node; }, getBoundingClientRect() {} }, head: { appendChild() {} }, createElement: () => ({}), importNode: node => node };
+    const frame = { style: {}, setAttribute() {}, contentWindow: { document: printDocument, addEventListener() {}, removeEventListener() {}, focus() {}, print: () => { printed++; } }, remove() {} };
+    const view = await mount("PaymentReceipt", { window: { setTimeout, clearTimeout }, document: { baseURI: "http://localhost:5173/", querySelectorAll: () => [], createElement: () => frame, body: { appendChild() {} } } }, { payment: saved, account, onClose() {} });
     const all = view.render();
-    assert(all.some(node => node.type === "dd" && node.props.children.includes("ACTUAL-50")));
-    assert(all.some(node => node.type === "dd" && node.props.children.includes(feeView.feeMoney(195))));
+    assert(all.some(node => node.type === "span" && node.props.children.includes("ACTUAL-50")));
+    assert(all.some(node => node.type === "td" && node.props.children.includes(feeView.feeMoney(195))));
     const receipt = all.find(node => node.props?.ref);
     const actualNode = { receiptOnly: true };
     receipt.props.ref.current = actualNode;
-    const printButton = nodes(all[0].props.footer).find(node => node.type === "button" && node.props.children.includes(" Print Receipt"));
-    printButton.props.onClick();
+    const printButton = nodes(all[0].props.footer).find(node => node.type === "button" && node.props.children.includes("Print Receipt"));
+    await printButton.props.onClick();
     assert.equal(printed, 1); assert.equal(cloned, actualNode);
     assert(!source.includes("dangerouslySetInnerHTML"));
   });
+
+  test("saved receipts require view permission and use the selected payment ID with GET only", async () => {
+    assert.equal(service.feeReceiptAccess({ loading: false, canView: () => true }), true);
+    assert.equal(service.feeReceiptAccess({ loading: true, canView: () => true }), false);
+    assert.equal(service.feeReceiptAccess({ isAccountant: true, canView: () => false }), false);
+    const calls = [];
+    await withAdapter(config => { calls.push(config); return saved; }, async () => {
+      assert.equal((await service.loadSavedFeePayment(saved, undefined, () => true)).receiptNumber, "ACTUAL-50");
+      await assert.rejects(service.loadSavedFeePayment(saved, undefined, () => false), /view permission/);
+    });
+    assert.deepEqual(calls.map(config => [config.method, config.url]), [["get", "/api/v1/fees/payments/50"]]);
+    assert(!("groupName" in saved));
+  });
+
+  test("saved receipts reject mismatched identities, wrong receipt numbers and incomplete data", async () => {
+    for (const mutation of [{ feePaymentId: 51 }, { studentId: 11 }, { studentFeeId: 101 }, { receiptNumber: "OTHER" }, { studentName: "" }, { admissionNumber: "" }, { amount: null }, { amount: 0 }, { paymentDate: "invalid" }, { paymentMethod: "" }, { status: "Failed" }]) {
+      await withAdapter(() => ({ ...saved, ...mutation }), async () => {
+        await assert.rejects(service.loadSavedFeePayment(saved, undefined, () => true), /does not match|incomplete/);
+      });
+    }
+    await withAdapter(() => ({ ...saved, receiptNumber: "RESTORED-50" }), async () => {
+      assert.equal((await service.loadSavedFeePayment({ ...saved, receiptNumber: "" }, undefined, () => true)).receiptNumber, "RESTORED-50");
+    });
+    let calls = 0;
+    await withAdapter(() => { calls++; return saved; }, async () => {
+      await assert.rejects(service.loadSavedFeePayment({ ...saved, feePaymentId: undefined }, undefined, () => true), /identifiers/);
+      await assert.rejects(service.loadSavedFeePayment({ ...saved, status: "Pending" }, undefined, () => true), /not confirmed/);
+    });
+    assert.equal(calls, 0);
+  });
+
+  test("historical receipt requests stop on denied, missing, failed or cancelled reads", async () => {
+    for (const status of [401, 403, 404, 500]) {
+      let calls = 0;
+      await withAdapter(config => { calls++; throw { config, response: { status } }; }, async () => {
+        await assert.rejects(service.loadSavedFeePayment(saved, undefined, () => true));
+      });
+      assert.equal(calls, 1);
+    }
+    const controller = new AbortController(); controller.abort();
+    await assert.rejects(service.loadSavedFeePayment(saved, controller.signal, () => true), /abort/i);
+  });
+
+  test("both actions pass the raw saved transaction and never collect another payment", async () => {
+    const selected = [];
+    const view = await mount("FeeReceiptActions", {}, { payment: saved, allowed: true, onSelect: value => selected.push(value) });
+    const buttons = view.render().filter(node => node.type === "button");
+    assert.deepEqual(buttons.map(button => button.props["aria-label"]), ["View Receipt", "Print Receipt"]);
+    buttons.forEach(button => button.props.onClick());
+    assert.equal(selected[0].payment, saved); assert.equal(selected[1].payment, saved);
+    assert.equal(selected[0].autoPrint, false); assert.equal(selected[1].autoPrint, true);
+    const blocked = await mount("FeeReceiptActions", {}, { payment: { ...saved, status: "Failed" }, onSelect() {} });
+    assert(blocked.render().filter(node => node.type === "button").every(button => button.props.disabled));
+  });
+
+  test("historical receipts use fresh payment details without a current-account fallback", async () => {
+    const state = { data: saved, loading: false, error: "", reload() {} };
+    const view = await mount("SavedPaymentReceipt", { useFinancePage: () => state }, { payment: saved, autoPrint: true, onClose() {} });
+    const receipt = view.render()[0];
+    assert.equal(receipt.props.payment, saved); assert.equal(receipt.props.account, null); assert.equal(receipt.props.autoPrint, true);
+    state.data = { ...saved, feePaymentId: 51, receiptNumber: "ACTUAL-51" };
+    assert.equal(view.render()[0].props.payment.receiptNumber, "ACTUAL-51");
+    state.data = null; state.loading = true;
+    assert(!view.render().some(node => node.props?.payment));
+    state.loading = false; state.error = "Not found";
+    assert(view.render().some(node => node.type === "FeeNotice"));
+  });
+
+  test("direct print waits for styles and fonts after the selected receipt mounts, and blocks rapid duplicate clicks", async () => {
+    let printed = 0, receiptClone, linkClone, afterPrint, removed = 0, finishPrint, readyFonts;
+    const printStarted = new Promise(resolve => { finishPrint = resolve; });
+    const fontsReady = new Promise(resolve => { readyFonts = resolve; });
+    const printDocument = { open() {}, write() {}, close() {}, images: [], fonts: { ready: fontsReady },
+      body: { appendChild: node => { receiptClone = node; }, getBoundingClientRect() {} },
+      head: { appendChild(node) { if (node.tagName === "LINK") linkClone = node; } }, createElement: () => ({}), importNode: node => ({ ...node }) };
+    const frame = { style: {}, setAttribute() {}, contentWindow: { document: printDocument, addEventListener: (event, callback) => { afterPrint = callback; }, removeEventListener() {}, focus() {}, print() { printed++; finishPrint(); } }, remove() { removed++; } };
+    const view = await mount("PaymentReceipt", { window: { setTimeout, clearTimeout }, document: { baseURI: "http://localhost:5173/", querySelectorAll: () => [{ tagName: "LINK", href: "/receipt.css" }], createElement: () => frame, body: { appendChild() {} } } }, { payment: saved, account: null, autoPrint: true, onClose() {} });
+    const all = view.render();
+    all.find(node => node.props?.ref).props.ref.current = { receiptOnly: true, receiptNumber: saved.receiptNumber };
+    const cleanups = view.runEffects();
+    assert.equal(printed, 0);
+    assert(!all.some(node => node.type === "Modal"));
+    assert(all.some(node => node.props?.["aria-hidden"] === "true" && node.props.style?.left === "-10000px"));
+    // A second print effect while preparation is pending must share the guard.
+    view.runEffects();
+    assert.equal(printed, 0);
+    linkClone.onload(); readyFonts();
+    await printStarted;
+    assert.equal(printed, 1); assert.equal(receiptClone.receiptOnly, true); assert.equal(receiptClone.receiptNumber, "ACTUAL-50");
+    afterPrint(); assert.equal(removed, 1);
+    cleanups.forEach(cleanup => { if (typeof cleanup === "function") cleanup(); });
+  });
+
+  test("View never auto-prints, and View/Print share exactly the same receipt template", async () => {
+    let unexpectedPrints = 0;
+    const bindings = { document: { createElement() { unexpectedPrints++; throw new Error("View must not print"); } } };
+    const viewed = await mount("PaymentReceipt", bindings, { payment: saved, account: null, onClose() {} });
+    const visible = viewed.render(); viewed.runEffects();
+    assert(visible.some(node => node.type === "Modal"));
+    assert.equal(unexpectedPrints, 0);
+    const direct = await mount("PaymentReceipt", {}, { payment: saved, account: null, autoPrint: true, onClose() {} });
+    const hidden = direct.render();
+    assert(!hidden.some(node => node.type === "Modal"));
+    const template = all => all.find(node => node.props?.className === "cms-fee-receipt cms-fee-receipt-print");
+    assert.deepEqual(JSON.parse(JSON.stringify(template(visible))), JSON.parse(JSON.stringify(template(hidden))));
+    assert(nodes(visible[0].props.footer).some(node => node.props?.children?.includes("Print Receipt")));
+  });
+
+  test("direct printing never renders a modal while loading, denied, or failed", async () => {
+    const state = { data: null, loading: true, error: "", reload() {} };
+    const view = await mount("SavedPaymentReceipt", { useFinancePage: () => state }, { payment: saved, autoPrint: true, onClose() {} });
+    assert(!view.render().some(node => node.type === "Modal"));
+    state.loading = false; state.error = "Permission denied";
+    assert(!view.render().some(node => node.type === "Modal"));
+    assert(view.render().some(node => node.type === "FeeNotice"));
+  });
+
+  test("saved academic fields use flat and nested response labels without current student or navbar substitutions", async () => {
+    const academic = { Group: { GroupId: 2, GroupName: "Historical BiPC" }, Program: { ProgramName: "Historical Program" }, Section: { SectionName: "Old A" }, AcademicYear: { AcademicYearName: "2024-2025" }, Campus: { CampusName: "Old Campus" }, student: { groupName: "Wrong current group" } };
+    const view = await mount("PaymentReceipt", {}, { payment: { ...saved, ...academic }, account: null, onClose() {} });
+    const values = view.render().filter(node => node.type === "td").flatMap(node => node.props.children);
+    for (const value of ["Historical BiPC", "Historical Program", "Old A", "2024-2025", "Old Campus"]) assert(values.includes(value), value);
+    assert(!values.includes("Wrong current group"));
+    const flat = await mount("PaymentReceipt", {}, { payment: { ...saved, groupName: "MPC", programName: "Regular", sectionName: "A", academicYearName: "2025-2026", campusName: "Saved Campus" }, account: null, onClose() {} });
+    const flatValues = flat.render().filter(node => node.type === "td").flatMap(node => node.props.children);
+    for (const value of ["MPC", "Regular", "A", "2025-2026", "Saved Campus"]) assert(flatValues.includes(value));
+    const missing = await mount("PaymentReceipt", {}, { payment: { ...saved, group: { groupId: 2 }, campus: { campusId: 3 }, academicYear: {} }, account: null, onClose() {} });
+    assert(missing.render().filter(node => node.type === "td").some(node => node.props.children.includes("-")));
+    assert(missing.render().filter(node => node.type === "td").flatMap(node => node.props.children).every(value => typeof value !== "object"));
+  });
+
+  test("account transactions load saved bulk history when details omit it and retain only the selected fee account", async () => {
+    const calls = [];
+    await withAdapter(config => { calls.push(config); return { 10: [saved, { ...saved, feePaymentId: 51, studentFeeId: 101 }] }; }, async () => {
+      const rows = await service.loadFeeAccountPayments(account, undefined, () => true);
+      assert.deepEqual(rows.map(row => row.feePaymentId), [50]);
+    });
+    assert.deepEqual(calls.map(config => [config.method, config.url, JSON.parse(config.data)]), [["post", "/api/v1/fees/bulk-history", [10]]]);
+    await assert.rejects(service.loadFeeAccountPayments(account, undefined, () => false), /create permission/);
+    await withAdapter(() => { throw new Error("No extra request expected"); }, async () => {
+      assert.equal((await service.loadFeeAccountPayments({ ...account, paymentHistory: [saved] })).length, 1);
+    });
+    await withAdapter(() => ({ 10: [{ ...saved, studentId: 11 }] }), async () => {
+      await assert.rejects(service.loadFeeAccountPayments(account, undefined, () => true), /mismatched/);
+    });
+  });
+
+  test("history keeps scoped data and pagination while exposing shared receipt actions", async () => {
+    const payments = await readFile(new URL("../pages/AccountantPayments.jsx", import.meta.url), "utf8");
+    assert(payments.includes("loadPaymentHistory(campusParams, signal"));
+    assert(payments.includes('pageOf(feeRows, feePageNumber, "", "", 5)'));
+    assert(payments.includes('String(b.date).localeCompare(String(a.date))'));
+    assert(payments.includes("receiptSelection?.scope === receiptScope"));
+    assert(payments.includes("<FeeReceiptActions payment={row.payment}"));
+    assert(source.includes("loadFeeAccountPayments(state.data, signal"));
+    assert(!payments.includes("Historical receipt retrieval is unavailable"));
+  });
+
 });
 
 await describe("Leave", async () => {
