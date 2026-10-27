@@ -1309,9 +1309,16 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
     setHighlightIndex(0);
   };
 
-  const removeSubject = (subjectName) => {
+  const removeSubject = async (subjectName) => {
     const next = selectedSubjects.filter((s) => s !== subjectName);
     if (typeof onChange === "function") onChange(next);
+    if (staffId) {
+      try {
+        await staffApi.unassignStaffSubject(Number(staffId) || staffId, subjectName);
+      } catch (err) {
+        console.warn("Unassign subject API notice:", err);
+      }
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -2616,6 +2623,18 @@ function Field({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [localFile, setLocalFile] = useState(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl && localPreviewUrl.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(localPreviewUrl);
+        } catch {
+          // ignore URL revocation error
+        }
+      }
+    };
+  }, [localPreviewUrl]);
   const isValidItem = Array.isArray(item) && item.length >= 2;
   const name = isValidItem ? (item[0] || "") : "";
   const label = isValidItem ? (item[1] || name || "") : "";
@@ -2873,6 +2892,7 @@ function Field({
           ...prev,
           [name]: file.name,
           [name + "_previewUrl"]: previewUrl,
+          [name + "_file"]: file,
         }));
       } else {
         change(file.name);
@@ -3060,6 +3080,13 @@ function Field({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (localPreviewUrl && localPreviewUrl.startsWith("blob:")) {
+                    try {
+                      URL.revokeObjectURL(localPreviewUrl);
+                    } catch {
+                      // ignore URL revocation error
+                    }
+                  }
                   change("");
                   setLocalFile(null);
                   setLocalPreviewUrl("");
@@ -4085,6 +4112,9 @@ function StaffList({ records = [], setRecords, forced }) {
         const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
         const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || row.boardName || activeBoardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
+        const activeCampusName = selectedCampus?.name ?? selectedCampus?.campusName;
+        const activeCampusCode = selectedCampus?.code ?? selectedCampus?.campusCode;
 
         const empId = row.employeeId || generateNextNumber(row.staffType === "Non-Teaching" ? "NON_TEACHING_STAFF" : "TEACHING_STAFF");
         if (!row.employeeId) {
@@ -4113,6 +4143,11 @@ function StaffList({ records = [], setRecords, forced }) {
           boardName: activeBoardName,
           boardCode: activeBoardCode,
           ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
+          campusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
+          campusName: activeCampusName || undefined,
+          campusCode: activeCampusCode || undefined,
+          assignedCampusIds: activeCampusId ? [Number(activeCampusId)] : [],
+          assignedCampuses: activeCampusName ? [activeCampusName] : [],
           allocatedSubjects: row.allocatedSubjects || [],
           subjects: row.subjects || [],
         };
@@ -4230,7 +4265,9 @@ function StaffList({ records = [], setRecords, forced }) {
     } catch (err) {
       console.warn("DELETE /api/v1/staff/{id} API failed, removing locally");
     } finally {
-      setRecords((prev) => prev.filter((r) => r.id !== remove.id));
+      setRecords((prev) => prev.filter((r) => String(r.id) !== String(remove.id)));
+      setApiItems((prev) => Array.isArray(prev) ? prev.filter((r) => String(r.id) !== String(remove.id)) : null);
+      setTotalApiCount((prev) => Math.max(0, prev - 1));
       setRemove(null);
       try {
         window.dispatchEvent(new Event("staff-records-updated"));
@@ -4865,9 +4902,34 @@ function TeachingForm({ records, setRecords, existing }) {
         const res = await apiClient.post(apiEndpoints.faculty.create, payload);
         targetId = res.data?.id || res.data?.staffId;
       }
+
+      const photoFile = values.profilePhoto_file || values.photo_file;
+      let finalPhotoPath = values.profilePhoto || values.photo || values.photoPath || "";
+      if (photoFile && targetId) {
+        try {
+          const photoData = new FormData();
+          photoData.append("Photo", photoFile);
+          photoData.append("file", photoFile);
+          photoData.append("StaffId", String(targetId));
+          photoData.append("staffId", String(targetId));
+          const uploadRes = await apiClient.post(apiEndpoints.faculty.uploadPhoto, photoData, {
+            headers: { "Content-Type": "multipart/form-data" }
+          });
+          const serverUploaded = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || uploadRes?.data?.profilePhoto;
+          if (serverUploaded) {
+            finalPhotoPath = serverUploaded;
+          }
+        } catch (photoErr) {
+          console.warn("Failed to upload staff photo file in admin portal:", photoErr);
+        }
+      }
+
       const record = {
         ...payload,
         id: targetId,
+        photoPath: finalPhotoPath,
+        profilePhoto: finalPhotoPath,
+        photoUrl: finalPhotoPath,
         assignedCampusIds: finalAssignedCampusIds,
         assignedCampuses: values.assignedCampuses || [],
         assignedBoardIds: finalAssignedBoardIds,
@@ -5245,7 +5307,29 @@ function NonTeachingForm({ records, setRecords, existing }) {
         const res = await apiClient.post(apiEndpoints.faculty.create, payload);
         targetId = res.data?.id || res.data?.staffId;
       }
-      const record = { ...payload, id: targetId, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
+
+      const photoFile = values.profilePhoto_file || values.photo_file;
+      let finalPhotoPath = values.profilePhoto || values.photo || values.photoPath || "";
+      if (photoFile && targetId) {
+        try {
+          const photoData = new FormData();
+          photoData.append("Photo", photoFile);
+          photoData.append("file", photoFile);
+          photoData.append("StaffId", String(targetId));
+          photoData.append("staffId", String(targetId));
+          const uploadRes = await apiClient.post(apiEndpoints.faculty.uploadPhoto, photoData, {
+            headers: { "Content-Type": "multipart/form-data" }
+          });
+          const serverUploaded = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || uploadRes?.data?.profilePhoto;
+          if (serverUploaded) {
+            finalPhotoPath = serverUploaded;
+          }
+        } catch (photoErr) {
+          console.warn("Failed to upload staff photo file in admin portal:", photoErr);
+        }
+      }
+
+      const record = { ...payload, id: targetId, photoPath: finalPhotoPath, profilePhoto: finalPhotoPath, photoUrl: finalPhotoPath, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
       if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
       if (existing) {
@@ -5672,6 +5756,8 @@ function SendLink({ record, update, activity }) {
 // ----------------------------------------------------------------------
 function Pending({ records = [], setRecords, activity }) {
   const n = useNavigate();
+  const { selectedCampus } = useCampusContext();
+  const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
   const tabs = ["Link Sent", "In Progress", "Needs Correction", "Submitted"];
   const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
@@ -5685,9 +5771,11 @@ function Pending({ records = [], setRecords, activity }) {
   const fetchPendingStaff = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get(apiEndpoints.faculty.list, {
-        params: { staffType: "Teaching", pageSize: 100 },
-      });
+      const params = {
+        pageSize: 200,
+        ...(activeCampusId ? { campusId: activeCampusId } : {}),
+      };
+      const res = await apiClient.get(apiEndpoints.faculty.list, { params });
       if (res?.data) {
         const items = res.data.items || res.data.data || (Array.isArray(res.data) ? res.data : []);
         setApiItems(items);
@@ -5698,7 +5786,7 @@ function Pending({ records = [], setRecords, activity }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeCampusId]);
 
   useEffect(() => {
     fetchPendingStaff();
@@ -5961,11 +6049,28 @@ function Pending({ records = [], setRecords, activity }) {
                       ) : null}
                       <td><strong>{r.employeeId}</strong></td>
                       <td>
-                        <div>
-                          <strong>{r.fullName}</strong>
-                          {r.email && r.email !== "—" ? (
-                            <div style={{ fontSize: "11px", color: "var(--cms-muted)" }}>{r.email}</div>
-                          ) : null}
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          {(() => {
+                            const raw = r.profilePhoto || r.photo || r.photoPath || r.photoUrl;
+                            const photoSrc = typeof raw === "string" && raw.trim()
+                              ? (raw.startsWith("http") || raw.startsWith("data:") || raw.startsWith("blob:") ? raw : raw)
+                              : null;
+                            return (
+                              <div style={{ width: "32px", height: "32px", borderRadius: "50%", overflow: "hidden", background: "var(--cms-border, #e2e8f0)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {photoSrc ? (
+                                  <img src={photoSrc} alt={r.fullName} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                ) : (
+                                  <UserRound size={16} color="var(--cms-muted, #64748b)" />
+                                )}
+                              </div>
+                            );
+                          })()}
+                          <div>
+                            <strong>{r.fullName}</strong>
+                            {r.email && r.email !== "—" ? (
+                              <div style={{ fontSize: "11px", color: "var(--cms-muted)" }}>{r.email}</div>
+                            ) : null}
+                          </div>
                         </div>
                       </td>
                       <td>{r.boardCode || r.board || "—"}</td>
@@ -6149,8 +6254,9 @@ function Details({ record, records, setRecords, id }) {
         <section className="staff-detail-head">
           {(() => {
             const rawPhoto = activeRecord.profilePhoto || activeRecord.photo || activeRecord.photoPath || activeRecord.photoUrl || activeRecord.avatar || activeRecord.profileImage;
+            const photoBaseUrl = apiClient?.defaults?.baseURL ? apiClient.defaults.baseURL.replace(/\/+$/, "") : "";
             const photoSrc = typeof rawPhoto === "string" && rawPhoto.trim()
-              ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:") || rawPhoto.startsWith("blob:") ? rawPhoto : `http://localhost:5167${rawPhoto.startsWith("/") ? "" : "/"}${rawPhoto}`)
+              ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:") || rawPhoto.startsWith("blob:") ? rawPhoto : `${photoBaseUrl}${rawPhoto.startsWith("/") ? "" : "/"}${rawPhoto}`)
               : null;
             return photoSrc && !photoError ? (
               <img

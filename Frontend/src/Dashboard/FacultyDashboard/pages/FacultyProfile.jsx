@@ -571,7 +571,8 @@ export default function FacultyProfile() {
       ctx.restore();
 
       const croppedDataUrl = outCanvas.toDataURL("image/jpeg", 0.92);
-      const staffTargetId = profileData.id || profileData.facultyId || 1108;
+      const authUser = getAuthUser() || {};
+      const staffTargetId = profileData.staffId || profileData.id || profileData.facultyId || authUser.staffId || authUser.id;
       
       outCanvas.toBlob(async (blob) => {
         if (blob && staffTargetId) {
@@ -586,11 +587,17 @@ export default function FacultyProfile() {
               headers: { "Content-Type": "multipart/form-data" },
             });
 
-            const serverPath = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || uploadRes?.data?.profilePhoto;
+            const serverPath =
+              uploadRes?.data?.photoPath ||
+              uploadRes?.data?.PhotoPath ||
+              uploadRes?.data?.photoUrl ||
+              uploadRes?.data?.PhotoUrl ||
+              uploadRes?.data?.profilePhoto;
+
             const finalPhotoUrl = serverPath || `/uploads/staff-photos/photo_staff_${staffTargetId}.jpg`;
 
             setProfileData((prev) => {
-              const updated = { ...prev, photoUrl: finalPhotoUrl, photoPath: serverPath || finalPhotoUrl };
+              const updated = { ...prev, photoUrl: finalPhotoUrl, photoPath: finalPhotoUrl, profilePhoto: finalPhotoUrl };
               persistStaffProfile(updated);
               return updated;
             });
@@ -600,30 +607,22 @@ export default function FacultyProfile() {
               localStorage.setItem(`staff_profile_${staffTargetId}_photo`, finalPhotoUrl);
               window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: finalPhotoUrl } }));
             }
+            notify("Profile photo cropped and saved to server successfully!");
           } catch (e) {
             console.error("Photo upload to backend failed:", e);
+            notify("Photo uploaded locally, but sync with server failed. Please try saving again.", "warning");
           }
         }
       }, "image/jpeg", 0.92);
 
-      setProfileData((prev) => {
-        const updated = { ...prev, photoUrl: croppedDataUrl };
-        persistStaffProfile(updated);
-        return updated;
-      });
-      if (typeof window !== "undefined") {
-        localStorage.setItem("staff_profile_photo", croppedDataUrl);
-        if (staffTargetId) {
-          localStorage.setItem(`staff_profile_${staffTargetId}_photo`, croppedDataUrl);
-        }
-        window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: croppedDataUrl } }));
-      }
+      // Immediately display cropped preview while upload completes in background
+      setProfileData((prev) => ({ ...prev, photoUrl: croppedDataUrl }));
       setPhotoLoadError(false);
-      notify("Profile photo cropped and saved to server successfully!");
       setIsCropModalOpen(false);
       setRawImageToCrop(null);
     };
     img.src = rawImageToCrop;
+
   };
 
   const hasVal = (val) => {

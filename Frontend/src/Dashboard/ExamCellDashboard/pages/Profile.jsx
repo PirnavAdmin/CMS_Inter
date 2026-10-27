@@ -371,14 +371,24 @@ export default function Profile() {
       {/* PROFILE HEADER HERO CARD */}
       <section className="ec-card ec-profile-header-card">
         <div className="ec-profile-header-left">
-          <span className="ec-profile-avatar-circle">
-            {displayName
-              .split(/\s+/)
-              .slice(0, 2)
-              .map((word) => word[0])
-              .join("")
-              .toLowerCase()}
+          <span className="ec-profile-avatar-circle" style={{ overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+            {profile.photoUrl || profile.photoPath || profile.profilePhoto ? (
+              <img
+                src={profile.photoUrl || profile.photoPath || profile.profilePhoto}
+                alt={displayName}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+              />
+            ) : (
+              displayName
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((word) => word[0])
+                .join("")
+                .toLowerCase()
+            )}
           </span>
+
           <div className="ec-profile-header-meta">
             <div className="ec-profile-name-row">
               <h2>{displayName}</h2>

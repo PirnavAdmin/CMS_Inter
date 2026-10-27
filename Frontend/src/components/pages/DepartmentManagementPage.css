@@ -1047,6 +1047,9 @@
   }
 }
 @media (max-width: 700px) {
+  .master-table-wrap tbody tr.master-filler-row {
+    display: none !important;
+  }
   .master-page-actions {
     width: 100%;
     flex-wrap: wrap;

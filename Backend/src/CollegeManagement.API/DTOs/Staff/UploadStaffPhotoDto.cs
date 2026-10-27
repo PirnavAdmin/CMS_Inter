@@ -5,7 +5,6 @@ namespace CollegeManagement.API.DTOs.Staff
 {
     public class UploadStaffPhotoDto
     {
-        [Required(ErrorMessage = "Staff ID is required.")]
         public int StaffId { get; set; }
 
         public int FacultyId
@@ -14,7 +13,17 @@ namespace CollegeManagement.API.DTOs.Staff
             set => StaffId = value;
         }
 
-        [Required(ErrorMessage = "Photo file is required.")]
-        public IFormFile Photo { get; set; } = null!;
+        public int Id
+        {
+            get => StaffId;
+            set => StaffId = value;
+        }
+
+        public IFormFile? Photo { get; set; }
+        public IFormFile? File { get; set; }
+        public IFormFile? ProfilePhoto { get; set; }
+
+        public IFormFile? GetFile() => Photo ?? File ?? ProfilePhoto;
     }
 }
+

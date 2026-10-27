@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
+using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -239,6 +240,45 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> DeleteSubjectAllocation(int id)
         {
             await _staffService.DeleteSubjectAllocationAsync(id);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// 3b. DELETE /api/v1/staff/{staffId:int}/unassign-subject
+        /// Unassign a subject from a staff member by subject name or subject ID.
+        /// </summary>
+        [HttpDelete("{staffId:int}/unassign-subject")]
+        [AllowAnonymous]
+        public async Task<IActionResult> UnassignSubject(
+            int staffId,
+            [FromQuery] string? subjectName = null,
+            [FromQuery] int? subjectId = null,
+            CancellationToken ct = default)
+        {
+            var allocations = await _db.StaffSubjectAllocations
+                .Include(a => a.Subject)
+                .Where(a => a.StaffId == staffId)
+                .ToListAsync(ct);
+
+            StaffSubjectAllocation? target = null;
+            if (subjectId.HasValue && subjectId.Value > 0)
+            {
+                target = allocations.FirstOrDefault(a => a.SubjectId == subjectId.Value);
+            }
+            else if (!string.IsNullOrWhiteSpace(subjectName))
+            {
+                var clean = subjectName.Trim().ToLowerInvariant();
+                target = allocations.FirstOrDefault(a =>
+                    (a.Subject != null && (a.Subject.SubjectName.ToLower() == clean || a.Subject.SubjectCode.ToLower() == clean)) ||
+                    (a.Subject != null && clean.Contains(a.Subject.SubjectName.ToLower())));
+            }
+
+            if (target != null)
+            {
+                _db.StaffSubjectAllocations.Remove(target);
+                await _db.SaveChangesAsync(ct);
+            }
+
             return NoContent();
         }
 

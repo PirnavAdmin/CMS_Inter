@@ -293,7 +293,7 @@ export const apiEndpoints = {
     getById: (id) => `/api/v1/designations/${id}`,
     update: (id) => `/api/v1/designations/${id}`,
     delete: (id) => `/api/v1/designations/${id}`,
-    importExcel: "/api/v1/departments/import-excel",
+    importExcel: "/api/v1/designations/import-excel",
     exportExcel: "/api/v1/designations/export-excel",
     template: "/api/v1/designations/template",
     exportTemplate: "/api/v1/designations/template",
@@ -827,6 +827,14 @@ export const apiEndpoints = {
     assignUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/assign`,
     removeUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/remove`,
     myPermissions: "/api/v1/roles/my-permissions",
+  },
+  numberSeries: {
+    getAll: "/api/v1/settings/number-series",
+    getByCode: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
+    update: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
+    generateNext: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/generate-next`,
+    preview: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/preview`,
+    delete: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
   },
 };
 

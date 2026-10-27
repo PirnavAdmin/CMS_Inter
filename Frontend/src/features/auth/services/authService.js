@@ -795,6 +795,23 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     ? rawAssignedBoardIds.map(Number).filter(Boolean)
     : [];
 
+  const photoUrl =
+    data.PhotoUrl ||
+    data.photoUrl ||
+    data.PhotoPath ||
+    data.photoPath ||
+    data.ProfilePhoto ||
+    data.profilePhoto ||
+    data.photo ||
+    data.Photo ||
+    payload.PhotoUrl ||
+    payload.photoUrl ||
+    payload.PhotoPath ||
+    payload.photoPath ||
+    data.user?.photoUrl ||
+    payload.user?.photoUrl ||
+    "";
+
   const user = {
     id: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || data.AdminId || data.adminId || data.id || data.Id || payload.AdminId || payload.adminId || payload.id || payload.Id,
     userId: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || (isTransportManager ? 928 : null),
@@ -812,7 +829,11 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     isAdmin,
     assignedCampusIds,
     assignedBoardIds,
+    photoUrl,
+    photoPath: photoUrl,
+    profilePhoto: photoUrl,
   };
+
 
   return {
     token,

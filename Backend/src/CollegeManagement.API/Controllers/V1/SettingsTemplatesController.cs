@@ -21,7 +21,6 @@ namespace CollegeManagement.API.Controllers.V1
     [Route("api/v{version:apiVersion}/settings/templates")]
     [EnableCors("AllowFrontend")]
     [Authorize]
-    [RequirePermission("settings")]
     [Produces("application/json")]
     public class SettingsTemplatesController : ControllerBase
     {
@@ -106,7 +105,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Create a new template with dynamic placeholders and HTML content.
         /// </summary>
         [HttpPost]
-        [AllowAnonymous]
+        [RequirePermission("settings")]
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -134,7 +133,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Update an existing template (auto-increments Version and updates UpdatedAt).
         /// </summary>
         [HttpPut("{id:int}")]
-        [AllowAnonymous]
+        [RequirePermission("settings")]
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -165,7 +164,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Soft-delete / deactivate a template.
         /// </summary>
         [HttpDelete("{id:int}")]
-        [AllowAnonymous]
+        [RequirePermission("settings")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Delete(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
@@ -183,6 +182,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Toggle the active status of a template.
         /// </summary>
         [HttpPatch("{id:int}/toggle-active")]
+        [RequirePermission("settings")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ToggleActive(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)

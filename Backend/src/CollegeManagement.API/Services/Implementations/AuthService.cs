@@ -235,7 +235,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if ((!user.StaffId.HasValue || user.StaffId.Value <= 0) && !string.IsNullOrWhiteSpace(user.Email))
                 {
                     var staffByEmail = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Id, Designation, EmployeeId FROM Staffs WHERE Email = @Email AND IsDeleted = 0 ORDER BY Id DESC LIMIT 1", 
+                        "SELECT Id, Designation, EmployeeId FROM Staff WHERE Email = @Email AND IsDeleted = 0 ORDER BY Id DESC LIMIT 1", 
                         new { Email = user.Email.Trim() });
                     if (staffByEmail != null)
                     {
@@ -248,7 +248,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
                     staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType, PhotoPath FROM Staffs WHERE Id = @Id", 
+                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType, PhotoPath FROM Staff WHERE Id = @Id", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
@@ -288,6 +288,13 @@ namespace CollegeManagement.API.Services.Implementations
                     status: "Success",
                     details: $"Successful login for {user.Email}", overrideUser: user.FullName ?? user.Email, overrideRole: user.Role?.RoleName ?? "Unknown");
 
+                string? resolvedPhotoPath = (string?)staffInfo?.PhotoPath;
+                if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.AdminId.HasValue && user.AdminId.Value > 0)
+                {
+                    resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT PhotoPath FROM Admins WHERE Id = @Id", new { Id = user.AdminId.Value });
+                }
+
                 return new AuthResult
                 {
                     Status = true,
@@ -307,8 +314,8 @@ namespace CollegeManagement.API.Services.Implementations
                         : (user.StudentId.HasValue ? "Student" : (staffInfo?.StaffType ?? "Non-Teaching")),
                     AssignedCampusIds = assignedCampusIds,
                     AssignedBoardIds = assignedBoardIds,
-                    PhotoPath = (string?)staffInfo?.PhotoPath,
-                    PhotoUrl = (string?)staffInfo?.PhotoPath
+                    PhotoPath = resolvedPhotoPath,
+                    PhotoUrl = resolvedPhotoPath
                 };
             }
 
@@ -1196,16 +1203,24 @@ namespace CollegeManagement.API.Services.Implementations
             var canonicalRoleName = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? "User";
             
             string? staffType = null;
-            if (user.StaffId.HasValue && user.StaffId.Value > 0)
+            string? refreshPhotoPath = null;
+
+            if (user.AdminId.HasValue && user.AdminId.Value > 0)
+            {
+                refreshPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT PhotoPath FROM Admins WHERE Id = @Id", new { Id = user.AdminId.Value });
+            }
+            else if (user.StaffId.HasValue && user.StaffId.Value > 0)
             {
                 var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                    "SELECT Designation, EmployeeId, StaffType FROM Staffs WHERE Id = @Id", 
+                    "SELECT Designation, EmployeeId, StaffType, PhotoPath FROM Staff WHERE Id = @Id", 
                     new { Id = user.StaffId.Value });
                 if (staffInfo != null)
                 {
                     user.Designation = staffInfo.Designation;
                     user.EmployeeId = staffInfo.EmployeeId;
                     staffType = staffInfo.StaffType;
+                    refreshPhotoPath = (string?)staffInfo.PhotoPath;
                 }
             }
 
@@ -1229,7 +1244,9 @@ namespace CollegeManagement.API.Services.Implementations
                     ? "Admin"
                     : (staffType ?? (user.StudentId.HasValue ? "Student" : "Non-Teaching")),
                 Designation = user.Designation,
-                EmployeeId = user.EmployeeId
+                EmployeeId = user.EmployeeId,
+                PhotoPath = refreshPhotoPath,
+                PhotoUrl = refreshPhotoPath
             };
         }
     }

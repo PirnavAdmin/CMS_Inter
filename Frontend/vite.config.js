@@ -78,7 +78,19 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
+        "/uploads": {
+          target: apiBaseUrl,
+          changeOrigin: true,
+          secure: !isHttpsApi ? true : false,
+          agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
+          proxyTimeout: 120000,
+          timeout: 120000,
+          headers: {
+            "ngrok-skip-browser-warning": "true",
+          },
+        },
       },
+
     },
   };
 });

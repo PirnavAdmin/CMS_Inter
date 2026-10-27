@@ -50,23 +50,11 @@
   gap: 4px;
 }
 
-/* CARD GRID (4 COLUMNS DESKTOP, 2 TABLET, 1 MOBILE) */
+/* CARD GRID (RESPONSIVE AUTO-FIT) */
 .ns-card-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
-}
-
-@media (max-width: 1200px) {
-  .ns-card-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .ns-card-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .ns-card {
@@ -557,21 +545,22 @@
 .ns-field select,
 .ns-field textarea {
   width: 100%;
-  padding: 5px 9px;
-  font-size: 12.5px;
+  padding: 8px 12px;
+  font-size: 13.5px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: 8px;
   outline: none;
   box-sizing: border-box;
   background: #ffffff;
-  height: 32px;
+  height: 40px;
+  transition: all 0.2s ease;
 }
 
 .ns-field input:focus,
 .ns-field select:focus,
 .ns-field textarea:focus {
   border-color: #355e3b;
-  box-shadow: 0 0 0 3px rgba(53, 94, 59, 0.1);
+  box-shadow: 0 0 0 3px rgba(53, 94, 59, 0.12);
 }
 
 .ns-input-readonly {

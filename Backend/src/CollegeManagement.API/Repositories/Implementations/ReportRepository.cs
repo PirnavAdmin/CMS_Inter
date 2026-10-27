@@ -157,7 +157,7 @@ public class ReportRepository : IReportRepository
         if (fromDate.HasValue) attQuery = attQuery.Where(a => a.AttendanceDate >= fromDate.Value);
         if (toDate.HasValue) attQuery = attQuery.Where(a => a.AttendanceDate <= toDate.Value);
         var totalAtt = await attQuery.CountAsync(ct);
-        var presentAtt = totalAtt > 0 ? await attQuery.CountAsync(a => a.Status == AttendanceStatus.Present, ct) : 0;
+        var presentAtt = totalAtt > 0 ? await attQuery.CountAsync(a => a.Status == AttendanceStatus.Present || a.Status == AttendanceStatus.Late, ct) : 0;
         decimal attendancePct = totalAtt > 0 ? Math.Round((decimal)presentAtt * 100m / totalAtt, 2) : 0m;
 
         // 4. Fee Collection (Valid payments from FeePayments joined with Students)
@@ -316,7 +316,7 @@ public class ReportRepository : IReportRepository
                     .Select(g => new
                     {
                         Total = g.Count(),
-                        Present = g.Count(x => x.Status == AttendanceStatus.Present)
+                        Present = g.Count(x => x.Status == AttendanceStatus.Present || x.Status == AttendanceStatus.Late)
                     })
                     .ToListAsync(ct);
 
@@ -905,6 +905,19 @@ public class ReportRepository : IReportRepository
             var groupMap = await GetGroupMapAsync(ct);
             var sectionMap = await GetSectionMapAsync(ct);
 
+            var allSubjects = await _context.Subjects.AsNoTracking().ToListAsync(ct);
+            var subjectMarksMap = allSubjects
+                .GroupBy(x => x.SubjectId)
+                .ToDictionary(g => g.Key, g =>
+                {
+                    var s = g.First();
+                    if (s.TotalMarks > 0) return (decimal)s.TotalMarks;
+                    var name = (s.SubjectName ?? "").ToLowerInvariant();
+                    if (name.Contains("math")) return 75m;
+                    if (name.Contains("physic") || name.Contains("chemis") || name.Contains("botan") || name.Contains("zool")) return 60m;
+                    return 100m;
+                });
+
             return list.Select(r =>
             {
                 var s = studentMap.ContainsKey(r.StudentId) ? studentMap[r.StudentId] : null;
@@ -912,6 +925,7 @@ public class ReportRepository : IReportRepository
                 var sName = s?.SectionId.HasValue == true && sectionMap.ContainsKey(s.SectionId.Value) ? sectionMap[s.SectionId.Value] : "Section";
                 var examName = examMap.ContainsKey(r.ExamId) ? examMap[r.ExamId] : "Examination";
                 var subjName = subjectMap.ContainsKey(r.SubjectId) ? subjectMap[r.SubjectId] : "Subject";
+                var maxMarks = subjectMarksMap.TryGetValue(r.SubjectId, out var mm) && mm > 0 ? mm : 100m;
 
                 return new ResultAnalysisReportDto
                 {
@@ -923,7 +937,7 @@ public class ReportRepository : IReportRepository
                     ExamName = examName,
                     SubjectId = r.SubjectId,
                     SubjectName = subjName,
-                    TotalMarks = r.TotalMarks,
+                    TotalMarks = maxMarks,
                     MarksObtained = r.TotalMarks,
                     InternalMarks = r.InternalMarks,
                     ExternalMarks = r.ExternalMarks,
