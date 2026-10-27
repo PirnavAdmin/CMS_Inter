@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -43,6 +45,11 @@ namespace CollegeManagement.API.Models
 
         public DateTime? UpdatedAt { get; set; }
 
+        public int? MasterGroupId { get; set; }
+
+        [ForeignKey(nameof(MasterGroupId))]
+        public virtual MasterGroup? MasterGroupNavigation { get; set; }
+
         [ForeignKey(nameof(BoardId))]
         public Board? BoardNavigation { get; set; }
 
@@ -51,7 +58,8 @@ namespace CollegeManagement.API.Models
 
         [ForeignKey(nameof(AcademicLevelId))]
         public AcademicLevel? AcademicLevelNavigation { get; set; }
+
         public virtual ICollection<GroupProgram> GroupPrograms { get; set; }
-    = new List<GroupProgram>();
+            = new List<GroupProgram>();
     }
 }

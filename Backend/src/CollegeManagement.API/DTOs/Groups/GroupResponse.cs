@@ -1,8 +1,12 @@
-﻿namespace CollegeManagement.API.DTOs.Groups
+using System;
+using System.Collections.Generic;
+
+namespace CollegeManagement.API.DTOs.Groups
 {
     public class GroupResponse
     {
         public int GroupId { get; set; }
+        public int? MasterGroupId { get; set; }
         public int BoardId { get; set; }
         public string? BoardName { get; set; }
         public int AcademicYearId { get; set; }
@@ -18,7 +22,6 @@
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public List<int> ProgramIds { get; set; } = new();
-        public List<CollegeManagement.API.DTOs.Program.GroupProgramDto> Programs { get; set; }
-    = new();
+        public List<CollegeManagement.API.DTOs.Program.GroupProgramDto> Programs { get; set; } = new();
     }
 }
