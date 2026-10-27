@@ -61,6 +61,12 @@
   text-align: center;
 }
 
+.group-management .group-available-levels {
+  display: block;
+  color: var(--cms-muted);
+  margin-top: 4px;
+}
+
 .group-management .cms-pagination > .cms-page-btn {
   flex: 0 0 auto;
 }
