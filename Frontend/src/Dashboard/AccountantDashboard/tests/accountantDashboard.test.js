@@ -1545,3 +1545,133 @@ test("personal attendance never queries the student or administrative staff regi
   assert.match(source, /authorized personal staff attendance API/);
 });
 });
+
+await describe("Accountant homepage", async () => {
+  const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
+  after(() => server.close());
+  const service = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantService.js");
+  const source = await readFile(new URL("../AccountantDashboard.jsx", import.meta.url), "utf8");
+  const helpers = source.slice(source.indexOf("export function accountantGreeting"), source.indexOf("function useAccountantLoader")).replaceAll("export ", "");
+  const fixture = { Id: 12, FirstName: "Actual", LastName: "Accountant", EmployeeId: "EMP-12", StaffType: "Non-Teaching" };
+  const categories = [{ LeaveCategoryId: 1, CategoryName: "Casual", CategoryCode: "CL", AnnualQuota: 12, ApplicableStaffType: "Non-Teaching", IsActive: true }, { LeaveCategoryId: 2, CategoryName: "Teaching only", ApplicableStaffType: "Teaching", AnnualQuota: 20, IsActive: true }];
+  const contextFor = (get = async () => { throw Error("Unexpected request"); }) => {
+    const context = vm.createContext({ ...service, ...leaveHelpers, field: profileHelpers.profileValue, apiClient: { get }, getApiErrorMessage: error => error.message, attendanceService: { getMyTodayStatus: async () => ({ Data: { Status: "punched_in", InTime: "09:00", TodayStatus: "Present" } }), getMyAttendanceHistory: async period => ({ Data: { metrics: { presentDays: period === "week" ? 0 : 999, workingDays: 5 } } }) } });
+    vm.runInContext(helpers, context);
+    return context;
+  };
+
+  test("greetings follow local morning, afternoon and evening boundaries", () => {
+    const context = contextFor();
+    for (const [hour, expected] of [[0, "Good morning"], [11, "Good morning"], [12, "Good afternoon"], [16, "Good afternoon"], [17, "Good evening"], [23, "Good evening"]]) assert.equal(context.accountantGreeting(hour), expected);
+  });
+
+  test("recent transactions use saved payments, sort real timestamps and preserve zero versus unavailable", () => {
+    const context = contextFor();
+    const rows = context.accountantRecentPayments({ RecentPayments: [{ FeePaymentId: 1, StudentName: "Older", Amount: 200, PaymentDate: "2026-10-25", Status: "Paid" }, { FeePaymentId: 2, StudentName: "Newer", Amount: 50, PaymentDate: "2026-10-27", Status: "Success" }] });
+    assert.equal(rows[0].studentName, "Newer");
+    assert.equal(rows[1].amount, 200);
+    assert.equal(rows[0].status, "Success");
+    assert.equal(context.accountantRecentPayments({ recentPayments: [] }).length, 0);
+    assert.equal(context.accountantRecentPayments({}), null);
+    assert.equal(context.accountantRecentPayments({ Paid: 500, Balance: 200 }), null);
+  });
+
+  test("personal overview resolves the authenticated staff ID and reuses eligible leave policy calculations", async () => {
+    const calls = [];
+    const context = contextFor(async url => {
+      calls.push(url);
+      if (url === "/api/v1/staff/me") return { data: { Data: fixture } };
+      if (url === "/api/v1/leave-categories") return { data: { Data: categories } };
+      if (url.endsWith("/staff/12")) return { data: { Data: { StaffId: 12, History: [{ StaffId: 12, LeaveCategoryId: 1, TotalDays: 2, Status: "Approved" }, { StaffId: 12, Status: "Pending" }] } } };
+      throw Error("Unexpected endpoint");
+    });
+    const data = await context.loadAccountantHomePersonal({ attendance: true, leave: true });
+    assert.equal(data.today.InTime, "09:00");
+    assert.equal(data.attendance.metrics.presentDays, 0);
+    assert.equal(data.categories.length, 1);
+    assert.equal(data.categories[0].categoryName, "Casual");
+    assert.equal(leaveHelpers.getAccountantLeaveCategoryStats(data.categories[0], data.catalog, data.leaves).text, "2 / 12 Days");
+    assert.equal(calls.filter(url => url === "/api/v1/staff/me").length, 1);
+    assert.ok(calls.includes("/api/v1/staff-attendance/leave/history/staff/12"));
+  });
+
+  test("category 403 stays unavailable while authorized attendance and leave requests still load", async () => {
+    const context = contextFor(async url => {
+      if (url.endsWith("/me")) return { data: fixture };
+      if (url.endsWith("leave-categories")) throw Object.assign(Error("Forbidden"), { response: { status: 403 } });
+      return { data: { staffId: 12, history: [] } };
+    });
+    const data = await context.loadAccountantHomePersonal({ attendance: true, leave: true });
+    assert.match(data.errors.categories, /HTTP 403/);
+    assert.equal(data.categories.length, 0);
+    assert.equal(data.leaves.length, 0);
+    assert.equal(data.today.TodayStatus, "Present");
+  });
+
+  test("missing staff identity never falls back to an auth user ID or another staff history", async () => {
+    const calls = [];
+    const context = contextFor(async url => { calls.push(url); return { data: url.endsWith("/me") ? { userId: 999 } : categories }; });
+    const data = await context.loadAccountantHomePersonal({ attendance: false, leave: true });
+    assert.match(data.errors.leaves, /authenticated staff profile/);
+    assert.equal(calls.some(url => url.includes("history/staff")), false);
+  });
+
+  test("cross-staff leave results are rejected and permission-disabled services are never requested", async () => {
+    let calls = 0;
+    const context = contextFor(async url => { calls++; return { data: url.endsWith("/me") ? fixture : url.endsWith("leave-categories") ? categories : { staffId: 12, history: [{ staffId: 99, status: "Approved" }] } }; });
+    const rejected = await context.loadAccountantHomePersonal({ attendance: false, leave: true });
+    assert.match(rejected.errors.leaves, /authenticated staff identity/);
+    assert.equal(rejected.leaves, undefined);
+    calls = 0;
+    const disabled = await context.loadAccountantHomePersonal({ attendance: false, leave: false });
+    assert.equal(calls, 1);
+    assert.equal(disabled.today, undefined);
+    assert.equal(disabled.leaves, undefined);
+  });
+
+  test("homepage navigation uses registered Accountant paths and routes punch controls to the existing screen", async () => {
+    const routes = await readFile(new URL("../AccountantPortalRoutes.jsx", import.meta.url), "utf8");
+    const paths = [...routes.matchAll(/<Route path="([^"]+)"/g)].map(match => match[1]).filter(path => path !== "*");
+    const registered = [{ path: "/accountant-dashboard", children: [{ index: true }, ...paths.map(path => ({ path }))] }];
+    for (const [, path] of source.matchAll(/["'](\/accountant-dashboard\/[^"']+)["']/g)) assert.ok(matchRoutes(registered, path), path);
+    assert.match(source, /\/accountant-dashboard\/payments\?tab=fees/);
+    assert.doesNotMatch(source, /attendanceService\.(punchIn|punchOut)|apiClient\.(post|put|patch|delete)/);
+    assert.match(source, /permissions\.canCreate\("fee-management", "fee-collection"\)/);
+  });
+
+  test("homepage renders real identity, zero values, finance totals, generated icons and authorized actions", async () => {
+    const React = await import("react");
+    const components = {};
+    for (const name of ["StudentCard", "StudentDataTable", "StudentSummaryCard"]) components[name] = (await server.ssrLoadModule(`/src/Dashboard/StudentDashboard/components/${name}.jsx`)).default;
+    let homeSource = source.replace(/^import .*;\r?\n/gm, "").replaceAll("export default ", "").replaceAll("export ", "");
+    const start = homeSource.indexOf("function useAccountantLoader");
+    homeSource = homeSource.slice(0, start) + homeSource.slice(homeSource.indexOf("function HomeIcon", start));
+    const compiled = await transformWithOxc(homeSource, "AccountantDashboard.jsx", { lang: "jsx", jsx: { runtime: "classic" } });
+    const finance = { loading: false, data: { dashboard: { totalCollected: 1200, totalOutstanding: 300, recentPayments: [] }, payments: [], dues: [], payroll: { totalNetSalary: 900, processedCount: 0, pendingCount: 0 }, payrollRows: [], errors: [] } };
+    const personal = { loading: false, data: { profile: fixture, today: { todayStatus: "Present", inTime: "09:00", shiftDuration: "3h 0m" }, attendance: { metrics: { presentDays: 0, workingDays: 5 } }, leaves: [], categories: [], errors: {} } };
+    const iconAssets = { feeManagement: "fee.png", paymentHistory: "history.png", payroll: { src: "sprite.png", position: "0% 100%" }, financialReports: "reports.png" };
+    let permission = true;
+    let loaderIndex = 0;
+    const context = vm.createContext({ ...React, React, ...service, ...leaveHelpers, ...components, field: profileHelpers.profileValue, adminIconAssets: iconAssets, attendanceIcon: "attendance.png", leaveIcon: "leave.png", staffIcon: "staff.png", AlertCircle: "i", ArrowRight: "i", CalendarDays: "i", RefreshCw: "i", Sun: "i", Moon: "i", Sunset: "i", Link: ({ to, children, ...props }) => createElement("a", { href: to, ...props }, children), useCampusContext: () => ({ selectedCampusId: 2, selectedCampus: { campusName: "Assigned campus" } }), useAcademicContext: () => ({ selectedBoardId: 3, selectedAcademicYearId: 4 }), usePermissions: () => ({ user: {}, canView: () => permission, canCreate: () => permission }), useAccountantLoader: () => loaderIndex++ % 2 === 0 ? finance : personal });
+    vm.runInContext(compiled.code, context);
+    const html = renderToStaticMarkup(createElement(context.AccountantDashboard));
+    assert.match(html, /Actual Accountant/);
+    assert.match(html, /EMP-12/);
+    assert.match(html, /Assigned campus/);
+    assert.match(html, /0 present days/);
+    assert.match(html, /1,200/);
+    assert.match(html, /900/);
+    assert.match(html, /sprite\.png/);
+    assert.match(html, /href="\/accountant-dashboard\/payments\?tab=fees"/);
+    assert.match(html, /Open punch controls/);
+    assert.match(html, /The overview API does not supply a daily total/);
+    permission = false;
+    loaderIndex = 0;
+    // A newly unauthorized view has no loaded finance or personal records.
+    finance.data = null;
+    personal.data = { errors: {} };
+    const denied = renderToStaticMarkup(createElement(context.AccountantDashboard));
+    assert.doesNotMatch(denied, /Collect Student Fee|Open punch controls|Manage leaves|View history/);
+    assert.match(denied, /Attendance access is unavailable/);
+  });
+});
