@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Users, GraduationCap, Calendar, CheckCircle2, ChevronRight, Award, BookOpen, Clock, ArrowLeft, Eye } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, getChildForYear } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { getChildForYear } from "../parentData.js";
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 

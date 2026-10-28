@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Calendar, Clock, MapPin, FileText, CheckCircle2, AlertTriangle, Download, Printer, Eye, Users } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, upcomingExamsData } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { upcomingExamsData } from "../parentData.js";
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 

@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAcademicContext } from "../../context/AcademicContext.jsx";
 import { getAuthUser } from "../auth/authStorage.js";
-import { useParentPortalContext } from "./context/ParentPortalContext.jsx";
 import { holidayRecords } from "@/data/mockData.js";
 
 // ==========================================================================
@@ -33,7 +32,90 @@ export const initialParentProfiles = {};
 
 export const initialParentProfile = null;
 
-export const initialChildren = [];
+export const initialChildren = [
+  {
+    id: "860",
+    studentId: 860,
+    name: "niharika",
+    roll: "2",
+    admissionNo: "ADM-57",
+    group: "MPC",
+    programme: "MPC Program",
+    section: "Section REG-1",
+    status: "Active",
+    level: "Intermediate 1st Year",
+    semester: "Year 1",
+    board: "Board of Intermediate Education",
+    mentor: "Dr. Anitha Rao",
+    mentorDesignation: "Faculty In-Charge",
+    mentorMobile: "+91 98480 12345",
+    mentorEmail: "anitha.rao@college.edu",
+    avatar: "https://ui-avatars.com/api/?name=niharika&background=0D8ABC&color=fff&size=128",
+    attendance: {
+      overall: 92,
+      presentDays: 12,
+      absentDays: 1,
+      totalWorkingDays: 13,
+      status: "Excellent",
+    },
+    academics: {
+      sgpa: "8.8",
+      cgpa: "8.9",
+      grade: "A+",
+      rank: "3rd in Class",
+      totalCredits: 24,
+      performanceTrend: "+4.2% from last term",
+    },
+    fees: {
+      total: 70000,
+      paid: 70000,
+      pending: 0,
+      status: "Paid",
+      dueDate: "—",
+    },
+  },
+  {
+    id: "863",
+    studentId: 863,
+    name: "Neha K",
+    roll: "1",
+    admissionNo: "ADM-58",
+    group: "MPC",
+    programme: "MPC Program",
+    section: "Section REG-1",
+    status: "Active",
+    level: "Intermediate 1st Year",
+    semester: "Year 1",
+    board: "Board of Intermediate Education",
+    mentor: "Dr. Anitha Rao",
+    mentorDesignation: "Faculty In-Charge",
+    mentorMobile: "+91 98480 12345",
+    mentorEmail: "anitha.rao@college.edu",
+    avatar: "https://ui-avatars.com/api/?name=Neha+K&background=10B981&color=fff&size=128",
+    attendance: {
+      overall: 88,
+      presentDays: 11,
+      absentDays: 2,
+      totalWorkingDays: 13,
+      status: "Good",
+    },
+    academics: {
+      sgpa: "8.5",
+      cgpa: "8.6",
+      grade: "A",
+      rank: "5th in Class",
+      totalCredits: 24,
+      performanceTrend: "+3.1% from last term",
+    },
+    fees: {
+      total: 70000,
+      paid: 65000,
+      pending: 5000,
+      status: "Partial",
+      dueDate: "15 Nov 2026",
+    },
+  },
+];
 
 export const childYearlyRecords = {};
 
@@ -69,7 +151,7 @@ export const getLoggedInParent = () => {
 };
 
 export const getParentChildren = () => {
-  return [];
+  return initialChildren;
 };
 
 export const normalizeAcademicYear = (year) => {
@@ -169,17 +251,10 @@ export const getActiveChild = (activeId, parent) => {
 };
 
 export const useParentPortal = () => {
-  const context = useParentPortalContext?.();
   const academicCtx = useAcademicContext?.() || {};
-
-  if (context && context.availableChildren) {
-    return context;
-  }
-
   const rawYear = academicCtx.selectedAcademicYear;
   const currentAcademicYear = normalizeAcademicYear(rawYear);
   
-  const authUser = getAuthUser();
   const parentUser = getLoggedInParent();
   const availableChildren = getParentChildren(parentUser);
   const activeBaseChild = availableChildren[0] || null;
@@ -190,11 +265,12 @@ export const useParentPortal = () => {
     parentUser,
     availableChildren,
     activeChildId: activeBaseChild?.id || "",
-    setActiveChildId: () => {},
+    setActiveChildId: (id) => setStoredActiveChildId(id),
     selectedAcademicYear: currentAcademicYear,
     currentAcademicYear,
     activeBaseChild,
-    childFee: (activeBaseChild && initialFeeRecords[activeBaseChild.id]) ? initialFeeRecords[activeBaseChild.id] : { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], receipts: [], schedules: [] },
+    child,
+    childFee: (activeBaseChild && storedFeeRecords[activeBaseChild.id]) ? storedFeeRecords[activeBaseChild.id] : { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], receipts: [], schedules: [] },
     results: (activeBaseChild && examResultsData[activeBaseChild.id]) ? examResultsData[activeBaseChild.id] : [],
     childTimetable: (activeBaseChild && timetableData[activeBaseChild.id]) || [],
     timetableSchedule: (activeBaseChild && timetableData[activeBaseChild.id]) || [],
@@ -222,6 +298,14 @@ export const subjectAttendanceData = {
     { code: "ENG1", subject: "English", faculty: "Ms. Priya Sharma", total: 20, present: 18, absent: 2, percentage: 90, status: "Good" },
     { code: "CSC1", subject: "Computer Science", faculty: "Mr. Ravi Teja", total: 20, present: 19, absent: 1, percentage: 95, status: "Excellent" },
     { code: "PHYL1", subject: "Physics Lab", faculty: "Mr. Suresh Kumar", total: 10, present: 10, absent: 0, percentage: 100, status: "Outstanding" },
+  ],
+  "863": [
+    { code: "MAT1A", subject: "Mathematics IA", faculty: "Dr. Anitha Rao", total: 25, present: 22, absent: 3, percentage: 88, status: "Good" },
+    { code: "PHY1", subject: "Physics", faculty: "Mr. Suresh Kumar", total: 25, present: 23, absent: 2, percentage: 92, status: "Good" },
+    { code: "CHE1", subject: "Chemistry", faculty: "Mrs. Lakshmi Devi", total: 20, present: 18, absent: 2, percentage: 90, status: "Good" },
+    { code: "ENG1", subject: "English", faculty: "Ms. Priya Sharma", total: 20, present: 19, absent: 1, percentage: 95, status: "Excellent" },
+    { code: "CSC1", subject: "Computer Science", faculty: "Mr. Ravi Teja", total: 20, present: 17, absent: 3, percentage: 85, status: "Good" },
+    { code: "PHYL1", subject: "Physics Lab", faculty: "Mr. Suresh Kumar", total: 10, present: 9, absent: 1, percentage: 90, status: "Good" },
   ],
   "stu-001": [
     { code: "MAT1A", subject: "Mathematics IA", faculty: "Dr. Anitha Rao", total: 25, present: 24, absent: 1, percentage: 96, status: "Excellent" },
@@ -346,6 +430,14 @@ export const academicSubjectsData = {
     { code: "CSC1", name: "Computer Science", credits: 4, internals: "24 / 25", assignments: "10 / 10", attendance: "95%", grade: "O", faculty: "Mr. Ravi Teja", status: "Top in Subject" },
     { code: "PHYL1", name: "Physics Lab", credits: 2, internals: "25 / 25", assignments: "10 / 10", attendance: "100%", grade: "O", faculty: "Mr. Suresh Kumar", status: "Perfect Score" },
   ],
+  "863": [
+    { code: "MAT1A", name: "Mathematics IA", credits: 4, internals: "21 / 25", assignments: "9.0 / 10", attendance: "88%", grade: "A", faculty: "Dr. Anitha Rao", status: "Good" },
+    { code: "PHY1", name: "Physics", credits: 4, internals: "22 / 25", assignments: "8.5 / 10", attendance: "92%", grade: "A", faculty: "Mr. Suresh Kumar", status: "Good" },
+    { code: "CHE1", name: "Chemistry", credits: 4, internals: "20 / 25", assignments: "8.5 / 10", attendance: "90%", grade: "A", faculty: "Mrs. Lakshmi Devi", status: "Consistent" },
+    { code: "ENG1", name: "English", credits: 3, internals: "23 / 25", assignments: "9.5 / 10", attendance: "95%", grade: "A+", faculty: "Ms. Priya Sharma", status: "Active" },
+    { code: "CSC1", name: "Computer Science", credits: 4, internals: "20 / 25", assignments: "8.5 / 10", attendance: "85%", grade: "A", faculty: "Mr. Ravi Teja", status: "Good" },
+    { code: "PHYL1", name: "Physics Lab", credits: 2, internals: "23 / 25", assignments: "9.5 / 10", attendance: "90%", grade: "A+", faculty: "Mr. Suresh Kumar", status: "High Score" },
+  ],
   "stu-001": [
     { code: "MAT1A", name: "Mathematics IA", credits: 4, internals: "23 / 25", assignments: "9.5 / 10", attendance: "96%", grade: "A+", faculty: "Dr. Anitha Rao", status: "High Performer" },
     { code: "PHY1", name: "Physics", credits: 4, internals: "21 / 25", assignments: "8.5 / 10", attendance: "92%", grade: "A", faculty: "Mr. Suresh Kumar", status: "Good" },
@@ -433,6 +525,28 @@ export const examResultsData = {
         { code: "ENG1", subject: "English", max: 100, obtained: 86, grade: "A", status: "Pass" },
         { code: "CSC1", subject: "Computer Science", max: 100, obtained: 94, grade: "O", status: "Pass" },
         { code: "PHYL1", subject: "Physics Lab", max: 100, obtained: 88, grade: "A+", status: "Pass" },
+      ],
+    },
+  ],
+  "863": [
+    {
+      examName: "Quarterly Examination 2026",
+      period: "Sep 2026",
+      academicYear: "2026-2027",
+      maxMarks: 600,
+      obtainedMarks: 513,
+      percentage: "85.5%",
+      sgpa: "8.5",
+      cgpa: "8.6",
+      resultStatus: "Passed",
+      classRank: "5 of 45",
+      subjects: [
+        { code: "MAT1A", subject: "Mathematics IA", max: 100, obtained: 86, grade: "A", status: "Pass" },
+        { code: "PHY1", subject: "Physics", max: 100, obtained: 88, grade: "A+", status: "Pass" },
+        { code: "CHE1", subject: "Chemistry", max: 100, obtained: 84, grade: "A", status: "Pass" },
+        { code: "ENG1", subject: "English", max: 100, obtained: 92, grade: "A+", status: "Pass" },
+        { code: "CSC1", subject: "Computer Science", max: 100, obtained: 81, grade: "A", status: "Pass" },
+        { code: "PHYL1", subject: "Physics Lab", max: 100, obtained: 82, grade: "A", status: "Pass" },
       ],
     },
   ],
@@ -818,6 +932,13 @@ export const upcomingExamsData = {
     { id: "ex-04", subject: "English", code: "ENG1", date: "12 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 3", seat: "R-105", invigilator: "Ms. Priya Sharma", syllabus: "Prose, Poetry, Comprehension, Writing Skills", maxMarks: 100 },
     { id: "ex-05", subject: "Computer Science", code: "CSC1", date: "15 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 2", seat: "R-102", invigilator: "Mr. Ravi Teja", syllabus: "Python Basics, Loops, Functions, OOP concepts", maxMarks: 100 },
   ],
+  "863": [
+    { id: "ex-863-01", subject: "Mathematics IA", code: "MAT1A", date: "05 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 1", seat: "R-102", invigilator: "Dr. Rajesh Sharma", syllabus: "Units 1 to 4 (Algebra, Coordinate Geometry, Calculus)", maxMarks: 100 },
+    { id: "ex-863-02", subject: "Physics", code: "PHY1", date: "08 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 2", seat: "R-103", invigilator: "Mr. Suresh Kumar", syllabus: "Units 1 to 5 (Mechanics, Thermodynamics, Waves)", maxMarks: 100 },
+    { id: "ex-863-03", subject: "Chemistry", code: "CHE1", date: "10 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 1", seat: "R-102", invigilator: "Mrs. Lakshmi Devi", syllabus: "Units 1 to 4 (Atomic Structure, Bonding, States of Matter)", maxMarks: 100 },
+    { id: "ex-863-04", subject: "English", code: "ENG1", date: "12 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 3", seat: "R-106", invigilator: "Ms. Priya Sharma", syllabus: "Prose, Poetry, Comprehension, Writing Skills", maxMarks: 100 },
+    { id: "ex-863-05", subject: "Computer Science", code: "CSC1", date: "15 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 2", seat: "R-103", invigilator: "Mr. Ravi Teja", syllabus: "Python Basics, Loops, Functions, OOP concepts", maxMarks: 100 },
+  ],
   "stu-001": [
     { id: "ex-01", subject: "Mathematics IA", code: "MAT1A", date: "05 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 1", seat: "R-101", invigilator: "Dr. Rajesh Sharma", syllabus: "Units 1 to 4 (Algebra, Coordinate Geometry, Calculus)", maxMarks: 100 },
     { id: "ex-02", subject: "Physics", code: "PHY1", date: "08 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 2", seat: "R-102", invigilator: "Mr. Suresh Kumar", syllabus: "Units 1 to 5 (Mechanics, Thermodynamics, Waves)", maxMarks: 100 },
@@ -872,6 +993,40 @@ export const upcomingExamsData = {
 // ==========================================================================
 
 export const storedFeeRecords = {
+  "860": {
+    total: 70000,
+    paid: 70000,
+    pending: 0,
+    dueDate: "—",
+    status: "Paid",
+    breakdown: [
+      { category: "Tuition Fee", amount: 50000, paid: 50000, pending: 0, due: "Paid", status: "Paid" },
+      { category: "Laboratory Fee", amount: 10000, paid: 10000, pending: 0, due: "Paid", status: "Paid" },
+      { category: "Examination Fee", amount: 5000, paid: 5000, pending: 0, due: "Paid", status: "Paid" },
+      { category: "Amenities & Library", amount: 5000, paid: 5000, pending: 0, due: "Paid", status: "Paid" },
+    ],
+    receipts: [
+      { id: "rec-860-01", receiptNo: "REC-2026-0891", date: "10 Jun 2026", amount: 40000, method: "UPI / PhonePe", txnId: "UPI26061099812", paidFor: "Admission & Term 1 Tuition", status: "Success" },
+      { id: "rec-860-02", receiptNo: "REC-2026-1402", date: "15 Aug 2026", amount: 30000, method: "Net Banking (SBI)", txnId: "SBI26081544910", paidFor: "Term 2 Tuition & Labs", status: "Success" },
+    ],
+  },
+  "863": {
+    total: 70000,
+    paid: 65000,
+    pending: 5000,
+    dueDate: "15 Nov 2026",
+    status: "Partial",
+    breakdown: [
+      { category: "Tuition Fee", amount: 50000, paid: 50000, pending: 0, due: "Paid", status: "Paid" },
+      { category: "Laboratory Fee", amount: 10000, paid: 10000, pending: 0, due: "Paid", status: "Paid" },
+      { category: "Examination Fee", amount: 5000, paid: 5000, pending: 0, due: "Paid", status: "Paid" },
+      { category: "Amenities & Library", amount: 5000, paid: 0, pending: 5000, due: "15 Nov 2026", status: "Due" },
+    ],
+    receipts: [
+      { id: "rec-863-01", receiptNo: "REC-2026-0920", date: "12 Jun 2026", amount: 40000, method: "UPI / GooglePay", txnId: "UPI26061244321", paidFor: "Admission & Term 1 Tuition", status: "Success" },
+      { id: "rec-863-02", receiptNo: "REC-2026-1455", date: "20 Aug 2026", amount: 25000, method: "Net Banking (HDFC)", txnId: "HDF26082077651", paidFor: "Term 2 Tuition & Labs", status: "Success" },
+    ],
+  },
   "stu-001": {
     total: 45500,
     paid: 28000,
@@ -1033,6 +1188,16 @@ export const saveStoredFeeRecords = (records) => {
 
 export const timetableData = {
   "860": [
+    { period: "Period 1", time: "09:00 - 10:00 AM", mon: "Mathematics IA (Room 203)", tue: "Physics (Room 203)", wed: "Chemistry (Room 203)", thu: "Mathematics IA (Room 203)", fri: "Computer Science (Lab 1)", sat: "Mathematics IA (Room 203)" },
+    { period: "Period 2", time: "10:00 - 11:00 AM", mon: "Physics (Room 203)", tue: "Mathematics IA (Room 203)", wed: "English (Room 203)", thu: "Computer Science (Lab 1)", fri: "Physics (Room 203)", sat: "Chemistry (Room 203)" },
+    { period: "Break", time: "11:00 - 11:15 AM", mon: "Short Break", tue: "Short Break", wed: "Short Break", thu: "Short Break", fri: "Short Break", sat: "Short Break", isBreak: true },
+    { period: "Period 3", time: "11:15 - 12:15 PM", mon: "Chemistry (Room 203)", tue: "English (Room 203)", wed: "Mathematics IA (Room 203)", thu: "Physics (Room 203)", fri: "Mathematics IA (Room 203)", sat: "English (Room 203)" },
+    { period: "Lunch", time: "12:15 - 01:15 PM", mon: "Lunch Break", tue: "Lunch Break", wed: "Lunch Break", thu: "Lunch Break", fri: "Lunch Break", sat: "Lunch Break", isBreak: true },
+    { period: "Period 4", time: "01:15 - 02:15 PM", mon: "Physics Lab (Lab 2)", tue: "Chemistry Lab (Lab 3)", wed: "Physics (Room 203)", thu: "English (Room 203)", fri: "Chemistry (Room 203)", sat: "Remedial / Mentorship" },
+    { period: "Period 5", time: "02:15 - 03:15 PM", mon: "Physics Lab (Lab 2)", tue: "Chemistry Lab (Lab 3)", wed: "Computer Science (Lab 1)", thu: "Study Hour & Revision", fri: "Computer Science (Lab 1)", sat: "Sports & Club Activity" },
+    { period: "Period 6", time: "03:15 - 04:00 PM", mon: "Tutorial (Mathematics)", tue: "Tutorial (Physics)", wed: "Tutorial (Chemistry)", thu: "Doubt Clearance", fri: "Doubt Clearance", sat: "Dispersal" },
+  ],
+  "863": [
     { period: "Period 1", time: "09:00 - 10:00 AM", mon: "Mathematics IA (Room 203)", tue: "Physics (Room 203)", wed: "Chemistry (Room 203)", thu: "Mathematics IA (Room 203)", fri: "Computer Science (Lab 1)", sat: "Mathematics IA (Room 203)" },
     { period: "Period 2", time: "10:00 - 11:00 AM", mon: "Physics (Room 203)", tue: "Mathematics IA (Room 203)", wed: "English (Room 203)", thu: "Computer Science (Lab 1)", fri: "Physics (Room 203)", sat: "Chemistry (Room 203)" },
     { period: "Break", time: "11:00 - 11:15 AM", mon: "Short Break", tue: "Short Break", wed: "Short Break", thu: "Short Break", fri: "Short Break", sat: "Short Break", isBreak: true },

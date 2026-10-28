@@ -35,16 +35,19 @@ const isBackendStudentId = (id) => Boolean(id) && !isNaN(Number(id)) && Number(i
 export const getMyChildren = async () => {
   try {
     const res = await api.get("/api/v1/students/my-children");
-    // Handles { success: true, data: [...] } or direct array [...]
-    if (res?.data && Array.isArray(res.data.data)) {
-      return res.data.data;
-    }
-    if (Array.isArray(res?.data)) {
-      return res.data;
-    }
-    return res?.data?.data || [];
-  } catch {
+    const raw = res?.data;
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw?.students)) return raw.students;
+    if (Array.isArray(raw?.children)) return raw.children;
+    if (Array.isArray(raw?.data?.items)) return raw.data.items;
+    if (Array.isArray(raw?.data?.students)) return raw.data.students;
+    if (Array.isArray(raw?.data?.children)) return raw.data.children;
+    if (raw?.data && typeof raw.data === "object") return [raw.data];
     return [];
+  } catch (err) {
+    // Rethrow so callers can distinguish between network/auth failure vs genuine 0 children
+    throw err;
   }
 };
 
@@ -207,11 +210,11 @@ export const getSubjectsByGroup = async (groupId) => {
  * 8. GET /api/v1/attendance/student/{studentId}/yearly-overview
  * Retrieves the yearly attendance overview for a specific student.
  */
-export const getStudentAttendanceOverview = async (studentId, academicYearId) => {
+export const getStudentAttendanceOverview = async (studentId, academicYearId = 9) => {
   if (!isBackendStudentId(studentId)) return null;
   try {
     const res = await api.get(`/api/v1/attendance/student/${encodeURIComponent(studentId)}/yearly-overview`, {
-      params: academicYearId ? { academicYearId } : {},
+      params: { academicYearId: academicYearId || 9 },
     });
     return res?.data?.data ?? res?.data ?? null;
   } catch {

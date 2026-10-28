@@ -20,8 +20,8 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useParentPortal } from "./context/ParentPortalContext.jsx";
 import {
-  useParentPortal,
   subjectAttendanceData,
   academicSubjectsData,
   upcomingExamsData,

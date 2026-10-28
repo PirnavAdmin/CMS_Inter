@@ -5,11 +5,10 @@ import {
   ChevronRight, Eye, Download, Printer, Clock
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import { useParentPortal, transformMemoSubjects } from "../context/ParentPortalContext.jsx";
 import {
-  useParentPortal,
   academicSubjectsData, examResultsData
 } from "../parentData.js";
-import { transformMemoSubjects } from "../context/ParentPortalContext.jsx";
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
