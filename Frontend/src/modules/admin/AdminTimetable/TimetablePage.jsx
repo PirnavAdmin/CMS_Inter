@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CalendarDays, ChevronDown, Copy, Download, Eye, FileSpreadsheet, FileText, MoreVertical, Pencil, Power, Search, Trash2, UserPlus, UsersRound } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { SkeletonPage, SkeletonTable, SkeletonText, Toast } from "@/shared/components/Ui.jsx";
@@ -18,6 +18,14 @@ const EMPTY = {
   groupId: "",
   programId: "",
   sectionId: "",
+};
+const timetableContextUrl = (path, context, search = "") => {
+  const params = new URLSearchParams(search);
+  ["modal", "structureId", "slotId", "slotDay", "slotPeriodId"].forEach((key) => params.delete(key));
+  Object.keys(EMPTY).forEach((key) => { if (context?.[key]) params.set(key, String(context[key])); else params.delete(key); });
+  if (context?.isPublished !== undefined) params.set("isPublished", String(Boolean(context.isPublished)));
+  if (context?.workingDays?.length) params.set("workingDays", context.workingDays.join(","));
+  return params.size ? `${path}?${params}` : path;
 };
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DEFAULT_WORKING_DAYS = [1, 2, 3, 4, 5, 6];
@@ -413,7 +421,7 @@ function TimetableViewTabs({ context, opening = false, onOpenGenerated }) {
         className={`ttm-view-tab${generatedActive ? "" : " is-active"}`}
         aria-pressed={!generatedActive}
         disabled={!completeContext || generatedActive}
-        onClick={() => navigate("/dashboard/timetable/setup", { state: { timetableContext: context } })}
+        onClick={() => navigate(timetableContextUrl("/dashboard/timetable/setup", context, location.search), { state: { timetableContext: context } })}
       >
         Create Timetable
       </Btn>
@@ -479,7 +487,22 @@ function ConfirmDelete({ name, busy, error, onCancel, onConfirm }) {
 function useLookups(initial = {}) {
   const { selectedCampusId } = useCampusContext();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
-  const [value, setValue] = useState({ ...EMPTY, ...initial, campusId: initial?.campusId || selectedCampusId || "", boardId: initial?.boardId || selectedBoardId || "", academicYearId: initial?.academicYearId || selectedAcademicYearId || "" });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const baseContext = { ...EMPTY, ...initial, campusId: initial?.campusId || selectedCampusId || "", boardId: initial?.boardId || selectedBoardId || "", academicYearId: initial?.academicYearId || selectedAcademicYearId || "" };
+  const value = { ...baseContext, ...Object.fromEntries(Object.keys(EMPTY).filter((key) => searchParams.has(key)).map((key) => [key, searchParams.get(key)])), campusId: selectedCampusId || searchParams.get("campusId") || baseContext.campusId, boardId: selectedBoardId || searchParams.get("boardId") || baseContext.boardId, academicYearId: selectedAcademicYearId || searchParams.get("academicYearId") || baseContext.academicYearId };
+  const lookupNavigation = useRef(null);
+  lookupNavigation.current = { value, searchParams, setSearchParams };
+  const setValue = useCallback((update) => {
+    const current = lookupNavigation.current;
+    const next = typeof update === "function" ? update(current.value) : update;
+    if (next === current.value) return;
+    const params = new URLSearchParams(current.searchParams);
+    Object.keys(EMPTY).forEach((key) => params.set(key, String(next[key] ?? "")));
+    if (params.toString() !== current.searchParams.toString()) {
+      lookupNavigation.current = { ...current, value: next, searchParams: params };
+      current.setSearchParams(params, { replace: true });
+    }
+  }, []);
   const [sectionsReloadKey, setSectionsReloadKey] = useState(0);
   const [data, setData] = useState({
     boards: [],
@@ -536,7 +559,7 @@ function useLookups(initial = {}) {
         academicYearId: nextYear,
       };
     });
-  }, [initial?.academicYearId, initial?.boardId, initial?.campusId, selectedAcademicYearId, selectedBoardId, selectedCampusId]);
+  }, [initial?.academicYearId, initial?.boardId, initial?.campusId, selectedAcademicYearId, selectedBoardId, selectedCampusId, setValue]);
   useEffect(() => {
     Promise.allSettled([
       apiClient.get(apiEndpoints.boards.getAll, { params: { Status: true } }),
@@ -640,7 +663,7 @@ function useLookups(initial = {}) {
         }
       });
     return () => { cancelled = true; };
-  }, [value.boardId, data.allYears, data.boards]);
+  }, [value.boardId, data.allYears, data.boards, setValue]);
   useEffect(() => {
     if (!value.boardId) return undefined;
     let cancelled = false;
@@ -686,6 +709,7 @@ function useLookups(initial = {}) {
     data.allYears,
     data.allLevels,
     data.boards,
+    setValue,
   ]);
   const selectedGroupRef = useRef(value.groupId);
   useEffect(() => { selectedGroupRef.current = value.groupId; }, [value.groupId]);
@@ -719,7 +743,7 @@ function useLookups(initial = {}) {
     };
     load();
     return () => { cancelled = true; };
-  }, [value.campusId, value.boardId, value.academicYearId, value.academicLevelId]);
+  }, [value.campusId, value.boardId, value.academicYearId, value.academicLevelId, setValue]);
   useEffect(() => {
     if (!value.groupId) {
       setData((current) => ({ ...current, programs: [], programsLoading: false }));
@@ -748,7 +772,7 @@ function useLookups(initial = {}) {
         if (!cancelled) setData((current) => ({ ...current, programs: [], programsLoading: false }));
       });
     return () => { cancelled = true; };
-  }, [value.groupId]);
+  }, [value.groupId, setValue]);
   useEffect(() => {
     if (!value.groupId) return;
     let cancelled = false;
@@ -834,7 +858,7 @@ function useLookups(initial = {}) {
       }));
     });
     return () => { cancelled = true; };
-  }, [value.campusId, value.boardId, value.academicYearId, value.academicLevelId, value.groupId, value.programId, data.programs, sectionsReloadKey, selectedBoardId]);
+  }, [value.campusId, value.boardId, value.academicYearId, value.academicLevelId, value.groupId, value.programId, data.programs, sectionsReloadKey, selectedBoardId, setValue]);
   const change = (key) => (event) =>
     setValue((current) => {
       const next = event.target.value;
@@ -1274,8 +1298,20 @@ function AssignStructureForm({ item, close, assigned, notify, initial }) {
 }
 function Structures({ notify, initial }) {
   const [items, setItems] = useState([]);
-  const [modal, setModal] = useState(null);
-  const [item, setItem] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const modal = ["form", "preview", "assign", "delete"].includes(searchParams.get("modal")) ? searchParams.get("modal") : null;
+  const selectedStructureId = searchParams.get("structureId");
+  const pendingItem = useRef(null);
+  const item = items.find((row) => String(structureId(row)) === selectedStructureId)
+    || (String(structureId(pendingItem.current)) === selectedStructureId ? pendingItem.current : null);
+  const setItem = (row) => { pendingItem.current = row; };
+  const setModal = (mode) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (mode) params.set("modal", mode); else params.delete("modal");
+    const id = pendingItem.current === null ? null : structureId(pendingItem.current) || selectedStructureId;
+    if (mode && id) params.set("structureId", String(id)); else params.delete("structureId");
+    return params;
+  });
   const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deleteError, setDeleteError] = useState("");
@@ -1343,7 +1379,7 @@ function Structures({ notify, initial }) {
   <div className="ttm-period-structure-toolbar">
     <Link
       className="ttm-back-link"
-      to="/dashboard/timetable"
+      to={timetableContextUrl("/dashboard/timetable", initial, searchParams)}
       state={{ timetableContext: initial }}
     >
       <ArrowLeft size={15} />
@@ -1435,7 +1471,8 @@ function Structures({ notify, initial }) {
         </div>,
         document.body,
       ) : null}
-      {modal === "form" && (
+      {modal && !item && (modal !== "form" || selectedStructureId) && <Modal title={modal === "form" ? "Edit Period Structure" : modal === "preview" ? "Period Structure Preview" : modal === "assign" ? "Assign Period Structure" : "Delete Period Structure"} onClose={() => setModal(null)}><div className="ttm-modal-body"><p role={loading ? "status" : "alert"}>{loading ? "Loading period structure..." : "This period structure is unavailable."}</p></div></Modal>}
+      {modal === "form" && (!selectedStructureId || item) && (
         <StructureForm
           item={item}
           close={() => setModal(null)}
@@ -1453,23 +1490,22 @@ function Structures({ notify, initial }) {
           }}
         />
       )}
-      {modal === "preview" && <StructurePreview item={item} close={() => setModal(null)} notify={notify} />}
-      {modal === "assign" && (
+      {modal === "preview" && item && <StructurePreview item={item} close={() => setModal(null)} notify={notify} />}
+      {modal === "assign" && item && (
         <AssignStructureForm
           item={item}
           close={() => setModal(null)}
           notify={notify}
           initial={initial}
           assigned={(context) => {
-            setModal(null);
             notify("Period structure assigned.");
-            navigate("/dashboard/timetable/generate", {
+            navigate(timetableContextUrl("/dashboard/timetable/generate", context, searchParams), {
               state: { timetableContext: { ...context, periodStructureId: structureId(item) } },
             });
           }}
         />
       )}
-      {modal === "delete" && (
+      {modal === "delete" && item && (
         <ConfirmDelete
           name={pick(item, "name")}
           busy={deleting}
@@ -1483,6 +1519,7 @@ function Structures({ notify, initial }) {
 }
 
 function Generate({ goDraft, notify, initial }) {
+  const location = useLocation();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
   const state = useLookups({
@@ -1491,14 +1528,15 @@ function Generate({ goDraft, notify, initial }) {
     boardId: selectedBoardId || initial?.boardId || "",
     academicYearId: selectedAcademicYearId || initial?.academicYearId || "",
   });
-  const { value, data } = state;
+  const { value, data, setValue } = state;
   const [requirements, setRequirements] = useState({});
   const [workingDays, setWorkingDays] = useState(() =>
     (initial?.workingDays?.length ? initial.workingDays : DEFAULT_WORKING_DAYS).map((day) => Number(day) === 7 ? 0 : Number(day)),
   );
   const [capacityError, setCapacityError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [selectedSectionId, setSelectedSectionId] = useState(initial?.sectionId ?? "");
+  const selectedSectionId = value.sectionId;
+  const setSelectedSectionId = useCallback((update) => setValue((current) => ({ ...current, sectionId: typeof update === "function" ? update(current.sectionId) : update })), [setValue]);
   const [inputErrors, setInputErrors] = useState({});
   const allocationContextRef = useRef("");
   const allocationStateRef = useRef("");
@@ -1532,12 +1570,13 @@ function Generate({ goDraft, notify, initial }) {
     setCapacityError("");
   };
   useEffect(() => {
+    if (!data.sections.length) return;
     setSelectedSectionId((current) =>
       data.sections.some((section) => String(section.id) === String(current))
         ? current
         : (data.sections[0]?.id ?? ""),
     );
-  }, [data.sections]);
+  }, [data.sections, setSelectedSectionId]);
   useEffect(() => {
     const contextChanged = allocationContextRef.current !== allocationContext;
     if (contextChanged) {
@@ -1692,7 +1731,7 @@ function Generate({ goDraft, notify, initial }) {
     <Page
       title="Generate Timetable"
       subtitle="Generate a conflict-free theory timetable in DRAFT state."
-      action={<div className="ttm-page-actions"><Link className="cms-btn cms-btn-ghost" to="/dashboard/timetable/setup" state={{ timetableContext: value }}>Create Period Structure</Link></div>}
+      action={<div className="ttm-page-actions"><Link className="cms-btn cms-btn-ghost" to={timetableContextUrl("/dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Create Period Structure</Link></div>}
     >
       <section className="ttm-card ttm-generate-card">
         <Context state={state} section={false} hideGlobalContext />
@@ -1907,7 +1946,9 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
   );
 }
 function SubstitutionPreview({ context, close, notify }) {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get("substitutionDate") || "") ? searchParams.get("substitutionDate") : new Date().toISOString().slice(0, 10);
+  const setDate = (value) => setSearchParams((previous) => { const params = new URLSearchParams(previous); if (value) params.set("substitutionDate", value); else params.delete("substitutionDate"); return params; });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1998,6 +2039,22 @@ function SubstitutionPreview({ context, close, notify }) {
   );
 }
 function Draft({ initial, notify }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const draftDialog = searchParams.get("modal");
+  const slotId = searchParams.get("slotId") || "";
+  const slotDay = searchParams.get("slotDay");
+  const slotPeriodId = searchParams.get("slotPeriodId");
+  const navigateDraftDialog = (modal, slot) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    ["modal", "slotId", "slotDay", "slotPeriodId", "substitutionDate"].forEach((key) => params.delete(key));
+    if (modal) params.set("modal", modal);
+    if (slot) {
+      const id = timetableId(slot);
+      if (id) params.set("slotId", String(id));
+      else { params.set("slotDay", String(slot.dayOfWeek)); params.set("slotPeriodId", String(slot.periodId)); }
+    }
+    return params;
+  });
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
   const state = useLookups({
@@ -2010,10 +2067,28 @@ function Draft({ initial, notify }) {
   const navigate = useNavigate();
   const [slots, setSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [publishedSlotDetails, setPublishedSlotDetails] = useState(null);
-  const [substitutionPreviewOpen, setSubstitutionPreviewOpen] = useState(false);
-  const [copying, setCopying] = useState(false);
+  const [restoredSlot, setRestoredSlot] = useState(null);
+  const [slotLoadError, setSlotLoadError] = useState("");
+  const slotNavigationKey = JSON.stringify([slotId, slotDay, slotPeriodId, value.campusId, value.sectionId]);
+  const editing = draftDialog === "slot" && restoredSlot?.key === slotNavigationKey ? restoredSlot.slot : null;
+  const setEditing = (slot) => navigateDraftDialog(slot ? "slot" : null, slot);
+  const [slotPopover, setSlotPopover] = useState(null);
+  const pinnedSlot = draftDialog === "slot-details" && restoredSlot?.key === slotNavigationKey ? restoredSlot.slot : null;
+  const publishedSlotDetails = useMemo(() => draftDialog === "slot-details" ? pinnedSlot ? { id: `${slotId}:${pick(pinnedSlot, "dayOfWeek", "DayOfWeek")}:${pick(pinnedSlot, "periodId", "PeriodId")}`, slot: pinnedSlot, style: slotPopover?.style || { left: 16, top: 120 }, pinned: true } : null : slotPopover, [draftDialog, pinnedSlot, slotId, slotPopover]);
+  const popoverNavigation = useRef(null);
+  popoverNavigation.current = { publishedSlotDetails, draftDialog, navigateDraftDialog };
+  const setPublishedSlotDetails = useCallback((update) => {
+    const current = popoverNavigation.current;
+    const next = typeof update === "function" ? update(current.publishedSlotDetails) : update;
+    if (next === current.publishedSlotDetails) return;
+    setSlotPopover(next);
+    if (next?.pinned) current.navigateDraftDialog("slot-details", next.slot);
+    else if (current.draftDialog === "slot-details") current.navigateDraftDialog(null);
+  }, []);
+  const substitutionPreviewOpen = draftDialog === "substitutions";
+  const setSubstitutionPreviewOpen = (open) => navigateDraftDialog(open ? "substitutions" : null);
+  const copying = draftDialog === "copy";
+  const setCopying = (open) => navigateDraftDialog(open ? "copy" : null);
   const [copyTarget, setCopyTarget] = useState({ academicYearId: "", sectionId: "" });
   const [actionBusy, setActionBusy] = useState(false);
   const [activeAction, setActiveAction] = useState("");
@@ -2023,20 +2098,42 @@ function Draft({ initial, notify }) {
   const [workflowStatus, setWorkflowStatus] = useState(() => timetableWorkflowStatus(initial));
   const firstSection = useRef(true);
   const [validation, setValidation] = useState(null);
-  const [validationOpen, setValidationOpen] = useState(false);
+  const validationOpen = draftDialog === "validation";
+  const setValidationOpen = (open) => navigateDraftDialog(open ? "validation" : null);
   const [studentChoices, setStudentChoices] = useState([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [staffChoices, setStaffChoices] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [staffSearch, setStaffSearch] = useState("");
-  const [publishedFilter, setPublishedFilter] = useState(
-    initial?.isPublished === undefined ? "" : String(Boolean(initial.isPublished)),
-  );
+  const publishedFilter = searchParams.has("published") ? ["true", "false"].includes(searchParams.get("published")) ? searchParams.get("published") : "" : initial?.isPublished === undefined ? "" : String(Boolean(initial.isPublished));
+  const setPublishedFilter = (filter) => setSearchParams((previous) => { const params = new URLSearchParams(previous); params.set("published", filter); return params; });
   const workingDays = (initial?.workingDays?.length ? initial.workingDays : DEFAULT_WORKING_DAYS)
     .map((day) => Number(day) === 7 ? 0 : Number(day))
     .filter((day) => WORKING_DAY_OPTIONS.some((option) => option.value === day));
   const generatedSlots = useMemo(() => list(initial?.generatedSlots), [initial?.generatedSlots]);
+  useEffect(() => {
+    if (!["slot", "slot-details"].includes(draftDialog)) return;
+    let active = true;
+    setSlotLoadError("");
+    const restore = async () => {
+      try {
+        let slot;
+        if (slotId) {
+          const response = await apiClient.get(apiEndpoints.timetable.getById(slotId));
+          slot = response.data?.data ?? response.data;
+          if (!timetableId(slot) || (slotSectionId(slot) && String(slotSectionId(slot)) !== String(value.sectionId)) || (slotCampusId(slot) && String(slotCampusId(slot)) !== String(value.campusId))) throw new Error("Timetable slot is unavailable for this section.");
+        } else {
+          if (draftDialog === "slot-details") throw new Error("Timetable slot is unavailable.");
+          if (!slotPeriodId || !/^[0-6]$/.test(slotDay || "")) throw new Error("Timetable slot is unavailable.");
+          slot = { dayOfWeek: Number(slotDay), periodId: slotPeriodId };
+        }
+        if (active) setRestoredSlot({ key: slotNavigationKey, slot });
+      } catch (error) { if (active) setSlotLoadError(getApiErrorMessage(error)); }
+    };
+    restore();
+    return () => { active = false; };
+  }, [draftDialog, slotId, slotDay, slotPeriodId, slotNavigationKey, value.sectionId, value.campusId]);
   useEffect(() => {
     const closeWhenOutside = (event) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) setExportOpen(false);
@@ -2146,9 +2243,9 @@ function Draft({ initial, notify }) {
       document.removeEventListener("mousedown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [publishedSlotDetails]);
+  }, [publishedSlotDetails, setPublishedSlotDetails]);
   useEffect(() => {
-    setPublishedSlotDetails(null);
+    setSlotPopover(null);
   }, [published, publishedFilter, value.sectionId]);
   useEffect(() => {
     if (!published || !value.sectionId) {
@@ -2217,7 +2314,7 @@ function Draft({ initial, notify }) {
     const top = Math.max(8, Math.min(bounds.top, window.innerHeight - height - 8));
     setPublishedSlotDetails({ id: currentId, slot, style: { left, top }, pinned: interaction === "click" });
   };
-  const openSlotEditor = async (slot, pendingSlot) => {
+  const openSlotEditor = (slot, pendingSlot) => {
     if (!slot) {
       if (!pendingSlot || actionBusy) return;
       // Reuse the existing SlotEditor in create mode, prefilled with the
@@ -2227,17 +2324,7 @@ function Draft({ initial, notify }) {
     }
     const id = timetableId(slot);
     if (!id || actionBusy) return;
-    setActionBusy(true);
-    setActiveAction("slot");
-    try {
-      const response = await apiClient.get(apiEndpoints.timetable.getById(id));
-      setEditing(response.data?.data ?? response.data ?? slot);
-    } catch (error) {
-      notify(getApiErrorMessage(error));
-    } finally {
-      setActionBusy(false);
-      setActiveAction("");
-    }
+    setEditing(slot);
   };
   const action = async (path, method = "post", body) => {
     if (actionBusy) return;
@@ -2395,7 +2482,7 @@ function Draft({ initial, notify }) {
       subtitle="Review, validate, approve and publish the section timetable."
       pageClassName="ttm-draft-page"
     >
-      <Link className="cms-back-link" to="/dashboard/timetable">
+        <Link className="cms-back-link" to={timetableContextUrl("/dashboard/timetable", value, searchParams)} state={{ timetableContext: value }}>
         <ArrowLeft size={15} /> Back to Timetable
       </Link>
       <section className="ttm-card">
@@ -2638,6 +2725,7 @@ function Draft({ initial, notify }) {
           </>
         )}
       </section>
+      {validationOpen && !validation && <Modal title="Validate Timetable" onClose={() => setValidationOpen(false)}><div className="ttm-modal-body"><p role="status">Validation results are unavailable after refresh. Close this dialog and validate the timetable again.</p></div></Modal>}
       {validationOpen && validation && (
         <Modal title="Validate Timetable" onClose={() => setValidationOpen(false)}>
           <div className="ttm-modal-body">
@@ -2650,6 +2738,8 @@ function Draft({ initial, notify }) {
           </div>
         </Modal>
       )}
+      {draftDialog === "slot" && !editing && <Modal title="Timetable Slot" onClose={() => setEditing(null)}><div className="ttm-modal-body"><p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot..."}</p></div></Modal>}
+      {draftDialog === "slot-details" && !pinnedSlot && <Modal title="Timetable Slot Details" onClose={() => navigateDraftDialog(null)}><div className="ttm-modal-body"><p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot details..."}</p></div></Modal>}
       {editing && (
         <SlotEditor
           context={value}
@@ -2753,7 +2843,7 @@ function MainTimetable({ notify }) {
         notify("No generated timetable was found for the selected context.");
         return;
       }
-      navigate("/dashboard/timetable/draft", { state: { timetableContext: { ...value, isPublished: pick(latest, "isPublished", "IsPublished"), workingDays: latest.workingDays ?? latest.WorkingDays } } });
+      navigate(timetableContextUrl("/dashboard/timetable/draft", value, location.search), { state: { timetableContext: { ...value, isPublished: pick(latest, "isPublished", "IsPublished"), workingDays: latest.workingDays ?? latest.WorkingDays } } });
     } catch (error) {
       notify(getApiErrorMessage(error));
     } finally {
@@ -2828,6 +2918,14 @@ function LatestDraft({ notify }) {
 export default function TimetablePage({ screen = "latest" }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const initialContext = useMemo(() => {
+    const context = { ...location.state?.timetableContext };
+    Object.keys(EMPTY).forEach((key) => { if (searchParams.has(key)) context[key] = searchParams.get(key); });
+    if (["true", "false"].includes(searchParams.get("isPublished"))) context.isPublished = searchParams.get("isPublished") === "true";
+    if (/^[0-7](,[0-7])*$/.test(searchParams.get("workingDays") || "")) context.workingDays = [...new Set(searchParams.get("workingDays").split(",").map(Number))];
+    return context;
+  }, [location.state, searchParams]);
   const { selectedCampusId } = useCampusContext();
   const [toast, setToast] = useState({ message: "", type: "success" });
   const notify = useCallback((message, type = "success") => setToast({ message, type }), []);
@@ -2839,18 +2937,18 @@ export default function TimetablePage({ screen = "latest" }) {
     screen === "latest" ? (
       <MainTimetable key={campusViewKey} notify={notify} />
     ) : screen === "draft" ? (
-      <Draft key={campusViewKey} initial={location.state?.timetableContext} notify={notify} />
+      <Draft key={campusViewKey} initial={initialContext} notify={notify} />
     ) : screen === "generate" ? (
       <Generate
         key={campusViewKey}
         notify={notify}
-        initial={location.state?.timetableContext}
+        initial={initialContext}
         goDraft={(context) =>
-          navigate("/dashboard/timetable/draft", { state: { timetableContext: context } })
+          navigate(timetableContextUrl("/dashboard/timetable/draft", context, location.search), { state: { timetableContext: context } })
         }
       />
     ) : (
-      <Structures key={campusViewKey} notify={notify} initial={location.state?.timetableContext} />
+      <Structures key={campusViewKey} notify={notify} initial={initialContext} />
     );
   return (
     <div className="timetable-module">

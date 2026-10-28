@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ArrowLeft, BookOpen, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
@@ -105,6 +106,23 @@ export default function SubjectManagementPage() {
 }
 
 function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYearId }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const subjectView = searchParams.get("view") === "languages" ? "languages" : "subjects";
+  const subjectModal = searchParams.get("modal");
+  const navigationSubjectId = searchParams.get("subjectId") || "";
+  const navigationScope = searchParams.get("scope") || "group";
+  const navigateSubject = (modal, subject, scope = "group") => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    ["modal", "subjectId", "scope"].forEach((key) => params.delete(key));
+    if (modal) params.set("modal", modal);
+    if (subject) { params.set("subjectId", scope === "group" && modal !== "configure" ? String(subject.id) : subjectKey(subject)); params.set("scope", scope); }
+    return params;
+  });
+  const setSubjectView = (view) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (view === "languages") params.set("view", view); else params.delete("view");
+    return params;
+  });
   const [context, setContext] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
@@ -123,7 +141,6 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
   const [groupsLevelId, setGroupsLevelId] = useState(null);
   const [filterError, setFilterError] = useState("");
   const [subjectsError, setSubjectsError] = useState("");
-  const [subjectView, setSubjectView] = useState("subjects");
   const [levels, setLevels] = useState([]);
   const [levelsLoading, setLevelsLoading] = useState(Boolean(navbarBoardId));
   const [academicContextValid, setAcademicContextValid] = useState(false);
@@ -137,14 +154,22 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
   const [searchResults, setSearchResults] = useState([]);
   const [activeSubjects, setActiveSubjects] = useState([]);
   const [subjectSearch, setSubjectSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
+  const addOpen = subjectModal === "add";
+  const setAddOpen = (open) => navigateSubject(open ? "add" : null);
   const [choice, setChoice] = useState("");
   const [draft, setDraft] = useState(empty);
-  const [editing, setEditing] = useState(null);
-  const [removing, setRemoving] = useState(null);
+  const [navigationRecord, setNavigationRecord] = useState(null);
+  const [navigationError, setNavigationError] = useState("");
+  const recordKey = JSON.stringify([subjectModal, navigationSubjectId, navigationScope, context.levelId, context.groupId]);
+  const navigationRecordData = navigationRecord?.key === recordKey ? navigationRecord.subject : null;
+  const editing = subjectModal === "edit" && navigationRecordData ? { subject: navigationRecordData, scope: navigationScope } : null;
+  const removing = subjectModal === "delete" && navigationRecordData ? { ...navigationRecordData, scope: navigationScope } : null;
+  const setEditing = (record) => navigateSubject(record ? "edit" : null, record?.subject, record?.scope);
+  const setRemoving = (subject) => navigateSubject(subject ? "delete" : null, subject, subject?.scope);
   const [toast, setToast] = useState("");
   const languages = secondLanguageOptions;
-  const [languageModalOpen, setLanguageModalOpen] = useState(false);
+  const languageModalOpen = subjectModal === "add-language";
+  const setLanguageModalOpen = (open) => navigateSubject(open ? "add-language" : null);
   // A Second Language is one common-subject slot with many selectable
   // language options. Keep every selected option rather than a single value.
   const [secondLanguages, setSecondLanguages] = useState(loadSecondLanguages);
@@ -155,7 +180,8 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
   const [temporarySubjects, setTemporarySubjects] = useState([]);
   const [selectedSubjectKeys, setSelectedSubjectKeys] = useState([]);
   const [configuredSubjects, setConfiguredSubjects] = useState({});
-  const [configuring, setConfiguring] = useState(null);
+  const configuring = subjectModal === "configure" ? navigationRecordData : null;
+  const setConfiguring = (subject) => navigateSubject(subject ? "configure" : null, subject);
   const [allocationSearch, setAllocationSearch] = useState("");
   const [allocatedSearch, setAllocatedSearch] = useState("");
   const contextRequestSequence = useRef(0);
@@ -561,17 +587,9 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
     }
     finally { setSubjectBusy(false); }
   };
-  const openEdit = async (subject, scope = "group") => {
+  const openEdit = (subject, scope = "group") => {
     if (subjectBusy) return;
-    if (scope !== "group") { setEditing({ subject, scope }); setDraft({ ...subject, category: "Second Language", type: [...subject.type], marks: editableMarks(subject.marks) }); return; }
-    setSubjectBusy(true);
-    try {
-      const response = await apiClient.get(apiEndpoints.subjects.byId(subject.id));
-      const latest = subjectFromApi(body(response));
-      setEditing({ subject: latest.id ? latest : subject, scope });
-      setDraft({ ...(latest.id ? latest : subject), type: [...(latest.type?.length ? latest.type : subject.type)], marks: editableMarks(latest.id ? latest.marks : subject.marks) });
-    } catch (requestError) { setToast(getApiErrorMessage(requestError) || "Unable to load subject details."); }
-    finally { setSubjectBusy(false); }
+    setEditing({ subject, scope });
   };
   const openConfiguredLanguageEdit = (subject, scope) => {
     setEditing({ subject, scope });
@@ -619,6 +637,38 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
     ? current.filter((key) => key !== subjectKey(subject))
     : [...current, subjectKey(subject)]);
   const selectedGroupName = groups.find((group) => group.value === String(context.groupId))?.label || groupKey || "Select Group";
+  const navigationLocalSubject = subjectModal === "configure"
+    ? allocateSubjects.find((subject) => subjectKey(subject) === navigationSubjectId)
+    : navigationScope !== "group" ? languageSubjects.find((subject) => subjectKey(subject) === navigationSubjectId) : null;
+  const configurationSnapshot = useRef(configuredSubjects);
+  configurationSnapshot.current = configuredSubjects;
+  useEffect(() => {
+    if (!["edit", "delete", "configure"].includes(subjectModal)) {
+      if (subjectModal === "add") { setDraft(empty()); setChoice("new"); }
+      if (subjectModal === "add-language") { setLanguageDraft(emptyLanguageDraft()); setLanguageSelection(""); }
+      return;
+    }
+    let active = true;
+    setNavigationError("");
+    if (subjectModal === "configure" && !navigationLocalSubject && (levelsLoading || (context.levelId && groupsLevelId !== context.levelId))) {
+      if (filterError) setNavigationError(filterError);
+      return;
+    }
+    const restore = async () => {
+      try {
+        const subject = navigationScope === "group" && subjectModal !== "configure"
+          ? subjectFromApi(body(await apiClient.get(apiEndpoints.subjects.byId(navigationSubjectId))))
+          : navigationLocalSubject;
+        if (!active) return;
+        if (!subject?.id && !subject?.code) throw new Error("This subject is unavailable. Unsaved subjects must be added again.");
+        setNavigationRecord({ key: recordKey, subject });
+        const configuration = subjectModal === "configure" ? configurationSnapshot.current[subjectKey(subject)] || subject : subject;
+        setDraft({ ...configuration, ...(navigationScope !== "group" ? { category: "Second Language" } : {}), type: [...(configuration.type || [])], marks: editableMarks(configuration.marks) });
+      } catch (error) { if (active) setNavigationError(getApiErrorMessage(error) || "Unable to load subject."); }
+    };
+    if (!navigationSubjectId) setNavigationError("Subject is unavailable."); else restore();
+    return () => { active = false; };
+  }, [subjectModal, navigationSubjectId, navigationScope, recordKey, navigationLocalSubject, levelsLoading, context.levelId, groupsLevelId, filterError]);
   return <DashboardLayout title="Subject Management" subtitle="Configure and allocate subjects to groups." breadcrumb={["Academics", "Subject Management"]}>
     <main className="subject-screen subject-master-screen subject-allocation-screen subject-management-page">
       {subjectView === "languages" ? <>
@@ -647,6 +697,7 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
       </section>
       </>}
     </main>
+    {["edit", "delete", "configure"].includes(subjectModal) && !navigationRecordData && <Modal title={subjectModal === "configure" ? "Configure Subject" : subjectModal === "delete" ? "Delete Subject" : navigationScope === "group" ? "Edit Subject" : "Edit Language"} onClose={() => navigateSubject(null)}><p role={navigationError ? "alert" : "status"}>{navigationError || "Loading subject..."}</p></Modal>}
     {addOpen && <Modal title="Add New Subject" className="subject-add-modal" onClose={() => !subjectBusy && setAddOpen(false)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setAddOpen(false)} disabled={subjectBusy}>Cancel</button><button className="cms-btn cms-btn-primary" onClick={addOtherSubject} disabled={subjectBusy}>Add to List</button></>}><div className="subject-modal"><Form draft={draft} editDraft={editDraft} editMark={editMark} toggleType={toggleType} onNameSearch={setSubjectSearch} />{subjectSearch && searchResults.length ? <p className="subject-existing-hint">Existing matches: {searchResults.slice(0, 3).map((subject) => `${subject.name} (${subject.code})`).join(", ")}</p> : null}</div></Modal>}
     {configuring && <Modal title={`Configure ${configuring.name}`} size="sm" onClose={() => setConfiguring(null)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setConfiguring(null)}>Cancel</button><button className="cms-btn cms-btn-primary" onClick={applyConfiguration}>Apply Changes</button></>}><div className="subject-modal"><Form draft={draft} editDraft={editDraft} editMark={editMark} toggleType={toggleType} /></div></Modal>}
     {editing && <Modal title={(editing.scope === "group" ? "Edit Subject - " : "Edit Language - ") + displaySubjectName(editing.subject.name)} onClose={() => !subjectBusy && setEditing(null)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setEditing(null)} disabled={subjectBusy}>Cancel</button><button className="cms-btn cms-btn-primary" onClick={save} disabled={subjectBusy}>{subjectBusy ? "Saving..." : "Save Changes"}</button></>}><div className="subject-modal">{editing.scope === "group" ? <Form draft={draft} editDraft={editDraft} editMark={editMark} toggleType={toggleType} /> : <LanguageForm draft={draft} editDraft={editDraft} editMark={editMark} />}</div></Modal>}

@@ -1,6 +1,6 @@
 import StudentFeeTab from "./StudentFeeTab.jsx";
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Bus, ClipboardList, GraduationCap, Eye, IndianRupee, Mail, MapPin, Pencil, School, User, Users } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import StudentEnrollmentPage from "@/modules/admin/AdminStudents/StudentEnrollmentPage.jsx";
@@ -87,20 +87,45 @@ const resolvePhotoUrl = (value, version) => {
 };
 
 export default function StudentProfilePage({ id }) {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const editMode = searchParams.get("view") === "edit";
+  const requestedTab = searchParams.get("tab");
+  const activeTab = profileTabs.some(([key]) => key === requestedTab) && !(editMode && requestedTab === "fee") ? requestedTab : "overview";
+  const setActiveTab = (tab) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (tab === "overview") params.delete("tab"); else params.set("tab", tab);
+    return params;
+  });
+  const setEditMode = (editing) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (editing) {
+      params.set("view", "edit");
+      if (params.get("tab") === "fee") params.delete("tab");
+    } else params.delete("view");
+    return params;
+  });
   const [editorBusy, setEditorBusy] = useState(false);
+  const [loadedStudentId, setLoadedStudentId] = useState("");
   const location = useLocation();
   const returnState = location.state?.studentManagement;
-  const [student, setStudent] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [photoFailed, setPhotoFailed] = useState(false), [photoObjectUrl, setPhotoObjectUrl] = useState(""), [editMode, setEditMode] = useState(false), [refreshKey, setRefreshKey] = useState(0);
+  const [student, setStudent] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [photoFailed, setPhotoFailed] = useState(false), [photoObjectUrl, setPhotoObjectUrl] = useState(""), [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setStudent(null);
     setError("");
+    if (!/^[1-9]\d*$/.test(String(id))) {
+      setError("Invalid student ID.");
+      setLoadedStudentId(String(id));
+      setLoading(false);
+      return () => { active = false; };
+    }
     apiClient.get(apiEndpoints.students.getById(id)).then(async ({ data }) => {
       const record = data?.data ?? data?.Data ?? data;
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
       const admissionNo = String(read(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim();
       const studentId = String(read(record, "studentId", "StudentId", "id", "Id") ?? id);
+      if (studentId !== String(id)) throw new Error("Student record does not match the requested student.");
       const [studentsResult, admissionsResult, sectionsResult, hostelBlocksResult] = await Promise.allSettled([
         apiClient.get(apiEndpoints.students.getAll),
         apiClient.get(apiEndpoints.admissions.getAll),
@@ -170,7 +195,9 @@ export default function StudentProfilePage({ id }) {
         setPhotoFailed(false);
         setStudent({ ...source, currentAllocation, id: studentId, studentId, name: read(source, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Student", admissionNo: admissionNo || "—", roll: read(record, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll") ?? "", photo: uploadedPhoto || read(source, "photo", "Photo", "photoPath", "PhotoPath", "photoUrl", "PhotoUrl", "profilePhoto", "ProfilePhoto", "profilePhotoUrl", "ProfilePhotoUrl"), photoVersion: Date.now(), academicYear: read(source, "academicYearName", "AcademicYearName", "academicYear", "AcademicYear"), level: read(source, "academicLevelName", "AcademicLevelName", "academicLevel", "AcademicLevel", "levelName", "LevelName"), group: read(source, "groupName", "GroupName", "group", "Group"), programme: read(source, "programmeName", "ProgrammeName", "programName", "ProgramName", "programme", "Programme"), section: sectionName, admissionType: read(source, "admissionType", "AdmissionType", "admissionTypeName", "AdmissionTypeName", "admissionCategory", "AdmissionCategory", "admissionQuota", "AdmissionQuota", "quota", "Quota", "admissionMode", "AdmissionMode", "type", "Type"), status: read(record, "status", "Status", "studentStatus", "StudentStatus") ?? "Pending assignment" });
       }
-    }).catch((e) => active && setError(getApiErrorMessage(e))).finally(() => active && setLoading(false));
+    }).catch((e) => active && setError(getApiErrorMessage(e))).finally(() => {
+      if (active) { setLoadedStudentId(String(id)); setLoading(false); }
+    });
     return () => { active = false; };
   }, [id, refreshKey]);
   const remotePhotoUrl = student?.photo ? resolvePhotoUrl(student.photo, student.photoVersion) : "";
@@ -196,8 +223,10 @@ export default function StudentProfilePage({ id }) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [remotePhotoUrl]);
-  if (loading) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><SkeletonPage /></DashboardLayout>;
-  if (!student) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{error || "Student record was not found."}</div></div></DashboardLayout>;
+  const profileBackLink = <Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>;
+  const loadingTitle = editMode ? "EDIT STUDENT PROFILE" : "Student Profile";
+  if (loading || loadedStudentId !== String(id)) return <DashboardLayout title={loadingTitle} breadcrumb={["People", "Students"]} backLink={profileBackLink}><div className="student-management-profile-page" data-active-section={activeTab}><SkeletonPage /></div></DashboardLayout>;
+  if (!student) return <DashboardLayout title={loadingTitle} breadcrumb={["People", "Students"]} backLink={profileBackLink}><div className="cms-card"><div className="cms-empty">{error || "Student record was not found."}</div></div></DashboardLayout>;
   const initials = student.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
   const allocation = student.currentAllocation || residentialAllocation(student);
   const finishEditing = async () => { setEditMode(false); setRefreshKey((value) => value + 1); };
@@ -208,14 +237,14 @@ export default function StudentProfilePage({ id }) {
     backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>}
     actions={<div className="cms-admission-main-tabs" role="group" aria-label="Student profile mode">
       <button type="button" className={`cms-admission-main-tab ${!editMode ? "is-active" : ""}`} aria-pressed={!editMode} disabled={editorBusy} onClick={() => setEditMode(false)}><Eye size={15} />View</button>
-      <button type="button" className={`cms-admission-main-tab ${editMode ? "is-active" : ""}`} aria-pressed={editMode} disabled={editorBusy} onClick={() => { if (activeTab === "fee") setActiveTab("overview"); setEditMode(true); }}><Pencil size={15} />Edit</button>
+      <button type="button" className={`cms-admission-main-tab ${editMode ? "is-active" : ""}`} aria-pressed={editMode} disabled={editorBusy} onClick={() => setEditMode(true)}><Pencil size={15} />Edit</button>
     </div>}
   >
     <div className="student-management-profile-page student-profile-compact" data-active-section={activeTab}>
       <div className="cms-admission-main-tabs student-profile-section-tabs" role="tablist" aria-label="Student sections">
         {profileTabs.map(([key, label, Icon]) => <button key={key} id={`student-${key}-tab`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={key === "fee" ? "student-fee-panel" : "student-section-panel"} disabled={editMode && key === "fee"} className={`cms-admission-main-tab ${activeTab === key ? "is-active" : ""}`} onClick={() => setActiveTab(key)}><Icon size={17} />{label}</button>)}
       </div>
-    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} onValidationError={() => setActiveTab("overview")} onBusyChange={setEditorBusy} /></div> : activeTab === "fee" ? <><StudentFeeTab key={`fees-${student.studentId}-${refreshKey}`} student={student} compactContext /></> : <div className="student-profile-overview" role="tabpanel" id="student-section-panel" aria-labelledby={`student-${activeTab}-tab`}>
+    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage key={id} id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} onValidationError={() => setActiveTab("overview")} onBusyChange={setEditorBusy} /></div> : activeTab === "fee" ? <><StudentFeeTab key={`fees-${student.studentId}-${refreshKey}`} student={student} compactContext /></> : <div className="student-profile-overview" role="tabpanel" id="student-section-panel" aria-labelledby={`student-${activeTab}-tab`}>
       <ViewSection title="Personal Information" className="student-profile-personal-section"><div className="student-profile-personal-layout"><div className="student-profile-view-photo">{photoObjectUrl && !photoFailed ? <img src={photoObjectUrl} alt={`${student.name}'s profile`} onError={() => setPhotoFailed(true)} /> : initials}</div><ViewDetails items={[["Student Name", student.name], ["Gender", read(student, "gender", "Gender")], ["Date of Birth", formatDisplayDate(read(student, "dateOfBirth", "DateOfBirth", "dob"))], ["Blood Group", read(student, "bloodGroup", "BloodGroup")], ["Nationality", read(student, "nationality", "Nationality")], ["Religion", read(student, "religion", "Religion")], ["Category", read(student, "category", "Category")], ["Aadhaar Number", read(student, "aadhaarNumber", "AadhaarNumber")]]}/></div></ViewSection>
       <ViewSection title="Academic Placement"><ViewDetails items={[["Board", read(student, "boardName", "BoardName", "board")], ["Academic Year", student.academicYear], ["Academic Level", student.level], ["Group", student.group], ["Program", student.programme], ["Section", student.section], ["Medium", read(student, "medium", "Medium")], ["Second Language", read(student, "secondLanguage", "SecondLanguage")]]}/></ViewSection>
       <ViewSection title="Contact Information"><ViewDetails items={[["Email", read(student, "studentEmail", "email", "Email")], ["Mobile Number", read(student, "studentMobileNumber", "mobileNumber", "mobile", "MobileNumber")]]}/></ViewSection>

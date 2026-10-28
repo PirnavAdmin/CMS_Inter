@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2, FileUp } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
@@ -191,28 +192,67 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
 }
 
 export default function HolidayManagementPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const holidayNavigation = useRef(searchParams);
+  holidayNavigation.current = searchParams;
+  const updateHolidayNavigation = (changes, replace = false) => {
+    const params = new URLSearchParams(holidayNavigation.current);
+    Object.entries(changes).forEach(([key, value]) => { if (value == null || value === "") params.delete(key); else params.set(key, String(value)); });
+    if (params.toString() !== holidayNavigation.current.toString()) { holidayNavigation.current = params; setSearchParams(params, { replace }); }
+  };
+  const holidayView = searchParams.get("view");
+  const holidayId = searchParams.get("holidayId") || "";
+  const navigateHoliday = (view, holiday) => updateHolidayNavigation({ view, holidayId: holiday?.id });
+  const [restoredHoliday, setRestoredHoliday] = useState(null);
+  const [holidayLoadError, setHolidayLoadError] = useState("");
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
   const [holidays, setHolidays] = useState(holidayRecords);
   const [summary, setSummary] = useState({ total: 8, national: 3, festival: 5, upcoming: 7, completed: 1 });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [query, setQuery] = useState("");
-  const [month, setMonth] = useState("All");
-  const [customRange, setCustomRange] = useState({ from: "", to: "" });
-  const [appliedRange, setAppliedRange] = useState(null);
-  const [type, setType] = useState("All");
-  const [status, setStatus] = useState("All");
-  const [page, setPage] = useState(1);
-  const [importModal, setImportModal] = useState(false);
+  const query = searchParams.get("q") || "";
+  const setQuery = (value) => updateHolidayNavigation({ q: value }, true);
+  const month = /^(?:[1-9]|1[0-2]|Custom Range)$/.test(searchParams.get("month") || "") ? searchParams.get("month") : "All";
+  const [customRange, setCustomRange] = useState({ from: searchParams.get("from") || "", to: searchParams.get("to") || "" });
+  const appliedRange = useMemo(() => searchParams.get("from") && searchParams.get("to") ? { from: searchParams.get("from"), to: searchParams.get("to") } : null, [searchParams]);
+  const setAppliedRange = (range) => updateHolidayNavigation({ from: range?.from, to: range?.to });
+  const type = TYPES.includes(searchParams.get("type")) ? searchParams.get("type") : "All";
+  const setType = (value) => updateHolidayNavigation({ type: value === "All" ? null : value });
+  const status = ["Active", "Upcoming", "Completed", "Inactive"].includes(searchParams.get("status")) ? searchParams.get("status") : "All";
+  const setStatus = (value) => updateHolidayNavigation({ status: value === "All" ? null : value });
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const setPage = (value) => updateHolidayNavigation({ page: typeof value === "function" ? value(page) : value }, true);
+  const importModal = holidayView === "import";
+  const setImportModal = (open) => navigateHoliday(open ? "import" : null);
   const [importFile, setImportFile] = useState(null);
   const [importValidation, setImportValidation] = useState(null);
   const [importBusy, setImportBusy] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
-  const [formHoliday, setFormHoliday] = useState(undefined);
-  const [viewHoliday, setViewHoliday] = useState(null);
-  const [deleteHoliday, setDeleteHoliday] = useState(null);
+  const holidayScope = JSON.stringify([selectedCampusId, selectedBoardId, selectedAcademicYearId, holidayId]);
+  const selectedHoliday = restoredHoliday?.scope === holidayScope ? restoredHoliday.holiday : null;
+  const formHoliday = holidayView === "add" ? null : holidayView === "edit" && selectedHoliday ? selectedHoliday : undefined;
+  const viewHoliday = holidayView === "details" ? selectedHoliday : null;
+  const deleteHoliday = holidayView === "delete" ? selectedHoliday : null;
+  const setFormHoliday = (holiday) => navigateHoliday(holiday === undefined ? null : holiday ? "edit" : "add", holiday);
+  const setViewHoliday = (holiday) => navigateHoliday(holiday ? "details" : null, holiday);
+  const setDeleteHoliday = (holiday) => navigateHoliday(holiday ? "delete" : null, holiday);
   const [toast, setToast] = useState({ message: "", type: "success" });
+
+  useEffect(() => {
+    if (!["edit", "details", "delete"].includes(holidayView)) return;
+    let active = true;
+    setRestoredHoliday(null);
+    setHolidayLoadError("");
+    if (!holidayId) { setHolidayLoadError("Holiday is unavailable."); return; }
+    holidayApi.getHolidayById(holidayId).then((holiday) => {
+      if (!active) return;
+      const campusId = holiday?.campusId ?? holiday?.CampusId;
+      if (!holiday?.id || (selectedCampusId && campusId != null && String(campusId) !== String(selectedCampusId))) throw new Error("Holiday is unavailable in this campus.");
+      setRestoredHoliday({ scope: holidayScope, holiday });
+    }).catch((error) => { if (active) setHolidayLoadError(error?.message || "Unable to load holiday."); });
+    return () => { active = false; };
+  }, [holidayId, holidayView, holidayScope, selectedCampusId]);
 
   const months = useMemo(() => Array.from({ length: 12 }, (_, index) => ({ value: String(index + 1), label: new Intl.DateTimeFormat("en-IN", { month: "long" }).format(new Date(2026, index, 1)) })), []);
 
@@ -317,11 +357,9 @@ export default function HolidayManagementPage() {
 
   const updateFilter = (setter) => (value) => { setter(value); setPage(1); };
   const changeMonth = (value) => {
-    setMonth(value);
-    setPage(1);
+    updateHolidayNavigation({ month: value === "All" ? null : value, page: 1, ...(value !== "Custom Range" ? { from: null, to: null } : {}) });
     if (value !== "Custom Range") {
       setCustomRange({ from: "", to: "" });
-      setAppliedRange(null);
     }
   };
 
@@ -569,8 +607,14 @@ export default function HolidayManagementPage() {
         </section>
       </div>
 
+      {["edit", "details", "delete"].includes(holidayView) && !selectedHoliday ? (
+        <Modal title={holidayView === "edit" ? "Edit Holiday" : holidayView === "delete" ? "Delete holiday" : "Holiday Details"} onClose={() => navigateHoliday(null)}>
+          <p role={holidayLoadError ? "alert" : "status"}>{holidayLoadError || "Loading holiday..."}</p>
+        </Modal>
+      ) : null}
+
       {formHoliday !== undefined ? (
-        <HolidayForm holiday={formHoliday} saving={saving} onClose={() => setFormHoliday(undefined)} onSave={saveHoliday} />
+        <HolidayForm key={holidayView + holidayId} holiday={formHoliday} saving={saving} onClose={() => setFormHoliday(undefined)} onSave={saveHoliday} />
       ) : null}
 
       {viewHoliday ? (

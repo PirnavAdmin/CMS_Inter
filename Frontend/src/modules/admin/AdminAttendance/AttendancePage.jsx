@@ -133,32 +133,31 @@ export default function AttendancePage({ area: areaProp } = {}) {
     if (clean === "my-attendance" || clean === "my") return "my-attendance";
     return "my-attendance";
   };
-  const [activeStaffTab, setActiveStaffTabState] = useState(() => normalizeStaffTab(tabFromUrl));
+  const activeStaffTab = normalizeStaffTab(tabFromUrl);
 
   const setActiveStaffTab = (tab) => {
     const normalized = normalizeStaffTab(tab);
-    setActiveStaffTabState(normalized);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.set("tab", normalized);
         if (normalized !== "my-attendance") next.delete("regularize");
         return next;
-      },
-      { replace: true }
+      }
     );
   };
 
-  useEffect(() => {
-    const normalized = normalizeStaffTab(tabFromUrl);
-    if (tabFromUrl && normalized !== activeStaffTab) {
-      setActiveStaffTabState(normalized);
-    }
-  }, [tabFromUrl, activeStaffTab]);
-
   const [notice, setNotice] = useState({ message: "", type: "success" });
-  const [importOpen, setImportOpen] = useState(false);
+  const importOpen = searchParams.get("modal") === "import";
+  const setImportOpen = (open) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (open) params.set("modal", "import"); else params.delete("modal");
+    if (open && attendanceDateRef.current) params.set("importDate", attendanceDateRef.current); else params.delete("importDate");
+    return params;
+  });
   const [studentAttendanceLocked, setStudentAttendanceLocked] = useState(true);
+  const attendanceDateRef = useRef(null);
+  const handleHolidayLockChange = useCallback((locked, date) => { setStudentAttendanceLocked(locked); attendanceDateRef.current = date; }, []);
   const say = useCallback((message, type = "success") => setNotice({ message, type }), []);
 
   const dynamicHeader = useMemo(() => {
@@ -256,12 +255,13 @@ export default function AttendancePage({ area: areaProp } = {}) {
                 </div>
               }
             >
-              <Screen key={staff ? "staff" : "student"} staff={staff} say={say} onHolidayLockChange={setStudentAttendanceLocked} />
+              <Screen key={staff ? "staff" : "student"} staff={staff} say={say} onHolidayLockChange={handleHolidayLockChange} />
             </ErrorBoundary>
           )}
         </main>
       </DashboardLayout>
-      {importOpen && (staff || !studentAttendanceLocked) && <AttendanceImportModal staff={staff} say={say} onClose={() => setImportOpen(false)} />}
+      {importOpen && dynamicHeader.showImport && (staff || !studentAttendanceLocked) && <AttendanceImportModal staff={staff} say={say} onClose={() => setImportOpen(false)} />}
+      {importOpen && !staff && studentAttendanceLocked && <Modal title="Student Attendance Import" onClose={() => setImportOpen(false)}><p role="status">Attendance import is unavailable until this date is confirmed as an eligible working day. Close this dialog to review any holiday or loading error.</p></Modal>}
       <Toast message={notice.message} type={notice.type} onClose={() => setNotice({ message: "", type: "success" })} />
     </>
   );
@@ -456,15 +456,26 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const navigate = useNavigate();
  const location = useLocation();
  const [editParams, setEditParams] = useSearchParams();
- const editId = staff ? editParams.get("edit") || "" : "";
- const editDate = staff ? editParams.get("date") || "" : "";
+ const editRequested = editParams.has("edit");
+ const editId = editParams.get("edit") || "";
+ const editDate = editParams.get("date") || "";
  const validEditDate = /^\d{4}-\d{2}-\d{2}$/.test(editDate) && !Number.isNaN(Date.parse(editDate)) && new Date(editDate).toISOString().slice(0, 10) === editDate;
+ const importDate = editParams.get("modal") === "import" ? editParams.get("importDate") || "" : "";
+ const validImportDate = /^\d{4}-\d{2}-\d{2}$/.test(importDate) && !Number.isNaN(Date.parse(importDate)) && new Date(importDate).toISOString().slice(0, 10) === importDate;
  const { selectedBoardId: navbarBoardId, selectedAcademicYearId: navbarAcademicYearId } = useAcademicContext();
  const campusCtx = useCampusContext();
  const navbarCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
  const restoredState = !staff ? location.state?.attendanceState : null;
- const defaultFilters = { date: staff && editId && validEditDate ? editDate : getTodayDate(), level: "", group: "", section: "", program: "", department: "", type: "", person: "", status: "", view: "Attendance" };
- const [f, setF] = useState(() => restoredState?.filters || defaultFilters);
+ const defaultFilters = { date: editId && validEditDate ? editDate : validImportDate ? importDate : getTodayDate(), level: !staff && editId ? editParams.get("editLevel") || "" : "", group: !staff && editId ? editParams.get("editGroup") || "" : "", section: !staff && editId ? editParams.get("editSection") || "" : "", program: !staff && editId ? editParams.get("editProgram") || "" : "", department: "", type: "", person: "", status: "" };
+ const [filterState, setF] = useState(() => {
+   const filters = { ...(restoredState?.filters || defaultFilters) };
+   delete filters.view;
+   return filters;
+ });
+ const viewParam = editParams.get(staff ? "view" : "tab");
+ const viewNames = { attendance: "Attendance", "monthly-report": "Monthly Report", ...(!staff ? { defaulters: "Defaulters" } : {}) };
+ const selectedView = viewNames[viewParam] || (!viewParam && Object.values(viewNames).includes(restoredState?.filters?.view) ? restoredState.filters.view : "Attendance");
+ const f = useMemo(() => ({ ...filterState, view: selectedView }), [filterState, selectedView]);
  const [rows, setRows] = useState(() => restoredState?.rows || []);
  const [report, setReport] = useState(() => restoredState?.report || null);
  const [loaded, setLoaded] = useState(() => Boolean(restoredState?.loaded));
@@ -472,27 +483,32 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const [editing, setEditing] = useState(null);
  const [editSaving, setEditSaving] = useState(false);
  const [editLoading, setEditLoading] = useState(false);
+ const [restoredEditKey, setRestoredEditKey] = useState("");
+ const [editError, setEditError] = useState("");
+ const editKey = JSON.stringify([staff, editId, editDate, navbarCampusId, navbarBoardId, navbarAcademicYearId, ...(!staff ? ["editLevel", "editGroup", "editProgram", "editSection"].map((key) => editParams.get(key) || "") : [])]);
  const closeEdit = () => {
    setEditing(null);
-   if (!staff) return;
+   setRestoredEditKey("");
+   setEditError("");
    const next = new URLSearchParams(editParams);
-   next.delete("edit"); next.delete("date");
+   ["edit", "date", "editLevel", "editGroup", "editProgram", "editSection"].forEach((key) => next.delete(key));
    setEditParams(next);
  };
  useEffect(() => {
-   if (!staff) return undefined;
+   if (editRequested && restoredEditKey === editKey) return undefined;
    let active = true;
    setEditing(null);
    setEditLoading(false);
-   if (!editId) return undefined;
+   setEditError("");
+   if (!editRequested) return undefined;
    if (!/^[1-9]\d*$/.test(editId) || !validEditDate) {
-     say("Invalid staff attendance edit link.", "error");
+     setEditError("Invalid attendance edit link.");
      return undefined;
    }
-   setF((current) => current.date === editDate ? current : { ...current, date: editDate });
+   setF((current) => ({ ...current, date: editDate, ...(!staff ? { level: editParams.get("editLevel") || "", group: editParams.get("editGroup") || "", program: editParams.get("editProgram") || "", section: editParams.get("editSection") || "" } : {}) }));
    if (!navbarCampusId || !navbarBoardId || !navbarAcademicYearId) return undefined;
    setEditLoading(true);
-   apiClient.post(apiEndpoints.staffAttendance.load, {
+   const request = staff ? apiClient.post(apiEndpoints.staffAttendance.load, {
      date: editDate,
      campusId: num(navbarCampusId),
      boardId: num(navbarBoardId),
@@ -500,16 +516,24 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
      departmentId: undefined,
      staffType: undefined,
      facultyId: num(editId)
-   }).then((response) => {
+   }) : apiClient.get(apiEndpoints.attendance.studentAdminDaily, { params: {
+     date: editDate, campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId),
+     academicLevelId: num(editParams.get("editLevel")), groupId: num(editParams.get("editGroup")), sectionId: num(editParams.get("editSection")),
+     ...(editParams.get("editProgram") ? { programId: num(editParams.get("editProgram")) } : {})
+   } });
+   request.then((response) => {
      if (!active) return;
-     const record = asList(body(response)).find((row) => String(get(row, "facultyId", "staffId", "id")) === editId);
-     if (!record) throw new Error("Staff attendance record is unavailable for this date and campus.");
+     const record = asList(body(response)).find((row) => String(staff ? get(row, "facultyId", "staffId", "id") : get(row, "studentId", "id")) === editId);
+     if (!record) throw new Error("Attendance record is unavailable for this date and campus.");
      const status = staffStatus(record.status);
-     setEditing({ record, status: STAFF_STATUSES.includes(status) ? status : "Present", inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" });
-   }).catch((error) => { if (active) say(getApiErrorMessage(error) || "Unable to load staff attendance.", "error"); })
+     setEditing(staff ? { record, status: STAFF_STATUSES.includes(status) ? status : "Present", inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" }
+       : { record, morning: studentSessionStatus(record, "morning"), afternoon: studentSessionStatus(record, "afternoon"), remarks: get(record, "remarks", "remark") || "" });
+     setRestoredEditKey(editKey);
+     setEditLoading(false);
+   }).catch((error) => { if (active) setEditError(getApiErrorMessage(error) || "Unable to load attendance."); })
      .finally(() => { if (active) setEditLoading(false); });
    return () => { active = false; };
- }, [staff, editId, editDate, validEditDate, navbarCampusId, navbarBoardId, navbarAcademicYearId, say]);
+ }, [staff, editRequested, editId, editDate, validEditDate, editKey, restoredEditKey, editParams, navbarCampusId, navbarBoardId, navbarAcademicYearId]);
  const [search, setSearch] = useState(() => restoredState?.search || "");
  const [page, setPage] = useState(() => restoredState?.page || 1);
  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
@@ -518,7 +542,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const [holidayError, setHolidayError] = useState("");
  const holidayKey = `${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}:${f.date}`;
  const holidayLocked = !staff && (holidayCheckedKey !== holidayKey || Boolean(activeHoliday) || Boolean(holidayError));
- useEffect(() => { onHolidayLockChange?.(holidayLocked); }, [holidayLocked, onHolidayLockChange]);
+ useEffect(() => { onHolidayLockChange?.(holidayLocked, f.date); }, [holidayLocked, f.date, onHolidayLockChange]);
  const [dirty, setDirty] = useState(false);
  const holidaysCacheRef = useRef(new Map());
  const [admissionDates, setAdmissionDates] = useState(new Map());
@@ -549,7 +573,11 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
 
  const switchView = (newView) => {
    setPage(1);
-   setF((old) => ({ ...old, view: newView }));
+   setEditParams((previous) => {
+     const params = new URLSearchParams(previous);
+     params.set(staff ? "view" : "tab", newView === "Monthly Report" ? "monthly-report" : newView === "Defaulters" ? "defaulters" : "attendance");
+     return params;
+   });
  };
 
  useEffect(() => {
@@ -950,6 +978,13 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                }
                const s = staffStatus(record.status);
                const initialStatus = STAFF_STATUSES.includes(s) ? s : "Present";
+               const studentId = get(record, "studentId", "id");
+               if (studentId == null) return say("Student attendance has no stable student ID.", "error");
+               const next = new URLSearchParams(editParams);
+               next.set("edit", String(studentId)); next.set("date", f.date);
+               Object.entries({ editLevel: f.level, editGroup: f.group, editProgram: f.program, editSection: f.section }).forEach(([key, value]) => { if (value) next.set(key, value); else next.delete(key); });
+               setRestoredEditKey(JSON.stringify([staff, String(studentId), f.date, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, f.section]));
+               setEditParams(next);
                setEditing(
                  staff
                    ? { record, status: initialStatus, inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" }
@@ -958,7 +993,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
              }}
              view={(record) => {
                const personId = staff ? get(record, "facultyId", "staffId", "id") : get(record, "studentId", "id");
-               if (personId != null) navigate(`/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`, {
+               if (personId != null) navigate({ pathname: `/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`, search: editParams.toString() }, {
                  state: staff ? undefined : {
                    attendanceState: { filters: f, rows, report, loaded, search, page: currentPage, activeHoliday }
                  }
@@ -970,8 +1005,8 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
        </>
      ))}
      {!staff && holidayError ? <p role="alert" className="att-holiday-banner">{holidayError}</p> : null}
-     {staff && editLoading ? <Modal title="Edit Staff Attendance" onClose={closeEdit}><SkeletonPage variant="table" columns={2} rows={3} /></Modal> : null}
-     {editing && !editLoading && !holidayLocked ? (
+     {editRequested && (editLoading || !editing || restoredEditKey !== editKey || holidayLocked) ? <Modal title={`Edit ${staff ? "Staff" : "Student"} Attendance`} onClose={closeEdit}>{editError || (!staff && holidayError) || (!staff && activeHoliday) ? <p role="alert">{editError || holidayError || "Attendance cannot be edited on this holiday."}</p> : <SkeletonPage variant="table" columns={2} rows={3} />}</Modal> : null}
+     {editRequested && editing && restoredEditKey === editKey && !editLoading && !holidayLocked ? (
        <Edit editing={editing} setEditing={setEditing} staff={staff} date={f.date} save={save} close={() => { if (!editSaving) closeEdit(); }} busy={busy || editSaving} />
      ) : null}
    </>

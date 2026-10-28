@@ -77,7 +77,9 @@ export default function AttendanceOverviewPage() {
   }, [id, loadData]);
 
   const title = staff ? "Staff Attendance Overview" : "Student Attendance Overview";
-  const backPath = staff ? "/dashboard/attendance/staff" : "/dashboard/attendance/student";
+  const backParams = new URLSearchParams(location.search);
+  if (staff) backParams.set("tab", "staff-attendance");
+  const backPath = `${staff ? "/dashboard/attendance/staff" : "/dashboard/attendance/student"}${backParams.size ? `?${backParams}` : ""}`;
   const backState = !staff && location.state?.attendanceState ? { attendanceState: location.state.attendanceState } : undefined;
   const yearLabel = selectedAcademicYear?.name || selectedAcademicYear?.label || profile?.academicYearName || '';
   const subtitle = yearLabel ? `Academic Year: ${yearLabel}` : '';

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Download, Eye, FileText, FileUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Modal, SkeletonRow, StatusBadge, Toast } from "@/shared/components/Ui.jsx";
@@ -113,6 +113,19 @@ export default function StudentManagementPage() {
   const restoringFilters = useRef(Boolean(restoredState));
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const studentModal = searchParams.get("modal");
+  const uploadStudentId = searchParams.get("studentId") || "";
+  const uploadRequested = studentModal === "document" || studentModal === "photo";
+  const uploadScope = JSON.stringify([selectedCampusId, selectedBoardId, selectedAcademicYearId, uploadStudentId]);
+  const [uploadStudent, setUploadStudent] = useState(null);
+  const [uploadLoadError, setUploadLoadError] = useState("");
+  const navigateStudentModal = (modal, studentId) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (modal) params.set("modal", modal); else params.delete("modal");
+    if (studentId) params.set("studentId", String(studentId)); else params.delete("studentId");
+    return params;
+  });
   const [query, setQuery] = useState(restoredState?.query ?? "");
   const [filters, setFilters] = useState(restoredState?.filters ?? {
     level: "",
@@ -130,17 +143,23 @@ export default function StudentManagementPage() {
   const [exporting, setExporting] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const [importOpen, setImportOpen] = useState(false);
+  const importOpen = studentModal === "import";
+  const setImportOpen = (open) => navigateStudentModal(open ? "import" : null);
   const [importFile, setImportFile] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
   const [importBusy, setImportBusy] = useState("");
   const [importSuccess, setImportSuccess] = useState(false);
-  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const credentialsOpen = studentModal === "credentials";
+  const setCredentialsOpen = (open) => navigateStudentModal(open ? "credentials" : null);
   const [credentialFilters, setCredentialFilters] = useState({ level: "", group: "", program: "", section: "", admissionNo: "" });
   const [credentialGroups, setCredentialGroups] = useState([]);
   const [credentialPrograms, setCredentialPrograms] = useState([]);
   const [credentialSections, setCredentialSections] = useState([]);
-  const [fileAction, setFileAction] = useState(null);
+  const fileAction = uploadRequested && uploadStudent?.scope === uploadScope ? { kind: studentModal, student: uploadStudent.student } : null;
+  const setFileAction = (action) => {
+    if (action) setUploadStudent({ scope: JSON.stringify([selectedCampusId, selectedBoardId, selectedAcademicYearId, String(action.student.id)]), student: action.student });
+    navigateStudentModal(action?.kind, action?.student?.id);
+  };
   const [uploadFile, setUploadFile] = useState(null);
   const [documentType, setDocumentType] = useState("");
   const [levelOptions, setLevelOptions] = useState([]);
@@ -150,6 +169,22 @@ export default function StudentManagementPage() {
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
   const [page, setPage] = useState(restoredState?.page ?? 1);
+
+  useEffect(() => {
+    setUploadFile(null);
+    setDocumentType("");
+    if (!uploadRequested || uploadStudent?.scope === uploadScope) return;
+    let active = true;
+    setUploadLoadError("");
+    if (!/^[1-9]\d*$/.test(uploadStudentId)) { setUploadLoadError("Invalid student ID."); return; }
+    apiClient.get(apiEndpoints.students.getById(uploadStudentId)).then(({ data }) => {
+      const record = data?.data ?? data?.Data ?? data;
+      if (!record || typeof record !== "object" || String(value(record, "studentId", "StudentId", "id", "Id")) !== uploadStudentId) throw new Error("Student record was not found.");
+      if (!matchesStudentContext(record, { campusId: selectedCampusId, boardId: selectedBoardId, academicYearId: selectedAcademicYearId })) throw new Error("Student is unavailable in the current context.");
+      if (active) setUploadStudent({ scope: uploadScope, student: { ...record, id: uploadStudentId, name: value(record, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Unnamed Student", admissionNo: value(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "—" } });
+    }).catch((error) => { if (active) setUploadLoadError(getApiErrorMessage(error)); });
+    return () => { active = false; };
+  }, [studentModal, uploadRequested, uploadStudentId, uploadScope, uploadStudent?.scope, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { restoringFilters.current = false; }, 0);
@@ -660,6 +695,7 @@ export default function StudentManagementPage() {
           </div>
         </Modal>
       )}
+      {uploadRequested && !fileAction && <Modal title={studentModal === "photo" ? "Upload Student Photo" : "Upload Student Document"} size="sm" onClose={() => navigateStudentModal(null)} footer={<button className="cms-btn cms-btn-ghost" type="button" onClick={() => navigateStudentModal(null)}>Cancel</button>}><p role={uploadLoadError ? "alert" : "status"}>{uploadLoadError || "Loading student..."}</p></Modal>}
       {credentialsOpen && (
         <Modal
           title="Student Credentials"
