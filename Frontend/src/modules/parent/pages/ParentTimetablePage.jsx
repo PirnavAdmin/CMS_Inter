@@ -221,7 +221,7 @@ export default function ParentTimetablePage() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${child.id === c.id ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${(String(activeChildId) === String(c.id) || String(child?.id) === String(c.id)) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <GraduationCap size={15} /> {c.name} ({c.group || c.className || "Class"})

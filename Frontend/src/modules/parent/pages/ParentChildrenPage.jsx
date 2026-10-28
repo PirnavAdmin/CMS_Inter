@@ -16,11 +16,22 @@ export default function ParentChildrenPage() {
     child,
     currentAcademicYear,
     loading,
+    getChildForYear: contextGetChildForYear,
   } = useParentPortal();
   const [selectedChildModal, setSelectedChildModal] = useState(null);
 
-  const activeBase = availableChildren.find((c) => c.id === (id || activeChildId)) || availableChildren[0];
-  const activeChild = activeBase ? (activeBase.id === child?.id ? child : getChildForYear(activeBase, currentAcademicYear)) : null;
+  const getChild = (base) => {
+    if (!base) return null;
+    if (contextGetChildForYear) {
+      const res = contextGetChildForYear(base);
+      if (res) return res;
+    }
+    if (base.id === activeChildId && child) return child;
+    return getChildForYear(base, currentAcademicYear);
+  };
+
+  const activeBase = availableChildren.find((c) => String(c.id) === String(id || activeChildId)) || availableChildren[0];
+  const activeChild = activeBase ? (activeBase.id === child?.id && child ? child : getChild(activeBase)) : null;
 
   const handleSelectChild = (childId) => {
     setActiveChildId(childId);
@@ -85,12 +96,13 @@ export default function ParentChildrenPage() {
           </div>
           <div className="parent-child-switch-buttons">
             {availableChildren.map((base) => {
-              const c = getChildForYear(base, currentAcademicYear);
+              const c = getChild(base);
+              const isSelected = String(activeChildId) === String(c?.id) || String(activeChild?.id) === String(c?.id);
               return (
                 <button
                   key={c.id}
                   type="button"
-                  className={`parent-child-switch-btn ${activeChild.id === c.id ? "is-active" : ""}`}
+                  className={`parent-child-switch-btn ${isSelected ? "is-active" : ""}`}
                   onClick={() => handleSelectChild(c.id)}
                 >
                   <GraduationCap size={15} />
@@ -103,46 +115,47 @@ export default function ParentChildrenPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 20 }}>
           {availableChildren.map((base) => {
-            const child = getChildForYear(base, currentAcademicYear);
+            const c = getChild(base);
+            const isSelected = String(activeChildId) === String(c?.id) || String(activeChild?.id) === String(c?.id);
             return (
-            <div key={child.id} className="parent-card" style={{ borderTop: activeChild.id === child.id ? "3px solid var(--cms-primary)" : undefined }}>
+            <div key={c.id} className="parent-card" style={{ borderTop: isSelected ? "3px solid var(--cms-primary)" : undefined }}>
               <div className="parent-card-header">
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <img src={child.avatar} alt={child.name} className="parent-child-avatar" style={{ width: 46, height: 46 }} />
+                  <img src={c.avatar} alt={c.name} className="parent-child-avatar" style={{ width: 46, height: 46 }} />
                   <div>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{child.name}</h3>
-                    <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Roll No: {child.roll} | Adm: {child.admissionNo}</span>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{c.name}</h3>
+                    <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Roll No: {c.roll} | Adm: {c.admissionNo}</span>
                   </div>
                 </div>
-                <span className={`cms-badge ${(child?.fees?.status || "") === "Paid" ? "cms-badge-active" : "cms-badge-warn"}`}>
-                  Fee: {child?.fees?.status || "—"}
+                <span className={`cms-badge ${(c?.fees?.status || "") === "Paid" ? "cms-badge-active" : "cms-badge-warn"}`}>
+                  Fee: {c?.fees?.status || "—"}
                 </span>
               </div>
               <div className="parent-card-body">
                 <div className="parent-profile-meta-grid" style={{ marginBottom: 16 }}>
                   <div className="parent-meta-item">
                     <span className="parent-meta-label">Course & Level</span>
-                    <span className="parent-meta-val">{child.level}</span>
+                    <span className="parent-meta-val">{c.level}</span>
                   </div>
                   <div className="parent-meta-item">
                     <span className="parent-meta-label">Group & Section</span>
-                    <span className="parent-meta-val">{child.group} - {child.section}</span>
+                    <span className="parent-meta-val">{c.group} - {c.section}</span>
                   </div>
                   <div className="parent-meta-item">
                     <span className="parent-meta-label">Overall Attendance</span>
-                    <span className="parent-meta-val" style={{ color: "var(--cms-green)" }}>{child?.attendance?.overall ?? 0}% ({child?.attendance?.status || "—"})</span>
+                    <span className="parent-meta-val" style={{ color: "var(--cms-green)" }}>{c?.attendance?.overall ?? 0}% ({c?.attendance?.status || "—"})</span>
                   </div>
                   <div className="parent-meta-item">
                     <span className="parent-meta-label">Current SGPA</span>
-                    <span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)" }}>{child?.academics?.sgpa || "—"} / 10.0</span>
+                    <span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)" }}>{c?.academics?.sgpa || "—"} / 10.0</span>
                   </div>
                 </div>
 
                 <div style={{ padding: "12px 14px", background: "var(--cms-bg)", borderRadius: 10, marginBottom: 16 }}>
                   <div style={{ fontSize: 12, color: "var(--cms-muted)", marginBottom: 4, fontWeight: 600 }}>CLASS TEACHER / MENTOR</div>
                   <div>
-                    <strong style={{ fontSize: 13.5 }}>{child.mentor}</strong>
-                    <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{child.mentorDesignation}</div>
+                    <strong style={{ fontSize: 13.5 }}>{c.mentor}</strong>
+                    <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{c.mentorDesignation}</div>
                   </div>
                 </div>
 
@@ -152,17 +165,17 @@ export default function ParentChildrenPage() {
                     className="cms-btn cms-btn-primary"
                     style={{ flex: 1 }}
                     onClick={() => {
-                      handleSelectChild(child.id);
-                      setSelectedChildModal(child);
+                      handleSelectChild(c.id);
+                      setSelectedChildModal(c);
                     }}
                   >
                     <Eye size={14} /> Quick View
                   </button>
                   <Link
-                    to={`/parent-dashboard/children/${child.id}`}
+                    to={`/parent-dashboard/children/${c.id}`}
                     className="cms-btn cms-btn-outline"
                     style={{ flex: 1, textDecoration: "none", textAlign: "center" }}
-                    onClick={() => handleSelectChild(child.id)}
+                    onClick={() => handleSelectChild(c.id)}
                   >
                     Full Profile <ChevronRight size={14} />
                   </Link>
@@ -224,9 +237,20 @@ export default function ParentChildrenPage() {
 
 export function ParentChildDetailsRoute() {
   const { id } = useParams();
-  const { availableChildren, activeChildId, currentAcademicYear, setActiveChildId, child: contextChild } = useParentPortal();
-  const baseChild = availableChildren.find((c) => c.id === id) || availableChildren[0];
-  const child = (baseChild && baseChild.id === contextChild?.id) ? contextChild : (baseChild ? getChildForYear(baseChild, currentAcademicYear) : null);
+  const { availableChildren, activeChildId, currentAcademicYear, setActiveChildId, child: contextChild, getChildForYear: contextGetChildForYear } = useParentPortal();
+
+  const getChild = (base) => {
+    if (!base) return null;
+    if (contextGetChildForYear) {
+      const res = contextGetChildForYear(base);
+      if (res) return res;
+    }
+    if (base.id === activeChildId && contextChild) return contextChild;
+    return getChildForYear(base, currentAcademicYear);
+  };
+
+  const baseChild = availableChildren.find((c) => String(c.id) === String(id)) || availableChildren[0];
+  const child = (baseChild && baseChild.id === contextChild?.id && contextChild) ? contextChild : (baseChild ? getChild(baseChild) : null);
 
   useEffect(() => {
     if (child?.id && activeChildId !== child.id) {

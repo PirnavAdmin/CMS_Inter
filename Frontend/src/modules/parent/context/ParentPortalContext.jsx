@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
@@ -499,6 +499,7 @@ export function ParentPortalProvider({ children }) {
   const authUser = getAuthUser();
 
   const location = useLocation();
+  const navigate = useNavigate();
 
   const getInitialActiveChildId = () => {
     if (typeof window === "undefined") return "";
@@ -525,15 +526,21 @@ export function ParentPortalProvider({ children }) {
       try {
         window.sessionStorage.setItem("cms-parent-active-child", strId);
       } catch {}
-      try {
-        const url = new URL(window.location.href);
-        if (url.searchParams.get("studentId") !== strId) {
-          url.searchParams.set("studentId", strId);
-          window.history.pushState(null, "", url.toString());
-        }
-      } catch {}
     }
-  }, []);
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("studentId") !== strId) {
+        url.searchParams.set("studentId", strId);
+        navigate(
+          {
+            pathname: location.pathname,
+            search: url.searchParams.toString(),
+          },
+          { replace: false }
+        );
+      }
+    } catch {}
+  }, [location.pathname, navigate]);
   const [detailedStudentMap, setDetailedStudentMap] = useState({});
   const [feeMap, setFeeMap] = useState({});
   const [resultsMap, setResultsMap] = useState({});
@@ -597,6 +604,9 @@ export function ParentPortalProvider({ children }) {
 
       if (mapped && mapped.length > 0) {
         setChildrenList(mapped);
+        mapped.forEach((c) => {
+          fetchActiveChildData(c.id);
+        });
         setActiveChildIdState((prev) => {
           let candidate = prev;
           if (!candidate && typeof window !== "undefined") {
@@ -615,7 +625,13 @@ export function ParentPortalProvider({ children }) {
               const url = new URL(window.location.href);
               if (url.pathname.startsWith("/parent-dashboard") && !url.pathname.startsWith("/parent-dashboard/children/") && url.searchParams.get("studentId") !== String(chosenId)) {
                 url.searchParams.set("studentId", String(chosenId));
-                window.history.replaceState(null, "", url.toString());
+                navigate(
+                  {
+                    pathname: location.pathname,
+                    search: url.searchParams.toString(),
+                  },
+                  { replace: true }
+                );
               }
             } catch {}
           }
@@ -684,10 +700,16 @@ export function ParentPortalProvider({ children }) {
         url.searchParams.get("studentId") !== activeChildId
       ) {
         url.searchParams.set("studentId", activeChildId);
-        window.history.replaceState(null, "", url.toString());
+        navigate(
+          {
+            pathname: location.pathname,
+            search: url.searchParams.toString(),
+          },
+          { replace: true }
+        );
       }
     } catch {}
-  }, [activeChildId, location.pathname]);
+  }, [activeChildId, location.pathname, location.search, navigate]);
 
   // Fetch holidays from Admin holiday management (real API with fallback to mockStore/mockData)
   const fetchHolidays = useCallback(async () => {
@@ -871,7 +893,7 @@ export function ParentPortalProvider({ children }) {
         // Silent recovery
       }
     }
-  }, [detailedStudentMap]);
+  }, []);
 
   useEffect(() => {
     if (activeChildId) {
