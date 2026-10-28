@@ -6,6 +6,7 @@ import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { Modal, SkeletonPage, Toast } from "@/shared/components/Ui.jsx";
 import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { fetchAdminGroups, fetchAdminLevels } from "@/api/studentApi.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -94,7 +95,7 @@ const staffType = (v) => {
 };
 const ATTENDANCE_PAGE_SIZE = 5;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
-function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
+function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false, error }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select>{error && <small className="attendance-import-error" role="alert">{error}</small>}</Field>; }
 
 function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
   const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
@@ -352,8 +353,8 @@ function AttendanceImportModal({ staff, say, onClose }) {
 
 function useOptions(staff, boardId) { const [o, setO] = useState({}); useEffect(() => { if (!staff) return undefined; let mounted = true; const calls = [apiEndpoints.departments.getAll, boardId ? `${apiEndpoints.faculty.list}?boardId=${boardId}` : apiEndpoints.faculty.list]; Promise.allSettled(calls.map((url) => apiClient.get(url))).then((rs) => { if (!mounted) return; const values = rs.map((r) => r.status === "fulfilled" ? asList(body(r.value)) : []); setO({ departments: values[0], faculty: values[1] }); }); return () => { mounted = false; }; }, [staff, boardId]); return o; }
 
-function useStudentOptions(boardId, academicYearId, levelId, groupId, programId) {
-  const [options, setOptions] = useState({ levels: [], groups: [], programs: [], sections: [], loadingLevels: false, loadingGroups: false, loadingPrograms: false, loadingSections: false });
+function useStudentOptions(boardId, academicYearId, levelId, groupId, programId, campusId, setFilters) {
+  const [options, setOptions] = useState({ levels: [], groups: [], programs: [], sections: [], loadingLevels: false, loadingGroups: false, groupsError: "", loadingPrograms: false, loadingSections: false });
   const scoped = (rows, selected, keys) => rows.filter((row) => {
     const rowValue = get(row, ...keys);
     return rowValue == null || rowValue === "" || String(rowValue) === String(selected);
@@ -371,30 +372,26 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId)
     if (!boardId) { setOptions((value) => ({ ...value, levels: [], groups: [], programs: [], sections: [] })); return undefined; }
     let active = true;
     setOptions((value) => ({ ...value, levels: [], loadingLevels: true }));
-    apiClient.get(apiEndpoints.boards.academicLevels, { params: { boardId } })
-      .then((response) => active && setOptions((value) => ({ ...value, levels: unique(scoped(asList(body(response)), boardId, ["boardId", "BoardId"]), ["academicLevelId", "AcademicLevelId", "levelId", "LevelId", "id", "Id"]), loadingLevels: false })))
+    fetchAdminLevels({ boardId, academicYearId })
+      .then((levels) => active && setOptions((value) => ({ ...value, levels, loadingLevels: false })))
       .catch(() => active && setOptions((value) => ({ ...value, levels: [], loadingLevels: false })));
     return () => { active = false; };
-  }, [boardId]);
+  }, [boardId, academicYearId]);
   useEffect(() => {
-    if (!boardId) { setOptions((value) => ({ ...value, groups: [], loadingGroups: false })); return undefined; }
     let active = true;
-    setOptions((value) => ({ ...value, groups: [], loadingGroups: true }));
-    const params = { academicYearId, isActive: true };
-    if (levelId) params.academicLevelId = levelId;
-    apiClient.get(apiEndpoints.groups.getByBoard(boardId), { params }).then((response) => {
+    const controller = new AbortController();
+    setOptions((current) => ({ ...current, groups: [], loadingGroups: Boolean(boardId), groupsError: "" }));
+    if (!boardId) return () => controller.abort();
+    fetchAdminGroups({ boardId, academicYearId, academicLevelId: levelId, campusId }, { signal: controller.signal }).then((groups) => {
       if (!active) return;
-      const payload = body(response);
-      const wrappers = asList(payload);
-      let groupRows = Array.isArray(payload?.groups) ? payload.groups : Array.isArray(payload?.Groups) ? payload.Groups : wrappers.flatMap((item) => Array.isArray(item?.groups) ? item.groups : Array.isArray(item?.Groups) ? item.Groups : Array.isArray(item?.groupList) ? item.groupList : Array.isArray(item?.data) ? item.data : get(item, "groupId", "GroupId", "id", "Id") != null ? [item] : []);
-      groupRows = scoped(scoped(groupRows, boardId, ["boardId", "BoardId"]), academicYearId, ["academicYearId", "AcademicYearId"]);
-      if (levelId) {
-        groupRows = scoped(groupRows, levelId, ["academicLevelId", "AcademicLevelId", "levelId", "LevelId"]);
-      }
-      setOptions((value) => ({ ...value, groups: unique(groupRows.filter((item) => item?.isActive !== false && item?.IsActive !== false), ["groupId", "GroupId", "id", "Id"]), loadingGroups: false }));
-    }).catch(() => active && setOptions((value) => ({ ...value, groups: [], loadingGroups: false })));
-    return () => { active = false; };
-  }, [boardId, academicYearId, levelId]);
+      setOptions((current) => ({ ...current, groups, loadingGroups: false, groupsError: levelId && !groups.length ? "No active groups are available for this board and academic year." : "" }));
+      setFilters((current) => current.group && !groups.some((group) => String(get(group, "groupId", "GroupId", "id", "Id")) === String(current.group))
+        ? { ...current, group: "", program: "", section: "" } : current);
+    }).catch((error) => {
+      if (active) setOptions((current) => ({ ...current, groups: [], loadingGroups: false, groupsError: getApiErrorMessage(error) }));
+    });
+    return () => { active = false; controller.abort(); };
+  }, [boardId, academicYearId, levelId, campusId, setFilters]);
   useEffect(() => {
     let active = true;
     setOptions((value) => ({ ...value, programs: [], loadingPrograms: true }));
@@ -417,6 +414,10 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId)
   }, [groupId]);
   useEffect(() => {
     let active = true;
+    if (groupId && (options.loadingGroups || options.groupsError)) {
+      setOptions((current) => ({ ...current, loadingSections: false }));
+      return undefined;
+    }
     const selectedProgram = options.programs.find((program) => String(get(program, "id", "Id", "programId", "ProgramId", "programmeId", "ProgrammeId", "groupProgramId", "GroupProgramId")) === String(programId));
     const validProgramIds = new Set([programId, get(selectedProgram, "programId", "ProgramId", "programmeId", "ProgrammeId"), get(selectedProgram, "groupProgramId", "GroupProgramId")].filter((id) => id != null && id !== "").map(String));
     const selectedProgramName = String(get(selectedProgram, "programName", "ProgramName", "programmeName", "ProgrammeName", "name", "Name") ?? "").trim().toLowerCase();
@@ -440,10 +441,13 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId)
           return Boolean(selectedProgramName && sectionProgramName === selectedProgramName);
         });
       }
-      setOptions((value) => ({ ...value, sections: unique(sectionRows.filter((section) => section?.isActive !== false && section?.IsActive !== false), ["sectionId", "SectionId", "id", "Id"]), loadingSections: false }));
+      const sections = unique(sectionRows.filter((section) => section?.isActive !== false && section?.IsActive !== false), ["sectionId", "SectionId", "id", "Id"]);
+      setOptions((value) => ({ ...value, sections, loadingSections: false }));
+      setFilters((current) => current.section && !sections.some((section) => String(get(section, "sectionId", "SectionId", "id", "Id")) === String(current.section))
+        ? { ...current, section: "" } : current);
     }).catch(() => active && setOptions((value) => ({ ...value, sections: [], loadingSections: false })));
     return () => { active = false; };
-  }, [boardId, academicYearId, levelId, groupId, programId, options.programs]);
+  }, [boardId, academicYearId, levelId, groupId, programId, options.programs, options.loadingGroups, options.groupsError, setFilters]);
   return options;
 }
 
@@ -491,12 +495,12 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  }, [staff, navbarCampusId, say]);
  const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
- const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
+ const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, navbarCampusId, setF);
  const options = staff ? staffOptions : studentOptions;
 
  const update = (key) => (e) => {
    setPage(1);
-   setF((old) => ({ ...old, [key]: e.target.value, ...(key === "level" ? { group: "", program: "", section: "" } : {}), ...(key === "group" ? { program: "", section: "" } : {}), ...(key === "program" ? { section: "" } : {}) }));
+   setF((old) => ({ ...old, [key]: e.target.value, ...(key === "level" && !e.target.value ? { group: "", program: "", section: "" } : {}), ...(key === "group" ? { program: "", section: "" } : {}), ...(key === "program" ? { section: "" } : {}) }));
  };
 
  const switchView = (newView) => {
@@ -956,7 +960,7 @@ function StaffAttendanceFilters({ f, update, o }) {
 function StudentAttendanceFilters({ f, update, o }) {
   return <div className="att-student-relocated-filters">
     <Select label="Academic Level" value={f.level} onChange={update("level")} items={o.levels} all="All Academic Levels" disabled={o.loadingLevels} />
-    <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all="All Groups" disabled={o.loadingGroups} />
+    <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all={o.loadingGroups ? "Loading groups..." : o.groupsError ? "Groups unavailable" : "All Groups"} error={o.groupsError} disabled={o.loadingGroups} />
     <Select label="Program" value={f.program} onChange={update("program")} items={o.programs} all="All Programs" disabled={o.loadingPrograms} />
     <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all="All Sections" disabled={o.loadingSections} />
     <Select label="Status" value={f.status} onChange={update("status")} items={STUDENT_STATUSES} all="All Status" />

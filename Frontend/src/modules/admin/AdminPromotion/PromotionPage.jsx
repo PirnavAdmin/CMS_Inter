@@ -4,6 +4,7 @@ import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCi
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Field, Modal, SkeletonTable, Toast } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { fetchAdminGroups, fetchAdminLevels } from "@/api/studentApi.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -31,6 +32,15 @@ const EMPTY_SETUP = {
   fromYear: "", board: "", fromLevel: "", group: "", program: "", fromSection: "",
   toYear: "", toBoard: "", toLevel: "", toGroup: "", toProgram: "", toSection: "",
 };
+
+const promotionGroupOption = (item) => ({
+  ...option(read(item, "groupId", "GroupId", "id", "Id"), read(item, "groupName", "GroupName", "name", "Name")),
+  board: asString(read(item, "boardId", "BoardId")),
+  year: asString(read(item, "academicYearId", "AcademicYearId")),
+  levelId: asString(read(item, "academicLevelId", "AcademicLevelId")),
+  level: asString(read(item, "academicLevelName", "AcademicLevelName", "academicLevel", "AcademicLevel")),
+  programs: unwrap(item, ["programs", "Programs"]).map((program) => option(read(program, "programId", "ProgramId", "id", "Id"), read(program, "programName", "ProgramName", "name", "Name"))).filter((program) => numericId(program.value)),
+});
 
 const EMPTY_HISTORY_FILTERS = {
   academicYearId: "", academicLevel: "",
@@ -214,6 +224,9 @@ export default function PromotionPage({ screen = "promotion" }) {
 
   const [allocationTab, setAllocationTab] = useState("program");
   const [setup, setSetup] = useState(EMPTY_SETUP);
+  const [mappedLevels, setMappedLevels] = useState({ boardId: "", rows: [] });
+  const [sourceGroups, setSourceGroups] = useState([]);
+  const [sourceGroupsLoading, setSourceGroupsLoading] = useState(false);
   const [masters, setMasters] = useState({ years: [], boards: [], levels: [], groups: [], sections: [] });
   const [masterLoading, setMasterLoading] = useState(true);
   const [masterError, setMasterError] = useState("");
@@ -305,7 +318,7 @@ export default function PromotionPage({ screen = "promotion" }) {
         };
       }).filter((item) => numericId(item.value) && item.active);
 
-      setMasters({
+      setMasters((current) => ({
         years: unwrap(yearsData).map((item) => ({
           ...option(read(item, "academicYearId", "AcademicYearId", "id", "Id"), read(item, "academicYear", "AcademicYear", "academicYearName", "AcademicYearName", "name", "Name")),
           board: asString(read(item, "boardId", "BoardId")),
@@ -313,9 +326,9 @@ export default function PromotionPage({ screen = "promotion" }) {
         })).filter((item) => numericId(item.value)),
         boards: boardOptions,
         levels,
-        groups,
+        groups: [...new Map([...groups, ...current.groups].map((group) => [group.value, group])).values()],
         sections,
-      });
+      }));
       setMasterError(getMasterFailureMessage(responses, ["academic years", "boards", "academic levels", "groups", "sections"]));
     } catch (requestError) {
       setMasterError(getApiErrorMessage(requestError));
@@ -405,9 +418,23 @@ export default function PromotionPage({ screen = "promotion" }) {
     setError("");
   }, [selectedBoardId, selectedAcademicYearId, nextAcademicYearObj, activeCampusId]);
 
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setMappedLevels({ boardId: asString(selectedBoardId), rows: [] });
+    if (!selectedBoardId) return () => controller.abort();
+    fetchAdminLevels({ boardId: selectedBoardId, academicYearId: selectedAcademicYearId }, { signal: controller.signal }).then((rows) => {
+      if (active) setMappedLevels({ boardId: asString(selectedBoardId), rows: rows.map((row) => ({
+        ...option(row.academicLevelId, row.levelName), board: asString(selectedBoardId), year: asString(read(row, "academicYearId", "AcademicYearId")),
+      })) });
+    }).catch((error) => { if (active) setError(getApiErrorMessage(error)); });
+    return () => { active = false; controller.abort(); };
+  }, [selectedBoardId, selectedAcademicYearId]);
+
   // Resolve academic levels associated with the active board
   const boardLevels = useMemo(() => {
     const boardValue = setup.board || asString(selectedBoardId);
+    if (mappedLevels.boardId === asString(boardValue)) return mappedLevels.rows;
     const activeBoard = masters.boards.find((b) => String(b.value) === String(boardValue) || String(b.id) === String(boardValue));
     if (!activeBoard) return masters.levels;
     const matched = masters.levels.filter((level) => {
@@ -417,7 +444,7 @@ export default function PromotionPage({ screen = "promotion" }) {
       return false;
     });
     return matched.length ? matched : masters.levels;
-  }, [masters.boards, masters.levels, selectedBoardId, setup.board]);
+  }, [mappedLevels, masters.boards, masters.levels, selectedBoardId, setup.board]);
 
   // Filter levels for the active navbar board & academic year
   const levelsFor = useCallback((prefix) => {
@@ -440,8 +467,30 @@ export default function PromotionPage({ screen = "promotion" }) {
     setSetup((current) => ({ ...current, fromLevel: firstYear.value, toLevel: secondYear?.value || "" }));
   }, [boardLevels, setup.fromLevel]);
 
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    const boardId = setup.board || selectedBoardId;
+    const academicYearId = setup.fromYear || selectedAcademicYearId;
+    setSourceGroups([]);
+    const enabled = Boolean(boardId && academicYearId && setup.fromLevel);
+    setSourceGroupsLoading(enabled);
+    if (!enabled) return () => controller.abort();
+    fetchAdminGroups({ boardId, academicYearId, academicLevelId: setup.fromLevel, campusId: activeCampusId }, { signal: controller.signal }).then((rows) => {
+      if (!active) return;
+      const groups = rows.map(promotionGroupOption);
+      setSourceGroups(groups);
+      setMasters((current) => ({ ...current, groups: [...new Map([...current.groups, ...groups].map((group) => [group.value, group])).values()] }));
+      setSetup((current) => current.group && !groups.some((group) => group.value === asString(current.group))
+        ? { ...current, group: "", program: "", fromSection: "", toGroup: "", toProgram: "", toSection: "" } : current);
+      if (!groups.length) setError("No active source groups are available for this board and academic year.");
+    }).catch((error) => { if (active) setError(getApiErrorMessage(error)); })
+      .finally(() => { if (active) setSourceGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [setup.board, setup.fromYear, setup.fromLevel, selectedBoardId, selectedAcademicYearId, activeCampusId]);
+
   // Filter groups for the active navbar board, academic year, and chosen level
-  const groupsFor = useCallback((prefix) => masters.groups.filter((group) => {
+  const groupsFor = useCallback((prefix) => prefix === "from" ? sourceGroups : masters.groups.filter((group) => {
     const boardValue = setup.board || asString(selectedBoardId);
     const yearValue = setup.fromYear || asString(selectedAcademicYearId);
     const levelValue = setup[prefix === "from" ? "fromLevel" : "toLevel"];
@@ -451,7 +500,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     return group.board === asString(boardValue)
       && group.year === asString(yearValue)
       && (group.levelId === asString(levelValue) || group.level === asString(levelLabel));
-  }), [masters.groups, masters.levels, selectedAcademicYearId, selectedBoardId, setup]);
+  }), [sourceGroups, masters.groups, masters.levels, selectedAcademicYearId, selectedBoardId, setup]);
 
   const programsFor = useCallback((prefix) => {
     const groupValue = setup[prefix === "from" ? "group" : "toGroup"];
@@ -476,10 +525,10 @@ export default function PromotionPage({ screen = "promotion" }) {
   // Form fields for Source - Board & From Academic Year are REMOVED as they come from the Navbar!
   const sourceFields = useMemo(() => [
     { name: "fromLevel", label: "From Academic Level", type: "select", options: levelsFor("from"), required: true, disabled: true },
-    { name: "group", label: "Group", type: "select", options: groupsFor("from"), required: true, disabled: !setup.fromLevel },
+    { name: "group", label: "Group", type: "select", options: groupsFor("from"), required: true, disabled: !setup.fromLevel || sourceGroupsLoading },
     { name: "program", label: "Program", type: "select", options: programsFor("from"), required: true, disabled: !setup.group },
     { name: "fromSection", label: "From Section", type: "select", options: sectionsFor("from"), required: true, disabled: !setup.program },
-  ], [groupsFor, levelsFor, programsFor, sectionsFor, setup.fromLevel, setup.group, setup.program]);
+  ], [groupsFor, levelsFor, programsFor, sectionsFor, setup.fromLevel, setup.group, setup.program, sourceGroupsLoading]);
 
   const selectedSourceLevel = masters.levels.find((level) => level.value === asString(setup.fromLevel));
   const isFinalYear = isSecondYearLevel(selectedSourceLevel?.label || setup.fromLevel);
@@ -860,7 +909,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     ...current,
     [name]: value,
     ...(name === "academicYearId" ? { academicLevel: "", groupId: "", programId: "", section: "" } : {}),
-    ...(name === "academicLevel" ? { groupId: "", programId: "", section: "" } : {}),
+    ...(name === "academicLevel" && !value ? { groupId: "", programId: "", section: "" } : {}),
     ...(name === "groupId" ? { programId: "", section: "" } : {}),
     ...(name === "programId" ? { section: "" } : {}),
   }));
@@ -873,26 +922,14 @@ export default function PromotionPage({ screen = "promotion" }) {
     setHistoryFilters((current) => ({ ...current, academicLevel: "", groupId: "", programId: "", section: "" }));
     if (!selectedBoardId || !historyYearId) return;
     setHistoryLevelsLoading(true);
-    apiClient.get(apiEndpoints.boards.academicLevels, { params: {
-      BoardId: numericId(selectedBoardId), AcademicYearId: numericId(historyYearId), CampusId: numericId(activeCampusId),
-    } }).then(({ data }) => {
+    fetchAdminLevels({ boardId: selectedBoardId, academicYearId: historyYearId }).then((rows) => {
       if (!active) return;
-      setHistoryLevelIds(unwrap(data, ["academicLevels", "AcademicLevels"]).filter((item) => {
-        const board = read(item, "boardId", "BoardId");
-        const year = read(item, "academicYearId", "AcademicYearId");
-        return (!isPresent(board) || asString(board) === asString(selectedBoardId))
-          && (!isPresent(year) || asString(year) === asString(historyYearId));
-      }).map((item) => asString(typeof item === "string" ? item : read(item, "academicLevelId", "AcademicLevelId", "id", "Id", "academicLevelName", "AcademicLevelName", "levelName", "LevelName"))));
+      setHistoryLevelIds(rows.map((row) => asString(row.academicLevelId)));
     }).catch((err) => { if (active) setError(getApiErrorMessage(err)); })
       .finally(() => { if (active) setHistoryLevelsLoading(false); });
     return () => { active = false; };
   }, [activeTab, selectedBoardId, historyYearId, activeCampusId]);
-  const historyBoard = masters.boards.find((board) => board.value === asString(selectedBoardId));
-  const historyLevels = masters.levels.filter((level) => historyLevelIds.includes(level.value)
-    && (!level.year || level.year === asString(historyYearId))
-    && (level.board === asString(selectedBoardId)
-      || historyBoard?.academicLevelIds?.includes(level.value)
-      || historyBoard?.academicLevelNames?.some((name) => name.toLowerCase() === level.label.toLowerCase())));
+  const historyLevels = masters.levels.filter((level) => historyLevelIds.includes(level.value));
 
   const historySourceLevel = historyLevels.find((level) => level.value === asString(historyFilters.academicLevel));
   useEffect(() => {
@@ -901,27 +938,19 @@ export default function PromotionPage({ screen = "promotion" }) {
     setHistoryGroupsLoading(false);
     if (activeTab !== "history" || !selectedBoardId || !historyYearId || !historySourceLevel) return;
     setHistoryGroupsLoading(true);
-    apiClient.get(apiEndpoints.groups.list, { params: {
-      CampusId: numericId(activeCampusId), BoardId: numericId(selectedBoardId),
-      AcademicYearId: numericId(historyYearId), AcademicLevelId: numericId(historySourceLevel.value),
-    } }).then(({ data }) => {
+    fetchAdminGroups({ campusId: activeCampusId, boardId: selectedBoardId,
+      academicYearId: historyYearId, academicLevelId: historySourceLevel.value,
+    }).then((rows) => {
       if (!active) return;
-      setHistoryGroupOptions(unwrap(data).filter((item) => {
-        const filters = [["campusId", activeCampusId], ["boardId", selectedBoardId],
-          ["academicYearId", historyYearId], ["academicLevelId", historySourceLevel.value]];
-        return filters.every(([key, expected]) => {
-          const actual = read(item, key, key[0].toUpperCase() + key.slice(1));
-          return !isPresent(actual) || asString(actual) === asString(expected);
-        });
-      }).map((item) => ({
-        ...option(read(item, "groupId", "GroupId", "id", "Id"), read(item, "groupName", "GroupName", "name", "Name")),
-        programs: unwrap(item, ["programs", "Programs"]).map((program) => option(
-          read(program, "programId", "ProgramId", "id", "Id"), read(program, "programName", "ProgramName", "name", "Name"))),
-      })).filter((group) => group.value));
+      const groups = rows.map(promotionGroupOption);
+      setHistoryGroupOptions(groups);
+      setHistoryFilters((current) => current.groupId && !groups.some((group) => group.value === asString(current.groupId))
+        ? { ...current, groupId: "", programId: "", section: "" } : current);
+      if (!groups.length) setError("No active groups returned for this board and history year.");
     }).catch((err) => { if (active) setError(getApiErrorMessage(err)); })
       .finally(() => { if (active) setHistoryGroupsLoading(false); });
     return () => { active = false; };
-  }, [activeTab, activeCampusId, selectedBoardId, historyYearId, historySourceLevel?.value]);
+  }, [activeTab, activeCampusId, selectedBoardId, historyYearId, historySourceLevel]);
   const historyGroups = historyGroupOptions;
   const historyGroup = historyGroups.find((group) => group.value === asString(historyFilters.groupId));
   const historyPrograms = historyGroup?.programs || [];
@@ -948,7 +977,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     }).catch((err) => { if (active) setError(getApiErrorMessage(err)); })
       .finally(() => { if (active) setHistorySectionsLoading(false); });
     return () => { active = false; };
-  }, [activeTab, activeCampusId, selectedBoardId, historyYearId, historySourceLevel?.value, historyFilters.groupId, historyFilters.programId]);
+  }, [activeTab, activeCampusId, selectedBoardId, historyYearId, historySourceLevel, historyFilters.groupId, historyFilters.programId]);
   const previewStudents = unwrap(previewData, ["students", "Students", "eligibleStudents", "EligibleStudents"]);
   const previewEligibleCount = read(previewData, "eligibleCount", "EligibleCount") ?? (previewStudents.length ? previewStudents.filter((student) => isEligible(normalizeStudent(student))).length : selectedStudents.length);
 
@@ -1258,7 +1287,7 @@ export default function PromotionPage({ screen = "promotion" }) {
         {activeTab === "single" ? (
           <SinglePromotionScreen
             key={`${activeCampusId}:${selectedBoardId}`}
-            masters={masters}
+            masters={{ ...masters, levels: boardLevels }}
             preselectedStudent={individualStudent || students.find(isEligible)}
             allStudents={students}
             defaultNextYearId={nextAcademicYearObj?.value}
@@ -2033,43 +2062,31 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
     || board?.academicLevelNames?.some((name) => name.toLowerCase() === level.label.toLowerCase()));
   const targetLevelLabel = targetLevels.find((level) => level.value === asString(target.level))?.label;
 
-  // Fallback groups from masters.groups for the current board
-  const fallbackGroups = useMemo(() => {
-    return (masters?.groups || []).filter((g) => !g.board || g.board === asString(selectedBoardId));
-  }, [masters?.groups, selectedBoardId]);
-
-  // Load groups for the board (groups represent academic streams under a Board, decoupled from level/year)
   useEffect(() => {
     let active = true;
-    if (!selectedBoardId) {
-      setTargetGroups([]);
-      return;
-    }
-    if (fallbackGroups.length > 0) {
-      setTargetGroups(fallbackGroups);
-    }
-    setGroupsLoading(true);
-    apiClient.get(apiEndpoints.groups.list, { params: {
-      BoardId: numericId(selectedBoardId),
-    } }).then(({ data }) => {
+    const controller = new AbortController();
+    setTargetGroups([]);
+    const enabled = Boolean(selectedBoardId && target.year && target.level);
+    setGroupsLoading(enabled);
+    if (!enabled) return () => controller.abort();
+    setError("");
+    fetchAdminGroups({ boardId: selectedBoardId, academicYearId: target.year, academicLevelId: target.level, campusId }, { signal: controller.signal }).then((rows) => {
       if (!active) return;
-      const loaded = unwrap(data).map((item) => ({
-        ...option(read(item, "groupId", "GroupId", "id", "Id"), read(item, "groupName", "GroupName", "name", "Name")),
-        board: asString(read(item, "boardId", "BoardId")),
-        programs: unwrap(item, ["programs", "Programs"]).map((program) => option(read(program, "programId", "ProgramId", "id", "Id"), read(program, "programName", "ProgramName", "name", "Name"))).filter((program) => numericId(program.value)),
-      })).filter((item) => numericId(item.value));
-      if (loaded.length > 0) {
-        setTargetGroups(loaded);
-      }
-    }).catch((err) => {
-      if (active && fallbackGroups.length === 0) setError(getApiErrorMessage(err));
-    }).finally(() => {
-      if (active) setGroupsLoading(false);
-    });
-    return () => { active = false; };
-  }, [selectedBoardId, fallbackGroups]);
+      const groups = rows.map(promotionGroupOption);
+      setTargetGroups(groups);
+      setTarget((current) => {
+        const group = groups.find((group) => group.value === asString(current.group));
+        if (current.group && !group) return { ...current, group: "", program: "", section: "" };
+        if (current.program && group && !group.programs.some((program) => program.value === asString(current.program))) return { ...current, program: "", section: "" };
+        return current;
+      });
+      if (!groups.length) setError("No active target groups are available for this board and academic year.");
+    }).catch((error) => { if (active) setError(getApiErrorMessage(error)); })
+      .finally(() => { if (active) setGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [selectedBoardId, target.year, target.level, campusId]);
 
-  const availableGroups = targetGroups.length ? targetGroups : fallbackGroups;
+  const availableGroups = targetGroups;
   const targetGroup = availableGroups.find((group) => asString(group.value) === asString(target.group));
   const targetPrograms = targetGroup?.programs || [];
 

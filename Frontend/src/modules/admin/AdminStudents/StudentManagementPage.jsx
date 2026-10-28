@@ -4,6 +4,7 @@ import { CheckCircle2, Download, Eye, FileText, FileUp, Search, Upload } from "l
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Modal, SkeletonRow, StatusBadge, Toast } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { fetchAdminGroups, fetchAdminLevels } from "@/api/studentApi.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -144,6 +145,8 @@ export default function StudentManagementPage() {
   const [documentType, setDocumentType] = useState("");
   const [levelOptions, setLevelOptions] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState("");
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
   const [page, setPage] = useState(restoredState?.page ?? 1);
@@ -218,21 +221,31 @@ export default function StudentManagementPage() {
     setLevelOptions([]); setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
     if (!selectedBoardId) return undefined;
     let active = true;
-    apiClient.get(apiEndpoints.boards.academicLevels, { params: { boardId: selectedBoardId } })
-      .then((response) => active && setLevelOptions(selectOptions(response.data, ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"])))
+    fetchAdminLevels({ boardId: selectedBoardId, academicYearId: selectedAcademicYearId })
+      .then((levels) => active && setLevelOptions(selectOptions(levels, ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"])))
       .catch(() => active && setLevelOptions([]));
     return () => { active = false; };
   }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
-    if (!restoringFilters.current) setFilters((current) => ({ ...current, group: "", programme: "", section: "" }));
-    setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
-    if (!selectedBoardId || !filters.level) return undefined;
     let active = true;
-    apiClient.get(apiEndpoints.groups.getByBoard(selectedBoardId), { params: { academicYearId: selectedAcademicYearId, academicLevelId: filters.level, isActive: true } })
-      .then((response) => active && setGroupOptions(selectOptions(response.data, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"])))
-      .catch(() => active && setGroupOptions([]));
-    return () => { active = false; };
-  }, [filters.level, selectedBoardId, selectedAcademicYearId]);
+    const controller = new AbortController();
+    const enabled = Boolean(selectedBoardId && selectedAcademicYearId && filters.level);
+    setGroupOptions([]);
+    setGroupsLoading(enabled);
+    setGroupsError("");
+    if (!enabled) return () => controller.abort();
+    fetchAdminGroups({ boardId: selectedBoardId, academicYearId: selectedAcademicYearId, campusId: selectedCampusId }, { signal: controller.signal })
+      .then((groups) => {
+        if (!active) return;
+        const options = selectOptions(groups, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
+        setGroupOptions(options);
+        setFilters((current) => current.group && !options.some((option) => option.value === String(current.group))
+          ? { ...current, group: "", programme: "", section: "" } : current);
+        if (!options.length) setGroupsError("No active groups available for this board and academic year.");
+      }).catch((error) => { if (active) setGroupsError(getApiErrorMessage(error)); })
+      .finally(() => { if (active) setGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [filters.level, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
     if (!restoringFilters.current) setFilters((current) => ({ ...current, programme: "", section: "" }));
     setProgrammeOptions([]); setSectionOptions([]);
@@ -244,12 +257,17 @@ export default function StudentManagementPage() {
     return () => { active = false; };
   }, [filters.group]);
   useEffect(() => {
-    if (!restoringFilters.current) setFilters((current) => ({ ...current, section: "" }));
     setSectionOptions([]);
     if (!filters.programme) return undefined;
     let active = true;
     apiClient.get(apiEndpoints.sections.list, { params: { boardId: selectedBoardId, academicYearId: selectedAcademicYearId, academicLevelId: filters.level, groupId: filters.group, programId: filters.programme, ProgramId: filters.programme, IsActive: true } })
-      .then((response) => active && setSectionOptions(selectOptions(response.data, ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"])))
+      .then((response) => {
+        if (!active) return;
+        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load sections.");
+        const options = selectOptions(response.data, ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]);
+        setSectionOptions(options);
+        setFilters((current) => current.section && !options.some((option) => option.value === String(current.section)) ? { ...current, section: "" } : current);
+      })
       .catch(() => active && setSectionOptions([]));
     return () => { active = false; };
   }, [filters.programme, filters.group, filters.level, selectedBoardId, selectedAcademicYearId]);
@@ -324,7 +342,7 @@ export default function StudentManagementPage() {
     setFilters((current) => ({
       ...current,
       [key]: selectedValue,
-      ...(key === "level" ? { group: "", programme: "", section: "" } : {}),
+      ...(key === "level" && !selectedValue ? { group: "", programme: "", section: "" } : {}),
       ...(key === "group" ? { programme: "", section: "" } : {}),
       ...(key === "programme" ? { section: "" } : {}),
     }));
@@ -469,7 +487,7 @@ export default function StudentManagementPage() {
           <div className="student-management-filters">
           {[
             ["Academic Level", "level", levelOptions, !selectedBoardId],
-            ["Group", "group", groupOptions, !filters.level],
+            ["Group", "group", groupOptions, !filters.level || groupsLoading],
             ["Programme", "programme", programmeOptions, !filters.group],
             ["Section", "section", sectionOptions, !filters.programme],
           ].map(([label, key, options, disabled]) => (
@@ -480,11 +498,12 @@ export default function StudentManagementPage() {
                 onChange={(event) => updateFilter(key, event.target.value)}
                 disabled={disabled}
               >
-                <option value="">All {label}s</option>
+                <option value="">{key === "group" && groupsLoading ? "Loading groups..." : key === "group" && groupsError ? "Groups unavailable" : `All ${label}s`}</option>
                 {options.map((item) => (
                   <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
               </select>
+              {key === "group" && groupsError && <small role="alert">{groupsError}</small>}
             </label>
           ))}
           </div>

@@ -1,4 +1,5 @@
 // Examination Management Component
+import { getCatalogGroups } from "@/modules/admin/AdminResults/services/resultsService.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -3298,6 +3299,8 @@ export default function ExaminationPage() {
   const [academicYears, setAcademicYears] = useState([]);
   const [academicLevels, setAcademicLevels] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsReady, setGroupsReady] = useState(false);
   const [programs, setPrograms] = useState([]);
   const [masterPatterns, setMasterPatterns] = useState([]);
   const [examTypes, setExamTypes] = useState([]);
@@ -3976,6 +3979,31 @@ export default function ExaminationPage() {
     }
   }, [effectiveCampusId]);
 
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setGroups([]); setGroupsReady(false); setGroupsLoading(Boolean(selectedBoardId && selectedAcademicYearId));
+    getCatalogGroups({ boardId: selectedBoardId, academicYearId: selectedAcademicYearId, campusId: effectiveCampusId }, { signal: controller.signal }).then((rows) => {
+      if (!active) return;
+      const groups = rows.map((group) => ({ ...group, id: normalizeId(group.groupId), name: group.groupName, code: group.groupCode ?? "",
+        programs: ensureArray(group.programs).map((program) => ({ ...program, id: normalizeId(program.programId ?? program.id), name: program.programName ?? program.name, code: program.programCode ?? program.code ?? "", candidateStrength: Number(program.candidateStrength ?? program.strength ?? program.capacity) || 0, capacity: Number(program.capacity ?? program.candidateStrength) || 0, objectivePatternCodes: program.objectivePatternCodes || [], groupId: normalizeId(group.groupId), isActive: program.isActive !== false })) }));
+      setGroups(groups);
+      setGroupsReady(true);
+      setPrograms((current) => [...new Map([...current, ...groups.flatMap((group) => group.programs)].map((program) => [program.groupId + "_" + program.id, program])).values()]);
+      setFilters((current) => current.groupId && !groups.some((group) => group.id === normalizeId(current.groupId))
+        ? { ...current, groupId: "", programId: "" } : current);
+    }).catch((error) => { if (active) showToast(getApiErrorMessage(error) || "Unable to load groups.", "error"); })
+      .finally(() => { if (active) setGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [selectedBoardId, selectedAcademicYearId, effectiveCampusId, showToast]);
+
+  const filterGroups = useMemo(() => groups.filter((group) => !filters.levelId || normalizeId(group.academicLevelId) === normalizeId(filters.levelId)), [groups, filters.levelId]);
+  useEffect(() => {
+    if (!groupsReady) return;
+    setFilters((current) => current.groupId && !filterGroups.some((group) => group.id === normalizeId(current.groupId))
+      ? { ...current, groupId: "", programId: "" } : current);
+  }, [groupsReady, filterGroups]);
+
   // 1. Initial Mount: Active Boards, Patterns, Exam Types, Rooms, Faculty, Academic Levels, Groups, Students
   useEffect(() => {
     let isMounted = true;
@@ -3983,7 +4011,7 @@ export default function ExaminationPage() {
     const { signal } = controller;
     const fetchInitialMasterData = async () => {
       try {
-        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, groupsRes, subjectsRes, programsRes, campusesRes] =
+        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, subjectsRes, programsRes, campusesRes] =
           await Promise.allSettled([
             apiClient.get("/api/v1/boards/active", { signal }).catch((error) => {
               if (signal.aborted) throw error;
@@ -4001,7 +4029,6 @@ export default function ExaminationPage() {
             apiClient.get("/api/v1/examinations/types", { signal }),
             apiClient.get("/api/v1/staff/dropdown", { signal, params: { staffType: "Teaching" } }).catch(() => apiClient.get("/api/v1/staff", { signal, params: { staffType: "Teaching", pageSize: 1000 } })),
             apiClient.get("/api/v1/academic-levels", { signal }),
-            apiClient.get("/api/v1/groups", { signal }),
             apiClient.get("/api/v1/subjects", { signal }).catch(() => null),
             apiClient.get("/api/v1/programs", { signal }),
             apiClient.get("/api/v1/campuses", { signal, params: { isActive: true } }).catch(() => null),
@@ -4100,36 +4127,6 @@ export default function ExaminationPage() {
           );
         }
 
-        if (groupsRes.status === "fulfilled") {
-          const rawGroups = unwrap(groupsRes.value);
-          const mappedGroups = rawGroups.map((g) => {
-            const gid = normalizeId(g.groupId ?? g.id);
-            const progs = ensureArray(g.programs).map((p) => ({
-              id: normalizeId(p.programId ?? p.id),
-              name: p.programName ?? p.name,
-              code: p.programCode ?? p.code ?? "",
-              groupId: gid,
-              candidateStrength: Number(p.candidateStrength ?? p.strength ?? p.capacity) || 0,
-              capacity: Number(p.capacity ?? p.candidateStrength) || 0,
-              isActive: p.isActive !== false,
-              objectivePatternCodes: p.objectivePatternCodes || [],
-            }));
-            return {
-              id: gid,
-              name: g.groupName ?? g.name,
-              code: g.groupCode ?? g.code ?? "",
-              boardId: normalizeId(g.boardId),
-              programs: progs,
-              isActive: g.isActive !== false,
-            };
-          });
-          setGroups(mappedGroups);
-
-          const extractedPrograms = mappedGroups.flatMap((g) => g.programs || []);
-          if (extractedPrograms.length > 0) {
-            setPrograms(extractedPrograms);
-          }
-
           try {
             if (programsRes.status === "rejected") throw programsRes.reason;
             const progsRes = programsRes.value;
@@ -4165,7 +4162,6 @@ export default function ExaminationPage() {
               });
             }
           } catch (error) { if (isMounted) showToast(getApiErrorMessage(error) || "Failed to load programs.", "error"); }
-        }
 
         if (subjectsRes?.status === "fulfilled" && subjectsRes.value) {
           const rawSubjects = unwrap(subjectsRes.value);
@@ -5387,12 +5383,13 @@ export default function ExaminationPage() {
               <div className="exam-toolbar-select">
                 <SearchableSingleSelect
                   value={filters.groupId}
+                  disabled={groupsLoading}
                   onChange={(v) => changeFilter("groupId", v)}
                   options={[
                     { id: "", name: "All Groups" },
-                    ...groups.filter((g) => g.isActive !== false && (!selectedBoardId || !g.boardId || normalizeId(g.boardId) === normalizeId(selectedBoardId))),
+                    ...filterGroups,
                   ]}
-                  placeholder="Select Group"
+                  placeholder={groupsLoading ? "Loading groups..." : "Select Group"}
                 />
               </div>
               <div className="exam-toolbar-select">
@@ -6805,6 +6802,8 @@ function ExamForm({
   const [formYears, setFormYears] = useState(availableYears);
   const [formLevels, setFormLevels] = useState([]);
   const [formGroups, setFormGroups] = useState([]);
+  const [formGroupsLoading, setFormGroupsLoading] = useState(false);
+  const [formGroupsError, setFormGroupsError] = useState("");
   const [formPrograms, setFormPrograms] = useState([]);
   const [formEligibleSubjects, setFormEligibleSubjects] = useState([]);
   const [subjectsLoading, setSubjectsLoading] = useState(false);
@@ -7117,6 +7116,7 @@ function ExamForm({
   const isSubmittingRef = useRef(false);
   const todayStr = new Date().toISOString().split("T")[0];
 
+  const groupLevelKey = JSON.stringify(form.levelIds || []);
   // Resolve hierarchy against backend records for the selected board.
   useEffect(() => {
     let active = true;
@@ -7133,7 +7133,7 @@ function ExamForm({
 
     const load = async () => {
       try {
-        const [yearsResponse, levelsResponse, groupsResponse] = await Promise.allSettled([
+        const [yearsResponse, levelsResponse] = await Promise.allSettled([
           apiClient.get("/api/v1/academic-years", {
             params: {
               ...(campusId ? { campusId, CampusId: campusId } : {}),
@@ -7148,9 +7148,6 @@ function ExamForm({
               boardId: form.boardId,
               BoardId: form.boardId,
             },
-          }),
-          apiClient.get("/api/v1/groups/board/" + form.boardId, {
-            params: campusId ? { campusId, CampusId: campusId } : {},
           }),
         ]);
         if (!active) return;
@@ -7203,21 +7200,6 @@ function ExamForm({
           setHierarchyError("Failed to load academic levels for the selected Board.");
         }
 
-        // Process groups
-        if (groupsResponse.status === "fulfilled") {
-          const unwrappedGroups = unwrap(groupsResponse.value).filter(belongsToBoard).map((group) => ({
-            ...group,
-            id: normalizeId(group.groupId ?? group.id),
-            boardId: normalizeId(form.boardId),
-            name: group.groupName ?? group.name,
-            code: group.groupCode ?? group.code,
-          }));
-          // Valid empty response must be applied as empty array!
-          setFormGroups(unwrappedGroups);
-        } else {
-          setFormGroups([]);
-          setHierarchyError((prev) => prev || "Failed to load groups for the selected Board.");
-        }
       } catch (error) {
         if (active) {
           setFormLevels([]);
@@ -7231,7 +7213,19 @@ function ExamForm({
     };
     load();
     return () => { active = false; };
-  }, [form.boardId, selectedAcademicYear, selectedAcademicYearId, showToast, existing, academicYears, academicLevels]);
+  }, [campusId, form.boardId, selectedAcademicYear, selectedAcademicYearId, showToast, existing, academicYears, academicLevels]);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setFormGroups([]); setFormGroupsError("");
+    setFormGroupsLoading(Boolean(form.boardId && (form.yearId || selectedAcademicYearId)));
+    getCatalogGroups({ boardId: form.boardId, academicYearId: form.yearId || selectedAcademicYearId, academicLevelIds: JSON.parse(groupLevelKey), campusId }, { signal: controller.signal }).then((rows) => {
+      if (active) setFormGroups(rows.map((group) => ({ ...group, id: normalizeId(group.groupId), name: group.groupName, code: group.groupCode ?? "" })));
+    }).catch((error) => { if (active) setFormGroupsError(getApiErrorMessage(error) || "Unable to load groups."); })
+      .finally(() => { if (active) setFormGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [campusId, form.boardId, form.yearId, groupLevelKey, selectedAcademicYearId]);
 
   useEffect(() => {
     if (availableYears.length > 0) {
@@ -8353,7 +8347,8 @@ function ExamForm({
                         </div>
                       </div>
                     )}
-                    {errors.groupIds && <span className="cms-error">{errors.groupIds}</span>}
+                    {(errors.groupIds || formGroupsError) && <span className="cms-error" role="alert">{errors.groupIds || formGroupsError}</span>}
+                    {formGroupsLoading && <span>Loading groups...</span>}
                     {errors.programIds && <span className="cms-error">{errors.programIds}</span>}
                   </div>
                 </>

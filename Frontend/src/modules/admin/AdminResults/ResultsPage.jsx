@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import React, { useLayoutEffect, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLayout";
 import * as XLSX from "xlsx";
 import {
@@ -21,6 +22,7 @@ import {
   X,
   FileText
 } from "lucide-react";
+import { getCatalogGroups } from "./services/resultsService.js";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -119,6 +121,8 @@ export default function ResultProcessingPage() {
   const [academicYears, setAcademicYears] = useState([]);
   const [academicLevels, setAcademicLevels] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState("");
   const [programs, setPrograms] = useState([]);
   const [examinations, setExaminations] = useState([]);
 
@@ -511,7 +515,7 @@ export default function ResultProcessingPage() {
     const fetchBoardDependencies = async () => {
       try {
         const targetBoardObj = boards.find((b) => String(b.boardId || b.id) === String(filters.board)) || selectedBoard;
-        const [yearsRes, levelsRes, groupsRes] = await Promise.all([
+        const [yearsRes, levelsRes] = await Promise.all([
           apiClient.get(`/api/v1/academic-years`, {
             params: {
               CampusId: effectiveCampusId,
@@ -542,25 +546,11 @@ export default function ResultProcessingPage() {
             console.warn("Could not fetch academic-levels from server:", e?.message);
             return { data: { data: [] } };
           }),
-          apiClient.get(`/api/v1/groups`, {
-            params: {
-              CampusId: effectiveCampusId,
-              campusId: effectiveCampusId,
-              boardId: filters.board,
-              BoardId: filters.board,
-            },
-            headers: {
-              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-            },
-          }).catch((e) => {
-            console.warn("Could not fetch groups from server:", e?.message);
-            return { data: { data: [] } };
-          }),
+
         ]);
 
         const yearsData = yearsRes?.data?.data || yearsRes?.data?.items || yearsRes?.data || [];
         const levelsData = levelsRes?.data?.data || levelsRes?.data?.items || levelsRes?.data || [];
-        const groupsData = groupsRes?.data?.items || groupsRes?.data?.data || groupsRes?.data || [];
 
         // STRICT FILTER: Filter active years belonging strictly to the selected board
         const rawYearsList = Array.isArray(yearsData) ? yearsData : [];
@@ -571,11 +561,9 @@ export default function ResultProcessingPage() {
           .filter((y) => isYearForBoard(y, filters.board, targetBoardObj));
 
         const resolvedLevels = Array.isArray(levelsData) ? levelsData : [];
-        const resolvedGroups = Array.isArray(groupsData) ? groupsData.filter((g) => g.isActive === true || g.status === "Active") : [];
 
         setAcademicYears(activeYears);
         setAcademicLevels(resolvedLevels);
-        setGroups(resolvedGroups);
 
         // Auto-select active year matched from navbar or first active
         const matchedYear = activeYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) ||
@@ -591,6 +579,23 @@ export default function ResultProcessingPage() {
     };
     fetchBoardDependencies();
   }, [filters.board, effectiveCampusId, boards, selectedBoard, showToast, selectedAcademicYearId, selectedAcademicYear, matchesYear, isYearForBoard]);
+
+  const selectedGroupRef = useRef(filters.group);
+  useEffect(() => { selectedGroupRef.current = filters.group; }, [filters.group]);
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    const scope = { levelIndependentGroups: true, selectedGroupId: selectedGroupRef.current, boardId: filters.board, academicYearId: filters.year || selectedAcademicYearId, academicLevelId: filters.level, campusId: effectiveCampusId };
+    setGroups([]); setGroupsLoading(Boolean(scope.boardId && scope.academicYearId)); setGroupsError("");
+    getCatalogGroups(scope, { signal: controller.signal }).then((groups) => {
+      if (!active) return;
+      setGroups(groups);
+      setFilters((current) => current.group && !groups.some((group) => String(group.groupId) === String(current.group))
+        ? { ...current, group: "", program: "", exam: "" } : current);
+    }).catch((error) => { if (active) setGroupsError(getApiErrorMessage(error) || "Unable to load groups."); })
+      .finally(() => { if (active) setGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [filters.board, filters.year, filters.level, selectedAcademicYearId, effectiveCampusId]);
 
   // Merge academicYears with navbar selectedAcademicYear so it is always present
   const resolvedAcademicYears = useMemo(() => {
@@ -1063,12 +1068,7 @@ export default function ResultProcessingPage() {
 
   const changeFilter = (key, value) => {
     const next = { ...filters, [key]: value };
-    if (key === "board") {
-      next.level = "";
-      next.group = "";
-      next.program = "";
-      next.exam = "";
-    }
+    if (key === "board") next.level = "";
     setResultsGenerated(false);
     setSectionSummaries([]);
     setSelectedSectionDetails(null);
@@ -1078,7 +1078,7 @@ export default function ResultProcessingPage() {
   };
 
   const isGroupValid = Boolean(
-    filters.group && (!groups.length || groups.some((g) => String(g.groupId || g.id) === String(filters.group)))
+    !groupsLoading && !groupsError && filters.group && groups.some((g) => String(g.groupId || g.id) === String(filters.group))
   );
   const isProgramRequired = programs.length > 0;
   const hasProgramIfRequired =
@@ -2498,7 +2498,7 @@ export default function ResultProcessingPage() {
   // Available groups for the selected published examination
   const analyticsGroupOptions = useMemo(() => {
     if (!activeAnalyticsOption) return [{ id: "all", name: "All Groups" }];
-    const set = new Set();
+    const set = new Map();
 
     const targetExamId = Number(activeAnalyticsOption.examId);
     const targetPublishedId = Number(activeAnalyticsOption.publishedId || activeAnalyticsOption.groupData?.publishedId);
@@ -2506,14 +2506,20 @@ export default function ResultProcessingPage() {
       const matchesThisExam =
         (targetPublishedId && Number(pg.publishedId) === targetPublishedId) ||
         (targetExamId && Number(pg.examId) === targetExamId);
-      if (matchesThisExam && pg.groupName) {
-        set.add(pg.groupName);
+      const validGroup = groups.find((group) => pg.groupId ? String(group.groupId) === String(pg.groupId) : String(group.groupName).trim().toLowerCase() === String(pg.groupName).trim().toLowerCase());
+      if (matchesThisExam && pg.groupName && validGroup) {
+        set.set(validGroup.groupName, { id: pg.groupName, name: validGroup.groupName });
       }
     });
 
-    const items = Array.from(set).map((name) => ({ id: name, name }));
+    const items = Array.from(set.values());
     return [{ id: "all", name: "All Groups" }, ...items];
-  }, [activeAnalyticsOption, publishedGroups]);
+  }, [activeAnalyticsOption, publishedGroups, groups]);
+
+  useEffect(() => {
+    if (groupsLoading || groupsError) return;
+    if (!analyticsGroupOptions.some((option) => option.id === analyticsGroupFilter)) setAnalyticsGroupFilter("all");
+  }, [analyticsGroupOptions, analyticsGroupFilter, groupsLoading, groupsError]);
 
   // Fetch API analytics and section student records when activeAnalyticsOption changes
   useEffect(() => {
@@ -3157,10 +3163,10 @@ export default function ResultProcessingPage() {
                     <Select
                       label="Group"
                       value={filters.group}
-                      disabled={false}
+                      disabled={groupsLoading}
                       onChange={(v) => changeFilter("group", v)}
                     >
-                      <option value="">Select Group</option>
+                      <option value="">{groupsLoading ? "Loading groups..." : groupsError ? "Unable to load groups" : "Select Group"}</option>
                       {groups.map((g) => {
                         const gId = g.groupId || g.id;
                         const gName = g.groupName || g.name;
@@ -3550,6 +3556,9 @@ function Select({
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const ref = useRef(null);
+  const menuRef = useRef(null);
+  const isGroup = String(label || "").trim().toLowerCase() === "group";
+  const [menuStyle, setMenuStyle] = useState({});
   const inputRef = useRef(null);
   const selectId = useMemo(
     () => id || (label ? `select-${label.toLowerCase().replace(/[^a-z0-9]/g, "-")}` : `select-${Math.random().toString(36).substring(2, 7)}`),
@@ -3604,7 +3613,7 @@ function Select({
   useEffect(() => {
     if (!open) return;
     const outside = (event) => {
-      if (!ref.current?.contains(event.target)) {
+      if (!ref.current?.contains(event.target) && !menuRef.current?.contains(event.target)) {
         setOpen(false);
         setQuery("");
       }
@@ -3612,6 +3621,31 @@ function Select({
     document.addEventListener("mousedown", outside);
     return () => document.removeEventListener("mousedown", outside);
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!isGroup || !open || disabled) return undefined;
+    const position = (event) => {
+      if (event && menuRef.current?.contains(event.target)) return;
+      const rect = ref.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const upwards = below < 160 && above > below;
+      const width = Math.min(rect.width, window.innerWidth - 16);
+      setMenuStyle({ left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), width,
+        top: upwards ? "auto" : rect.bottom + 4,
+        bottom: upwards ? window.innerHeight - rect.top + 4 : "auto",
+        maxHeight: Math.max(0, Math.min(220, upwards ? above : below)) });
+    };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => { window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
+  }, [isGroup, open, disabled]);
+
+  useEffect(() => {
+    if (isGroup && open) menuRef.current?.querySelector('[data-group-index="' + highlight + '"]')?.scrollIntoView({ block: "nearest" });
+  }, [isGroup, open, highlight, query]);
 
   const keyDown = (event) => {
     if (disabled) return;
@@ -3638,6 +3672,40 @@ function Select({
       }
     }
   };
+
+  const menu = (
+<div ref={menuRef} className={`cms-custom-select-menu bay-style-menu ${isGroup ? "cms-group-scroll-menu" : ""}`} style={isGroup ? menuStyle : undefined} id={listId} role="listbox" onMouseDown={isGroup ? (event) => event.preventDefault() : undefined}>
+            {filtered.length ? (
+              filtered.map((item, index) => {
+                const isItemSel = String(item.id) === String(value);
+                return (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isItemSel}
+                    className={`cms-custom-select-option ${isItemSel ? "selected" : ""} ${highlight === index ? "highlighted" : ""
+                      }`}
+                    key={item.id}
+                  id={isGroup ? `${listId}-option-${index}` : undefined}
+                  data-group-index={isGroup ? index : undefined}
+                    title={item.name}
+                    onMouseEnter={() => setHighlight(index)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChange(item.id);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  >
+                    <span className="cms-option-text">{item.name}</span>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="cms-custom-select-empty">No matching options</div>
+            )}
+          </div>
+  );
 
   const displayName = selected ? selected.name : (placeholder || (label ? `Select ${label}` : "Select..."));
   const fullText = selected?.name || displayName;
@@ -3714,6 +3782,7 @@ function Select({
             aria-label={label}
             aria-expanded={open}
             aria-controls={listId}
+            aria-activedescendant={isGroup && open && filtered[highlight] ? `${listId}-option-${highlight}` : undefined}
             disabled={disabled}
             className="cms-custom-combobox-input"
             value={open ? query : (selected?.name || "")}
@@ -3740,6 +3809,13 @@ function Select({
             onClick={(e) => {
               e.stopPropagation();
               if (disabled) return;
+              if (isGroup) {
+                const next = !open;
+                setQuery("");
+                setOpen(next);
+                if (next) requestAnimationFrame(() => inputRef.current?.focus());
+                return;
+              }
               setOpen((prev) => {
                 const next = !prev;
                 if (next) {
@@ -3754,37 +3830,7 @@ function Select({
           </button>
         </div>
 
-        {open && !disabled && (
-          <div className="cms-custom-select-menu bay-style-menu" id={listId} role="listbox">
-            {filtered.length ? (
-              filtered.map((item, index) => {
-                const isItemSel = String(item.id) === String(value);
-                return (
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={isItemSel}
-                    className={`cms-custom-select-option ${isItemSel ? "selected" : ""} ${highlight === index ? "highlighted" : ""
-                      }`}
-                    key={item.id}
-                    title={item.name}
-                    onMouseEnter={() => setHighlight(index)}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onChange(item.id);
-                      setOpen(false);
-                      setQuery("");
-                    }}
-                  >
-                    <span className="cms-option-text">{item.name}</span>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="cms-custom-select-empty">No matching options</div>
-            )}
-          </div>
-        )}
+        {open && !disabled && (isGroup ? createPortal(menu, document.body) : menu)}
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import React, { useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { getCatalogGroups } from "@/modules/admin/AdminResults/services/resultsService.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -930,6 +932,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   const [years, setYears] = useState([]);
   const [levels, setLevels] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState("");
   const [programs, setPrograms] = useState([]);
   const [sections, setSections] = useState([]);
   const [exams, setExams] = useState([]);
@@ -1110,53 +1114,24 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     };
   }, [filters.board, effectiveBoardId, activeCampusId, selectedBoard]);
 
-  // Load Groups (Independent)
+  const selectedGroupRef = useRef(filters.group);
+  useEffect(() => { selectedGroupRef.current = filters.group; }, [filters.group]);
+  // Use the master catalog to validate contextual IDs for both marks tabs.
   useEffect(() => {
-    const currentBoard = filters.board || effectiveBoardId;
-    let isMounted = true;
-
-    const loadGroups = async () => {
-      try {
-        const groupsRes = await apiClient
-          .get("/api/v1/groups", {
-            params: {
-              CampusId: activeCampusId,
-              campusId: activeCampusId,
-              ...(currentBoard ? { boardId: currentBoard, BoardId: currentBoard } : {}),
-              isActive: true,
-            },
-            headers: {
-              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-            },
-          })
-          .catch(() => apiClient.get("/api/v1/groups"))
-          .catch(() => null);
-
-        const rawGroups = unwrapRecords(groupsRes);
-        const listGroups = rawGroups
-          .map((g) => ({
-            id: normalizeId(g.groupId ?? g.id),
-            name: g.groupName ?? g.name ?? "",
-            groupName: g.groupName ?? g.name ?? "",
-            groupCode: g.groupCode ?? "",
-            boardId: normalizeId(g.boardId),
-            programs: g.programs || [],
-            isActive: g.isActive !== false,
-          }))
-          .filter((g) => g.isActive && (!g.boardId || !currentBoard || eq(g.boardId, currentBoard)));
-
-        if (isMounted) setGroups(listGroups);
-      } catch (err) {
-        console.error("Error fetching groups:", err);
-        if (isMounted) setGroups([]);
-      }
-    };
-
-    loadGroups();
-    return () => {
-      isMounted = false;
-    };
-  }, [filters.board, effectiveBoardId, activeCampusId]);
+    let active = true;
+    const controller = new AbortController();
+    const scope = { levelIndependentGroups: true, selectedGroupId: selectedGroupRef.current, boardId: filters.board || effectiveBoardId, academicYearId: filters.year || effectiveYearId, academicLevelId: filters.level, campusId: activeCampusId };
+    setGroups([]); setGroupsLoading(Boolean(scope.boardId && scope.academicYearId)); setGroupsError("");
+    getCatalogGroups(scope, { signal: controller.signal }).then((rows) => {
+      if (!active) return;
+      const groups = rows.map((g) => ({ ...g, id: normalizeId(g.groupId), name: g.groupName }));
+      setGroups(groups);
+      setFilters((current) => current.group && !groups.some((group) => eq(group.id, current.group))
+        ? { ...current, group: "", program: "", section: "", exam: "" } : current);
+    }).catch((error) => { if (active) setGroupsError(getApiErrorMessage(error) || "Unable to load groups."); })
+      .finally(() => { if (active) setGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [filters.board, filters.year, filters.level, effectiveBoardId, effectiveYearId, activeCampusId]);
 
   // Load Programs (Independent: group-specific if group is selected, otherwise all programs for campus/board)
   useEffect(() => {
@@ -1488,7 +1463,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
       onReset();
       setFilters((prev) => {
         const next = { ...prev, [key]: value };
-        if (key === "level" || key === "group" || key === "program") {
+        if (key === "group" || key === "program") {
           next.section = "";
           next.exam = "";
         } else if (key === "section") {
@@ -1512,6 +1487,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     years,
     levels,
     groups,
+    groupsLoading,
+    groupsError,
     programs,
     sections,
     exams,
@@ -3954,6 +3931,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             years={entry.years}
             levels={entry.levels}
             groups={entry.groups}
+            groupsLoading={entry.groupsLoading}
+            groupsError={entry.groupsError}
             programs={entry.programs}
             sections={entry.sections}
             changeFilter={entry.changeFilter}
@@ -4037,6 +4016,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             years={evalState.years}
             levels={evalState.levels}
             groups={evalState.groups}
+            groupsLoading={evalState.groupsLoading}
+            groupsError={evalState.groupsError}
             programs={evalState.programs}
             sections={evalState.sections}
             exams={evalState.exams}
@@ -4330,6 +4311,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
 // FilterCard with Dynamic Action Button (Enter Marks / Check Evaluations)
 function FilterCard({
   mode = "entry",
+  groupsLoading = false,
+  groupsError = "",
   filters,
   boards,
   years,
@@ -4350,7 +4333,7 @@ function FilterCard({
     { key: "board", label: "Board", options: boards, disabled: true },
     { key: "year", label: "Academic Year", options: years, disabled: true },
     { key: "level", label: "Academic Level", options: levels, disabled: false },
-    { key: "group", label: "Group", options: groups, disabled: false },
+    { key: "group", label: "Group", options: groups, disabled: groupsLoading },
     { key: "program", label: "Program", options: programs, disabled: false },
     { key: "section", label: "Section", options: sections, disabled: false },
     ...(mode === "evaluation"
@@ -4379,13 +4362,14 @@ function FilterCard({
           <button
             type="button"
             className="cms-btn cms-btn-primary"
-            disabled={Boolean(actionDisabled || processing)}
+            disabled={Boolean(actionDisabled || processing || groupsLoading || groupsError)}
             onClick={onAction}
           >
             {processing ? "Loading..." : actionLabel}
           </button>
         )}
       </div>
+      {groupsError && <p role="alert">{groupsError}</p>}
       <div className="cms-filter-grid">
         {fields.map((field) => (
           <SearchableSelect
@@ -5133,6 +5117,9 @@ function SearchableSelect({
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const ref = useRef(null);
+  const menuRef = useRef(null);
+  const isGroup = id === "marks-group";
+  const [menuStyle, setMenuStyle] = useState({});
   const inputRef = useRef(null);
   const listId = `${id}-listbox`;
 
@@ -5150,7 +5137,7 @@ function SearchableSelect({
   useEffect(() => {
     if (!open) return;
     const outside = (event) => {
-      if (!ref.current?.contains(event.target)) {
+      if (!ref.current?.contains(event.target) && !menuRef.current?.contains(event.target)) {
         setOpen(false);
         setQuery("");
       }
@@ -5159,9 +5146,35 @@ function SearchableSelect({
     return () => document.removeEventListener("mousedown", outside);
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (!isGroup || !open || disabled) return undefined;
+    const position = (event) => {
+      if (event && menuRef.current?.contains(event.target)) return;
+      const rect = ref.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const upwards = below < 160 && above > below;
+      const width = Math.min(rect.width, window.innerWidth - 16);
+      setMenuStyle({ left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), width,
+        top: upwards ? "auto" : rect.bottom + 4,
+        bottom: upwards ? window.innerHeight - rect.top + 4 : "auto",
+        maxHeight: Math.max(0, Math.min(220, upwards ? above : below)) });
+    };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => { window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
+  }, [isGroup, open, disabled]);
+
+  useEffect(() => {
+    if (isGroup && open) menuRef.current?.querySelector('[data-group-index="' + highlight + '"]')?.scrollIntoView({ block: "nearest" });
+  }, [isGroup, open, highlight, query]);
+
   const keyDown = (event) => {
     if (disabled) return;
     if (event.key === "Escape") {
+      if (isGroup) ref.current?.querySelector('[role="combobox"]')?.focus();
       setOpen(false);
       setQuery("");
     } else if (["ArrowDown", "ArrowUp"].includes(event.key)) {
@@ -5179,11 +5192,58 @@ function SearchableSelect({
       if (open && filtered[highlight]) {
         event.preventDefault();
         onChange(filtered[highlight].id);
-        setOpen(false);
+        if (isGroup) ref.current?.querySelector('[role="combobox"]')?.focus();
+      setOpen(false);
         setQuery("");
       }
     }
   };
+
+  const menu = (
+<div ref={menuRef} className={`cms-custom-select-menu bay-style-menu ${isGroup ? "cms-group-scroll-menu" : ""}`} style={isGroup ? menuStyle : undefined} id={listId} role="listbox" onMouseDown={isGroup ? (event) => event.preventDefault() : undefined}>
+            <button
+              type="button"
+              role="option"
+              aria-selected={!value}
+              className={`cms-custom-select-option ${!value ? "selected" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange("");
+                if (isGroup) ref.current?.querySelector('[role="combobox"]')?.focus();
+                setOpen(false);
+                setQuery("");
+              }}
+            >
+              <span className="cms-option-text">Select {label}</span>
+            </button>
+            {filtered.length ? (
+              filtered.map((item, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={eq(item.id, value)}
+                  className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${highlight === index ? "highlighted" : ""
+                    }`}
+                  key={item.id}
+                  id={isGroup ? `${listId}-option-${index}` : undefined}
+                  data-group-index={isGroup ? index : undefined}
+                  onMouseEnter={() => setHighlight(index)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(item.id);
+                    if (isGroup) ref.current?.querySelector('[role="combobox"]')?.focus();
+                setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <span className="cms-option-text">{item.name}</span>
+                </button>
+              ))
+            ) : (
+              <div className="cms-custom-select-empty">{emptyText}</div>
+            )}
+          </div>
+  );
 
   const isBoard = id === "marks-board";
   const isYear = id === "marks-year";
@@ -5237,6 +5297,7 @@ function SearchableSelect({
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-controls={listId}
+          aria-activedescendant={isGroup && open && filtered[highlight] ? `${listId}-option-${highlight}` : undefined}
           aria-label={label}
           className={`cms-custom-select-combobox ${open ? "is-focused" : ""} ${disabled ? "is-disabled" : ""}`}
           onClick={() => {
@@ -5297,47 +5358,7 @@ function SearchableSelect({
           </button>
         </div>
 
-        {open && !disabled && (
-          <div className="cms-custom-select-menu bay-style-menu" id={listId} role="listbox">
-            <button
-              type="button"
-              role="option"
-              aria-selected={!value}
-              className={`cms-custom-select-option ${!value ? "selected" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange("");
-                setOpen(false);
-                setQuery("");
-              }}
-            >
-              <span className="cms-option-text">Select {label}</span>
-            </button>
-            {filtered.length ? (
-              filtered.map((item, index) => (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={eq(item.id, value)}
-                  className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${highlight === index ? "highlighted" : ""
-                    }`}
-                  key={item.id}
-                  onMouseEnter={() => setHighlight(index)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange(item.id);
-                    setOpen(false);
-                    setQuery("");
-                  }}
-                >
-                  <span className="cms-option-text">{item.name}</span>
-                </button>
-              ))
-            ) : (
-              <div className="cms-custom-select-empty">{emptyText}</div>
-            )}
-          </div>
-        )}
+        {open && !disabled && (isGroup ? createPortal(menu, document.body) : menu)}
       </div>
     </div>
   );
