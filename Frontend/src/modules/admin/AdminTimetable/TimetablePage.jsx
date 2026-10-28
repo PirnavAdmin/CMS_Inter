@@ -164,10 +164,14 @@ const validTimetableGroups = (masters, contexts, context) => {
     if (!(Number(masterId) > 0)) return;
     const matches = contexts.filter((group) => usable(group)
       && idOf(group, "masterGroupId") === masterId
-      && ["boardId", "academicYearId", "academicLevelId"].every((key) => idOf(group, key) === String(context[key]))
+      && ["boardId", "academicYearId"].every((key) => idOf(group, key) === String(context[key]))
       && (!idOf(group, "campusId") || idOf(group, "campusId") === String(context.campusId))
       && Number.isInteger(Number(idOf(group, "groupId"))) && Number(idOf(group, "groupId")) > 0);
-    const selected = matches.find((group) => idOf(group, "groupId") === String(context.groupId)) ?? matches[0];
+    // Prefer an existing matching-level context, but do not hide the shared
+    // group's real ID merely because only its first-year context exists.
+    const levelMatches = matches.filter((group) => idOf(group, "academicLevelId") === String(context.academicLevelId));
+    const selected = levelMatches.find((group) => idOf(group, "groupId") === String(context.groupId)) ?? levelMatches[0]
+      ?? matches.find((group) => idOf(group, "groupId") === String(context.groupId)) ?? matches[0];
     if (selected) byMaster.set(masterId, { id: idOf(selected, "groupId"), name: String(pick(master, "groupName", "GroupName") ?? ""), raw: selected });
   });
   return [...new Map([...byMaster.values()].filter((group) => group.name).map((group) => [group.id, group])).values()];
@@ -700,7 +704,7 @@ function useLookups(initial = {}) {
         // This existing filter returns the explicit master/context link;
         // older unfiltered stored procedures can omit MasterGroupId.
         const responses = await Promise.all(masterIds.map((masterGroupId) => apiClient.get(apiEndpoints.groups.list, {
-          params: { masterGroupId, boardId: Number(context.boardId), academicYearId: Number(context.academicYearId), academicLevelId: Number(context.academicLevelId), isActive: true },
+          params: { masterGroupId, boardId: Number(context.boardId), academicYearId: Number(context.academicYearId), isActive: true },
         })));
         if (cancelled) return;
         if (responses.some((result) => result.data?.success === false)) throw new Error("Unable to load contextual groups.");
