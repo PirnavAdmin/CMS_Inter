@@ -36,6 +36,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getExamDuties } from "@/services/examinationService.js";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
+import { useExamCellTab, getModuleState, saveModuleState } from "../statePersistence.js";
 import { Modal, Toast, Pagination } from "@/shared/components/Ui.jsx";
 import {
   d,
@@ -387,43 +388,74 @@ export default function HallAllocation({ initialTab = "rooms" }) {
   const navExamId = location?.state?.examId ? String(location.state.examId) : "";
 
   // Tab State: "rooms" | "duties"
-  const [activeTab, setActiveTab] = useState(() => {
-    return location?.state?.activeTab || initialTab || "rooms";
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "hall_allocation",
+    defaultTab: "rooms",
+    initialProp: location?.state?.activeTab || initialTab,
+    tabAliases: {
+      "rooms": "rooms",
+      "room": "rooms",
+      "hall-allocation": "rooms",
+      "allocation": "rooms",
+      "duties": "duties",
+      "invigilation": "duties",
+      "invigilation-duties": "duties",
+    },
   });
 
-  useEffect(() => {
-    if (location?.state?.activeTab) {
-      setActiveTab(location.state.activeTab);
-    } else if (initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [location?.state?.activeTab, initialTab]);
+  const savedHallState = useMemo(() => getModuleState("hall_allocation", {}), []);
 
   const { selectedCampusId } = useCampusContext();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
 
   const [exams, setExams] = useState([]);
-  const [examId, setExamId] = useState(navExamId);
+  const [examId, setExamId] = useState(() => navExamId || savedHallState?.examId || "");
   const [schedules, setSchedules] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [faculty, setFaculty] = useState([]);
   const [schedulingContext, setSchedulingContext] = useState(null);
 
   // Filters for Rooms tab
-  const [dateFilter, setDateFilter] = useState("");
-  const [sessionFilter, setSessionFilter] = useState("");
-  const [roomFilter, setRoomFilter] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [dateFilter, setDateFilter] = useState(() => savedHallState?.dateFilter || "");
+  const [sessionFilter, setSessionFilter] = useState(() => savedHallState?.sessionFilter || "");
+  const [roomFilter, setRoomFilter] = useState(() => savedHallState?.roomFilter || "");
+  const [searchTerm, setSearchTerm] = useState(() => savedHallState?.searchTerm || "");
 
   // Invigilation Duties state
   const [duties, setDuties] = useState([]);
   const [loadingDuties, setLoadingDuties] = useState(false);
-  const [dutyStaffFilter, setDutyStaffFilter] = useState("all");
-  const [dutyStatusFilter, setDutyStatusFilter] = useState("all");
-  const [dutySearch, setDutySearch] = useState("");
-  const [dutyViewMode, setDutyViewMode] = useState("table"); // 'table' | 'cards'
+  const [dutyStaffFilter, setDutyStaffFilter] = useState(() => savedHallState?.dutyStaffFilter || "all");
+  const [dutyStatusFilter, setDutyStatusFilter] = useState(() => savedHallState?.dutyStatusFilter || "all");
+  const [dutySearch, setDutySearch] = useState(() => savedHallState?.dutySearch || "");
+  const [dutyViewMode, setDutyViewMode] = useState(() => savedHallState?.dutyViewMode || "table"); // 'table' | 'cards'
   const [selectedDutyForModal, setSelectedDutyForModal] = useState(null);
-  const [dutyPage, setDutyPage] = useState(1);
+  const [dutyPage, setDutyPage] = useState(() => savedHallState?.dutyPage || 1);
+
+  useEffect(() => {
+    saveModuleState("hall_allocation", {
+      examId,
+      dateFilter,
+      sessionFilter,
+      roomFilter,
+      searchTerm,
+      dutyStaffFilter,
+      dutyStatusFilter,
+      dutySearch,
+      dutyViewMode,
+      dutyPage,
+    });
+  }, [
+    examId,
+    dateFilter,
+    sessionFilter,
+    roomFilter,
+    searchTerm,
+    dutyStaffFilter,
+    dutyStatusFilter,
+    dutySearch,
+    dutyViewMode,
+    dutyPage,
+  ]);
   const DUTIES_PER_PAGE = 10;
 
   // UI state

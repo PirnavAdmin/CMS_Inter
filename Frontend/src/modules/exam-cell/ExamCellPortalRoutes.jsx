@@ -53,6 +53,7 @@ export default function ExamCellPortalRoutes() {
       <Route path="promotions/eligible" element={<Promotions screen="promotion" />} />
       <Route path="promotions/single" element={<Promotions screen="single" />} />
       <Route path="promotions/allocation" element={<Promotions screen="allocation" />} />
+      <Route path="promotions/transfer" element={<Promotions screen="transfer" />} />
       <Route path="promotions/history" element={<Promotions screen="history" />} />
       <Route path="holidays" element={<Holidays />} />
       <Route path="profile" element={<Profile />} />

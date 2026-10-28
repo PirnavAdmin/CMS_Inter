@@ -18,6 +18,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getModuleState, saveModuleState } from "../statePersistence.js";
 import "@/modules/admin/AdminAttendance/AttendancePage.css";
 import "@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.css";
 
@@ -465,14 +466,16 @@ function Screen({ say }) {
     useAcademicContext();
   const campusCtx = useCampusContext();
   const navbarCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
-  const restoredState = location.state?.attendanceState || null;
+  const savedAttState = getModuleState("attendance", {});
+  const restoredState = location.state?.attendanceState || (savedAttState?.filters ? savedAttState : null);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
 
   const getInitialView = () => {
-    if (restoredState?.filters?.view) return restoredState.filters.view;
     if (tabParam === "monthly") return "Monthly Report";
     if (tabParam === "defaulters") return "Defaulters";
+    if (tabParam === "daily") return "Daily Attendance";
+    if (restoredState?.filters?.view) return restoredState.filters.view;
     return "Daily Attendance";
   };
 
@@ -495,10 +498,23 @@ function Screen({ say }) {
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState(() => restoredState?.search || "");
   const [page, setPage] = useState(() => restoredState?.page || 1);
-  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
+  const [attendanceThreshold, setAttendanceThreshold] = useState(() => restoredState?.attendanceThreshold || 75);
   const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
   const initialAcademicContext = useRef(`${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
   const skipInitialPageReset = useRef(true);
+
+  useEffect(() => {
+    saveModuleState("attendance", {
+      filters: f,
+      rows,
+      report,
+      loaded,
+      search,
+      page,
+      attendanceThreshold,
+      activeHoliday,
+    });
+  }, [f, rows, report, loaded, search, page, attendanceThreshold, activeHoliday]);
 
   const studentOptions = useStudentOptions(
     navbarBoardId,

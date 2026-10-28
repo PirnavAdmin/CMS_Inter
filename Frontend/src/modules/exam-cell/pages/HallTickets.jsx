@@ -23,6 +23,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
+import { getModuleState, saveModuleState } from "../statePersistence.js";
 import { Modal, Toast, Pagination } from "@/shared/components/Ui.jsx";
 import "./HallTickets.css";
 
@@ -197,10 +198,12 @@ export default function HallTickets() {
   const [students, setStudents] = useState([]);
   const [schedules, setSchedules] = useState([]);
 
+  const savedTicketsState = useMemo(() => getModuleState("hall_tickets", {}), []);
+
   // Selection Filters
-  const [examId, setExamId] = useState("");
-  const [sectionId, setSectionId] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [examId, setExamId] = useState(() => savedTicketsState?.examId || "");
+  const [sectionId, setSectionId] = useState(() => savedTicketsState?.sectionId || "");
+  const [searchTerm, setSearchTerm] = useState(() => savedTicketsState?.searchTerm || "");
 
   // Hall Tickets State
   const [tickets, setTickets] = useState([]);
@@ -348,7 +351,16 @@ export default function HallTickets() {
   }, [schedules, tickets]);
 
   const TICKETS_PAGE_SIZE = 10;
-  const [ticketPage, setTicketPage] = useState(1);
+  const [ticketPage, setTicketPage] = useState(() => savedTicketsState?.ticketPage || 1);
+
+  useEffect(() => {
+    saveModuleState("hall_tickets", {
+      examId,
+      sectionId,
+      searchTerm,
+      ticketPage,
+    });
+  }, [examId, sectionId, searchTerm, ticketPage]);
 
   // Reset to page 1 on search or filter change
   useEffect(() => {

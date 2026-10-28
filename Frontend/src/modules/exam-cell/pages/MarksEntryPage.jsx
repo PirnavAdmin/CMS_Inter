@@ -6,6 +6,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { SkeletonButton, SkeletonPage, SkeletonRow } from "@/shared/components/Ui.jsx";
+import { useExamCellTab, getModuleState, saveModuleState } from "../statePersistence.js";
 import * as XLSX from "xlsx";
 import {
   X,
@@ -465,7 +466,7 @@ const isLegalStatusTransition = (from, to) =>
   }[from] || []).includes(to);
 
 // Reusable Hook for Independent Academic Cascading Filters
-function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => { }) {
+function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => { }, filterScope = "entry") {
   const {
     selectedCampus,
     selectedCampusId,
@@ -490,15 +491,29 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? "");
   }, [selectedAcademicYearId, selectedAcademicYear]);
 
-  const [filters, setFilters] = useState({
-    board: effectiveBoardId,
-    year: effectiveYearId,
-    level: "",
-    group: "",
-    program: "",
-    section: "",
-    exam: "",
+  const [filters, setFilters] = useState(() => {
+    const saved = getModuleState("marks_entry", {});
+    const scopeFilters = saved?.[filterScope]?.filters;
+    return {
+      board: scopeFilters?.board || effectiveBoardId,
+      year: scopeFilters?.year || effectiveYearId,
+      level: scopeFilters?.level || "",
+      group: scopeFilters?.group || "",
+      program: scopeFilters?.program || "",
+      section: scopeFilters?.section || "",
+      exam: scopeFilters?.exam || "",
+    };
   });
+
+  useEffect(() => {
+    saveModuleState("marks_entry", (prev) => ({
+      ...prev,
+      [filterScope]: {
+        ...(prev?.[filterScope] || {}),
+        filters,
+      },
+    }));
+  }, [filters, filterScope]);
   const [years, setYears] = useState([]);
   const [levels, setLevels] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -1097,13 +1112,19 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
   }, [effectiveCampus, selectedCampus, selectedCampusId]);
 
   // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
-  const [tab, setTab] = useState(initialTab);
-
-  useEffect(() => {
-    if (initialTab && initialTab !== tab) {
-      setTab(initialTab);
-    }
-  }, [initialTab]);
+  const [tab, setTab] = useExamCellTab({
+    moduleKey: "marks_entry",
+    defaultTab: "entry",
+    initialProp: initialTab,
+    tabAliases: {
+      "entry": "entry",
+      "marks-entry": "entry",
+      "evaluation": "evaluation",
+      "marks-evaluation": "evaluation",
+      "verification": "evaluation",
+      "students": "students",
+    },
+  });
 
   // Initial Master Boards (Loaded once on mount)
   const [allBoards, setAllBoards] = useState([]);
@@ -1330,7 +1351,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
   const [validationResult, setValidationResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false));
+  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false), "entry");
 
   // Helper to load schedules & search evaluations for an examination in Marks Entry
   const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
@@ -2656,49 +2677,13 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
   const [evaluationSearch, setEvaluationSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
 
-  const evalState = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEvalApplied(false));
+  const evalState = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEvalApplied(false), "evaluation");
 
-  // Handle Switching Between Main Tabs: Reset cascading filters from scratch (preserving Board and Year)
+  // Handle Switching Between Main Tabs: Preserve working state across tabs
   const handleTabChange = (nextTab) => {
     if (nextTab === tab) return;
     guard(() => {
       setTab(nextTab);
-      if (nextTab === "entry") {
-        entry.setFilters((prev) => ({
-          board: prev.board,
-          year: prev.year,
-          level: "",
-          group: "",
-          program: "",
-          section: "",
-          exam: "",
-        }));
-        setEntryApplied(false);
-        setEntryExamId("");
-        setEntrySubjectId("");
-        setEntryConfigs([]);
-        setEntryStudents([]);
-        setEntryPage(1);
-      } else {
-        evalState.setFilters((prev) => ({
-          board: prev.board,
-          year: prev.year,
-          level: "",
-          group: "",
-          program: "",
-          section: "",
-          exam: "",
-        }));
-        setEvalApplied(false);
-        setEvalConfigs([]);
-        setEvalStudents([]);
-        setSelectedEvaluation(null);
-        setSelectedStudent(null);
-        setEvalSubTab("evaluation");
-        setEvaluationPage(1);
-        setStudentPage(1);
-        setDetailPage(1);
-      }
     });
   };
 

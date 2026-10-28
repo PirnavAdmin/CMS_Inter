@@ -6,6 +6,7 @@ import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { Field, SkeletonPage, SkeletonRow, SkeletonText, Toast, useConfirmDialog } from "@/shared/components/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useExamCellTab, getModuleState, saveModuleState } from "../statePersistence.js";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import {  getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES, normalizeApiTemplate, extractCleanCertificateBody  } from "@/modules/admin/AdminTemplates/TemplatesPage.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -1641,8 +1642,10 @@ export default function CertificatesPage({ initialTab = "generate" }) {
   const [creating, setCreating] = useState(false);
   const [busyAction, setBusyAction] = useState({ id: null, type: "" });
   const [bulkAction, setBulkAction] = useState("");
+  const savedCertState = useMemo(() => getModuleState("certificates", {}), []);
+
   const [printingId, setPrintingId] = useState(null);
-  const [generationMode, setGenerationMode] = useState("single");
+  const [generationMode, setGenerationMode] = useState(() => savedCertState?.generationMode || "single");
   const [bulkStudentSearch, setBulkStudentSearch] = useState("");
   const [selectedBulkStudents, setSelectedBulkStudents] = useState([]);
   const [bulkStudentFilters, setBulkStudentFilters] = useState(() => ({
@@ -1652,38 +1655,81 @@ export default function CertificatesPage({ initialTab = "generate" }) {
     section: "",
   }));
 
-  const [form, setForm] = useState({
-    admissionNo: "",
-    student: "",
-    group: "",
-    level: "",
-    academicYear: "",
-    rollNo: "",
-    section: "",
-    type: "",
-    customType: "",
-    orientation: "portrait",
-    purpose: "",
-    requestDate: todayIso(),
-    remarks: "",
+  const [form, setForm] = useState(() => {
+    const saved = getModuleState("certificates", {});
+    return saved?.form ? { ...saved.form } : {
+      admissionNo: "",
+      student: "",
+      group: "",
+      level: "",
+      academicYear: "",
+      rollNo: "",
+      section: "",
+      type: "",
+      customType: "",
+      orientation: "portrait",
+      purpose: "",
+      requestDate: todayIso(),
+      remarks: "",
+    };
   });
   const [errors, setErrors] = useState({});
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [yearFilter, setYearFilter] = useState("All");
+  const [query, setQuery] = useState(() => savedCertState?.query || "");
+  const [status, setStatus] = useState(() => savedCertState?.status || "All");
+  const [typeFilter, setTypeFilter] = useState(() => savedCertState?.typeFilter || "All");
+  const [yearFilter, setYearFilter] = useState(() => savedCertState?.yearFilter || "All");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [showRecordFilters, setShowRecordFilters] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState(initialTab);
+
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "certificates",
+    defaultTab: "certificates",
+    initialProp: initialTab,
+    tabAliases: {
+      "generate": "generate",
+      "create": "generate",
+      "create-certificate": "generate",
+      "certificates": "certificates",
+      "records": "certificates",
+      "certificate-records": "certificates",
+      "actions": "actions",
+      "review": "actions",
+      "review-issue": "actions",
+    },
+  });
+
+  const [page, setPage] = useState(() => savedCertState?.page || 1);
+  const [actionPage, setActionPage] = useState(() => savedCertState?.actionPage || 1);
+  const [workflowStatusFilter, setWorkflowStatusFilter] = useState(() => savedCertState?.workflowStatusFilter || "All");
+  const [workflowQuery, setWorkflowQuery] = useState(() => savedCertState?.workflowQuery || "");
+
   useEffect(() => {
-    if (initialTab) setActiveTab(initialTab);
-  }, [initialTab]);
-  const [page, setPage] = useState(1);
-  const [workflowStatusFilter, setWorkflowStatusFilter] = useState("All");
-  const [workflowQuery, setWorkflowQuery] = useState("");
-  const [actionPage, setActionPage] = useState(1);
+    saveModuleState("certificates", {
+      generationMode,
+      form,
+      query,
+      status,
+      typeFilter,
+      yearFilter,
+      page,
+      actionPage,
+      workflowStatusFilter,
+      workflowQuery,
+    });
+  }, [
+    generationMode,
+    form,
+    query,
+    status,
+    typeFilter,
+    yearFilter,
+    page,
+    actionPage,
+    workflowStatusFilter,
+    workflowQuery,
+  ]);
   const [printPreview, setPrintPreview] = useState(null);
   const [toast, setToast] = useState("");
   const admissionLookupRef = useRef(0);

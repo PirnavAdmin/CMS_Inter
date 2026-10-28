@@ -25,6 +25,7 @@ import {
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useExamCellTab, getModuleState, saveModuleState } from "../statePersistence.js";
 import "@/modules/admin/AdminResults/ResultProcessingPage.css";
 
 const PAGE_SIZE = 10;
@@ -109,16 +110,34 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
     setSelectedAcademicYear,
   } = useAcademicContext();
 
-  const emptyFilters = { board: "", year: "", level: "", group: "", program: "", exam: "" };
-  const [filters, setFilters] = useState(emptyFilters);
-  const [applied, setApplied] = useState(emptyFilters);
-  const [viewMode, setViewMode] = useState(initialView);
+  const savedResultsState = useMemo(() => getModuleState("results", {}), []);
 
-  useEffect(() => {
-    if (initialView) {
-      setViewMode(initialView);
-    }
-  }, [initialView]);
+  const emptyFilters = { board: "", year: "", level: "", group: "", program: "", exam: "" };
+  const [filters, setFilters] = useState(() => {
+    const saved = getModuleState("results", {});
+    return saved?.filters ? { ...emptyFilters, ...saved.filters } : emptyFilters;
+  });
+  const [applied, setApplied] = useState(() => {
+    const saved = getModuleState("results", {});
+    return saved?.applied ? { ...emptyFilters, ...saved.applied } : emptyFilters;
+  });
+
+  const [viewMode, setViewMode] = useExamCellTab({
+    moduleKey: "results",
+    defaultTab: "table",
+    initialProp: initialView,
+    tabAliases: {
+      "table": "table",
+      "processing": "table",
+      "result-processing": "table",
+      "rank": "rankList",
+      "ranklist": "rankList",
+      "rank-list": "rankList",
+      "published": "published",
+      "published-results": "published",
+      "analytics": "analytics",
+    },
+  });
 
   // Cascading Master Data State
   const [campusesList, setCampusesList] = useState([]);
@@ -134,8 +153,8 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
   const [checkingReadiness, setCheckingReadiness] = useState(false);
 
   // Results State
-  const [resultsGenerated, setResultsGenerated] = useState(false);
-  const [sectionSummaries, setSectionSummaries] = useState([]);
+  const [resultsGenerated, setResultsGenerated] = useState(() => Boolean(savedResultsState?.resultsGenerated));
+  const [sectionSummaries, setSectionSummaries] = useState(() => savedResultsState?.sectionSummaries || []);
   const [publishedGroups, setPublishedGroups] = useState([]);
   const [loadingPublished, setLoadingPublished] = useState(false);
   const publishedGroupsRef = useRef(publishedGroups);
@@ -146,27 +165,27 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
   }, [publishedGroups]);
 
   // Drilldown states for Published Results Tab
-  const [selectedPublishedGroup, setSelectedPublishedGroup] = useState(null);
-  const [selectedPublishedSection, setSelectedPublishedSection] = useState(null);
+  const [selectedPublishedGroup, setSelectedPublishedGroup] = useState(() => savedResultsState?.selectedPublishedGroup || null);
+  const [selectedPublishedSection, setSelectedPublishedSection] = useState(() => savedResultsState?.selectedPublishedSection || null);
 
   // Drilldown states for Generated Results Tab
-  const [selectedSectionDetails, setSelectedSectionDetails] = useState(null);
+  const [selectedSectionDetails, setSelectedSectionDetails] = useState(() => savedResultsState?.selectedSectionDetails || null);
   const [selectedStudentMemo, setSelectedStudentMemo] = useState(null);
 
   // Search & Pagination
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState(() => savedResultsState?.query || "");
+  const [page, setPage] = useState(() => savedResultsState?.page || 1);
 
   // Published tab filters
-  const [publishedSearch, setPublishedSearch] = useState("");
-  const [publishedStatusFilter, setPublishedStatusFilter] = useState("all");
-  const [publishedGroupFilter, setPublishedGroupFilter] = useState("all");
-  const [publishedExamFilter, setPublishedExamFilter] = useState("all");
+  const [publishedSearch, setPublishedSearch] = useState(() => savedResultsState?.publishedSearch || "");
+  const [publishedStatusFilter, setPublishedStatusFilter] = useState(() => savedResultsState?.publishedStatusFilter || "all");
+  const [publishedGroupFilter, setPublishedGroupFilter] = useState(() => savedResultsState?.publishedGroupFilter || "all");
+  const [publishedExamFilter, setPublishedExamFilter] = useState(() => savedResultsState?.publishedExamFilter || "all");
 
   // Rank List state
-  const [rankSearch, setRankSearch] = useState("");
-  const [rankFilter, setRankFilter] = useState("all");
-  const [rankPage, setRankPage] = useState(1);
+  const [rankSearch, setRankSearch] = useState(() => savedResultsState?.rankSearch || "");
+  const [rankFilter, setRankFilter] = useState(() => savedResultsState?.rankFilter || "all");
+  const [rankPage, setRankPage] = useState(() => savedResultsState?.rankPage || 1);
   const [showRankPreview, setShowRankPreview] = useState(false);
   const [apiRankRecords, setApiRankRecords] = useState([]);
 
@@ -179,8 +198,51 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
 
   const [apiAnalytics, setApiAnalytics] = useState(null);
   const [apiFailedStudents, setApiFailedStudents] = useState([]);
-  const [selectedAnalyticsExamKey, setSelectedAnalyticsExamKey] = useState("");
-  const [analyticsGroupFilter, setAnalyticsGroupFilter] = useState("all");
+  const [selectedAnalyticsExamKey, setSelectedAnalyticsExamKey] = useState(() => savedResultsState?.selectedAnalyticsExamKey || "");
+  const [analyticsGroupFilter, setAnalyticsGroupFilter] = useState(() => savedResultsState?.analyticsGroupFilter || "all");
+
+  // Save updated filters, tab and drilldown state to sessionStorage
+  useEffect(() => {
+    saveModuleState("results", {
+      filters,
+      applied,
+      resultsGenerated,
+      sectionSummaries,
+      selectedPublishedGroup,
+      selectedPublishedSection,
+      selectedSectionDetails,
+      query,
+      page,
+      publishedSearch,
+      publishedStatusFilter,
+      publishedGroupFilter,
+      publishedExamFilter,
+      rankSearch,
+      rankFilter,
+      rankPage,
+      selectedAnalyticsExamKey,
+      analyticsGroupFilter,
+    });
+  }, [
+    filters,
+    applied,
+    resultsGenerated,
+    sectionSummaries,
+    selectedPublishedGroup,
+    selectedPublishedSection,
+    selectedSectionDetails,
+    query,
+    page,
+    publishedSearch,
+    publishedStatusFilter,
+    publishedGroupFilter,
+    publishedExamFilter,
+    rankSearch,
+    rankFilter,
+    rankPage,
+    selectedAnalyticsExamKey,
+    analyticsGroupFilter,
+  ]);
   const [selectedExamAnalyticsApiData, setSelectedExamAnalyticsApiData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
@@ -496,20 +558,24 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
     }
   }, [selectedBoardId, selectedBoard, academicYears, contextAcademicYears, selectedAcademicYearId, selectedAcademicYear, setSelectedAcademicYear]);
 
-  // Reactive reset of results state when active campus changes
+  // Reactive reset of results state only when active campus actually changes
+  const prevCampusForResetRef = useRef(effectiveCampusId);
   useEffect(() => {
-    publishedRequestCampusRef.current = effectiveCampusId;
-    publishedGroupsCampusRef.current = effectiveCampusId;
-    publishedGroupsRef.current = [];
-    setPublishedGroups([]);
-    setSelectedPublishedGroup(null);
-    setSelectedPublishedSection(null);
-    setResultsGenerated(false);
-    setSectionSummaries([]);
-    setSelectedSectionDetails(null);
-    setSelectedStudentMemo(null);
-    setReadiness(null);
-    setApplied(emptyFilters);
+    if (prevCampusForResetRef.current !== effectiveCampusId) {
+      prevCampusForResetRef.current = effectiveCampusId;
+      publishedRequestCampusRef.current = effectiveCampusId;
+      publishedGroupsCampusRef.current = effectiveCampusId;
+      publishedGroupsRef.current = [];
+      setPublishedGroups([]);
+      setSelectedPublishedGroup(null);
+      setSelectedPublishedSection(null);
+      setResultsGenerated(false);
+      setSectionSummaries([]);
+      setSelectedSectionDetails(null);
+      setSelectedStudentMemo(null);
+      setReadiness(null);
+      setApplied(emptyFilters);
+    }
   }, [effectiveCampusId]);
 
   // 3. Cascading Board Dependencies (Board -> Years, Levels, Groups)

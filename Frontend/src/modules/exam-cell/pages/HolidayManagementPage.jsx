@@ -5,6 +5,7 @@ import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getModuleState, saveModuleState } from "../statePersistence.js";
 import holidayApi from "@/api/holidayApi.js";
 import "@/modules/admin/AdminAcademicCalendar/HolidayManagementPage.css";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
@@ -175,15 +176,29 @@ export default function HolidayManagementPage() {
   const { selectedCampusId } = useCampusContext();
   const [holidays, setHolidays] = useState([]);
   const [summary, setSummary] = useState({ total: "—", national: "—", festival: "—", upcoming: "—", completed: "—" });
+  const savedHolidayState = useMemo(() => getModuleState("holidays", {}), []);
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [query, setQuery] = useState("");
-  const [month, setMonth] = useState("All");
-  const [customRange, setCustomRange] = useState({ from: "", to: "" });
-  const [appliedRange, setAppliedRange] = useState(null);
-  const [type, setType] = useState("All");
-  const [status, setStatus] = useState("All");
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState(() => savedHolidayState?.query || "");
+  const [month, setMonth] = useState(() => savedHolidayState?.month || "All");
+  const [customRange, setCustomRange] = useState(() => savedHolidayState?.customRange || { from: "", to: "" });
+  const [appliedRange, setAppliedRange] = useState(() => savedHolidayState?.appliedRange || null);
+  const [type, setType] = useState(() => savedHolidayState?.type || "All");
+  const [status, setStatus] = useState(() => savedHolidayState?.status || "All");
+  const [page, setPage] = useState(() => savedHolidayState?.page || 1);
+
+  useEffect(() => {
+    saveModuleState("holidays", {
+      query,
+      month,
+      customRange,
+      appliedRange,
+      type,
+      status,
+      page,
+    });
+  }, [query, month, customRange, appliedRange, type, status, page]);
   const [importModal, setImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importValidation, setImportValidation] = useState(null);

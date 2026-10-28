@@ -18,6 +18,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
+import { getModuleState, saveModuleState } from "../statePersistence.js";
 import { Toast, Pagination } from "@/shared/components/Ui.jsx";
 import "@/modules/admin/AdminExaminations/ExaminationPage.css";
 import "./ExamReports.css";
@@ -172,14 +173,24 @@ export default function ExamReports() {
   const { selectedCampusId: campusId } = useCampusContext();
   const { selectedBoardId: boardId, selectedAcademicYearId: academicYearId } = useAcademicContext();
 
+  const savedReportState = useMemo(() => getModuleState("exam_reports", {}), []);
+
   const [exams, setExams] = useState([]);
-  const [examId, setExamId] = useState("");
+  const [examId, setExamId] = useState(() => savedReportState?.examId || "");
   const [analytics, setAnalytics] = useState(null);
   const [ranks, setRanks] = useState([]);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [reportPage, setReportPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState(() => savedReportState?.searchTerm || "");
+  const [reportPage, setReportPage] = useState(() => savedReportState?.reportPage || 1);
+
+  useEffect(() => {
+    saveModuleState("exam_reports", {
+      examId,
+      searchTerm,
+      reportPage,
+    });
+  }, [examId, searchTerm, reportPage]);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });

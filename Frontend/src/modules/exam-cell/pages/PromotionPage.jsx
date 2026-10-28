@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCircle2, Users, UserCheck, UserX, Megaphone, RotateCcw, ChevronDown, Eye } from "lucide-react";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import { Field, Modal, SkeletonTable, Toast } from "@/shared/components/Ui.jsx";
+import { useExamCellTab, useExamCellSubTab, getModuleState, saveModuleState } from "../statePersistence.js";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -199,9 +200,36 @@ const isEligible = (student) => {
 
 export default function PromotionPage({ screen = "promotion" }) {
   const navigate = useNavigate();
-  const [localTab, setLocalTab] = useState("");
-  useEffect(() => { setLocalTab(screen); }, [screen]);
-  const activeTab = localTab || screen;
+
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "promotion",
+    defaultTab: "promotion",
+    initialProp: screen,
+    tabAliases: {
+      "promotion": "promotion",
+      "eligible": "promotion",
+      "student-promotion": "promotion",
+      "single": "single",
+      "single-student": "single",
+      "allocation": "allocation",
+      "program-allocation": "allocation",
+      "section-allocation": "allocation",
+      "transfer": "transfer",
+      "campus-transfer": "transfer",
+      "history": "history",
+      "promotion-history": "history",
+    },
+  });
+
+  const [allocationTab, setAllocationTab] = useExamCellSubTab({
+    moduleKey: "promotion",
+    mainTab: "allocation",
+    defaultSubTab: "program",
+    subTabAliases: {
+      "program": "program",
+      "section": "section",
+    },
+  });
 
   // Consume global Board & Academic Year from Navbar Context
   const {
@@ -214,21 +242,25 @@ export default function PromotionPage({ screen = "promotion" }) {
   const campusCtx = useCampusContext();
   const activeCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
 
-  const [allocationTab, setAllocationTab] = useState("program");
-  const [setup, setSetup] = useState(EMPTY_SETUP);
+  const savedPromoState = useMemo(() => getModuleState("promotion", {}), []);
+
+  const [setup, setSetup] = useState(() => {
+    const saved = getModuleState("promotion", {});
+    return saved?.setup ? { ...EMPTY_SETUP, ...saved.setup } : EMPTY_SETUP;
+  });
   const [masters, setMasters] = useState({ years: [], boards: [], levels: [], groups: [], sections: [] });
   const [masterLoading, setMasterLoading] = useState(true);
   const [masterError, setMasterError] = useState("");
   const [students, setStudents] = useState([]);
   const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [studentsLoading, setStudentsLoading] = useState(false);
-  const [studentsPage, setStudentsPage] = useState(1);
+  const [studentsPage, setStudentsPage] = useState(() => savedPromoState?.studentsPage || 1);
   const [studentsTotalCount, setStudentsTotalCount] = useState(0);
   const [studentsTotalPages, setStudentsTotalPages] = useState(1);
   const [localStudentPaging, setLocalStudentPaging] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [search, setSearch] = useState("");
-  const [eligibilityFilter, setEligibilityFilter] = useState("");
+  const [search, setSearch] = useState(() => savedPromoState?.search || "");
+  const [eligibilityFilter, setEligibilityFilter] = useState(() => savedPromoState?.eligibilityFilter || "");
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
@@ -239,7 +271,20 @@ export default function PromotionPage({ screen = "promotion" }) {
   const [submitting, setSubmitting] = useState(false);
   const [individualStudent, setIndividualStudent] = useState(null);
   const [history, setHistory] = useState([]);
-  const [historyFilters, setHistoryFilters] = useState(EMPTY_HISTORY_FILTERS);
+  const [historyFilters, setHistoryFilters] = useState(() => {
+    const saved = getModuleState("promotion", {});
+    return saved?.historyFilters ? { ...EMPTY_HISTORY_FILTERS, ...saved.historyFilters } : EMPTY_HISTORY_FILTERS;
+  });
+
+  useEffect(() => {
+    saveModuleState("promotion", {
+      setup,
+      historyFilters,
+      search,
+      eligibilityFilter,
+      studentsPage,
+    });
+  }, [setup, historyFilters, search, eligibilityFilter, studentsPage]);
   const [historyLevelIds, setHistoryLevelIds] = useState([]);
   const [historyLevelsLoading, setHistoryLevelsLoading] = useState(false);
   const [historyGroupOptions, setHistoryGroupOptions] = useState([]);
@@ -1098,7 +1143,7 @@ export default function PromotionPage({ screen = "promotion" }) {
             ["promotion", "Student Promotion", "/exam-cell-dashboard/promotions/eligible"],
             ["single", "Single Student", "/exam-cell-dashboard/promotions/single"],
             ["allocation", "Program & Section Allocation", "/exam-cell-dashboard/promotions/allocation"],
-            ["transfer", "Campus Transfer", null],
+            ["transfer", "Campus Transfer", "/exam-cell-dashboard/promotions/transfer"],
             ["history", "Promotion History", "/exam-cell-dashboard/promotions/history"],
           ].map(([value, label, path]) => (
             <button
@@ -1106,9 +1151,8 @@ export default function PromotionPage({ screen = "promotion" }) {
               className={activeTab === value ? "is-active" : ""}
               onClick={() => {
                 setError("");
-                if (value === "transfer") setLocalTab("transfer");
-                else {
-                  setLocalTab("");
+                setActiveTab(value);
+                if (path) {
                   navigate(path);
                 }
               }}

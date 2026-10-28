@@ -33,6 +33,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { generateNextNumber } from "@/api/numberSeriesApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useExamCellTab, getModuleState, saveModuleState } from "../statePersistence.js";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast, Pagination } from "@/shared/components/Ui.jsx";
@@ -3142,23 +3143,25 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   const location = useLocation();
   const navigate = useNavigate();
 
+  const savedExamState = useMemo(() => getModuleState("examinations", {}), []);
+
   const [viewMode, setViewMode] = useState("list"); // "list" | "add" | "edit"
-  const tabParam = searchParams.get("tab");
-  const resolvedInitialTab = tabParam === "schedule" ? "schedule" : (tabParam === "exams" ? "exams" : initialTab);
-  const [activeTab, setActiveTab] = useState(resolvedInitialTab); // "exams" | "schedule"
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "examinations",
+    defaultTab: "exams",
+    initialProp: initialTab,
+    tabAliases: {
+      "exams": "exams",
+      "examinations": "exams",
+      "schedule": "schedule",
+      "timetable": "schedule",
+      "exam-timetable": "schedule",
+    },
+  });
   const [editingExamId, setEditingExamId] = useState(null);
 
-  const examIdParam = searchParams.get("examId") || location.state?.examId || initialExamId;
+  const examIdParam = searchParams.get("examId") || location.state?.examId || initialExamId || savedExamState?.examId || "";
   const [examId, setExamId] = useState(examIdParam);
-
-  useEffect(() => {
-    const currentTab = searchParams.get("tab");
-    if (currentTab === "schedule" && activeTab !== "schedule") {
-      setActiveTab("schedule");
-    } else if (currentTab === "exams" && activeTab !== "exams") {
-      setActiveTab("exams");
-    }
-  }, [searchParams, activeTab]);
 
   useEffect(() => {
     const currentExamId = searchParams.get("examId");
@@ -3216,9 +3219,18 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   });
   const [errors, setErrors] = useState({});
 
-  const [filters, setFilters] = useState({ groupId: "", programId: "", levelId: "" });
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState(() => savedExamState?.filters || { groupId: "", programId: "", levelId: "" });
+  const [search, setSearch] = useState(() => savedExamState?.search || "");
+  const [page, setPage] = useState(() => savedExamState?.page || 1);
+
+  useEffect(() => {
+    saveModuleState("examinations", {
+      examId,
+      search,
+      page,
+      filters,
+    });
+  }, [examId, search, page, filters]);
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
