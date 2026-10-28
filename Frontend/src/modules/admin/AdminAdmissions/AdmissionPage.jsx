@@ -3054,6 +3054,10 @@ export default function AdmissionPage() {
       if (admissionId && view !== "list") params.set("admissionId", String(admissionId));
       else params.delete("admissionId");
       params.delete("returnView");
+      if (view !== "requests") {
+        params.delete("requestTab");
+        params.delete("requestId");
+      }
       return params;
     }, { replace });
   };
