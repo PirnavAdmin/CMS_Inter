@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { 
   CalendarDays, 
   Plus, 
@@ -40,7 +40,6 @@ const getCodeClass = (code) => {
 };
 
 export default function LeaveTypesPage() {
-  const navigate = useNavigate();
 
   const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState({ standardAnnualAllowance: 37, totalCategories: 0, badges: [] });
@@ -198,13 +197,6 @@ export default function LeaveTypesPage() {
         <div className="leave-types-actions-group">
           <button 
             type="button" 
-            className="leave-btn-back" 
-            onClick={() => navigate("/dashboard/settings")}
-          >
-            <ArrowLeft size={16} /> Back to Settings
-          </button>
-          <button 
-            type="button" 
             className="leave-btn-add" 
             onClick={openAddModal}
           >
@@ -215,7 +207,7 @@ export default function LeaveTypesPage() {
     >
       <div className="leave-types-page">
         {/* Back Navigation */}
-        <div className="cms-back-nav-bar" style={{ marginBottom: "14px" }}>
+        <div className="cms-back-nav-bar" style={{ marginBottom: "-12px" }}>
           <Link
             to="/dashboard/settings"
             className="cms-back-link"

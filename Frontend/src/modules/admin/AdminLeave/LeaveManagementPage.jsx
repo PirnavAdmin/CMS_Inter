@@ -1724,13 +1724,6 @@ export default function LeaveManagementPage() {
           <div className="leave-tabs-card">
             <button
               type="button"
-              className={`leave-tab-btn ${activeTab === "apply" ? "active" : ""}`}
-              onClick={() => setActiveTab("apply")}
-            >
-              <FileText size={16} /> Apply Leave
-            </button>
-            <button
-              type="button"
               className={`leave-tab-btn ${activeTab === "today" ? "active" : ""}`}
               onClick={() => setActiveTab("today")}
             >
@@ -1742,6 +1735,13 @@ export default function LeaveManagementPage() {
               onClick={() => setActiveTab("all")}
             >
               <UsersRound size={16} /> All Requests <span className="tab-pill count">{requests.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`leave-tab-btn ${activeTab === "apply" ? "active" : ""}`}
+              onClick={() => setActiveTab("apply")}
+            >
+              <FileText size={16} /> Apply Leave
             </button>
           </div>
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
@@ -948,13 +949,61 @@ function assertTransportDeleteSucceeded(response) {
 export default function TransportPage() {
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
-  const [navigation, setNavigation] = useState({ section: 'dashboard', setup: 'routes', operations: 'vehicleAssignments', report: 'transport-dashboard-report' });
-  return <TransportContextPage key={`${selectedCampusId || ''}:${selectedBoardId || ''}:${selectedAcademicYearId || ''}`} navigation={navigation} onNavigate={(key, value) => setNavigation((current) => ({ ...current, [key]: value }))} />;
+  const [params, setParams] = useSearchParams();
+  const [remembered, setRemembered] = useState({ setup: "routes", operations: "vehicleAssignments", report: "transport-dashboard-report" });
+  const section = sectionTabs.some((tab) => tab.id === params.get("tab")) ? params.get("tab") : "dashboard";
+  const validSection = (tabs, fallback) => tabs.some((tab) => tab.id === params.get("section")) ? params.get("section") : fallback;
+  const navigation = { section,
+    setup: section === "setup" ? validSection(setupTabs, "routes") : remembered.setup,
+    operations: section === "operations" ? validSection(operationTabs, "vehicleAssignments") : remembered.operations,
+    report: section === "reports" ? validSection(reportTabs, "transport-dashboard-report") : remembered.report,
+  };
+  const pendingNavigation = useRef(null);
+  const onNavigate = (key, value) => {
+    const pending = pendingNavigation.current;
+    const next = pending || new URLSearchParams(params);
+    if (key === "action") {
+      next.set("action", value.action); next.set("entity", value.entity);
+      for (const [name, id] of Object.entries({ campusId: selectedCampusId, boardId: selectedBoardId, yearId: selectedAcademicYearId })) if (id) next.set(name, String(id));
+      if (value.id != null && value.id !== "") next.set("id", String(value.id)); else next.delete("id");
+    } else if (key === "closeAction") {
+      ["action", "entity", "id"].forEach((name) => next.delete(name));
+    } else {
+      ["action", "entity", "id"].forEach((name) => next.delete(name));
+      if (key === "section") {
+        if (value === "dashboard") { next.delete("tab"); next.delete("section"); }
+        else { next.set("tab", value); next.set("section", value === "setup" ? navigation.setup : value === "operations" ? navigation.operations : navigation.report); }
+      } else {
+        setRemembered((current) => ({ ...current, [key]: value }));
+        next.set("tab", key === "report" ? "reports" : key); next.set("section", value);
+      }
+    }
+    pendingNavigation.current = next;
+    if (!pending) queueMicrotask(() => {
+      const target = pendingNavigation.current; pendingNavigation.current = null;
+      if (target && target.toString() !== params.toString()) setParams(target);
+    });
+  };
+  return <TransportContextPage key={`${selectedCampusId || ''}:${selectedBoardId || ''}:${selectedAcademicYearId || ''}`} navigation={navigation} onNavigate={onNavigate} />;
 }
 
 function TransportContextPage({ navigation, onNavigate }) {
   const { selectedBoardId, selectedAcademicYearId, selectedAcademicYear } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
+  const [actionParams] = useSearchParams();
+  const actionQuery = actionParams.toString();
+  const latestActionQuery = useRef(actionQuery);
+  latestActionQuery.current = actionQuery;
+  const restoredAction = useRef("");
+  const actionLoaders = useRef({});
+  const [recordsReady, setRecordsReady] = useState(false);
+  const [restoringAction, setRestoringAction] = useState(false);
+  const routeAction = (action, entity, row) => {
+    const id = row ? (entity === "studentAssignments" ? getStudentTransportAssignmentId(row) : row.id) : null;
+    if (row && (id == null || String(id).trim() === "")) { showErrorToast("The record has no stable identifier. Refresh the list and retry."); return; }
+    onNavigate("action", { action, entity, id });
+  };
+  const closeAction = () => onNavigate("closeAction");
   const alive = useRef(true);
   const loadRequest = useRef({ id: 0, controller: null });
   const scopedRecords = useRef(null);
@@ -983,11 +1032,34 @@ function TransportContextPage({ navigation, onNavigate }) {
   const [reportFilters, setReportFilters] = useState({ route: "All", vehicle: "All", status: "All" });
   const [toast, setToast] = useState({ message: "", type: "success" });
   const lastErrorToastRef = useRef({ message: "", time: 0 });
-  const [formConfig, setFormConfig] = useState(null);
-  const [isAddDriverOpen, setIsAddDriverOpen] = useState(false);
-  const [isAddAttendantOpen, setIsAddAttendantOpen] = useState(false);
-  const [detailConfig, setDetailConfig] = useState(null);
-  const [deleteConfig, setDeleteConfig] = useState(null);
+  const [formConfig, setFormConfigState] = useState(null);
+  const setFormConfig = (value) => {
+    if (latestActionQuery.current !== actionQuery) return;
+    setFormConfigState(value);
+    if (!value) closeAction();
+  };
+  const [isAddDriverOpen, setIsAddDriverOpenState] = useState(false);
+  const setIsAddDriverOpen = (open) => {
+    if (open) routeAction("add", "drivers");
+    else { setIsAddDriverOpenState(false); closeAction(); }
+  };
+  const [isAddAttendantOpen, setIsAddAttendantOpenState] = useState(false);
+  const setIsAddAttendantOpen = (open) => {
+    if (open) routeAction("add", "attendants");
+    else { setIsAddAttendantOpenState(false); closeAction(); }
+  };
+  const [detailConfig, setDetailConfigState] = useState(null);
+  const setDetailConfig = (value) => {
+    if (latestActionQuery.current !== actionQuery) return;
+    setDetailConfigState(value);
+    if (!value) closeAction();
+  };
+  const [deleteConfig, setDeleteConfigState] = useState(null);
+  const setDeleteConfig = (value) => {
+    if (latestActionQuery.current !== actionQuery) return;
+    setDeleteConfigState(value);
+    if (!value) closeAction();
+  };
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -1440,7 +1512,7 @@ function TransportContextPage({ navigation, onNavigate }) {
       console.error("Error fetching transport data:", err);
       showErrorToast(`${getApiErrorMessage(err) || "Unable to refresh transport data."} Showing the currently loaded transport data where available.`);
     } finally {
-      if (current()) setIsLoading(false);
+      if (current()) { setIsLoading(false); setRecordsReady(true); }
     }
   };
 
@@ -1587,7 +1659,9 @@ function TransportContextPage({ navigation, onNavigate }) {
     return record;
   };
 
-  const openForm = (key, title, fields, record = null) => {
+  const openForm = (key, title, fields, record = null, restoring = false) => {
+    if (!restoring) { routeAction(record ? "edit" : "add", key, record); return; }
+    if (latestActionQuery.current !== actionQuery) return;
     const formRecord = key === "trips" && record
       ? {
           ...record,
@@ -1613,7 +1687,8 @@ function TransportContextPage({ navigation, onNavigate }) {
     setFormConfig({ key, title, fields, record: formRecord });
   };
 
-  const openEditForm = async (key, title, fields, record) => {
+  const openEditForm = async (key, title, fields, record, restoring = false) => {
+    if (!restoring) { routeAction("edit", key, record); return; }
     if (key === "pickupPoints") {
       const pickupPointId = Number(String(record.id).replace(/[^\d]/g, "")) || record.id;
       try {
@@ -1641,20 +1716,20 @@ function TransportContextPage({ navigation, onNavigate }) {
           distanceKm: detail.distanceFromStart ?? detail.DistanceFromStart ?? detail.distanceFromSchool ?? detail.DistanceFromSchool ?? detail.distanceKm ?? record.distanceKm,
           monthlyFee: detail.monthlyFee ?? detail.MonthlyFee ?? detail.monthlyFare ?? detail.MonthlyFare ?? record.monthlyFee,
           status: rawStatus === true || rawStatus === 1 || rawStatus === "Active" ? "Active" : rawStatus === false || rawStatus === 0 || rawStatus === "Inactive" ? "Inactive" : record.status,
-        });
+        }, true);
       } catch (error) {
         openForm(key, title, fields, {
           ...record,
           pickupTime: toTimeInputValue(record.pickupTime),
           dropTime: toTimeInputValue(record.dropTime),
-        });
+        }, true);
         showErrorToast(`Latest pickup-point details unavailable: ${getApiErrorMessage(error)}`);
       }
       return;
     }
 
     if (key !== "studentAssignments") {
-      openForm(key, title, fields, record);
+      openForm(key, title, fields, record, true);
       return;
     }
 
@@ -1706,7 +1781,7 @@ function TransportContextPage({ navigation, onNavigate }) {
           : typeof (detail.status ?? detail.Status) === "string"
             ? (detail.status ?? detail.Status)
             : record.status,
-      });
+      }, true);
     } catch (error) {
       openForm(key, title, fields, record);
       showErrorToast(`Latest student transport details unavailable: ${getApiErrorMessage(error)}`);
@@ -2031,11 +2106,13 @@ function TransportContextPage({ navigation, onNavigate }) {
     }
   };
 
-  const requestDelete = (key, row, label) => {
+  const requestDelete = (key, row, label, restoring = false) => {
+    if (!restoring) { routeAction("delete", key, row); return; }
     setDeleteConfig({ key, row, label });
   };
 
-  const openRecordDetails = async (key, row, title) => {
+  const openRecordDetails = async (key, row, title, restoring = false) => {
+    if (!restoring) { routeAction("view", key, row); return; }
     if (key === "trips") {
       setDetailConfig({ title, row: getTripDetailRow(row) });
       return;
@@ -2532,7 +2609,8 @@ function TransportContextPage({ navigation, onNavigate }) {
     };
   };
 
-  const openTripDetails = async (trip) => {
+  const openTripDetails = async (trip, restoring = false) => {
+    if (!restoring) { routeAction("details", "trips", trip); return; }
     const fallback = getTripDetailRow(trip);
     if (!trip.assignmentId) {
       setDetailConfig({ title: "Trip Details", row: fallback });
@@ -2563,6 +2641,49 @@ function TransportContextPage({ navigation, onNavigate }) {
     const percent = capacity ? Math.round((assigned / capacity) * 100) : 0;
     return { assigned, capacity, percent };
   };
+
+  actionLoaders.current = { add: openForm, edit: openEditForm, view: openRecordDetails, delete: requestDelete, details: openTripDetails };
+  const action = actionParams.get("action") || "";
+  const actionId = actionParams.get("id") || "";
+  const actionEntity = actionParams.get("entity") || (activeSection === "setup" ? activeSetupTab : activeSection === "operations" ? activeOperationTab : "");
+  useEffect(() => {
+    if (restoredAction.current === actionQuery) return undefined;
+    let current = true;
+    setFormConfigState(null); setDetailConfigState(null); setDeleteConfigState(null);
+    setIsAddDriverOpenState(false); setIsAddAttendantOpenState(false); setRestoringAction(false);
+    if (!action) { restoredAction.current = actionQuery; return undefined; }
+    if (!recordsReady || isLoading) return undefined;
+    if ([["campusId", selectedCampusId], ["boardId", selectedBoardId], ["yearId", selectedAcademicYearId]].some(([name, id]) => actionParams.get(name) && String(id || "") !== actionParams.get(name))) { restoredAction.current = actionQuery; showErrorToast("This transport action belongs to a different campus, board or academic year."); return undefined; }
+    const config = tableConfigs[actionEntity];
+    const validEntity = activeSection === "dashboard" ? actionEntity === "trips" && action === "details" : activeSection === "setup" ? actionEntity === activeSetupTab : activeSection === "operations" && actionEntity === activeOperationTab;
+    if (!config || !validEntity || !["add", "edit", "view", "delete", "details"].includes(action) || (action !== "add" && (!actionId.trim() || actionId.length > 200 || Array.from(actionId).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)))) {
+      restoredAction.current = actionQuery; showErrorToast("Invalid transport action or record identifier."); return undefined;
+    }
+    const row = config.rows.find((item) => String(actionEntity === "studentAssignments" ? getStudentTransportAssignmentId(item) : item.id) === actionId);
+    if (action !== "add" && !row) {
+      restoredAction.current = actionQuery; showErrorToast("The transport record is unavailable in the current campus, board or academic year, or its API could not be loaded."); return undefined;
+    }
+    if ((action === "add" && !config.addLabel && !["drivers", "attendants"].includes(actionEntity)) || (["edit", "add"].includes(action) && !config.fields && !["drivers", "attendants"].includes(actionEntity)) || (action === "details" && actionEntity !== "trips")) {
+      restoredAction.current = actionQuery; showErrorToast("This transport action is not available for this section."); return undefined;
+    }
+    restoredAction.current = actionQuery;
+    setRestoringAction(true);
+    const restore = async () => {
+      if (action === "add") {
+        if (actionEntity === "drivers") setIsAddDriverOpenState(true);
+        else if (actionEntity === "attendants") setIsAddAttendantOpenState(true);
+        else actionLoaders.current.add(actionEntity, config.addLabel, config.fields, null, true);
+      } else if (action === "edit") await actionLoaders.current.edit(actionEntity, `Edit ${config.title}`, config.fields, row, true);
+      else if (action === "view") await actionLoaders.current.view(actionEntity, row, config.title, true);
+      else if (action === "delete") actionLoaders.current.delete(actionEntity, row, config.title, true);
+      else await actionLoaders.current.details(row, true);
+    };
+    restore().catch((error) => { if (current) showErrorToast(getApiErrorMessage(error) || "Unable to restore the transport screen."); })
+      .finally(() => { if (current) setRestoringAction(false); });
+    return () => { current = false; };
+  // The saved list data resolves IDs; restoration calls only existing read/form handlers.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionQuery, action, actionId, actionEntity, recordsReady, isLoading, activeSection, activeSetupTab, activeOperationTab]);
 
   const renderTable = (key) => {
     const config = tableConfigs[key];
@@ -3129,6 +3250,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         {renderActiveSection()}
       </div>
 
+      {restoringAction && !formConfig && !detailConfig && !deleteConfig && !isAddDriverOpen && !isAddAttendantOpen ? <Modal title="Loading transport record" onClose={closeAction}><SkeletonTable columns={3} rows={3} /></Modal> : null}
       {formConfig?.key === "pickupPoints" && !formConfig.record?.id ? (
         <AddPickupPointsModal
           routes={routes}

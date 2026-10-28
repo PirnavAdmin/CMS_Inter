@@ -213,9 +213,6 @@ export default function AttendanceTimingConfigPage() {
       breadcrumb={["Settings", "Attendance Timing"]}
       actions={
         <div style={{ display: "flex", gap: "10px" }}>
-          <Link to="/dashboard/settings" className="cms-btn cms-btn-ghost">
-            <ArrowLeft size={16} /> Back to Settings
-          </Link>
           <button type="button" className="cms-btn cms-btn-primary" onClick={openCreateModal}>
             <Plus size={16} /> Add Timing Rule
           </button>
@@ -223,6 +220,27 @@ export default function AttendanceTimingConfigPage() {
       }
     >
       <div className="att-timing-page">
+        {/* Back Navigation */}
+        <div className="cms-back-nav-bar" style={{ marginBottom: "-12px" }}>
+          <Link
+            to="/dashboard/settings"
+            className="cms-back-link"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              color: "var(--cms-primary, #355e3b)",
+              fontWeight: 650,
+              fontSize: "13px",
+              textDecoration: "none",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={16} /> Back to Settings
+          </Link>
+        </div>
+
+
         {/* Info Banner */}
         <div className="att-timing-banner">
           <div className="att-timing-banner-icon">

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
+  ArrowLeft,
   AlertTriangle,
   Check,
   CheckCircle2,
@@ -1951,7 +1953,25 @@ export default function RolesPermissionsPage() {
     academicYearId: activeAcademicYearId,
   }), [activeCampusId, activeBoardId, activeAcademicYearId]);
 
-  const [activeTab, setActiveTab] = useState("permissions");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") === "user-role-assignment" ? "assignments" : "permissions";
+  const routeParamsRef = useRef(searchParams);
+  const routeSetterRef = useRef(setSearchParams);
+  routeParamsRef.current = searchParams;
+  routeSetterRef.current = setSearchParams;
+  const updateRoleRoute = useCallback((changes, replace = true) => {
+    const next = new URLSearchParams(routeParamsRef.current);
+    Object.entries(changes).forEach(([key, value]) => value == null ? next.delete(key) : next.set(key, String(value)));
+    if (next.toString() !== routeParamsRef.current.toString()) {
+      routeParamsRef.current = next;
+      routeSetterRef.current(next, { replace });
+    }
+  }, []);
+  useEffect(() => {
+    if (!["permission-matrix", "user-role-assignment"].includes(searchParams.get("tab"))) updateRoleRoute({ tab: "permission-matrix" });
+  }, [searchParams, updateRoleRoute]);
+  const selectionRestoreRef = useRef("");
+  const selectionLoadersRef = useRef({});
   const [allRoles, setAllRoles] = useState([]);
   const [manageableRoles, setManageableRoles] = useState([]);
   const [modules, setModules] = useState([]);
@@ -2086,7 +2106,7 @@ export default function RolesPermissionsPage() {
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
       setModules(modulesResponse.data);
-      const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      const searchParams = routeParamsRef.current;
       const persistedRoleId = searchParams?.get("roleId") || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rbac_selected_role_id") : null) || selectedRoleIdRef.current;
       const persistedUserId = searchParams?.get("userId") || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rbac_selected_user_id") : null);
 
@@ -2098,15 +2118,8 @@ export default function RolesPermissionsPage() {
         try {
           const roleIdStr = String(role.id || role.roleId || role.code);
           sessionStorage.setItem("rbac_selected_role_id", roleIdStr);
-          const url = new URL(window.location.href);
-          url.searchParams.set("roleId", roleIdStr);
-          if (persistedUserId) {
-            url.searchParams.set("userId", String(persistedUserId));
-          } else {
-            url.searchParams.delete("userId");
-          }
-          window.history.replaceState({}, "", url.toString());
         } catch {}
+        updateRoleRoute({ roleId: String(role.id || role.roleId || role.code), userId: persistedUserId || null });
       }
       setSelectedRole(role);
       if (role) {
@@ -2129,7 +2142,7 @@ export default function RolesPermissionsPage() {
     } finally {
       if (pageRequestRef.current === requestId) setLoading(false);
     }
-  }, [activeContextFilters, loadPermissions, loadRoleMembers]);
+  }, [activeContextFilters, loadPermissions, loadRoleMembers, updateRoleRoute]);
 
   useEffect(() => {
     loadPage();
@@ -2166,11 +2179,8 @@ export default function RolesPermissionsPage() {
       const roleIdStr = String(role.id || role.roleId || role.code);
       sessionStorage.setItem("rbac_selected_role_id", roleIdStr);
       sessionStorage.removeItem("rbac_selected_user_id");
-      const url = new URL(window.location.href);
-      url.searchParams.set("roleId", roleIdStr);
-      url.searchParams.delete("userId");
-      window.history.replaceState({}, "", url.toString());
     } catch {}
+    updateRoleRoute({ roleId: String(role.id || role.roleId || role.code), userId: null });
     setSelectedRole(role);
     setSelectedMember(null);
     await loadPermissions(role);
@@ -2193,10 +2203,8 @@ export default function RolesPermissionsPage() {
     if (!guardDirty()) return;
     try {
       sessionStorage.removeItem("rbac_selected_user_id");
-      const url = new URL(window.location.href);
-      url.searchParams.delete("userId");
-      window.history.replaceState({}, "", url.toString());
     } catch {}
+    updateRoleRoute({ userId: null });
     setSelectedMember(null);
     await loadPermissions(selectedRole);
     setMembersDialogOpen(false);
@@ -2214,11 +2222,8 @@ export default function RolesPermissionsPage() {
       const userIdStr = String(member.id || member.userId);
       sessionStorage.setItem("rbac_selected_role_id", roleIdStr);
       sessionStorage.setItem("rbac_selected_user_id", userIdStr);
-      const url = new URL(window.location.href);
-      url.searchParams.set("roleId", roleIdStr);
-      url.searchParams.set("userId", userIdStr);
-      window.history.replaceState({}, "", url.toString());
     } catch {}
+    updateRoleRoute({ roleId: String(role.id || role.roleId || role.code), userId: String(member.id || member.userId) });
     setSelectedRole(role);
     await loadMemberPermissions(member, role);
   };
@@ -2226,8 +2231,35 @@ export default function RolesPermissionsPage() {
   const selectTab = (tab) => {
     if (tab === activeTab) return;
     if (!guardDirty()) return;
-    setActiveTab(tab);
+    updateRoleRoute({ tab: tab === "assignments" ? "user-role-assignment" : "permission-matrix" }, false);
   };
+
+  selectionLoadersRef.current = { permissions: loadPermissions, members: loadRoleMembers, member: loadMemberPermissions };
+  const requestedRoleId = searchParams.get("roleId") || "";
+  const requestedUserId = searchParams.get("userId") || "";
+  useEffect(() => {
+    if (loading || permissionLoading || !allRoles.length || !requestedRoleId) return undefined;
+    const key = requestedRoleId + ":" + requestedUserId;
+    const role = allRoles.find((item) => [item.id, item.roleId, item.code].some((id) => id != null && String(id).toLowerCase() === requestedRoleId.toLowerCase()));
+    if (!role || selectionRestoreRef.current === key) return undefined;
+    const sameRole = String(role.id) === String(selectedRole?.id);
+    const sameMember = requestedUserId ? [selectedMember?.id, selectedMember?.userId].some((id) => id != null && String(id) === requestedUserId) : !selectedMember;
+    if (sameRole && sameMember) { selectionRestoreRef.current = key; return undefined; }
+    selectionRestoreRef.current = key;
+    let active = true;
+    const restore = async () => {
+      setSelectedRole(role);
+      const members = await selectionLoadersRef.current.members(role);
+      if (!active) return;
+      const member = requestedUserId ? (members || []).find((item) => [item.id, item.userId].some((id) => id != null && String(id) === requestedUserId)) : null;
+      if (member) await selectionLoadersRef.current.member(member, role);
+      else { setSelectedMember(null); await selectionLoadersRef.current.permissions(role); }
+    };
+    restore();
+    return () => { active = false; };
+  // Role/member changes made by this restoration must not cancel its pending read.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedRoleId, requestedUserId, loading, permissionLoading, allRoles]);
 
   const persistPermissions = useCallback(async (target, nextPermissions, previousPermissions = lastSavedPermissions) => {
     const role = target?.role;
@@ -2287,6 +2319,28 @@ export default function RolesPermissionsPage() {
       breadcrumb={["Home", "Administration", "Roles & Permissions"]}
     >
       <main className="rbac-page">
+        {/* Back Navigation */}
+        <div className="cms-back-nav-bar" style={{ marginBottom: "-4px" }}>
+          <Link
+            to="/dashboard/settings"
+            className="cms-back-link"
+            onClick={(event) => { if (!guardDirty()) event.preventDefault(); }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              color: "var(--cms-primary, #355e3b)",
+              fontWeight: 650,
+              fontSize: "13px",
+              textDecoration: "none",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={16} /> Back to Settings
+          </Link>
+        </div>
+
+
         <div className="rbac-tabs" role="tablist" aria-label="Roles and permissions sections">
           <button
             type="button"

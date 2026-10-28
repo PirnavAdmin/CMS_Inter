@@ -39,7 +39,8 @@ import {
   Legend,
 } from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-import { uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
+import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
+import { fetchAdminGroups, fetchAdminLevels, flagIsFalse, flagIsTrue } from "@/api/studentApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -764,6 +765,10 @@ export default function ReportsPage() {
   const [yearsLoading, setYearsLoading] = useState(false);
   const [levelLoading, setLevelLoading] = useState(false);
   const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState("");
+  const [sectionsError, setSectionsError] = useState("");
+  const groupScopeRef = useRef("");
+  const sectionScopeRef = useRef("");
   const [sectionsLoading, setSectionsLoading] = useState(false);
 
   const [previewing, setPreviewing] = useState("");
@@ -827,30 +832,18 @@ export default function ReportsPage() {
     setBoardsLoading(true);
     setYearsLoading(true);
     try {
-      const [boardsRes, yearsRes, levelsRes, groupsRes, sectionsRes] = await Promise.allSettled([
+      const [boardsRes, yearsRes] = await Promise.allSettled([
         apiClient.get(REPORTS_API.filters.boards, { signal: controller.signal, skipGlobalLoader: true }),
         apiClient.get(REPORTS_API.filters.academicYears, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.academicLevels, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.groups, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.sections, { signal: controller.signal, skipGlobalLoader: true }),
       ]);
       if (!mountedRef.current || controller.signal.aborted) return;
-      
+
       const newOptions = {};
       if (boardsRes.status === "fulfilled") {
         newOptions.boards = activeFilterOptions(boardsRes.value.data, ["boards", "Boards"], ["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "name", "Name"]);
       }
       if (yearsRes.status === "fulfilled") {
         newOptions.years = activeAcademicYearOptions(yearsRes.value.data);
-      }
-      if (levelsRes.status === "fulfilled") {
-        newOptions.levels = activeFilterOptions(levelsRes.value.data, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "name", "Name", "academicLevelName"]);
-      }
-      if (groupsRes.status === "fulfilled") {
-        newOptions.groups = activeFilterOptions(groupsRes.value.data, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
-      }
-      if (sectionsRes.status === "fulfilled") {
-        newOptions.sections = activeFilterOptions(sectionsRes.value.data, ["sections", "Sections"], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]);
       }
 
       setMasterOptions((curr) => ({ ...curr, ...newOptions }));
@@ -906,112 +899,122 @@ export default function ReportsPage() {
     if (rawBoardId) {
       setFilters((prev) => {
         if (prev.board === String(rawBoardId)) return prev;
-        return { ...prev, board: String(rawBoardId) };
+        return { ...prev, board: String(rawBoardId), level: "", group: "", section: "" };
       });
     }
   }, [selectedBoardId, selectedBoard]);
 
-  // Load Levels when Board changes
+  // Use the same academic identifiers and board/year group catalog as Student Management.
   useEffect(() => {
-    const boardId = positiveId(filters.board);
-    const cacheKey = boardId ? String(boardId) : "all";
+    const scope = { campusId: positiveId(filters.campus), boardId: positiveId(filters.board), academicYearId: positiveId(filters.year) };
+    const cacheKey = [scope.campusId || 0, scope.boardId || 0, scope.academicYearId || 0].join(":");
+    const controller = beginRequest("academicLevels");
     const cached = cachedFilterOptions(filterOptionsCacheRef.current.academicLevels, cacheKey);
     if (cached) {
-      setMasterOptions((curr) => ({ ...curr, levels: cached }));
-      setLevelLoading(false);
-      return;
+      setMasterOptions((current) => ({ ...current, levels: cached })); setLevelLoading(false);
+      finishRequest("academicLevels", controller);
+      return () => controller.abort();
     }
-    const controller = beginRequest("academicLevels");
     setLevelLoading(true);
-    const params = boardId ? { boardId } : {};
-    apiClient.get(REPORTS_API.filters.academicLevels, {
-      params,
-      signal: controller.signal,
-      skipGlobalLoader: true,
-    }).then((res) => {
+    const request = scope.boardId
+      ? fetchAdminLevels(scope, { signal: controller.signal })
+      : apiClient.get(REPORTS_API.filters.academicLevels, { signal: controller.signal, skipGlobalLoader: true }).then((response) => response.data);
+    request.then((rows) => {
       if (controller.signal.aborted) return;
-      const levels = activeFilterOptions(res.data, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "name", "Name", "academicLevelName"]);
+      if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load academic levels.");
+      const levels = activeFilterOptions(rows, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.academicLevels, cacheKey, levels);
-      setMasterOptions((curr) => ({ ...curr, levels }));
-    }).catch((err) => {
-      if (!controller.signal.aborted && !isCanceledRequest(err)) setToast("Failed to load Academic Levels.");
+      setMasterOptions((current) => ({ ...current, levels }));
+      setFilters((current) => current.level && !levels.some((level) => level.value === String(current.level)) ? { ...current, level: "", group: "", section: "" } : current);
+    }).catch((error) => {
+      if (!controller.signal.aborted && !isCanceledRequest(error)) setToast(getApiErrorMessage(error) || "Failed to load Academic Levels.");
     }).finally(() => {
       if (!controller.signal.aborted) setLevelLoading(false);
       finishRequest("academicLevels", controller);
     });
-  }, [beginRequest, filters.board, finishRequest]);
+    return () => controller.abort();
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year]);
 
-  // Load Groups when Board, Year, or Level changes
   useEffect(() => {
-    const boardId = positiveId(filters.board);
-    const academicYearId = positiveId(filters.year);
-    const academicLevelId = positiveId(filters.level);
-    const cacheKey = `${boardId || 0}:${academicYearId || 0}:${academicLevelId || 0}`;
+    const scope = { campusId: positiveId(filters.campus), boardId: positiveId(filters.board), academicYearId: positiveId(filters.year) };
+    // Groups are board/year catalog records in Student Management, not year-specific copies.
+    const cacheKey = [scope.campusId || 0, scope.boardId || 0, scope.academicYearId || 0].join(":");
+    const controller = beginRequest("groups");
+    setGroupsError("");
+    if (groupScopeRef.current !== cacheKey) setMasterOptions((current) => ({ ...current, groups: [] }));
+    groupScopeRef.current = cacheKey;
+    const applyGroups = (groups) => {
+      setMasterOptions((current) => ({ ...current, groups }));
+      setFilters((current) => current.group && !groups.some((group) => group.value === String(current.group)) ? { ...current, group: "", section: "" } : current);
+    };
     const cached = cachedFilterOptions(filterOptionsCacheRef.current.groups, cacheKey);
     if (cached) {
-      setMasterOptions((curr) => ({ ...curr, groups: cached }));
-      setGroupsLoading(false);
-      return;
+      applyGroups(cached); setGroupsLoading(false); finishRequest("groups", controller);
+      return () => controller.abort();
     }
-    const controller = beginRequest("groups");
     setGroupsLoading(true);
-    const params = {};
-    if (boardId) params.boardId = boardId;
-    if (academicYearId) params.academicYearId = academicYearId;
-    if (academicLevelId) params.academicLevelId = academicLevelId;
-    apiClient.get(REPORTS_API.filters.groups, {
-      params,
-      signal: controller.signal,
-      skipGlobalLoader: true,
-    }).then((res) => {
+    const request = scope.boardId
+      ? fetchAdminGroups(scope, { signal: controller.signal })
+      : apiClient.get(REPORTS_API.filters.groups, { params: { campusId: scope.campusId, academicYearId: scope.academicYearId }, signal: controller.signal, skipGlobalLoader: true }).then((response) => response.data);
+    request.then((rows) => {
       if (controller.signal.aborted) return;
-      const groups = activeFilterOptions(res.data, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
+      if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load groups.");
+      const groups = activeFilterOptions(rows, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.groups, cacheKey, groups);
-      setMasterOptions((curr) => ({ ...curr, groups }));
-    }).catch((err) => {
-      if (!controller.signal.aborted && !isCanceledRequest(err)) setToast("Failed to load Groups.");
+      applyGroups(groups);
+    }).catch((error) => {
+      if (!controller.signal.aborted && !isCanceledRequest(error)) {
+        const message = getApiErrorMessage(error) || "Failed to load Groups.";
+        setGroupsError(message); setToast(message);
+      }
     }).finally(() => {
       if (!controller.signal.aborted) setGroupsLoading(false);
       finishRequest("groups", controller);
     });
-  }, [beginRequest, filters.board, filters.level, filters.year, finishRequest]);
+    return () => controller.abort();
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, filters.level]);
 
-  // Load Sections when Group or other filters change
   useEffect(() => {
-    const groupId = positiveId(filters.group);
-    const boardId = positiveId(filters.board);
-    const academicYearId = positiveId(filters.year);
-    const academicLevelId = positiveId(filters.level);
-    const cacheKey = `${groupId || 0}:${boardId || 0}:${academicYearId || 0}:${academicLevelId || 0}`;
+    const scope = { campusId: positiveId(filters.campus), boardId: positiveId(filters.board), academicYearId: positiveId(filters.year), academicLevelId: positiveId(filters.level), groupId: positiveId(filters.group) };
+    const cacheKey = Object.values(scope).map((id) => id || 0).join(":");
+    const controller = beginRequest("sections");
+    setSectionsError("");
+    if (sectionScopeRef.current !== cacheKey) setMasterOptions((current) => ({ ...current, sections: [] }));
+    sectionScopeRef.current = cacheKey;
+    const applySections = (sections) => {
+      setMasterOptions((current) => ({ ...current, sections }));
+      setFilters((current) => current.section && !sections.some((section) => section.value === String(current.section)) ? { ...current, section: "" } : current);
+    };
     const cached = cachedFilterOptions(filterOptionsCacheRef.current.sections, cacheKey);
     if (cached) {
-      setMasterOptions((curr) => ({ ...curr, sections: cached }));
-      setSectionsLoading(false);
-      return;
+      applySections(cached); setSectionsLoading(false); finishRequest("sections", controller);
+      return () => controller.abort();
     }
-    const controller = beginRequest("sections");
     setSectionsLoading(true);
-    const params = {};
-    if (groupId) params.groupId = groupId;
-    if (boardId) params.boardId = boardId;
-    if (academicYearId) params.academicYearId = academicYearId;
-    if (academicLevelId) params.academicLevelId = academicLevelId;
-    apiClient.get(REPORTS_API.filters.sections, {
-      params,
-      signal: controller.signal,
-      skipGlobalLoader: true,
-    }).then((res) => {
+    apiClient.get(apiEndpoints.sections.list, { params: { ...scope, IsActive: true }, signal: controller.signal, skipGlobalLoader: true }).then((response) => {
       if (controller.signal.aborted) return;
-      const sections = activeFilterOptions(res.data, ["sections", "Sections"], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]);
+      if (response.data?.success === false || response.data?.Success === false) throw new Error(response.data.message || response.data.Message || "Unable to load sections.");
+      const rows = collection(response.data, ["sections", "Sections"]).filter((row) => {
+        if (flagIsFalse(read(row, "isActive", "IsActive")) || flagIsTrue(read(row, "isDeleted", "IsDeleted")) || String(read(row, "status", "Status") || "").toLowerCase() === "deleted") return false;
+        return Object.entries(scope).every(([key, expected]) => {
+          const actual = read(row, key, key[0].toUpperCase() + key.slice(1));
+          return !expected || actual == null || positiveId(actual) === expected;
+        });
+      });
+      const sections = activeFilterOptions(rows, [], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.sections, cacheKey, sections);
-      setMasterOptions((curr) => ({ ...curr, sections }));
-    }).catch((err) => {
-      if (!controller.signal.aborted && !isCanceledRequest(err)) setToast("Failed to load Sections.");
+      applySections(sections);
+    }).catch((error) => {
+      if (!controller.signal.aborted && !isCanceledRequest(error)) {
+        const message = getApiErrorMessage(error) || "Failed to load Sections.";
+        setSectionsError(message); setToast(message);
+      }
     }).finally(() => {
       if (!controller.signal.aborted) setSectionsLoading(false);
       finishRequest("sections", controller);
     });
-  }, [beginRequest, filters.board, filters.group, filters.level, filters.year, finishRequest]);
+    return () => controller.abort();
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, filters.level, filters.group]);
 
   const availableCampuses = useMemo(() => {
     const list = (activeCampuses && activeCampuses.length > 0)
@@ -1029,7 +1032,7 @@ export default function ReportsPage() {
     if (rawCampusId) {
       setFilters((prev) => {
         if (prev.campus === String(rawCampusId)) return prev;
-        return { ...prev, campus: String(rawCampusId) };
+        return { ...prev, campus: String(rawCampusId), group: "", section: "" };
       });
     }
   }, [selectedCampusId, selectedCampus]);
@@ -1107,14 +1110,14 @@ export default function ReportsPage() {
     }
 
     if (match) {
-      setFilters((prev) => (prev.year === String(match.value) ? prev : { ...prev, year: String(match.value) }));
+      setFilters((prev) => (prev.year === String(match.value) ? prev : { ...prev, year: String(match.value), group: "", section: "" }));
     } else if (availableYears.length > 0 && filters.board) {
       const stillValid = availableYears.some((y) => String(y.value) === String(filters.year));
       if (!stillValid) {
-        setFilters((prev) => ({ ...prev, year: String(availableYears[0].value) }));
+        setFilters((prev) => ({ ...prev, year: String(availableYears[0].value), group: "", section: "" }));
       }
     } else if (rawYearId) {
-      setFilters((prev) => (prev.year === String(rawYearId) ? prev : { ...prev, year: String(rawYearId) }));
+      setFilters((prev) => (prev.year === String(rawYearId) ? prev : { ...prev, year: String(rawYearId), group: "", section: "" }));
     }
   }, [selectedAcademicYearId, selectedAcademicYear, availableYears, filters.board, filters.year]);
 
@@ -1148,21 +1151,21 @@ export default function ReportsPage() {
     },
     {
       name: "group",
-      label: groupsLoading ? "Group (Loading...)" : "Group",
+      label: groupsLoading ? "Group (Loading...)" : groupsError ? "Group (Unable to load)" : !masterOptions.groups.length ? "Group (No active groups)" : "Group",
       type: "select",
       options: [{ value: "", label: "All Groups" }, ...masterOptions.groups],
       disabled: groupsLoading,
     },
     {
       name: "section",
-      label: sectionsLoading ? "Section (Loading...)" : "Section",
+      label: sectionsLoading ? "Section (Loading...)" : sectionsError ? "Section (Unable to load)" : !masterOptions.sections.length ? "Section (No sections available)" : "Section",
       type: "select",
       options: [{ value: "", label: "All Sections" }, ...masterOptions.sections],
       disabled: sectionsLoading,
     },
     { name: "from", label: "From Date", type: "date" },
     { name: "to", label: "To Date", type: "date" },
-  ], [availableCampuses, availableBoards, availableYears, boardsLoading, groupsLoading, levelLoading, masterOptions.groups, masterOptions.levels, masterOptions.sections, sectionsLoading, yearsLoading]);
+  ], [availableCampuses, availableBoards, availableYears, boardsLoading, groupsLoading, groupsError, sectionsError, levelLoading, masterOptions.groups, masterOptions.levels, masterOptions.sections, sectionsLoading, yearsLoading]);
 
   const handleFilterChange = (name, value) => {
     setReportGenerated(false);
@@ -1177,7 +1180,7 @@ export default function ReportsPage() {
       if (name === "board") {
         Object.assign(next, { level: "", group: "", section: "" });
       }
-      if (name === "level") {
+      if (name === "level" || name === "year") {
         Object.assign(next, { group: "", section: "" });
       }
       if (name === "group") {
