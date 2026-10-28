@@ -32,6 +32,8 @@ export default function ExamCellPortalRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="dashboard" element={<Navigate to="/exam-cell-dashboard" replace />} />
         <Route path="exams" element={<Examinations />} />
+        <Route path="exams/create" element={<Examinations initialView="create" />} />
+        <Route path="exams/add" element={<Examinations initialView="create" />} />
         <Route path="exam-timetable" element={<ExamTimetable />} />
         <Route path="hall-allocation" element={<HallAllocation initialTab="rooms" />} />
         <Route path="invigilation-duties" element={<HallAllocation initialTab="duties" />} />

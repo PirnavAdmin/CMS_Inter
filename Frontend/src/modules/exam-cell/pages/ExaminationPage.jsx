@@ -3076,7 +3076,7 @@ export const pageConfig = {
 };
 
 // ---------- MAIN EXAMINATION PAGE COMPONENT ----------
-export default function ExaminationPage({ initialTab = "exams", initialExamId = "" }) {
+export default function ExaminationPage({ initialTab = "exams", initialExamId = "", initialView = "" }) {
   const {
     campuses: contextCampuses = [],
     activeCampuses = [],
@@ -3149,11 +3149,15 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
     moduleKey: "examinations",
     paramKey: "view",
     defaultAction: "list",
+    initialProp: initialView,
     aliases: {
-      "create": "add",
-      "add": "add",
+      "create": "create",
+      "add": "create",
       "edit": "edit",
       "list": "list",
+    },
+    pathMap: {
+      "create": "/exam-cell-dashboard/exams/create",
     },
   });
 
@@ -3182,7 +3186,7 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   }, []);
 
   const setViewMode = useCallback((mode) => {
-    const norm = mode === "add" ? "create" : mode;
+    const norm = (mode === "add" || mode === "create") ? "create" : mode;
     setViewModeAction(norm);
     if (norm !== "edit") {
       setEditingExamId(null);
@@ -5216,14 +5220,15 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   };
 
   // Render Exam Scope Form (Create / Edit)
-  if (viewMode === "add" || viewMode === "edit") {
+  if (viewMode === "create" || viewMode === "add" || viewMode === "edit") {
     return (
       <ExamForm
         campusId={effectiveCampusId}
         exams={exams}
         schedules={schedules}
-        editId={editingExamId}
-        boards={campusBoards.length > 0 ? campusBoards : boards}
+        editId={viewMode === "edit" ? editingExamId : null}
+        existing={viewMode === "edit" ? (editingExam || exams.find((x) => normalizeId(x.id) === normalizeId(editingExamId))) : null}
+        boards={campusBoards.length > 0 ? campusBoards : (boards.length > 0 ? boards : contextBoards)}
         academicYears={academicYears.length > 0 ? academicYears : contextAcademicYears}
         academicLevels={academicLevels}
         groups={groups}
@@ -5237,11 +5242,19 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           saveModuleState("examinations", { draftForm: null });
           setViewMode("list");
           setEditingExamId(null);
+          if (typeof window !== "undefined" && (window.location.pathname.includes("/exams/create") || window.location.pathname.includes("/exams/add"))) {
+            navigate("/exam-cell-dashboard/exams");
+          }
         }}
-        onSave={async (record) => {
+        onSave={async (record, proceedToSchedule) => {
           saveModuleState("examinations", { draftForm: null });
-          const res = await handleSaveExamRecord(record);
-          if (res) setViewMode("list");
+          const res = await handleSaveExamRecord(record, proceedToSchedule);
+          if (res) {
+            setViewMode("list");
+            if (typeof window !== "undefined" && (window.location.pathname.includes("/exams/create") || window.location.pathname.includes("/exams/add"))) {
+              navigate("/exam-cell-dashboard/exams");
+            }
+          }
         }}
       />
     );
@@ -5281,7 +5294,7 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
             className="cms-btn cms-btn-primary exam-header-create-btn"
             onClick={() => {
               setEditingExamId(null);
-              setViewMode("add");
+              setViewMode("create");
             }}
           >
             <Plus size={16} /> Create Examination
@@ -6456,7 +6469,7 @@ function ExamForm({
     academicYears: contextAcademicYears = [],
   } = academicCtx;
 
-  const existing = exams.find((e) => String(e.id) === String(editId));
+  const existing = editId ? exams.find((e) => String(e.id) === String(editId)) : null;
 
   const initialGroupProgramSelections = useMemo(() => {
     if (!existing) return {};
@@ -6635,6 +6648,9 @@ function ExamForm({
       return {
         ...savedDraft,
         campusId: normalizeId(campusId || "1"),
+        boardId: savedDraft.boardId || defaultBoardId,
+        yearId: savedDraft.yearId || defaultYearId,
+        academicYearId: savedDraft.academicYearId || savedDraft.yearId || defaultYearId,
       };
     }
     return {
@@ -6666,9 +6682,15 @@ function ExamForm({
 
   useEffect(() => {
     if (!existing) {
-      saveModuleState("examinations", { draftForm: form });
+      saveModuleState("examinations", {
+        draftForm: {
+          ...form,
+          activeGroupTab,
+          activeSubjectTabKey,
+        },
+      });
     }
-  }, [form, existing]);
+  }, [form, activeGroupTab, activeSubjectTabKey, existing]);
 
   useEffect(() => {
     if (existing) {
@@ -6721,40 +6743,62 @@ function ExamForm({
     };
   }, [existing, campusId, form.boardId, form.yearId, boards, academicYears]);
 
+  const isInitialMountRef = useRef(true);
+  const prevContextBoardRef = useRef(defaultBoardId);
+  const prevContextYearRef = useRef(defaultYearId);
+
   useEffect(() => {
     if (existing) return;
-    setForm((previous) => {
-      const nextBoardId = defaultBoardId || "";
-      const nextYearId = defaultYearId || "";
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      prevContextBoardRef.current = defaultBoardId;
+      prevContextYearRef.current = defaultYearId;
+      setForm((previous) => {
+        let updated = false;
+        const next = { ...previous };
+        if (!previous.boardId && defaultBoardId) {
+          next.boardId = defaultBoardId;
+          updated = true;
+        }
+        if (!previous.yearId && defaultYearId) {
+          next.yearId = defaultYearId;
+          next.academicYearId = defaultYearId;
+          updated = true;
+        }
+        return updated ? next : previous;
+      });
+      return;
+    }
 
-      // If context board changes or clears:
-      if (normalizeId(previous.boardId) !== normalizeId(nextBoardId)) {
-        return {
-          ...previous,
-          boardId: nextBoardId,
-          yearId: nextYearId,
-          levelId: "",
-          levelIds: [],
-          groupId: "",
-          groupIds: [],
-          programId: "",
-          programIds: [],
-          selectedSubjectIds: [],
-          groupProgramSelections: {},
-          selectedGroupPatterns: {},
-        };
-      }
+    // Only if context board changes during session
+    if (defaultBoardId && prevContextBoardRef.current !== defaultBoardId) {
+      prevContextBoardRef.current = defaultBoardId;
+      setForm((previous) => ({
+        ...previous,
+        boardId: defaultBoardId,
+        yearId: defaultYearId || previous.yearId,
+        levelId: "",
+        levelIds: [],
+        groupId: "",
+        groupIds: [],
+        programId: "",
+        programIds: [],
+        selectedSubjectIds: [],
+        groupProgramSelections: {},
+        selectedGroupPatterns: {},
+      }));
+      return;
+    }
 
-      // If only context year changes:
-      if (normalizeId(previous.yearId) !== normalizeId(nextYearId)) {
-        return {
-          ...previous,
-          yearId: nextYearId,
-        };
-      }
-
-      return previous;
-    });
+    // If only context year changes:
+    if (defaultYearId && prevContextYearRef.current !== defaultYearId) {
+      prevContextYearRef.current = defaultYearId;
+      setForm((previous) => ({
+        ...previous,
+        yearId: defaultYearId,
+        academicYearId: defaultYearId,
+      }));
+    }
   }, [defaultBoardId, defaultYearId, existing]);
 
   // Load fresh examination details and schedule subjects from backend when editing
@@ -7000,7 +7044,7 @@ function ExamForm({
     if (existing) return;
     const targetYearId = defaultYearId || normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id);
     if (!targetYearId) return;
-    setForm((previous) => (previous.yearId === targetYearId ? previous : { ...previous, yearId: targetYearId }));
+    setForm((previous) => (previous.yearId ? previous : { ...previous, yearId: targetYearId, academicYearId: targetYearId }));
   }, [defaultYearId, selectedAcademicYearId, selectedAcademicYear, existing]);
 
   const availableGroups = useMemo(() => formGroups.filter((group) =>
@@ -7016,7 +7060,11 @@ function ExamForm({
   }, [existing, availableGroups]);
 
   // Group Tabs active tab state in Creation Form
-  const [activeGroupTab, setActiveGroupTab] = useState(() => preferredGroupTab);
+  const savedDraft = useMemo(() => (!existing ? getModuleState("examinations", {})?.draftForm : null), [existing]);
+  const [activeGroupTab, setActiveGroupTab] = useState(() => {
+    if (savedDraft?.activeGroupTab) return normalizeId(savedDraft.activeGroupTab);
+    return preferredGroupTab;
+  });
 
   useEffect(() => {
     if (availableGroups.length > 0) {
@@ -7144,12 +7192,13 @@ function ExamForm({
     const set = new Set();
     if (activeGroupTab) set.add(normalizeId(activeGroupTab));
     ensureArray(form.groupIds).forEach((gid) => gid && set.add(normalizeId(gid)));
+    Object.keys(form.groupProgramSelections || {}).forEach((gid) => gid && set.add(normalizeId(gid)));
     if (existing) {
       ensureArray(existing.groupIds).forEach((gid) => gid && set.add(normalizeId(gid)));
       if (existing.groupId) set.add(normalizeId(existing.groupId));
     }
     return Array.from(set);
-  }, [activeGroupTab, form.groupIds, existing]);
+  }, [activeGroupTab, form.groupIds, form.groupProgramSelections, existing]);
 
   const groupIdsToFetchKey = useMemo(() => [...groupIdsToFetchPrograms].sort().join(","), [groupIdsToFetchPrograms]);
 
@@ -7399,7 +7448,7 @@ function ExamForm({
     return Array.from(map.values());
   }, [eligibleSubjects, form.levelIds, form.groupIds, formLevels, formGroups, activeGroupTab, availableGroups]);
 
-  const [activeSubjectTabKey, setActiveSubjectTabKey] = useState("");
+  const [activeSubjectTabKey, setActiveSubjectTabKey] = useState(() => savedDraft?.activeSubjectTabKey || "");
 
   useEffect(() => {
     if (subjectTabGroups.length > 0) {
@@ -7441,6 +7490,17 @@ function ExamForm({
     );
     return isStandard ? "" : form.examType;
   });
+
+  useEffect(() => {
+    if (!form.examType) return;
+    const isStandard = combinedExamTypeOptions.some(
+      (o) => o.id !== "Others" && o.name.toLowerCase() === form.examType.toLowerCase(),
+    );
+    setSelectedExamTypeOption(isStandard ? form.examType : "Others");
+    if (!isStandard) {
+      setCustomExamType(form.examType);
+    }
+  }, [form.examType, combinedExamTypeOptions]);
 
   const availablePatternOptions = useMemo(() => resolveGroupPatterns(activeGroupObj, form.examCategory, masterPatterns), [activeGroupObj, form.examCategory, masterPatterns]);
 

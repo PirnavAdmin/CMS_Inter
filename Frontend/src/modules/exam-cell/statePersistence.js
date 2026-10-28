@@ -341,7 +341,9 @@ export function useExamCellAction({
   moduleKey,
   paramKey = "action",
   defaultAction = null,
+  initialProp = null,
   aliases = {},
+  pathMap = null,
   onActionChange = null,
 }) {
   const normalize = useCallback(
@@ -359,6 +361,15 @@ export function useExamCellAction({
   const resolveInitialAction = () => {
     if (typeof window !== "undefined") {
       try {
+        if (pathMap) {
+          const currentPath = window.location.pathname.replace(/\/+$/, "");
+          for (const [actionKey, subPath] of Object.entries(pathMap)) {
+            if (subPath && currentPath === subPath.replace(/\/+$/, "")) {
+              return actionKey;
+            }
+          }
+        }
+
         const params = new URLSearchParams(window.location.search);
         const val = params.get(paramKey);
         if (val) {
@@ -369,6 +380,12 @@ export function useExamCellAction({
         // ignore
       }
     }
+
+    if (initialProp) {
+      const norm = normalize(initialProp);
+      if (norm) return norm;
+    }
+
     const stored = getModuleState(moduleKey);
     if (stored?.[paramKey]) {
       const norm = normalize(stored[paramKey]);
@@ -386,7 +403,7 @@ export function useExamCellAction({
       try {
         const url = new URL(window.location.href);
         const current = url.searchParams.get(paramKey);
-        if (action) {
+        if (action && action !== defaultAction) {
           if (normalize(current) !== action) {
             url.searchParams.set(paramKey, action);
             window.history.replaceState(window.history.state, "", url.toString());
@@ -400,11 +417,11 @@ export function useExamCellAction({
       }
     }
     saveModuleState(moduleKey, { [paramKey]: action });
-  }, [action, paramKey, normalize, moduleKey]);
+  }, [action, paramKey, normalize, moduleKey, defaultAction]);
 
   const setAction = useCallback(
     (nextAction) => {
-      const norm = normalize(nextAction);
+      const norm = normalize(nextAction) || defaultAction;
       if (norm === actionRef.current) return;
       setActionState(norm);
       saveModuleState(moduleKey, { [paramKey]: norm });
@@ -412,7 +429,7 @@ export function useExamCellAction({
       if (typeof window !== "undefined") {
         try {
           const url = new URL(window.location.href);
-          if (norm) {
+          if (norm && norm !== defaultAction) {
             url.searchParams.set(paramKey, norm);
           } else {
             url.searchParams.delete(paramKey);
@@ -427,7 +444,7 @@ export function useExamCellAction({
         onActionChange(norm);
       }
     },
-    [normalize, moduleKey, paramKey, onActionChange]
+    [normalize, defaultAction, moduleKey, paramKey, onActionChange]
   );
 
   return [action, setAction];
