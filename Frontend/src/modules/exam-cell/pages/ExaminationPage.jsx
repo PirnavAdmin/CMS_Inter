@@ -6620,7 +6620,7 @@ function ExamForm({
 
   const [examCodePreview, setExamCodePreview] = useState("");
 
-
+  const savedDraft = useMemo(() => (!existing ? getModuleState("examinations", {})?.draftForm : null), [existing]);
 
   const [form, setForm] = useState(() => {
     if (existing) {
@@ -6643,7 +6643,6 @@ function ExamForm({
         examType: existing.examType || "",
       };
     }
-    const savedDraft = getModuleState("examinations", {})?.draftForm;
     if (savedDraft && typeof savedDraft === "object") {
       return {
         ...savedDraft,
@@ -6679,18 +6678,6 @@ function ExamForm({
       status: "DRAFT",
     };
   });
-
-  useEffect(() => {
-    if (!existing) {
-      saveModuleState("examinations", {
-        draftForm: {
-          ...form,
-          activeGroupTab,
-          activeSubjectTabKey,
-        },
-      });
-    }
-  }, [form, activeGroupTab, activeSubjectTabKey, existing]);
 
   useEffect(() => {
     if (existing) {
@@ -7060,7 +7047,6 @@ function ExamForm({
   }, [existing, availableGroups]);
 
   // Group Tabs active tab state in Creation Form
-  const savedDraft = useMemo(() => (!existing ? getModuleState("examinations", {})?.draftForm : null), [existing]);
   const [activeGroupTab, setActiveGroupTab] = useState(() => {
     if (savedDraft?.activeGroupTab) return normalizeId(savedDraft.activeGroupTab);
     return preferredGroupTab;
@@ -7503,6 +7489,18 @@ function ExamForm({
   }, [form.examType, combinedExamTypeOptions]);
 
   const availablePatternOptions = useMemo(() => resolveGroupPatterns(activeGroupObj, form.examCategory, masterPatterns), [activeGroupObj, form.examCategory, masterPatterns]);
+
+  useEffect(() => {
+    if (!existing) {
+      saveModuleState("examinations", {
+        draftForm: {
+          ...form,
+          activeGroupTab,
+          activeSubjectTabKey,
+        },
+      });
+    }
+  }, [form, activeGroupTab, activeSubjectTabKey, existing]);
 
   const change = (n, v) => {
     if (n === "boardId" || n === "yearId") {
