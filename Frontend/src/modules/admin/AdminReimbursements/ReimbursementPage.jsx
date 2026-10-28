@@ -829,9 +829,6 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     });
   }, [
     claims,
-    activePortalTab,
-    authUser,
-    defaultFacultyName,
     statusFilter,
     categoryFilter,
     deptFilter,
