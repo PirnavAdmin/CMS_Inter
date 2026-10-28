@@ -18,19 +18,22 @@ public class CertificateService : ICertificateService
     private readonly INumberSeriesService _numberSeriesService;
     private readonly ITemplateService _templateService;
     private readonly IHubContext<NotificationHub>? _hubContext;
+    private readonly Microsoft.Extensions.Logging.ILogger<CertificateService>? _logger;
 
     public CertificateService(
         ICertificateRepository repository, 
         CollegeManagement.API.Data.AppDbContext context, 
         INumberSeriesService numberSeriesService,
         ITemplateService templateService,
-        IHubContext<NotificationHub>? hubContext = null)
+        IHubContext<NotificationHub>? hubContext = null,
+        Microsoft.Extensions.Logging.ILogger<CertificateService>? logger = null)
     {
         _repository = repository;
         _context = context;
         _numberSeriesService = numberSeriesService;
         _templateService = templateService;
         _hubContext = hubContext;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<CertificateResponseDto>> GetAllAsync(
@@ -91,7 +94,7 @@ public class CertificateService : ICertificateService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateService.GetPreviewAsync] Failed to render template via service: {ex.Message}");
+            _logger?.LogWarning(ex, "[CertificateService.GetPreviewAsync] Failed to render template via service: {Message}", ex.Message);
         }
 
         return preview;

@@ -150,9 +150,9 @@ namespace CollegeManagement.API.Services.Implementations
                     .OrderBy(s => s.RollNo)
                     .ToListAsync();
 
-                var isPractical = subject?.Practical == true || subject?.SubjectType?.ToLower() == "practical";
-                var isObjective = examination != null ? await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId) : false;
-                var (subjectMaxMarks, _) = subject != null ? await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, subject) : (100, 35);
+                var subjPractical = subject?.Practical == true || subject?.SubjectType?.ToLower() == "practical";
+                var examObjective = examination != null ? await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId) : false;
+                var (maxMarksForSubject, _) = subject != null ? await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, subject) : (100, 35);
 
                 return new EvaluationDetailDto
                 {
@@ -167,13 +167,13 @@ namespace CollegeManagement.API.Services.Implementations
                     ProgramName = examination?.Program?.ProgramName ?? "Regular Academic",
                     SectionName = section?.SectionName ?? $"Section {sectionId}",
                     ExaminationName = examination?.ExamName ?? "Examination",
-                    ExamPattern = examination?.ExamPattern ?? (isObjective ? "JEE Main Pattern" : "Regular Academic Pattern"),
-                    ExamType = isObjective ? "Objective" : (examination?.AssessmentType?.AssessmentTypeName ?? "Written"),
-                    ExamTotalMarks = examination?.TotalMarks ?? (isObjective ? 300 : 600),
-                    ExamPassPercentage = examination?.PassPercentage ?? (isObjective ? 40m : 35m),
-                    SubjectMaxMarks = subjectMaxMarks,
-                    IsPractical = isObjective ? false : isPractical,
-                    SubjectType = isObjective ? "Objective" : (subject?.SubjectType ?? (isPractical ? "Practical" : "Theory")),
+                    ExamPattern = examination?.ExamPattern ?? (examObjective ? "JEE Main Pattern" : "Regular Academic Pattern"),
+                    ExamType = examObjective ? "Objective" : (examination?.AssessmentType?.AssessmentTypeName ?? "Written"),
+                    ExamTotalMarks = examination?.TotalMarks ?? (examObjective ? 300 : 600),
+                    ExamPassPercentage = examination?.PassPercentage ?? (examObjective ? 40m : 35m),
+                    SubjectMaxMarks = maxMarksForSubject,
+                    IsPractical = examObjective ? false : subjPractical,
+                    SubjectType = examObjective ? "Objective" : (subject?.SubjectType ?? (subjPractical ? "Practical" : "Theory")),
                     TotalStudents = students.Count,
                     AverageMarks = 0,
                     HighestMarks = 0,
@@ -185,7 +185,7 @@ namespace CollegeManagement.API.Services.Implementations
                     RejectionReason = null,
                     Students = students.Select(s => new StudentEvaluationMarkRecordDto
                     {
-                        MarkId = null,
+                        MarkId = 0,
                         StudentId = s.StudentId,
                         AdmissionNo = !string.IsNullOrEmpty(s.AdmissionNo) ? s.AdmissionNo : $"ADM{s.StudentId}",
                         RollNo = !string.IsNullOrEmpty(s.RollNo) ? s.RollNo : $"ROLL{s.StudentId:000}",
@@ -195,7 +195,7 @@ namespace CollegeManagement.API.Services.Implementations
                         Theory = null,
                         TotalMarks = 0,
                         ObtainedMarks = 0,
-                        MaxMarks = subjectMaxMarks,
+                        MaxMarks = maxMarksForSubject,
                         Percentage = 0,
                         IsAbsent = false,
                         Remarks = null
@@ -476,8 +476,8 @@ namespace CollegeManagement.API.Services.Implementations
                     Examination = exam?.ExamName ?? "Examination",
                     ExamType = exam?.AssessmentType?.AssessmentTypeName ?? "Written",
                     ExamPattern = exam?.ExamPattern ?? "REGULAR_ACADEMIC",
-                    RequiredSubjectCount = 0,
-                    Subjects = new List<StudentSubjectAnalysisItemDto>(),
+                    RequiredSubjects = 0,
+                    Subjects = new List<StudentSubjectAnalysisDetailItemDto>(),
                     TotalMarks = 0,
                     MaxMarks = exam?.TotalMarks ?? 100,
                     Percentage = 0,
