@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CalendarCheck, Users, CheckCircle2, XCircle, AlertCircle, Clock, Filter, Eye, ChevronRight, Calendar } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal, recentAttendanceLogs, subjectAttendanceData } from "../parentData.js";
@@ -43,10 +44,46 @@ export default function ParentAttendancePage() {
     holidays,
   } = useParentPortal();
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const yearParam = searchParams.get("year");
+  const monthParam = searchParams.get("month");
+  const statusParam = searchParams.get("status");
+
   const [selectedSubjectModal, setSelectedSubjectModal] = useState(null);
-  const [selectedYear, setSelectedYear] = useState(() => (currentAcademicYear.startsWith("2024") ? "2024" : currentAcademicYear.startsWith("2025") ? "2025" : "2026"));
-  const [selectedMonth, setSelectedMonth] = useState("10");
-  const [filterStatus, setFilterStatus] = useState("all");
+  const [selectedYear, setSelectedYear] = useState(() => yearParam || (currentAcademicYear.startsWith("2024") ? "2024" : currentAcademicYear.startsWith("2025") ? "2025" : "2026"));
+  const [selectedMonth, setSelectedMonth] = useState(() => monthParam || "10");
+  const [filterStatus, setFilterStatus] = useState(() => statusParam || "all");
+
+  const handleYearChange = (year) => {
+    setSelectedYear(year);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("year", year);
+      return next;
+    });
+  };
+
+  const handleMonthChange = (month) => {
+    setSelectedMonth(month);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("month", month);
+      return next;
+    });
+  };
+
+  const handleStatusChange = (status) => {
+    setFilterStatus(status);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (status && status !== "all") {
+        next.set("status", status);
+      } else {
+        next.delete("status");
+      }
+      return next;
+    });
+  };
 
   // Live data states strictly in memory (NO localStorage / sessionStorage)
   const [liveSubjects, setLiveSubjects] = useState([]);
@@ -494,7 +531,7 @@ export default function ParentAttendancePage() {
                 <select
                   id="att-year-select"
                   value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
+                  onChange={(e) => handleYearChange(e.target.value)}
                   className="cms-select"
                   style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600 }}
                 >
@@ -511,7 +548,7 @@ export default function ParentAttendancePage() {
                 <select
                   id="att-month-select"
                   value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  onChange={(e) => handleMonthChange(e.target.value)}
                   className="cms-select"
                   style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600 }}
                 >
@@ -534,7 +571,7 @@ export default function ParentAttendancePage() {
               <select
                 id="att-status-select"
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                onChange={(e) => handleStatusChange(e.target.value)}
                 className="cms-select"
                 style={{ padding: "6px 12px", fontSize: 13 }}
                 aria-label="Filter by status"
@@ -554,6 +591,13 @@ export default function ParentAttendancePage() {
                       setSelectedYear(defaultY);
                       setSelectedMonth("10");
                       setFilterStatus("all");
+                      setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.delete("year");
+                        next.delete("month");
+                        next.delete("status");
+                        return next;
+                      });
                     }}
                     style={{ fontSize: 12, padding: "5px 10px" }}
                   >

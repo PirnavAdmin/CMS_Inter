@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { FileText, Download, Printer, Plus, Eye, CheckCircle2, Users, Loader2 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal } from "../parentData.js";
@@ -26,12 +27,64 @@ export default function ParentDocumentsPage() {
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [docsError, setDocsError] = useState(null);
   const [selectedDocModal, setSelectedDocModal] = useState(null);
-  const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
-  const [docType, setDocType] = useState("Bonafide Certificate");
-  const [docPurpose, setDocPurpose] = useState("");
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialModalOpen = searchParams.get("action") === "request";
+  const [requestModalOpen, setRequestModalOpen] = useState(initialModalOpen);
+
+  const getInitialDocDraft = () => {
+    if (typeof window === "undefined") return { docType: "Bonafide Certificate", docPurpose: "" };
+    try {
+      const stored = window.sessionStorage.getItem("cms-parent-doc-draft");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          docType: parsed.docType || "Bonafide Certificate",
+          docPurpose: parsed.docPurpose || "",
+        };
+      }
+    } catch {}
+    return { docType: "Bonafide Certificate", docPurpose: "" };
+  };
+
+  const initialDraft = getInitialDocDraft();
+  const [docType, setDocType] = useState(initialDraft.docType);
+  const [docPurpose, setDocPurpose] = useState(initialDraft.docPurpose);
   const [toastMessage, setToastMessage] = useState("");
+
+  const handleOpenRequestModal = () => {
+    setRequestModalOpen(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("action", "request");
+      return next;
+    });
+  };
+
+  const handleCloseRequestModal = () => {
+    setRequestModalOpen(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("action");
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const isRequest = searchParams.get("action") === "request";
+    setRequestModalOpen(isRequest);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (requestModalOpen) {
+        window.sessionStorage.setItem("cms-parent-doc-draft", JSON.stringify({ docType, docPurpose }));
+      }
+    } catch {}
+  }, [requestModalOpen, docType, docPurpose]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
@@ -130,8 +183,11 @@ export default function ParentDocumentsPage() {
       });
 
       setToastMessage(`Request for ${docType} submitted successfully to Administration!`);
-      setRequestModalOpen(false);
+      handleCloseRequestModal();
       setDocPurpose("");
+      try {
+        window.sessionStorage.removeItem("cms-parent-doc-draft");
+      } catch {}
       await loadDocuments(false);
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || "Failed to submit request.";
@@ -192,7 +248,7 @@ export default function ParentDocumentsPage() {
       subtitle={`Official certificates, issued documents, and verification records • ${child.name}`}
       breadcrumb={["Parent Portal", "Documents"]}
       actions={
-        <button type="button" className="cms-btn cms-btn-primary cms-btn-sm" onClick={() => setRequestModalOpen(true)}>
+        <button type="button" className="cms-btn cms-btn-primary cms-btn-sm" onClick={handleOpenRequestModal}>
           <Plus size={14} /> Request Document
         </button>
       }
@@ -229,7 +285,7 @@ export default function ParentDocumentsPage() {
             <h3 className="parent-card-title">
               <FileText size={18} /> Issued Certificates & Student Records ({docs.length})
             </h3>
-            <button type="button" className="cms-btn cms-btn-primary cms-btn-sm" onClick={() => setRequestModalOpen(true)}>
+            <button type="button" className="cms-btn cms-btn-primary cms-btn-sm" onClick={handleOpenRequestModal}>
               <Plus size={14} /> Request New Certificate
             </button>
           </div>
@@ -305,11 +361,11 @@ export default function ParentDocumentsPage() {
         {requestModalOpen && (
           <Modal
             title="Request Official Student Document"
-            onClose={() => setRequestModalOpen(false)}
+            onClose={handleCloseRequestModal}
             size="md"
             footer={
               <>
-                <button type="button" className="cms-btn cms-btn-outline" onClick={() => setRequestModalOpen(false)}>Cancel</button>
+                <button type="button" className="cms-btn cms-btn-outline" onClick={handleCloseRequestModal}>Cancel</button>
                 <button type="button" className="cms-btn cms-btn-primary" disabled={submitting} onClick={handleRequestSubmit}>
                   {submitting ? "Submitting..." : "Submit Application"}
                 </button>

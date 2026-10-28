@@ -49,7 +49,11 @@ export default function ParentAcademicsPage() {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    setSearchParams({ tab });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tab);
+      return next;
+    });
   };
 
   const subjects = useMemo(() => {

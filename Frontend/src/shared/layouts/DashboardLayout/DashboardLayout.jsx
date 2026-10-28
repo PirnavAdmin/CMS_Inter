@@ -695,6 +695,9 @@ export default function DashboardLayout({
   }, []);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
+  const parentStudentId = isParent
+    ? (new URLSearchParams(location.search).get("studentId") || (typeof window !== "undefined" ? window.sessionStorage?.getItem("cms-parent-active-child") : null))
+    : null;
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
   const isExamCell = !isWarden && (isExamCellRole(user?.role) || pathname.startsWith("/exam-cell-dashboard"));
   const activeMenu = useMemo(() => {
@@ -1210,10 +1213,14 @@ export default function DashboardLayout({
                     </div>
                   );
                 }
+                const linkTarget = (isParent && item.to.startsWith("/parent-dashboard") && parentStudentId)
+                  ? `${item.to}?studentId=${encodeURIComponent(parentStudentId)}`
+                  : item.to;
+
                 return (
                   <Link
                     key={item.to}
-                    to={item.to}
+                    to={linkTarget}
                     title={navOpen ? undefined : item.label}
                     className={`cms-nav-link ${active ? "is-active" : ""}`}
                     onClick={() => { setAttendanceOpen(false); closeOnMobile(); }}
@@ -1496,7 +1503,7 @@ export default function DashboardLayout({
             <ThemeToggle variant="dashboard" />
             {isParent ? (
               <Link
-                to="/parent-dashboard/notifications"
+                to={parentStudentId ? `/parent-dashboard/notifications?studentId=${encodeURIComponent(parentStudentId)}` : "/parent-dashboard/notifications"}
                 className="cms-icon-btn"
                 style={{ textDecoration: "none" }}
                 aria-label={`${pendingActionCount} notifications`}
