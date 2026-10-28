@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "../config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken, BACKEND_ADMIN_JWT } from "../features/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken, BACKEND_ADMIN_JWT } from "../modules/auth/authStorage.js";
 
 let activeApiRequests = 0;
 import { handleMockApiRequest } from "./mockApiAdapter.js";
@@ -143,8 +143,8 @@ apiClient.interceptors.request.use(
   (config) => {
     if (typeof FormData !== "undefined" && config.data instanceof FormData) {
       // Preserve file bodies and let the browser supply the multipart boundary.
-      try { config.headers?.delete?.("Content-Type"); } catch {}
-      try { config.headers?.delete?.("content-type"); } catch {}
+      try { config.headers?.delete?.("Content-Type"); } catch { }
+      try { config.headers?.delete?.("content-type"); } catch { }
       if (config.headers) {
         delete config.headers["Content-Type"];
         delete config.headers["content-type"];
@@ -159,12 +159,12 @@ apiClient.interceptors.request.use(
     // Real server requests will NEVER use mock data when the server is offline
     const isExplicitMockToken = Boolean(
       token &&
-        (token.startsWith("mock-") ||
-          token.startsWith("demo-") ||
-          token.startsWith("non-teaching-") ||
-          token.startsWith("warden-") ||
-          token.startsWith("parent-") ||
-          token.startsWith("exam-cell-"))
+      (token.startsWith("mock-") ||
+        token.startsWith("demo-") ||
+        token.startsWith("non-teaching-") ||
+        token.startsWith("warden-") ||
+        token.startsWith("parent-") ||
+        token.startsWith("exam-cell-"))
     );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
     const isHostelRequest = /\/api\/v1\/hostel/i.test(config.url || "");
@@ -211,7 +211,7 @@ apiClient.interceptors.response.use(
     finishApiLoading(response.config);
     if (!isHtmlResponse(response.data)) {
       if (!response.config?._isMockFallback && typeof window !== "undefined") {
-        try { window.localStorage.removeItem("cms_backend_offline"); } catch {}
+        try { window.localStorage.removeItem("cms_backend_offline"); } catch { }
       }
       return response;
     }
@@ -242,12 +242,12 @@ apiClient.interceptors.response.use(
     const token = getStoredAccessToken();
     const isExplicitMockToken = Boolean(
       token &&
-        (token.startsWith("mock-") ||
-          token.startsWith("demo-") ||
-          token.startsWith("non-teaching-") ||
-          token.startsWith("warden-") ||
-          token.startsWith("parent-") ||
-          token.startsWith("exam-cell-"))
+      (token.startsWith("mock-") ||
+        token.startsWith("demo-") ||
+        token.startsWith("non-teaching-") ||
+        token.startsWith("warden-") ||
+        token.startsWith("parent-") ||
+        token.startsWith("exam-cell-"))
     );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
     const isHostelRequest = /\/api\/v1\/hostel/i.test(originalRequest?.url || "");
@@ -331,12 +331,12 @@ apiClient.interceptors.response.use(
       const currentToken = getStoredAccessToken();
       const isMockToken = Boolean(
         currentToken &&
-          (currentToken.startsWith("mock-") ||
-            currentToken.startsWith("demo-") ||
-            currentToken.startsWith("non-teaching-") ||
-            currentToken.startsWith("warden-") ||
-            currentToken.startsWith("parent-") ||
-            currentToken.startsWith("exam-cell-"))
+        (currentToken.startsWith("mock-") ||
+          currentToken.startsWith("demo-") ||
+          currentToken.startsWith("non-teaching-") ||
+          currentToken.startsWith("warden-") ||
+          currentToken.startsWith("parent-") ||
+          currentToken.startsWith("exam-cell-"))
       );
       if (isMockToken) {
         // Mock token sessions must NEVER be logged out or redirected by backend 401 errors
