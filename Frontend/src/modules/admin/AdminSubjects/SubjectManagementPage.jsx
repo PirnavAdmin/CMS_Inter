@@ -100,10 +100,32 @@ export const pageConfig = { title: "Subject Management", rows: [], fields: [] };
 export default function SubjectManagementPage() {
   const { selectedBoardId: navbarBoardId, selectedAcademicYearId: navbarAcademicYearId } = useAcademicContext();
   const { selectedCampusId: navbarCampusId } = useCampusContext();
-  const [context, setContext] = useState({ levelId: "", groupId: "" });
+  const storageKey = `cms_subject_management_filters:${JSON.stringify([navbarCampusId ?? "", navbarBoardId ?? "", navbarAcademicYearId ?? ""])}`;
+  return <SubjectManagementContent key={storageKey} {...{ storageKey, navbarBoardId, navbarAcademicYearId }} />;
+}
+
+function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYearId }) {
+  const [context, setContext] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+      return { levelId: String(saved?.levelId ?? ""), groupId: String(saved?.groupId ?? "") };
+    } catch { return { levelId: "", groupId: "" }; }
+  });
+  const contextRef = useRef(context);
+  const updateContext = useCallback((next) => {
+    contextRef.current = next;
+    setContext(next);
+    try {
+      if (next.levelId || next.groupId) localStorage.setItem(storageKey, JSON.stringify(next));
+      else localStorage.removeItem(storageKey);
+    } catch { /* Keep filters usable when storage is unavailable. */ }
+  }, [storageKey]);
+  const [groupsLevelId, setGroupsLevelId] = useState(null);
+  const [filterError, setFilterError] = useState("");
+  const [subjectsError, setSubjectsError] = useState("");
   const [subjectView, setSubjectView] = useState("subjects");
   const [levels, setLevels] = useState([]);
-  const [levelsLoading, setLevelsLoading] = useState(false);
+  const [levelsLoading, setLevelsLoading] = useState(Boolean(navbarBoardId));
   const [academicContextValid, setAcademicContextValid] = useState(false);
   const [groups, setGroups] = useState([]);
   const [master, setMaster] = useState(() => subjectMaster.map((item) => ({ ...item, marks: { ...item.marks } })));
@@ -208,24 +230,29 @@ export default function SubjectManagementPage() {
   useEffect(() => {
     let active = true;
     setAcademicContextValid(false);
-    setContext({ levelId: "", groupId: "" });
     setLevels([]);
     setGroups([]);
     if (!navbarBoardId) { setLevelsLoading(false); return undefined; }
     setLevelsLoading(true);
     apiClient.get(apiEndpoints.boards.academicLevels, { params: { boardId: navbarBoardId } }).then((response) => {
       if (!active) return;
-      setLevels(asList(body(response)).map((item) => ({ ...option(item, ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]), raw: item })).filter((item) => item.value && item.label));
+      const nextLevels = asList(body(response)).map((item) => ({ ...option(item, ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]), raw: item })).filter((item) => item.value && item.label);
+      setLevels(nextLevels);
+      if (!nextLevels.some((level) => level.value === contextRef.current.levelId)) updateContext({ levelId: "", groupId: "" });
       setAcademicContextValid(true);
       setLevelsLoading(false);
-    }).catch(() => { if (active) { setLevels([]); setAcademicContextValid(false); setLevelsLoading(false); setToast("Unable to load valid academic context."); } });
+    }).catch(() => { if (active) { setLevels([]); setAcademicContextValid(false); setLevelsLoading(false); setFilterError("Unable to load academic levels. Refresh to retry."); } });
     return () => { active = false; };
-  }, [navbarCampusId, navbarBoardId, navbarAcademicYearId]);
+  }, [navbarBoardId, navbarAcademicYearId, updateContext]);
   useEffect(() => {
     let active = true;
-    setContext((current) => ({ ...current, groupId: "" }));
+    setGroupsLevelId(null);
     setGroups([]);
-    if (!navbarBoardId || !context.levelId) return undefined;
+    if (!academicContextValid || !navbarBoardId || !context.levelId) return undefined;
+    setFilterError("");
+    // Changing Group must not refetch its options; validate the retained ID
+    // only when this academic level's options finish loading successfully.
+    const candidateGroupId = contextRef.current.groupId;
     const requestParams = { academicYearId: navbarAcademicYearId, academicLevelId: context.levelId, isActive: true };
     const rowsFrom = (response) => {
       const payload = body(response), wrappers = asList(payload);
@@ -242,23 +269,29 @@ export default function SubjectManagementPage() {
           const listed = await apiClient.get(apiEndpoints.groups.list, { params: { boardId: navbarBoardId, ...requestParams } });
           next = normalizeGroups(rowsFrom(listed));
         }
-        if (active) setGroups(next);
+        if (active) {
+          setGroups(next);
+          if (!next.some((group) => group.value === candidateGroupId)) updateContext({ levelId: context.levelId, groupId: "" });
+          setGroupsLevelId(context.levelId);
+        }
       } catch {
-        if (active) setGroups([]);
+        if (active) setFilterError("Unable to load groups. Refresh to retry.");
       }
     };
     loadGroups();
     return () => { active = false; };
-  }, [context.levelId, navbarBoardId, navbarAcademicYearId]);
+  }, [academicContextValid, context.levelId, navbarBoardId, navbarAcademicYearId, updateContext]);
   const loadContextSubjects = useCallback(async () => {
     const requestSequence = ++contextRequestSequence.current;
-    if (!navbarBoardId || !context.levelId || !context.groupId) {
+    if (!academicContextValid || groupsLevelId !== context.levelId || !groups.some((group) => group.value === context.groupId) || !navbarBoardId || !context.levelId || !context.groupId) {
+      setSubjectsError("");
       setContextSubjects([]);
       setContextSubjectsReady(false);
       setSubjectsLoading(false);
       return false;
     }
     setSubjectsLoading(true);
+    setSubjectsError("");
     setContextSubjectsReady(false);
     try {
       const response = await apiClient.get(apiEndpoints.subjects.context, { params: { boardId: navbarBoardId, groupId: context.groupId, academicLevelId: context.levelId } });
@@ -270,13 +303,16 @@ export default function SubjectManagementPage() {
       if (requestSequence !== contextRequestSequence.current) return false;
       setContextSubjects([]);
       setContextSubjectsReady(false);
-      setToast(getApiErrorMessage(error) || "Unable to load subjects.");
+      setSubjectsError(getApiErrorMessage(error) || "Unable to load subjects. Refresh to retry.");
       return false;
     } finally {
       if (requestSequence === contextRequestSequence.current) setSubjectsLoading(false);
     }
-  }, [context.groupId, context.levelId, navbarBoardId]);
-  useEffect(() => { loadContextSubjects(); }, [loadContextSubjects]);
+  }, [academicContextValid, groupsLevelId, groups, context.groupId, context.levelId, navbarBoardId]);
+  useEffect(() => {
+    loadContextSubjects();
+    return () => { contextRequestSequence.current += 1; };
+  }, [loadContextSubjects]);
   useEffect(() => {
     if (!addOpen || !navbarBoardId) return undefined;
     const timer = window.setTimeout(async () => {
@@ -579,7 +615,7 @@ export default function SubjectManagementPage() {
         <button className="cms-back-link subject-language-back" type="button" onClick={() => setSubjectView("subjects")}><ArrowLeft size={15} /> Back to Subjects</button>
         <section className="subject-table-card subject-language-list"><header className="subject-table-head"><div><h2>Language Subjects</h2><p>Reusable language records for group-wise allocation.</p></div><button className="cms-btn cms-btn-primary" type="button" onClick={() => { setLanguageDraft(emptyLanguageDraft()); setLanguageSelection(""); setLanguageModalOpen(true); }}><Plus size={16} /> Add Language</button></header><div className="subject-table-scroll"><table className="subject-table subject-master-table subject-language-table"><thead><tr><th>Language</th><th>Subject Code</th><th>Total Marks</th><th>Passing Marks</th><th>Action</th></tr></thead><tbody>{languageSubjects.map((subject) => { const scope = /^english$/i.test(displayLanguageName(subject.name)) ? "common" : "secondLanguage"; return <tr key={subjectKey(subject)}><td>{displayLanguageName(subject.name)}</td><td><b>{subject.code}</b></td><td>{total(subject.marks)}</td><td>{markValue(subject.marks?.passing)}</td><td><div className="subject-master-actions"><button className="cms-action-btn" title="Edit language" onClick={() => openConfiguredLanguageEdit(subject, scope)}><Pencil size={16} /></button><button className="cms-action-btn subject-remove-btn" title="Delete language" onClick={() => setRemoving({ ...subject, scope })}><Trash2 size={16} /></button></div></td></tr>; })}</tbody></table></div></section>
       </> : <>
-      <section className="subject-master-context"><Select label="Academic Level" value={context.levelId} options={levels} disabled={subjectBusy || levelsLoading || !navbarBoardId || !levels.length} onChange={(levelId) => { setContextSubjects([]); setContextSubjectsReady(false); setContext({ levelId, groupId: "" }); }} placeholder={levelsLoading ? "Loading academic levels..." : !navbarBoardId ? "No active boards available" : !levels.length ? "No academic levels available" : "Select Academic Level"} /><GroupCombobox value={context.groupId} options={groups} onChange={(groupId) => { setContextSubjects([]); setContextSubjectsReady(false); setContext((current) => ({ ...current, groupId })); }} disabled={subjectBusy || !context.levelId} /></section>
+      <section className="subject-master-context"><Select label="Academic Level" value={context.levelId} options={levels} disabled={subjectBusy || levelsLoading || !navbarBoardId || !levels.length} onChange={(levelId) => { setContextSubjects([]); setContextSubjectsReady(false); updateContext({ levelId, groupId: levelId ? context.groupId : "" }); }} placeholder={levelsLoading ? "Loading academic levels..." : !navbarBoardId ? "No active boards available" : !levels.length ? "No academic levels available" : "Select Academic Level"} /><GroupCombobox value={context.groupId} options={groups} onChange={(groupId) => { setContextSubjects([]); setContextSubjectsReady(false); updateContext({ ...context, groupId }); }} disabled={subjectBusy || !academicContextValid || groupsLevelId !== context.levelId || !context.levelId} /></section>
       <section className="subject-allocation-columns" aria-label="Group subject allocation">
         <section className="subject-table-card subject-allocation-panel">
           <header className="subject-table-head"><div><h2>Allocate Subjects — {selectedGroupName}</h2><p>Available curriculum subjects not yet saved for this group.</p></div></header>
@@ -594,9 +630,9 @@ export default function SubjectManagementPage() {
           <footer className="subject-allocation-footer"><button className="cms-btn cms-btn-ghost" type="button" disabled={!context.groupId} onClick={() => { setChoice("new"); setDraft(empty()); setAddOpen(true); }}><Plus size={16} /> Add Other Subject</button><span>{selectedSubjectKeys.length} Subject{selectedSubjectKeys.length === 1 ? "" : "s"}{selectedLanguageKeys.length ? ` + ${selectedLanguageKeys.length} Language${selectedLanguageKeys.length === 1 ? "" : "s"}` : ""} Selected</span><button className="cms-btn cms-btn-primary" type="button" disabled={(!selectedSubjectKeys.length && !selectedLanguageKeys.length) || subjectBusy} onClick={saveAllocatedSubjects}>{subjectBusy ? "Saving…" : "Save Allocated Subjects"}</button></footer>
         </section>
         <section className="subject-table-card subject-allocation-panel">
-          <header className="subject-table-head"><div><h2>Allocated Subjects — {selectedGroupName}</h2><p>{allocatedGroupSubjects.length} Subject{allocatedGroupSubjects.length === 1 ? "" : "s"} Allocated</p></div></header>
+          <header className="subject-table-head"><div><h2>Allocated Subjects — {selectedGroupName}</h2><p>{filterError || subjectsError ? "Unable to load allocated subjects" : levelsLoading || (context.levelId && groupsLevelId !== context.levelId) || (context.groupId && !contextSubjectsReady) ? "Loading allocated subjects..." : `${allocatedGroupSubjects.length} Subject${allocatedGroupSubjects.length === 1 ? "" : "s"} Allocated`}</p></div></header>
           <div className="subject-panel-search"><Search3DIcon size={17} aria-hidden="true" /><input value={allocatedSearch} onChange={(event) => setAllocatedSearch(event.target.value)} placeholder="Search allocated subjects..." disabled={!context.groupId} /></div>
-          <div className="subject-card-list">{!context.groupId ? <p className="subject-panel-empty">Select a group to view allocated subjects.</p> : subjectsLoading ? Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index} lines={2} />) : filteredAllocatedSubjects.length ? filteredAllocatedSubjects.map((subject) => <article className="subject-allocation-row is-allocated" key={subject.id}><span><b>{displaySubjectName(subject.name)}</b><small>{subject.code} · {subject.type.join(" + ")}</small><em>Total: {total(subject.marks)} · Passing: {markValue(subject.marks.passing)}</em></span><div className="subject-master-actions"><button className="cms-action-btn" title="Edit subject" disabled={subjectBusy} onClick={() => openEdit(subject)}><Pencil size={16} /></button><button className="cms-action-btn subject-remove-btn" title="Delete/deactivate subject" disabled={subjectBusy} onClick={() => setRemoving(subject)}><Trash2 size={16} /></button></div></article>) : <p className="subject-panel-empty">No subjects have been allocated for this group.</p>}</div>
+          <div className="subject-card-list">{filterError || subjectsError ? <p className="subject-panel-empty" role="alert">{filterError || subjectsError}</p> : levelsLoading || (context.levelId && groupsLevelId !== context.levelId) ? <SkeletonCard lines={2} /> : !context.groupId ? <p className="subject-panel-empty">Select a group to view allocated subjects.</p> : subjectsLoading ? Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index} lines={2} />) : filteredAllocatedSubjects.length ? filteredAllocatedSubjects.map((subject) => <article className="subject-allocation-row is-allocated" key={subject.id}><span><b>{displaySubjectName(subject.name)}</b><small>{subject.code} · {subject.type.join(" + ")}</small><em>Total: {total(subject.marks)} · Passing: {markValue(subject.marks.passing)}</em></span><div className="subject-master-actions"><button className="cms-action-btn" title="Edit subject" disabled={subjectBusy} onClick={() => openEdit(subject)}><Pencil size={16} /></button><button className="cms-action-btn subject-remove-btn" title="Delete/deactivate subject" disabled={subjectBusy} onClick={() => setRemoving(subject)}><Trash2 size={16} /></button></div></article>) : <p className="subject-panel-empty">No subjects have been allocated for this group.</p>}</div>
         </section>
       </section>
       </>}
