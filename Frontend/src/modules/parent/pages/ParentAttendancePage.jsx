@@ -2,10 +2,11 @@ import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarCheck, Users, CheckCircle2, XCircle, AlertCircle, Clock, Filter, Eye, ChevronRight, Calendar } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, recentAttendanceLogs, subjectAttendanceData } from "../parentData.js";
+import { useParentPortal, transformSubjectAttendance } from "../context/ParentPortalContext.jsx";
+import { recentAttendanceLogs, subjectAttendanceData } from "../parentData.js";
 import { Modal } from "@/shared/components/Ui.jsx";
 import { getStudentAttendanceSubjects, getStudentDailyAttendanceLogs } from "@/api/parentApi.js";
-import { transformSubjectAttendance } from "../context/ParentPortalContext.jsx";
+// context imports
 import "../ParentDashboard.css";
 
 const MONTH_NAMES = {
@@ -372,7 +373,7 @@ export default function ParentAttendancePage() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${(String(activeChildId) === String(c.id) || String(child?.id) === String(c.id)) ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <Users size={14} /> {c.name}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -517,10 +517,12 @@ export function ParentPortalProvider({ children }) {
   const [error, setError] = useState(null);
   const [childrenList, setChildrenList] = useState([]);
   const [activeChildId, setActiveChildIdState] = useState(getInitialActiveChildId);
+  const lastManualSelectRef = useRef(null);
 
   const setActiveChildId = useCallback((rawId) => {
     if (!rawId) return;
     const strId = String(rawId).trim();
+    lastManualSelectRef.current = strId;
     setActiveChildIdState(strId);
     if (typeof window !== "undefined") {
       try {
@@ -528,19 +530,19 @@ export function ParentPortalProvider({ children }) {
       } catch {}
     }
     try {
-      const url = new URL(window.location.href);
-      if (url.searchParams.get("studentId") !== strId) {
-        url.searchParams.set("studentId", strId);
+      const currentParams = new URLSearchParams(location.search);
+      if (currentParams.get("studentId") !== strId) {
+        currentParams.set("studentId", strId);
         navigate(
           {
             pathname: location.pathname,
-            search: url.searchParams.toString(),
+            search: currentParams.toString(),
           },
           { replace: false }
         );
       }
     } catch {}
-  }, [location.pathname, navigate]);
+  }, [location.pathname, location.search, navigate]);
   const [detailedStudentMap, setDetailedStudentMap] = useState({});
   const [feeMap, setFeeMap] = useState({});
   const [resultsMap, setResultsMap] = useState({});
@@ -622,13 +624,13 @@ export function ParentPortalProvider({ children }) {
               window.sessionStorage.setItem("cms-parent-active-child", String(chosenId));
             } catch {}
             try {
-              const url = new URL(window.location.href);
-              if (url.pathname.startsWith("/parent-dashboard") && !url.pathname.startsWith("/parent-dashboard/children/") && url.searchParams.get("studentId") !== String(chosenId)) {
-                url.searchParams.set("studentId", String(chosenId));
+              const currentParams = new URLSearchParams(location.search);
+              if (location.pathname.startsWith("/parent-dashboard") && !location.pathname.startsWith("/parent-dashboard/children/") && currentParams.get("studentId") !== String(chosenId)) {
+                currentParams.set("studentId", String(chosenId));
                 navigate(
                   {
                     pathname: location.pathname,
-                    search: url.searchParams.toString(),
+                    search: currentParams.toString(),
                   },
                   { replace: true }
                 );
@@ -662,7 +664,8 @@ export function ParentPortalProvider({ children }) {
         const fromUrl = urlParams.get("studentId") || urlParams.get("childId");
         if (fromUrl && childrenList.length > 0) {
           const matched = childrenList.find((m) => String(m.id) === String(fromUrl) || String(m.studentId) === String(fromUrl));
-          if (matched && matched.id !== activeChildId) {
+          lastManualSelectRef.current = null;
+          if (matched && String(matched.id) !== String(activeChildId)) {
             setActiveChildIdState(matched.id);
             window.sessionStorage.setItem("cms-parent-active-child", matched.id);
           }
@@ -680,7 +683,14 @@ export function ParentPortalProvider({ children }) {
     const paramStudentId = urlParams.get("studentId") || urlParams.get("childId");
     if (paramStudentId && childrenList.length > 0) {
       const match = childrenList.find((m) => String(m.id) === String(paramStudentId) || String(m.studentId) === String(paramStudentId));
-      if (match && match.id !== activeChildId) {
+      const strParam = String(paramStudentId).trim();
+      if (lastManualSelectRef.current && String(lastManualSelectRef.current) !== strParam) {
+        return;
+      }
+      if (lastManualSelectRef.current && String(lastManualSelectRef.current) === strParam) {
+        lastManualSelectRef.current = null;
+      }
+      if (match && String(match.id) !== String(activeChildId)) {
         setActiveChildIdState(match.id);
         try {
           window.sessionStorage.setItem("cms-parent-active-child", match.id);
@@ -693,17 +703,17 @@ export function ParentPortalProvider({ children }) {
   useEffect(() => {
     if (!activeChildId || typeof window === "undefined") return;
     try {
-      const url = new URL(window.location.href);
+      const currentParams = new URLSearchParams(location.search);
       if (
-        url.pathname.startsWith("/parent-dashboard") &&
-        !url.pathname.startsWith("/parent-dashboard/children/") &&
-        url.searchParams.get("studentId") !== activeChildId
+        location.pathname.startsWith("/parent-dashboard") &&
+        !location.pathname.startsWith("/parent-dashboard/children/") &&
+        currentParams.get("studentId") !== String(activeChildId)
       ) {
-        url.searchParams.set("studentId", activeChildId);
+        currentParams.set("studentId", String(activeChildId));
         navigate(
           {
             pathname: location.pathname,
-            search: url.searchParams.toString(),
+            search: currentParams.toString(),
           },
           { replace: true }
         );
@@ -1305,5 +1315,9 @@ export function ParentPortalProvider({ children }) {
 }
 
 export function useParentPortalContext() {
+  return useContext(ParentPortalContext);
+}
+
+export function useParentPortal() {
   return useContext(ParentPortalContext);
 }

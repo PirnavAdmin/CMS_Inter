@@ -97,7 +97,7 @@ export default function ParentChildrenPage() {
           <div className="parent-child-switch-buttons">
             {availableChildren.map((base) => {
               const c = getChild(base);
-              const isSelected = String(activeChildId) === String(c?.id) || String(activeChild?.id) === String(c?.id);
+              const isSelected = String(activeChildId || activeChild?.id) === String(c?.id);
               return (
                 <button
                   key={c.id}

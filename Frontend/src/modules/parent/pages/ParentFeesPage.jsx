@@ -116,7 +116,7 @@ export default function ParentFeesPage() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${(String(activeChildId) === String(c.id) || String(child?.id) === String(c.id)) ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <Users size={14} /> {c.name}
