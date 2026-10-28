@@ -832,15 +832,13 @@ export default function HallTickets() {
           </table>
         </div>
 
-        {filteredTickets.length > 0 && (
-          <Pagination
+        <Pagination
             currentPage={ticketPage}
             totalRecords={filteredTickets.length}
             pageSize={TICKETS_PAGE_SIZE}
             onPageChange={setTicketPage}
-            unit="admit cards"
+            unit="records"
           />
-        )}
       </section>
 
       {/* OFFICIAL ADMIT CARD / HALL TICKET MODAL */}

@@ -5470,15 +5470,13 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
             </table>
           </div>
 
-          {list.length > 0 && (
-            <Pagination
-              currentPage={page}
-              totalRecords={list.length}
-              pageSize={PAGE_SIZE}
-              onPageChange={setPage}
-              unit="examinations"
-            />
-          )}
+          <Pagination
+            currentPage={page}
+            totalRecords={list.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            unit="records"
+          />
         </div>
       ) : (
         <>
@@ -10508,15 +10506,13 @@ function ScheduleTable({
         </table>
       </div>
 
-      {displayEntries.length > 0 && (
-        <Pagination
+      <Pagination
           currentPage={page}
           totalRecords={displayEntries.length}
           pageSize={pageSize}
           onPageChange={setPage}
-          unit="schedules"
+          unit="records"
         />
-      )}
     </div>
   );
 }

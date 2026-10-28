@@ -3822,6 +3822,9 @@ function SectionsTable({
   const filtered = summaries.filter((item) =>
     (item.sectionName || "").toLowerCase().includes(query.toLowerCase())
   );
+  const [secPage, setSecPage] = useState(1);
+  useEffect(() => setSecPage(1), [query, summaries]);
+  const pagedSections = filtered.slice((secPage - 1) * PAGE_SIZE, secPage * PAGE_SIZE);
 
   const allPublished = summaries.length > 0 && summaries.every((s) => s.resultStatus === "PUBLISHED");
 
@@ -3883,8 +3886,8 @@ function SectionsTable({
               </tr>
             </thead>
             <tbody>
-              {filtered.length ? (
-                filtered.map((item) => {
+              {pagedSections.length ? (
+                pagedSections.map((item) => {
                   const isSecPublished = item.resultStatus === "PUBLISHED";
                   return (
                     <tr key={item.sectionId}>
@@ -3936,6 +3939,7 @@ function SectionsTable({
             </tbody>
           </table>
         </div>
+        <Pagination page={secPage} totalRecords={filtered.length} setPage={setSecPage} />
       </div>
     </div>
   );
@@ -3967,6 +3971,10 @@ function PublishedGroupsList({
       return true;
     });
   }, [groups, search, statusFilter]);
+
+  const [pubPage, setPubPage] = useState(1);
+  useEffect(() => setPubPage(1), [search, statusFilter, groups]);
+  const pagedGroups = filtered.slice((pubPage - 1) * PAGE_SIZE, pubPage * PAGE_SIZE);
 
   return (
     <div className="cms-card">
@@ -4022,8 +4030,8 @@ function PublishedGroupsList({
               </tr>
             </thead>
             <tbody>
-              {filtered.length ? (
-                filtered.map((item) => (
+              {pagedGroups.length ? (
+                pagedGroups.map((item) => (
                   <tr key={`${item.publishedId || item.examId}_${item.groupId || item.groupName || ""}`}>
                     <td className="cms-font-semibold">{item.examName}</td>
                     <td>{item.groupName}</td>
@@ -4065,6 +4073,7 @@ function PublishedGroupsList({
             </tbody>
           </table>
         </div>
+        <Pagination page={pubPage} totalRecords={filtered.length} setPage={setPubPage} />
       </div>
     </div>
   );
@@ -4072,6 +4081,9 @@ function PublishedGroupsList({
 
 /* Sections List for a Selected Published Group */
 function PublishedSectionsList({ group, onBack, onViewSection }) {
+  const [secPage, setSecPage] = useState(1);
+  const sections = group.sections || [];
+  const pagedSections = sections.slice((secPage - 1) * PAGE_SIZE, secPage * PAGE_SIZE);
   return (
     <div className="cms-card">
       <div className="cms-card-body">
@@ -4105,8 +4117,8 @@ function PublishedSectionsList({ group, onBack, onViewSection }) {
               </tr>
             </thead>
             <tbody>
-              {group.sections?.length ? (
-                group.sections.map((sec) => (
+              {pagedSections.length ? (
+                pagedSections.map((sec) => (
                   <tr key={sec.sectionId}>
                     <td className="cms-font-semibold">{sec.sectionName}</td>
                     <td>{sec.inChargeName}</td>
@@ -4143,6 +4155,7 @@ function PublishedSectionsList({ group, onBack, onViewSection }) {
             </tbody>
           </table>
         </div>
+        <Pagination page={secPage} totalRecords={sections.length} setPage={setSecPage} />
       </div>
     </div>
   );
@@ -4332,7 +4345,7 @@ function SectionStudentsView({
             </tbody>
           </table>
         </div>
-        <Pagination page={page} pages={totalPages} setPage={setPage} />
+        <Pagination page={page} pages={totalPages} totalRecords={filtered.length} setPage={setPage} />
       </div>
     </div>
   );
@@ -4461,7 +4474,7 @@ function RankListView({
             </tbody>
           </table>
         </div>
-        <Pagination page={page} pages={pages} setPage={setPage} />
+        <Pagination page={page} pages={pages} totalRecords={totalRecords ?? rows.length} setPage={setPage} />
       </div>
     </div>
   );
@@ -4865,6 +4878,7 @@ function AnalyticsStudentsModal({ type, rows, onClose, onViewStudent }) {
               <Pagination
                 page={page}
                 pages={pages}
+                totalRecords={rows.length}
                 setPage={setPage}
                 className="results-analytics-modal-pagination"
                 btnClassName="results-analytics-btn-compact"
@@ -4931,7 +4945,7 @@ function RankPreviewModal({ rows, examName, onClose, onDownload }) {
               </tbody>
             </table>
           </div>
-          {modalPages > 1 && <Pagination page={modalPage} pages={modalPages} setPage={setModalPage} />}
+          <Pagination page={modalPage} pages={modalPages} totalRecords={rows.length} setPage={setModalPage} />
         </div>
 
         <div className="cms-modal-footer">
@@ -5004,67 +5018,70 @@ function PublishConfirmModal({ confirm, examName, onCancel, onConfirm, loading }
 }
 
 /* Shared Pagination Component */
-function Pagination({ page, pages, setPage, className = "", btnClassName = "" }) {
-  const totalPages = Math.max(1, pages || 1);
-  const activePage = Math.min(Math.max(1, page || 1), totalPages);
+function Pagination({ page, pages, setPage, totalRecords, total, pageSize = 10, className = "", btnClassName = "" }) {
+  const resolvedTotal = Number(totalRecords ?? total);
+  const limit = Math.max(1, Number(pageSize) || 10);
+  const hasExplicitCount = !isNaN(resolvedTotal) && resolvedTotal >= 0;
+  const totalPages = hasExplicitCount
+    ? (resolvedTotal === 0 ? 0 : Math.ceil(resolvedTotal / limit))
+    : Math.max(0, Number(pages) || 0);
 
-  const pageNumbers = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
-  } else {
-    pageNumbers.push(1);
-    if (activePage > 3) pageNumbers.push('...');
-    const pStart = Math.max(2, activePage - 1);
-    const pEnd = Math.min(totalPages - 1, activePage + 1);
-    for (let i = pStart; i <= pEnd; i += 1) pageNumbers.push(i);
-    if (activePage < totalPages - 2) pageNumbers.push('...');
-    pageNumbers.push(totalPages);
-  }
+  const activePage = totalPages === 0 ? 1 : Math.min(Math.max(1, page || 1), totalPages);
+
+  const start = hasExplicitCount ? (resolvedTotal === 0 ? 0 : (activePage - 1) * limit + 1) : 0;
+  const end = hasExplicitCount ? Math.min(activePage * limit, resolvedTotal) : 0;
+
+  const pageNumbers = totalPages <= 0
+    ? []
+    : totalPages === 1
+    ? [1]
+    : activePage <= 2
+    ? [1, 2]
+    : [activePage - 1, activePage];
+
+  const summary = hasExplicitCount
+    ? `Showing ${start}–${end} of ${resolvedTotal} records`
+    : `Showing 0–0 of 0 records`;
 
   return (
-    <div className={`results-pagination ${className}`.trim()} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-      <button
-        type="button"
-        className={`cms-btn cms-btn-ghost ${btnClassName}`.trim()}
-        disabled={activePage <= 1}
-        onClick={() => setPage(activePage - 1)}
-        aria-label="Previous Page"
-      >
-        Previous
-      </button>
-
-      {pageNumbers.map((p, idx) =>
-        p === '...' ? (
-          <span key={`dots-${idx}`} className="results-page-label" style={{ padding: '0 4px' }}>
-            ...
-          </span>
-        ) : (
-          <button
-            key={`page-${p}`}
-            type="button"
-            className={`cms-btn ${p === activePage ? 'cms-btn-primary is-active' : 'cms-btn-ghost'} ${btnClassName}`.trim()}
-            onClick={() => setPage(p)}
-            aria-label={`Page ${p}`}
-            style={{ minWidth: '32px', height: '32px', padding: '0 8px' }}
-          >
-            {p}
-          </button>
-        )
-      )}
-
-      <button
-        type="button"
-        className={`cms-btn cms-btn-ghost ${btnClassName}`.trim()}
-        disabled={activePage >= totalPages}
-        onClick={() => setPage(activePage + 1)}
-        aria-label="Next Page"
-      >
-        Next
-      </button>
-
-      <span className="results-page-label" style={{ marginLeft: '8px' }}>
-        Page {activePage} of {totalPages}
+    <div className={`results-pagination ${className}`.trim()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', minHeight: '46px', padding: '5px 14px', borderTop: '1px solid var(--cms-border)', background: 'var(--cms-subtle)', flexWrap: 'wrap' }}>
+      <span className="cms-page-info" style={{ color: 'var(--cms-muted)', fontSize: '12.5px', marginRight: 'auto' }}>
+        {summary}
       </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <button
+          type="button"
+          className={`cms-btn cms-btn-ghost ${btnClassName}`.trim()}
+          disabled={activePage <= 1 || totalPages === 0 || (hasExplicitCount && resolvedTotal === 0)}
+          onClick={() => setPage(activePage - 1)}
+          aria-label="Previous Page"
+        >
+          Previous
+        </button>
+
+        {pageNumbers.map((p) => (
+            <button
+              key={"page-" + p}
+              type="button"
+              className={("cms-btn " + (p === activePage ? 'cms-btn-primary is-active' : 'cms-btn-ghost') + " " + btnClassName).trim()}
+              onClick={() => setPage(p)}
+              aria-label={"Page " + p}
+              style={{ minWidth: '32px', height: '32px', padding: '0 8px' }}
+            >
+              {p}
+            </button>
+          ))}
+
+        <button
+          type="button"
+          className={`cms-btn cms-btn-ghost ${btnClassName}`.trim()}
+          disabled={activePage >= totalPages || totalPages === 0 || (hasExplicitCount && resolvedTotal === 0)}
+          onClick={() => setPage(activePage + 1)}
+          aria-label="Next Page"
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }
