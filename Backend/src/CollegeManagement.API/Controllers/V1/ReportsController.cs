@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 
 namespace CollegeManagement.API.Controllers.V1;
 
@@ -37,22 +38,8 @@ public class ReportsController : ControllerBase
 
     private int? GetCampusIdFromRequest(int? queryCampusId)
     {
-        if (queryCampusId.HasValue && queryCampusId > 0)
-            return queryCampusId;
-
-        if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
-            int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
-        {
-            return cId;
-        }
-
-        var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
-        if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
-        {
-            return claimCampusId;
-        }
-
-        return null;
+        var resolvedCampusId = CampusContextResolver.ResolveAndValidateCampusId(User, queryCampusId);
+        return resolvedCampusId > 0 ? resolvedCampusId : null;
     }
 
     private ReportFilterDto PrepareFilter(ReportFilterDto? filter)

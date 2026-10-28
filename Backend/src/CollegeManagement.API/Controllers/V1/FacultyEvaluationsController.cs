@@ -42,7 +42,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? status,
             [FromQuery] string? examinationStatus)
         {
-            var effectiveFacultyId = facultyId ?? GetCurrentFacultyId();
+            var currentStaffId = GetCurrentFacultyId();
+            var effectiveFacultyId = facultyId ?? currentStaffId;
+            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal") && !User.IsInRole("Examination Cell"))
+            {
+                effectiveFacultyId = currentStaffId;
+            }
             var result = await _evaluationService.GetFacultyEvaluationsAsync(effectiveFacultyId, status, examinationStatus);
             return Ok(result);
         }

@@ -358,6 +358,7 @@ namespace CollegeManagement.API.Controllers
 
         // POST: api/payroll/payslips/generate
         [HttpPost("payslips/generate")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
         public async Task<IActionResult> GeneratePayslip(
             [FromBody] GeneratePayslipRequest request)
         {
@@ -401,6 +402,7 @@ namespace CollegeManagement.API.Controllers
 
         // POST: api/payroll/payslips/generate-bulk
         [HttpPost("payslips/generate-bulk")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
         public async Task<IActionResult> GenerateBulkPayslips(
             [FromBody] GenerateBulkPayslipRequest request)
         {
@@ -456,6 +458,7 @@ namespace CollegeManagement.API.Controllers
 
         // PATCH: api/payroll/payslips/5/status
         [HttpPatch("payslips/{id}/status")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
         public async Task<IActionResult> UpdatePayslipStatus(
             string id,
             [FromQuery] string status)
@@ -513,6 +516,7 @@ namespace CollegeManagement.API.Controllers
 
         // POST: api/payroll/payslips/5/send-email
         [HttpPost("payslips/{id}/send-email")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
         public async Task<IActionResult> SendPayslipEmail(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
@@ -554,6 +558,7 @@ namespace CollegeManagement.API.Controllers
 
         // GET: api/payroll/payslips
         [HttpGet("payslips")]
+        [HttpGet("payslips/my-payslips")]
         public async Task<IActionResult> GetPayslipHistory(
             [FromQuery] int? payrollMonth,
             [FromQuery] int? payrollYear,
@@ -569,6 +574,12 @@ namespace CollegeManagement.API.Controllers
                     staffType,
                     search,
                     resolvedCampusId);
+
+            if (!IsAdminOrHr())
+            {
+                var callerStaffId = GetCallerStaffId();
+                result = result.Where(p => p.StaffId == (callerStaffId ?? 0));
+            }
 
             return Ok(result);
         }
@@ -605,6 +616,15 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            if (!IsAdminOrHr())
+            {
+                var callerStaffId = GetCallerStaffId();
+                if (result.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to view payslips of other employees." });
+                }
+            }
+
             return Ok(result);
         }
 
@@ -630,6 +650,17 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            if (!IsAdminOrHr())
+            {
+                var existing = await _payrollService.GetPayslipByIdAsync(numericId.Value);
+                if (existing == null) return NotFound(new { Message = "Payslip not found." });
+                var callerStaffId = GetCallerStaffId();
+                if (existing.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to download payslips of other employees." });
+                }
+            }
+
             var pdfBytes = await _payrollService.GeneratePayslipPdfAsync(numericId.Value);
             if (pdfBytes == null || pdfBytes.Length == 0)
             {
@@ -640,6 +671,14 @@ namespace CollegeManagement.API.Controllers
             }
 
             return File(pdfBytes, "application/pdf", $"Payslip_{numericId.Value}.pdf");
+        }
+
+        private bool IsAdminOrHr() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("HR");
+
+        private int? GetCallerStaffId()
+        {
+            var claim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            return int.TryParse(claim, out int id) ? id : null;
         }
 
         // GET: api/payroll/revisions?staffId=10&status=Pending

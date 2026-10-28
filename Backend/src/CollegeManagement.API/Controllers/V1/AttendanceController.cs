@@ -26,18 +26,22 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IAttendanceService _attendanceService;
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
+        private readonly CollegeManagement.API.Data.AppDbContext? _db;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AttendanceController"/> class.
         /// </summary>
         /// <param name="attendanceService">The attendance service dependency.</param>
         /// <param name="jwtTokenHelper">The JWT token helper dependency.</param>
+        /// <param name="db">The database context dependency.</param>
         public AttendanceController(
             IAttendanceService attendanceService,
-            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
+            CollegeManagement.API.Data.AppDbContext? db = null)
         {
             _attendanceService = attendanceService;
             _jwtTokenHelper = jwtTokenHelper;
+            _db = db;
         }
 
         /// <summary>
@@ -220,7 +224,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPost("admin/students")]
         [HttpGet("admin/students")]
-        [Authorize]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<StudentAttendanceResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -253,12 +258,69 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPost("admin/bulk-save")]
         [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> AdminBulkSaveStudentAttendance([FromBody] AdminBulkSaveStudentAttendanceRequest request)
         {
+            if (request == null || request.Attendances == null || !request.Attendances.Any())
+            {
+                return BadRequest(new { success = false, message = "Attendance request or records list cannot be empty." });
+            }
+
+            if (!IsCurrentUserAdmin())
+            {
+                var attDate = request.AttendanceDate.Date;
+                var today = DateTime.UtcNow.Date;
+
+                // 1. 48-Hour Retroactive Limit Enforcement
+                if (attDate < today.AddDays(-2) || attDate > today.AddDays(1))
+                {
+                    return BadRequest(new { success = false, message = "Non-administrative staff cannot submit attendance more than 48 hours retroactively or for future dates." });
+                }
+
+                // 2. Sunday & Holiday Check
+                if (attDate.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    return BadRequest(new { success = false, message = "Attendance cannot be recorded on Sundays." });
+                }
+
+                if (_db != null)
+                {
+                    var isHoliday = await _db.Holidays.AsNoTracking().AnyAsync(h => !h.IsDeleted && h.Status == "Active" && h.StartDate.Date <= attDate && h.EndDate.Date >= attDate);
+                    if (isHoliday)
+                    {
+                        return BadRequest(new { success = false, message = "Attendance cannot be recorded on declared institutional holidays." });
+                    }
+                }
+
+                // 3. Section Allocation Check
+                var callerStaffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+                if (int.TryParse(callerStaffClaim, out int callerStaffId) && callerStaffId > 0 && request.SectionId.HasValue && request.SectionId.Value > 0)
+                {
+                    var isAllocated = false;
+                    if (_db != null)
+                    {
+                        isAllocated = await _db.Sections.AsNoTracking().AnyAsync(s => s.SectionId == request.SectionId.Value && s.InchargeId == callerStaffId);
+                    }
+                    if (!isAllocated)
+                    {
+                        var hasTimetable = await _attendanceService.GetFacultySubjectAllocationAsync(attDate, request.GroupId, request.SectionId.Value, null, null);
+                        if (hasTimetable != null && hasTimetable.FacultyId == callerStaffId)
+                        {
+                            isAllocated = true;
+                        }
+                    }
+
+                    if (!isAllocated)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "You are not authorized to record attendance for a section not allocated to you." });
+                    }
+                }
+            }
+
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
             var count = await _attendanceService.AdminBulkSaveStudentAttendanceAsync(request, userName, userId);
@@ -452,9 +514,42 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("reports/student-monthly")]
         [HttpPost("student-monthly")]
         [HttpGet("student-monthly")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [BypassPermission]
         public async Task<IActionResult> GetStudentMonthlyReportGrid([FromQuery] StudentMonthlyReportRequest requestQuery, [FromBody] StudentMonthlyReportRequest? requestBody = null)
         {
             var request = requestBody ?? requestQuery;
+            if (request.Month < 1 || request.Month > 12)
+            {
+                return BadRequest(new { Status = false, Message = "Month must be between 1 and 12." });
+            }
+
+            if (!IsCurrentUserAdmin())
+            {
+                var callerStaffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+                if (int.TryParse(callerStaffClaim, out int callerStaffId) && callerStaffId > 0 && request.SectionId.HasValue && request.SectionId.Value > 0)
+                {
+                    var isAllocated = false;
+                    if (_db != null)
+                    {
+                        isAllocated = await _db.Sections.AsNoTracking().AnyAsync(s => s.SectionId == request.SectionId.Value && s.InchargeId == callerStaffId);
+                    }
+                    if (!isAllocated)
+                    {
+                        var hasSlot = await _attendanceService.GetFacultySubjectAllocationAsync(DateTime.UtcNow.Date, null, request.SectionId.Value, null, null);
+                        if (hasSlot != null && hasSlot.FacultyId == callerStaffId)
+                        {
+                            isAllocated = true;
+                        }
+                    }
+
+                    if (!isAllocated)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view attendance reports for sections not allocated to you." });
+                    }
+                }
+            }
+
             var result = await _attendanceService.GetStudentMonthlyReportGridAsync(request);
             return Ok(new { Status = true, Message = "Student monthly report grid generated successfully.", Data = result });
         }
@@ -463,8 +558,38 @@ namespace CollegeManagement.API.Controllers.V1
         /// Exports Student Monthly Calendar Matrix Report to CSV format.
         /// </summary>
         [HttpGet("student-monthly-report/export/csv")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [BypassPermission]
         public async Task<IActionResult> ExportStudentMonthlyCsv([FromQuery] StudentMonthlyReportRequest request)
         {
+            if (request.Month < 1 || request.Month > 12)
+            {
+                return BadRequest(new { Status = false, Message = "Month must be between 1 and 12." });
+            }
+
+            if (!IsCurrentUserAdmin())
+            {
+                var callerStaffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+                if (int.TryParse(callerStaffClaim, out int callerStaffId) && callerStaffId > 0 && request.SectionId.HasValue && request.SectionId.Value > 0)
+                {
+                    var isAllocated = false;
+                    if (_db != null)
+                    {
+                        isAllocated = await _db.Sections.AsNoTracking().AnyAsync(s => s.SectionId == request.SectionId.Value && s.InchargeId == callerStaffId);
+                    }
+                    if (!isAllocated)
+                    {
+                        var hasSlot = await _attendanceService.GetFacultySubjectAllocationAsync(DateTime.UtcNow.Date, null, request.SectionId.Value, null, null);
+                        if (hasSlot != null && hasSlot.FacultyId == callerStaffId)
+                        {
+                            isAllocated = true;
+                        }
+                    }
+
+                    if (!isAllocated) return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "Forbidden" });
+                }
+            }
+
             var bytes = await _attendanceService.ExportStudentMonthlyReportToCsvAsync(request);
             return File(bytes, "text/csv", $"StudentMonthlyReport_{request.Year}_{request.Month:D2}.csv");
         }
@@ -473,8 +598,38 @@ namespace CollegeManagement.API.Controllers.V1
         /// Exports Student Monthly Calendar Matrix Report to Excel format.
         /// </summary>
         [HttpGet("student-monthly-report/export/excel")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [BypassPermission]
         public async Task<IActionResult> ExportStudentMonthlyExcel([FromQuery] StudentMonthlyReportRequest request)
         {
+            if (request.Month < 1 || request.Month > 12)
+            {
+                return BadRequest(new { Status = false, Message = "Month must be between 1 and 12." });
+            }
+
+            if (!IsCurrentUserAdmin())
+            {
+                var callerStaffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+                if (int.TryParse(callerStaffClaim, out int callerStaffId) && callerStaffId > 0 && request.SectionId.HasValue && request.SectionId.Value > 0)
+                {
+                    var isAllocated = false;
+                    if (_db != null)
+                    {
+                        isAllocated = await _db.Sections.AsNoTracking().AnyAsync(s => s.SectionId == request.SectionId.Value && s.InchargeId == callerStaffId);
+                    }
+                    if (!isAllocated)
+                    {
+                        var hasSlot = await _attendanceService.GetFacultySubjectAllocationAsync(DateTime.UtcNow.Date, null, request.SectionId.Value, null, null);
+                        if (hasSlot != null && hasSlot.FacultyId == callerStaffId)
+                        {
+                            isAllocated = true;
+                        }
+                    }
+
+                    if (!isAllocated) return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "Forbidden" });
+                }
+            }
+
             var bytes = await _attendanceService.ExportStudentMonthlyReportToExcelAsync(request);
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"StudentMonthlyReport_{request.Year}_{request.Month:D2}.xlsx");
         }

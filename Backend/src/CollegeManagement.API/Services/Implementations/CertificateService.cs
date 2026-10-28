@@ -8,6 +8,7 @@ using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using CollegeManagement.API.Exceptions;
 
 namespace CollegeManagement.API.Services;
 
@@ -131,7 +132,19 @@ public class CertificateService : ICertificateService
         var student = await _context.Students
             .FirstOrDefaultAsync(s => s.AdmissionNo == request.AdmissionNo, ct);
 
-        if (student != null && string.IsNullOrWhiteSpace(request.CertificateNo))
+        if (student == null)
+            throw new NotFoundException($"Student with AdmissionNo '{request.AdmissionNo}' not found.");
+
+        // Pipeline 5 Gating: verify no pending fee dues unless PrincipalOverride is provided
+        var hasPendingDues = await _context.StudentFees
+            .AnyAsync(sf => sf.StudentId == student.StudentId && sf.BalanceAmount > 0 && sf.Status != "Cancelled", ct);
+
+        if (hasPendingDues && !string.Equals(request.Remarks, "PrincipalOverride", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ValidationException($"Cannot generate certificate for student '{student.StudentName}' (AdmissionNo: {request.AdmissionNo}) due to outstanding fee dues. Principal override permission required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CertificateNo))
         {
             var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
             { 
@@ -146,7 +159,8 @@ public class CertificateService : ICertificateService
             }
             else
             {
-                request.CertificateNo = $"CERT-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 5).ToUpper()}";
+                // Pipeline 5: Strict atomic sequence lock. Eliminate silent random GUID fallback.
+                throw new InvalidOperationException("Certificate number series 'CERTIFICATE_NUMBER' could not be generated. Please ensure the sequence configuration is initialized.");
             }
         }
 
@@ -207,6 +221,48 @@ public class CertificateService : ICertificateService
             throw new ArgumentException("Certificate number is required.");
 
         return await _repository.VerifyAsync(certificateNo.Trim(), ct);
+    }
+
+    public async Task<PublicCertificateVerificationDto?> VerifyPublicAsync(
+        string certificateNo,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(certificateNo))
+            throw new ArgumentException("Certificate number is required.");
+
+        var cert = await _repository.VerifyAsync(certificateNo.Trim(), ct);
+        if (cert == null) return null;
+
+        string maskedName = MaskStudentName(cert.StudentName);
+        var issueDate = cert.IssueDate != default ? cert.IssueDate : DateTime.UtcNow;
+
+        // Deterministic verification hash (SHA256 of certificateNo + issueDate + type)
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var hashBytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes($"{cert.CertificateNumber}:{issueDate:yyyy-MM-dd}:{cert.CertificateType}"));
+        var verificationHash = Convert.ToHexString(hashBytes)[..16];
+
+        return new PublicCertificateVerificationDto
+        {
+            CertificateNumber = cert.CertificateNumber,
+            StudentNameMasked = maskedName,
+            CertificateType = cert.CertificateType,
+            IssueDate = issueDate,
+            IssuingInstitution = !string.IsNullOrWhiteSpace(cert.BoardName) ? cert.BoardName : "College Management System",
+            ValidityStatus = string.Equals(cert.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) ? "Cancelled" : "Valid",
+            VerificationHash = verificationHash
+        };
+    }
+
+    private static string MaskStudentName(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return "****";
+        var parts = fullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var maskedParts = parts.Select(p =>
+        {
+            if (p.Length <= 2) return p[0] + "*";
+            return p[0] + new string('*', Math.Max(1, p.Length - 2)) + p[^1];
+        });
+        return string.Join(" ", maskedParts);
     }
 
     public async Task<CertificateResponseDto?> ReissueAsync(

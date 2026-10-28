@@ -175,16 +175,32 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var trimmedName = request.FullName.Trim();
+                var cleanedMobile = System.Text.RegularExpressions.Regex.Replace(request.Mobile.Trim(), @"[^\d]", "");
+                if (cleanedMobile.Length != 10)
+                {
+                    return BadRequest(new { success = false, message = "Phone number must be a valid 10-digit mobile number." });
+                }
+
+                var newEmail = request.PersonalEmail.Trim();
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
+                if (user != null && !string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    var emailExists = await _context.Users.AnyAsync(u => u.Email == newEmail && u.UserId != user.UserId);
+                    if (emailExists)
+                    {
+                        return BadRequest(new { success = false, message = "The email address is already in use by another account." });
+                    }
+                }
+
                 var nameParts = trimmedName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
                 staff.FirstName = nameParts.Length > 0 ? nameParts[0] : trimmedName;
                 staff.LastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
-                staff.Mobile = request.Mobile.Trim();
-                staff.Email = request.PersonalEmail.Trim();
+                staff.Mobile = cleanedMobile;
+                staff.Email = newEmail;
                 staff.CurrentAddress = request.Address?.Trim();
                 staff.AlternateMobile = request.EmergencyContact?.Trim();
                 staff.UpdatedAt = DateTime.UtcNow;
 
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
                 if (user != null)
                 {
                     user.FullName = trimmedName;
@@ -260,18 +276,19 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(ModelState);
             }
 
-            if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 6)
+            if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
             {
-                return BadRequest(new { success = false, message = "New password must be at least 6 characters long." });
+                return BadRequest(new { success = false, message = "New password must be at least 8 characters long." });
             }
 
             bool hasUpper = request.NewPassword.Any(char.IsUpper);
+            bool hasLower = request.NewPassword.Any(char.IsLower);
             bool hasDigit = request.NewPassword.Any(char.IsDigit);
             bool hasSpecial = request.NewPassword.Any(ch => !char.IsLetterOrDigit(ch));
 
-            if (!hasUpper || !hasDigit || !hasSpecial)
+            if (!hasUpper || !hasLower || !hasDigit || !hasSpecial)
             {
-                return BadRequest(new { success = false, message = "New password must contain at least one uppercase letter (A-Z), one number (0-9), and one special symbol (e.g. !@#$%^&*)." });
+                return BadRequest(new { success = false, message = "New password must contain at least one uppercase letter (A-Z), one lowercase letter (a-z), one number (0-9), and one special symbol (e.g. !@#$%^&*)." });
             }
 
             try

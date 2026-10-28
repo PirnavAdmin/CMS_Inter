@@ -440,6 +440,7 @@ builder.Services.AddSwaggerGen(c =>
     }
 
     c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
+    c.CustomSchemaIds(type => type.FullName);
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -469,35 +470,6 @@ builder.Services.AddSwaggerGen(c =>
 #endregion
 
 var app = builder.Build();
-
-if (args.Contains("--test-timetable"))
-{
-    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
-    var tester = new CollegeManagement.API.Tests.TimetableOptimizationTester(connStr);
-    await tester.RunAsync();
-    return;
-}
-
-if (args.Contains("--deploy-inventory"))
-{
-    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
-    await CollegeManagement.API.Tests.InventoryDbDeployer.DeployAsync(connStr);
-    return;
-}
-
-if (args.Contains("--verify-inventory"))
-{
-    await CollegeManagement.API.Tests.InventoryVerificationRunner.RunAsync(app.Services);
-    return;
-}
-
-if (args.Contains("--test-audit"))
-{
-    var tester = new CollegeManagement.API.Tests.AuditModuleBackendTester(app.Services);
-    await tester.RunAllTestsAsync();
-    return;
-}
-
 
 #region Pipeline Middleware
 var forwardedHeadersOptions = new ForwardedHeadersOptions

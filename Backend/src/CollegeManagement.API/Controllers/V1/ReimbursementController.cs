@@ -105,7 +105,15 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { Status = false, Message = "Invalid request payload." });
             }
 
-            if (request.StaffId <= 0)
+            if (!IsAdminOrFinance())
+            {
+                var resolvedStaff = ResolveStaffId();
+                if (resolvedStaff.HasValue && resolvedStaff.Value > 0)
+                {
+                    request.StaffId = resolvedStaff.Value;
+                }
+            }
+            else if (request.StaffId <= 0)
             {
                 var resolvedStaff = ResolveStaffId();
                 if (resolvedStaff.HasValue && resolvedStaff.Value > 0)
@@ -136,6 +144,17 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? search)
         {
             var resolvedCampus = ResolveCampusId(campusId);
+            if (!IsAdminOrFinance())
+            {
+                var staffId = ResolveStaffId();
+                if (!staffId.HasValue || staffId.Value <= 0)
+                {
+                    return BadRequest(new { Status = false, Message = "Unable to determine staff identity." });
+                }
+                var myResult = await _service.GetMyClaimsAsync(staffId.Value, resolvedCampus);
+                return Ok(new { Status = true, Message = "Personal reimbursement claims retrieved successfully.", Data = myResult });
+            }
+
             var result = await _service.GetAllClaimsAsync(resolvedCampus, status, category, search);
             return Ok(new { Status = true, Message = "Reimbursement claims retrieved successfully.", Data = result });
         }
@@ -176,7 +195,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 5. Get Account Ledger Entries (For Account Ledger Modal)
         /// </summary>
         [HttpGet("account-entries")]
-        [Authorize]
+        [Authorize(Roles = "Accountant,Admin,Super Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAccountEntries([FromQuery] int? campusId)
         {
@@ -198,6 +217,16 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 return NotFound(new { Status = false, Message = "Reimbursement claim not found." });
             }
+
+            if (!IsAdminOrFinance())
+            {
+                var callerStaffId = ResolveStaffId();
+                if (result.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view reimbursement claims belonging to other staff members." });
+                }
+            }
+
             return Ok(new { Status = true, Message = "Reimbursement claim details retrieved.", Data = result });
         }
 
@@ -291,8 +320,21 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { Status = false, Message = "A valid receipt or invoice file is required." });
             }
 
+            if (!IsAdminOrFinance())
+            {
+                var existing = await _service.GetClaimByIdAsync(id);
+                if (existing == null) return NotFound(new { Status = false, Message = "Reimbursement claim not found." });
+                var callerStaffId = ResolveStaffId();
+                if (existing.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to upload proofs for claims belonging to other staff members." });
+                }
+            }
+
             var filePath = await _service.UploadProofAsync(id, file);
             return Ok(new { Status = true, Message = "Proof document uploaded successfully.", Data = filePath });
         }
+
+        private bool IsAdminOrFinance() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Transport Manager");
     }
 }

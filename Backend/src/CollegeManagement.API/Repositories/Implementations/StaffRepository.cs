@@ -99,7 +99,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .FirstOrDefaultAsync(s => s.ProfileLinkToken == token.Trim() && !s.IsDeleted);
+                .FirstOrDefaultAsync(s => s.ProfileLinkToken == token.Trim() && 
+                                          !s.IsDeleted && 
+                                          (!s.ProfileLinkExpiresAt.HasValue || s.ProfileLinkExpiresAt.Value > DateTime.UtcNow) && 
+                                          s.ProfileStatus != "Completed");
         }
 
         public async Task<string?> GetPhotoPathAsync(int id)
@@ -400,22 +403,41 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (string.IsNullOrWhiteSpace(nextId))
             {
-                // Fallback if SP fails or configuration doesn't exist
                 var prefix = isTeaching ? "PCTCH" : "PCNT";
-                var maxNumber = await _context.Staffs
-                    .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null && s.EmployeeId.StartsWith(prefix))
-                    .Select(s => s.EmployeeId)
-                    .ToListAsync();
-                    
-                int max = 0;
-                foreach (var id in maxNumber)
+                try
                 {
-                    var match = System.Text.RegularExpressions.Regex.Match(id, @"\d+");
-                    if (match.Success && int.TryParse(match.Value, out int parsedNum) && parsedNum > max)
+                    using var conn = _context.Database.GetDbConnection();
+                    if (conn.State != System.Data.ConnectionState.Open) await _context.Database.OpenConnectionAsync();
+
+                    // Ensure sequence row exists atomically
+                    await conn.ExecuteAsync(
+                        @"INSERT INTO `NumberSeriesConfigurations` 
+                          (`SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, `NumberLength`, `StartNumber`, `CurrentSequence`, `CampusId`, `IsActive`, `CreatedAt`, `UpdatedAt`)
+                          SELECT @sCode, @sName, @pfx, '{PREFIX}{SEQ}', 4, 1, 0, @cId, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP()
+                          FROM DUAL
+                          WHERE NOT EXISTS (SELECT 1 FROM `NumberSeriesConfigurations` WHERE `SeriesCode` = @sCode AND (`CampusId` = @cId OR `CampusId` IS NULL));",
+                        new { sCode = seriesCode, sName = isTeaching ? "Teaching Staff ID" : "Non-Teaching Staff ID", pfx = prefix, cId = campusId });
+
+                    // Atomic increment with LAST_INSERT_ID
+                    var seq = await conn.QuerySingleOrDefaultAsync<int>(
+                        @"UPDATE `NumberSeriesConfigurations` 
+                          SET `CurrentSequence` = LAST_INSERT_ID(CASE WHEN `CurrentSequence` < `StartNumber` THEN `StartNumber` ELSE `CurrentSequence` + 1 END),
+                              `UpdatedAt` = UTC_TIMESTAMP()
+                          WHERE `SeriesCode` = @sCode AND (`CampusId` = @cId OR `CampusId` IS NULL)
+                          ORDER BY `CampusId` DESC LIMIT 1;
+                          SELECT LAST_INSERT_ID();",
+                        new { sCode = seriesCode, cId = campusId });
+
+                    if (seq > 0)
                     {
-                        max = parsedNum;
+                        return $"{prefix}{seq:D4}";
                     }
                 }
+                catch { }
+
+                var max = await _context.Staffs
+                    .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null && s.EmployeeId.StartsWith(prefix))
+                    .CountAsync();
                 return $"{prefix}{(max + 1):D4}";
             }
 

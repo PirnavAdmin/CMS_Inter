@@ -92,7 +92,11 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> CreateStaffLeave([FromBody] CreateStaffLeaveRequest request)
         {
             var userId = GetCurrentUserId();
-            if (request.StaffId <= 0)
+            if (!IsCurrentUserAdmin())
+            {
+                request.StaffId = await ResolveStaffIdAsync();
+            }
+            else if (request.StaffId <= 0)
             {
                 try
                 {
@@ -105,6 +109,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("leave/{leaveRequestId}/action")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -121,6 +126,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffLeaves([FromQuery] int? campusId, [FromQuery] int? staffId, [FromQuery] int? departmentId, [FromQuery] CollegeManagement.API.Enums.LeaveStatus? status)
         {
+            if (!IsCurrentUserAdmin() && !User.IsInRole("HOD"))
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                staffId = callerStaffId;
+            }
+
             var result = await _service.GetStaffLeaveRequestsAsync(campusId, staffId, departmentId, status);
             return Ok(new { Status = true, Message = "Staff leaves retrieved successfully.", Data = result });
         }
@@ -132,10 +143,25 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetStaffLeaveDetails(int leaveRequestId)
         {
             var result = await _service.GetStaffLeaveDetailsAsync(leaveRequestId);
+            if (result == null)
+            {
+                return NotFound(new { Status = false, Message = "Staff leave details not found." });
+            }
+
+            if (!IsCurrentUserAdmin() && !User.IsInRole("HOD"))
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                if (result.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view leave details for other staff members." });
+                }
+            }
+
             return Ok(new { Status = true, Message = "Staff leave details retrieved successfully.", Data = result });
         }
 
         [HttpGet("leave/history")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffLeaveHistorySummary([FromQuery] int? campusId, [FromQuery] int? departmentId, [FromQuery] string? staffType)
@@ -150,8 +176,19 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffLeaveHistory(int staffId)
         {
+            if (!IsCurrentUserAdmin() && !User.IsInRole("HOD"))
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                if (staffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view leave history for other staff members." });
+                }
+            }
+
             var result = await _service.GetStaffLeaveHistoryAsync(staffId);
             return Ok(new { Status = true, Message = "Staff leave history retrieved successfully.", Data = result });
         }
+
+        private bool IsCurrentUserAdmin() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal");
     }
 }

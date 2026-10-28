@@ -21,6 +21,7 @@ namespace CollegeManagement.API.Controllers.V1
         public string DueDate { get; set; } = string.Empty;
         public string AssignedDate { get; set; } = string.Empty;
         public string AssignedBy { get; set; } = "Self / Supervisor";
+        public string OwnerId { get; set; } = string.Empty;
     }
 
     public class CreateStaffTaskDto
@@ -47,10 +48,19 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private static readonly ConcurrentDictionary<string, StaffTaskItemDto> _tasks = new();
 
+        private string GetCallerOwnerId()
+        {
+            return User.FindFirst("StaffId")?.Value 
+                ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                ?? "anonymous";
+        }
+
         [HttpGet("my")]
         public IActionResult GetMyTasks()
         {
+            var ownerId = GetCallerOwnerId();
             var list = _tasks.Values
+                .Where(t => t.OwnerId == ownerId || string.IsNullOrEmpty(t.OwnerId))
                 .OrderByDescending(t => t.AssignedDate)
                 .ThenBy(t => t.Id)
                 .ToList();
@@ -71,6 +81,7 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { success = false, message = "Task title is required." });
             }
 
+            var ownerId = GetCallerOwnerId();
             var nextSeq = _tasks.Count + 1001;
             var id = $"TSK-{nextSeq}";
             var item = new StaffTaskItemDto
@@ -84,6 +95,7 @@ namespace CollegeManagement.API.Controllers.V1
                 DueDate = string.IsNullOrWhiteSpace(dto.DueDate) ? DateTime.UtcNow.AddDays(2).ToString("yyyy-MM-dd") : dto.DueDate.Trim(),
                 AssignedDate = DateTime.UtcNow.ToString("yyyy-MM-dd"),
                 AssignedBy = "Self / Personal Reminder",
+                OwnerId = ownerId
             };
 
             _tasks[id] = item;
@@ -104,6 +116,12 @@ namespace CollegeManagement.API.Controllers.V1
                 return NotFound(new { success = false, message = $"Task with ID '{id}' was not found." });
             }
 
+            var ownerId = GetCallerOwnerId();
+            if (!string.IsNullOrEmpty(task.OwnerId) && task.OwnerId != ownerId && !User.IsInRole("Admin") && !User.IsInRole("Super Admin"))
+            {
+                return Forbid();
+            }
+
             task.Status = string.IsNullOrWhiteSpace(dto.Status) ? "Pending" : dto.Status.Trim();
             _tasks[id] = task;
 
@@ -118,6 +136,17 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpDelete("{id}")]
         public IActionResult DeleteTask(string id)
         {
+            if (!_tasks.TryGetValue(id, out var task))
+            {
+                return NotFound(new { success = false, message = $"Task with ID '{id}' was not found." });
+            }
+
+            var ownerId = GetCallerOwnerId();
+            if (!string.IsNullOrEmpty(task.OwnerId) && task.OwnerId != ownerId && !User.IsInRole("Admin") && !User.IsInRole("Super Admin"))
+            {
+                return Forbid();
+            }
+
             if (_tasks.TryRemove(id, out _))
             {
                 return Ok(new { success = true, message = "Task deleted successfully." });

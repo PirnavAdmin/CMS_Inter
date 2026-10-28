@@ -163,7 +163,7 @@ public class ReportRepository : IReportRepository
         // 4. Fee Collection (Valid payments from FeePayments joined with Students)
         var feeQuery = _context.FeePayments.AsNoTracking().Where(p => p.Status != "Cancelled" && p.Status != "Failed");
         feeQuery = feeQuery.Where(p => _context.Students.Any(s => s.StudentId == p.StudentId
-            && (!f.CampusId.HasValue || f.CampusId.Value <= 0 || s.CampusId == f.CampusId.Value)
+            && (f.CampusId.HasValue && f.CampusId.Value > 0 ? s.CampusId == f.CampusId.Value : true)
             && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
             && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
             && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
@@ -178,7 +178,7 @@ public class ReportRepository : IReportRepository
         // 5. Due Fees (Outstanding from StudentFees joined with Active Enrolled Students)
         var dueQuery = _context.StudentFees.AsNoTracking().Where(sf => sf.Status != "Cancelled" && sf.BalanceAmount > 0);
         dueQuery = dueQuery.Where(sf => _context.Students.Any(s => s.StudentId == sf.StudentId && s.IsActive
-            && (!f.CampusId.HasValue || f.CampusId.Value <= 0 || s.CampusId == f.CampusId.Value)
+            && (f.CampusId.HasValue && f.CampusId.Value > 0 ? s.CampusId == f.CampusId.Value : true)
             && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
             && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
             && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
@@ -728,7 +728,7 @@ public class ReportRepository : IReportRepository
                 .Where(sf => sf.Status != "Cancelled" && sf.BalanceAmount > 0);
 
             query = query.Where(sf => _context.Students.Any(s => s.StudentId == sf.StudentId && s.IsActive
-                && (!f.CampusId.HasValue || f.CampusId.Value <= 0 || s.CampusId == f.CampusId.Value)
+                && (f.CampusId.HasValue && f.CampusId.Value > 0 ? s.CampusId == f.CampusId.Value : true)
                 && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
                 && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
                 && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)

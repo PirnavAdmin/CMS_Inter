@@ -601,3 +601,46 @@ public class DashboardHolidaysResponseDto
     public int TotalCompleted { get; set; }
     public int TotalHolidays { get; set; }
 }
+
+public class PrincipalDashboardResponseDto
+{
+    public int CampusId { get; set; }
+    public string CampusName { get; set; } = string.Empty;
+    public int StudentCount { get; set; }
+    public int StaffCount { get; set; }
+    public decimal AttendancePercentage { get; set; }
+    public decimal PassPercentage { get; set; }
+    public PrincipalFeeMetricsDto Fees { get; set; } = new();
+    public IReadOnlyList<PerformanceStreamDto> PerformanceStreams { get; set; } = new List<PerformanceStreamDto>();
+    public IReadOnlyList<PrincipalNoticeDto> Notices { get; set; } = new List<PrincipalNoticeDto>();
+}
+
+public class PrincipalFeeMetricsDto
+{
+    public decimal TotalExpected { get; set; }
+    public decimal TotalCollected { get; set; }
+    public decimal TotalPending { get; set; }
+    public decimal CollectionPercentage { get; set; }
+    public decimal TotalPaid => TotalCollected;
+    public decimal TotalOutstanding => TotalPending;
+}
+
+public class PerformanceStreamDto
+{
+    public string Label { get; set; } = string.Empty;
+    public string StreamName => Label;
+    public decimal Current { get; set; }
+    public decimal PassPercentage => Current;
+    public decimal Previous { get; set; }
+}
+
+public class PrincipalNoticeDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Date { get; set; } = string.Empty;
+    public string Type { get; set; } = "Notice";
+    public string Priority { get; set; } = "Normal";
+}
+

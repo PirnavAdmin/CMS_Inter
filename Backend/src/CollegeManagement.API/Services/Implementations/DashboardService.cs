@@ -120,4 +120,11 @@ public class DashboardService : IDashboardService
         string key = $"dashboard:upcoming_holidays:{academicYearId}:{boardId}:{campusId}:{limit}";
         return await _cache.GetOrCreateAsync(key, () => _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, campusId, ct), TimeSpan.FromMinutes(10));
     }
+
+    public async Task<PrincipalDashboardResponseDto> GetPrincipalOverviewAsync(int campusId, int? academicYearId, int? boardId, CancellationToken ct = default)
+    {
+        if (_cache == null) return await _repository.GetPrincipalOverviewAsync(campusId, academicYearId, boardId, ct);
+        string key = $"dashboard:principal:{campusId}:{academicYearId}:{boardId}";
+        return await _cache.GetOrCreateAsync(key, () => _repository.GetPrincipalOverviewAsync(campusId, academicYearId, boardId, ct), TimeSpan.FromSeconds(30));
+    }
 }

@@ -75,6 +75,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             bool? isActive = null,
             string? seriesName = null)
         {
+            var maxIssued = await GetMaxSequenceForBaseSeriesAsync(seriesCode, campusId);
+            if (startNumber <= maxIssued && maxIssued > 0)
+            {
+                throw new InvalidOperationException($"Cannot reset series start number to {startNumber}. Maximum sequence number already issued is {maxIssued}. Resetting below issued numbers would create duplicate identifiers.");
+            }
+
             var existing = await _context.Set<NumberSeriesConfiguration>()
                 .Where(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
                 .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
@@ -186,6 +192,30 @@ namespace CollegeManagement.API.Repositories.Implementations
                     return newConfig;
                 }
             }
+
+            // Pipeline 5 Auto-Initialization: If series definition is missing entirely, auto-provision default sequence
+            if (existing == null)
+            {
+                var (defaultName, defaultPrefix, defaultPattern, defaultLen, defaultStart) = GetDefaultSeriesDefinition(baseSeriesCode ?? seriesCode);
+                var autoConfig = new NumberSeriesConfiguration
+                {
+                    SeriesCode = seriesCode.Trim(),
+                    SeriesName = defaultName,
+                    Prefix = defaultPrefix,
+                    FormatPattern = defaultPattern,
+                    NumberLength = defaultLen,
+                    StartNumber = defaultStart,
+                    CurrentSequence = defaultStart,
+                    Description = $"Auto-provisioned default sequence for {seriesCode}",
+                    CampusId = campusId,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Set<NumberSeriesConfiguration>().Add(autoConfig);
+                await _context.SaveChangesAsync();
+                return autoConfig;
+            }
             else if (existing != null)
             {
                 // If we need a sequence for a specific campus but only found the global fallback,
@@ -226,15 +256,40 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
                 else
                 {
-                    // Thread-safe atomic increment via database row update
-                    await _context.Database.ExecuteSqlRawAsync(
-                        "UPDATE `NumberSeriesConfigurations` SET `CurrentSequence` = CASE WHEN `CurrentSequence` < `StartNumber` THEN `StartNumber` ELSE `CurrentSequence` + 1 END, `UpdatedAt` = UTC_TIMESTAMP() WHERE `Id` = {0}",
-                        existing.Id);
-                    await _context.Entry(existing).ReloadAsync();
+                    // Thread-safe atomic increment using MySQL LAST_INSERT_ID(CurrentSequence + 1)
+                    var conn = await GetOpenConnectionAsync();
+                    var updatedSequence = await conn.QuerySingleAsync<int>(
+                        @"UPDATE `NumberSeriesConfigurations` 
+                          SET `CurrentSequence` = LAST_INSERT_ID(CASE WHEN `CurrentSequence` < `StartNumber` THEN `StartNumber` ELSE `CurrentSequence` + 1 END), 
+                              `UpdatedAt` = UTC_TIMESTAMP() 
+                          WHERE `Id` = @Id;
+                          SELECT LAST_INSERT_ID();",
+                        new { Id = existing.Id });
+
+                    existing.CurrentSequence = updatedSequence;
+                    existing.UpdatedAt = DateTime.UtcNow;
                 }
             }
 
             return existing;
+        }
+
+        private static (string Name, string Prefix, string Pattern, int Length, int Start) GetDefaultSeriesDefinition(string code)
+        {
+            var normalized = code.ToUpperInvariant().Trim();
+            return normalized switch
+            {
+                "CERTIFICATE_NO" or "CERTIFICATE_NUMBER" => ("Certificate Number", "CERT-", "{PREFIX}{YYYY}{SEQ}", 5, 1),
+                "ADMISSION_NO" => ("Admission Number", "ADM", "{PREFIX}{YY}{SEQ}", 5, 1),
+                "TEACHING_STAFF_ID" => ("Teaching Staff ID", "PCTCH", "{PREFIX}{SEQ}", 4, 1),
+                "NON_TEACHING_STAFF_ID" => ("Non-Teaching Staff ID", "PCNT", "{PREFIX}{SEQ}", 4, 1),
+                "EMPLOYEE_ID" => ("Employee ID", "EMP", "{PREFIX}{SEQ}", 4, 1),
+                "ROLL_NO" => ("Student Roll Number", "R", "{PREFIX}{SEQ}", 3, 1),
+                "RECEIPT_NO" => ("Fee Receipt Number", "RCP-", "{PREFIX}{YYYY}{SEQ}", 5, 1),
+                "STUDENT_ID" => ("Student ID", "STU", "{PREFIX}{SEQ}", 5, 1),
+                "EXAM_CODE" => ("Exam Code", "EXM", "{PREFIX}{YY}{SEQ}", 3, 1),
+                _ => (code, code.Substring(0, Math.Min(4, code.Length)).ToUpperInvariant(), "{PREFIX}{SEQ}", 4, 1)
+            };
         }
 
         public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null, string? board = null, string? academicYear = null)

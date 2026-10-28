@@ -46,6 +46,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 Name = d.Name,
                 DepartmentId = d.DepartmentId,
                 StaffType = d.StaffType,
+                ReportsToDesignationId = d.ReportsToDesignationId,
                 IsActive = d.IsActive,
                 CreatedAt = d.CreatedAt,
                 UpdatedAt = d.UpdatedAt
@@ -93,6 +94,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 var list = await query.OrderBy(d => d.Name).ToListAsync();
                 var deptDict = await _context.Departments.AsNoTracking().ToDictionaryAsync(d => d.DepartmentId, d => d);
+                var desigDict = list.ToDictionary(d => d.Id, d => d.Name);
 
                 return list.Select(d => new DesignationResponseDto
                 {
@@ -102,6 +104,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     DepartmentName = d.DepartmentId.HasValue && deptDict.TryGetValue(d.DepartmentId.Value, out var dept) ? dept.DepartmentName : "",
                     DepartmentCode = d.DepartmentId.HasValue && deptDict.TryGetValue(d.DepartmentId.Value, out var dept2) ? dept2.DepartmentCode : "",
                     StaffType = d.StaffType ?? "Both",
+                    ReportsToDesignationId = d.ReportsToDesignationId,
+                    ReportsToDesignationName = d.ReportsToDesignationId.HasValue && desigDict.TryGetValue(d.ReportsToDesignationId.Value, out var pName) ? pName : null,
                     IsActive = d.IsActive,
                     CreatedAt = d.CreatedAt,
                     UpdatedAt = d.UpdatedAt,
@@ -121,6 +125,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 Name = dto.Name,
                 DepartmentId = dto.DepartmentId,
                 StaffType = dto.StaffType,
+                ReportsToDesignationId = dto.ReportsToDesignationId,
                 IsActive = dto.IsActive,
                 CreatedAt = dto.CreatedAt,
                 UpdatedAt = dto.UpdatedAt

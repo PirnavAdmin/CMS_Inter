@@ -20,6 +20,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public string DepartmentName { get; set; } = string.Empty;
         public string DepartmentCode { get; set; } = string.Empty;
         public string StaffType { get; set; } = "Both";
+        public int? ReportsToDesignationId { get; set; }
+        public string? ReportsToDesignationName { get; set; }
         public bool IsActive { get; set; } = true;
         public string Status => IsActive ? "Active" : "Inactive";
         public int AssignedStaffCount { get; set; }
@@ -47,6 +49,8 @@ namespace CollegeManagement.API.DTOs.Staff
         [StringLength(20)]
         public string StaffType { get; set; } = "Both";
 
+        public int? ReportsToDesignationId { get; set; }
+
         public bool IsActive { get; set; } = true;
     }
 
@@ -69,6 +73,8 @@ namespace CollegeManagement.API.DTOs.Staff
 
         [StringLength(20)]
         public string StaffType { get; set; } = "Both";
+
+        public int? ReportsToDesignationId { get; set; }
 
         public bool IsActive { get; set; } = true;
     }
