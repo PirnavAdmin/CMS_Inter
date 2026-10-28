@@ -304,6 +304,7 @@ export default function AppRoutes() {
           <Route path="/dashboard/promotions/eligible" element={<PromotionPage screen="promotion" />} />
           <Route path="/dashboard/promotions/single" element={<PromotionPage screen="single" />} />
           <Route path="/dashboard/promotions/allocation" element={<PromotionPage screen="allocation" />} />
+          <Route path="/dashboard/promotions/transfer" element={<PromotionPage screen="transfer" />} />
           <Route path="/dashboard/promotions/history" element={<PromotionPage screen="history" />} />
           <Route path="/dashboard/promotions/report" element={<PromotionPage screen="report" />} />
         </Route>

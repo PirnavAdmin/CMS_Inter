@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCircle2, Users, UserCheck, UserX, Megaphone, RotateCcw, ChevronDown, Eye } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Field, Modal, SkeletonTable, Toast } from "@/shared/components/Ui.jsx";
@@ -208,8 +208,7 @@ const isEligible = (student) => {
 
 export default function PromotionPage({ screen = "promotion" }) {
   const navigate = useNavigate();
-  const [localTab, setLocalTab] = useState("");
-  const activeTab = localTab || screen;
+  const activeTab = screen;
 
   // Consume global Board & Academic Year from Navbar Context
   const {
@@ -1000,7 +999,7 @@ export default function PromotionPage({ screen = "promotion" }) {
             ["promotion", "Student Promotion", "/dashboard/promotions/eligible"],
             ["single", "Single Student", "/dashboard/promotions/single"],
             ["allocation", "Program & Section Allocation", "/dashboard/promotions/allocation"],
-            ["transfer", "Campus Transfer", null],
+            ["transfer", "Campus Transfer", "/dashboard/promotions/transfer"],
             ["history", "Promotion History", "/dashboard/promotions/history"],
           ].map(([value, label, path]) => (
             <button
@@ -1008,11 +1007,7 @@ export default function PromotionPage({ screen = "promotion" }) {
               className={activeTab === value ? "is-active" : ""}
               onClick={() => {
                 setError("");
-                if (value === "transfer") setLocalTab("transfer");
-                else {
-                  setLocalTab("");
-                  navigate(path);
-                }
+                navigate(path);
               }}
             >
               {label}
@@ -1500,8 +1495,19 @@ export default function PromotionPage({ screen = "promotion" }) {
 function CampusTransferScreen({ onSuccess }) {
   const { selectedCampus, campuses } = useCampusContext();
   const emptyForm = { campus: "", effectiveDate: "", reason: "", remarks: "" };
-  const [transferTab, setTransferTab] = useState("create");
-  const [requestDirection, setRequestDirection] = useState("sent");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const transferTab = searchParams.get("tab") === "requests" ? "requests" : "create";
+  const requestDirection = searchParams.get("direction") === "received" ? "received" : "sent";
+  const setTransferTab = (tab) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    params.set("tab", tab === "requests" ? "requests" : "create");
+    return params;
+  });
+  const setRequestDirection = (direction) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    params.set("direction", direction === "received" ? "received" : "sent");
+    return params;
+  });
   const [studentQuery, setStudentQuery] = useState("");
   const [studentOpen, setStudentOpen] = useState(false);
   const [student, setStudent] = useState(null);
