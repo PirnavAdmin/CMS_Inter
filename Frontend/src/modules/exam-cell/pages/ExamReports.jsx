@@ -176,7 +176,40 @@ export default function ExamReports() {
   const savedReportState = useMemo(() => getModuleState("exam_reports", {}), []);
 
   const [exams, setExams] = useState([]);
-  const [examId, setExamId] = useState(() => savedReportState?.examId || "");
+  const [examId, setExamIdState] = useState(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("examId")) return p.get("examId");
+    }
+    return savedReportState?.examId || "";
+  });
+
+  const setExamId = (val) => {
+    setExamIdState(val);
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        if (val) {
+          url.searchParams.set("examId", String(val));
+        } else {
+          url.searchParams.delete("examId");
+        }
+        window.history.replaceState(window.history.state, "", url.toString());
+      } catch {}
+    }
+  };
+
+  useEffect(() => {
+    if (examId && typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("examId") !== String(examId)) {
+          url.searchParams.set("examId", String(examId));
+          window.history.replaceState(window.history.state, "", url.toString());
+        }
+      } catch {}
+    }
+  }, [examId]);
   const [analytics, setAnalytics] = useState(null);
   const [ranks, setRanks] = useState([]);
   const [busy, setBusy] = useState(false);

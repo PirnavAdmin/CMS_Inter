@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 
 const STORAGE_PREFIX = "cms_examcell_";
 
@@ -47,13 +46,15 @@ export function clearModuleState(moduleKey) {
 }
 
 /**
- * Hook to manage persistent tabs synchronized with URL search params and sessionStorage.
+ * Hook to manage persistent tabs synchronized with URL (search params or pathnames) and sessionStorage.
+ * Does not trigger full React Router navigation or Suspense boundary fallback on tab switch.
  *
  * Priority order for initial tab:
- * 1. URL searchParam (?tab=...)
- * 2. Initial prop (if explicitly specified and not fallback default)
- * 3. Last active tab from sessionStorage
- * 4. Default tab
+ * 1. URL pathname match (e.g. /promotions/single -> single)
+ * 2. URL searchParam (?tab=...)
+ * 3. Explicit non-default route prop (e.g. screen="single")
+ * 4. Last active tab from sessionStorage
+ * 5. Default tab
  */
 export function useExamCellTab({
   moduleKey,
@@ -61,12 +62,9 @@ export function useExamCellTab({
   tabParamKey = "tab",
   initialProp = null,
   tabAliases = {},
+  pathMap = null, // e.g. { single: "/exam-cell-dashboard/promotions/single", ... }
   onTabChange = null,
 }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = searchParams.get(tabParamKey);
-
-  // Normalizer helper taking care of case-insensitivity and aliases
   const normalize = useCallback(
     (tabVal) => {
       if (!tabVal) return "";
@@ -79,84 +77,157 @@ export function useExamCellTab({
     [tabAliases]
   );
 
-  const resolveInitialTab = useCallback(() => {
-    // 1. URL searchParam has highest priority
-    if (urlTab) {
-      const normalized = normalize(urlTab);
-      if (normalized) return normalized;
+  const resolveInitialTab = () => {
+    if (typeof window !== "undefined") {
+      try {
+        // 1. Check if current pathname matches a specific sub-route
+        if (pathMap) {
+          const currentPath = window.location.pathname.replace(/\/+$/, "");
+          for (const [tabKey, subPath] of Object.entries(pathMap)) {
+            if (subPath && currentPath === subPath.replace(/\/+$/, "")) {
+              return tabKey;
+            }
+          }
+        }
+
+        // 2. URL searchParam has highest priority (explicit query parameter)
+        const params = new URLSearchParams(window.location.search);
+        const urlVal = params.get(tabParamKey);
+        if (urlVal) {
+          const normalized = normalize(urlVal);
+          if (normalized) return normalized;
+        }
+      } catch {
+        // ignore
+      }
     }
-    // 2. Initial prop from route (e.g. initialView="published" or screen="single")
+
+    // 3. Initial prop from route if explicitly specified and not equal to default
     if (initialProp) {
       const normalized = normalize(initialProp);
-      if (normalized) return normalized;
+      if (normalized && normalized !== defaultTab) return normalized;
     }
-    // 3. Last saved tab in sessionStorage
+
+    // 4. Last saved tab in sessionStorage
     const stored = getModuleState(moduleKey);
     if (stored?.tab) {
       const normalized = normalize(stored.tab);
       if (normalized) return normalized;
     }
-    // 4. Default tab
+
+    // 5. Initial prop fallback
+    if (initialProp) {
+      const normalized = normalize(initialProp);
+      if (normalized) return normalized;
+    }
+
+    // 6. Default tab
     return defaultTab;
-  }, [urlTab, initialProp, moduleKey, defaultTab, normalize]);
+  };
 
   const [activeTab, setActiveTabState] = useState(resolveInitialTab);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
 
-  // Sync with URL when URL changes externally (e.g., Back/Forward navigation)
+  // On mount and when activeTab changes: update URL quietly without triggering Suspense/reload, and save to sessionStorage
   useEffect(() => {
-    if (urlTab) {
-      const normalized = normalize(urlTab);
-      if (normalized && normalized !== activeTabRef.current) {
-        setActiveTabState(normalized);
-        saveModuleState(moduleKey, { tab: normalized });
-        if (typeof onTabChange === "function") {
-          onTabChange(normalized);
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        let updated = false;
+
+        // If pathMap is provided and matches, update pathname
+        if (pathMap && pathMap[activeTab]) {
+          const targetPath = pathMap[activeTab];
+          if (url.pathname !== targetPath) {
+            url.pathname = targetPath;
+            updated = true;
+          }
         }
+
+        // Keep searchParam synced
+        const currentParam = url.searchParams.get(tabParamKey);
+        if (normalize(currentParam) !== activeTab) {
+          url.searchParams.set(tabParamKey, activeTab);
+          updated = true;
+        }
+
+        if (updated) {
+          window.history.replaceState(window.history.state, "", url.toString());
+        }
+      } catch {
+        // ignore
       }
     }
-  }, [urlTab, normalize, moduleKey, onTabChange]);
-
-  // Synchronize URL on mount or when activeTab changes if URL does not reflect it
-  useEffect(() => {
-    const currentInUrl = searchParams.get(tabParamKey);
-    const normalizedInUrl = normalize(currentInUrl);
-    if (normalizedInUrl !== activeTab) {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set(tabParamKey, activeTab);
-          return next;
-        },
-        { replace: true }
-      );
-    }
     saveModuleState(moduleKey, { tab: activeTab });
-  }, [activeTab, tabParamKey, normalize, moduleKey, searchParams, setSearchParams]);
+  }, [activeTab, tabParamKey, normalize, moduleKey, pathMap]);
 
-  // Public setter that updates state, sessionStorage, and URL
+  // Handle browser Back / Forward history navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window !== "undefined") {
+        try {
+          if (pathMap) {
+            const currentPath = window.location.pathname.replace(/\/+$/, "");
+            for (const [tabKey, subPath] of Object.entries(pathMap)) {
+              if (subPath && currentPath === subPath.replace(/\/+$/, "")) {
+                if (tabKey !== activeTabRef.current) {
+                  setActiveTabState(tabKey);
+                  saveModuleState(moduleKey, { tab: tabKey });
+                  if (typeof onTabChange === "function") onTabChange(tabKey);
+                  return;
+                }
+              }
+            }
+          }
+
+          const params = new URLSearchParams(window.location.search);
+          const val = params.get(tabParamKey);
+          if (val) {
+            const normalized = normalize(val);
+            if (normalized && normalized !== activeTabRef.current) {
+              setActiveTabState(normalized);
+              saveModuleState(moduleKey, { tab: normalized });
+              if (typeof onTabChange === "function") {
+                onTabChange(normalized);
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [tabParamKey, normalize, moduleKey, onTabChange, pathMap]);
+
+  // Public setter that updates state, sessionStorage, and browser URL quietly
   const setActiveTab = useCallback(
     (nextTab) => {
       const normalized = normalize(nextTab);
-      if (!normalized) return;
+      if (!normalized || normalized === activeTabRef.current) return;
       setActiveTabState(normalized);
       saveModuleState(moduleKey, { tab: normalized });
 
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set(tabParamKey, normalized);
-          return next;
-        },
-        { replace: true }
-      );
+      if (typeof window !== "undefined") {
+        try {
+          const url = new URL(window.location.href);
+          if (pathMap && pathMap[normalized]) {
+            url.pathname = pathMap[normalized];
+          }
+          url.searchParams.set(tabParamKey, normalized);
+          window.history.replaceState(window.history.state, "", url.toString());
+        } catch {
+          // ignore
+        }
+      }
 
       if (typeof onTabChange === "function") {
         onTabChange(normalized);
       }
     },
-    [moduleKey, tabParamKey, normalize, setSearchParams, onTabChange]
+    [normalize, moduleKey, tabParamKey, pathMap, onTabChange]
   );
 
   return [activeTab, setActiveTab];
@@ -172,9 +243,6 @@ export function useExamCellSubTab({
   subTabParamKey = "subtab",
   subTabAliases = {},
 }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlSubTab = searchParams.get(subTabParamKey);
-
   const normalize = useCallback(
     (val) => {
       if (!val) return "";
@@ -187,10 +255,18 @@ export function useExamCellSubTab({
     [subTabAliases]
   );
 
-  const resolveInitialSubTab = useCallback(() => {
-    if (urlSubTab) {
-      const normalized = normalize(urlSubTab);
-      if (normalized) return normalized;
+  const resolveInitialSubTab = () => {
+    if (typeof window !== "undefined") {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlSub = params.get(subTabParamKey);
+        if (urlSub) {
+          const normalized = normalize(urlSub);
+          if (normalized) return normalized;
+        }
+      } catch {
+        // ignore
+      }
     }
     const stored = getModuleState(moduleKey);
     const storedSub = stored?.subTabs?.[mainTab];
@@ -199,23 +275,38 @@ export function useExamCellSubTab({
       if (normalized) return normalized;
     }
     return defaultSubTab;
-  }, [urlSubTab, moduleKey, mainTab, defaultSubTab, normalize]);
+  };
 
   const [activeSubTab, setActiveSubTabState] = useState(resolveInitialSubTab);
+  const activeSubTabRef = useRef(activeSubTab);
+  activeSubTabRef.current = activeSubTab;
 
   useEffect(() => {
-    if (urlSubTab) {
-      const normalized = normalize(urlSubTab);
-      if (normalized && normalized !== activeSubTab) {
-        setActiveSubTabState(normalized);
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        const current = url.searchParams.get(subTabParamKey);
+        if (normalize(current) !== activeSubTab) {
+          url.searchParams.set(subTabParamKey, activeSubTab);
+          window.history.replaceState(window.history.state, "", url.toString());
+        }
+      } catch {
+        // ignore
       }
     }
-  }, [urlSubTab, normalize, activeSubTab]);
+    saveModuleState(moduleKey, (prev) => ({
+      ...prev,
+      subTabs: {
+        ...(prev?.subTabs || {}),
+        [mainTab]: activeSubTab,
+      },
+    }));
+  }, [activeSubTab, subTabParamKey, normalize, moduleKey, mainTab]);
 
   const setActiveSubTab = useCallback(
     (nextSubTab) => {
       const normalized = normalize(nextSubTab);
-      if (!normalized) return;
+      if (!normalized || normalized === activeSubTabRef.current) return;
       setActiveSubTabState(normalized);
 
       saveModuleState(moduleKey, (prev) => ({
@@ -226,18 +317,118 @@ export function useExamCellSubTab({
         },
       }));
 
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set(subTabParamKey, normalized);
-          return next;
-        },
-        { replace: true }
-      );
+      if (typeof window !== "undefined") {
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set(subTabParamKey, normalized);
+          window.history.replaceState(window.history.state, "", url.toString());
+        } catch {
+          // ignore
+        }
+      }
     },
-    [moduleKey, mainTab, subTabParamKey, normalize, setSearchParams]
+    [moduleKey, mainTab, subTabParamKey, normalize]
   );
 
   return [activeSubTab, setActiveSubTab];
 }
 
+/**
+ * Hook to manage persistent view / modal / action states (e.g. view=create, action=add, action=import)
+ * synchronized with URL search params and sessionStorage.
+ */
+export function useExamCellAction({
+  moduleKey,
+  paramKey = "action",
+  defaultAction = null,
+  aliases = {},
+  onActionChange = null,
+}) {
+  const normalize = useCallback(
+    (val) => {
+      if (!val) return null;
+      const trimmed = String(val).trim();
+      const lower = trimmed.toLowerCase();
+      if (aliases[trimmed] !== undefined) return aliases[trimmed];
+      if (aliases[lower] !== undefined) return aliases[lower];
+      return trimmed;
+    },
+    [aliases]
+  );
+
+  const resolveInitialAction = () => {
+    if (typeof window !== "undefined") {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const val = params.get(paramKey);
+        if (val) {
+          const norm = normalize(val);
+          if (norm) return norm;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    const stored = getModuleState(moduleKey);
+    if (stored?.[paramKey]) {
+      const norm = normalize(stored[paramKey]);
+      if (norm) return norm;
+    }
+    return defaultAction;
+  };
+
+  const [action, setActionState] = useState(resolveInitialAction);
+  const actionRef = useRef(action);
+  actionRef.current = action;
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        const current = url.searchParams.get(paramKey);
+        if (action) {
+          if (normalize(current) !== action) {
+            url.searchParams.set(paramKey, action);
+            window.history.replaceState(window.history.state, "", url.toString());
+          }
+        } else if (current) {
+          url.searchParams.delete(paramKey);
+          window.history.replaceState(window.history.state, "", url.toString());
+        }
+      } catch {
+        // ignore
+      }
+    }
+    saveModuleState(moduleKey, { [paramKey]: action });
+  }, [action, paramKey, normalize, moduleKey]);
+
+  const setAction = useCallback(
+    (nextAction) => {
+      const norm = normalize(nextAction);
+      if (norm === actionRef.current) return;
+      setActionState(norm);
+      saveModuleState(moduleKey, { [paramKey]: norm });
+
+      if (typeof window !== "undefined") {
+        try {
+          const url = new URL(window.location.href);
+          if (norm) {
+            url.searchParams.set(paramKey, norm);
+          } else {
+            url.searchParams.delete(paramKey);
+          }
+          window.history.replaceState(window.history.state, "", url.toString());
+        } catch {
+          // ignore
+        }
+      }
+
+      if (typeof onActionChange === "function") {
+        onActionChange(norm);
+      }
+    },
+    [normalize, moduleKey, paramKey, onActionChange]
+  );
+
+  return [action, setAction];
+}
