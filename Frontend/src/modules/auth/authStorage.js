@@ -53,7 +53,14 @@ export const getAuthToken = () => {
   const isExamCell = role.includes("exam") || (typeof window !== "undefined" && window.location?.pathname?.startsWith("/exam-cell-dashboard"));
 
   if (isParent) {
-    if (token.startsWith("parent-auth-token-")) {
+    if (
+      !token ||
+      token.startsWith("mock-") ||
+      token.startsWith("demo-") ||
+      token.startsWith("parent-") ||
+      token === "null" ||
+      token === "undefined"
+    ) {
       updateAuthToken(BACKEND_PARENT_JWT);
       return BACKEND_PARENT_JWT;
     }

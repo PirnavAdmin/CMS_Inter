@@ -12,7 +12,7 @@ import {
   Filter,
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
 import "@/modules/admin/AdminTimetable/TimetablePage.css";
 import "../ParentDashboard.css";
 

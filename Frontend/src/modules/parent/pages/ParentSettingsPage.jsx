@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { Settings, Bell, Lock, Globe, Shield, CheckCircle2, Save } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
 import {
-  useParentPortal,
   getStoredSettings,
   saveStoredSettings,
   getStoredParentPassword,

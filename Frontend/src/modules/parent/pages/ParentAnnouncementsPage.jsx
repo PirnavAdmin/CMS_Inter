@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Megaphone, Calendar, Search, Eye, CheckCircle2, Clock, MapPin } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, collegeAnnouncements, upcomingEvents } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { collegeAnnouncements, upcomingEvents } from "../parentData.js";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 

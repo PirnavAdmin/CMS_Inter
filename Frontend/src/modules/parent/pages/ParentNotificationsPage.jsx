@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Bell, CheckCheck, ChevronRight, Eye, Filter } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, getStoredNotifications, saveStoredNotifications } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { getStoredNotifications, saveStoredNotifications } from "../parentData.js";
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 

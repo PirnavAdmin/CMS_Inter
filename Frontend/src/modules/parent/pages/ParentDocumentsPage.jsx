@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FileText, Download, Printer, Plus, Eye, CheckCircle2, Users, Loader2 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal } from "../parentData.js";
-import { formatDate } from "../context/ParentPortalContext.jsx";
+import { useParentPortal, formatDate } from "../context/ParentPortalContext.jsx";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import {
   getStudentCertificates,

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Wallet, CreditCard, CheckCircle2, Download, Printer, Users, Eye, AlertCircle, Clock } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, getStoredFeeRecords, saveStoredFeeRecords } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { getStoredFeeRecords, saveStoredFeeRecords } from "../parentData.js";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
