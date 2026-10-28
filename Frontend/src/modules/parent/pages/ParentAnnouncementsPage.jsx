@@ -53,7 +53,15 @@ export default function ParentAnnouncementsPage() {
 
   const handleSwitchTab = (tab) => {
     setActiveMainTab(tab);
-    setSearchParams(tab === "events" ? { tab: "events" } : {});
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tab === "events") {
+        next.set("tab", "events");
+      } else {
+        next.set("tab", "notices");
+      }
+      return next;
+    });
   };
 
   const handleToggleRsvp = (eventId) => {

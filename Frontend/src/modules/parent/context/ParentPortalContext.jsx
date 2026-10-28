@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
@@ -497,11 +498,51 @@ export function ParentPortalProvider({ children }) {
   const currentAcademicYear = useMemo(() => normalizeAcademicYear(rawYear), [rawYear]);
   const authUser = getAuthUser();
 
-  // State held strictly in React memory — NO LOCAL STORAGE OR SESSION STORAGE
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const getInitialActiveChildId = () => {
+    if (typeof window === "undefined") return "";
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const fromUrl = urlParams.get("studentId") || urlParams.get("childId");
+      if (fromUrl) return String(fromUrl).trim();
+      const fromSession = window.sessionStorage.getItem("cms-parent-active-child");
+      if (fromSession) return String(fromSession).trim();
+    } catch {}
+    return "";
+  };
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [childrenList, setChildrenList] = useState([]);
-  const [activeChildId, setActiveChildId] = useState("");
+  const [activeChildId, setActiveChildIdState] = useState(getInitialActiveChildId);
+  const lastManualSelectRef = useRef(null);
+
+  const setActiveChildId = useCallback((rawId) => {
+    if (!rawId) return;
+    const strId = String(rawId).trim();
+    lastManualSelectRef.current = strId;
+    setActiveChildIdState(strId);
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.setItem("cms-parent-active-child", strId);
+      } catch {}
+    }
+    try {
+      const currentParams = new URLSearchParams(location.search);
+      if (currentParams.get("studentId") !== strId) {
+        currentParams.set("studentId", strId);
+        navigate(
+          {
+            pathname: location.pathname,
+            search: currentParams.toString(),
+          },
+          { replace: false }
+        );
+      }
+    } catch {}
+  }, [location.pathname, location.search, navigate]);
   const [detailedStudentMap, setDetailedStudentMap] = useState({});
   const [feeMap, setFeeMap] = useState({});
   const [resultsMap, setResultsMap] = useState({});
@@ -565,10 +606,42 @@ export function ParentPortalProvider({ children }) {
 
       if (mapped && mapped.length > 0) {
         setChildrenList(mapped);
-        setActiveChildId((prev) => (mapped.some((m) => m.id === prev) ? prev : mapped[0].id));
+        mapped.forEach((c) => {
+          fetchActiveChildData(c.id);
+        });
+        setActiveChildIdState((prev) => {
+          let candidate = prev;
+          if (!candidate && typeof window !== "undefined") {
+            try {
+              const urlParams = new URLSearchParams(window.location.search);
+              candidate = urlParams.get("studentId") || urlParams.get("childId") || window.sessionStorage.getItem("cms-parent-active-child");
+            } catch {}
+          }
+          const matched = mapped.find((m) => String(m.id) === String(candidate) || String(m.studentId) === String(candidate));
+          const chosenId = matched ? matched.id : mapped[0].id;
+          if (typeof window !== "undefined") {
+            try {
+              window.sessionStorage.setItem("cms-parent-active-child", String(chosenId));
+            } catch {}
+            try {
+              const currentParams = new URLSearchParams(location.search);
+              if (location.pathname.startsWith("/parent-dashboard") && !location.pathname.startsWith("/parent-dashboard/children/") && currentParams.get("studentId") !== String(chosenId)) {
+                currentParams.set("studentId", String(chosenId));
+                navigate(
+                  {
+                    pathname: location.pathname,
+                    search: currentParams.toString(),
+                  },
+                  { replace: true }
+                );
+              }
+            } catch {}
+          }
+          return chosenId;
+        });
       } else {
         setChildrenList([]);
-        setActiveChildId(null);
+        setActiveChildIdState("");
       }
     } catch {
       setChildrenList([]);
@@ -581,6 +654,72 @@ export function ParentPortalProvider({ children }) {
   useEffect(() => {
     fetchChildren();
   }, [fetchChildren]);
+
+  // Handle browser Back / Forward history transitions
+  useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window === "undefined") return;
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromUrl = urlParams.get("studentId") || urlParams.get("childId");
+        if (fromUrl && childrenList.length > 0) {
+          const matched = childrenList.find((m) => String(m.id) === String(fromUrl) || String(m.studentId) === String(fromUrl));
+          lastManualSelectRef.current = null;
+          if (matched && String(matched.id) !== String(activeChildId)) {
+            setActiveChildIdState(matched.id);
+            window.sessionStorage.setItem("cms-parent-active-child", matched.id);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [childrenList, activeChildId]);
+
+  // Synchronize when route search params change
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const paramStudentId = urlParams.get("studentId") || urlParams.get("childId");
+    if (paramStudentId && childrenList.length > 0) {
+      const match = childrenList.find((m) => String(m.id) === String(paramStudentId) || String(m.studentId) === String(paramStudentId));
+      const strParam = String(paramStudentId).trim();
+      if (lastManualSelectRef.current && String(lastManualSelectRef.current) !== strParam) {
+        return;
+      }
+      if (lastManualSelectRef.current && String(lastManualSelectRef.current) === strParam) {
+        lastManualSelectRef.current = null;
+      }
+      if (match && String(match.id) !== String(activeChildId)) {
+        setActiveChildIdState(match.id);
+        try {
+          window.sessionStorage.setItem("cms-parent-active-child", match.id);
+        } catch {}
+      }
+    }
+  }, [location.search, childrenList, activeChildId]);
+
+  // Ensure active childId is in the URL query parameters on parent dashboard routes
+  useEffect(() => {
+    if (!activeChildId || typeof window === "undefined") return;
+    try {
+      const currentParams = new URLSearchParams(location.search);
+      if (
+        location.pathname.startsWith("/parent-dashboard") &&
+        !location.pathname.startsWith("/parent-dashboard/children/") &&
+        currentParams.get("studentId") !== String(activeChildId)
+      ) {
+        currentParams.set("studentId", String(activeChildId));
+        navigate(
+          {
+            pathname: location.pathname,
+            search: currentParams.toString(),
+          },
+          { replace: true }
+        );
+      }
+    } catch {}
+  }, [activeChildId, location.pathname, location.search, navigate]);
 
   // Fetch holidays from Admin holiday management (real API with fallback to mockStore/mockData)
   const fetchHolidays = useCallback(async () => {
@@ -764,7 +903,7 @@ export function ParentPortalProvider({ children }) {
         // Silent recovery
       }
     }
-  }, [detailedStudentMap]);
+  }, []);
 
   useEffect(() => {
     if (activeChildId) {
@@ -1176,5 +1315,9 @@ export function ParentPortalProvider({ children }) {
 }
 
 export function useParentPortalContext() {
+  return useContext(ParentPortalContext);
+}
+
+export function useParentPortal() {
   return useContext(ParentPortalContext);
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   CalendarDays,
   Printer,
@@ -77,7 +78,22 @@ export default function ParentTimetablePage() {
     loading,
   } = useParentPortal();
 
-  const [selectedDay, setSelectedDay] = useState("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialDay = searchParams.get("day") || "all";
+  const [selectedDay, setSelectedDay] = useState(initialDay);
+
+  const handleDayChange = (day) => {
+    setSelectedDay(day);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (day && day !== "all") {
+        next.set("day", day);
+      } else {
+        next.delete("day");
+      }
+      return next;
+    });
+  };
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [slotPopupStyle, setSlotPopupStyle] = useState({});
 
@@ -205,7 +221,7 @@ export default function ParentTimetablePage() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${child.id === c.id ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <GraduationCap size={15} /> {c.name} ({c.group || c.className || "Class"})
@@ -236,7 +252,7 @@ export default function ParentTimetablePage() {
                     <span>Day Filter</span>
                     <select
                       value={selectedDay}
-                      onChange={(e) => setSelectedDay(e.target.value)}
+                      onChange={(e) => handleDayChange(e.target.value)}
                       aria-label="Filter timetable by day"
                     >
                       <option value="all">All Working Days (Mon – Sat)</option>

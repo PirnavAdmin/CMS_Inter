@@ -49,7 +49,11 @@ export default function ParentAcademicsPage() {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    setSearchParams({ tab });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tab);
+      return next;
+    });
   };
 
   const subjects = useMemo(() => {
@@ -150,7 +154,7 @@ export default function ParentAcademicsPage() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${child.id === c.id ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <Users size={14} /> {c.name}
