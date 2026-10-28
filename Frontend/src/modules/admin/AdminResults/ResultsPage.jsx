@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import React, { useLayoutEffect, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLayout";
@@ -111,9 +112,47 @@ export default function ResultProcessingPage() {
   } = useAcademicContext();
 
   const emptyFilters = { board: "", year: "", level: "", group: "", program: "", exam: "" };
-  const [filters, setFilters] = useState(emptyFilters);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const readResultFilters = () => Object.fromEntries(Object.keys(emptyFilters).map((key) => [key, searchParams.get(key + "Id") || (key === "board" ? String(selectedBoardId || selectedBoard?.id || selectedBoard?.boardId || "") : key === "year" ? String(selectedAcademicYearId || selectedAcademicYear?.id || selectedAcademicYear?.academicYearId || "") : "")]));
+  const [filters, setFilters] = useState(readResultFilters);
   const [applied, setApplied] = useState(emptyFilters);
-  const [viewMode, setViewMode] = useState("table");
+  const resultTabs = { "rank-list": "rankList", rankList: "rankList", published: "published", analytics: "analytics", processing: "table" };
+  const queryTab = searchParams.get("tab");
+  const viewMode = Object.hasOwn(resultTabs, queryTab) ? resultTabs[queryTab] : "table";
+  const setViewMode = (mode) => updateResultRoute((next) => {
+    ["action", "sectionId", "studentId", "publishedKey", "publishScope"].forEach((key) => next.delete(key));
+    next.set("tab", mode === "table" ? "processing" : mode === "rankList" ? "rank-list" : mode);
+    Object.entries(filters).forEach(([key, value]) => value ? next.set(key + "Id", String(value)) : next.delete(key + "Id"));
+  });
+
+  const pendingResultNavigation = useRef(null);
+  const resultRestoreKey = useRef("");
+  const resultActionKey = useRef("");
+  const resultLoaders = useRef({});
+  const updateResultRoute = (change) => {
+    const pending = pendingResultNavigation.current;
+    const next = pending || new URLSearchParams(searchParams);
+    change(next); pendingResultNavigation.current = next;
+    if (!pending) queueMicrotask(() => {
+      const target = pendingResultNavigation.current; pendingResultNavigation.current = null;
+      if (target && target.toString() !== searchParams.toString()) setSearchParams(target);
+    });
+  };
+  const persistResultContext = (scope = filters) => updateResultRoute((next) => {
+    Object.entries(scope).forEach(([key, value]) => value ? next.set(key + "Id", String(value)) : next.delete(key + "Id"));
+    if (effectiveCampusId) next.set("campusId", String(effectiveCampusId));
+  });
+  const resultQuery = searchParams.toString();
+  const latestResultQuery = useRef(resultQuery);
+  latestResultQuery.current = resultQuery;
+  useEffect(() => {
+    const restored = readResultFilters();
+    if (!Object.keys(restored).every((key) => String(filters[key] || "") === restored[key])) {
+      setResultsGenerated(false); setSectionSummaries([]); setFilters(restored);
+    }
+  // URL navigation restores filters; API defaults never overwrite the address.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultQuery]);
 
   // Cascading Master Data State
   const [campusesList, setCampusesList] = useState([]);
@@ -135,6 +174,8 @@ export default function ResultProcessingPage() {
   const [sectionSummaries, setSectionSummaries] = useState([]);
   const [publishedGroups, setPublishedGroups] = useState([]);
   const [loadingPublished, setLoadingPublished] = useState(false);
+  const [publishedReady, setPublishedReady] = useState(false);
+  const [publishedContext, setPublishedContext] = useState(null);
   const publishedGroupsRef = useRef(publishedGroups);
   const publishedGroupsCampusRef = useRef(null);
   const publishedFetchSequenceRef = useRef(0);
@@ -143,12 +184,53 @@ export default function ResultProcessingPage() {
   }, [publishedGroups]);
 
   // Drilldown states for Published Results Tab
-  const [selectedPublishedGroup, setSelectedPublishedGroup] = useState(null);
-  const [selectedPublishedSection, setSelectedPublishedSection] = useState(null);
+  const [selectedPublishedGroup, setSelectedPublishedGroupState] = useState(null);
+  const setSelectedPublishedGroup = (value) => {
+    setSelectedPublishedGroupState(value);
+    updateResultRoute((next) => {
+      if (value) { next.set("action", "group"); next.set("publishedKey", String(value.id || value.publishedId || value.examId)); next.set("examId", String(value.examId || value.publishedId));
+        for (const [key, id] of Object.entries({ boardId: value.boardId, yearId: value.academicYearId, levelId: value.academicLevelId, groupId: value.groupId, programId: value.programId })) { if (id) next.set(key, String(id)); } }
+      else {
+        next.delete("action");
+        next.delete("publishedKey");
+      }
+    });
+  };
+  const [selectedPublishedSection, setSelectedPublishedSectionState] = useState(null);
+  const setSelectedPublishedSection = (value) => {
+    setSelectedPublishedSectionState(value);
+    updateResultRoute((next) => {
+      if (value) { next.set("action", "section"); next.set("sectionId", String(value.sectionId || value.id)); if (value.examId) next.set("examId", String(value.examId)); }
+      else {
+        next.delete("action");
+        next.delete("sectionId"); if (next.has("publishedKey")) next.set("action", "group");
+      }
+    });
+  };
 
   // Drilldown states for Generated Results Tab
-  const [selectedSectionDetails, setSelectedSectionDetails] = useState(null);
-  const [selectedStudentMemo, setSelectedStudentMemo] = useState(null);
+  const [selectedSectionDetails, setSelectedSectionDetailsState] = useState(null);
+  const setSelectedSectionDetails = (value) => {
+    setSelectedSectionDetailsState(value);
+    updateResultRoute((next) => {
+      if (value) { next.set("action", "section"); next.set("sectionId", String(value.sectionId || value.id)); if (value.examId) next.set("examId", String(value.examId)); }
+      else {
+        next.delete("action");
+        next.delete("sectionId"); if (next.has("publishedKey")) next.set("action", "group");
+      }
+    });
+  };
+  const [selectedStudentMemo, setSelectedStudentMemoState] = useState(null);
+  const setSelectedStudentMemo = (value) => {
+    setSelectedStudentMemoState(value);
+    updateResultRoute((next) => {
+      if (value) { next.set("action", "student"); next.set("studentId", String(value.studentId || value.id)); }
+      else {
+        next.delete("action");
+        next.delete("studentId"); if (next.has("sectionId")) next.set("action", "section");
+      }
+    });
+  };
 
   // Search & Pagination
   const [query, setQuery] = useState("");
@@ -164,20 +246,52 @@ export default function ResultProcessingPage() {
   const [rankSearch, setRankSearch] = useState("");
   const [rankFilter, setRankFilter] = useState("all");
   const [rankPage, setRankPage] = useState(1);
-  const [showRankPreview, setShowRankPreview] = useState(false);
+  const [showRankPreview, setShowRankPreviewState] = useState(false);
+  const setShowRankPreview = (value) => {
+    if (value) persistResultContext();
+    setShowRankPreviewState(value);
+    updateResultRoute((next) => {
+      if (value) { next.set("action", "rank-preview");  }
+      else {
+        next.delete("action");
+
+      }
+    });
+  };
   const [apiRankRecords, setApiRankRecords] = useState([]);
 
   // Analytics Modals & Detail
-  const [analyticsModal, setAnalyticsModal] = useState(null);
-  const [confirmPublish, setConfirmPublish] = useState(null);
+  const [analyticsModal, setAnalyticsModalState] = useState(null);
+  const setAnalyticsModal = (value) => {
+    setAnalyticsModalState(value);
+    updateResultRoute((next) => {
+      if (value) { next.set("action", "analytics"); next.set("analyticsType", value); }
+      else {
+        next.delete("action");
+        next.delete("analyticsType");
+      }
+    });
+  };
+  const [confirmPublish, setConfirmPublishState] = useState(null);
+  const setConfirmPublish = (value) => {
+    setConfirmPublishState(value);
+    updateResultRoute((next) => {
+      if (value) { next.set("action", "publish"); next.set("publishScope", value.type); if (value.type === "section") next.set("sectionId", String(value.data.sectionId || value.data.id)); }
+      else {
+        next.delete("action");
+        next.delete("publishScope"); next.delete("sectionId");
+      }
+    });
+  };
   const [toast, setToast] = useState("");
   const [generatingResults, setGeneratingResults] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
 
   const [apiAnalytics, setApiAnalytics] = useState(null);
   const [apiFailedStudents, setApiFailedStudents] = useState([]);
-  const [selectedAnalyticsExamKey, setSelectedAnalyticsExamKey] = useState("");
-  const [analyticsGroupFilter, setAnalyticsGroupFilter] = useState("all");
+  const [selectedAnalyticsExamKey, setSelectedAnalyticsExamKey] = useState(searchParams.get("analyticsExam") || "");
+  const [analyticsGroupFilter, setAnalyticsGroupFilterState] = useState(searchParams.get("analyticsGroup") || "all");
+  const setAnalyticsGroupFilter = (value) => { setAnalyticsGroupFilterState(value); updateResultRoute((next) => next.set("analyticsGroup", value)); };
   const [selectedExamAnalyticsApiData, setSelectedExamAnalyticsApiData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
@@ -499,12 +613,12 @@ export default function ResultProcessingPage() {
     publishedGroupsCampusRef.current = effectiveCampusId;
     publishedGroupsRef.current = [];
     setPublishedGroups([]);
-    setSelectedPublishedGroup(null);
-    setSelectedPublishedSection(null);
+    setSelectedPublishedGroupState(null);
+    setSelectedPublishedSectionState(null);
     setResultsGenerated(false);
     setSectionSummaries([]);
-    setSelectedSectionDetails(null);
-    setSelectedStudentMemo(null);
+    setSelectedSectionDetailsState(null);
+    setSelectedStudentMemoState(null);
     setReadiness(null);
     setApplied(emptyFilters);
   }, [effectiveCampusId]);
@@ -1071,9 +1185,11 @@ export default function ResultProcessingPage() {
     if (key === "board") next.level = "";
     setResultsGenerated(false);
     setSectionSummaries([]);
-    setSelectedSectionDetails(null);
-    setSelectedStudentMemo(null);
+    setSelectedSectionDetailsState(null);
+    setSelectedStudentMemoState(null);
     setReadiness(null);
+    persistResultContext(next);
+    updateResultRoute((params) => { params.delete("action"); params.delete("sectionIds"); });
     setFilters(next);
   };
 
@@ -1496,11 +1612,13 @@ export default function ResultProcessingPage() {
         subjectDefinitions: s.subjectDefinitions || s.subjects || []
       }));
 
+      persistResultContext();
+      updateResultRoute((next) => { next.set("sectionIds", mappedSections.map((section) => section.sectionId).join(",")); next.set("workflow", "results"); });
       setApplied({ ...filters });
       setSectionSummaries(mappedSections);
       setResultsGenerated(true);
-      setSelectedSectionDetails(null);
-      setSelectedStudentMemo(null);
+      setSelectedSectionDetailsState(null);
+      setSelectedStudentMemoState(null);
       setPage(1);
 
       // If any returned section is already published, immediately sync to Published Results
@@ -1521,13 +1639,114 @@ export default function ResultProcessingPage() {
     }
   };
 
+  const restoreSavedProcessing = async (sectionIds) => {
+    const requestKey = latestResultQuery.current;
+      const activeExamId = Number(filters.exam);
+      const activeGroupId = Number(filters.group);
+      const activeExamObj = examinations.find((e) => String(e.examinationId ?? e.id ?? e.examId) === String(activeExamId));
+      const activeGroupObj = groups.find((g) => String(g.groupId || g.id) === String(activeGroupId));
+      const activeProgramObj = programs.find((p) =>
+        String(p.programId ?? p.id) === String(filters.program) ||
+        String(p.programName ?? p.name).trim().toLowerCase() === String(filters.program).trim().toLowerCase() ||
+        String(p.programCode ?? p.code).trim().toLowerCase() === String(filters.program).trim().toLowerCase()
+      );
+
+      const progIdVal = activeProgramObj?.code || activeProgramObj?.programName || (filters.program ? String(filters.program) : undefined);
+      const progNameVal = activeProgramObj?.programName || activeProgramObj?.name || "Regular";
+      const resolvedProgramId = filters.program
+        ? String(filters.program)
+        : (activeProgramObj?.programId !== undefined && activeProgramObj?.programId !== null
+            ? String(activeProgramObj.programId)
+            : (progIdVal ? String(progIdVal) : "1"));
+
+
+      const responses = await Promise.all(sectionIds.map((sectionId) => apiClient.get(`/api/v1/results/sections/${sectionId}`, {
+        params: { campusId: effectiveCampusId, examId: activeExamId },
+        headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+      })));
+      if (latestResultQuery.current !== requestKey) return;
+      const rawSections = responses.map((response, index) => {
+        const payload = unwrapPayload(response);
+        if (!payload || typeof payload !== "object") throw new Error("Saved section results are unavailable.");
+        const published = (publishedGroupsRef.current || []).find((group) => Number(group.examId) === activeExamId && (!group.groupId || Number(group.groupId) === activeGroupId));
+        const savedSummary = published?.sections?.find((section) => String(section.sectionId || section.id) === String(sectionIds[index]));
+        const section = { ...savedSummary, ...(Array.isArray(payload) ? { studentRows: payload } : payload), sectionId: sectionIds[index] };
+        if (!["passed", "passedCount", "passCount"].some((key) => section[key] != null) || !["failed", "failedCount", "failCount"].some((key) => section[key] != null)) {
+          throw new Error("The existing read APIs do not return saved summary metrics for this section. Results were not regenerated.");
+        }
+        return section;
+      });
+      const examTitle = activeExamObj?.examName || activeExamObj?.examinationName || activeExamObj?.name || `Exam ${activeExamId}`;
+      const mappedSections = rawSections.map((s, idx) => ({
+        sectionId: s.sectionId || s.id || idx + 1,
+        sectionName: s.sectionName || s.name || `Section ${idx + 1}`,
+        inChargeName: s.inChargeName || s.facultyName || s.inCharge || "—",
+        studentCount: s.studentCount ?? s.totalStudents ?? s.studentsCount ?? (s.studentRows?.length || 0),
+        passed: s.passed ?? s.passedCount ?? s.passCount ?? 0,
+        failed: s.failed ?? s.failedCount ?? s.failCount ?? 0,
+        passRate: Number(s.passRate ?? s.passPercentage ?? (s.studentCount ? ((s.passed / s.studentCount) * 100) : 0)),
+        average: Number(s.average ?? s.averagePercentage ?? s.averageScore ?? 0),
+        resultStatus: String(s.resultStatus || s.status || (s.isPublished ? "PUBLISHED" : "GENERATED")).toUpperCase(),
+        isPublished: Boolean(s.isPublished || s.resultStatus === "PUBLISHED" || s.status === "PUBLISHED"),
+        examId: activeExamId,
+        examinationId: activeExamId,
+        examName: examTitle,
+        boardId: Number(filters.board),
+        academicYearId: Number(filters.year),
+        academicLevelId: Number(filters.level),
+        groupId: activeGroupId,
+        groupName: activeGroupObj?.groupName || activeGroupObj?.name || "Group",
+        programId: filters.program,
+        programName: progNameVal,
+        studentRows: (s.studentRows || s.students || []).map((st, stIdx) => ({
+          ...st,
+          studentId: st.studentId ?? st.id ?? stIdx + 1,
+          rollNo: st.rollNo || st.rollNumber || "—",
+          rollNumber: st.rollNo || st.rollNumber || "—",
+          studentName: st.studentName || st.name || "—",
+          examinationId: activeExamId,
+          examId: activeExamId,
+          examinationName: examTitle,
+          boardId: Number(filters.board),
+          academicYearId: Number(filters.year),
+          academicLevelId: Number(filters.level),
+          groupId: activeGroupId,
+          groupName: activeGroupObj?.groupName || activeGroupObj?.name || "Group",
+          programId: filters.program,
+          programName: progNameVal,
+          sectionId: s.sectionId || s.id || idx + 1,
+          sectionName: s.sectionName || s.name || `Section ${idx + 1}`,
+          subjects: Array.isArray(st.subjects) ? st.subjects : (Array.isArray(st.subjectResults) ? st.subjectResults : []),
+          total: st.totalMarks ?? st.total ?? st.totalObtained ?? 0,
+          totalMarks: st.totalMarks ?? st.total ?? st.totalObtained ?? 0,
+          maximum: st.maxMarks ?? st.maximum ?? st.maxTotal ?? st.totalMaximum ?? 400,
+          maxMarks: st.maxMarks ?? st.maximum ?? st.maxTotal ?? st.totalMaximum ?? 400,
+          percentage: Number(st.percentage ?? (st.maximum ? (st.total / st.maximum) * 100 : 0)),
+          grade: st.grade || "—",
+          result: String(st.result || (st.grade === "F" ? "FAIL" : "PASS")).toUpperCase(),
+          sectionRank: st.sectionRank ?? st.rank ?? null,
+          groupRank: st.groupRank ?? st.rank ?? null,
+          rank: st.rank ?? st.groupRank ?? st.sectionRank ?? null,
+          status: String(s.resultStatus || s.status || (s.isPublished ? "PUBLISHED" : "GENERATED")).toUpperCase(),
+          publicationStatus: String(s.resultStatus || s.status || (s.isPublished ? "PUBLISHED" : "GENERATED")).toUpperCase(),
+          isPublished: Boolean(s.isPublished || s.resultStatus === "PUBLISHED" || s.status === "PUBLISHED"),
+        })),
+        subjectDefinitions: s.subjectDefinitions || s.subjects || []
+      }));
+
+
+      setApplied({ ...filters }); setSectionSummaries(mappedSections); setResultsGenerated(true);
+  };
+
   // Section-Wise Publishing Handler
   const handlePublishSection = (section) => {
+    persistResultContext();
     setConfirmPublish({ type: "section", data: section });
   };
 
   // Group-Wise Publishing Handler
   const handlePublishGroup = () => {
+    persistResultContext();
     setConfirmPublish({ type: "group", data: sectionSummaries });
   };
 
@@ -1646,7 +1865,7 @@ export default function ResultProcessingPage() {
         setSectionSummaries(updatedSections);
 
         if (selectedSectionDetails && selectedSectionDetails.sectionId === secId) {
-          setSelectedSectionDetails((prev) => ({
+          setSelectedSectionDetailsState((prev) => ({
             ...prev,
             resultStatus: "PUBLISHED",
             isPublished: true,
@@ -1702,7 +1921,7 @@ export default function ResultProcessingPage() {
         setSectionSummaries(updatedSections);
 
         if (selectedSectionDetails) {
-          setSelectedSectionDetails((prev) => ({
+          setSelectedSectionDetailsState((prev) => ({
             ...prev,
             resultStatus: "PUBLISHED",
             isPublished: true,
@@ -1734,6 +1953,7 @@ export default function ResultProcessingPage() {
     const requestedCampusId = effectiveCampusId;
     const requestSequence = ++publishedFetchSequenceRef.current;
     setLoadingPublished(true);
+    setPublishedReady(false);
     const bId = Number(selectedBoardId || filters.board || applied.board);
     const yId = Number(selectedAcademicYearId || filters.year || applied.year);
     const gId = Number(filters.group || applied.group);
@@ -1952,7 +2172,7 @@ export default function ResultProcessingPage() {
     } catch (err) {
       console.error("fetchPublishedGroups error:", err);
     } finally {
-      if (publishedFetchSequenceRef.current === requestSequence) setLoadingPublished(false);
+      if (publishedFetchSequenceRef.current === requestSequence) { setLoadingPublished(false); setPublishedReady(true); setPublishedContext(requestedCampusId); }
     }
   }, [effectiveCampusId]);
 
@@ -1966,7 +2186,9 @@ export default function ResultProcessingPage() {
     }
   }, [viewMode, fetchPublishedGroups]);
 
-  const handleViewSection = async (sec, isPublished = false) => {
+  const handleViewSection = async (sec, isPublished = false, restoring = false) => {
+    if (!restoring) { persistResultContext(); updateResultRoute((next) => { next.set("action", "section"); next.set("sectionId", String(sec.sectionId)); next.set("examId", String(sec.examId || sec.examinationId || filters.exam || applied.exam)); }); return; }
+    const requestKey = latestResultQuery.current;
     const targetExamId = Number(
       sec.examId ||
       sec.examinationId ||
@@ -1984,7 +2206,9 @@ export default function ResultProcessingPage() {
           ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
         },
       });
-      const payload = unwrapPayload(res) || {};
+      if (latestResultQuery.current !== requestKey) return;
+      const payload = unwrapPayload(res);
+      if (!payload) throw new Error("Saved section results are unavailable.");
       const studentsList = Array.isArray(payload)
         ? payload
         : Array.isArray(payload.studentRows)
@@ -2021,11 +2245,13 @@ export default function ResultProcessingPage() {
       };
 
       if (isPublished) {
-        setSelectedPublishedSection(enrichedSection);
+        setSelectedPublishedSectionState(enrichedSection);
       } else {
-        setSelectedSectionDetails(enrichedSection);
+        setSelectedSectionDetailsState(enrichedSection);
       }
     } catch (err) {
+      if (latestResultQuery.current !== requestKey) return;
+      if (restoring) { showToast(getApiErrorMessage(err) || "Section results could not be loaded.", "error"); return; }
       const fallbackSection = {
         ...sec,
         examId: targetExamId,
@@ -2046,9 +2272,9 @@ export default function ResultProcessingPage() {
         })),
       };
       if (isPublished) {
-        setSelectedPublishedSection(fallbackSection);
+        setSelectedPublishedSectionState(fallbackSection);
       } else {
-        setSelectedSectionDetails(fallbackSection);
+        setSelectedSectionDetailsState(fallbackSection);
       }
     }
   };
@@ -2056,7 +2282,9 @@ export default function ResultProcessingPage() {
   /* ============================================================
      TAB 3: STUDENT MARKS MEMO
      ============================================================ */
-  const handleViewStudentMemo = async (student) => {
+  const handleViewStudentMemo = async (student, restoring = false) => {
+    if (!restoring) { persistResultContext(); updateResultRoute((next) => { next.set("action", "student"); next.set("studentId", String(student.studentId || student.id)); if (student.examId || student.examinationId) next.set("examId", String(student.examId || student.examinationId)); }); return; }
+    const requestKey = latestResultQuery.current;
     try {
       const studentId = student.studentId || student.id;
       const examId = Number(
@@ -2088,23 +2316,27 @@ export default function ResultProcessingPage() {
           ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
         },
       });
+      if (latestResultQuery.current !== requestKey) return;
       const memoData = unwrapPayload(res);
+      if (restoring && !memoData?.studentId && !memoData?.studentName) throw new Error("Saved student result is unavailable.");
       const examTitle = memoData?.examinationName || student.examinationName || selectedPublishedGroup?.examName || currentExamObj.name;
       if (memoData && typeof memoData === "object" && (memoData.studentId || memoData.studentName)) {
-        setSelectedStudentMemo({
+        setSelectedStudentMemoState({
           ...student,
           ...memoData,
           examinationName: examTitle,
           subjects: memoData.subjects || student.subjects || [],
         });
       } else {
-        setSelectedStudentMemo({
+        setSelectedStudentMemoState({
           ...student,
           examinationName: examTitle,
         });
       }
     } catch (err) {
-      setSelectedStudentMemo({
+      if (latestResultQuery.current !== requestKey) return;
+      if (restoring) { showToast(getApiErrorMessage(err) || "Student result could not be loaded.", "error"); return; }
+      setSelectedStudentMemoState({
         ...student,
         examinationName: student.examinationName || selectedPublishedGroup?.examName || currentExamObj.name,
       });
@@ -2481,6 +2713,7 @@ export default function ResultProcessingPage() {
   }, [analyticsExamOptions, selectedAnalyticsExamKey]);
 
   const handleSelectAnalyticsExam = (key) => {
+    updateResultRoute((next) => { next.set("analyticsExam", key); next.set("analyticsGroup", "all"); });
     setSelectedAnalyticsExamKey(key);
     setSelectedExamAnalyticsApiData(null);
     setAnalyticsGroupFilter("all");
@@ -2518,7 +2751,7 @@ export default function ResultProcessingPage() {
 
   useEffect(() => {
     if (groupsLoading || groupsError) return;
-    if (!analyticsGroupOptions.some((option) => option.id === analyticsGroupFilter)) setAnalyticsGroupFilter("all");
+    if (!analyticsGroupOptions.some((option) => option.id === analyticsGroupFilter)) setAnalyticsGroupFilterState("all");
   }, [analyticsGroupOptions, analyticsGroupFilter, groupsLoading, groupsError]);
 
   // Fetch API analytics and section student records when activeAnalyticsOption changes
@@ -3027,6 +3260,64 @@ export default function ResultProcessingPage() {
       showToast(getApiErrorMessage(err) || "Failed to submit revaluation request.", "error");
     }
   };
+
+  resultLoaders.current = { processing: restoreSavedProcessing, section: handleViewSection, student: handleViewStudentMemo };
+  const savedSectionIds = searchParams.get("sectionIds") || "";
+  const processingRouteKey = [effectiveCampusId, filters.board, filters.year, filters.level, filters.group, filters.program, filters.exam, savedSectionIds].join(":");
+  useEffect(() => {
+    if (!savedSectionIds || !canGenerate || !publishedReady || String(publishedContext) !== String(effectiveCampusId) || resultRestoreKey.current === processingRouteKey || generatingResults) return;
+    if (searchParams.get("campusId") && searchParams.get("campusId") !== String(effectiveCampusId)) return;
+    const ids = savedSectionIds.split(",");
+    resultRestoreKey.current = processingRouteKey;
+    if (ids.length > 100 || ids.some((id) => !/^[1-9]\d*$/.test(id))) { showToast("Invalid saved results section identifiers.", "error"); return; }
+    if (resultsGenerated) return;
+    resultLoaders.current.processing(ids).catch((error) => showToast(getApiErrorMessage(error) || "Saved results could not be restored.", "error"));
+  }, [savedSectionIds, canGenerate, processingRouteKey, generatingResults, resultsGenerated, effectiveCampusId, searchParams, publishedReady, publishedContext, showToast]);
+  useEffect(() => {
+    const action = searchParams.get("action");
+    const key = [resultQuery, effectiveCampusId].join(":");
+    if (!effectiveCampusId || resultActionKey.current === key) return;
+    if (searchParams.get("campusId") && searchParams.get("campusId") !== String(effectiveCampusId)) { resultActionKey.current = key; showToast("This results view belongs to a different campus.", "error"); return; }
+    const sectionId = searchParams.get("sectionId");
+    const studentId = searchParams.get("studentId");
+    const publishedKey = searchParams.get("publishedKey");
+    if (publishedKey && (!publishedReady || loadingPublished || String(publishedContext) !== String(effectiveCampusId))) return;
+    const group = publishedKey ? publishedGroups.find((item) => String(item.id || item.publishedId || item.examId) === publishedKey) : null;
+    if (publishedKey && !group) {
+      if (publishedReady && !loadingPublished) { resultActionKey.current = key; showToast("Published results are unavailable in the current campus or could not be loaded.", "error"); }
+      return;
+    }
+    if (action === "rank-preview" && !resultsGenerated) return;
+    if (action === "analytics" && analyticsLoading) return;
+    if (group) setSelectedPublishedGroupState(group);
+    else setSelectedPublishedGroupState(null);
+    setSelectedSectionDetailsState(null); setSelectedPublishedSectionState(null); setSelectedStudentMemoState(null);
+    setShowRankPreviewState(action === "rank-preview");
+    setAnalyticsModalState(action === "analytics" && ["passed", "failed"].includes(searchParams.get("analyticsType")) ? searchParams.get("analyticsType") : null);
+    if (searchParams.has("analyticsExam")) setSelectedAnalyticsExamKey(searchParams.get("analyticsExam"));
+    setAnalyticsGroupFilterState(searchParams.get("analyticsGroup") || "all");
+    setConfirmPublishState(null);
+    if (["section", "publish"].includes(action)) {
+      const sections = group?.sections || sectionSummaries;
+      const section = sectionId ? sections.find((item) => String(item.sectionId || item.id) === sectionId) : null;
+      if (action === "publish") {
+        if (!resultsGenerated || !sections.length || ["board", "year", "level", "group", "program", "exam"].some((field) => String(applied[field] || "") !== String(filters[field] || ""))) return;
+        if (searchParams.get("publishScope") === "group") setConfirmPublishState({ type: "group", data: sections });
+        else if (section) setConfirmPublishState({ type: "section", data: section });
+        else { showToast("Selected results section is unavailable.", "error"); return; }
+      } else {
+        if (!sectionId || !/^[1-9]\d*$/.test(sectionId)) { showToast("Invalid results section identifier.", "error"); return; }
+        resultLoaders.current.section(section || { sectionId, examId: searchParams.get("examId") }, viewMode === "published", true);
+      }
+    }
+    if (action === "student") {
+      if (!studentId || !/^[1-9]\d*$/.test(studentId)) { showToast("Invalid student result identifier.", "error"); return; }
+      resultLoaders.current.student({ studentId, examinationId: searchParams.get("examId"), boardId: filters.board, academicYearId: filters.year, academicLevelId: filters.level, groupId: filters.group, programId: filters.program }, true);
+    }
+    resultActionKey.current = key;
+  // Restoration calls only the existing read handlers, never generate/publish/revaluation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultQuery, effectiveCampusId, publishedGroups, publishedReady, publishedContext, loadingPublished, sectionSummaries, resultsGenerated, applied, analyticsLoading]);
 
   return (
     <DashboardLayout

@@ -460,10 +460,9 @@ export default function AppRoutes() {
           <Route path="/dashboard/staff-salary/import" element={<PayrollPage mode="import" />} />
         </Route>
 
-        {/* Faculty & Staff Reimbursement Canonical & Finance Routes */}
+        {/* Finance Reimbursement Routes */}
         <Route element={<ProtectedRoute requiredModule="reimbursement" />}>
           <Route path="/dashboard/reimbursement" element={<ReimbursementPage />} />
-          <Route path="/dashboard/reimbursements" element={<ReimbursementPage />} />
           <Route path="/dashboard/finance/reimbursement" element={<ReimbursementPage />} />
           <Route path="/dashboard/finance/reimbursements" element={<ReimbursementPage />} />
         </Route>

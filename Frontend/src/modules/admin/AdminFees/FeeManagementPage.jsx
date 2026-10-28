@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { STUDENT_FEES_UPDATED_EVENT } from "@/modules/admin/AdminPromotion/services/promotionStore.js";
 import {
@@ -53,6 +54,18 @@ const LEDGER_TABS = [
   { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Payment History", label: "Payment History" },
 ];
+const feeSetupSlugs = { "Fee Types": "fee-types", "Fee Structure": "fee-structure", "Hostel Fees": "hostel-fees", "Transport Fees": "transport-fees", Scholarships: "scholarships", Fine: "fine" };
+const feeLedgerSlugs = { "Fee Collection": "fee-collection", "Student Fee Ledger": "fee-accounts", "Payment History": "payment-history" };
+const resolveFeeView = (params, initialTab, initialSetupTab, initialLedgerTab) => {
+  const tabKey = params.get("tab");
+  const tab = tabKey === "setup" ? "Fee Setup" : tabKey === "student-ledger" ? "Student Fee Ledger" : tabKey === "overview" || tabKey ? "Overview" : initialTab;
+  const subtab = params.get("subtab");
+  return { tab,
+    setupTab: tab === "Fee Setup" ? Object.keys(feeSetupSlugs).find((key) => feeSetupSlugs[key] === subtab) || initialSetupTab : initialSetupTab,
+    ledgerTab: tab === "Student Fee Ledger" ? Object.keys(feeLedgerSlugs).find((key) => feeLedgerSlugs[key] === subtab) || initialLedgerTab : initialLedgerTab,
+    overviewTab: tab === "Overview" && ["overdue", "upcoming", "recent"].includes(subtab) ? subtab : "overdue" };
+};
+
 const FEE_TYPE_CATEGORIES = ["Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous"];
 const PAGE_SIZE = 5;
 const OVERVIEW_TABS = [
@@ -1646,8 +1659,7 @@ const normalizeDashboard = (payload) => {
   };
 };
 
-function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded = false }) {
-  const [overviewTab, setOverviewTab] = useState("overdue");
+function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded = false, overviewTab, setOverviewTab }) {
   const [overduePage, setOverduePage] = useState(1);
   const [upcomingPage, setUpcomingPage] = useState(1);
   const [recentPage, setRecentPage] = useState(1);
@@ -4372,12 +4384,41 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   } = useAcademicContext();
   const { selectedCampus, selectedCampusId } = useCampusContext();
   const selectedCampusValue = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id ?? "";
-  const [tab, setTab] = useState(initialTab);
-  const [setupTab, setSetupTab] = useState(initialSetupTab);
-  const [ledgerTab, setLedgerTab] = useState(initialLedgerTab);
-  const [selectedId, setSelectedId] = useState(null);
-  const [selectedSource, setSelectedSource] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { tab, setupTab, ledgerTab, overviewTab } = resolveFeeView(searchParams, initialTab, initialSetupTab, initialLedgerTab);
+  const lastSetupTab = useRef(setupTab);
+  const lastLedgerTab = useRef(ledgerTab);
+  useEffect(() => {
+    if (tab === "Fee Setup") lastSetupTab.current = setupTab;
+    if (tab === "Student Fee Ledger") lastLedgerTab.current = ledgerTab;
+  }, [tab, setupTab, ledgerTab]);
+  const navigateFeeTab = useCallback((nextTab, subtab) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextTab === "Overview") {
+      next.delete("tab");
+      if (subtab && subtab !== "overdue") next.set("tab", "overview");
+      if (subtab && subtab !== "overdue") next.set("subtab", subtab);
+      else next.delete("subtab");
+    } else {
+      next.set("tab", nextTab === "Fee Setup" ? "setup" : "student-ledger");
+      next.set("subtab", nextTab === "Fee Setup" ? feeSetupSlugs[subtab || lastSetupTab.current] : feeLedgerSlugs[subtab || lastLedgerTab.current]);
+    }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+  const setTab = useCallback((nextTab) => navigateFeeTab(nextTab), [navigateFeeTab]);
+  const setSetupTab = useCallback((nextTab) => navigateFeeTab("Fee Setup", nextTab), [navigateFeeTab]);
+  const setLedgerTab = useCallback((nextTab) => navigateFeeTab("Student Fee Ledger", nextTab), [navigateFeeTab]);
+  const setOverviewTab = useCallback((nextTab) => navigateFeeTab("Overview", nextTab), [navigateFeeTab]);
+  const selectedId = searchParams.get("account") || null;
+  const selectedSource = searchParams.get("source") === "collection" ? "collection" : selectedId ? "ledger" : "";
+  const navigateFeeAccount = useCallback((id, source = "ledger") => {
+    const next = new URLSearchParams(searchParams);
+    if (id != null) { next.set("account", String(id)); next.set("source", source); }
+    else { next.delete("account"); next.delete("source"); }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  }, [searchParams, setSearchParams]);
   const [collecting, setCollecting] = useState(false);
+  useEffect(() => { setCollecting(false); }, [selectedId, selectedSource]);
   const [receipt, setReceipt] = useState(null);
   const [toast, setToast] = useState("");
   const [feeTypes, setFeeTypes] = useState([]);
@@ -4758,14 +4799,12 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue]);
 
   const openCollectPayment = (id) => {
-    setSelectedId(id);
-    setSelectedSource("collection");
+    navigateFeeAccount(id, "collection");
     setCollecting(false);
   };
 
   const printStudentStatement = (id) => {
-    setSelectedId(id);
-    setSelectedSource("ledger");
+    navigateFeeAccount(id, "ledger");
     window.setTimeout(() => printFeeTarget("student"), 80);
   };
 
@@ -4885,7 +4924,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         ))}
       </div>
 
-      {tab === "Overview" ? <OverviewTab accounts={overviewAccounts} dashboard={dashboardData} dueRows={dueRows} dashboardLoaded={dashboardLoaded} /> : null}
+      {tab === "Overview" ? <OverviewTab overviewTab={overviewTab} setOverviewTab={setOverviewTab} accounts={overviewAccounts} dashboard={dashboardData} dueRows={dueRows} dashboardLoaded={dashboardLoaded} /> : null}
       {tab === "Fee Setup" ? (
         <FeeSetupTab
           setupTab={setupTab}
@@ -4909,7 +4948,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       {tab === "Student Fee Ledger" && selected && !collecting ? (
         <StudentFeeAccountScreen
           account={selected}
-          onClose={() => { setSelectedId(null); setSelectedSource(""); setCollecting(false); }}
+          onClose={() => { navigateFeeAccount(null); setCollecting(false); }}
           onCollect={() => setCollecting(true)}
           onReceipt={setReceipt}
           allowCollect={selectedSource === "collection"}
@@ -4923,7 +4962,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           collectionAccounts={collectionAccounts}
           paymentHistoryRows={paymentHistoryRows}
           fineRules={fineRules}
-          onView={(id) => { setSelectedId(id); setSelectedSource("ledger"); }}
+          onView={(id) => navigateFeeAccount(id, "ledger")}
           onPrint={printStudentStatement}
           onCollect={openCollectPayment}
           onReceipt={setReceipt}

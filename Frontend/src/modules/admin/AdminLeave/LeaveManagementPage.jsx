@@ -922,31 +922,58 @@ export default function LeaveManagementPage() {
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [openingRequestId, setOpeningRequestId] = useState(null);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelectedRecord] = useState(null);
   const [rejecting, setRejecting] = useState(null);
   const [affected, setAffected] = useState(null);
   const [assignment, setAssignment] = useState(null);
   const [records, setRecords] = useState([]);
   const [remark, setRemark] = useState("");
   const [message, setMessage] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [staffHistory, setStaffHistory] = useState(null);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState(tabParam === "today" ? "today" : tabParam === "all" ? "all" : "apply");
+  const activeTab = tabParam === "apply" ? "apply" : ["all", "requests"].includes(tabParam) ? "all" : "today";
+  const historyOpen = tabParam === "history";
+  const viewId = searchParams.get("view") || "";
+  const setActiveTab = useCallback((tab) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", tab === "all" ? "requests" : tab === "today" ? "staff" : "apply");
+    next.delete("view"); next.delete("returnTab");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+  const setHistoryOpen = useCallback((open) => {
+    const next = new URLSearchParams(searchParams);
+    if (open) { next.set("returnTab", activeTab === "all" ? "requests" : activeTab === "apply" ? "apply" : "staff"); next.set("tab", "history"); }
+    else { next.set("tab", ["apply", "requests", "staff"].includes(next.get("returnTab")) ? next.get("returnTab") : "staff"); next.delete("returnTab"); }
+    next.delete("view");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  }, [activeTab, searchParams, setSearchParams]);
+  const closeDetails = useCallback(() => {
+    setSelectedRecord(null);
+    const next = new URLSearchParams(searchParams); next.delete("view");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  }, [searchParams, setSearchParams]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [requestPage, setRequestPage] = useState(1);
   const [requestPageSize, setRequestPageSize] = useState(10);
 
   useEffect(() => {
-    if (tabParam === "history") {
-      setHistoryOpen(true);
-    } else {
-      setHistoryOpen(false);
-      setActiveTab(tabParam === "all" ? "all" : "today");
+    let active = true;
+    if (!viewId) { setSelectedRecord(null); setOpeningRequestId(null); return undefined; }
+    if (!/^[A-Za-z0-9_-]+$/.test(viewId) || /^0+$/.test(viewId)) {
+      setSelectedRecord(null); setOpeningRequestId(null); setMessage("Invalid leave request ID."); return undefined;
     }
-  }, [tabParam]);
+    setSelectedRecord((current) => String(current?.staffLeaveRequestId || current?.id || "") === viewId ? current : null);
+    setOpeningRequestId(viewId);
+    getLeaveDetails(viewId).then((detail) => {
+      if (!active) return;
+      if (!detail || String(detail.staffLeaveRequestId || detail.id) !== viewId) throw new Error("Leave request details were not found.");
+      setSelectedRecord(detail); setRemark(detail.adminRemark || "");
+    }).catch((error) => { if (active) { setSelectedRecord(null); setMessage(getApiErrorMessage(error) || "Unable to load leave request details."); } })
+      .finally(() => { if (active) setOpeningRequestId(null); });
+    return () => { active = false; };
+  }, [viewId, campusId]);
 
   // Admin personal leave states (First Reference Screen)
   const [adminLeaveList, setAdminLeaveList] = useState([]);
@@ -1551,20 +1578,11 @@ export default function LeaveManagementPage() {
   }, [loadRequests]);
 
   const openDetails = (req) => {
-    setSelected(req); // Open immediately so the modal is never blocked
-    setRemark(req.adminRemark || "");
-    const rid = req.staffLeaveRequestId || req.id;
-    if (rid) {
-      setOpeningRequestId(rid);
-      getLeaveDetails(rid).then(detail => {
-        if (detail) {
-          setSelected(prev => ({ ...prev, ...detail }));
-          if (detail.adminRemark) setRemark(detail.adminRemark);
-        }
-      }).catch(console.warn).finally(() => {
-        setOpeningRequestId(null);
-      });
-    }
+    const id = req.staffLeaveRequestId || req.id;
+    if (!id) { setMessage("This leave request has no stable ID."); return; }
+    setSelectedRecord(req); setRemark(req.adminRemark || "");
+    const next = new URLSearchParams(searchParams); next.set("view", String(id));
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
   };
 
   const commitReview = (status) => {
@@ -1577,7 +1595,7 @@ export default function LeaveManagementPage() {
       rejectionReason: remark
     }).then(() => {
       loadRequests();
-      setSelected(null);
+      closeDetails();
       setRejecting(null);
       setMessage(`Leave request ${status.toLowerCase()}.`);
     }).catch(console.error).finally(() => {
@@ -1606,6 +1624,7 @@ export default function LeaveManagementPage() {
   if (historyOpen) {
     return (
       <>
+        {message && <Toast message={message} onClose={() => setMessage("")} />}
         <DashboardLayout
           title="Leave History"
           subtitle="View staff leave usage, requests, and approval history"
@@ -1627,14 +1646,15 @@ export default function LeaveManagementPage() {
           />
         )}
 
-        {selected && (
+      {openingRequestId && !selected && <Modal title="Leave Request Details" onClose={closeDetails}><Skeleton /></Modal>}
+      {selected && (
           <LeaveDetails
             leave={selected}
             remark={remark}
             setRemark={setRemark}
-            onClose={() => setSelected(null)}
+            onClose={() => closeDetails()}
             onReview={review}
-            onAffected={() => { setAffected(selected); setSelected(null); }}
+            onAffected={() => { setAffected(selected); closeDetails(); }}
             reviewing={reviewing}
           />
         )}
@@ -2230,14 +2250,15 @@ export default function LeaveManagementPage() {
           )
           : null)}
 
+      {openingRequestId && !selected && <Modal title="Leave Request Details" onClose={closeDetails}><Skeleton /></Modal>}
       {selected && (
         <LeaveDetails
           leave={selected}
           remark={remark}
           setRemark={setRemark}
-          onClose={() => setSelected(null)}
+          onClose={() => closeDetails()}
           onReview={review}
-          onAffected={() => { setAffected(selected); setSelected(null); }}
+          onAffected={() => { setAffected(selected); closeDetails(); }}
           reviewing={reviewing}
         />
       )}

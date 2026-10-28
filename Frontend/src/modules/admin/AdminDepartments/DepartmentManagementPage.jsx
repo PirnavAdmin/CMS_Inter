@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Building2,
@@ -758,14 +758,27 @@ function MasterCreateModal({ kind, staffType, departments = [], selectedCampus, 
   );
 }
 
+const withDepartmentContext = (path, params) => {
+  const next = new URLSearchParams(params);
+  next.delete("add");
+  return path + (next.toString() ? "?" + next.toString() : "");
+};
+
 export default function DepartmentManagementPage() {
   const navigate = useNavigate();
+  const [routeParams, setRouteParams] = useSearchParams();
+  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
   const { selectedCampus } = useCampusContext();
   const { selectedBoard } = useAcademicContext();
 
   const [departments, setDepartments] = useState(() => loadCachedDepartments());
   const [designations, setDesignations] = useState(() => loadCachedDesignations());
-  const [staffType, setStaffType] = useState("Teaching");
+  const staffType = routeParams.get("tab") === "non-teaching" ? "Non-Teaching" : "Teaching";
+  const setStaffType = useCallback((type) => {
+    const next = new URLSearchParams(routeParams);
+    next.set("tab", type === "Non-Teaching" ? "non-teaching" : "teaching"); next.delete("add");
+    if (next.toString() !== routeParams.toString()) setRouteParams(next);
+  }, [routeParams, setRouteParams]);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
   const [designationsLoading, setDesignationsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -776,7 +789,12 @@ export default function DepartmentManagementPage() {
   const [toast, setToast] = useState("");
   const [pendingDeleteDept, setPendingDeleteDept] = useState(null);
   const [pendingDeleteDesig, setPendingDeleteDesig] = useState(null);
-  const [createKind, setCreateKind] = useState(null);
+  const createKind = ["department", "designation"].includes(routeParams.get("add")) ? routeParams.get("add") : null;
+  const setCreateKind = useCallback((kind) => {
+    const next = new URLSearchParams(routeParams);
+    if (kind) next.set("add", kind); else next.delete("add");
+    if (next.toString() !== routeParams.toString()) setRouteParams(next);
+  }, [routeParams, setRouteParams]);
   const [deletingDept, setDeletingDept] = useState(false);
   const [deletingDesig, setDeletingDesig] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
@@ -1215,7 +1233,7 @@ export default function DepartmentManagementPage() {
                 <button
                   type="button"
                   className="cms-btn secondary"
-                  onClick={() => navigate("/dashboard/departments/import")}
+                  onClick={() => navigate(withDepartmentContext("/dashboard/departments/import", routeParams))}
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} /> Import Excel
                 </button>
@@ -1276,7 +1294,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-view"
                                 title={`View ${item.name}`}
                                 aria-label={`View ${item.name}`}
-                                onClick={() => navigate(`/dashboard/departments/${item.id}/view`, { state: { department: item } })}
+                                onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${item.id}/view`, routeParams), { state: { department: item } })}
                               >
                                 <Eye size={12} />
                               </button>
@@ -1285,7 +1303,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-edit"
                                 title={`Edit ${item.name}`}
                                 aria-label={`Edit ${item.name}`}
-                                onClick={() => navigate(`/dashboard/departments/${item.id}/edit`)}
+                                onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${item.id}/edit`, routeParams))}
                               >
                                 <Pencil size={12} />
                               </button>
@@ -1348,7 +1366,7 @@ export default function DepartmentManagementPage() {
                 <button
                   type="button"
                   className="cms-btn secondary"
-                  onClick={() => navigate("/dashboard/designations/import")}
+                  onClick={() => navigate(withDepartmentContext("/dashboard/designations/import", routeParams))}
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} /> Import Excel
                 </button>
@@ -1415,7 +1433,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-view"
                                 title={`View ${item.name}`}
                                 aria-label={`View ${item.name}`}
-                                onClick={() => navigate(`/dashboard/designations/${item.id}/view`, { state: { designation: item } })}
+                                onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${item.id}/view`, routeParams), { state: { designation: item } })}
                               >
                                 <Eye size={12} />
                               </button>
@@ -1424,7 +1442,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-edit"
                                 title={`Edit ${item.name}`}
                                 aria-label={`Edit ${item.name}`}
-                                onClick={() => navigate(`/dashboard/designations/${item.id}/edit`)}
+                                onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${item.id}/edit`, routeParams))}
                               >
                                 <Pencil size={12} />
                               </button>
@@ -1553,6 +1571,8 @@ export default function DepartmentManagementPage() {
 // ----------------------------------------------------------------------
 export function DepartmentDetailsPage() {
   const navigate = useNavigate();
+  const [routeParams] = useSearchParams();
+  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
   const location = useLocation();
   const { id } = useParams();
   const [department, setDepartment] = useState(location.state?.department || null);
@@ -1563,7 +1583,7 @@ export function DepartmentDetailsPage() {
 
   useEffect(() => {
     let active = true;
-    if (!department) {
+    if (!department || String(department.id) !== String(id)) {
       setLoading(true);
       const loadDept = async () => {
         try {
@@ -1571,6 +1591,7 @@ export function DepartmentDetailsPage() {
             const res = await apiClient.get(apiEndpoints.departments.getById(id), { skipGlobalLoader: true });
             if (!active) return;
             setDepartment(normalizeDepartment(res.data));
+            setLoading(false);
             return;
           }
         } catch (err) {
@@ -1640,7 +1661,7 @@ export function DepartmentDetailsPage() {
         department ? (
           <button
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate(`/dashboard/departments/${department.id}/edit`)}
+            onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${department.id}/edit`, routeParams))}
           >
             <Pencil /> Edit Department
           </button>
@@ -1648,7 +1669,7 @@ export function DepartmentDetailsPage() {
       }
     >
       <main className="master-form-page">
-        <button className="master-back" onClick={() => navigate("/dashboard/departments")}>
+        <button className="master-back" onClick={() => navigate(listUrl)}>
           <ArrowLeft /> Back to Department & Designation
         </button>
         <section className="master-details-card">
@@ -1705,7 +1726,7 @@ export function DepartmentDetailsPage() {
                     type="button"
                     className="cms-btn secondary"
                     style={{ height: 32, fontSize: "12px", padding: "0 10px" }}
-                    onClick={() => navigate("/dashboard/designations/create")}
+                    onClick={() => navigate(withDepartmentContext("/dashboard/designations/add", routeParams))}
                   >
                     + Add Designation
                   </button>
@@ -1759,6 +1780,8 @@ export function DepartmentDetailsPage() {
 // ----------------------------------------------------------------------
 export function DesignationDetailsPage() {
   const navigate = useNavigate();
+  const [routeParams] = useSearchParams();
+  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
   const location = useLocation();
   const { id } = useParams();
   const [designation, setDesignation] = useState(location.state?.designation || null);
@@ -1766,7 +1789,7 @@ export function DesignationDetailsPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (designation) return;
+    if (designation && String(designation.id) === String(id)) return;
     let active = true;
     setLoading(true);
     apiClient
@@ -1796,7 +1819,7 @@ export function DesignationDetailsPage() {
         designation ? (
           <button
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate(`/dashboard/designations/${id}/edit`)}
+            onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${id}/edit`, routeParams))}
           >
             <Pencil /> Edit Designation
           </button>
@@ -1804,7 +1827,7 @@ export function DesignationDetailsPage() {
       }
     >
       <main className="master-form-page">
-        <button className="master-back" onClick={() => navigate("/dashboard/departments")}>
+        <button className="master-back" onClick={() => navigate(listUrl)}>
           <ArrowLeft /> Back to Department & Designation
         </button>
         <section className="master-details-card">
@@ -1864,6 +1887,8 @@ export function DesignationDetailsPage() {
 // ----------------------------------------------------------------------
 export function MasterFormPage({ kind }) {
   const navigate = useNavigate();
+  const [routeParams] = useSearchParams();
+  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
   const { id } = useParams();
   const edit = Boolean(id);
   const label = kind === "department" ? "Department" : "Designation";
@@ -1882,7 +1907,7 @@ export function MasterFormPage({ kind }) {
     departmentId: "",
     description: "",
     status: "Active",
-    staffType: "Teaching",
+    staffType: routeParams.get("tab") === "non-teaching" ? "Non-Teaching" : "Teaching",
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(edit);
@@ -2016,7 +2041,7 @@ export function MasterFormPage({ kind }) {
         } else {
           await apiClient.post(apiEndpoints.departments.create, payload);
         }
-        navigate("/dashboard/departments");
+        navigate(listUrl);
       } else {
         const desigCode = values.designationCode?.trim() || values.designationName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 12);
         const payload = {
@@ -2036,7 +2061,7 @@ export function MasterFormPage({ kind }) {
         } else {
           await apiClient.post(apiEndpoints.designations.create, payload);
         }
-        navigate("/dashboard/departments");
+        navigate(listUrl);
       }
     } catch (error) {
       setErrors({
@@ -2057,7 +2082,7 @@ export function MasterFormPage({ kind }) {
       breadcrumb={["Administration", "Department & Designation"]}
     >
       <main className="master-form-page">
-        <button className="master-back" onClick={() => navigate("/dashboard/departments")}>
+        <button className="master-back" onClick={() => navigate(listUrl)}>
           <ArrowLeft /> Back to Department & Designation
         </button>
         {loading ? (
@@ -2158,7 +2183,7 @@ export function MasterFormPage({ kind }) {
               <button
                 type="button"
                 className="cms-btn secondary"
-                onClick={() => navigate("/dashboard/departments")}
+                onClick={() => navigate(listUrl)}
                 disabled={submitting}
               >
                 Cancel
@@ -2199,6 +2224,8 @@ const importColumns = {
 
 export function MasterImportPage({ kind = "department" }) {
   const navigate = useNavigate();
+  const [routeParams] = useSearchParams();
+  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
   const [rows, setRows] = useState([]);
   const [rawFile, setRawFile] = useState(null);
   const [parsing, setParsing] = useState(false);
@@ -2440,7 +2467,7 @@ export function MasterImportPage({ kind = "department" }) {
       breadcrumb={["Administration", "Department & Designation"]}
     >
       <main className="master-import">
-        <button className="master-back" onClick={() => navigate("/dashboard/departments")}>
+        <button className="master-back" onClick={() => navigate(listUrl)}>
           <ArrowLeft /> Back to Department & Designation
         </button>
         <section>
@@ -2490,7 +2517,7 @@ export function MasterImportPage({ kind = "department" }) {
                   type="button"
                   className="cms-btn primary"
                   style={{ height: "30px", fontSize: "11px" }}
-                  onClick={() => navigate("/dashboard/departments")}
+                  onClick={() => navigate(listUrl)}
                 >
                   Go to Department & Designation
                 </button>

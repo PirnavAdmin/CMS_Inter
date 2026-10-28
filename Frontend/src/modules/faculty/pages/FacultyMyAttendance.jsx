@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
@@ -123,7 +124,14 @@ const normalizeTodayData = (raw, timing) => {
   };
 };
 
-export default function FacultyMyAttendance() {
+export default function FacultyMyAttendance({ adminRouting = false } = {}) {
+  const [routeParams, setRouteParams] = useSearchParams();
+  const regularizeDate = adminRouting ? routeParams.get("regularize") || "" : "";
+  const rangeParam = routeParams.get("range");
+  const routedRange = ["week", "last_week", "month", "last_month"].includes(rangeParam) ? rangeParam : "week";
+  const restoredRegularization = useRef("");
+  const historyRequest = useRef(0);
+  const [historyRange, setHistoryRange] = useState("");
   const context = useFacultySafe();
   const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
 
@@ -175,7 +183,14 @@ export default function FacultyMyAttendance() {
   }, []);
 
   // Filter State: "week" | "last_week" | "month" | "last_month"
-  const [activeFilter, setActiveFilter] = useState("week");
+  const [localFilter, setLocalFilter] = useState("week");
+  const activeFilter = adminRouting ? routedRange : localFilter;
+  const setActiveFilter = (range) => {
+    if (!adminRouting) return setLocalFilter(range);
+    const next = new URLSearchParams(routeParams);
+    next.set("tab", "my-attendance"); next.set("range", range);
+    setRouteParams(next);
+  };
 
   // Loading States
   const [loadingToday, setLoadingToday] = useState(true);
@@ -214,7 +229,15 @@ export default function FacultyMyAttendance() {
   });
 
   // Regularization Modal State
-  const [regModalOpen, setRegModalOpen] = useState(false);
+  const [localRegModalOpen, setLocalRegModalOpen] = useState(false);
+  const regModalOpen = adminRouting ? Boolean(regularizeDate && restoredRegularization.current === regularizeDate && localRegModalOpen) : localRegModalOpen;
+  const setRegModalOpen = (open) => {
+    setLocalRegModalOpen(open);
+    if (adminRouting && !open) {
+      const next = new URLSearchParams(routeParams); next.delete("regularize");
+      setRouteParams(next);
+    }
+  };
   const [regSubmitting, setRegSubmitting] = useState(false);
   const [regForm, setRegForm] = useState({
     rawDate: "",
@@ -287,10 +310,14 @@ export default function FacultyMyAttendance() {
 
   // Fetch Attendance History for selected filter
   const fetchHistory = useCallback(async (period) => {
+    const request = ++historyRequest.current;
+    if (adminRouting) setHistoryRange("");
     try {
       setLoadingHistory(true);
       const res = await attendanceService.getMyAttendanceHistory(period);
+      if (adminRouting && request !== historyRequest.current) return;
       const payload = res?.data || res?.Data || (res?.status ? res : null);
+      if (!payload && adminRouting) setHistoryRange("error");
       if (payload) {
         const rawLogs = payload.logs || payload.Logs || [];
         const rawMetrics = payload.metrics || payload.Metrics || {};
@@ -386,6 +413,8 @@ export default function FacultyMyAttendance() {
           };
         });
 
+        if (adminRouting) setHistoryRange(period);
+
         // Compute late punch count dynamically
         const lateCount = processedLogs.filter((l) => l.status === "Late").length;
         const presentDaysCount = processedLogs.filter((l) => l.status === "Present" || l.status === "Late" || l.status === "Missed Checkout").length;
@@ -406,10 +435,11 @@ export default function FacultyMyAttendance() {
       }
     } catch (err) {
       console.warn("Could not load attendance history from backend", err);
+      if (adminRouting && request === historyRequest.current) setHistoryRange("error");
     } finally {
-      setLoadingHistory(false);
+      if (!adminRouting || request === historyRequest.current) setLoadingHistory(false);
     }
-  }, [timingConfig]);
+  }, [timingConfig, adminRouting]);
 
   // Initial load once on mount
   useEffect(() => {
@@ -505,8 +535,48 @@ export default function FacultyMyAttendance() {
     }
   };
 
+  useEffect(() => {
+    if (!adminRouting) return;
+    if (!regularizeDate) {
+      restoredRegularization.current = "";
+      setLocalRegModalOpen(false);
+      return;
+    }
+    if (restoredRegularization.current === regularizeDate) return;
+    setLocalRegModalOpen(false);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(regularizeDate) || Number.isNaN(Date.parse(regularizeDate)) || new Date(regularizeDate).toISOString().slice(0, 10) !== regularizeDate) {
+      restoredRegularization.current = regularizeDate;
+      notify("Invalid attendance regularization date.", "error");
+      return;
+    }
+    if (loadingHistory || (historyRange !== activeFilter && historyRange !== "error")) return;
+    if (historyRange === "error") {
+      notify("Attendance history could not be loaded. Please retry.", "error");
+      return;
+    }
+    const log = historyData.logs.find((row) => String(row.rawDate || "").slice(0, 10) === regularizeDate);
+    if (!log || !log.canRegularize || ["pending", "approved", "rejected"].includes(String(log.regularizationState || "").toLowerCase())) {
+      restoredRegularization.current = regularizeDate;
+      notify("Attendance record is unavailable or cannot be regularized in this history range.", "error");
+      return;
+    }
+    setRegForm({ rawDate: regularizeDate, displayDate: log.date || log.day || "Selected Date", requestedInTime: "09:00", requestedOutTime: "16:30", reason: "" });
+    restoredRegularization.current = regularizeDate;
+    setLocalRegModalOpen(true);
+  }, [adminRouting, regularizeDate, loadingHistory, historyRange, activeFilter, historyData, notify]);
+
   // Open Regularization Modal for a specific date
   const openRegularizeModal = (log) => {
+    if (adminRouting) {
+      const date = String(log.rawDate || log.RawDate || "").slice(0, 10);
+      if (!date) return notify("Attendance record has no valid date.", "error");
+      const next = new URLSearchParams(routeParams);
+      next.set("tab", "my-attendance");
+      next.set("range", historyData.logs.some((row) => String(row.rawDate || "").slice(0, 10) === date) ? activeFilter : "week");
+      next.set("regularize", date);
+      setRouteParams(next);
+      return;
+    }
     setRegForm({
       rawDate: log.rawDate || log.RawDate || new Date().toISOString().split("T")[0],
       displayDate: log.date || log.Date || log.day || "Selected Date",

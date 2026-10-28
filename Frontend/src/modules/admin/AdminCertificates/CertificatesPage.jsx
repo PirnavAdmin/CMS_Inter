@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FaArrowsRotate, FaAward, FaBan, FaCheck, FaChevronDown, FaClipboardCheck, FaDownload, FaEraser, FaEye, FaFileCirclePlus, FaFileLines, FaFilter, FaPaperPlane, FaPlus, FaPrint, FaRotateLeft, FaTrash, FaUsers, FaXmark } from "react-icons/fa6";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -1669,6 +1669,14 @@ function buildPrintHtml(record) {
 </html>`;
 }
 
+const resolveCertificateView = (params) => {
+  const tab = params.get("tab");
+  if (["actions", "review", "review-issue"].includes(tab)) return { tab: "actions", mode: "single" };
+  if (["certificates", "records"].includes(tab)) return { tab: "certificates", mode: "single" };
+  if (["create", "generate"].includes(tab)) return { tab: "generate", mode: params.get("subtab") === "bulk" ? "bulk" : "single" };
+  return { tab: params.get("status") === "Requested" ? "actions" : "generate", mode: "single" };
+};
+
 export default function CertificatesPage() {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const { selectedBoard, selectedAcademicYear, selectedBoardId, selectedAcademicYearId } = useAcademicContext();
@@ -1689,7 +1697,9 @@ export default function CertificatesPage() {
   const [busyAction, setBusyAction] = useState({ id: null, type: "" });
   const [bulkAction, setBulkAction] = useState("");
   const [printingId, setPrintingId] = useState(null);
-  const [generationMode, setGenerationMode] = useState("single");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const certificateView = resolveCertificateView(searchParams);
+  const generationMode = certificateView.mode;
   const [bulkStudentSearch, setBulkStudentSearch] = useState("");
   const [selectedBulkStudents, setSelectedBulkStudents] = useState([]);
   const [bulkStudentFilters, setBulkStudentFilters] = useState(() => ({
@@ -1723,21 +1733,16 @@ export default function CertificatesPage() {
   const [toDate, setToDate] = useState("");
   const [showRecordFilters, setShowRecordFilters] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [searchParams] = useSearchParams();
-  const urlStatus = searchParams?.get("status");
-  const urlTab = searchParams?.get("tab");
-  const [activeTab, setActiveTab] = useState(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const s = sp.get("status");
-      const t = sp.get("tab");
-      if (t === "actions" || t === "review" || s === "Requested") return "actions";
-      if (t === "certificates" || t === "records") return "certificates";
-    } catch {
-      /* ignore */
-    }
-    return "generate";
-  });
+  const activeTab = certificateView.tab;
+  const navigateCertificateTab = useCallback((tab, mode = "single") => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", tab === "actions" ? "review-issue" : tab === "certificates" ? "records" : "create");
+    if (tab === "generate") next.set("subtab", mode === "bulk" ? "bulk" : "single");
+    else next.delete("subtab");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+  const setActiveTab = useCallback((tab) => navigateCertificateTab(tab), [navigateCertificateTab]);
+  const setGenerationMode = useCallback((mode) => navigateCertificateTab("generate", mode), [navigateCertificateTab]);
   const [page, setPage] = useState(1);
   const [workflowStatusFilter, setWorkflowStatusFilter] = useState(() => {
     try {
@@ -2111,15 +2116,6 @@ export default function CertificatesPage() {
 
   useEffect(() => {
     const statusParam = searchParams?.get("status");
-    const tabParam = searchParams?.get("tab");
-    if (tabParam === "actions" || tabParam === "review" || statusParam === "Requested") {
-      setActiveTab("actions");
-    } else if (tabParam === "certificates" || tabParam === "records") {
-      setActiveTab("certificates");
-    } else if (tabParam === "generate") {
-      setActiveTab("generate");
-    }
-
     if (statusParam && ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(statusParam)) {
       setWorkflowStatusFilter(statusParam);
       setActionPage(1);
@@ -2783,7 +2779,6 @@ export default function CertificatesPage() {
       feeDueAmount: row.feeDueAmount,
       rawRow: row,
     });
-    setGenerationMode("single");
     setActiveTab("generate");
     setToast(`Loaded request for ${row.student || admissionNo} (${row.type}). Review details and click Generate.`);
   };

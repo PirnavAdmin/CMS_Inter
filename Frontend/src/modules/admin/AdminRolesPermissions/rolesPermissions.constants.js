@@ -568,9 +568,9 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   },
   {
     id: "reimbursement",
-    name: "Staff Reimbursements",
-    route: "/dashboard/reimbursements",
-    section: "Staff",
+    name: "Reimbursement",
+    route: "/dashboard/reimbursement",
+    section: "Finance",
     icon: ReceiptIndianRupee,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
     screens: [

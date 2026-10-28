@@ -215,7 +215,6 @@ export const menu = [
       { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department, moduleKey: "department-designation" },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance" },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management" },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll, moduleKey: "reimbursement" },
     ],
   },
   {
@@ -368,7 +367,7 @@ const EMPTY_CAMPUS_CONTEXT = Object.freeze({
   setSelectedCampus: () => undefined,
 });
 const MOCK_NOTIFICATIONS = [
-  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/dashboard/reimbursements", label: "reimbursements" }
+  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/dashboard/reimbursement", label: "reimbursements" }
 ];
 const PARENT_NOTIFICATIONS = [
   { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
@@ -775,7 +774,7 @@ export default function DashboardLayout({
                     id: "admin-notif-reimbursement",
                     title: "New Staff Reimbursement Request",
                     count: claims.length,
-                    to: "/dashboard/reimbursements",
+                    to: "/dashboard/reimbursement",
                     label: "reimbursements"
                   });
                 }
@@ -997,7 +996,7 @@ export default function DashboardLayout({
     if (pathname.startsWith("/dashboard/certificates")) {
       setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-certificate"));
     }
-    if (pathname.startsWith("/dashboard/reimbursements")) {
+    if (/^\/dashboard\/(?:finance\/)?reimbursements?(?:\/|$)/.test(pathname)) {
       setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-reimbursement"));
     }
   }, [pathname]);

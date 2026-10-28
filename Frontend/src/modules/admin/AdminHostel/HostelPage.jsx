@@ -74,6 +74,32 @@ const studentSubtabs = [
   { id: "transfers", label: "Transfer & Vacate Student", title: "Hostel Transfers & Bed Vacations", subtitle: "Track inter-block migrations, room swaps, and official bed vacation applications", icon: RotateCcw },
 ];
 
+const hostelViewPaths = {
+  dashboard: "/hostel",
+  setup: { blocks: "/hostel?tab=setup&subtab=blocks", rooms: "/hostel?tab=setup&subtab=rooms", wardens: "/hostel?tab=setup&subtab=wardens" },
+  students: { allocations: "/hostel?tab=students&subtab=allocations", attendance: "/hostel?tab=students&subtab=attendance", outpasses: "/hostel?tab=students&subtab=outpasses", transfers: "/hostel?tab=students&subtab=transfers" },
+  reports: "/hostel?tab=reports",
+};
+const resolveHostelView = (pathname, search = "") => {
+  const path = pathname.toLowerCase().replace(/\/+$/, "");
+  if (!/^\/(?:dashboard\/)?hostel(?:\/|$)/.test(path)) return null;
+  const suffix = path.replace(/^\/(?:dashboard\/)?hostel\/?/, "");
+  const view = { major: "dashboard", setup: "blocks", student: "allocations" };
+  const setup = { "master": "blocks", "master-setup": "blocks", "master-setup/blocks": "blocks", "master-setup/rooms-beds": "rooms", "master-setup/rooms": "rooms", "master-setup/wardens": "wardens" };
+  const students = { "students": "allocations", "students/allocations": "allocations", "student-allocation": "allocations", "attendance": "attendance", "students/attendance": "attendance", "students/outpasses": "outpasses", "students/transfers": "transfers" };
+  const params = new URLSearchParams(search);
+  const tab = params.get("tab");
+  const subtab = params.get("subtab");
+  if (tab === "dashboard") return view;
+  if (tab === "setup") return { ...view, major: "setup", setup: Object.hasOwn(hostelViewPaths.setup, subtab) ? subtab : "blocks" };
+  if (tab === "students") return { ...view, major: "students", student: Object.hasOwn(hostelViewPaths.students, subtab) ? subtab : "allocations" };
+  if (tab === "reports") return { ...view, major: "reports" };
+  if (Object.hasOwn(setup, suffix)) return { ...view, major: "setup", setup: setup[suffix] };
+  if (Object.hasOwn(students, suffix)) return { ...view, major: "students", student: students[suffix] };
+  if (suffix === "reports") return { ...view, major: "reports" };
+  return view;
+};
+
 // Reference Academic Year Months for Monthly Attendance
 const academicMonthOptions = [
   { value: "2026-06", label: "June 2026", rangeText: "Jun 1, 2026 – Jun 30, 2026" },
@@ -327,7 +353,9 @@ export default function HostelPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const user = getAuthUser();
-  const isWardenRoute = location.pathname.toLowerCase().includes("warden");
+  const adminView = useMemo(() => resolveHostelView(location.pathname, location.search), [location.pathname, location.search]);
+  const isAdminHostelRoute = Boolean(adminView);
+  const isWardenRoute = /^\/warden(?:-|\/|$)/i.test(location.pathname);
   const isWarden = isWardenRole(user?.role, user) || isWardenRoute;
   const isAdmin = Boolean(user?.isAdmin || String(user?.role || "").toLowerCase().includes("admin"));
   const canAccessAdminEndpoints = isAdmin && !isWarden;
@@ -349,12 +377,36 @@ export default function HostelPage() {
     return "default";
   }, [location.pathname]);
 
-  const isDedicatedView = isWardenRoute || activeSection !== "default";
+  const isDedicatedView = !isAdminHostelRoute && (isWardenRoute || activeSection !== "default");
 
   // ── Navigation Tabs State ───────────────────────────────────────────
-  const [activeMajorTab, setActiveMajorTab] = useState("dashboard");
-  const [activeSetupSubtab, setActiveSetupSubtab] = useState("blocks");
-  const [activeStudentSubtab, setActiveStudentSubtab] = useState("allocations");
+  const [legacyMajorTab, setLegacyMajorTab] = useState("dashboard");
+  const [legacySetupSubtab, setLegacySetupSubtab] = useState("blocks");
+  const [legacyStudentSubtab, setLegacyStudentSubtab] = useState("allocations");
+  const activeMajorTab = adminView?.major ?? legacyMajorTab;
+  const activeSetupSubtab = adminView?.setup ?? legacySetupSubtab;
+  const activeStudentSubtab = adminView?.student ?? legacyStudentSubtab;
+  const lastSetupSubtab = useRef(activeSetupSubtab);
+  const lastStudentSubtab = useRef(activeStudentSubtab);
+  useEffect(() => {
+    if (activeMajorTab === "setup") lastSetupSubtab.current = activeSetupSubtab;
+    if (activeMajorTab === "students") lastStudentSubtab.current = activeStudentSubtab;
+  }, [activeMajorTab, activeSetupSubtab, activeStudentSubtab]);
+  const navigateHostelView = useCallback((major, subtab) => {
+    if (!isAdminHostelRoute) {
+      setLegacyMajorTab(major);
+      if (major === "setup" && subtab) setLegacySetupSubtab(subtab);
+      if (major === "students" && subtab) setLegacyStudentSubtab(subtab);
+      return;
+    }
+    const target = major === "setup" ? hostelViewPaths.setup[subtab === "categories" ? "rooms" : subtab || lastSetupSubtab.current]
+      : major === "students" ? hostelViewPaths.students[subtab || lastStudentSubtab.current]
+      : hostelViewPaths[major];
+    if (target && target !== location.pathname + location.search) navigate(target);
+  }, [isAdminHostelRoute, location.pathname, location.search, navigate]);
+  const setActiveMajorTab = useCallback((major) => navigateHostelView(major), [navigateHostelView]);
+  const setActiveSetupSubtab = useCallback((subtab) => navigateHostelView("setup", subtab), [navigateHostelView]);
+  const setActiveStudentSubtab = useCallback((subtab) => navigateHostelView("students", subtab), [navigateHostelView]);
 
   // ── Dashboard Interactive State ─────────────────────────────────────
   const [dashBlockSearch, setDashBlockSearch] = useState("");
@@ -1149,36 +1201,37 @@ export default function HostelPage() {
 
   // ── Synchronize route location with initial tab ──────────────────────
   useEffect(() => {
+    if (isAdminHostelRoute) return;
     const path = location.pathname.toLowerCase();
     if (path.includes("master") || path.includes("block")) {
-      setActiveMajorTab("setup");
-      if (path.includes("category") || path.includes("room")) setActiveSetupSubtab("rooms");
-      else if (path.includes("warden")) setActiveSetupSubtab("wardens");
-      else setActiveSetupSubtab("blocks");
+      setLegacyMajorTab("setup");
+      if (path.includes("category") || path.includes("room")) setLegacySetupSubtab("rooms");
+      else if (path.includes("warden")) setLegacySetupSubtab("wardens");
+      else setLegacySetupSubtab("blocks");
     } else if (path.includes("room") || path.includes("bed")) {
-      setActiveMajorTab("setup");
-      setActiveSetupSubtab("rooms");
+      setLegacyMajorTab("setup");
+      setLegacySetupSubtab("rooms");
     } else if (path.includes("allocat")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("allocations");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("allocations");
     } else if (path.includes("attendance")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("attendance");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("attendance");
     } else if (path.includes("outpass") || path.includes("leave")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("outpasses");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("outpasses");
     } else if (path.includes("transfer") || path.includes("vacat")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("transfers");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("transfers");
     } else if (path.includes("students") || path.includes("student-allocation")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("allocations");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("allocations");
     } else if (path.includes("report")) {
-      setActiveMajorTab("reports");
+      setLegacyMajorTab("reports");
     } else if (path.includes("hostel") || path.includes("warden")) {
-      setActiveMajorTab("dashboard");
+      setLegacyMajorTab("dashboard");
     }
-  }, [location.pathname]);
+  }, [location.pathname, isAdminHostelRoute]);
 
   // ── Search & Filter State ───────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
@@ -2041,8 +2094,7 @@ export default function HostelPage() {
       });
 
       // Instantly switch tabs and clear filters so rooms are visible in real time
-      setActiveMajorTab("setup");
-      setActiveSetupSubtab("rooms");
+      navigateHostelView("setup", "rooms");
       setSearchQuery("");
       setFilterHostelRooms("all");
       setFilterFloor("all");
@@ -4107,8 +4159,7 @@ export default function HostelPage() {
               if (isWardenRoute) {
                 navigate("/warden-dashboard/rooms");
               } else {
-                setActiveMajorTab("setup");
-                setActiveSetupSubtab("blocks");
+                navigateHostelView("setup", "blocks");
               }
             }}
           >
@@ -4122,8 +4173,7 @@ export default function HostelPage() {
               if (isWardenRoute) {
                 navigate("/warden-dashboard/students");
               } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("allocations");
+                navigateHostelView("students", "allocations");
               }
             }}
           >
@@ -4137,8 +4187,7 @@ export default function HostelPage() {
               if (isWardenRoute) {
                 navigate("/warden-dashboard/allocations");
               } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("allocations");
+                navigateHostelView("students", "allocations");
               }
               setModal({ isOpen: true, type: "allocation", mode: "add", data: null });
             }}
@@ -4153,8 +4202,7 @@ export default function HostelPage() {
               if (isWardenRoute) {
                 navigate("/warden-dashboard/attendance");
               } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("attendance");
+                navigateHostelView("students", "attendance");
               }
             }}
           >
@@ -4382,8 +4430,7 @@ export default function HostelPage() {
                   if (isWardenRoute) {
                     navigate("/warden-dashboard/allocations");
                   } else {
-                    setActiveMajorTab("students");
-                    setActiveStudentSubtab("allocations");
+                    navigateHostelView("students", "allocations");
                   }
                 }}
               >
@@ -4446,8 +4493,7 @@ export default function HostelPage() {
                   if (isWardenRoute) {
                     navigate("/warden-dashboard/leave-requests");
                   } else {
-                    setActiveMajorTab("students");
-                    setActiveStudentSubtab("outpasses");
+                    navigateHostelView("students", "outpasses");
                   }
                 }}
               >
@@ -9112,8 +9158,7 @@ export default function HostelPage() {
             modal={modal}
             closeModal={closeModal}
             handleSaveBlock={handleSaveBlock}
-            setActiveMajorTab={setActiveMajorTab}
-            setActiveSetupSubtab={setActiveSetupSubtab}
+            onViewRooms={() => navigateHostelView("setup", "rooms")}
             setFilterHostelRooms={setFilterHostelRooms}
             blocks={blocks}
             isWardenRoute={isWardenRoute}
@@ -9819,7 +9864,7 @@ function StudentAttendanceModal({
 }
 
 // Block Modal
-function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, setActiveSetupSubtab, setFilterHostelRooms, blocks = [] }) {
+function BlockModal({ modal, closeModal, handleSaveBlock, onViewRooms, setFilterHostelRooms, blocks = [] }) {
     const isView = modal.mode === "view";
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [form, setForm] = useState(
@@ -9964,13 +10009,12 @@ function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, set
             <button type="button" className="cms-btn cms-btn-ghost" onClick={closeModal} disabled={isSubmitting}>
               {isView ? "Close" : "Cancel"}
             </button>
-            {isView && setActiveMajorTab && setActiveSetupSubtab && (
+            {isView && onViewRooms && (
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
                 onClick={() => {
-                  setActiveMajorTab("setup");
-                  setActiveSetupSubtab("rooms");
+                  onViewRooms();
                   if (setFilterHostelRooms) setFilterHostelRooms(String(form.id || form.code || ""));
                   closeModal();
                 }}
