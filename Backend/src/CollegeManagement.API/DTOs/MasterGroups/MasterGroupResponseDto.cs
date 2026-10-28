@@ -19,6 +19,11 @@ namespace CollegeManagement.API.DTOs.MasterGroups
         public List<int> ProgramIds { get; set; } = new();
         public List<MasterGroupProgramDto> Programs { get; set; } = new();
         public List<EligibleAcademicLevelDto> EligibleLevels { get; set; } = new();
+        public List<EligibleAcademicLevelDto> EligibleAcademicLevels 
+        { 
+            get => EligibleLevels; 
+            set => EligibleLevels = value; 
+        }
         public int ResolvedContextCount { get; set; }
     }
 }

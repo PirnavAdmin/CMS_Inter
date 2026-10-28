@@ -1,0 +1,401 @@
+.accountant-shell {
+  --sp-primary: var(--cms-primary);
+  --sp-primary-dark: var(--cms-primary-dark);
+  --sp-primary-hover: var(--cms-primary-hover);
+  --sp-primary-soft: var(--cms-primary-soft);
+  --sp-soft: var(--cms-subtle);
+  --sp-bg: var(--cms-bg);
+  --sp-surface: var(--cms-surface);
+  --sp-border: var(--cms-border);
+  --sp-text: var(--cms-text);
+  --sp-muted: var(--cms-muted);
+  display: grid;
+  gap: 12px;
+  color: var(--cms-text);
+}
+
+.accountant-shell .sp-page-header {
+  min-height: auto;
+}
+
+.accountant-shell .sp-page-header h1 {
+  color: var(--cms-text);
+  font-size: clamp(19px, 1.5vw, 22px);
+  letter-spacing: 0;
+}
+
+.accountant-shell .sp-page-header p {
+  color: var(--cms-muted);
+}
+
+.accountant-shell .sp-btn {
+  border-color: var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(28, 36, 22, 0.03);
+}
+
+.accountant-shell .sp-btn:hover {
+  border-color: var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary-dark);
+}
+
+.accountant-shell .sp-btn.primary {
+  border-color: var(--cms-primary);
+  background: linear-gradient(90deg, var(--cms-primary), var(--cms-primary-hover));
+  color: #ffffff;
+}
+
+.accountant-shell .sp-btn.primary:hover {
+  background: var(--cms-primary-dark);
+  color: #ffffff;
+}
+
+.accountant-btn-icon,
+.accountant-btn-generated-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 16%));
+}
+
+.accountant-btn-generated-icon {
+  background-repeat: no-repeat;
+  background-size: 300% 200%;
+  border-radius: 5px;
+}
+
+.accountant-shell .sp-summary-grid {
+  gap: 8px;
+}
+
+.accountant-shell .sp-summary {
+  --kpi-accent: var(--cms-primary);
+  min-height: 76px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--kpi-accent) 20%, var(--cms-border));
+  border-radius: 8px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--kpi-accent) 10%, var(--cms-surface)), var(--cms-surface) 75%);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--kpi-accent) 6%, transparent);
+}
+
+.accountant-shell .sp-summary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--kpi-accent) 12%, transparent);
+}
+
+.accountant-shell .sp-summary-icon {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--kpi-accent) 14%, var(--cms-surface));
+}
+
+.accountant-shell .sp-summary-3d-icon {
+  display: block;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--kpi-accent) 20%, transparent));
+}
+
+.accountant-shell .sp-summary-generated-icon {
+  background-repeat: no-repeat;
+  background-size: 300% 200%;
+  border-radius: 5px;
+}
+
+.accountant-shell .sp-tone-blue { --kpi-accent: #2563eb; }
+.accountant-shell .sp-tone-orange { --kpi-accent: #f07a1a; }
+.accountant-shell .sp-tone-purple { --kpi-accent: #7c3aed; }
+.accountant-shell .sp-tone-red { --kpi-accent: #ef4444; }
+
+.accountant-shell .sp-card,
+.accountant-shell .sp-toolbar,
+.accountant-shell .sp-profile-hero {
+  border-color: var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.accountant-shell .sp-card-head {
+  border-bottom-color: var(--cms-border);
+  background: color-mix(in srgb, var(--cms-subtle) 40%, var(--cms-surface));
+}
+
+.accountant-shell .accountant-chart { display: grid; gap: 10px; }
+.accountant-shell .accountant-chart-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 11px; }
+.accountant-shell .accountant-chart-row > span:first-child { color: var(--sp-muted); }
+.accountant-shell .accountant-bar { height: 9px; overflow: hidden; border-radius: 99px; background: var(--sp-soft); }
+.accountant-shell .accountant-bar i { display: block; height: 100%; border-radius: inherit; background: var(--sp-primary); }
+.accountant-shell .accountant-error { border-color: #efb4bc; background: #fff1f2; color: #b42336; }
+.accountant-shell .accountant-filter-row { display: flex; flex-wrap: wrap; gap: 9px; }
+.accountant-shell .accountant-filter-row input { flex: 1 1 220px; min-height: 38px; padding: 8px 10px; border: 1px solid var(--sp-border); border-radius: 8px; background: var(--sp-surface); color: var(--sp-text); font: inherit; font-size: 12px; }
+.accountant-profile-container {
+  max-width: 1300px;
+  padding-inline: 0;
+}
+.accountant-profile-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.accountant-profile-actions .sp-btn,
+.accountant-photo-controls .sp-btn,
+.admin-feedback-msg .sp-btn {
+  min-height: 34px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+.accountant-photo-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.accountant-photo-controls small {
+  color: var(--cms-muted);
+  font-size: 11px;
+}
+.accountant-hidden-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.admin-feedback-msg.accountant-warning {
+  border-color: #f7d58b;
+  background: #fff8e7;
+  color: #865b00;
+}
+.admin-feedback-msg span {
+  min-width: 0;
+}
+.accountant-avatar-initials {
+  color: var(--cms-primary);
+  font-size: 20px;
+  font-weight: 800;
+}
+.accountant-shell .accountant-fee-card { min-width: 0; }
+.accountant-shell .accountant-fee-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sp-border);
+}
+.accountant-shell .accountant-fee-tabs button {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sp-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.accountant-shell .accountant-fee-tabs button.is-active {
+  background: var(--sp-primary);
+  color: #fff;
+}
+.accountant-shell .accountant-fee-tabs.secondary button.is-active {
+  background: var(--sp-primary-soft);
+  border-color: var(--sp-primary);
+  color: var(--sp-primary-dark);
+}
+.accountant-shell .accountant-fee-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.accountant-shell .accountant-fee-filters .sp-search { min-width: 0; flex-basis: 220px; }
+.accountant-shell .accountant-fee-filters select {
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--sp-border);
+  border-radius: 8px;
+  background: var(--sp-surface);
+  color: var(--sp-text);
+  font: inherit;
+  font-size: 12px;
+}
+.accountant-shell .accountant-fee-totals,
+.accountant-shell .accountant-attendance-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 16px;
+  margin: 0;
+}
+.accountant-shell .accountant-fee-totals { padding: 12px 0; }
+.accountant-shell .accountant-fee-totals div,
+.accountant-shell .accountant-attendance-facts div { display: grid; gap: 6px; min-width: 0; }
+.accountant-shell .accountant-fee-totals span,
+.accountant-shell .accountant-attendance-facts dt { font-size: 12px; color: var(--sp-muted); }
+.accountant-shell .accountant-fee-totals strong { font-size: 20px; overflow-wrap: anywhere; }
+.accountant-shell .accountant-attendance-facts dd { margin: 0; font-size: 14px; }
+.accountant-shell .accountant-attendance-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.accountant-shell .accountant-attendance-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.accountant-shell .accountant-structure-items { margin-top: 12px; }
+.accountant-shell .accountant-structure-items summary { cursor: pointer; font-size: 12px; padding: 8px 0; }
+.accountant-shell .accountant-section-label { font-size: 14px; margin: 16px 0 8px; }
+.accountant-shell .accountant-fee-tabs button:focus-visible { outline: 2px solid var(--sp-primary); outline-offset: 2px; }
+@media (max-width: 900px) {
+  .accountant-shell .sp-summary-grid.four,
+  .accountant-shell .sp-dashboard-grid,
+  .accountant-shell .sp-grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .accountant-profile-actions {
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 620px) { .accountant-shell .accountant-chart-row { grid-template-columns: 88px minmax(0, 1fr) auto; } }
+
+/* Payroll records pagination. */
+.acct-payroll-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--cms-border); font-size: 12px; color: var(--cms-muted); }
+.acct-payroll-pagination nav { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.acct-payroll-pagination .sp-btn { min-width: 32px; justify-content: center; padding: 6px 10px; }
+.acct-payroll-pagination .sp-btn:disabled { opacity: .5; cursor: not-allowed; }
+.acct-payroll-pagination .sp-btn:focus-visible { outline: 2px solid var(--cms-primary); outline-offset: 2px; }
+@media (max-width: 620px) { .acct-payroll-pagination { align-items: flex-start; flex-direction: column; } .acct-payroll-pagination nav { justify-content: flex-start; } }
+
+/* Homepage density follows Admin metrics and inline actions; staff data stays unchanged. */
+.cms-content:has(.accountant-home) { padding: 6px 14px 8px; }
+.accountant-home { display: grid; gap: 8px; min-width: 0; --home-cream: color-mix(in srgb, #fff8e8 70%, var(--cms-surface)); }
+.accountant-home *, .accountant-home *::before, .accountant-home *::after { box-sizing: border-box; }
+.accountant-home > *, .accountant-home .sp-card, .accountant-home .sp-card-body { min-width: 0; }
+.accountant-home .accountant-home-welcome { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 4px 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.accountant-home .accountant-home-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.accountant-home .accountant-home-identity > div:last-child { min-width: 0; }
+.accountant-home .accountant-home-avatar { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; background: var(--cms-surface); border-radius: 20px; box-shadow: 0 5px 14px rgb(69 94 32 / 10%); }
+.accountant-home .accountant-home-avatar img { width: 34px; height: 34px; object-fit: contain; }
+.accountant-home .accountant-home-eyebrow { font-size: 10px; font-weight: 800; letter-spacing: 1.2px; color: var(--cms-primary-dark); }
+.accountant-home h1 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0; font-size: clamp(18px, 1.4vw, 20px); line-height: 1.3; overflow-wrap: anywhere; }
+.accountant-home h1 svg { color: #be8b22; flex-shrink: 0; }
+.accountant-home p { margin: 4px 0; color: var(--cms-muted); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.accountant-home .accountant-home-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.accountant-home .accountant-home-pills span { font-size: 11px; font-weight: 650; padding: 3px 8px; border: 1px solid var(--cms-primary-border, #d0dfb7); border-radius: 20px; color: var(--cms-primary-dark); background: var(--cms-surface); overflow-wrap: anywhere; }
+.accountant-home .accountant-home-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; max-width: none; }
+.accountant-home .accountant-home-controls > span { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 650; color: var(--cms-muted); }
+.accountant-home .sp-btn { min-height: 34px; padding: 6px 10px; white-space: normal; text-align: center; }
+.accountant-home .sp-btn:focus-visible, .accountant-home a:focus-visible { outline: 3px solid var(--cms-primary); outline-offset: 3px; }
+.accountant-home .accountant-home-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.accountant-home .sp-summary { min-width: 0; min-height: 0; border-radius: 12px; padding: 8px 10px; gap: 8px; align-items: flex-start; border-top: 3px solid var(--kpi-accent); }
+.accountant-home .sp-summary > div { min-width: 0; }
+.accountant-home .sp-summary-icon { width: 28px; height: 28px; flex-basis: 28px; border-radius: 12px; }
+.accountant-home .sp-summary-3d-icon { width: 22px; height: 22px; }
+.accountant-home .sp-summary strong { font-size: 17px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
+.accountant-home .sp-summary small { font-size: 11px; }
+.accountant-home .sp-summary em { display: block; font-size: 10.5px; line-height: 1.35; white-space: normal; margin-top: 3px; }
+.accountant-home .sp-card { border-radius: 14px; box-shadow: 0 3px 12px rgb(58 80 30 / 4%); overflow: hidden; }
+.accountant-home .sp-card-head { background: linear-gradient(100deg, var(--home-cream), var(--cms-surface)); padding: 7px 10px; gap: 8px; flex-wrap: wrap; }
+.accountant-home .sp-card-head h2, .accountant-home .accountant-home-section-head h2 { font-size: 13px; font-weight: 750; margin: 0; }
+.accountant-home .sp-card-body { padding: 10px; }
+.accountant-home .sp-text-link { font-size: 11px; flex-shrink: 0; }
+.accountant-home .accountant-home-attendance { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 12px; background: linear-gradient(120deg, var(--cms-primary-soft), var(--home-cream)); }
+.accountant-home .accountant-home-attendance > img { width: 32px; height: 32px; object-fit: contain; }
+.accountant-home .accountant-home-attendance > div { flex: 1; min-width: 130px; }
+.accountant-home .accountant-home-attendance h3 { margin: 2px 0; font-size: 16px; overflow-wrap: anywhere; }
+.accountant-home .accountant-home-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.accountant-home .accountant-home-details dt { font-size: 11px; color: var(--cms-muted); }
+.accountant-home .accountant-home-details dd { font-size: 13px; font-weight: 700; margin: 3px 0 0; overflow-wrap: anywhere; }
+.accountant-home .accountant-home-records { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; padding: 6px 8px; margin-top: 6px; border-radius: 9px; background: var(--cms-subtle); font-size: 11px; color: var(--cms-muted); }
+.accountant-home .accountant-home-records strong { color: var(--cms-text); }
+.accountant-home .accountant-home-leaves { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.accountant-home .accountant-home-leaves > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; border: 1px solid var(--cms-border); border-radius: 10px; padding: 6px 8px; font-size: 12px; background: var(--cms-subtle); overflow-wrap: anywhere; }
+.accountant-home .accountant-home-leaves strong { font-size: 14px; color: var(--cms-primary-dark); }
+.accountant-home .accountant-home-leaves small, .accountant-home .accountant-home-caption { font-size: 10.5px; color: var(--cms-muted); }
+.accountant-home .accountant-home-section-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 3px 12px; margin-bottom: 6px; }
+.accountant-home .accountant-home-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.accountant-home .accountant-home-action { --action-tone: #527a22; display: flex; flex: 1 1 calc(25% - 8px); align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--action-tone) 20%, var(--cms-border)); background: linear-gradient(125deg, color-mix(in srgb, var(--action-tone) 8%, var(--cms-surface)), var(--cms-surface)); color: var(--cms-text); text-decoration: none; transition: transform 150ms ease, box-shadow 150ms ease; }
+.accountant-home .accountant-home-action.tone-blue { --action-tone: #2563eb; }
+.accountant-home .accountant-home-action.tone-orange { --action-tone: #c97921; }
+.accountant-home .accountant-home-action.tone-purple { --action-tone: #8054b1; }
+.accountant-home .accountant-home-action:hover { transform: translateY(-2px); box-shadow: 0 5px 12px rgb(58 80 30 / 10%); }
+.accountant-home .accountant-home-action > img, .accountant-home .accountant-home-action > span:first-child { width: 22px; height: 22px; flex: 0 0 22px; object-fit: contain; background-size: 300% 200%; background-repeat: no-repeat; filter: drop-shadow(0 3px 3px rgb(0 0 0 / 12%)); }
+.accountant-home .accountant-home-action > span:nth-child(2) { flex: 1; font-size: 11px; font-weight: 700; overflow-wrap: anywhere; }
+.accountant-home .accountant-home-action svg { flex-shrink: 0; color: var(--action-tone); }
+.accountant-home .accountant-home-notice { display: flex; align-items: flex-start; gap: 7px; border: 1px solid var(--cms-border); border-radius: 9px; background: var(--home-cream); padding: 10px 12px; }
+.accountant-home .accountant-home-notice svg { flex-shrink: 0; margin-top: 2px; }
+.accountant-home .sp-table-wrap { max-width: 100%; overflow-x: auto; }
+.accountant-home table { min-width: 560px; }
+.accountant-home .sp-table th, .accountant-home .sp-table td { padding: 6px 9px; }
+.accountant-home .sp-empty { padding: 10px; }
+
+.accountant-home .sp-card-head > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; min-width: 0; }
+.accountant-home .sp-card-head p { margin: 0; font-size: 10.5px; }
+.accountant-home .accountant-home-leaves small { grid-column: 1 / -1; }
+.accountant-home .accountant-home-leaves strong { white-space: normal; text-align: right; overflow-wrap: anywhere; }
+.accountant-home .accountant-home-caption { margin: 6px 0 0; line-height: 1.35; }
+.accountant-home .accountant-home-quick { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 10px; }
+.accountant-home .accountant-home-quick .accountant-home-section-head { margin: 0; }
+
+
+/* Faculty-style three-column widgets: fixed headers, one scrolling body. */
+.accountant-home .accountant-home-widget-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; min-width: 0; align-items: start; }
+.accountant-home .accountant-home-widget { display: flex; flex-direction: column; height: 260px; min-height: 0; }
+.accountant-home .accountant-home-widget .sp-card-head { flex: 0 0 auto; align-items: center; }
+.accountant-home .accountant-home-widget .sp-card-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--cms-primary-border, #c7d6b4) transparent; }
+.accountant-home .accountant-home-widget .sp-card-body::-webkit-scrollbar { width: 6px; height: 6px; }
+.accountant-home .accountant-home-widget .sp-card-body::-webkit-scrollbar-thumb { background: var(--cms-primary-border, #c7d6b4); border-radius: 8px; }
+.accountant-home .accountant-home-table-widget .sp-card-body { display: flex; flex-direction: column; overflow: hidden; }
+.accountant-home .accountant-home-table-widget .sp-table-wrap { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.accountant-home .accountant-home-table-widget th { position: sticky; top: 0; z-index: 1; }
+.accountant-home .accountant-home-table-widget table { min-width: 460px; }
+.accountant-home .accountant-home-attendance-card .accountant-home-details { margin-top: 10px; }
+.accountant-home .accountant-home-leaves { gap: 6px; }
+.accountant-home .accountant-home-leaves > div { grid-template-columns: minmax(0, 1fr); }
+.accountant-home .accountant-home-leaves strong { text-align: left; }
+.accountant-home .accountant-home-snapshot { display: grid; gap: 0; margin: 0; }
+.accountant-home .accountant-home-snapshot > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 10px; padding: 10px 0; border-bottom: 1px solid var(--cms-border); }
+.accountant-home .accountant-home-snapshot > div:first-child { padding-top: 0; }
+.accountant-home .accountant-home-snapshot > div:last-child { border-bottom: 0; padding-bottom: 0; }
+.accountant-home .accountant-home-snapshot dt { font-size: 12px; color: var(--cms-muted); }
+.accountant-home .accountant-home-snapshot dd { margin: 0; font-size: 15px; font-weight: 750; color: var(--cms-primary-dark); overflow-wrap: anywhere; }
+.accountant-home .accountant-home-snapshot small { grid-column: 1 / -1; font-size: 10.5px; color: var(--cms-muted); line-height: 1.35; }
+@media (max-width: 1200px) { .accountant-home .accountant-home-widget-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) {
+  .accountant-home .accountant-home-widget-grid { grid-template-columns: minmax(0, 1fr); }
+  .accountant-home .accountant-home-widget { height: auto; max-height: 320px; }
+  .accountant-home .accountant-home-widget .sp-card-body { flex: 0 1 auto; max-height: 240px; }
+}
+
+@media (max-width: 1100px) {
+  .accountant-home .accountant-home-action { flex-basis: calc(50% - 5px); }
+  .accountant-home .accountant-home-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .accountant-home .accountant-home-welcome { align-items: flex-start; flex-wrap: wrap; }
+  .accountant-home .accountant-home-controls { max-width: none; justify-content: flex-start; }
+}
+@media (max-width: 520px) {
+  .cms-content:has(.accountant-home) { padding: 8px 10px; }
+  .accountant-home .accountant-home-quick { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .accountant-home { gap: 12px; }
+  .accountant-home .accountant-home-welcome { padding: 4px 0; }
+  .accountant-home .accountant-home-identity { align-items: flex-start; gap: 10px; }
+  .accountant-home .accountant-home-avatar { width: 40px; height: 40px; flex-basis: 40px; border-radius: 12px; }
+  .accountant-home .accountant-home-avatar img { width: 34px; height: 34px; }
+  .accountant-home .accountant-home-summary { grid-template-columns: minmax(0, 1fr); }
+  .accountant-home .sp-summary { min-height: 0; }
+  .accountant-home .sp-card-head, .accountant-home .sp-card-body { padding: 10px 12px; }
+}
+@media (max-width: 360px) {
+  .accountant-home .accountant-home-action { flex-basis: 100%; }
+  .accountant-home .accountant-home-leaves { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .accountant-home .accountant-home-action, .accountant-home .sp-summary { transition: none; }
+  .accountant-home .accountant-home-action:hover, .accountant-home .sp-summary:hover { transform: none; }
+}

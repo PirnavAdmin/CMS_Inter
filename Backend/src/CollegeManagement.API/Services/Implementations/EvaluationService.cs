@@ -133,7 +133,75 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<EvaluationDetailDto?> GetEvaluationDetailAsync(int subjectId, int sectionId, int examinationId)
         {
             var marks = (await _marksRepository.GetEvaluationMarksListAsync(subjectId, sectionId, examinationId)).ToList();
-            if (!marks.Any()) return null;
+            if (!marks.Any())
+            {
+                var subject = await _context.Subjects.FirstOrDefaultAsync(s => s.SubjectId == subjectId);
+                var examination = await _context.Examinations
+                    .Include(e => e.AssessmentType)
+                    .Include(e => e.Program)
+                    .Include(e => e.Group)
+                    .FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
+                var section = await _context.Sections.FirstOrDefaultAsync(s => s.SectionId == sectionId);
+
+                if (subject == null && examination == null && section == null) return null;
+
+                var students = await _context.Students
+                    .Where(s => s.SectionId == sectionId && s.IsActive)
+                    .OrderBy(s => s.RollNo)
+                    .ToListAsync();
+
+                var subjPractical = subject?.Practical == true || subject?.SubjectType?.ToLower() == "practical";
+                var examObjective = examination != null ? await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId) : false;
+                var (maxMarksForSubject, _) = subject != null ? await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, subject) : (100, 35);
+
+                return new EvaluationDetailDto
+                {
+                    EvaluationId = $"{subjectId}_{sectionId}_{examinationId}",
+                    SubjectId = subjectId,
+                    SubjectName = subject?.SubjectName ?? $"Subject #{subjectId}",
+                    SubjectCode = subject?.SubjectCode ?? $"SUB{subjectId:000}",
+                    FacultyId = null,
+                    FacultyName = "Unassigned",
+                    FacultyCode = "FAC1001",
+                    GroupName = examination?.Group?.GroupName ?? "MPC",
+                    ProgramName = examination?.Program?.ProgramName ?? "Regular Academic",
+                    SectionName = section?.SectionName ?? $"Section {sectionId}",
+                    ExaminationName = examination?.ExamName ?? "Examination",
+                    ExamPattern = examination?.ExamPattern ?? (examObjective ? "JEE Main Pattern" : "Regular Academic Pattern"),
+                    ExamType = examObjective ? "Objective" : (examination?.AssessmentType?.AssessmentTypeName ?? "Written"),
+                    ExamTotalMarks = examination?.TotalMarks ?? (examObjective ? 300 : 600),
+                    ExamPassPercentage = examination?.PassPercentage ?? (examObjective ? 40m : 35m),
+                    SubjectMaxMarks = maxMarksForSubject,
+                    IsPractical = examObjective ? false : subjPractical,
+                    SubjectType = examObjective ? "Objective" : (subject?.SubjectType ?? (subjPractical ? "Practical" : "Theory")),
+                    TotalStudents = students.Count,
+                    AverageMarks = 0,
+                    HighestMarks = 0,
+                    LowestMarks = 0,
+                    Status = "NOT STARTED",
+                    StatusCode = 0,
+                    IsLocked = false,
+                    AdminReviewMessage = null,
+                    RejectionReason = null,
+                    Students = students.Select(s => new StudentEvaluationMarkRecordDto
+                    {
+                        MarkId = 0,
+                        StudentId = s.StudentId,
+                        AdmissionNo = !string.IsNullOrEmpty(s.AdmissionNo) ? s.AdmissionNo : $"ADM{s.StudentId}",
+                        RollNo = !string.IsNullOrEmpty(s.RollNo) ? s.RollNo : $"ROLL{s.StudentId:000}",
+                        StudentName = s.StudentName ?? "Student",
+                        Internal = null,
+                        Practical = null,
+                        Theory = null,
+                        TotalMarks = 0,
+                        ObtainedMarks = 0,
+                        MaxMarks = maxMarksForSubject,
+                        Percentage = 0,
+                        IsAbsent = false,
+                        Remarks = null
+                    }).ToList()
+                };
+            }
 
             var first = marks.First();
             var total = marks.Count;
@@ -377,7 +445,45 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     studentMarks = studentMarks.Where(m => m.ExaminationId == examinationId.Value).ToList();
                 }
-                if (!studentMarks.Any()) return null;
+            }
+
+            if (!studentMarks.Any())
+            {
+                var student = await _context.Students
+                    .Include(s => s.Section)
+                    .Include(s => s.Group)
+                    .FirstOrDefaultAsync(s => s.StudentId == studentId);
+
+                if (student == null) return null;
+
+                var exam = examinationId.HasValue
+                    ? await _context.Examinations.Include(e => e.AssessmentType).Include(e => e.Program).FirstOrDefaultAsync(e => e.ExaminationId == examinationId.Value)
+                    : null;
+
+                return new StudentAnalysisDetailDto
+                {
+                    StudentId = student.StudentId,
+                    RollNo = !string.IsNullOrEmpty(student.RollNo) ? student.RollNo : $"ROLL{student.StudentId:000}",
+                    RollNumber = !string.IsNullOrEmpty(student.RollNo) ? student.RollNo : $"ROLL{student.StudentId:000}",
+                    StudentName = student.StudentName ?? "Student",
+                    GroupName = student.Group?.GroupName ?? "MPC",
+                    Group = student.Group?.GroupName ?? "MPC",
+                    ProgramName = exam?.Program?.ProgramName ?? "Regular Academic",
+                    Program = exam?.Program?.ProgramName ?? "Regular Academic",
+                    SectionName = student.Section?.SectionName ?? "Section A",
+                    Section = student.Section?.SectionName ?? "Section A",
+                    ExamName = exam?.ExamName ?? "Examination",
+                    Examination = exam?.ExamName ?? "Examination",
+                    ExamType = exam?.AssessmentType?.AssessmentTypeName ?? "Written",
+                    ExamPattern = exam?.ExamPattern ?? "REGULAR_ACADEMIC",
+                    RequiredSubjects = 0,
+                    Subjects = new List<StudentSubjectAnalysisDetailItemDto>(),
+                    TotalMarks = 0,
+                    MaxMarks = exam?.TotalMarks ?? 100,
+                    Percentage = 0,
+                    Grade = "—",
+                    Result = "N/A"
+                };
             }
 
             var first = studentMarks.First();

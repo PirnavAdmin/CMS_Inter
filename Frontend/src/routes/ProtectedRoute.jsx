@@ -1,9 +1,9 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/features/authStorage.js";
+import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/modules/auth/authStorage.js";
 import { getJwtExpiryState } from "@/api/apiClient.js";
-import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
-import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
-import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
+import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
+import { can, hasRole } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
+import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
 
 export function isWardenRole(role, user) {
   const normalizedRole = String(role || "").trim().toLowerCase();

@@ -2606,7 +2606,7 @@ namespace CollegeManagement.API.Services.Implementations
             catch (Exception ex)
             {
                 // Fallback gracefully without breaking staff save
-                Console.WriteLine($"[StaffSubjectAllocationSync] Notice: {ex.Message}");
+                _logger.LogWarning(ex, "[StaffSubjectAllocationSync] Notice: {Message}", ex.Message);
             }
         }
 

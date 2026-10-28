@@ -1,79 +1,79 @@
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
-import LandingPage from "@/components/pages/LandingPage.jsx";
-import ExamCellPortalRoutes from "@/Dashboard/ExamCellDashboard/ExamCellPortalRoutes.jsx";
-import DashboardPage from "@/components/pages/DashboardPage.jsx";
-import PrincipalDashboard from "@/Dashboard/PrincipalDashboard/PrincipalDashboard.jsx";
-import ListPage from "@/components/pages/ListPage.jsx";
-import FormPage from "@/components/pages/FormPage.jsx";
-import BoardManagementPage, { pageConfig as boardManagementConfig } from "@/components/pages/BoardManagementPage.jsx";
-import AcademicYearPage, { pageConfig as academicYearConfig } from "@/components/pages/AcademicYearPage.jsx";
-import BoardAcademicYearManagementPage from "@/components/pages/BoardAcademicYearManagementPage.jsx";
-import CourseGroupPage, { CourseGroupFormRoute, pageConfig as courseGroupConfig } from "@/components/pages/CourseGroupPage.jsx";
-import SubjectManagementPage from "@/components/pages/SubjectManagementPage.jsx";
-import SectionManagementPage, { pageConfig as sectionManagementConfig } from "@/components/pages/SectionManagementPage.jsx";
-import StaffManagementPage from "@/components/pages/StaffManagementPage.jsx";
-import DepartmentManagementPage, { DepartmentDetailsPage, DesignationDetailsPage, MasterFormPage, MasterImportPage } from "@/components/pages/DepartmentManagementPage.jsx";
-import StudentAdmissionPage from "@/components/pages/StudentAdmissionPage.jsx";
-import StudentManagementPage, { pageConfig as studentManagementConfig } from "@/components/pages/StudentManagementPage.jsx";
-import SectionAllocationPage from "@/components/pages/SectionAllocationPage.jsx";
-import TimetablePage from "@/components/pages/TimetablePage.jsx";
-import HolidayManagementPage from "@/components/pages/HolidayManagementPage.jsx";
-import AcademicCalendarPage from "@/components/pages/AcademicCalendarPage.jsx";
-import AttendancePage from "@/components/pages/AttendancePage.jsx";
-import AttendanceOverviewPage from "@/components/pages/AttendanceOverviewPage.jsx";
-import LeaveManagementPage from "@/components/pages/LeaveManagementPage.jsx";
-import ExaminationPage, { pageConfig as examinationConfig } from "@/components/pages/ExaminationPage.jsx";
-import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
-import ResultProcessingPage from "@/components/pages/ResultProcessingPage.jsx";
-import PromotionPage from "@/components/pages/PromotionPage.jsx";
-import FeeManagementPage from "@/components/pages/FeeManagementPage.jsx";
-import TransportPage from "@/components/pages/TransportPage.jsx";
-import CertificatesPage, { pageConfig as certificatesConfig } from "@/components/pages/CertificatesPage.jsx";
-import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
-import InventoryManagementPage from "@/components/pages/InventoryManagement/InventoryManagementPage.jsx";
-import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
-import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
-import SettingsPage from "@/components/pages/SettingsPage.jsx";
-import LOPConfigurationPage from "@/components/pages/LOPConfiguration/LOPConfigurationPage.jsx";
-import CampusImagesConfigurationPage from "@/components/pages/CampusImagesConfigurationPage.jsx";
-import RolesPermissionsPage from "@/components/pages/RolesPermissionsPage.jsx";
-import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
-import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
-import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
-import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
-import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
-import PayrollPage from "@/components/pages/PayrollPage.jsx";
-import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
-import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
-import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
-import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
-import Login from "@/features/auth/pages/Login.jsx";
-import Register from "@/features/auth/pages/Register.jsx";
-import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
-import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
-import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
-import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
-import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx";
-import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
-import NonTeachingPortalRoutes from "@/Dashboard/NonTeachingDashboard/NonTeachingPortalRoutes.jsx";
-import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
-import TransportManagerRoutes from "@/Dashboard/TransportManagerDashboard/TransportManagerRoutes.jsx";
-import InventoryDashboard from "@/Dashboard/InventoryDashboard/InventoryDashboard.jsx";
-import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
-import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
-import ParentAttendancePage from "@/Dashboard/Parent Dashboard/pages/ParentAttendancePage.jsx";
-import ParentAcademicsPage from "@/Dashboard/Parent Dashboard/pages/ParentAcademicsPage.jsx";
-import ParentExaminationsPage from "@/Dashboard/Parent Dashboard/pages/ParentExaminationsPage.jsx";
-import ParentFeesPage from "@/Dashboard/Parent Dashboard/pages/ParentFeesPage.jsx";
-import ParentTimetablePage from "@/Dashboard/Parent Dashboard/pages/ParentTimetablePage.jsx";
-import ParentCommunicationPage from "@/Dashboard/Parent Dashboard/pages/ParentCommunicationPage.jsx";
-import ParentAnnouncementsPage from "@/Dashboard/Parent Dashboard/pages/ParentAnnouncementsPage.jsx";
-import ParentDocumentsPage from "@/Dashboard/Parent Dashboard/pages/ParentDocumentsPage.jsx";
-import ParentNotificationsPage from "@/Dashboard/Parent Dashboard/pages/ParentNotificationsPage.jsx";
-import ParentProfilePage from "@/Dashboard/Parent Dashboard/pages/ParentProfilePage.jsx";
-import ParentSettingsPage from "@/Dashboard/Parent Dashboard/pages/ParentSettingsPage.jsx";
-import { ParentPortalProvider } from "@/Dashboard/Parent Dashboard/context/ParentPortalContext.jsx";
-import ErrorBoundary from "@/components/common/ErrorBoundary.jsx";
+import LandingPage from "@/modules/landing/LandingPage.jsx";
+import ExamCellPortalRoutes from "@/modules/exam-cell/ExamCellPortalRoutes.jsx";
+import DashboardPage from "@/modules/admin/AdminDashboard/DashboardPage.jsx";
+import PrincipalDashboard from "@/modules/principal/PrincipalDashboard.jsx";
+import ListPage from "@/modules/admin/AdminCommon/ListPage.jsx";
+import FormPage from "@/modules/admin/AdminCommon/FormPage.jsx";
+import BoardManagementPage, { pageConfig as boardManagementConfig } from "@/modules/admin/AdminBoards/BoardManagementPage.jsx";
+import AcademicYearPage, { pageConfig as academicYearConfig } from "@/modules/admin/AdminAcademicYears/AcademicYearPage.jsx";
+import BoardAcademicYearManagementPage from "@/modules/admin/AdminBoards/BoardAcademicYearManagementPage.jsx";
+import CourseGroupPage, { CourseGroupFormRoute, pageConfig as courseGroupConfig } from "@/modules/admin/AdminCourses/CourseGroupPage.jsx";
+import SubjectManagementPage from "@/modules/admin/AdminSubjects/SubjectManagementPage.jsx";
+import SectionManagementPage, { pageConfig as sectionManagementConfig } from "@/modules/admin/AdminSections/SectionManagementPage.jsx";
+import StaffManagementPage from "@/modules/admin/AdminFaculty/StaffManagementPage.jsx";
+import DepartmentManagementPage, { DepartmentDetailsPage, DesignationDetailsPage, MasterFormPage, MasterImportPage } from "@/modules/admin/AdminDepartments/DepartmentManagementPage.jsx";
+import StudentAdmissionPage from "@/modules/admin/AdminAdmissions/StudentAdmissionPage.jsx";
+import StudentManagementPage, { pageConfig as studentManagementConfig } from "@/modules/admin/AdminStudents/StudentManagementPage.jsx";
+import SectionAllocationPage from "@/modules/admin/AdminSections/SectionAllocationPage.jsx";
+import TimetablePage from "@/modules/admin/AdminTimetable/TimetablePage.jsx";
+import HolidayManagementPage from "@/modules/admin/AdminAcademicCalendar/HolidayManagementPage.jsx";
+import AcademicCalendarPage from "@/modules/admin/AdminAcademicCalendar/AcademicCalendarPage.jsx";
+import AttendancePage from "@/modules/admin/AdminAttendance/AttendancePage.jsx";
+import AttendanceOverviewPage from "@/modules/admin/AdminAttendance/AttendanceOverviewPage.jsx";
+import LeaveManagementPage from "@/modules/admin/AdminLeave/LeaveManagementPage.jsx";
+import ExaminationPage, { pageConfig as examinationConfig } from "@/modules/admin/AdminExaminations/ExaminationPage.jsx";
+import MarksEntryPage from "@/modules/admin/AdminMarksEntry/MarksEntryPage.jsx";
+import ResultProcessingPage from "@/modules/admin/AdminResults/ResultProcessingPage.jsx";
+import PromotionPage from "@/modules/admin/AdminPromotion/PromotionPage.jsx";
+import FeeManagementPage from "@/modules/admin/AdminFees/FeeManagementPage.jsx";
+import TransportPage from "@/modules/admin/AdminTransport/TransportPage.jsx";
+import CertificatesPage, { pageConfig as certificatesConfig } from "@/modules/admin/AdminCertificates/CertificatesPage.jsx";
+import ReportsAnalyticsPage from "@/modules/admin/AdminReports/ReportsAnalyticsPage.jsx";
+import InventoryManagementPage from "@/modules/admin/AdminInventory/InventoryManagementPage.jsx";
+import StudentProfilePage from "@/modules/admin/AdminStudents/StudentProfilePage.jsx";
+import StudentEnrollmentPage from "@/modules/admin/AdminStudents/StudentEnrollmentPage.jsx";
+import SettingsPage from "@/modules/admin/AdminSettings/SettingsPage.jsx";
+import LOPConfigurationPage from "@/modules/admin/AdminLOPConfiguration/LOPConfigurationPage.jsx";
+import CampusImagesConfigurationPage from "@/modules/admin/AdminSettings/CampusImagesConfigurationPage.jsx";
+import RolesPermissionsPage from "@/modules/admin/AdminRolesPermissions/RolesPermissionsPage.jsx";
+import LeaveTypesPage from "@/modules/admin/AdminLeave/LeaveTypesPage.jsx";
+import AttendanceTimingConfigPage from "@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.jsx";
+import NumberSeriesPage from "@/modules/admin/AdminNumberSeries/NumberSeriesPage.jsx";
+import TemplatesPage from "@/modules/admin/AdminTemplates/TemplatesPage.jsx";
+import CredentialsGeneratorPage from "@/modules/admin/AdminCredentialsGenerator/CredentialsGeneratorPage.jsx";
+import PayrollPage from "@/modules/admin/AdminPayroll/PayrollPage.jsx";
+import ReimbursementPage from "@/modules/admin/AdminReimbursements/ReimbursementPage.jsx";
+import AdminProfilePage from "@/modules/admin/AdminProfile/AdminProfilePage.jsx";
+import CampusConfigurationPage from "@/modules/admin/AdminSettings/CampusConfigurationPage.jsx";
+import AuditLogsPage from "@/modules/admin/AdminAuditLogs/AuditLogsPage.jsx";
+import Login from "@/modules/auth/pages/Login.jsx";
+import Register from "@/modules/auth/pages/Register.jsx";
+import ForgotPassword from "@/modules/auth/pages/ForgotPassword.jsx";
+import VerifyOTP from "@/modules/auth/pages/VerifyOTP.jsx";
+import ResetPassword from "@/modules/auth/pages/ResetPassword.jsx";
+import StudentPortalRoutes from "@/modules/student/StudentPortalRoutes.jsx";
+import AccountantPortalRoutes from "@/modules/accountant/AccountantPortalRoutes.jsx";
+import FacultyPortalRoutes from "@/modules/faculty/FacultyPortalRoutes.jsx";
+import NonTeachingPortalRoutes from "@/modules/non-teaching/NonTeachingPortalRoutes.jsx";
+import DriverDashboard from "@/modules/driver/DriverDashboard.jsx";
+import TransportManagerRoutes from "@/modules/transport-manager/TransportManagerRoutes.jsx";
+import InventoryDashboard from "@/modules/inventory/InventoryDashboard.jsx";
+import ParentDashboard from "@/modules/parent/ParentDashboard.jsx";
+import ParentChildrenPage, { ParentChildDetailsRoute } from "@/modules/parent/pages/ParentChildrenPage.jsx";
+import ParentAttendancePage from "@/modules/parent/pages/ParentAttendancePage.jsx";
+import ParentAcademicsPage from "@/modules/parent/pages/ParentAcademicsPage.jsx";
+import ParentExaminationsPage from "@/modules/parent/pages/ParentExaminationsPage.jsx";
+import ParentFeesPage from "@/modules/parent/pages/ParentFeesPage.jsx";
+import ParentTimetablePage from "@/modules/parent/pages/ParentTimetablePage.jsx";
+import ParentCommunicationPage from "@/modules/parent/pages/ParentCommunicationPage.jsx";
+import ParentAnnouncementsPage from "@/modules/parent/pages/ParentAnnouncementsPage.jsx";
+import ParentDocumentsPage from "@/modules/parent/pages/ParentDocumentsPage.jsx";
+import ParentNotificationsPage from "@/modules/parent/pages/ParentNotificationsPage.jsx";
+import ParentProfilePage from "@/modules/parent/pages/ParentProfilePage.jsx";
+import ParentSettingsPage from "@/modules/parent/pages/ParentSettingsPage.jsx";
+import { ParentPortalProvider } from "@/modules/parent/context/ParentPortalContext.jsx";
+import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
 import {
   HostelDashboard,
@@ -81,7 +81,7 @@ import {
   HostelStudentManagement,
   HostelAttendanceRegister,
   HostelReports,
-} from "@/modules/hostel/index.js";
+} from "@/modules/admin/AdminHostel/index.js";
 
 const moduleConfigs = {
   courses: courseGroupConfig,
@@ -460,10 +460,9 @@ export default function AppRoutes() {
           <Route path="/dashboard/staff-salary/import" element={<PayrollPage mode="import" />} />
         </Route>
 
-        {/* Faculty & Staff Reimbursement Canonical & Finance Routes */}
+        {/* Finance Reimbursement Routes */}
         <Route element={<ProtectedRoute requiredModule="reimbursement" />}>
           <Route path="/dashboard/reimbursement" element={<ReimbursementPage />} />
-          <Route path="/dashboard/reimbursements" element={<ReimbursementPage />} />
           <Route path="/dashboard/finance/reimbursement" element={<ReimbursementPage />} />
           <Route path="/dashboard/finance/reimbursements" element={<ReimbursementPage />} />
         </Route>
