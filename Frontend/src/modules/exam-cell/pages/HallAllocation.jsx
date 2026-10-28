@@ -1823,15 +1823,13 @@ export default function HallAllocation({ initialTab = "rooms" }) {
             </table>
           </div>
 
-          {filteredRows.length > 0 && (
-            <Pagination
+          <Pagination
               currentPage={slotPage}
               totalRecords={filteredRows.length}
               pageSize={SLOTS_PAGE_SIZE}
               onPageChange={setSlotPage}
-              unit="slots"
+              unit="records"
             />
-          )}
         </section>
       </>
     )}
@@ -2222,17 +2220,15 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           )}
 
           {/* Duties Pagination */}
-          {filteredDuties.length > DUTIES_PER_PAGE && (
-            <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ padding: "0 16px 16px" }}>
               <Pagination
                 currentPage={dutyPage}
                 totalRecords={filteredDuties.length}
                 pageSize={DUTIES_PER_PAGE}
                 onPageChange={setDutyPage}
-                unit="duties"
+                unit="records"
               />
             </div>
-          )}
         </section>
       </div>
     )}

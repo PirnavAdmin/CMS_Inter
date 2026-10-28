@@ -136,54 +136,42 @@ function Select({ label, value, onChange, items = [], all, disabled = false, mut
 }
 
 function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
-  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
+  const totalPages = totalRows === 0 ? 0 : Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE);
+  const currentPage = totalPages === 0 ? 1 : Math.min(page, totalPages);
   const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
   const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
 
-  const pageNumbers = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
-  } else {
-    pageNumbers.push(1);
-    if (currentPage > 3) pageNumbers.push('...');
-    const pStart = Math.max(2, currentPage - 1);
-    const pEnd = Math.min(totalPages - 1, currentPage + 1);
-    for (let i = pStart; i <= pEnd; i += 1) pageNumbers.push(i);
-    if (currentPage < totalPages - 2) pageNumbers.push('...');
-    pageNumbers.push(totalPages);
-  }
+  const pageNumbers = totalPages <= 0
+    ? []
+    : totalPages === 1
+    ? [1]
+    : currentPage <= 2
+    ? [1, 2]
+    : [currentPage - 1, currentPage];
 
   return (
     <nav className="att-pagination" aria-label="Attendance pages">
       <span className="att-pagination-summary">
-        Showing {start}-{end} of {totalRows} {unit}
+        Showing ${start}–${end} of ${totalRows} records
       </span>
       <div className="att-pagination-controls">
-        <button type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
+        <button type="button" disabled={currentPage <= 1 || totalPages === 0 || totalRows === 0} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
           Previous
         </button>
-        {pageNumbers.map((p, idx) =>
-          p === '...' ? (
-            <span key={`dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
-          ) : (
-            <button
-              key={`page-${p}`}
-              type="button"
-              className={p === currentPage ? "active is-active" : ""}
-              onClick={() => onPageChange(p)}
-              aria-label={`Page ${p}`}
-            >
-              {p}
-            </button>
-          )
-        )}
-        <button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
+        {pageNumbers.map((p) => (
+          <button
+            key={"page-" + p}
+            type="button"
+            className={p === currentPage ? "active is-active" : ""}
+            onClick={() => onPageChange(p)}
+            aria-label={"Page " + p}
+          >
+            {p}
+          </button>
+        ))}
+        <button type="button" disabled={currentPage >= totalPages || totalPages === 0 || totalRows === 0} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
           Next
         </button>
-        <span style={{ marginLeft: '4px' }}>
-          Page {currentPage} of {totalPages}
-        </span>
       </div>
     </nav>
   );

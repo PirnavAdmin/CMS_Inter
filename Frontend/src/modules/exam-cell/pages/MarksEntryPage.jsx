@@ -4976,10 +4976,9 @@ const IconAlert = () => (
 );
 
 function DynamicPagination({ page, pageSize = 10, setPageSize, totalItems = 0, setPage, summaryText }) {
-  const [isCustom, setIsCustom] = useState(false);
-  const [customInput, setCustomInput] = useState(String(pageSize || 10));
-
-  const totalPages = Math.max(1, Math.ceil(totalItems / (pageSize || 10)));
+  const currentLimit = 10;
+  const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / currentLimit);
+  const activePage = totalPages === 0 ? 1 : Math.min(page || 1, totalPages);
 
   useEffect(() => {
     if (totalPages && page > totalPages) {
@@ -4987,124 +4986,57 @@ function DynamicPagination({ page, pageSize = 10, setPageSize, totalItems = 0, s
     }
   }, [totalPages, page, setPage]);
 
-  const start = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
-  const end = totalItems > 0 ? Math.min(page * pageSize, totalItems) : 0;
+  const start = totalItems > 0 ? (activePage - 1) * currentLimit + 1 : 0;
+  const end = totalItems > 0 ? Math.min(activePage * currentLimit, totalItems) : 0;
 
-  const pageNumbers = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
-  } else {
-    pageNumbers.push(1);
-    if (page > 3) pageNumbers.push('...');
-    const pStart = Math.max(2, page - 1);
-    const pEnd = Math.min(totalPages - 1, page + 1);
-    for (let i = pStart; i <= pEnd; i += 1) pageNumbers.push(i);
-    if (page < totalPages - 2) pageNumbers.push('...');
-    pageNumbers.push(totalPages);
-  }
+  const pageNumbers = totalPages <= 0
+    ? []
+    : totalPages === 1
+    ? [1]
+    : activePage <= 2
+    ? [1, 2]
+    : [activePage - 1, activePage];
 
   return (
     <div className="cms-pagination">
       <div className="cms-pagination-summary-left">
         <span className="cms-sec-record-summary">
-          Showing {start}–{end} of {totalItems} records
+          Showing ${start}–${end} of ${totalItems} records
         </span>
-        {summaryText ? (
-          <span className="cms-eval-summary-text" style={{ marginLeft: 12 }}>
-            ({summaryText})
-          </span>
-        ) : null}
       </div>
 
       <div className="cms-pagination-controls">
-        {setPageSize && (
-          <div className="cms-sec-page-size-wrap">
-            <span className="cms-sec-page-size-label">Per page:</span>
-            <select
-              className="cms-sec-page-size-select"
-              aria-label="Records per page"
-              value={isCustom ? "custom" : pageSize}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === "custom") {
-                  setIsCustom(true);
-                  setCustomInput(String(pageSize));
-                } else {
-                  setIsCustom(false);
-                  setPageSize(Number(val));
-                  setPage(1);
-                }
-              }}
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={15}>15</option>
-              <option value={25}>25</option>
-              <option value="custom">Custom</option>
-            </select>
-            {isCustom && (
-              <input
-                type="number"
-                min="1"
-                max="200"
-                className="cms-sec-page-size-custom-input"
-                value={customInput}
-                placeholder="Qty"
-                aria-label="Custom records per page"
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setCustomInput(val);
-                  const num = parseInt(val, 10);
-                  if (Number.isInteger(num) && num > 0) {
-                    setPageSize(num);
-                    setPage(1);
-                  }
-                }}
-              />
-            )}
-          </div>
-        )}
-
         <button
           type="button"
           className="cms-page-btn"
-          disabled={page <= 1}
+          disabled={activePage <= 1 || totalPages === 0 || totalItems === 0}
           onClick={() => setPage((current) => Math.max(1, current - 1))}
           aria-label="Previous Page"
         >
           Previous
         </button>
 
-        {pageNumbers.map((p, idx) =>
-          p === '...' ? (
-            <span key={`dots-${idx}`} className="cms-page-info" style={{ minWidth: 'auto', padding: '0 4px' }}>
-              ...
-            </span>
-          ) : (
-            <button
-              key={`page-${p}`}
-              type="button"
-              className={`cms-page-btn ${p === page ? 'is-active' : ''}`}
-              onClick={() => setPage(p)}
-              aria-label={`Page ${p}`}
-            >
-              {p}
-            </button>
-          )
-        )}
+        {pageNumbers.map((p) => (
+          <button
+            key={"page-" + p}
+            type="button"
+            className={"cms-page-btn " + (p === activePage ? 'is-active' : '')}
+            onClick={() => setPage(p)}
+            aria-label={"Page " + p}
+          >
+            {p}
+          </button>
+        ))}
 
         <button
           type="button"
           className="cms-page-btn"
-          disabled={page >= totalPages}
+          disabled={activePage >= totalPages || totalPages === 0 || totalItems === 0}
           onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
           aria-label="Next Page"
         >
           Next
         </button>
-        <span className="cms-page-info">
-          Page {page} of {totalPages}
-        </span>
       </div>
     </div>
   );
@@ -5115,7 +5047,7 @@ function Pagination(props) {
     <DynamicPagination
       page={props.page}
       pageSize={PAGE_SIZE}
-      totalItems={(props.total || 0) * PAGE_SIZE}
+      totalItems={props.totalItems ?? ((props.total || 0) * PAGE_SIZE)}
       setPage={props.setPage}
       summaryText={props.summaryText}
     />
