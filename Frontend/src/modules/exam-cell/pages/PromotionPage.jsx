@@ -205,6 +205,13 @@ export default function PromotionPage({ screen = "promotion" }) {
     moduleKey: "promotion",
     defaultTab: "promotion",
     initialProp: screen,
+    pathMap: {
+      "promotion": "/exam-cell-dashboard/promotions/eligible",
+      "single": "/exam-cell-dashboard/promotions/single",
+      "allocation": "/exam-cell-dashboard/promotions/allocation",
+      "transfer": "/exam-cell-dashboard/promotions/transfer",
+      "history": "/exam-cell-dashboard/promotions/history",
+    },
     tabAliases: {
       "promotion": "promotion",
       "eligible": "promotion",
@@ -2270,16 +2277,41 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
   const [sectionsLoading, setSectionsLoading] = useState(false);
   const [loadedPrograms, setLoadedPrograms] = useState([]);
   const [programsLoading, setProgramsLoading] = useState(false);
-  const [currentStudent, setCurrentStudent] = useState(preselectedStudent || null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [target, setTarget] = useState({
-    year: defaultNextYearId || "",
-    level: "",
-    group: "",
-    program: "",
-    section: "",
-    medium: "English",
+  const savedSingleDraft = useMemo(() => getModuleState("promotion", {})?.singleDraft, []);
+  const [currentStudent, setCurrentStudent] = useState(() => {
+    if (preselectedStudent) return preselectedStudent;
+    if (savedSingleDraft?.studentId && allStudents?.length > 0) {
+      const match = allStudents.find((s) => String(s.id) === String(savedSingleDraft.studentId));
+      if (match) return match;
+    }
+    return null;
   });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [target, setTarget] = useState(() => {
+    if (savedSingleDraft?.target) {
+      return { ...savedSingleDraft.target };
+    }
+    return {
+      year: defaultNextYearId || "",
+      level: "",
+      group: "",
+      program: "",
+      section: "",
+      medium: "English",
+    };
+  });
+
+  useEffect(() => {
+    if (currentStudent || target.year || target.group) {
+      saveModuleState("promotion", {
+        singleDraft: {
+          studentId: currentStudent?.id || null,
+          target,
+          feeConfig,
+        },
+      });
+    }
+  }, [currentStudent, target, feeConfig]);
   const [submitting, setSubmitting] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");

@@ -1138,8 +1138,15 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry" 
   const timer = useRef(null);
   const fileInputRef = useRef(null);
 
-  // Central in-memory workspaces store for subject marks and evaluations
-  const [workspaces, setWorkspaces] = useState({});
+  // Central in-memory workspaces store for subject marks and evaluations (restored from draft)
+  const savedMarksState = useMemo(() => getModuleState("marks_entry", {}), []);
+  const [workspaces, setWorkspaces] = useState(() => savedMarksState?.workspaces || {});
+
+  useEffect(() => {
+    if (workspaces && Object.keys(workspaces).length > 0) {
+      saveModuleState("marks_entry", { workspaces });
+    }
+  }, [workspaces]);
 
   const notify = (text, type = "success") => {
     clearTimeout(timer.current);

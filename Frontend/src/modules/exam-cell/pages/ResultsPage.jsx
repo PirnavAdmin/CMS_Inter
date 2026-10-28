@@ -170,7 +170,7 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
 
   // Drilldown states for Generated Results Tab
   const [selectedSectionDetails, setSelectedSectionDetails] = useState(() => savedResultsState?.selectedSectionDetails || null);
-  const [selectedStudentMemo, setSelectedStudentMemo] = useState(null);
+  const [selectedStudentMemo, setSelectedStudentMemo] = useState(() => savedResultsState?.selectedStudentMemo || null);
 
   // Search & Pagination
   const [query, setQuery] = useState(() => savedResultsState?.query || "");
@@ -211,6 +211,7 @@ export default function ResultProcessingPage({ initialView = "table", pageTitle 
       selectedPublishedGroup,
       selectedPublishedSection,
       selectedSectionDetails,
+      selectedStudentMemo,
       query,
       page,
       publishedSearch,

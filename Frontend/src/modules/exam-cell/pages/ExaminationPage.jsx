@@ -33,7 +33,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { generateNextNumber } from "@/api/numberSeriesApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
-import { useExamCellTab, getModuleState, saveModuleState } from "../statePersistence.js";
+import { useExamCellTab, useExamCellAction, getModuleState, saveModuleState } from "../statePersistence.js";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast, Pagination } from "@/shared/components/Ui.jsx";
@@ -3145,7 +3145,50 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
 
   const savedExamState = useMemo(() => getModuleState("examinations", {}), []);
 
-  const [viewMode, setViewMode] = useState("list"); // "list" | "add" | "edit"
+  const [viewMode, setViewModeAction] = useExamCellAction({
+    moduleKey: "examinations",
+    paramKey: "view",
+    defaultAction: "list",
+    aliases: {
+      "create": "add",
+      "add": "add",
+      "edit": "edit",
+      "list": "list",
+    },
+  });
+
+  const [editingExamId, setEditingExamIdState] = useState(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("id")) return p.get("id");
+    }
+    return savedExamState?.editingExamId || null;
+  });
+
+  const setEditingExamId = useCallback((id) => {
+    setEditingExamIdState(id);
+    saveModuleState("examinations", { editingExamId: id });
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        if (id) {
+          url.searchParams.set("id", String(id));
+        } else {
+          url.searchParams.delete("id");
+        }
+        window.history.replaceState(window.history.state, "", url.toString());
+      } catch {}
+    }
+  }, []);
+
+  const setViewMode = useCallback((mode) => {
+    const norm = mode === "add" ? "create" : mode;
+    setViewModeAction(norm);
+    if (norm !== "edit") {
+      setEditingExamId(null);
+    }
+  }, [setViewModeAction, setEditingExamId]);
+
   const [activeTab, setActiveTab] = useExamCellTab({
     moduleKey: "examinations",
     defaultTab: "exams",
@@ -3158,7 +3201,6 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
       "exam-timetable": "schedule",
     },
   });
-  const [editingExamId, setEditingExamId] = useState(null);
 
   const examIdParam = searchParams.get("examId") || location.state?.examId || initialExamId || savedExamState?.examId || "";
   const [examId, setExamId] = useState(examIdParam);
@@ -5192,10 +5234,15 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
         faculty={faculty}
         showToast={showToast}
         onCancel={() => {
+          saveModuleState("examinations", { draftForm: null });
           setViewMode("list");
           setEditingExamId(null);
         }}
-        onSave={handleSaveExamRecord}
+        onSave={async (record) => {
+          saveModuleState("examinations", { draftForm: null });
+          const res = await handleSaveExamRecord(record);
+          if (res) setViewMode("list");
+        }}
       />
     );
   }
@@ -6562,9 +6609,9 @@ function ExamForm({
 
 
 
-  const [form, setForm] = useState(() =>
-    existing
-      ? {
+  const [form, setForm] = useState(() => {
+    if (existing) {
+      return {
         ...existing,
         campusId: normalizeId(existing.campusId || campusId || "1"),
         boardId: normalizeId(existing.boardId || defaultBoardId),
@@ -6581,33 +6628,47 @@ function ExamForm({
         selectedGroupPatterns: initialGroupPatterns,
         examPattern: existing.examPattern || existing.pattern || "",
         examType: existing.examType || "",
-      }
-      : {
+      };
+    }
+    const savedDraft = getModuleState("examinations", {})?.draftForm;
+    if (savedDraft && typeof savedDraft === "object") {
+      return {
+        ...savedDraft,
         campusId: normalizeId(campusId || "1"),
-        code: "",
-        name: "",
-        examCategory: "", // MANUAL SELECTION ONLY: starts empty so user must explicitly choose
-        customCategoryName: "",
-        boardId: defaultBoardId,
-        yearId: defaultYearId,
-        academicYearId: defaultYearId,
-        levelId: "",
-        levelIds: [],
-        groupId: "",
-        groupIds: [],
-        programId: "",
-        programIds: [],
-        selectedSubjectIds: [],
-        groupProgramSelections: {},
-        selectedGroupPatterns: {},
-        examPattern: "",
-        examType: "",
-        startDate: "",
-        endDate: "",
-        description: "",
-        status: "DRAFT",
-      },
-  );
+      };
+    }
+    return {
+      campusId: normalizeId(campusId || "1"),
+      code: "",
+      name: "",
+      examCategory: "",
+      customCategoryName: "",
+      boardId: defaultBoardId,
+      yearId: defaultYearId,
+      academicYearId: defaultYearId,
+      levelId: "",
+      levelIds: [],
+      groupId: "",
+      groupIds: [],
+      programId: "",
+      programIds: [],
+      selectedSubjectIds: [],
+      groupProgramSelections: {},
+      selectedGroupPatterns: {},
+      examPattern: "",
+      examType: "",
+      startDate: "",
+      endDate: "",
+      description: "",
+      status: "DRAFT",
+    };
+  });
+
+  useEffect(() => {
+    if (!existing) {
+      saveModuleState("examinations", { draftForm: form });
+    }
+  }, [form, existing]);
 
   useEffect(() => {
     if (existing) {
