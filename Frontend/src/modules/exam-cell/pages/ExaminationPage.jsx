@@ -3172,25 +3172,10 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
 
   const handleSelectScheduleTab = () => {
     setActiveTab("schedule");
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("tab", "schedule");
-      if (examId) next.set("examId", String(examId));
-      return next;
-    }, { replace: true });
   };
 
   const handleSelectExamsTab = () => {
-    if (activeTab === "schedule") {
-      handleBackFromSchedule();
-    } else {
-      setActiveTab("exams");
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("tab");
-        return next;
-      }, { replace: true });
-    }
+    setActiveTab("exams");
   };
   const [detail, setDetail] = useState(null);
   const [globalPreviewModal, setGlobalPreviewModal] = useState(null);

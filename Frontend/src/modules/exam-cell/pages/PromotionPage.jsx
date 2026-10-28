@@ -1152,9 +1152,6 @@ export default function PromotionPage({ screen = "promotion" }) {
               onClick={() => {
                 setError("");
                 setActiveTab(value);
-                if (path) {
-                  navigate(path);
-                }
               }}
             >
               {label}
