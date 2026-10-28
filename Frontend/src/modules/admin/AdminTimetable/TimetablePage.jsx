@@ -149,6 +149,33 @@ const optionize = (x, ids, labels) =>
       raw,
     }))
     .filter((item) => item.id && item.name);
+// Catalog identities and contextual GroupIds are different. Only expose
+// contextual records linked to an eligible, active master group.
+const validTimetableGroups = (masters, contexts, context) => {
+  const idOf = (row, key) => String(pick(row, key, key[0].toUpperCase() + key.slice(1)) ?? "");
+  const usable = (row) => isActiveRecord(row)
+    && ![true, 1, "true", "1"].includes(pick(row, "isDeleted", "IsDeleted"));
+  const byMaster = new Map();
+  masters.forEach((master) => {
+    const levels = master.eligibleAcademicLevels ?? master.EligibleAcademicLevels ?? master.eligibleLevels ?? master.EligibleLevels;
+    if (!usable(master) || idOf(master, "boardId") !== String(context.boardId)
+      || !Array.isArray(levels) || !levels.some((level) => usable(level) && idOf(level, "academicLevelId") === String(context.academicLevelId))) return;
+    const masterId = idOf(master, "masterGroupId");
+    if (!(Number(masterId) > 0)) return;
+    const matches = contexts.filter((group) => usable(group)
+      && idOf(group, "masterGroupId") === masterId
+      && ["boardId", "academicYearId"].every((key) => idOf(group, key) === String(context[key]))
+      && (!idOf(group, "campusId") || idOf(group, "campusId") === String(context.campusId))
+      && Number.isInteger(Number(idOf(group, "groupId"))) && Number(idOf(group, "groupId")) > 0);
+    // Prefer an existing matching-level context, but do not hide the shared
+    // group's real ID merely because only its first-year context exists.
+    const levelMatches = matches.filter((group) => idOf(group, "academicLevelId") === String(context.academicLevelId));
+    const selected = levelMatches.find((group) => idOf(group, "groupId") === String(context.groupId)) ?? levelMatches[0]
+      ?? matches.find((group) => idOf(group, "groupId") === String(context.groupId)) ?? matches[0];
+    if (selected) byMaster.set(masterId, { id: idOf(selected, "groupId"), name: String(pick(master, "groupName", "GroupName") ?? ""), raw: selected });
+  });
+  return [...new Map([...byMaster.values()].filter((group) => group.name).map((group) => [group.id, group])).values()];
+};
 const facultyOptionLabel = (entry) => {
   const source = entry?.raw ?? entry;
   const identifier = pick(
@@ -461,6 +488,8 @@ function useLookups(initial = {}) {
     levels: [],
     allLevels: [],
     groups: [],
+    groupsLoading: false,
+    groupsError: "",
     programs: [],
     programsLoading: false,
     sections: [],
@@ -488,34 +517,8 @@ function useLookups(initial = {}) {
     prevYearRef.current = selectedAcademicYearId;
 
     setValue((current) => {
-      if (campusChanged) {
-        return {
-          ...EMPTY,
-          campusId,
-          boardId: boardId || "",
-          academicYearId: academicYearId || "",
-        };
-      }
-      if (boardChanged) {
-        return {
-          ...current,
-          boardId: boardId || "",
-          academicYearId: academicYearId || current.academicYearId || "",
-          academicLevelId: "",
-          groupId: "",
-          programId: "",
-          sectionId: "",
-        };
-      }
-      if (yearChanged) {
-        return {
-          ...current,
-          academicYearId: academicYearId || "",
-          academicLevelId: "",
-          groupId: "",
-          programId: "",
-          sectionId: "",
-        };
+      if (campusChanged || boardChanged || yearChanged) {
+        return { ...current, campusId, boardId, academicYearId };
       }
 
       const nextCampus = current.campusId || campusId;
@@ -639,17 +642,18 @@ function useLookups(initial = {}) {
     return () => { cancelled = true; };
   }, [value.boardId, data.allYears, data.boards]);
   useEffect(() => {
-    if (!value.boardId) return;
+    if (!value.boardId) return undefined;
+    let cancelled = false;
     Promise.allSettled([
-      apiClient.get(apiEndpoints.groups.list, {
-        params: {
-          boardId: value.boardId,
-          isActive: true,
-        },
-      }),
       apiClient.get(apiEndpoints.boards.academicLevels, { params: { boardId: value.boardId } }),
     ])
-      .then(([groupsResult, levelsResult]) =>
+      .then(([levelsResult]) => {
+        if (cancelled) return;
+        if (levelsResult.status === "fulfilled") {
+          const levels = optionize(levelsResult.value.data, ["academicLevelId", "levelId", "id", "Id"], ["academicLevelName", "levelName", "name", "Name"]);
+          setValue((current) => current.boardId === value.boardId && current.academicLevelId && !levels.some((level) => level.id === String(current.academicLevelId))
+            ? { ...current, academicLevelId: "", groupId: "", programId: "", sectionId: "" } : current);
+        }
         setData((current) => ({
           ...current,
           years: uniqueAcademicYearsByName(boardMappedOptions(
@@ -673,18 +677,49 @@ function useLookups(initial = {}) {
                   ["academicLevelIds", "AcademicLevelIds", "levelIds", "LevelIds"],
                   ["academicLevelNames", "AcademicLevelNames", "levelNames", "LevelNames"],
                 ),
-          groups: groupsResult.status === "fulfilled"
-            ? optionize(groupsResult.value.data, ["groupId", "id", "Id"], ["groupName", "name", "Name"])
-            : [],
-        })),
-      )
-      .catch(() => setData((current) => ({ ...current, groups: [], levels: [] })));
+        }));
+      })
+      .catch(() => { if (!cancelled) setData((current) => ({ ...current, levels: [] })); });
+    return () => { cancelled = true; };
   }, [
     value.boardId,
     data.allYears,
     data.allLevels,
     data.boards,
   ]);
+  const selectedGroupRef = useRef(value.groupId);
+  useEffect(() => { selectedGroupRef.current = value.groupId; }, [value.groupId]);
+  useEffect(() => {
+    let cancelled = false;
+    const context = { campusId: value.campusId, boardId: value.boardId, academicYearId: value.academicYearId, academicLevelId: value.academicLevelId };
+    setData((current) => ({ ...current, groups: [], groupsLoading: Boolean(context.boardId && context.academicYearId && context.academicLevelId), groupsError: "" }));
+    if (!context.boardId || !context.academicYearId || !context.academicLevelId) return undefined;
+    const load = async () => {
+      try {
+        const response = await apiClient.get(apiEndpoints.masterGroups.list, { params: { boardId: Number(context.boardId) } });
+        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load master groups.");
+        if (cancelled) return;
+        const masters = list(response.data);
+        const masterIds = [...new Set(masters.filter(isActiveRecord).map((master) => Number(pick(master, "masterGroupId", "MasterGroupId"))).filter((id) => Number.isInteger(id) && id > 0))];
+        // This existing filter returns the explicit master/context link;
+        // older unfiltered stored procedures can omit MasterGroupId.
+        const responses = await Promise.all(masterIds.map((masterGroupId) => apiClient.get(apiEndpoints.groups.list, {
+          params: { masterGroupId, boardId: Number(context.boardId), academicYearId: Number(context.academicYearId), isActive: true },
+        })));
+        if (cancelled) return;
+        if (responses.some((result) => result.data?.success === false)) throw new Error("Unable to load contextual groups.");
+        const groups = validTimetableGroups(masters, responses.flatMap((result) => list(result.data)), { ...context, groupId: selectedGroupRef.current });
+        setData((current) => ({ ...current, groups, groupsLoading: false }));
+        setValue((current) => Object.keys(context).every((key) => String(current[key]) === String(context[key]))
+          && current.groupId && !groups.some((group) => group.id === String(current.groupId))
+          ? { ...current, groupId: "", programId: "", sectionId: "" } : current);
+      } catch (error) {
+        if (!cancelled) setData((current) => ({ ...current, groups: [], groupsLoading: false, groupsError: getApiErrorMessage(error) || "Unable to load groups." }));
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [value.campusId, value.boardId, value.academicYearId, value.academicLevelId]);
   useEffect(() => {
     if (!value.groupId) {
       setData((current) => ({ ...current, programs: [], programsLoading: false }));
@@ -696,13 +731,16 @@ function useLookups(initial = {}) {
       .get(apiEndpoints.groups.programs(value.groupId))
       .then((response) => {
         if (cancelled) return;
+        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load programs.");
+        const programs = optionize(response.data,
+          ["programId", "ProgramId", "id", "Id", "groupProgramId", "GroupProgramId"],
+          ["programName", "programme", "program", "name", "Name"],
+        ).filter((program) => isActiveRecord(program.raw));
+        setValue((current) => current.groupId === value.groupId && current.programId && !programs.some((program) => program.id === String(current.programId))
+          ? { ...current, programId: "", sectionId: "" } : current);
         setData((current) => ({
           ...current,
-          programs: optionize(
-            response.data,
-            ["programId", "ProgramId", "id", "Id", "groupProgramId", "GroupProgramId"],
-            ["programName", "programme", "program", "name", "Name"],
-          ),
+          programs,
           programsLoading: false,
         }));
       })
@@ -713,6 +751,7 @@ function useLookups(initial = {}) {
   }, [value.groupId]);
   useEffect(() => {
     if (!value.groupId) return;
+    let cancelled = false;
     const selectedProgram = data.programs.find((program) => String(program.id) === String(value.programId));
     setData((current) => ({
       ...current,
@@ -762,7 +801,13 @@ function useLookups(initial = {}) {
         if (!assignedId) return response;
         return apiClient.get(apiEndpoints.periodStructures.getById(assignedId));
       }),
-    ]).then((r) =>
+    ]).then((r) => {
+      if (cancelled) return;
+      if (r[0].status === "fulfilled" && r[0].value.data?.success !== false && value.programId && selectedProgram) {
+        const sections = sectionsForProgramme(r[0].value.data, selectedProgram, value.groupId, value.academicLevelId);
+        setValue((current) => current.sectionId && !sections.some((section) => String(pick(section, "sectionId", "id", "Id")) === String(current.sectionId))
+          ? { ...current, sectionId: "" } : current);
+      }
       setData((current) => ({
         ...current,
         sections:
@@ -786,8 +831,9 @@ function useLookups(initial = {}) {
                 r[3].status === "fulfilled" ? r[3].value.data : null,
               )
             : [],
-      })),
-    );
+      }));
+    });
+    return () => { cancelled = true; };
   }, [value.campusId, value.boardId, value.academicYearId, value.academicLevelId, value.groupId, value.programId, data.programs, sectionsReloadKey, selectedBoardId]);
   const change = (key) => (event) =>
     setValue((current) => {
@@ -798,38 +844,33 @@ function useLookups(initial = {}) {
           years: [],
           levels: [],
           groups: [],
-          programs: [],
           sections: [],
           subjects: [],
           periods: [],
           sectionsLoading: false,
           sectionsError: false,
         }));
-        return { ...EMPTY, campusId: current.campusId, boardId: next };
+        return { ...current, boardId: next, ...(!next ? { academicLevelId: "", groupId: "", programId: "", sectionId: "" } : {}) };
       }
       if (key === "academicYearId")
         {
-          setData((currentData) => ({ ...currentData, programs: [], sections: [], subjects: [], periods: [], sectionsLoading: false, sectionsError: false }));
+          setData((currentData) => ({ ...currentData, sections: [], subjects: [], periods: [], sectionsLoading: false, sectionsError: false }));
           return {
           ...current,
           academicYearId: next,
-          academicLevelId: "",
-          groupId: "",
-          programId: "",
-          sectionId: "",
           };
         }
       if (key === "academicLevelId") {
-        setData((currentData) => ({ ...currentData, programs: [], sections: [], subjects: [], periods: [], sectionsLoading: false, sectionsError: false }));
-        return { ...current, academicLevelId: next, groupId: "", programId: "", sectionId: "" };
+        setData((currentData) => ({ ...currentData, sections: [], subjects: [], periods: [], sectionsLoading: false, sectionsError: false }));
+        return { ...current, academicLevelId: next, ...(!next ? { groupId: "", programId: "", sectionId: "" } : {}) };
       }
       if (key === "groupId") {
         setData((currentData) => ({ ...currentData, programs: [], sections: [], sectionsLoading: false, sectionsError: false }));
-        return { ...current, groupId: next, programId: "", sectionId: "" };
+        return { ...current, groupId: next, ...(!next ? { programId: "", sectionId: "" } : {}) };
       }
       if (key === "programId") {
         setData((data) => ({ ...data, sections: [], sectionsLoading: Boolean(next), sectionsError: false }));
-        return { ...current, programId: next, sectionId: "" };
+        return { ...current, programId: next, ...(!next ? { sectionId: "" } : {}) };
       }
       return { ...current, [key]: next };
     });
@@ -857,7 +898,8 @@ function Context({ state, section = true, compact = false, hideGlobalContext = f
       {!hideGlobalContext && select("Board", "boardId", data.boards)}
       {!hideGlobalContext && select("Academic Year", "academicYearId", data.years, !value.boardId)}
       {select("Academic Level", "academicLevelId", data.levels, !value.academicYearId)}
-      {select("Group", "groupId", data.groups, !value.academicLevelId)}
+      {select("Group", "groupId", data.groups, !value.academicLevelId || data.groupsLoading, data.groupsLoading ? "Loading groups..." : data.groupsError ? "Unable to load groups" : undefined)}
+      {data.groupsError && <p className="ttm-validation-error" role="alert">{data.groupsError}</p>}
       {select(
         "Program",
         "programId",
@@ -1213,7 +1255,8 @@ function AssignStructureForm({ item, close, assigned, notify, initial }) {
       <div className="ttm-modal-body">
         <div className="ttm-form-grid">
           {select("Academic Level", "academicLevelId", data.levels, !value.academicYearId)}
-          {select("Group", "groupId", data.groups, !value.academicLevelId)}
+          {select("Group", "groupId", data.groups, !value.academicLevelId || data.groupsLoading)}
+          {data.groupsError && <p className="ttm-validation-error" role="alert">{data.groupsError}</p>}
         </div>
         <Field label="Period Structure">
           <input value={pick(item, "name") ?? ""} readOnly />

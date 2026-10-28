@@ -147,7 +147,7 @@ export function validateCalendarEvent(payload, eventTypes = EVENT_TYPES, masters
   }
   if (!Number.isInteger(Number(payload.boardId)) || Number(payload.boardId) <= 0) errors.boardId = 'Select a board.';
   if (payload.academicLevelId && !masters.levels.some((r) => r.id === payload.academicLevelId && (!r.boardId || r.boardId === payload.boardId))) errors.academicLevelId = 'Academic level must belong to the selected board.';
-  if (payload.groupId && !masters.groups.some((r) => r.id === payload.groupId && r.academicLevelId === payload.academicLevelId && r.boardId === payload.boardId)) errors.groupId = 'Group must belong to the selected academic level.';
+  if (payload.groupId && (!payload.academicLevelId || !masters.groups.some((r) => r.id === payload.groupId && r.boardId === payload.boardId && (!r.academicYearId || r.academicYearId === payload.academicYearId)))) errors.groupId = 'Select an eligible group for the selected board and academic year.';
   if (payload.programId && !masters.programs.some((r) => r.id === payload.programId && r.groupId === payload.groupId)) errors.programId = 'Programme must belong to the selected group.';
   if (payload.sectionId && !masters.sections.some((r) => r.id === payload.sectionId && r.programId === payload.programId)) errors.sectionId = 'Section must belong to the selected programme.';
   if (!CALENDAR_STATUSES.includes(payload.status)) errors.status = 'Select a valid status.';
@@ -341,7 +341,7 @@ function AcademicCalendarEventForm({ event, defaults, onClose, onSave, eventType
       {select('boardId', 'Board *', masters.boards, false, 'Select board')}
       {select('academicYearId', 'Academic Year *', masters.years, yearsLoading || !values.boardId, 'Select academic year')}
       {select('academicLevelId', 'Academic Level', masters.levels.filter((r) => !r.boardId || r.boardId === values.boardId), lookupLoading || !values.boardId || !values.academicYearId)}
-      {select('groupId', 'Group', masters.groups.filter((r) => r.academicLevelId === values.academicLevelId), lookupLoading || !values.academicLevelId)}
+      {select('groupId', 'Group', masters.groups.filter((r) => r.boardId === values.boardId), lookupLoading || !values.academicLevelId)}
       {select('programId', 'Programme', masters.programs.filter((r) => r.groupId === values.groupId), lookupLoading || !values.groupId)}
       {select('sectionId', 'Section', masters.sections.filter((r) => r.programId === values.programId && r.groupId === values.groupId && r.academicLevelId === values.academicLevelId), lookupLoading || !values.programId)}
       {field('location', 'Location')}

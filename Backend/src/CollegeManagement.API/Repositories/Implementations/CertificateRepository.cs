@@ -15,10 +15,12 @@ namespace CollegeManagement.API.Repositories.Implementations;
 public class CertificateRepository : ICertificateRepository
 {
     private readonly DatabaseContext _database;
+    private readonly Microsoft.Extensions.Logging.ILogger<CertificateRepository> _logger;
 
-    public CertificateRepository(DatabaseContext database)
+    public CertificateRepository(DatabaseContext database, Microsoft.Extensions.Logging.ILogger<CertificateRepository>? logger = null)
     {
         _database = database;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<CertificateRepository>.Instance;
     }
 
     // =========================================================
@@ -87,7 +89,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GetAllAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GetAllAsync] Error: {Message}", ex.Message);
             return new List<CertificateResponseDto>();
         }
     }
@@ -122,7 +124,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GetByIdAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GetByIdAsync] Error: {Message}", ex.Message);
             return null;
         }
     }
@@ -153,7 +155,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GetByCertificateNumberAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GetByCertificateNumberAsync] Error: {Message}", ex.Message);
             return null;
         }
     }
@@ -723,7 +725,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GetPreviewAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GetPreviewAsync] Error: {Message}", ex.Message);
             return null;
         }
     }
@@ -767,7 +769,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GetWorkflowStatsAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GetWorkflowStatsAsync] Error: {Message}", ex.Message);
             return new CertificateWorkflowStatsDto();
         }
     }
@@ -822,7 +824,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GetStudentsDropdownAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GetStudentsDropdownAsync] Error: {Message}", ex.Message);
             return new List<StudentCertificateDropdownDto>();
         }
     }
@@ -860,7 +862,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GenerateAsync] Error for {request.AdmissionNo}: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GenerateAsync] Error for {AdmissionNo}: {Message}", request.AdmissionNo, ex.Message);
             return null;
         }
     }
@@ -900,7 +902,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GetHistoryAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GetHistoryAsync] Error: {Message}", ex.Message);
             return new List<CertificateResponseDto>();
         }
     }
@@ -929,7 +931,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.VerifyAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.VerifyAsync] Error: {Message}", ex.Message);
             return null;
         }
     }
@@ -974,7 +976,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.UpdateByAdmissionNoAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.UpdateByAdmissionNoAsync] Error: {Message}", ex.Message);
             return null;
         }
     }
@@ -1007,7 +1009,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.MoveStatusAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.MoveStatusAsync] Error: {Message}", ex.Message);
             return false;
         }
     }
@@ -1039,7 +1041,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.BulkReviewAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.BulkReviewAsync] Error: {Message}", ex.Message);
             return 0;
         }
     }
@@ -1071,7 +1073,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.BulkApproveAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.BulkApproveAsync] Error: {Message}", ex.Message);
             return 0;
         }
     }
@@ -1105,7 +1107,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.BulkIssueAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.BulkIssueAsync] Error: {Message}", ex.Message);
             return 0;
         }
     }
@@ -1134,7 +1136,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.UpdateFeeClearanceAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.UpdateFeeClearanceAsync] Error: {Message}", ex.Message);
             return false;
         }
     }
@@ -1163,7 +1165,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GrantFeeExemptionAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GrantFeeExemptionAsync] Error: {Message}", ex.Message);
             return false;
         }
     }
@@ -1191,7 +1193,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.CancelAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.CancelAsync] Error: {Message}", ex.Message);
             return false;
         }
     }
@@ -1219,7 +1221,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.DeleteAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.DeleteAsync] Error: {Message}", ex.Message);
             return false;
         }
     }
@@ -1260,7 +1262,7 @@ public class CertificateRepository : ICertificateRepository
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error bulk generating for {admissionNo}: {ex.Message}");
+                _logger.LogError(ex, "Error bulk generating for {AdmissionNo}: {Message}", admissionNo, ex.Message);
             }
         }
 
@@ -1301,7 +1303,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CertificateRepository.GetBulkEligibleStudentsAsync] Error: {ex.Message}");
+            _logger.LogError(ex, "[CertificateRepository.GetBulkEligibleStudentsAsync] Error: {Message}", ex.Message);
             return new List<BulkEligibleStudentDto>();
         }
     }
