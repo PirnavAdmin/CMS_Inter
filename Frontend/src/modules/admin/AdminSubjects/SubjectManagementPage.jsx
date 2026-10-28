@@ -253,12 +253,20 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
     // Changing Group must not refetch its options; validate the retained ID
     // only when this academic level's options finish loading successfully.
     const candidateGroupId = contextRef.current.groupId;
-    const requestParams = { academicYearId: navbarAcademicYearId, academicLevelId: context.levelId, isActive: true };
+    // Group availability is shared across levels. Keep the real GroupId and
+    // board/year scope; the subject APIs apply the selected academic level.
+    const requestParams = { academicYearId: navbarAcademicYearId, isActive: true };
     const rowsFrom = (response) => {
       const payload = body(response), wrappers = asList(payload);
       return Array.isArray(payload?.groups) ? payload.groups : Array.isArray(payload?.Groups) ? payload.Groups : wrappers.flatMap((item) => Array.isArray(item?.groups) ? item.groups : Array.isArray(item?.Groups) ? item.Groups : Array.isArray(item?.groupList) ? item.groupList : get(item, "groupId", "GroupId", "id", "Id") != null ? [item] : []);
     };
-    const normalizeGroups = (rows) => rows.map((item) => ({ ...option(item, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name", "groupCode", "GroupCode", "code", "Code"]), raw: item })).filter((item) => item.value && item.label);
+    const normalizeGroups = (rows) => [...new Map(rows
+      .filter((item) => String(get(item, "boardId", "BoardId") ?? navbarBoardId) === String(navbarBoardId)
+        && get(item, "isActive", "IsActive") !== false
+        && String(get(item, "status", "Status") ?? "").toLowerCase() !== "inactive")
+      .map((item) => ({ ...option(item, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name", "groupCode", "GroupCode", "code", "Code"]), raw: item }))
+      .filter((item) => item.value && item.label)
+      .map((item) => [item.value, item])).values()];
     const loadGroups = async () => {
       try {
         const direct = await apiClient.get(apiEndpoints.groups.getByBoard(navbarBoardId), { params: requestParams });
@@ -269,13 +277,13 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
           const listed = await apiClient.get(apiEndpoints.groups.list, { params: { boardId: navbarBoardId, ...requestParams } });
           next = normalizeGroups(rowsFrom(listed));
         }
-        if (active) {
+        if (active && contextRef.current.levelId === context.levelId) {
           setGroups(next);
           if (!next.some((group) => group.value === candidateGroupId)) updateContext({ levelId: context.levelId, groupId: "" });
           setGroupsLevelId(context.levelId);
         }
       } catch {
-        if (active) setFilterError("Unable to load groups. Refresh to retry.");
+        if (active && contextRef.current.levelId === context.levelId) setFilterError("Unable to load groups. Refresh to retry.");
       }
     };
     loadGroups();
@@ -283,6 +291,8 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
   }, [academicContextValid, context.levelId, navbarBoardId, navbarAcademicYearId, updateContext]);
   const loadContextSubjects = useCallback(async () => {
     const requestSequence = ++contextRequestSequence.current;
+    const isCurrentRequest = () => requestSequence === contextRequestSequence.current
+      && contextRef.current.levelId === context.levelId && contextRef.current.groupId === context.groupId;
     if (!academicContextValid || groupsLevelId !== context.levelId || !groups.some((group) => group.value === context.groupId) || !navbarBoardId || !context.levelId || !context.groupId) {
       setSubjectsError("");
       setContextSubjects([]);
@@ -295,18 +305,18 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
     setContextSubjectsReady(false);
     try {
       const response = await apiClient.get(apiEndpoints.subjects.context, { params: { boardId: navbarBoardId, groupId: context.groupId, academicLevelId: context.levelId } });
-      if (requestSequence !== contextRequestSequence.current) return false;
+      if (!isCurrentRequest()) return false;
       setContextSubjects(asList(body(response)).map(subjectFromApi).filter((subject) => subject.id));
       setContextSubjectsReady(true);
       return true;
     } catch (error) {
-      if (requestSequence !== contextRequestSequence.current) return false;
+      if (!isCurrentRequest()) return false;
       setContextSubjects([]);
       setContextSubjectsReady(false);
       setSubjectsError(getApiErrorMessage(error) || "Unable to load subjects. Refresh to retry.");
       return false;
     } finally {
-      if (requestSequence === contextRequestSequence.current) setSubjectsLoading(false);
+      if (isCurrentRequest()) setSubjectsLoading(false);
     }
   }, [academicContextValid, groupsLevelId, groups, context.groupId, context.levelId, navbarBoardId]);
   useEffect(() => {

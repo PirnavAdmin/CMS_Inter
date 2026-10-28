@@ -3282,9 +3282,8 @@ export default function AdmissionPage() {
     return rows.filter((item) => (
       idsMatchOrLoose(values.board, item.boardId)
       && idsMatchOrLoose(values.year, item.academicYearId)
-      && idsMatchOrLoose(values.level, item.academicLevelId)
     ));
-  }, [masterOptions.groups, values.board, values.level, values.year]);
+  }, [masterOptions.groups, values.board, values.year]);
   const sectionOptions = useMemo(() => {
     const rows = masterOptions.sections || [];
     const selectedGroupName = values.groupName || optionLabel(masterOptions.groups, values.group);
@@ -4374,19 +4373,21 @@ export default function AdmissionPage() {
       return undefined;
     }
     let ignore = false;
+    setMasterOptions((current) => ({ ...current, groups: [] }));
     setMasterStatus((current) => ({ ...current, groupsLoading: true, groupsError: "" }));
     const params = {
       boardId: values.board || undefined,
       academicYearId: values.year || undefined,
-      academicLevelId: values.level || undefined,
       isActive: true,
     };
     apiClient.get(apiEndpoints.groups.getAll, { params })
       .then((response) => {
         if (ignore) return;
-        const groups = getCollection(response.data)
+        const groups = [...new Map(getCollection(response.data)
+          .filter(isLiveMasterActive)
           .map(normalizeGroupOption)
-          .filter((item) => item?.value);
+          .filter((item) => item?.value)
+          .map((item) => [item.value, item])).values()];
         setMasterOptions((current) => ({ ...current, groups }));
       })
       .catch(() => {
