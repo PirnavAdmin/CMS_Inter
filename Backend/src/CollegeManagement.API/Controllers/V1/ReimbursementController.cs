@@ -3,7 +3,9 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Reimbursement;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
+using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Reimbursement;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -23,13 +25,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IReimbursementService _service;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly IStaffAttendanceService? _staffAttendanceService;
 
         public ReimbursementController(
             IReimbursementService service,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            IStaffAttendanceService? staffAttendanceService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
+            _staffAttendanceService = staffAttendanceService;
         }
 
         private int ResolveUserId()
@@ -42,15 +47,32 @@ namespace CollegeManagement.API.Controllers.V1
             return userId.Value;
         }
 
-        private int? ResolveStaffId()
+        private async Task<int?> ResolveStaffIdAsync()
         {
-            var staffClaim = User?.Claims?.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId");
-            if (staffClaim != null && int.TryParse(staffClaim.Value, out int staffId) && staffId > 0)
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId.HasValue && staffId.Value > 0)
             {
-                return staffId;
+                return staffId.Value;
             }
 
-            return _jwtTokenHelper.GetUserId(User);
+            var staffClaim = User?.Claims?.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId");
+            if (staffClaim != null && int.TryParse(staffClaim.Value, out int sId) && sId > 0)
+            {
+                return sId;
+            }
+
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (userId.HasValue && userId.Value > 0 && _staffAttendanceService != null)
+            {
+                try
+                {
+                    var resolved = await _staffAttendanceService.ResolveStaffIdByUserIdAsync(userId.Value);
+                    if (resolved > 0) return resolved;
+                }
+                catch { }
+            }
+
+            return null;
         }
 
         private int? ResolveCampusId(int? explicitlyProvided = null)
@@ -95,7 +117,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 1. Submit a new Reimbursement Claim
         /// </summary>
         [HttpPost]
-        [Authorize]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> CreateClaim([FromBody] CreateReimbursementClaimRequest request)
@@ -107,7 +129,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (request.StaffId <= 0)
             {
-                var resolvedStaff = ResolveStaffId();
+                var resolvedStaff = await ResolveStaffIdAsync();
                 if (resolvedStaff.HasValue && resolvedStaff.Value > 0)
                 {
                     request.StaffId = resolvedStaff.Value;
@@ -127,7 +149,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// 2. Get All Claims (Finance & Admin Review table)
         /// </summary>
         [HttpGet]
-        [Authorize]
+        [RequirePermission("staff-reimbursement")]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllClaims(
             [FromQuery] int? campusId,
@@ -144,11 +167,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// 3. Get My Claims (Self-service claims for faculty/staff)
         /// </summary>
         [HttpGet("my-claims")]
-        [Authorize]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetMyClaims([FromQuery] int? campusId)
         {
-            var staffId = ResolveStaffId();
+            var staffId = await ResolveStaffIdAsync();
             if (!staffId.HasValue || staffId.Value <= 0)
             {
                 return BadRequest(new { Status = false, Message = "Unable to determine staff identity." });
@@ -163,7 +186,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// 4. Get Reimbursement Summary KPIs
         /// </summary>
         [HttpGet("summary")]
-        [Authorize]
+        [RequirePermission("staff-reimbursement")]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetSummary([FromQuery] int? campusId)
         {
@@ -176,7 +200,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// 5. Get Account Ledger Entries (For Account Ledger Modal)
         /// </summary>
         [HttpGet("account-entries")]
-        [Authorize]
+        [RequirePermission("staff-reimbursement")]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAccountEntries([FromQuery] int? campusId)
         {
@@ -189,6 +214,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 6. Get Single Claim by ID (Modal / Preview view with Audit Log Timeline)
         /// </summary>
         [HttpGet("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetClaimById(int id)
@@ -206,6 +232,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{id:int}/verify")]
         [HttpPut("{id:int}/approve")]
+        [RequirePermission("staff-reimbursement")]
         [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -225,6 +252,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{id:int}/clarification")]
         [HttpPut("{id:int}/clarification")]
+        [RequirePermission("staff-reimbursement")]
         [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -244,6 +272,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{id:int}/reject")]
         [HttpPut("{id:int}/reject")]
+        [RequirePermission("staff-reimbursement")]
         [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -263,6 +292,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{id:int}/mark-paid")]
         [HttpPost("{id:int}/pay")]
+        [RequirePermission("staff-reimbursement")]
         [Authorize(Roles = "Accountant,Admin,Super Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -281,7 +311,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 11. Upload Proof / Receipt Document
         /// </summary>
         [HttpPost("{id:int}/upload-proof")]
-        [Authorize]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> UploadProof(int id, IFormFile file)

@@ -546,8 +546,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
 
                 // 2. Insert Staff domain record via EF Core inside this transaction
-                _context.Staffs.Add(staff);
-                await _context.SaveChangesAsync();
+                await _staffRepository.AddAsync(staff);
 
                 // 3. Subject Allocations
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;
@@ -874,9 +873,7 @@ namespace CollegeManagement.API.Services.Implementations
                 var connection = _context.Database.GetDbConnection();
 
                 existingStaff.UpdatedAt = DateTime.UtcNow;
-                // Note: existingStaff is already tracked by EF Core from _staffRepository.GetByIdAsync(id).
-                // Do not call _context.Staffs.Update(existingStaff) as it marks all loaded navigation properties (Campuses, Boards, Departments) as Modified.
-                await _context.SaveChangesAsync();
+                await _staffRepository.UpdateAsync(existingStaff);
 
                 if (emailChanged)
                 {
@@ -937,8 +934,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 staff.IsDeleted = true;
                 staff.UpdatedAt = DateTime.UtcNow;
-                _context.Staffs.Update(staff);
-                await _context.SaveChangesAsync();
+                await _staffRepository.SoftDeleteAsync(staff);
 
                 await _userRepository.UpdateStatusByStaffIdAsync(id, false, connection, dbTransaction);
                 await transaction.CommitAsync();
@@ -2667,6 +2663,75 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 return null;
             }
+        }
+        public async Task<bool> UpdateCurrentStaffContactAsync(System.Security.Claims.ClaimsPrincipal user, UpdateStaffContactDto dto)
+        {
+            var staffIdClaim = user.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            Staff? staff = null;
+            if (int.TryParse(staffIdClaim, out int sId) && sId > 0)
+            {
+                staff = await _staffRepository.GetByIdAsync(sId);
+            }
+
+            if (staff == null)
+            {
+                var empIdClaim = user.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+                if (!string.IsNullOrWhiteSpace(empIdClaim))
+                {
+                    staff = await _staffRepository.GetByEmployeeIdAsync(empIdClaim);
+                }
+            }
+
+            if (staff == null)
+            {
+                var emailClaim = user.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+                if (!string.IsNullOrWhiteSpace(emailClaim))
+                {
+                    staff = await _staffRepository.GetByEmailAsync(emailClaim);
+                }
+            }
+
+            if (staff == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Mobile))
+                staff.Mobile = dto.Mobile.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.EmergencyContact))
+                staff.AlternateMobile = dto.EmergencyContact.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Address))
+                staff.CurrentAddress = dto.Address.Trim();
+
+            await _staffRepository.UpdateAsync(staff);
+            return true;
+        }
+
+        public async Task<bool> UnassignSubjectAsync(int staffId, string? subjectName, int? subjectId)
+        {
+            var allocations = await _allocationRepository.GetByStaffIdAsync(staffId);
+            if (!allocations.Any()) return false;
+
+            StaffSubjectAllocation? target = null;
+            if (subjectId.HasValue && subjectId.Value > 0)
+            {
+                target = allocations.FirstOrDefault(a => a.SubjectId == subjectId.Value);
+            }
+            else if (!string.IsNullOrWhiteSpace(subjectName))
+            {
+                var clean = subjectName.Trim().ToLowerInvariant();
+                target = allocations.FirstOrDefault(a =>
+                    (a.Subject != null && (a.Subject.SubjectName.ToLower() == clean || a.Subject.SubjectCode.ToLower() == clean)) ||
+                    (a.Subject != null && clean.Contains(a.Subject.SubjectName.ToLower())));
+            }
+
+            if (target != null)
+            {
+                await _allocationRepository.DeleteAsync(target);
+                return true;
+            }
+
+            return false;
         }
     }
 }

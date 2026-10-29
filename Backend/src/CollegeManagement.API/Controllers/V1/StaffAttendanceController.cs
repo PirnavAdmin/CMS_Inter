@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Asp.Versioning;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.DTOs.StaffAttendance.Responses;
 using CollegeManagement.API.Filters;
@@ -11,7 +10,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -25,16 +23,13 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IStaffAttendanceService _service;
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
-        private readonly AppDbContext? _context;
 
         public StaffAttendanceController(
             IStaffAttendanceService service,
-            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
-            AppDbContext? context = null)
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
-            _context = context;
         }
 
         /// <summary>
@@ -69,7 +64,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates a single staff attendance record.
         /// </summary>
         [HttpPut("update")]
-        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -102,7 +96,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Generates Staff Monthly Calendar Matrix Grid Report via GET query string.
         /// </summary>
         [HttpGet("monthly-report")]
-        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffMonthlyReportGridGet([FromQuery] StaffMonthlyReportRequest request)
@@ -152,7 +145,8 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffYearlyOverview(int staffId, [FromQuery] int academicYearId)
         {
-            var result = await _service.GetStaffYearlyOverviewAsync(staffId, academicYearId);
+            var campusId = GetCurrentCampusId();
+            var result = await _service.GetStaffYearlyOverviewAsync(staffId, academicYearId, campusId);
             return Ok(result);
         }
 
@@ -182,9 +176,20 @@ namespace CollegeManagement.API.Controllers.V1
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
             var isAdmin = IsCurrentUserAdmin();
+            var campusId = GetCurrentCampusId();
 
-            var result = await _service.ImportStaffAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId);
+            var result = await _service.ImportStaffAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId, campusId);
             return Ok(result);
+        }
+
+        private int? GetCurrentCampusId()
+        {
+            var campusClaim = User?.FindFirst("CampusId")?.Value ?? User?.FindFirst("campus_id")?.Value ?? User?.FindFirst("campusId")?.Value;
+            if (!string.IsNullOrEmpty(campusClaim) && int.TryParse(campusClaim, out int cId) && cId > 0)
+            {
+                return cId;
+            }
+            return null;
         }
 
         private int GetCurrentUserId()
@@ -196,6 +201,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
             return userId.Value;
         }
+
         private string GetCurrentUserName()
         {
             var userName = User?.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
@@ -224,84 +230,9 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var userId = _jwtTokenHelper.GetUserId(User);
-            if (userId.HasValue && userId.Value > 0 && _context != null)
+            if (userId.HasValue && userId.Value > 0)
             {
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId.Value);
-                if (user?.StaffId.HasValue == true && user.StaffId.Value > 0)
-                {
-                    return user.StaffId.Value;
-                }
-
-                if (!string.IsNullOrEmpty(user?.Email))
-                {
-                    var staff = await _context.Staffs.FirstOrDefaultAsync(s => s.Email == user.Email && !s.IsDeleted);
-                    if (staff != null)
-                    {
-                        if (user != null && !user.StaffId.HasValue)
-                        {
-                            user.StaffId = staff.Id;
-                            await _context.SaveChangesAsync();
-                        }
-                        return staff.Id;
-                    }
-                }
-
-                // Auto-provision if Admin
-                if (IsCurrentUserAdmin() && user != null)
-                {
-                    var campusId = await _context.Campuses.Select(c => c.CampusId).FirstOrDefaultAsync();
-                    if (campusId <= 0) campusId = 1;
-
-                    var names = (user.FullName ?? "Administrator").Split(' ');
-                    var firstName = names[0];
-                    var lastName = names.Length > 1 ? string.Join(" ", names.Skip(1)) : "Admin";
-
-                    var newStaff = new CollegeManagement.API.Models.Staff.Staff
-                    {
-                        EmployeeId = $"ADM{user.UserId:D3}",
-                        FirstName = firstName,
-                        LastName = lastName,
-                        Email = string.IsNullOrWhiteSpace(user.Email) ? $"admin{user.UserId}@college.local" : user.Email,
-                        Mobile = string.IsNullOrWhiteSpace(user.PhoneNumber) ? "9876543210" : user.PhoneNumber,
-                        Gender = "Other",
-                        DateOfBirth = new DateTime(1985, 1, 1),
-                        Qualification = "Master's Degree",
-                        Designation = "Administrator",
-                        StaffType = "Non-Teaching",
-                        DepartmentId = 5,
-                        CampusId = campusId,
-                        JoiningDate = DateTime.UtcNow,
-                        Status = "Active",
-                        Nationality = "Indian",
-                        Country = "India",
-                        EmploymentType = "Full Time",
-                        ProfileStatus = "Approved",
-                        ProfileCompletionPercentage = 100,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    _context.Staffs.Add(newStaff);
-                    await _context.SaveChangesAsync();
-
-                    user.StaffId = newStaff.Id;
-                    await _context.SaveChangesAsync();
-
-                    var hasBalance = await _context.StaffLeaveBalances.AnyAsync(b => b.StaffId == newStaff.Id);
-                    if (!hasBalance)
-                    {
-                        var activeYear = await _context.AcademicYears.Select(y => y.AcademicYearId).FirstOrDefaultAsync();
-                        if (activeYear <= 0) activeYear = 1;
-
-                        _context.StaffLeaveBalances.AddRange(
-                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Casual, AcademicYearId = activeYear, TotalDays = 15m, UsedDays = 0m, RemainingDays = 15m },
-                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Sick, AcademicYearId = activeYear, TotalDays = 10m, UsedDays = 0m, RemainingDays = 10m },
-                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Earned, AcademicYearId = activeYear, TotalDays = 10m, UsedDays = 0m, RemainingDays = 10m }
-                        );
-                        await _context.SaveChangesAsync();
-                    }
-
-                    return newStaff.Id;
-                }
+                return await _service.ResolveStaffIdByUserIdAsync(userId.Value);
             }
 
             throw new CollegeManagement.API.Exceptions.UnauthorizedException("Logged in user is not associated with an active staff or faculty record.");

@@ -202,6 +202,8 @@ builder.Services.AddScoped<ISectionRepository, SectionRepository>();
 builder.Services.AddScoped<ISubjectRepository, SubjectRepository>();
 builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
 builder.Services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
+builder.Services.AddScoped<ILeaveManagementRepository, LeaveManagementRepository>();
+builder.Services.AddScoped<ILeaveCategoryRepository, LeaveCategoryRepository>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IStudentAdmissionRepository, StudentAdmissionRepository>();
 builder.Services.AddScoped<IStudentImportRepository, StudentImportRepository>();

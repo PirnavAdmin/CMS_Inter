@@ -1,17 +1,25 @@
 using System;
 using System.Threading.Tasks;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.StaffAttendance;
 using CollegeManagement.API.Enums;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/attendance-timing-config")]
     [Route("api/v1/attendance-timing-config")]
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
+    [Authorize]
+    [RequirePermission("settings", "attendance-timing")]
     public class AttendanceTimingConfigController : ControllerBase
     {
         private readonly IAttendanceTimingConfigService _timingConfigService;
@@ -22,6 +30,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
+        [BypassPermission]
+        [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll()
         {
             try
@@ -46,6 +56,9 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("{id:int}")]
+        [BypassPermission]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetById([FromRoute] int id)
         {
             try
@@ -78,6 +91,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("effective")]
+        [BypassPermission]
+        [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetEffective([FromQuery] StaffType? staffType, [FromQuery] int? departmentId)
         {
             try
@@ -101,6 +116,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost]
+        [ProducesResponseType(StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Create([FromBody] CreateTimingConfigRequest request)
         {
             if (!ModelState.IsValid)
@@ -135,6 +152,9 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPut("{id:int}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Update([FromRoute] int id, [FromBody] UpdateTimingConfigRequest request)
         {
             if (!ModelState.IsValid)
@@ -178,6 +198,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpDelete("{id:int}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Delete([FromRoute] int id)
         {
             try

@@ -12,6 +12,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/leave-categories")]
+    [Route("api/v1/leave-categories")]
     [EnableCors("AllowFrontend")]
     [Authorize]
     [Produces("application/json")]

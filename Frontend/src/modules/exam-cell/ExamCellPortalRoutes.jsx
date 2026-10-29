@@ -12,7 +12,7 @@ const Marks = lazy(() => import("./pages/MarksEntryPage.jsx"));
 const Results = lazy(() => import("./pages/ResultsPage.jsx"));
 const Attendance = lazy(() => import("./pages/AttendancePage.jsx"));
 const AttendanceOverview = lazy(() => import("./pages/AttendanceOverviewPage.jsx"));
-const AttendanceTiming = lazy(() => import("./pages/AttendanceTimingConfigPage.jsx"));
+const AttendanceTiming = lazy(() => import("@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.jsx"));
 const Certificates = lazy(() => import("./pages/CertificatesPage.jsx"));
 const Promotions = lazy(() => import("./pages/PromotionPage.jsx"));
 const Holidays = lazy(() => import("./pages/HolidayManagementPage.jsx"));
