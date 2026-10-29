@@ -1,4 +1,5 @@
 import { SkeletonTable, SkeletonRow } from "@/shared/components/Skeleton.jsx";
+import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import {
@@ -114,7 +115,10 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return "daily";
   }, [initialView, location?.pathname, searchParams]);
 
-  const [attView, setAttView] = useState(resolvedDefaultView); // "daily" | "monthly" | "defaulters"
+  const { params: viewParams, setParam: setViewParam } = useFacultyViewParams();
+  const requestedView = viewParams.get("tab") || viewParams.get("view");
+  const attView = ["daily", "monthly", "defaulters"].includes(requestedView) ? requestedView : resolvedDefaultView;
+  const setAttView = (view) => setViewParam("tab", view); // "daily" | "monthly" | "defaulters"
   // Date auto-defaults to today
   const getLocalTodayDate = () => {
     const now = new Date();
@@ -186,7 +190,8 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
   const [timetableSlots, setTimetableSlots] = useState([]);
 
   // Import Attendance Modal State & Handlers
-  const [showImportModal, setShowImportModal] = useState(false);
+  const showImportModal = viewParams.get("modal") === "import";
+  const setShowImportModal = (open) => setViewParam("modal", open ? "import" : null);
   const [showTemplateStructure, setShowTemplateStructure] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);

@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
@@ -126,7 +126,9 @@ const normalizeTodayData = (raw, timing) => {
 
 export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   const [routeParams, setRouteParams] = useSearchParams();
-  const regularizeDate = adminRouting ? routeParams.get("regularize") || "" : "";
+  const { pathname } = useLocation();
+  const urlRouting = adminRouting || pathname.startsWith("/faculty-dashboard/my-attendance");
+  const regularizeDate = urlRouting ? routeParams.get("regularize") || "" : "";
   const rangeParam = routeParams.get("range");
   const routedRange = ["week", "last_week", "month", "last_month"].includes(rangeParam) ? rangeParam : "week";
   const restoredRegularization = useRef("");
@@ -184,11 +186,12 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
 
   // Filter State: "week" | "last_week" | "month" | "last_month"
   const [localFilter, setLocalFilter] = useState("week");
-  const activeFilter = adminRouting ? routedRange : localFilter;
+  const activeFilter = urlRouting ? routedRange : localFilter;
   const setActiveFilter = (range) => {
-    if (!adminRouting) return setLocalFilter(range);
+    if (!urlRouting) return setLocalFilter(range);
     const next = new URLSearchParams(routeParams);
-    next.set("tab", "my-attendance"); next.set("range", range);
+    if (adminRouting) next.set("tab", "my-attendance");
+    next.set("range", range);
     setRouteParams(next);
   };
 
@@ -230,10 +233,10 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
 
   // Regularization Modal State
   const [localRegModalOpen, setLocalRegModalOpen] = useState(false);
-  const regModalOpen = adminRouting ? Boolean(regularizeDate && restoredRegularization.current === regularizeDate && localRegModalOpen) : localRegModalOpen;
+  const regModalOpen = urlRouting ? Boolean(regularizeDate && restoredRegularization.current === regularizeDate && localRegModalOpen) : localRegModalOpen;
   const setRegModalOpen = (open) => {
     setLocalRegModalOpen(open);
-    if (adminRouting && !open) {
+    if (urlRouting && !open) {
       const next = new URLSearchParams(routeParams); next.delete("regularize");
       setRouteParams(next);
     }
@@ -311,13 +314,13 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   // Fetch Attendance History for selected filter
   const fetchHistory = useCallback(async (period) => {
     const request = ++historyRequest.current;
-    if (adminRouting) setHistoryRange("");
+    if (urlRouting) setHistoryRange("");
     try {
       setLoadingHistory(true);
       const res = await attendanceService.getMyAttendanceHistory(period);
-      if (adminRouting && request !== historyRequest.current) return;
+      if (urlRouting && request !== historyRequest.current) return;
       const payload = res?.data || res?.Data || (res?.status ? res : null);
-      if (!payload && adminRouting) setHistoryRange("error");
+      if (!payload && urlRouting) setHistoryRange("error");
       if (payload) {
         const rawLogs = payload.logs || payload.Logs || [];
         const rawMetrics = payload.metrics || payload.Metrics || {};
@@ -413,7 +416,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           };
         });
 
-        if (adminRouting) setHistoryRange(period);
+        if (urlRouting) setHistoryRange(period);
 
         // Compute late punch count dynamically
         const lateCount = processedLogs.filter((l) => l.status === "Late").length;
@@ -435,11 +438,11 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
       }
     } catch (err) {
       console.warn("Could not load attendance history from backend", err);
-      if (adminRouting && request === historyRequest.current) setHistoryRange("error");
+      if (urlRouting && request === historyRequest.current) setHistoryRange("error");
     } finally {
-      if (!adminRouting || request === historyRequest.current) setLoadingHistory(false);
+      if (!urlRouting || request === historyRequest.current) setLoadingHistory(false);
     }
-  }, [timingConfig, adminRouting]);
+  }, [timingConfig, urlRouting]);
 
   // Initial load once on mount
   useEffect(() => {
@@ -536,7 +539,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   };
 
   useEffect(() => {
-    if (!adminRouting) return;
+    if (!urlRouting) return;
     if (!regularizeDate) {
       restoredRegularization.current = "";
       setLocalRegModalOpen(false);
@@ -563,15 +566,15 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     setRegForm({ rawDate: regularizeDate, displayDate: log.date || log.day || "Selected Date", requestedInTime: "09:00", requestedOutTime: "16:30", reason: "" });
     restoredRegularization.current = regularizeDate;
     setLocalRegModalOpen(true);
-  }, [adminRouting, regularizeDate, loadingHistory, historyRange, activeFilter, historyData, notify]);
+  }, [urlRouting, regularizeDate, loadingHistory, historyRange, activeFilter, historyData, notify]);
 
   // Open Regularization Modal for a specific date
   const openRegularizeModal = (log) => {
-    if (adminRouting) {
+    if (urlRouting) {
       const date = String(log.rawDate || log.RawDate || "").slice(0, 10);
       if (!date) return notify("Attendance record has no valid date.", "error");
       const next = new URLSearchParams(routeParams);
-      next.set("tab", "my-attendance");
+      if (adminRouting) next.set("tab", "my-attendance");
       next.set("range", historyData.logs.some((row) => String(row.rawDate || "").slice(0, 10) === date) ? activeFilter : "week");
       next.set("regularize", date);
       setRouteParams(next);
@@ -1133,6 +1136,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
       </div>
 
       {/* Attendance Regularization Modal */}
+      {!adminRouting && regularizeDate && !regModalOpen && <div className="sp-reg-modal-backdrop"><div className="sp-reg-modal" role="dialog" aria-label="Attendance Regularization"><p role="status">{loadingHistory || !historyRange ? "Loading attendance record..." : "This attendance record is unavailable or cannot be regularized in this history range."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setRegModalOpen(false)}>Close</button></div></div>}
       {regModalOpen && (
         <div className="sp-reg-modal-backdrop" onClick={() => !regSubmitting && setRegModalOpen(false)}>
           <div className="sp-reg-modal" onClick={(e) => e.stopPropagation()}>

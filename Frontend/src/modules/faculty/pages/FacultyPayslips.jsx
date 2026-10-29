@@ -43,21 +43,12 @@ export default function FacultyPayslips() {
   const payslipIdParam = routeParams.get("payslipId") || routeParams.get("id");
 
   const [payslipList, setPayslipList] = useState([]);
-  const [payslipYear, setPayslipYear] = useState(yearParam);
-  const [viewingPayslip, setViewingPayslip] = useState(null);
-
-  useEffect(() => {
-    const y = routeParams.get("year") || "all";
-    if (y !== payslipYear) setPayslipYear(y);
-
-    const pid = routeParams.get("payslipId") || routeParams.get("id");
-    if (!pid && viewingPayslip) {
-      setViewingPayslip(null);
-    }
-  }, [routeParams]);
+  const payslipYear = yearParam;
+  const sourcePayslip = payslipIdParam == null ? null : payslipList.find((p) => String(p.payslipId || p.id || p.payrollId) === payslipIdParam);
+  const [payslipDetail, setPayslipDetail] = useState(null);
+  const viewingPayslip = sourcePayslip ? (String(payslipDetail?.payslipId || payslipDetail?.id || payslipDetail?.payrollId) === payslipIdParam ? payslipDetail : sourcePayslip) : null;
 
   const handleYearFilterChange = (yr) => {
-    setPayslipYear(yr);
     setRouteParams((prev) => {
       const next = new URLSearchParams(prev);
       if (yr && yr !== "all") next.set("year", yr);
@@ -67,7 +58,6 @@ export default function FacultyPayslips() {
   };
 
   const handleClosePayslipModal = () => {
-    setViewingPayslip(null);
     setRouteParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("payslipId");
@@ -217,42 +207,30 @@ export default function FacultyPayslips() {
     return now.toLocaleString("en-IN", { month: "long", year: "numeric" });
   }, [current]);
 
-  // Fetch full details when opening modal
-  const handleViewPayslip = async (slip) => {
+  const handleViewPayslip = (slip) => {
     if (!slip) {
       notify("No payslip record is available to view yet.", "info");
       return;
     }
-    setViewingPayslip(slip);
     const slipId = slip.payslipId || slip.id || slip.payrollId;
-    if (slipId) {
-      setRouteParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set("payslipId", String(slipId));
-        return next;
-      });
-    }
-    if (!slip.payslipId) return;
-    try {
-      const res = await apiClient.get(`/api/v1/Payroll/payslips/${slip.payslipId}`);
-      const detail = res?.data?.data || res?.data;
-      if (detail && typeof detail === "object" && detail.payslipId) {
-        setViewingPayslip(detail);
-      }
-    } catch (err) {
-      console.warn("Could not fetch detailed payslip:", err);
-    }
+    if (slipId) setRouteParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("payslipId", String(slipId));
+      return next;
+    });
   };
 
   useEffect(() => {
-    const pid = routeParams.get("payslipId") || routeParams.get("id");
-    if (pid && payslipList.length > 0 && (!viewingPayslip || String(viewingPayslip.payslipId || viewingPayslip.id) !== String(pid))) {
-      const match = payslipList.find((p) => String(p.payslipId || p.id || p.payrollId) === String(pid));
-      if (match) {
-        handleViewPayslip(match);
-      }
-    }
-  }, [routeParams, payslipList]);
+    if (!sourcePayslip?.payslipId) return;
+    let cancelled = false;
+    apiClient.get(`/api/v1/Payroll/payslips/${sourcePayslip.payslipId}`)
+      .then((res) => {
+        const detail = res?.data?.data || res?.data;
+        if (!cancelled && detail && typeof detail === "object" && String(detail.payslipId) === payslipIdParam) setPayslipDetail(detail);
+      })
+      .catch((err) => { if (!cancelled) console.warn("Could not fetch detailed payslip:", err); });
+    return () => { cancelled = true; };
+  }, [payslipIdParam, sourcePayslip]);
 
   // Download PDF attachment
   const handleDownloadPdf = async (slip) => {
@@ -342,7 +320,7 @@ export default function FacultyPayslips() {
           <select
             aria-label="Filter payslips by year"
             value={payslipYear}
-            onChange={(event) => setPayslipYear(event.target.value)}
+            onChange={(event) => handleYearFilterChange(event.target.value)}
           >
             <option value="all">All years</option>
             {years.map((year) => (
@@ -490,6 +468,7 @@ export default function FacultyPayslips() {
       </div>
 
       {/* Full Itemized Payslip Modal */}
+      {payslipIdParam && !viewingPayslip && <div className="cms-overlay"><div className="cms-modal" role="dialog" aria-label="Payslip Details"><p role="status">{loading ? "Loading payslip details..." : error || "This payslip is unavailable for your account."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={handleClosePayslipModal}>Close</button></div></div>}
       {viewingPayslip && (
         <div
           className="cms-overlay"

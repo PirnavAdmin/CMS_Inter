@@ -32,18 +32,9 @@ export default function FacultyLeave() {
   const [error, setError] = useState(null);
   const [routeParams, setRouteParams] = useSearchParams();
   const cardParam = routeParams.get("card");
-  const [showLeaveModal, setShowLeaveModal] = useState(() => cardParam === "apply" || cardParam === "apply-leave");
-
-  useEffect(() => {
-    const card = routeParams.get("card");
-    const shouldOpen = card === "apply" || card === "apply-leave";
-    if (shouldOpen !== showLeaveModal) {
-      setShowLeaveModal(shouldOpen);
-    }
-  }, [routeParams]);
+  const showLeaveModal = cardParam === "apply" || cardParam === "apply-leave";
 
   const handleCloseModal = () => {
-    setShowLeaveModal(false);
     setRouteParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("card");
@@ -284,7 +275,6 @@ export default function FacultyLeave() {
 
   // Handle opening the Apply Leave modal
   const handleOpenModal = () => {
-    setShowLeaveModal(true);
     setLeaveForm({
       categoryId: categories.length > 0 ? categories[0].leaveCategoryId : "OTHERS",
       customLeaveType: "",
@@ -489,7 +479,7 @@ export default function FacultyLeave() {
       const res = await apiClient.post("/api/v1/staff-attendance/leave", payload);
       if (res.data?.status || res.status === 200 || res.status === 201) {
         notify("Leave application submitted successfully!");
-        setShowLeaveModal(false);
+        handleCloseModal();
         setLeaveForm({
           categoryId: categories[0]?.leaveCategoryId || 1,
           customLeaveType: "",

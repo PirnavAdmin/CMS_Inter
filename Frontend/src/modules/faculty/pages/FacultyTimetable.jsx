@@ -1,3 +1,4 @@
+import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { X, Calendar, Clock, MapPin, BookOpen, Users, AlertCircle, RefreshCw, CheckCircle2, ChevronRight, Info, User, FileText } from "lucide-react";
 import "../styles/FacultyTimetable.css";
@@ -157,7 +158,10 @@ export default function FacultyTimetable() {
   const [allocatedSubjects, setAllocatedSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedSlot, setSelectedSlot] = useState(null);
+  const { params, setParam } = useFacultyViewParams();
+  const slotId = params.get("slotId");
+  const selectedSlot = slotId == null ? null : timetableSlots.find((slot) => String(slot.id) === slotId);
+  const setSelectedSlot = (slot) => setParam("slotId", slot?.id ?? null);
 
   const isFetchingRef = useRef(false);
 
@@ -642,6 +646,7 @@ export default function FacultyTimetable() {
         )}
       </div>
 
+      {slotId != null && !selectedSlot && <div className="faculty-tt-modal-backdrop"><div className="faculty-tt-modal-card" role="dialog" aria-label="Class Details"><p role="status">{loading ? "Loading class details..." : error || "This class is unavailable in your timetable."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setSelectedSlot(null)}>Close</button></div></div>}
       {/* Class Details Centered Modal Dialog */}
       {selectedSlot && (
         <div className="faculty-tt-modal-backdrop" onClick={() => setSelectedSlot(null)}>
