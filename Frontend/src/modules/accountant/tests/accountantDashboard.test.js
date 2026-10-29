@@ -1468,8 +1468,10 @@ test("Accountant steps retain edits, manage documents, open photo options and pr
     post: async (url, payload) => { calls.push(["POST", url, payload]); return { data: { status: true } }; },
     delete: async url => { calls.push(["DELETE", url]); return { data: { status: true } }; },
   };
+  const routeParams = new URLSearchParams();
+  const useAccountantViewParams = () => ({ params: routeParams, setParam: (key, input) => { if (input == null) routeParams.delete(key); else routeParams.set(key, String(input)); } });
   const context = vm.createContext({
-    React, useState, useRef, useEffect, useId: () => ":field:", createPortal: input => input, document,
+    React, useState, useRef, useEffect, useCallback: fn => fn, useAccountantViewParams, useId: () => ":field:", createPortal: input => input, document,
     window: { confirm: () => confirmed }, FormData, apiClient,
     apiEndpoints: { faculty: { uploadDocument: id => `staff/${id}/documents/upload`, deleteDocument: (id, type) => `staff/${id}/documents/${encodeURIComponent(type)}` } },
     getApiErrorMessage: error => error.message, env: { apiBaseUrl: "https://college.example" }, ...data, value: data.profileValue,
@@ -1496,6 +1498,7 @@ test("Accountant steps retain edits, manage documents, open photo options and pr
   const protectedField = find(node => typeof node.type === "function" && node.props.label === "Employee / Staff ID");
   assert.equal(protectedField.type(protectedField.props).props.children[1].props.disabled, true);
   button("Bank Info").props.onClick(); render();
+  assert.equal(routeParams.get("step"), "1");
   assert.equal(field("Bank Name").props.editing, false);
   assert(!field("Account Number").props.value.includes("12345678"));
   props.editing = true; render();
@@ -1528,6 +1531,7 @@ test("Accountant steps retain edits, manage documents, open photo options and pr
   select(new File(["image"], "image.png", { type: "image/png" })); assert(find(node => node.type === "PhotoEditor"));
   find(node => node.type === "PhotoEditor").props.onClose(); render(); assert.equal(find(node => node.type === "PhotoEditor"), undefined);
   button("Change Password").props.onClick(); render(); assert(find(node => node.props?.role === "dialog"));
+  assert.equal(routeParams.get("modal"), "password");
   listeners.keydown({ key: "Escape" }); render(); assert.equal(find(node => node.props?.role === "dialog"), undefined);
 });
 

@@ -1,3 +1,4 @@
+import { useAccountantViewParams } from "../components/AccountantUI.jsx";
 import { SkeletonTable, SkeletonRow, Skeleton } from "@/shared/components/Skeleton.jsx";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -46,7 +47,9 @@ export default function AccountantLeave() {
   const [prerequisitesLoading, setPrerequisitesLoading] = useState(true);
   const [error, setError] = useState(null);
   const [historyError, setHistoryError] = useState(null);
-  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const { params: viewParams, setParam } = useAccountantViewParams();
+  const showLeaveModal = viewParams.get("modal") === "apply";
+  const setShowLeaveModal = useCallback((open) => setParam("modal", open ? "apply" : null), [setParam]);
   const [leaveForm, setLeaveForm] = useState(blankForm);
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
   const [cancelId, setCancelId] = useState(null);
@@ -157,7 +160,7 @@ export default function AccountantLeave() {
     };
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("keydown", onKey); previous?.focus?.(); };
-  }, [showLeaveModal]);
+  }, [showLeaveModal, setShowLeaveModal]);
 
   const categoryCards = categories.map(category => ({
     category,

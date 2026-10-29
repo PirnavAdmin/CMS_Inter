@@ -1,4 +1,5 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
+import { useAccountantViewParams } from "../components/AccountantUI.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Camera, CheckCircle2, Edit3, Eye, EyeOff, Lock, RefreshCw, Save, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -40,7 +41,9 @@ export function AccountantProfile() {
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoSuccess, setPhotoSuccess] = useState("");
   const [photoUploadError, setPhotoUploadError] = useState("");
-  const [editing, setEditing] = useState(false);
+  const { params: viewParams, setParam } = useAccountantViewParams();
+  const editing = viewParams.get("mode") === "edit";
+  const setEditing = (open) => setParam("mode", open ? "edit" : null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState("");
   const [profileError, setProfileError] = useState("");
@@ -169,7 +172,6 @@ export function AccountantProfile() {
       lookups,
     });
     setForm(createProfileForm(staffData));
-    setEditing(false);
     const loadedStaffId = getNumericId(readAny(staffData, ["id", "Id", "staffId", "StaffId"]));
     if (loadedStaffId) loadPhoto(loadedStaffId, seq);
   }, [cleanupPhotoUrl, loadPhoto, user]);
@@ -528,8 +530,11 @@ function ReadField({ label, text }) {
 }
 
 function AccountantProfileContent({ staff, staffId, display, initials, photoUrl, photoUploading, photoSuccess, photoError, fileInputRef, onPhotoSelect, loading, notices, editing, savingProfile, form, onChange, onEdit, onCancel, onSave, securityForm, passwordLoading, passwordSuccess, resetPassword, onDocumentsChanged, EditableField }) {
-  const [step, setStep] = useState(0);
-  const [passwordOpen, setPasswordOpen] = useState(false);
+  const { params: viewParams, setParam } = useAccountantViewParams();
+  const step = /^[0-5]$/.test(viewParams.get("step") || "") ? Number(viewParams.get("step")) : 0;
+  const setStep = (step) => setParam("step", step);
+  const passwordOpen = viewParams.get("modal") === "password";
+  const setPasswordOpen = useCallback((open) => setParam("modal", open ? "password" : null), [setParam]);
   const [documentType, setDocumentType] = useState("");
   const [documentFile, setDocumentFile] = useState(null);
   const [documentBusy, setDocumentBusy] = useState(false);
@@ -561,7 +566,7 @@ function AccountantProfileContent({ staff, staffId, display, initials, photoUrl,
   };
   useEffect(() => {
     if (passwordSuccess) setPasswordOpen(false);
-  }, [passwordSuccess]);
+  }, [passwordSuccess, setPasswordOpen]);
   useEffect(() => {
     if (!passwordOpen) return;
     const previous = document.activeElement;
@@ -578,7 +583,7 @@ function AccountantProfileContent({ staff, staffId, display, initials, photoUrl,
     };
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; previous?.focus?.(); };
-  }, [passwordOpen, resetPassword]);
+  }, [passwordOpen, resetPassword, setPasswordOpen]);
 
   const personal = [
     ["Employee / Staff ID", display.employeeId], ["Middle Name", value(staff, "middleName")],

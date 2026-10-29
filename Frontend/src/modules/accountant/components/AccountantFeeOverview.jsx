@@ -1,3 +1,4 @@
+import { useAccountantViewParams } from "./AccountantUI.jsx";
 import { Skeleton } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useState } from "react";
 import { AlertCircle, CalendarClock, ReceiptText, Users, WalletCards } from "lucide-react";
@@ -18,7 +19,9 @@ function SummaryCard({ icon: Icon, label, value, hint, tone, onClick }) {
 }
 
 export default function AccountantFeeOverview({ params }) {
-  const [tab, setTab] = useState("overdue");
+  const { params: viewParams, setParam } = useAccountantViewParams();
+  const tab = ["overdue", "upcoming", "recent"].includes(viewParams.get("overview")) ? viewParams.get("overview") : "overdue";
+  const setTab = (tab) => setParam("overview", tab);
   const [pageNumber, setPageNumber] = useState(1);
   const [group, setGroup] = useState("");
   const load = useCallback((signal) => loadFeeOverview(params, signal), [params]);

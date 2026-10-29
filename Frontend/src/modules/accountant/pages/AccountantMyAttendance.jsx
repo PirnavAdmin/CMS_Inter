@@ -1,3 +1,4 @@
+import { useAccountantViewParams } from "../components/AccountantUI.jsx";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Clock,
@@ -95,7 +96,12 @@ export default function AccountantMyAttendance() {
   }, []);
 
   // Filter State: "week" | "last_week" | "month" | "last_month"
-  const [activeFilter, setActiveFilter] = useState("week");
+  const { params: viewParams, setParam } = useAccountantViewParams();
+  const activeFilter = ["week", "last_week", "month", "last_month"].includes(viewParams.get("range")) ? viewParams.get("range") : "week";
+  const setActiveFilter = (range) => setParam("range", range);
+  activeFilterRef.current = activeFilter;
+  const regularizeDate = viewParams.get("regularize");
+  const [historyPeriod, setHistoryPeriod] = useState("");
 
   // Loading States
   const [loadingToday, setLoadingToday] = useState(true);
@@ -134,9 +140,11 @@ export default function AccountantMyAttendance() {
   });
 
   // Regularization Modal State
-  const [regModalOpen, setRegModalOpen] = useState(false);
+  const selectedLog = regularizeDate == null ? null : historyData.logs.find((log) => String(log.rawDate).slice(0, 10) === regularizeDate);
+  const regModalOpen = Boolean(regularizeDate && !loadingHistory && !historyError && historyPeriod === activeFilter && selectedLog?.canRegularize);
+  const setRegModalOpen = (open) => { if (!open) setParam("regularize", null); };
   const [regSubmitting, setRegSubmitting] = useState(false);
-  const [regForm, setRegForm] = useState({
+  const [regDraft, setRegForm] = useState({
     rawDate: "",
     displayDate: "",
     requestedInTime: "",
@@ -144,6 +152,12 @@ export default function AccountantMyAttendance() {
     reason: "",
   });
 
+  const regForm = regDraft.rawDate === regularizeDate ? regDraft : {
+    rawDate: regularizeDate || "",
+    displayDate: selectedLog?.date || selectedLog?.day || "Selected Date",
+    requestedInTime: toInputTime(selectedLog?.inTime) || toInputTime(todayData.shiftStartTime),
+    requestedOutTime: toInputTime(selectedLog?.outTime) || toInputTime(todayData.shiftEndTime), reason: "",
+  };
   const [toast, setToast] = useState(null);
 
   const notify = useCallback((text, type = "success") => {
@@ -190,6 +204,7 @@ export default function AccountantMyAttendance() {
       if ((res?.status ?? res?.Status) === false || !payload) throw new Error(res?.message || res?.Message || "Attendance data is unavailable.");
       if (request !== historyRequest.current || period !== activeFilterRef.current) return;
       if (payload) {
+        setHistoryPeriod(period);
         const rawLogs = payload.logs || payload.Logs || [];
         const rawMetrics = payload.metrics || payload.Metrics || {};
         setHistoryData({
@@ -322,7 +337,7 @@ export default function AccountantMyAttendance() {
       requestedOutTime: toInputTime(log.outTime) || toInputTime(todayData.shiftEndTime),
       reason: "",
     });
-    setRegModalOpen(true);
+    setParam("regularize", String(log.rawDate).slice(0, 10));
   };
 
   // Submit Regularization Form
@@ -827,6 +842,7 @@ export default function AccountantMyAttendance() {
       </div>
 
       {/* Attendance Regularization Modal */}
+      {regularizeDate && !regModalOpen && <div className="acct-att-reg-modal-backdrop"><div className="acct-att-reg-modal" role="dialog" aria-label="Attendance Regularization"><p role="status">{loadingHistory || (!historyError && historyPeriod !== activeFilter) ? "Loading attendance record..." : historyError || "This attendance record is unavailable or cannot be regularized."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setRegModalOpen(false)}>Close</button></div></div>}
       {regModalOpen && (
         <div className="acct-att-reg-modal-backdrop" onClick={() => !regSubmitting && setRegModalOpen(false)}>
           <div className="acct-att-reg-modal" role="dialog" aria-modal="true" aria-label="Attendance Regularization Request" onClick={(e) => e.stopPropagation()}>
