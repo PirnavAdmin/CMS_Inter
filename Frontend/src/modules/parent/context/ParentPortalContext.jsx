@@ -519,6 +519,142 @@ export function ParentPortalProvider({ children }) {
   const [activeChildId, setActiveChildIdState] = useState(getInitialActiveChildId);
   const lastManualSelectRef = useRef(null);
 
+  const [detailedStudentMap, setDetailedStudentMap] = useState({});
+  const [feeMap, setFeeMap] = useState({});
+  const [resultsMap, setResultsMap] = useState({});
+  const [marksMap, setMarksMap] = useState({});
+  const [memoMap, setMemoMap] = useState({});
+  const [attendanceMap, setAttendanceMap] = useState({});
+  const [subjectAttendanceMap, setSubjectAttendanceMap] = useState({});
+  const [timetableMap, setTimetableMap] = useState({});
+  const [examinationsMap, setExaminationsMap] = useState({});
+  const [curriculumSubjectsMap, setCurriculumSubjectsMap] = useState({});
+  const [holidays, setHolidays] = useState([]);
+  const [holidaysLoading, setHolidaysLoading] = useState(false);
+
+  // 2. Fetch active child detailed record, fees, results, attendance, timetable, examinations & curriculum
+  const fetchActiveChildData = useCallback(async (studentId) => {
+    if (!studentId) return;
+    const isBackendStudent = Boolean(studentId) && Number.isInteger(Number(studentId)) && Number(studentId) > 0 && !String(studentId).startsWith("stu-");
+
+    if (isBackendStudent) {
+      try {
+        // Fetch detailed student profile first or in parallel
+        let studentRecord = detailedStudentMap[studentId];
+        if (!studentRecord) {
+          studentRecord = await getStudentById(studentId);
+          if (studentRecord) {
+            setDetailedStudentMap((prev) => ({
+              ...prev,
+              [studentId]: studentRecord,
+            }));
+          }
+        }
+
+        const sectionId = studentRecord?.sectionId || 30;
+        const groupId = studentRecord?.groupId || 37;
+        const campusId = studentRecord?.campusId || 1;
+
+        // Parallel fetch for speed: student details, fee details, results, marks, attendance, timetable, subject attendance, exams, curriculum
+        const [
+          feeRes,
+          resultsRes,
+          marksRes,
+          attendanceRes,
+          timetableRes,
+          subjectAttendanceRes,
+          examsRes,
+          curriculumRes,
+        ] = await Promise.allSettled([
+          getStudentFeeDetails(studentId),
+          getStudentResults(studentId),
+          getStudentMarks(studentId),
+          getStudentAttendanceOverview(studentId, 9),
+          getStudentTimetable(studentId, sectionId),
+          getStudentAttendanceSubjects(studentId),
+          getStudentExaminations(campusId, groupId),
+          getSubjectsByGroup(groupId),
+        ]);
+
+        if (feeRes.status === "fulfilled" && feeRes.value) {
+          setFeeMap((prev) => ({
+            ...prev,
+            [studentId]: feeRes.value,
+          }));
+        }
+
+        if (resultsRes.status === "fulfilled" && Array.isArray(resultsRes.value)) {
+          setResultsMap((prev) => ({
+            ...prev,
+            [studentId]: resultsRes.value,
+          }));
+        }
+
+        if (marksRes.status === "fulfilled" && Array.isArray(marksRes.value)) {
+          setMarksMap((prev) => ({
+            ...prev,
+            [studentId]: marksRes.value,
+          }));
+        }
+
+        if (attendanceRes.status === "fulfilled" && attendanceRes.value) {
+          setAttendanceMap((prev) => ({
+            ...prev,
+            [studentId]: attendanceRes.value,
+          }));
+        }
+
+        if (subjectAttendanceRes.status === "fulfilled" && Array.isArray(subjectAttendanceRes.value)) {
+          setSubjectAttendanceMap((prev) => ({
+            ...prev,
+            [studentId]: subjectAttendanceRes.value,
+          }));
+        }
+
+        if (timetableRes.status === "fulfilled" && Array.isArray(timetableRes.value)) {
+          setTimetableMap((prev) => ({
+            ...prev,
+            [studentId]: timetableRes.value,
+          }));
+        }
+
+        if (curriculumRes.status === "fulfilled" && Array.isArray(curriculumRes.value)) {
+          setCurriculumSubjectsMap((prev) => ({
+            ...prev,
+            [studentId]: curriculumRes.value,
+          }));
+        }
+
+        if (examsRes.status === "fulfilled" && Array.isArray(examsRes.value) && examsRes.value.length > 0) {
+          const rawExams = examsRes.value;
+          // Retrieve schedules for scheduled or active exams in parallel
+          const examsWithSchedules = await Promise.all(
+            rawExams.slice(0, 10).map(async (exam) => {
+              const examId = exam.examinationId || exam.examId;
+              try {
+                const scheds = await getExaminationSchedules(examId);
+                return {
+                  ...exam,
+                  examinationId: examId,
+                  examId,
+                  schedules: Array.isArray(scheds) ? scheds : [],
+                };
+              } catch {
+                return { ...exam, examinationId: examId, examId, schedules: [] };
+              }
+            })
+          );
+          setExaminationsMap((prev) => ({
+            ...prev,
+            [studentId]: examsWithSchedules,
+          }));
+        }
+      } catch {
+        // Silent recovery
+      }
+    }
+  }, []);
+
   const setActiveChildId = useCallback((rawId) => {
     if (!rawId) return;
     const strId = String(rawId).trim();
@@ -539,19 +675,6 @@ export function ParentPortalProvider({ children }) {
     // Immediately fetch active data for selected child
     fetchActiveChildData(strId);
   }, [fetchActiveChildData]);
-  const [detailedStudentMap, setDetailedStudentMap] = useState({});
-  const [feeMap, setFeeMap] = useState({});
-  const [resultsMap, setResultsMap] = useState({});
-  const [marksMap, setMarksMap] = useState({});
-  const [memoMap, setMemoMap] = useState({});
-  const [attendanceMap, setAttendanceMap] = useState({});
-  const [subjectAttendanceMap, setSubjectAttendanceMap] = useState({});
-  const [timetableMap, setTimetableMap] = useState({});
-  const [examinationsMap, setExaminationsMap] = useState({});
-  const [curriculumSubjectsMap, setCurriculumSubjectsMap] = useState({});
-  const [holidays, setHolidays] = useState([]);
-  const [holidaysLoading, setHolidaysLoading] = useState(false);
-
   // 1. Fetch children enrolled under parent from GET /api/v1/students/my-children
   const fetchChildren = useCallback(async () => {
     setLoading(true);
@@ -815,128 +938,7 @@ export function ParentPortalProvider({ children }) {
     };
   }, [fetchHolidays]);
 
-  // 2. Fetch active child detailed record, fees, results, attendance, timetable, examinations & curriculum
-  const fetchActiveChildData = useCallback(async (studentId) => {
-    if (!studentId) return;
-    const isBackendStudent = Boolean(studentId) && Number.isInteger(Number(studentId)) && Number(studentId) > 0 && !String(studentId).startsWith("stu-");
 
-    if (isBackendStudent) {
-      try {
-        // Fetch detailed student profile first or in parallel
-        let studentRecord = detailedStudentMap[studentId];
-        if (!studentRecord) {
-          studentRecord = await getStudentById(studentId);
-          if (studentRecord) {
-            setDetailedStudentMap((prev) => ({
-              ...prev,
-              [studentId]: studentRecord,
-            }));
-          }
-        }
-
-        const sectionId = studentRecord?.sectionId || 30;
-        const groupId = studentRecord?.groupId || 37;
-        const campusId = studentRecord?.campusId || 1;
-
-        // Parallel fetch for speed: student details, fee details, results, marks, attendance, timetable, subject attendance, exams, curriculum
-        const [
-          feeRes,
-          resultsRes,
-          marksRes,
-          attendanceRes,
-          timetableRes,
-          subjectAttendanceRes,
-          examsRes,
-          curriculumRes,
-        ] = await Promise.allSettled([
-          getStudentFeeDetails(studentId),
-          getStudentResults(studentId),
-          getStudentMarks(studentId),
-          getStudentAttendanceOverview(studentId, 9),
-          getStudentTimetable(studentId, sectionId),
-          getStudentAttendanceSubjects(studentId),
-          getStudentExaminations(campusId, groupId),
-          getSubjectsByGroup(groupId),
-        ]);
-
-        if (feeRes.status === "fulfilled" && feeRes.value) {
-          setFeeMap((prev) => ({
-            ...prev,
-            [studentId]: feeRes.value,
-          }));
-        }
-
-        if (resultsRes.status === "fulfilled" && Array.isArray(resultsRes.value)) {
-          setResultsMap((prev) => ({
-            ...prev,
-            [studentId]: resultsRes.value,
-          }));
-        }
-
-        if (marksRes.status === "fulfilled" && Array.isArray(marksRes.value)) {
-          setMarksMap((prev) => ({
-            ...prev,
-            [studentId]: marksRes.value,
-          }));
-        }
-
-        if (attendanceRes.status === "fulfilled" && attendanceRes.value) {
-          setAttendanceMap((prev) => ({
-            ...prev,
-            [studentId]: attendanceRes.value,
-          }));
-        }
-
-        if (subjectAttendanceRes.status === "fulfilled" && Array.isArray(subjectAttendanceRes.value)) {
-          setSubjectAttendanceMap((prev) => ({
-            ...prev,
-            [studentId]: subjectAttendanceRes.value,
-          }));
-        }
-
-        if (timetableRes.status === "fulfilled" && Array.isArray(timetableRes.value)) {
-          setTimetableMap((prev) => ({
-            ...prev,
-            [studentId]: timetableRes.value,
-          }));
-        }
-
-        if (curriculumRes.status === "fulfilled" && Array.isArray(curriculumRes.value)) {
-          setCurriculumSubjectsMap((prev) => ({
-            ...prev,
-            [studentId]: curriculumRes.value,
-          }));
-        }
-
-        if (examsRes.status === "fulfilled" && Array.isArray(examsRes.value) && examsRes.value.length > 0) {
-          const rawExams = examsRes.value;
-          // Retrieve schedules for scheduled or active exams in parallel
-          const examsWithSchedules = await Promise.all(
-            rawExams.slice(0, 10).map(async (exam) => {
-              const examId = exam.examinationId || exam.examId;
-              try {
-                const scheds = await getExaminationSchedules(examId);
-                return {
-                  ...exam,
-                  examinationId: examId,
-                  examId,
-                  schedules: Array.isArray(scheds) ? scheds : [],
-                };
-              } catch {
-                return { ...exam, examinationId: examId, examId, schedules: [] };
-              }
-            })
-          );
-          setExaminationsMap((prev) => ({
-            ...prev,
-            [studentId]: examsWithSchedules,
-          }));
-        }
-      } catch {
-        // Silent recovery
-      }
-    }
-  }, []);
 
   useEffect(() => {
     if (activeChildId) {
