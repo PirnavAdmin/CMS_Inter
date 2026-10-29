@@ -135,8 +135,9 @@ export default function ParentAttendancePage() {
     if (liveSubjects && liveSubjects.length > 0) {
       return transformSubjectAttendance(liveSubjects);
     }
-    return child?.attendance?.subjectRecords || [];
-  }, [liveSubjects, child?.attendance?.subjectRecords]);
+    if (child?.attendance?.subjectRecords && child.attendance.subjectRecords.length > 0) return child.attendance.subjectRecords;
+    return subjectAttendanceData[activeChildId] || subjectAttendanceData["860"] || [];
+  }, [liveSubjects, child?.attendance?.subjectRecords, activeChildId]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
@@ -258,10 +259,13 @@ export default function ParentAttendancePage() {
         // Sort descending by date (most recent first)
         formattedLogs.sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
 
-        setDailyLogs(formattedLogs || []);
+        const fallbackLogs = formattedLogs && formattedLogs.length > 0
+          ? formattedLogs
+          : (recentAttendanceLogs[activeChildId] || recentAttendanceLogs["860"] || []);
+        setDailyLogs(fallbackLogs);
       } catch {
         if (!cancelled) {
-          setDailyLogs([]);
+          setDailyLogs(recentAttendanceLogs[activeChildId] || recentAttendanceLogs["860"] || []);
         }
       } finally {
         if (!cancelled) {
@@ -305,7 +309,7 @@ export default function ParentAttendancePage() {
     }
 
     // Direct calculation from fetched live daily logs
-    const working = dailyLogs.length;
+    const working = dailyLogs.filter((l) => l.status?.toLowerCase() !== "holiday").length;
     const present = dailyLogs.filter((l) => l.status?.toLowerCase() === "present").length;
     const absent = dailyLogs.filter((l) => l.status?.toLowerCase() === "absent").length;
     const rate = working > 0 ? ((present / working) * 100).toFixed(1) : "0.0";

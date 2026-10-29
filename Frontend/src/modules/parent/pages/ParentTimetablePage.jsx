@@ -94,6 +94,15 @@ export default function ParentTimetablePage() {
       return next;
     });
   };
+  useEffect(() => {
+    const dayParam = searchParams.get("day");
+    if (dayParam) {
+      setSelectedDay(dayParam);
+    } else {
+      setSelectedDay("all");
+    }
+  }, [searchParams]);
+
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [slotPopupStyle, setSlotPopupStyle] = useState({});
 

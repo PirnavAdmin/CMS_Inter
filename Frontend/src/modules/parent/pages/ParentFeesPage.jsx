@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Wallet, CreditCard, CheckCircle2, Download, Printer, Users, Eye, AlertCircle, Clock } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal } from "../context/ParentPortalContext.jsx";
@@ -17,8 +18,27 @@ export default function ParentFeesPage() {
     currentAcademicYear,
     loading,
   } = useParentPortal();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [feeRecords, setFeeRecords] = useState(getStoredFeeRecords());
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+
+  const handleOpenReceipt = (rec) => {
+    setSelectedReceipt(rec);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("receiptId", String(rec.id || rec.receiptNo));
+      return next;
+    });
+  };
+
+  const handleCloseReceipt = () => {
+    setSelectedReceipt(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("receiptId");
+      return next;
+    });
+  };
   const [toastMessage, setToastMessage] = useState("");
 
   const isCurrentYear = currentAcademicYear === "2026-2027";
@@ -48,6 +68,14 @@ export default function ParentFeesPage() {
     pending: breakdownTotal > 0 ? breakdownPending : rawChildFee.pending,
     status: breakdownTotal > 0 ? (breakdownPending === 0 ? "Paid" : breakdownPaid > 0 ? "Partial" : "Due") : rawChildFee.status,
   };
+
+  useEffect(() => {
+    const receiptParam = searchParams.get("receiptId");
+    if (receiptParam && childFee?.receipts?.length > 0) {
+      const match = childFee.receipts.find((r) => String(r.id || r.receiptNo) === String(receiptParam));
+      if (match) setSelectedReceipt(match);
+    }
+  }, [searchParams, childFee?.receipts]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
@@ -266,7 +294,7 @@ export default function ParentFeesPage() {
                           <button
                             type="button"
                             className="cms-btn cms-btn-sm cms-btn-outline"
-                            onClick={() => setSelectedReceipt(rec)}
+                            onClick={() => handleOpenReceipt(rec)}
                           >
                             <Eye size={13} /> View Receipt
                           </button>
@@ -292,11 +320,11 @@ export default function ParentFeesPage() {
         {selectedReceipt && (
           <Modal
             title={`Fee Payment Receipt — ${selectedReceipt.receiptNo}`}
-            onClose={() => setSelectedReceipt(null)}
+            onClose={handleCloseReceipt}
             size="lg"
             footer={
               <>
-                <button type="button" className="cms-btn cms-btn-outline" onClick={() => setSelectedReceipt(null)}>Close</button>
+                <button type="button" className="cms-btn cms-btn-outline" onClick={handleCloseReceipt}>Close</button>
                 <button type="button" className="cms-btn cms-btn-primary" onClick={() => window.print()}>
                   <Printer size={15} /> Print Receipt
                 </button>

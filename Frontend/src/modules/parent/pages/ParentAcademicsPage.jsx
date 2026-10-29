@@ -40,6 +40,11 @@ export default function ParentAcademicsPage() {
     } else if (tabFromUrl === "results") {
       setActiveTab("results");
     }
+    const examParam = searchParams.get("exam");
+    if (examParam && yearResults.length > 0) {
+      const match = yearResults.find((r) => r.examName?.toLowerCase() === examParam.toLowerCase());
+      if (match) setSelectedResult(match);
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -59,10 +64,12 @@ export default function ParentAcademicsPage() {
     if (curriculumSubjects && curriculumSubjects.length > 0) {
       return curriculumSubjects;
     }
-    return [];
-  }, [curriculumSubjects]);
+    return academicSubjectsData[activeChildId] || academicSubjectsData["860"] || [];
+  }, [curriculumSubjects, activeChildId]);
 
-  const rawResults = contextResults && contextResults.length > 0 ? contextResults : [];
+  const rawResults = (contextResults && contextResults.length > 0)
+    ? contextResults
+    : (examResultsData[activeChildId] || examResultsData["860"] || []);
   const yearResults = rawResults.filter((r) => r.academicYear === currentAcademicYear || !r.academicYear);
   const currentExam = (selectedResult && (selectedResult.academicYear === currentAcademicYear || !selectedResult.academicYear))
     ? selectedResult
@@ -271,7 +278,14 @@ export default function ParentAcademicsPage() {
                   value={currentExam?.examName || ""}
                   onChange={(e) => {
                     const found = yearResults.find((r) => r.examName === e.target.value);
-                    if (found) setSelectedResult(found);
+                    if (found) {
+                      setSelectedResult(found);
+                      setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set("exam", found.examName);
+                        return next;
+                      });
+                    }
                   }}
                   disabled={yearResults.length === 0}
                   style={{
