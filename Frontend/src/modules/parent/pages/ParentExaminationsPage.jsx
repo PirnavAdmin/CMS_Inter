@@ -47,63 +47,6 @@ export default function ParentExaminationsPage() {
     currentAcademicYear,
     loading,
   } = useParentPortal();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedExamModal, setSelectedExamModal] = useState(null);
-  const [hallTicketOpen, setHallTicketOpen] = useState(() => searchParams.get("hallTicket") === "open");
-
-  useEffect(() => {
-    const isHall = searchParams.get("hallTicket") === "open";
-    setHallTicketOpen(isHall);
-
-    const examIdParam = searchParams.get("examId");
-    if (examIdParam && exams && exams.length > 0) {
-      const match = exams.find((e) => String(e.id) === String(examIdParam));
-      if (match) setSelectedExamModal(match);
-    }
-  }, [searchParams, exams]);
-
-  const handleOpenHallTicket = () => {
-    setHallTicketOpen(true);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("hallTicket", "open");
-      return next;
-    });
-  };
-
-  const handleCloseHallTicket = () => {
-    setHallTicketOpen(false);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("hallTicket");
-      return next;
-    });
-  };
-
-  const handleOpenExamModal = (ex) => {
-    setSelectedExamModal(ex);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("examId", String(ex.id));
-      return next;
-    });
-  };
-
-  const handleCloseExamModal = () => {
-    setSelectedExamModal(null);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("examId");
-      return next;
-    });
-  };
-
-
-  useEffect(() => {
-    setSelectedExamModal(null);
-    setHallTicketOpen(false);
-  }, [currentAcademicYear, activeChildId]);
-
   // Find the primary scheduled or active examination from live backend
   const activeExam = useMemo(() => {
     if (!contextExaminations || contextExaminations.length === 0) return null;
@@ -167,6 +110,62 @@ export default function ParentExaminationsPage() {
     }
     return getExamMetaForYear(currentAcademicYear);
   }, [activeExam, currentAcademicYear, child]);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedExamModal, setSelectedExamModal] = useState(null);
+  const [hallTicketOpen, setHallTicketOpen] = useState(() => searchParams.get("hallTicket") === "open");
+
+  useEffect(() => {
+    const isHall = searchParams.get("hallTicket") === "open";
+    setHallTicketOpen(isHall);
+
+    const examIdParam = searchParams.get("examId");
+    if (examIdParam && exams && exams.length > 0) {
+      const match = exams.find((e) => String(e.id) === String(examIdParam));
+      if (match) setSelectedExamModal(match);
+    }
+  }, [searchParams, exams]);
+
+  const handleOpenHallTicket = () => {
+    setHallTicketOpen(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("hallTicket", "open");
+      return next;
+    });
+  };
+
+  const handleCloseHallTicket = () => {
+    setHallTicketOpen(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("hallTicket");
+      return next;
+    });
+  };
+
+  const handleOpenExamModal = (ex) => {
+    setSelectedExamModal(ex);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("examId", String(ex.id));
+      return next;
+    });
+  };
+
+  const handleCloseExamModal = () => {
+    setSelectedExamModal(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("examId");
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setSelectedExamModal(null);
+    setHallTicketOpen(false);
+  }, [currentAcademicYear, activeChildId]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
