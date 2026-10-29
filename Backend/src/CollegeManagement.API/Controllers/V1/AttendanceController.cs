@@ -224,7 +224,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPost("admin/students")]
         [HttpGet("admin/students")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
         [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<StudentAttendanceResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -257,7 +257,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Saves or updates student attendance records in bulk for Admin (session-based).
         /// </summary>
         [HttpPost("admin/bulk-save")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
         [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -328,7 +328,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("defaulters")]
-        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<AttendanceDefaulterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -514,7 +515,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("reports/student-monthly")]
         [HttpPost("student-monthly")]
         [HttpGet("student-monthly")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
         [BypassPermission]
         public async Task<IActionResult> GetStudentMonthlyReportGrid([FromQuery] StudentMonthlyReportRequest requestQuery, [FromBody] StudentMonthlyReportRequest? requestBody = null)
         {
@@ -558,7 +559,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Exports Student Monthly Calendar Matrix Report to CSV format.
         /// </summary>
         [HttpGet("student-monthly-report/export/csv")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
         [BypassPermission]
         public async Task<IActionResult> ExportStudentMonthlyCsv([FromQuery] StudentMonthlyReportRequest request)
         {
@@ -598,7 +599,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Exports Student Monthly Calendar Matrix Report to Excel format.
         /// </summary>
         [HttpGet("student-monthly-report/export/excel")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
         [BypassPermission]
         public async Task<IActionResult> ExportStudentMonthlyExcel([FromQuery] StudentMonthlyReportRequest request)
         {
@@ -636,7 +637,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         private bool IsCurrentUserAdmin()
         {
-            return User.IsInRole("Super Admin") || User.IsInRole("Admin") || User.IsInRole("Principal");
+            return User.IsInRole("Super Admin") || User.IsInRole("Admin") || User.IsInRole("Principal") || User.IsInRole("Examination Cell") || User.IsInRole("Exam Cell");
         }
 
         private int GetCurrentUserId()

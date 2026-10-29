@@ -519,7 +519,19 @@ namespace CollegeManagement.API.Repositories.Implementations
             string? remarks = dict.ContainsKey("Remarks") && dict["Remarks"] != null ? dict["Remarks"].ToString() : null;
             bool isVerified = dict.ContainsKey("IsVerified") && dict["IsVerified"] != null && (Convert.ToInt32(dict["IsVerified"]) == 1 || Convert.ToBoolean(dict["IsVerified"]));
             bool isPublished = dict.ContainsKey("IsPublished") && dict["IsPublished"] != null && (Convert.ToInt32(dict["IsPublished"]) == 1 || Convert.ToBoolean(dict["IsPublished"]));
-            int statusInt = dict.ContainsKey("Status") && dict["Status"] != null ? Convert.ToInt32(dict["Status"]) : 1;
+            int statusInt = 1;
+            if (dict.ContainsKey("Status") && dict["Status"] != null)
+            {
+                var statusVal = dict["Status"].ToString();
+                if (int.TryParse(statusVal, out int parsedInt))
+                {
+                    statusInt = parsedInt;
+                }
+                else if (Enum.TryParse<EvaluationStatus>(statusVal, true, out var parsedEnum))
+                {
+                    statusInt = (int)parsedEnum;
+                }
+            }
             bool isLocked = dict.ContainsKey("IsLocked") && dict["IsLocked"] != null && (Convert.ToInt32(dict["IsLocked"]) == 1 || Convert.ToBoolean(dict["IsLocked"]));
             string? verifiedBy = dict.ContainsKey("VerifiedBy") && dict["VerifiedBy"] != null ? dict["VerifiedBy"].ToString() : null;
             DateTime? verifiedAt = dict.ContainsKey("VerifiedAt") && dict["VerifiedAt"] != null ? Convert.ToDateTime(dict["VerifiedAt"]) : null;
