@@ -46,7 +46,7 @@ export default function ParentFeesPage() {
   const rawChildFee = contextChildFee && contextChildFee.total !== undefined
     ? contextChildFee
     : (child
-        ? (feeRecords[feeKey] || (isCurrentYear ? feeRecords[child.id] || child.fees : null)) || {
+        ? (feeRecords[feeKey] || (isCurrentYear ? feeRecords[child?.id] || child?.fees : null)) || {
             total: 0,
             paid: 0,
             pending: 0,

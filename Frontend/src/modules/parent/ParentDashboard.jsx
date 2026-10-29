@@ -71,7 +71,7 @@ export default function ParentDashboard() {
   const rawChildFee = contextChildFee && contextChildFee.total !== undefined
     ? contextChildFee
     : (child
-        ? feeRecords[dataKey] || (isCurrentYear ? (feeRecords[child.id] || child.fees) : null) || { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] }
+        ? feeRecords[dataKey] || (isCurrentYear ? (feeRecords[child?.id] || child?.fees) : null) || { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] }
         : { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] });
 
   const breakdownTotal = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.amount || 0), 0);
@@ -88,7 +88,7 @@ export default function ParentDashboard() {
   const subjects = child?.attendance?.subjectRecords || [];
   const academics = useMemo(() => {
     if (curriculumSubjects && curriculumSubjects.length > 0) return curriculumSubjects;
-    return child ? academicSubjectsData[dataKey] || (isCurrentYear ? (academicSubjectsData[child.id] || []) : []) : [];
+    return child ? academicSubjectsData[dataKey] || (isCurrentYear ? (academicSubjectsData[child?.id] || []) : []) : [];
   }, [curriculumSubjects, child, dataKey, isCurrentYear]);
   
   // Bridge real published examination results or live scheduled exams
@@ -135,7 +135,7 @@ export default function ParentDashboard() {
     return notifs.filter((n) => {
       if (!n.studentId) return true;
       const baseId = n.studentId.replace(/-\d{4}$/, "");
-      return baseId === child.id || n.studentId === child.id;
+      return baseId === child?.id || n.studentId === child?.id;
     });
   }, [notifs, child?.id]);
 
@@ -622,7 +622,7 @@ export default function ParentDashboard() {
                   type="button"
                   className="cms-btn cms-btn-primary"
                   onClick={() => {
-                    navigate(`/parent-dashboard/children/${child.id}`);
+                    if (child?.id) navigate(`/parent-dashboard/children/${child.id}`);
                     setStudentModalOpen(false);
                   }}
                 >

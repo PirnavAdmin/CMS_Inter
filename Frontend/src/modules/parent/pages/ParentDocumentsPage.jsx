@@ -158,17 +158,17 @@ export default function ParentDocumentsPage() {
       if (combined.length === 0) {
         combined.push(
           {
-            id: `bonafide-${child.id}`,
+            id: `bonafide-${child?.id || 'default'}`,
             title: "Study & Bonafide Certificate",
             type: "Institutional Certificate",
-            docNo: `BON-2026-${child.admissionNo ? child.admissionNo.replace(/\D/g, "") : child.id}`,
+            docNo: `BON-2026-${child?.admissionNo ? child.admissionNo.replace(/\D/g, "") : (child?.id || 'default')}`,
             issuedDate: "15 Jul 2026",
             purpose: "Official Academic Verification",
             status: "Approved",
             isCertificate: true,
           },
           {
-            id: `marks-${child.id}`,
+            id: `marks-${child?.id || 'default'}`,
             title: "Consolidated Terminal Marks Memo",
             type: "Academic Transcript",
             docNo: `MEM-2026-${child.roll || "01"}`,

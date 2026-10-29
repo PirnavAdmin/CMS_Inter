@@ -1090,7 +1090,7 @@ export function ParentPortalProvider({ children }) {
   // Active child fee records
   const childFee = useMemo(() => {
     if (!activeBaseChild) {
-      return storedFeeRecords[activeBaseChild.id] || storedFeeRecords["860"] || { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], schedules: [], receipts: [] };
+      return storedFeeRecords["860"] || { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], schedules: [], receipts: [] };
     }
     const rawFee = feeMap[activeBaseChild.id];
     const rawDetailed = detailedStudentMap[activeBaseChild.id];
