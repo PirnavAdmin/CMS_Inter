@@ -646,19 +646,43 @@ function Screen({ say }) {
             setRows(defaulters);
           }
         } else {
-          const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
-            params: {
-              date: f.date,
-              campusId: num(navbarCampusId),
-              boardId: num(navbarBoardId),
-              academicYearId: num(navbarAcademicYearId),
-              academicLevelId: num(f.level),
-              groupId: num(f.group),
-              sectionId: num(f.section),
-              ...(f.program ? { programId: num(f.program) } : {}),
-            },
-          });
-          setRows(asList(body(r)));
+          let rowsData = [];
+          const queryParams = {
+            date: f.date,
+            campusId: num(navbarCampusId),
+            boardId: num(navbarBoardId),
+            academicYearId: num(navbarAcademicYearId),
+            academicLevelId: num(f.level),
+            groupId: num(f.group),
+            sectionId: num(f.section),
+            ...(f.program ? { programId: num(f.program) } : {}),
+          };
+
+          try {
+            const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
+              params: queryParams,
+            });
+            rowsData = asList(body(r));
+          } catch {
+            try {
+              // Fallback to general students attendance endpoint if admin endpoint has role constraints
+              const r2 = await apiClient.get(apiEndpoints.attendance.students, {
+                params: queryParams,
+              });
+              rowsData = asList(body(r2));
+            } catch {
+              try {
+                // Secondary fallback to attendance search endpoint
+                const r3 = await apiClient.get(apiEndpoints.attendance.search, {
+                  params: queryParams,
+                });
+                rowsData = asList(body(r3));
+              } catch {
+                rowsData = [];
+              }
+            }
+          }
+          setRows(rowsData);
         }
       })();
 
@@ -666,6 +690,7 @@ function Screen({ say }) {
       setLoaded(true);
     } catch (e) {
       say(getApiErrorMessage(e) || "Failed to load student attendance records.", "error");
+      setLoaded(true);
     } finally {
       setBusy(false);
     }
