@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2, FileUp } from "lucide-react";
@@ -609,7 +610,7 @@ export default function HolidayManagementPage() {
 
       {["edit", "details", "delete"].includes(holidayView) && !selectedHoliday ? (
         <Modal title={holidayView === "edit" ? "Edit Holiday" : holidayView === "delete" ? "Delete holiday" : "Holiday Details"} onClose={() => navigateHoliday(null)}>
-          <p role={holidayLoadError ? "alert" : "status"}>{holidayLoadError || "Loading holiday..."}</p>
+          {holidayLoadError ? <p role={holidayLoadError ? "alert" : "status"}>{holidayLoadError || "Loading holiday..."}</p> : <SkeletonPage variant="form" rows={4} />}
         </Modal>
       ) : null}
 

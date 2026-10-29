@@ -1,3 +1,4 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import React, { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "../../../api/apiClient.js";
@@ -56,7 +57,7 @@ export default function DriverHolidaysPage() {
       <div className="dp-holidays-card-head"><h2 id="driver-upcoming-holidays">Holiday List{!loading && !error && ` — ${holidays.length} Holidays`}</h2><button type="button" className="dp-icon-btn" disabled={loading} aria-label="Refresh holidays" onClick={() => setRevision((value) => value + 1)}><RefreshCw size={16} /></button></div>
       {error && <p className="dp-holidays-error" role="alert">{error}</p>}
       <div className="dp-holidays-table-wrap"><table className="dp-holidays-table"><thead><tr><th scope="col">DATE</th><th scope="col">HOLIDAY</th><th scope="col">TYPE</th></tr></thead><tbody>
-        {loading ? <tr><td colSpan={3} role="status">Loading holidays...</td></tr> : error ? <tr><td colSpan={3}>Holiday records could not be loaded. Use refresh to try again.</td></tr> : holidays.length ? holidays.map((holiday) => {
+        {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={3} />) : error ? <tr><td colSpan={3}>Holiday records could not be loaded. Use refresh to try again.</td></tr> : holidays.length ? holidays.map((holiday) => {
           const start = String(holiday.startDate).slice(0, 10);
           const end = String(holiday.endDate || holiday.startDate).slice(0, 10);
           return <tr key={holiday.id ?? `${start}-${holiday.holidayName}`}><td>{start}{end !== start && ` to ${end}`}</td><td>{holiday.holidayName}</td><td>{holiday.holidayType || "--"}</td></tr>;

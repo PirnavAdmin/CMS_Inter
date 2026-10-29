@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -2323,7 +2324,7 @@ export default function SectionManagementPage() {
 
   if (navigationView !== "list" && restoredNavigation !== navigationKey) return (
     <DashboardLayout title={`${navigationView === "add" ? "Add" : navigationView === "preview" ? "View" : "Edit"} ${activeTab === "rooms" ? "Room" : "Section"}`} breadcrumb={pageConfig.breadcrumb}>
-      <div className="cms-card"><button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigateManagement(activeTab)}>Back to {activeTab === "rooms" ? "Rooms" : "Sections"}</button><p role={navigationError ? "alert" : "status"}>{navigationError || "Loading form..."}</p></div>
+      <div className="cms-card"><button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigateManagement(activeTab)}>Back to {activeTab === "rooms" ? "Rooms" : "Sections"}</button>{navigationError ? <p role={navigationError ? "alert" : "status"}>{navigationError || "Loading form..."}</p> : <SkeletonPage variant="form" rows={4} />}</div>
     </DashboardLayout>
   );
 
@@ -3794,7 +3795,7 @@ export default function SectionManagementPage() {
           </div>
         )}
 
-        {["delete-section", "delete-room"].includes(confirmationView) && !deleteModalState.isOpen && !deleteRoomModalState.isOpen && <div className="cms-overlay"><section className="cms-modal" role="dialog" aria-modal="true" aria-label="Delete confirmation"><div className="cms-modal-head"><h3>{confirmationView === "delete-section" ? "Delete Section" : "Delete Room"}</h3></div><div className="cms-modal-body"><p role={confirmationError ? "alert" : "status"}>{confirmationError || "Loading record..."}</p></div><div className="cms-modal-foot"><button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigateConfirmation(null)}>Cancel</button></div></section></div>}
+        {["delete-section", "delete-room"].includes(confirmationView) && !deleteModalState.isOpen && !deleteRoomModalState.isOpen && <div className="cms-overlay"><section className="cms-modal" role="dialog" aria-modal="true" aria-label="Delete confirmation"><div className="cms-modal-head"><h3>{confirmationView === "delete-section" ? "Delete Section" : "Delete Room"}</h3></div><div className="cms-modal-body">{confirmationError ? <p role={confirmationError ? "alert" : "status"}>{confirmationError || "Loading record..."}</p> : <SkeletonPage variant="form" rows={4} />}</div><div className="cms-modal-foot"><button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigateConfirmation(null)}>Cancel</button></div></section></div>}
         {/* Section Delete Confirmation Modal */}
         {deleteModalState.isOpen && (
           <div className="cms-overlay" onClick={closeDeleteSectionModal}>

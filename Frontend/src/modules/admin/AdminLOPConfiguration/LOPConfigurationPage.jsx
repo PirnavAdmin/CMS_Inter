@@ -267,7 +267,6 @@ export default function LOPConfigurationPage() {
             </article>
           ))}
         </div>
-        {loading && <p role="status">Loading LOP records...</p>}
         {notice && <p role="status">{notice}</p>}
         {error && (
           <p className="lop-error" role="alert">
@@ -275,6 +274,7 @@ export default function LOPConfigurationPage() {
           </p>
         )}
         <DataTable
+          loading={loading}
           title="Staff LOP Configuration"
           rows={rows}
           onSearchChange={setSearch}

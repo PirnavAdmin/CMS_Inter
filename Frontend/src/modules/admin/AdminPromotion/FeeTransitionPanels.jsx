@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { getApiErrorMessage } from "@/api/axios.js";
@@ -42,7 +43,7 @@ export function useFeePreview(loader, params, enabled = true, normalize = normal
 }
 
 export function FeePreviewStatus({ state }) {
-  if (state.loading) return <p role="status">Loading fee preview...</p>;
+  if (state.loading) return <SkeletonPage variant="table" columns={5} rows={4} />;
   if (!state.error) return null;
   return <div className="promotion-error" role="alert"><span>{state.error}</span>
     <button type="button" className="cms-btn cms-btn-ghost" onClick={state.retry}><RefreshCw size={14} /> Retry</button>

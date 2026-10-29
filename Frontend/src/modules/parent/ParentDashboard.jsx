@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -162,13 +163,7 @@ export default function ParentDashboard() {
         breadcrumb={["Parent Portal", "Dashboard"]}
       >
         <div className="parent-dashboard-wrapper" style={{ padding: "40px 20px", textAlign: "center" }}>
-          <div className="parent-card" style={{ padding: "30px", maxWidth: 500, margin: "0 auto" }}>
-            <Users size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Enrolled Children...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to campus database to retrieve student enrollment and fee records.
-            </p>
-          </div>
+          <SkeletonPage variant="dashboard" columns={4} />
         </div>
       </DashboardLayout>
     );

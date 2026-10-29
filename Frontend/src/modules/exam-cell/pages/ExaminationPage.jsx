@@ -1,3 +1,4 @@
+import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
 // Isolated Exam Cell screen. Shared services and reference styles retain existing contracts.
 // Examination Management Component
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10964,10 +10965,7 @@ function GlobalSchedulePreviewModal({
 
         {/* Loading State */}
         {loading ? (
-          <div className="exam-preview-loading-box">
-            <RefreshCw size={26} className="cms-spin-icon" style={{ animation: "spin 1s linear infinite", margin: "0 auto 12px" }} />
-            <p>Loading examination schedules...</p>
-          </div>
+          <SkeletonTable columns={6} rows={5} />
         ) : targetExams.length === 0 ? (
           <div className="exam-preview-empty-box">
             <p>No scheduled examinations found.</p>

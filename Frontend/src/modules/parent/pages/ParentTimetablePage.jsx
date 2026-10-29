@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -174,6 +175,8 @@ export default function ParentTimetablePage() {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [selectedSlot]);
+
+  if (loading && availableChildren.length === 0) return <DashboardLayout title="Timetable" subtitle="Weekly Class Schedule" breadcrumb={["Parent Portal", "Timetable"]}><SkeletonPage variant="table" columns={7} rows={6} /></DashboardLayout>;
 
   if ((loading && availableChildren.length === 0) || !child) {
     return (

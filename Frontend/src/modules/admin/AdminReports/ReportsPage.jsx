@@ -1,3 +1,4 @@
+import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
 import { useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -422,10 +423,7 @@ function DetailDataTable({
   const renderTableContent = () => {
     if (loading) {
       return (
-        <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
-          <div className="cms-spinner" style={{ margin: "0 auto 12px" }} />
-          <p>Loading {cardConfig?.label || "detail"} records...</p>
-        </div>
+        <SkeletonTable columns={6} rows={5} />
       );
     }
 
@@ -1561,10 +1559,7 @@ export default function ReportsPage() {
           </div>
 
           {auditLogLoading ? (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
-              <div className="cms-spinner" style={{ margin: "0 auto 12px" }} />
-              <p>Loading audit trail records...</p>
-            </div>
+            <SkeletonTable columns={9} rows={5} />
           ) : auditLogError ? (
             <div style={{ padding: "30px 20px", textAlign: "center", color: "#dc2626" }}>
               <AlertCircle size={24} style={{ margin: "0 auto 8px" }} />

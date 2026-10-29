@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Camera, CheckCircle2, Edit3, Eye, EyeOff, Lock, RefreshCw, Save, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -649,7 +650,7 @@ function AccountantProfileContent({ staff, staffId, display, initials, photoUrl,
     <nav className="acct-profile-stepper" aria-label="Profile steps">{steps.map((title, index) => <button type="button" key={title} className={`acct-profile-step ${step === index ? "active" : ""} ${step > index ? "completed" : ""}`} aria-current={step === index ? "step" : undefined} disabled={loading || savingProfile} onClick={() => navigate(index)}><span className="acct-profile-step-number">{step > index ? <Check size={14} /> : index + 1}</span><span>{title}</span></button>)}</nav>
     <form id="accountantProfileForm" onSubmit={onSave} className="cms-card acct-profile-form-card">
       <div className="acct-profile-section-head"><h2>{titles[step]}</h2><span>Step {step + 1} of 6</span></div>
-      {loading ? <p role="status">Loading accountant profile...</p> : <>
+      {loading ? <SkeletonPage variant="form" rows={4} /> : <>
         {step === 0 && <div className="acct-profile-fields">
           <EditableField label="First Name" value={form.firstName} editing={editing && !savingProfile} onChange={onChange("firstName")} required />
           <EditableField label="Last Name" value={form.lastName} editing={editing && !savingProfile} onChange={onChange("lastName")} required />

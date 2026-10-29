@@ -1,3 +1,4 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { 
@@ -294,11 +295,7 @@ export default function LeaveTypesPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
-                      Loading leave categories...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={6} />)
                 ) : categories.length === 0 ? (
                   <tr>
                     <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>

@@ -1,3 +1,4 @@
+import { SkeletonPage, SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarCheck, Users, CheckCircle2, XCircle, AlertCircle, Clock, Filter, Eye, ChevronRight, Calendar } from "lucide-react";
@@ -324,13 +325,7 @@ export default function ParentAttendancePage() {
         breadcrumb={["Parent Portal", "Attendance"]}
       >
         <div className="parent-dashboard-wrapper">
-          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
-            <CalendarCheck size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Attendance Records...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to campus attendance system to retrieve student attendance registers.
-            </p>
-          </div>
+          <SkeletonPage variant="dashboard" columns={4} />
         </div>
       </DashboardLayout>
     );
@@ -457,11 +452,7 @@ export default function ParentAttendancePage() {
                 </thead>
                 <tbody>
                   {subjectsLoading ? (
-                    <tr>
-                      <td colSpan="7" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
-                        Loading subject attendance records...
-                      </td>
-                    </tr>
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                   ) : subjects.length > 0 ? (
                     subjects.map((sub, idx) => (
                       <tr key={sub.subjectId ?? sub.code ?? idx}>
@@ -666,11 +657,7 @@ export default function ParentAttendancePage() {
                 </thead>
                 <tbody>
                   {dailyLogsLoading ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: "center", padding: 30, color: "var(--cms-muted)" }}>
-                        Loading daily attendance records from server...
-                      </td>
-                    </tr>
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={6} />)
                   ) : displayedLogs.length === 0 ? (
                     <tr>
                       <td colSpan={6} style={{ textAlign: "center", padding: 30, color: "var(--cms-muted)" }}>

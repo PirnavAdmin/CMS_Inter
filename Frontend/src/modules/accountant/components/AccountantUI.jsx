@@ -1,3 +1,4 @@
+import { SkeletonText, SkeletonTable } from "@/shared/components/Skeleton.jsx";
 import { AlertCircle, RefreshCw, Search } from "lucide-react";
 
 export function FeeNotice({ children, error = false }) {
@@ -5,7 +6,7 @@ export function FeeNotice({ children, error = false }) {
 }
 
 export function FeeLoadState({ state }) {
-  if (state.loading) return <div className="accountant-fee-loading" role="status"><RefreshCw size={16} /> Loading fee data...</div>;
+  if (state.loading) return <SkeletonText lines={2} />;
   if (!state.error) return null;
   return <FeeNotice error>{state.error} <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" onClick={state.reload}><RefreshCw size={14} /> Retry</button></FeeNotice>;
 }
@@ -55,7 +56,7 @@ export function FeeTabs({ items, value, onChange, label, secondary = false }) {
 }
 
 export function PageState({ loading, error, onRetry }) {
-  if (loading) return <div className="sp-api-state">Loading finance data...</div>;
+  if (loading) return <SkeletonTable columns={6} rows={5} />;
   if (error) return <div className="sp-api-state is-error"><AlertCircle size={15} /> {error} {onRetry ? <button type="button" className="sp-btn" onClick={onRetry}><RefreshCw size={14} /> Retry</button> : null}</div>;
   return null;
 }

@@ -1,3 +1,4 @@
+import { Skeleton } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -1471,7 +1472,7 @@ function Structures({ notify, initial }) {
         </div>,
         document.body,
       ) : null}
-      {modal && !item && (modal !== "form" || selectedStructureId) && <Modal title={modal === "form" ? "Edit Period Structure" : modal === "preview" ? "Period Structure Preview" : modal === "assign" ? "Assign Period Structure" : "Delete Period Structure"} onClose={() => setModal(null)}><div className="ttm-modal-body"><p role={loading ? "status" : "alert"}>{loading ? "Loading period structure..." : "This period structure is unavailable."}</p></div></Modal>}
+      {modal && !item && (modal !== "form" || selectedStructureId) && <Modal title={modal === "form" ? "Edit Period Structure" : modal === "preview" ? "Period Structure Preview" : modal === "assign" ? "Assign Period Structure" : "Delete Period Structure"} onClose={() => setModal(null)}><div className="ttm-modal-body"><p role={loading ? "status" : "alert"}>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "This period structure is unavailable."}</p></div></Modal>}
       {modal === "form" && (!selectedStructureId || item) && (
         <StructureForm
           item={item}
@@ -2738,8 +2739,8 @@ function Draft({ initial, notify }) {
           </div>
         </Modal>
       )}
-      {draftDialog === "slot" && !editing && <Modal title="Timetable Slot" onClose={() => setEditing(null)}><div className="ttm-modal-body"><p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot..."}</p></div></Modal>}
-      {draftDialog === "slot-details" && !pinnedSlot && <Modal title="Timetable Slot Details" onClose={() => navigateDraftDialog(null)}><div className="ttm-modal-body"><p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot details..."}</p></div></Modal>}
+      {draftDialog === "slot" && !editing && <Modal title="Timetable Slot" onClose={() => setEditing(null)}><div className="ttm-modal-body">{slotLoadError ? <p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot..."}</p> : <SkeletonPage variant="form" rows={4} />}</div></Modal>}
+      {draftDialog === "slot-details" && !pinnedSlot && <Modal title="Timetable Slot Details" onClose={() => navigateDraftDialog(null)}><div className="ttm-modal-body">{slotLoadError ? <p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot details..."}</p> : <SkeletonPage variant="form" rows={4} />}</div></Modal>}
       {editing && (
         <SlotEditor
           context={value}

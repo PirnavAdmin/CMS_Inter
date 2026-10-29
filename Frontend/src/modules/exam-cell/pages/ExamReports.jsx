@@ -1,3 +1,4 @@
+import { SkeletonDashboard } from "@/shared/components/Skeleton.jsx";
 import React, { useEffect, useState, useMemo } from "react";
 import {
   FileSpreadsheet,
@@ -460,7 +461,8 @@ export default function ExamReports() {
         </form>
       </div>
 
-      {analytics && (
+      {busy && <SkeletonDashboard cards={4} tableColumns={7} />}
+      {!busy && analytics && (
         <>
           {/* KPI METRIC CARDS */}
           <div className="ec-reports-kpi-grid">

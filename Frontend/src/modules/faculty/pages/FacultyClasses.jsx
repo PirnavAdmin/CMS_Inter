@@ -1,3 +1,4 @@
+import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   BookOpen,
@@ -309,10 +310,7 @@ export default function FacultyClasses() {
 
         <div className="cms-card-body">
           {isLoading ? (
-            <div className="faculty-classes-loading">
-              <RefreshCw size={26} className="cms-spin" style={{ color: "var(--cms-primary, #6F8400)" }} />
-              <p>Fetching class assignments from the database...</p>
-            </div>
+            <SkeletonTable columns={6} rows={5} />
           ) : error ? (
             <div className="faculty-classes-alert">
               <AlertCircle size={20} />

@@ -1,3 +1,4 @@
+import { Skeleton } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useState } from "react";
 import { AlertCircle, CalendarClock, ReceiptText, Users, WalletCards } from "lucide-react";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
@@ -70,7 +71,7 @@ export default function AccountantFeeOverview({ params }) {
     </div>
     <FeeCard title="Group-wise Collection" action={<label className="cms-fee-chart-filter"><span>Group</span><select value={group} onChange={(event) => setGroup(event.target.value)}><option value="">All Groups</option>{groupNames.map((value) => <option key={value}>{value}</option>)}</select></label>}>
       <div className="cms-fee-chart cms-fee-donut">
-        {pie.length ? <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pie} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="82%" paddingAngle={2} isAnimationActive={false}>{pie.map((item) => <Cell key={item.key} fill={colors[chartTotals.findIndex((total) => total.key === item.key)]} />)}</Pie><Tooltip formatter={(value) => feeMoney(value)} contentStyle={{ borderRadius: 10, border: "1px solid var(--cms-border)", background: "var(--cms-surface)", color: "var(--cms-text)", fontSize: 12 }} /><Legend wrapperStyle={{ fontSize: 12 }} /></PieChart></ResponsiveContainer> : <div className="cms-fee-empty-row">{state.loading ? "Loading collection chart..." : "No collection chart data available."}</div>}
+        {pie.length ? <ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pie} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="82%" paddingAngle={2} isAnimationActive={false}>{pie.map((item) => <Cell key={item.key} fill={colors[chartTotals.findIndex((total) => total.key === item.key)]} />)}</Pie><Tooltip formatter={(value) => feeMoney(value)} contentStyle={{ borderRadius: 10, border: "1px solid var(--cms-border)", background: "var(--cms-surface)", color: "var(--cms-text)", fontSize: 12 }} /><Legend wrapperStyle={{ fontSize: 12 }} /></PieChart></ResponsiveContainer> : <div className="cms-fee-empty-row">{state.loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No collection chart data available."}</div>}
         <div className="cms-fee-chart-summary">{chartTotals.map((item) => <span key={item.key}>{item.name}<strong>{feeMoney(item.value)}</strong></span>)}</div>
       </div>
     </FeeCard>

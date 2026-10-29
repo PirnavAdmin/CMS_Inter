@@ -1,3 +1,4 @@
+import { SkeletonDashboard } from "@/shared/components/Skeleton.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -324,6 +325,8 @@ export default function FacultyPayslips() {
       notify(getApiErrorMessage(err) || "Failed to open printable payslip.", "error");
     }
   };
+
+  if (loading) return <div className="payslip-container" role="status" aria-label="Loading payslips"><h1 className="main-title">My Payslips</h1><SkeletonDashboard cards={3} tableColumns={6} /></div>;
 
   return (
     <div className="payslip-container">

@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Printer, Download, Eye, Pencil, Trash2, RotateCcw, CalendarDays, Clock3, FileText, Sun } from 'lucide-react';
@@ -686,7 +687,7 @@ export default function AcademicCalendarPage() {
       </section>
       <PlannerAside filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} setDetail={showDetail} viewAll={() => { updateNavigation({ view: 'list', upcoming: 'true' }); setPage(1); }} reset={refresh} eventTypes={eventTypes} metrics={null} />
       </div>
-      {['edit', 'details', 'delete'].includes(dialog) && !dialogEvent && <Modal className="academic-calendar-modal" title={dialog === 'edit' ? 'Edit Event' : dialog === 'delete' ? 'Delete event?' : 'Event Details'} onClose={() => navigateDialog(null)}><p role={dialogError ? 'alert' : 'status'}>{dialogError || 'Loading event...'}</p></Modal>}
+      {['edit', 'details', 'delete'].includes(dialog) && !dialogEvent && <Modal className="academic-calendar-modal" title={dialog === 'edit' ? 'Edit Event' : dialog === 'delete' ? 'Delete event?' : 'Event Details'} onClose={() => navigateDialog(null)}>{dialogError ? <p role={dialogError ? 'alert' : 'status'}>{dialogError || 'Loading event...'}</p> : <SkeletonPage variant="form" rows={4} />}</Modal>}
       {detail && <Modal className="academic-calendar-modal" title={detail.title} onClose={() => setDetail(null)} footer={<>
         <button className="cms-btn cms-btn-ghost" onClick={() => setDetail(null)}>Close</button>{detail.source === 'calendar' && <><button className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => openEditor(detail)}>Edit</button>
         <button className="cms-btn cms-btn-danger" disabled={busy} onClick={() => confirmDelete(detail)}>Delete</button>

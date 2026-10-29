@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { ShieldCheck, User, Lock, Bell, ArrowRight, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "../../../api/apiClient.js";
@@ -100,8 +101,8 @@ export default function DriverSettingsPage() {
       <div className="dp-settings-tabs" role="tablist" aria-label="General settings">{[["profile", "Profile Settings", User], ["password", "Reset / Change Password", Lock], ["preferences", "General Preferences", Bell]].map(([id, label, Icon]) => <button key={id} type="button" role="tab" id={`driver-settings-${id}-tab`} aria-selected={tab === id} aria-controls="driver-settings-panel" className={tab === id ? "is-active" : ""} disabled={busy} onClick={() => { setTab(id); setError(""); setMessage(""); setPassword(emptyPassword); }}><Icon size={15} />{label}</button>)}</div>
       <form onSubmit={save}>
         <div className="dp-settings-body" role="tabpanel" id="driver-settings-panel" aria-labelledby={`driver-settings-${tab}-tab`}>
-          {loading && <p role="status">Loading settings...</p>}{loadError && tab !== "preferences" && <p className="dp-settings-error" role="alert">{loadError}</p>}
-          <fieldset disabled={busy || loading}>
+          {loading && <SkeletonPage variant="form" columns={4} rows={4} />}{loadError && tab !== "preferences" && <p className="dp-settings-error" role="alert">{loadError}</p>}
+          <fieldset disabled={busy || loading} hidden={loading}>
           {tab === "profile" ? <div className="dp-settings-profile-grid">
             <label>Full Name<input required maxLength={150} value={profile.fullName} onChange={(event) => setProfile({ ...profile, fullName: event.target.value })} /></label>
             <label>Employee ID<input value={readOnlyProfile.employeeId ?? driverProfile.employeeId ?? ""} disabled /><small>Assigned by college administrator</small></label>

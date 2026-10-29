@@ -1,3 +1,4 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FileText, Download, Printer, Plus, Eye, CheckCircle2, Users, Loader2 } from "lucide-react";
@@ -340,11 +341,7 @@ export default function ParentDocumentsPage() {
                 </thead>
                 <tbody>
                   {loadingDocs ? (
-                    <tr>
-                      <td colSpan={7} style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
-                        Loading documents and certificates...
-                      </td>
-                    </tr>
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                   ) : docs.length === 0 ? (
                     <tr>
                       <td colSpan={7} style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>

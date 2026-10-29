@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Eye, History, Pencil, Plus, Printer, RefreshCw, Trash2, WalletCards } from "lucide-react";
@@ -465,7 +466,7 @@ export function SavedPaymentReceipt({ payment, autoPrint = false, onClose }) {
     <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>{autoPrint && state.loading ? "Cancel" : "Close"}</button>
     {state.error ? <button type="button" className="cms-btn cms-btn-ghost" onClick={state.reload}>Retry</button> : null}
   </>;
-  const progress = permissions.loading ? <p role="status">Verifying receipt permission...</p> : state.error ? <FeeNotice error>{state.error}</FeeNotice> : <p role="status">{autoPrint ? "Preparing saved receipt for printing..." : "Loading saved receipt..."}</p>;
+  const progress = permissions.loading ? <SkeletonPage variant="form" rows={3} /> : state.error ? <FeeNotice error>{state.error}</FeeNotice> : <p role="status">{autoPrint ? "Preparing saved receipt for printing..." : "Loading saved receipt..."}</p>;
   if (autoPrint) return <div className="cms-alert accountant-receipt-print-status">{progress}{controls}</div>;
   return <Modal title="Payment Receipt" className="accountant-payment-receipt-modal" onClose={onClose} footer={controls}>{progress}</Modal>;
 }

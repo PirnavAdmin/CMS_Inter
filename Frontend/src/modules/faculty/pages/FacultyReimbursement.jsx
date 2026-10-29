@@ -1,3 +1,4 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -1513,7 +1514,7 @@ export default function FacultyReimbursement() {
                   <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody>{isLoadingClaims ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />) : <>
                 {paginatedClaims.length === 0 ? (
                   <tr>
                     <td colSpan={9}>
@@ -1601,7 +1602,7 @@ export default function FacultyReimbursement() {
                     </tr>
                   ))
                 )}
-              </tbody>
+              </>}</tbody>
             </table>
           </div>
 

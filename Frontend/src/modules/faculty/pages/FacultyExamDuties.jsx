@@ -1,3 +1,4 @@
+import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Download,
@@ -511,12 +512,7 @@ export default function FacultyExamDuties() {
 
       {/* 4. Examination Duties View (Table or Cards) */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <Loader2 size={32} className="spin" style={{ marginInline: "auto", color: "var(--cms-primary, #6F8400)" }} />
-          <p style={{ marginTop: 12, fontSize: 13.5, color: "var(--cms-muted)" }}>
-            Loading live examination duties and hall allotments...
-          </p>
-        </div>
+        <SkeletonTable columns={6} rows={5} />
       ) : paginatedDuties.length === 0 ? (
         <div className="fed-empty-state">
           <div className="fed-empty-icon">

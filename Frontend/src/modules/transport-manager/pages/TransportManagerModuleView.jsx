@@ -1,3 +1,4 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTransportNavigation, useTransportRouteValue, validTransportPage } from "../TransportManagerContext.jsx";
@@ -274,6 +275,7 @@ function Toolbar({ query, onQuery, filters, onAdd, onExport, onPdfExport, onPrin
 }
 
 function TableSection({
+  loading = false,
   title,
   subtitle,
   rows,
@@ -374,7 +376,7 @@ function TableSection({
                 {hasRowActions ? <th>Actions</th> : null}
               </tr>
             </thead>
-            <tbody>
+            <tbody>{loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={columns.length + (hasRowActions ? 1 : 0)} />) : <>
               {paginatedRows.length ? paginatedRows.map((row, rowIndex) => (
                 <tr key={`${row.id ?? "transport-row"}-${(currentPage - 1) * TABLE_PAGE_SIZE + rowIndex}`}>
                   {columns.map((column) => (
@@ -397,7 +399,7 @@ function TableSection({
                   <td colSpan={columns.length + (hasRowActions ? 1 : 0)} className="cms-transport-empty">No records found.</td>
                 </tr>
               )}
-            </tbody>
+            </>}</tbody>
           </table>
         </div>
         {visibleRows.length ? (
@@ -2121,6 +2123,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     if (!config) return null;
     return (
       <TableSection
+        loading={isLoading}
         key={key}
         title={config.title}
         subtitle={config.subtitle}
@@ -2345,7 +2348,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
                   <p>Real-time location status and telemetry for active transport vehicles.</p>
                 </div>
               </div>
-              <div className="cms-card-body">{renderGpsCards()}</div>
+              <div className="cms-card-body">{isLoading ? <SkeletonTable columns={4} rows={5} /> : renderGpsCards()}</div>
             </div>
           ) : (
             renderTable(activeOperationsTab)

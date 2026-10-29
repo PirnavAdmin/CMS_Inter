@@ -1,3 +1,4 @@
+import { SkeletonRow, SkeletonTable } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -1731,14 +1732,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
               </thead>
               <tbody>
                 {loadingSchedules ? (
-                  <tr>
-                    <td colSpan="9" style={{ textAlign: "center", padding: "36px 16px" }}>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "var(--cms-muted)" }}>
-                        <RefreshCw size={16} className="cms-spin" />
-                        <span>Loading examination timetable and hall allocations...</span>
-                      </div>
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />)
                 ) : filteredRows.length === 0 ? (
                   <tr>
                     <td colSpan="9" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
@@ -2063,10 +2057,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         {/* 3. DUTIES LIST (Table or Cards) */}
         <section className="hall-table-card">
           {loadingDuties ? (
-            <div style={{ textAlign: "center", padding: "48px 0" }}>
-              <RefreshCw size={24} className="cms-spin" style={{ color: "var(--cms-primary, #15803d)", marginBottom: "8px" }} />
-              <p style={{ margin: 0, fontSize: "13px", color: "var(--cms-muted, #64748b)" }}>Loading invigilation duties...</p>
-            </div>
+            <SkeletonTable columns={6} rows={5} />
           ) : filteredDuties.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 20px" }}>
               <ShieldAlert size={36} style={{ color: "var(--cms-muted, #94a3b8)", marginBottom: "10px" }} />

@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Search, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -340,7 +341,7 @@ export function AccountantPayments() {
       ) : (
         <>
           <PageState {...state} onRetry={permissions.refresh} />
-          {permissions.loading ? <div className="sp-api-state" role="status">Verifying payment history permission...</div> : null}
+          {permissions.loading ? <SkeletonPage variant="form" rows={3} /> : null}
           {state.data?.errors?.length ? <div className="sp-api-state is-error" role="alert">History is incomplete: {state.data.errors.join(" ")} Access must be granted by your administrator if permission is denied. <button type="button" className="sp-btn" onClick={permissions.refresh}>Retry</button></div> : null}
           {!state.loading && !state.error && !permissions.loading ? (
             <StudentCard title="Fee Transactions" subtitle={`${feeRows.length} transactions`}>

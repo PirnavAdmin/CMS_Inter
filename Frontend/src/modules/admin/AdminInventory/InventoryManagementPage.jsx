@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import {
@@ -356,14 +357,14 @@ export default function InventoryManagementPage() {
           ))}
         </nav>
         {loading && (
-          <p role="status">Loading inventory from the server...</p>
+          <SkeletonPage variant="dashboard" columns={4} rows={4} />
         )}
         {loadError && (
           <div role="alert" className="cms-alert-error">
             Inventory could not be loaded. {loadError}
           </div>
         )}
-          <div key={tab} aria-busy={loading}>
+          <div key={tab} aria-busy={loading} hidden={loading}>
             {!tab && <InventoryDashboard {...shared} />}
             {tab === "items" && <InventoryItems {...shared} remove={remove} />}
             {(tab === "stock-in" || tab === "stock-out") && (

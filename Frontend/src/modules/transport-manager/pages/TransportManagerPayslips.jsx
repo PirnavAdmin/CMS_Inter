@@ -1,3 +1,4 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import { useTransportNavigation, useTransportRouteValue, useTransportRecord } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
@@ -327,14 +328,7 @@ export default function TransportManagerPayslips() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan="6" style={{ textAlign: "center", padding: "32px 0" }}>
-                    <Loader2 size={20} className="spin" style={{ margin: "0 auto" }} />
-                    <span style={{ fontSize: 13, color: "var(--cms-muted)", display: "block", marginTop: 8 }}>
-                      Loading payslips...
-                    </span>
-                  </td>
-                </tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={6} />)
               ) : filteredPayslips.length === 0 ? (
                 <tr>
                   <td colSpan="6" style={{ textAlign: "center", padding: "32px 0", color: "var(--cms-muted)" }}>

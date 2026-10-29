@@ -1,3 +1,4 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import { useTransportNavigation, useTransportRouteValue } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
@@ -425,14 +426,7 @@ export default function TransportManagerLeave() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan="9" style={{ textAlign: "center", padding: "32px 20px" }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                      <Loader2 size={24} className="leave-spin" style={{ color: "var(--cms-primary)" }} />
-                      <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>Loading leave applications...</span>
-                    </div>
-                  </td>
-                </tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />)
               ) : leaveList.length === 0 ? (
                 <tr>
                   <td colSpan="9" style={{ textAlign: "center", padding: "40px 20px" }}>

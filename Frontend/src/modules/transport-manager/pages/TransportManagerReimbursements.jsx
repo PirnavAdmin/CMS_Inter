@@ -1,3 +1,4 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import { useTransportNavigation, useTransportRouteValue, useTransportRecord, validTransportPage } from "../TransportManagerContext.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -874,7 +875,7 @@ export default function TransportManagerReimbursements() {
                   <th>ACTION</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody>{loadingClaims ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : <>
                 {displayedClaims.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="reimb-empty-state">
@@ -926,7 +927,7 @@ export default function TransportManagerReimbursements() {
                     </tr>
                   ))
                 )}
-              </tbody>
+              </>}</tbody>
             </table>
           </div>
 
