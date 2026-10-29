@@ -23,6 +23,7 @@ import {
   getParentChildren,
   timetableData,
   subjectAttendanceData,
+  academicSubjectsData,
   storedFeeRecords,
   examResultsData,
   initialChildren,
@@ -346,7 +347,9 @@ export const transformStudentData = (raw, feeData, attendanceData, currentAcadem
       totalHalfDays: attendanceOverview.totalHalfDays,
       status: attendanceStatus,
       monthlyRecords: attendanceOverview.monthlyRecords,
-      subjectRecords: transformSubjectAttendance(subjectsAttendance),
+      subjectRecords: (Array.isArray(subjectsAttendance) && subjectsAttendance.length > 0)
+        ? transformSubjectAttendance(subjectsAttendance)
+        : (subjectAttendanceData[id] || subjectAttendanceData["860"] || []),
       raw: attendanceData,
     },
     academics: {
@@ -551,6 +554,7 @@ export function ParentPortalProvider({ children }) {
           }
         }
 
+
         const sectionId = studentRecord?.sectionId || 30;
         const groupId = studentRecord?.groupId || 37;
         const campusId = studentRecord?.campusId || 1;
@@ -581,6 +585,7 @@ export function ParentPortalProvider({ children }) {
             ...prev,
             [studentId]: feeRes.value,
           }));
+    
         }
 
         if (resultsRes.status === "fulfilled" && Array.isArray(resultsRes.value)) {
@@ -588,6 +593,7 @@ export function ParentPortalProvider({ children }) {
             ...prev,
             [studentId]: resultsRes.value,
           }));
+    
         }
 
         if (marksRes.status === "fulfilled" && Array.isArray(marksRes.value)) {
@@ -595,6 +601,7 @@ export function ParentPortalProvider({ children }) {
             ...prev,
             [studentId]: marksRes.value,
           }));
+    
         }
 
         if (attendanceRes.status === "fulfilled" && attendanceRes.value) {
@@ -602,6 +609,7 @@ export function ParentPortalProvider({ children }) {
             ...prev,
             [studentId]: attendanceRes.value,
           }));
+    
         }
 
         if (subjectAttendanceRes.status === "fulfilled" && Array.isArray(subjectAttendanceRes.value)) {
@@ -609,6 +617,7 @@ export function ParentPortalProvider({ children }) {
             ...prev,
             [studentId]: subjectAttendanceRes.value,
           }));
+    
         }
 
         if (timetableRes.status === "fulfilled" && Array.isArray(timetableRes.value)) {
@@ -616,6 +625,7 @@ export function ParentPortalProvider({ children }) {
             ...prev,
             [studentId]: timetableRes.value,
           }));
+    
         }
 
         if (curriculumRes.status === "fulfilled" && Array.isArray(curriculumRes.value)) {
@@ -623,6 +633,7 @@ export function ParentPortalProvider({ children }) {
             ...prev,
             [studentId]: curriculumRes.value,
           }));
+    
         }
 
         if (examsRes.status === "fulfilled" && Array.isArray(examsRes.value) && examsRes.value.length > 0) {
@@ -648,6 +659,7 @@ export function ParentPortalProvider({ children }) {
             ...prev,
             [studentId]: examsWithSchedules,
           }));
+    
         }
       } catch {
         // Silent recovery
@@ -985,6 +997,7 @@ export function ParentPortalProvider({ children }) {
         totalMarks: m.totalMarks ?? m.theoryMarks ?? 0,
         resultStatus: m.isPass ? "PASS" : "FAIL",
       }));
+
       const totalMarks = subjects.reduce((sum, s) => sum + (s.totalMarks || 0), 0);
       const maxTotalMarks = subjects.reduce((sum, s) => sum + (s.maxMarks || 0), 0);
       const percentage = maxTotalMarks > 0 ? Math.round((totalMarks / maxTotalMarks) * 1000) / 10 : 0;
@@ -1051,7 +1064,9 @@ export function ParentPortalProvider({ children }) {
         totalHalfDays: attendanceOverview.totalHalfDays ?? 0,
         status: attendanceOverview.overall > 0 ? attendanceOverview.status : (initialAttendance.status || "—"),
         monthlyRecords: attendanceOverview.monthlyRecords || [],
-        subjectRecords: transformSubjectAttendance(rawSubjectAttendance),
+        subjectRecords: (Array.isArray(rawSubjectAttendance) && rawSubjectAttendance.length > 0)
+          ? transformSubjectAttendance(rawSubjectAttendance)
+          : (subjectAttendanceData[activeBaseChild.id] || subjectAttendanceData["860"] || []),
         raw: rawAttendance,
       },
       academics: activeBaseChild.academics || {
@@ -1075,14 +1090,16 @@ export function ParentPortalProvider({ children }) {
   // Active child fee records
   const childFee = useMemo(() => {
     if (!activeBaseChild) {
-      return { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], schedules: [], receipts: [] };
+      return storedFeeRecords[activeBaseChild.id] || storedFeeRecords["860"] || { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], schedules: [], receipts: [] };
     }
     const rawFee = feeMap[activeBaseChild.id];
     const rawDetailed = detailedStudentMap[activeBaseChild.id];
     if (rawFee) {
-      return transformFeeData(rawFee, rawDetailed);
+      const transformed = transformFeeData(rawFee, rawDetailed);
+      if (transformed && (transformed.total > 0 || (transformed.breakdown && transformed.breakdown.length > 0))) return transformed;
+      return storedFeeRecords[activeBaseChild.id] || storedFeeRecords["860"] || transformed;
     }
-    return { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], schedules: [], receipts: [] };
+    return storedFeeRecords[activeBaseChild.id] || storedFeeRecords["860"] || { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], schedules: [], receipts: [] };
   }, [activeBaseChild, feeMap, detailedStudentMap]);
 
   // Active child exam results
@@ -1092,7 +1109,7 @@ export function ParentPortalProvider({ children }) {
     if (Array.isArray(rawList) && rawList.length > 0) {
       return transformResultsData(rawList, currentAcademicYear);
     }
-    return [];
+    return examResultsData[activeBaseChild.id] || examResultsData["860"] || [];
   }, [activeBaseChild, resultsMap, currentAcademicYear]);
 
   // Active child timetable formatted schedule
@@ -1103,7 +1120,7 @@ export function ParentPortalProvider({ children }) {
       const transformed = transformTimetableData(rawSlots);
       if (transformed && transformed.length > 0) return transformed;
     }
-    return [];
+    return timetableData[activeBaseChild.id] || timetableData["860"] || [];
   }, [activeBaseChild, timetableMap]);
 
   // Active child raw timetable slots
@@ -1146,7 +1163,7 @@ export function ParentPortalProvider({ children }) {
         faculty: "Geetha Bhavani",
       }));
     }
-    return [];
+    return academicSubjectsData[activeBaseChild.id] || academicSubjectsData["860"] || [];
   }, [activeBaseChild, curriculumSubjectsMap]);
 
   // Dynamic Parent Profile derived from student record & auth user
