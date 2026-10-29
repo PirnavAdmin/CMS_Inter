@@ -168,6 +168,7 @@ public class DashboardController : ControllerBase
     /// Retrieves today's student attendance metrics and category breakdowns.
     /// </summary>
     [HttpGet("students-attendance-today")]
+    [BypassPermission]
     [ProducesResponseType(typeof(StudentsAttendanceTodayResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> StudentsAttendanceToday(
         [FromQuery] int? academicYearId = null,
