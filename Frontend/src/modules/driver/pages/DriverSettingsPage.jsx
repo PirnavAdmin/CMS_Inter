@@ -1,5 +1,6 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
-import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ShieldCheck, User, Lock, Bell, ArrowRight, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "../../../api/apiClient.js";
 import { unwrapDriverData } from "../data/driverData.js";
@@ -17,8 +18,20 @@ const preferenceFields = [
 
 export default function DriverSettingsPage() {
   const { driverProfile, refresh, applySavedPreferences } = useDriverData();
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState("profile");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const open = searchParams.get("modal") === "settings";
+  const tab = ["profile", "password", "preferences"].includes(searchParams.get("tab")) ? searchParams.get("tab") : "profile";
+  const setTab = (value) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    next.set("tab", value);
+    return next;
+  });
+  const setOpen = useCallback((value) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (value) { next.set("modal", "settings"); next.set("tab", "profile"); }
+    else { next.delete("modal"); next.delete("tab"); }
+    return next;
+  }), [setSearchParams]);
   const [profile, setProfile] = useState({ fullName: "", mobile: "", personalEmail: "", address: "" });
   const [preferences, setPreferences] = useState(null);
   const [readOnlyProfile, setReadOnlyProfile] = useState({});
@@ -29,7 +42,7 @@ export default function DriverSettingsPage() {
     else setPreview((previous) => ({ ...previous, [key]: value }));
   };
   const [password, setPassword] = useState(emptyPassword);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(open);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
@@ -40,7 +53,7 @@ export default function DriverSettingsPage() {
   const openSettings = () => {
     setReadOnlyProfile({});
     setProfile({ fullName: driverProfile.name || "", mobile: driverProfile.mobile || "", personalEmail: driverProfile.personalEmail || "", address: driverProfile.address || "" });
-    setPassword(emptyPassword); setPreferences(null); setPreview(previewPreferences); setTab("profile"); setError(""); setMessage(""); setOpen(true);
+    setPassword(emptyPassword); setPreferences(null); setPreview(previewPreferences); setError(""); setMessage(""); setOpen(true);
   };
   useEffect(() => {
     if (!open) return;
@@ -72,7 +85,7 @@ export default function DriverSettingsPage() {
     };
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("keydown", onKey); trigger?.focus(); };
-  }, [open]);
+  }, [open, setOpen]);
   const close = () => { if (!busy) { setPassword(emptyPassword); setOpen(false); } };
   const save = async (event) => {
     event.preventDefault();

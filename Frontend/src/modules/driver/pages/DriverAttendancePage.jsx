@@ -1,5 +1,6 @@
 import { SkeletonRow, Skeleton } from "@/shared/components/Skeleton.jsx";
-import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, Clock, LogOut, CheckCircle2, Briefcase, Award } from "lucide-react";
 import { attendanceToday, attendanceHistory, punchAttendance, regularizeAttendance, attendanceRecords, punchTime, punchHours, getDriverStaffId } from "../data/driverAttendanceApi.js";
 import { getApiErrorMessage } from "../../../api/apiClient.js";
@@ -21,7 +22,13 @@ export default function DriverAttendancePage() {
   const [todayRecord, setTodayRecord] = useState(null);
   const [summary, setSummary] = useState({});
   const [now, setNow] = useState(() => new Date());
-  const [filter, setFilter] = useState("week");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter = filters.some((item) => item.id === searchParams.get("range")) ? searchParams.get("range") : "week";
+  const setFilter = (value) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    next.set("range", value);
+    return next;
+  });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const dialogRef = useRef(null);
@@ -29,8 +36,14 @@ export default function DriverAttendancePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [regularizationOpen, setRegularizationOpen] = useState(false);
-  const [request, setRequest] = useState({ attendanceDate: "", requestedInTime: "", requestedOutTime: "", reason: "" });
+  const regularizationOpen = searchParams.get("modal") === "regularize";
+  const setRegularizationOpen = useCallback((value) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (value) next.set("modal", "regularize");
+    else next.delete("modal");
+    return next;
+  }), [setSearchParams]);
+  const [request, setRequest] = useState({ attendanceDate: dateKey(new Date()), requestedInTime: "", requestedOutTime: "", reason: "" });
   const today = dateKey(now);
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(timer); }, []);
 
@@ -88,7 +101,7 @@ export default function DriverAttendancePage() {
     };
     document.addEventListener("keydown", keydown);
     return () => { document.removeEventListener("keydown", keydown); trigger?.focus(); };
-  }, [regularizationOpen, busy]);
+  }, [regularizationOpen, busy, setRegularizationOpen]);
 
   const markAttendance = async (action) => {
     if (busy || loading) return;

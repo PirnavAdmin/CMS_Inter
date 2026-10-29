@@ -1,5 +1,6 @@
 import { SkeletonRow, Skeleton } from "@/shared/components/Skeleton.jsx";
-import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Plus, Search, X } from "lucide-react";
 import { getDriverLeaves, applyDriverLeave, getDriverLeaveCategories, DRIVER_LEAVE_TYPES } from "../data/driverLeaveApi.js";
 import { getApiErrorMessage } from "../../../api/apiClient.js";
@@ -24,11 +25,23 @@ export default function DriverLeavePage() {
   const applications = Array.isArray(details.history) ? details.history : [];
   const driverProfile = { ...sessionProfile, name: details.staffName || sessionProfile.name, employeeId: details.staffCode || sessionProfile.employeeId, department: details.department || sessionProfile.department, role: details.staffType || sessionProfile.role };
   const types = [...new Set([...leaveOptions.map((item) => item.name), ...applications.map((item) => item.leaveCategoryName || item.leaveType)].filter(Boolean))];
-  const [tab, setTab] = useState("applications");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("tab") === "balance" ? "balance" : "applications";
+  const setTab = (value) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    next.set("tab", value);
+    return next;
+  });
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
-  const [open, setOpen] = useState(false);
+  const open = searchParams.get("modal") === "apply";
+  const setOpen = useCallback((value) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (value) next.set("modal", "apply");
+    else next.delete("modal");
+    return next;
+  }), [setSearchParams]);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -75,7 +88,7 @@ export default function DriverLeavePage() {
     };
     document.addEventListener("keydown", handleKey);
     return () => { document.removeEventListener("keydown", handleKey); trigger?.focus(); };
-  }, [open, submitting]);
+  }, [open, submitting, setOpen]);
 
   const days = form.fromDate && form.toDate && form.toDate >= form.fromDate ? Math.round((Date.parse(form.toDate) - Date.parse(form.fromDate)) / 86400000) + 1 : 0;
   const submitLeave = async (event) => {
@@ -85,8 +98,12 @@ export default function DriverLeavePage() {
     submitLock.current = true; setSubmitting(true); setError(""); setMessage("");
     try {
       const result = await applyDriverLeave(form);
-      setOpen(false); setForm(emptyForm);
-      setQuery(""); setStatus(""); setType(""); setTab("applications");
+      setSearchParams((previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("modal"); next.set("tab", "applications");
+        return next;
+      }); setForm(emptyForm);
+      setQuery(""); setStatus(""); setType("");
       setMessage(result.message || "Leave application submitted successfully.");
       setRevision((value) => value + 1);
     } catch (failure) { setError(getApiErrorMessage(failure)); }
