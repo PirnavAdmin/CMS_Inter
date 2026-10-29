@@ -1249,6 +1249,9 @@ const printReceiptElement = async (receiptElement, signal) => {
   iframe.title = "Fee Payment Receipt";
   iframe.setAttribute("aria-hidden", "true");
   Object.assign(iframe.style, { position: "fixed", left: "-10000px", top: "0", width: "794px", height: "1123px", border: "0", opacity: "0" });
+  iframe.style.setProperty("display", "block", "important");
+  iframe.style.setProperty("visibility", "visible", "important");
+  iframe.style.setProperty("opacity", "1", "important");
   document.body.appendChild(iframe);
   const printWindow = iframe.contentWindow;
   const printDocument = printWindow?.document;
@@ -1340,49 +1343,41 @@ const printReceiptElement = async (receiptElement, signal) => {
 };
 
 const printStudentFeeAccountElement = async (accountElement) => {
-  if (!accountElement) {
-    printFeeTarget("student");
-    return;
-  }
+  if (!accountElement) throw new Error("The student fee account is not ready for printing.");
 
   const iframe = document.createElement("iframe");
   iframe.title = "Student Fee Account";
   iframe.style.position = "fixed";
   iframe.style.right = "0";
   iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
+  iframe.style.width = "794px";
+  iframe.style.height = "1123px";
+  iframe.style.left = "-10000px";
   iframe.style.border = "0";
   iframe.style.opacity = "0";
+  iframe.style.setProperty("display", "block", "important");
+  iframe.style.setProperty("visibility", "visible", "important");
+  iframe.style.setProperty("opacity", "1", "important");
   document.body.appendChild(iframe);
 
   const printWindow = iframe.contentWindow;
   const printDocument = printWindow?.document;
   if (!printWindow || !printDocument) {
     iframe.remove();
-    printFeeTarget("student");
-    return;
+    throw new Error("The browser could not prepare the fee account for printing.");
   }
 
-  const pageStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-    .map((node) => {
-      if (node.tagName.toLowerCase() === "link") {
-        return `<link rel="stylesheet" href="${node.href}">`;
-      }
-      return `<style>${node.textContent || ""}</style>`;
-    })
-    .join("");
-
+  // Isolate account printing from other modules' global print rules.
   printDocument.open();
   printDocument.write(`<!doctype html>
     <html>
       <head>
         <title>Student Fee Account</title>
-        ${pageStyles}
         <style>
           @page { size: A4; margin: 12mm; }
           html, body { margin: 0; background: #fff; }
-          body { color: #1C2416; }
+          body { color: #1C2416; font-family: Arial, sans-serif; font-size: 11px; }
+          *, *::before, *::after { box-sizing: border-box; }
           .cms-fee-student-print {
             display: grid;
             gap: 8px;
@@ -1398,7 +1393,8 @@ const printStudentFeeAccountElement = async (accountElement) => {
             page-break-inside: avoid;
             margin: 0;
             padding: 8px;
-            border-color: #d1d5db;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
             background: #fff;
           }
           .cms-fee-student-print .cms-fee-block h3 {
@@ -1406,11 +1402,13 @@ const printStudentFeeAccountElement = async (accountElement) => {
             font-size: 12px;
           }
           .cms-fee-student-print .cms-fee-kv {
+            display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 7px 10px;
           }
-          .cms-fee-student-print .cms-fee-kv span { font-size: 9.5px; }
-          .cms-fee-student-print .cms-fee-kv strong { font-size: 11px; }
+          .cms-fee-student-print .cms-fee-kv > div { min-width: 0; }
+          .cms-fee-student-print .cms-fee-kv span { display: block; font-size: 9.5px; color: #64705b; }
+          .cms-fee-student-print .cms-fee-kv strong { display: block; margin-top: 3px; font-size: 11px; overflow-wrap: anywhere; }
           .cms-fee-student-print .cms-table-wrap {
             overflow: visible;
           }
@@ -1424,9 +1422,15 @@ const printStudentFeeAccountElement = async (accountElement) => {
           .cms-fee-student-print .cms-table th,
           .cms-fee-student-print .cms-table td {
             padding: 4px 5px;
-            border-color: #d1d5db;
+            border: 1px solid #d1d5db;
+            text-align: left;
+            overflow-wrap: anywhere;
             color: #111827;
           }
+          .cms-fee-student-print .cms-table .num { text-align: right; }
+          .cms-fee-student-print thead { display: table-header-group; }
+          .cms-fee-student-print tr { break-inside: avoid; }
+          .cms-fee-student-print img { max-width: 100%; }
           .cms-fee-student-print .cms-action-btn,
           .cms-fee-student-print .cms-btn {
             display: none !important;
@@ -1437,20 +1441,17 @@ const printStudentFeeAccountElement = async (accountElement) => {
     </html>`);
   printDocument.close();
 
-  const waitForStyles = Promise.all(Array.from(printDocument.querySelectorAll('link[rel="stylesheet"]')).map((link) => (
-    new Promise((resolve) => {
-      if (link.sheet) {
-        resolve();
-        return;
-      }
-      link.onload = resolve;
-      link.onerror = resolve;
-      window.setTimeout(resolve, 1000);
-    })
-  )));
+  const waitForImages = Array.from(printDocument.images).map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      image.onload = resolve;
+      image.onerror = resolve;
+      window.setTimeout(resolve, 10000);
+    });
+  });
   const waitForFonts = printDocument.fonts?.ready || Promise.resolve();
 
-  await Promise.all([waitForStyles, waitForFonts]);
+  await Promise.all([waitForFonts, ...waitForImages]);
   await new Promise((resolve) => printWindow.requestAnimationFrame(() => resolve()));
 
   const cleanup = () => {
@@ -4441,6 +4442,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const [dueRows, setDueRows] = useState([]);
   const [, setOverviewError] = useState("");
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [pendingPrintId, setPendingPrintId] = useState(null);
   const [selectedDetailVersion, setSelectedDetailVersion] = useState(0);
   const [paymentHistoryExtras, setPaymentHistoryExtras] = useState([]);
   const accountRequestRef = useRef({ ledger: 0, collection: 0 });
@@ -4805,7 +4807,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
 
   const printStudentStatement = (id) => {
     navigateFeeAccount(id, "ledger");
-    window.setTimeout(() => printFeeTarget("student"), 80);
+    setPendingPrintId(String(id));
   };
 
   useEffect(() => {
@@ -4849,6 +4851,16 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       ignore = true;
     };
   }, [selectedBase, selectedDetailVersion, selectedId]);
+
+  useEffect(() => {
+    if (!pendingPrintId) return;
+    if (String(selectedId) !== pendingPrintId) { setPendingPrintId(null); return; }
+    if (!selectedDetail || String(selectedDetail.id) !== pendingPrintId) return;
+    const element = document.querySelector(".cms-fee-account-screen .cms-fee-student-print");
+    if (!element) return;
+    setPendingPrintId(null);
+    printStudentFeeAccountElement(element).catch((error) => setToast(error.message || "Unable to print the fee account."));
+  }, [pendingPrintId, selectedId, selectedDetail]);
 
   useEffect(() => {
     if (!modalOpen) return undefined;

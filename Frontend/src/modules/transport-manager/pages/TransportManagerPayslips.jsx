@@ -1,3 +1,4 @@
+import { useTransportNavigation, useTransportRouteValue, useTransportRecord } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Wallet,
@@ -34,13 +35,14 @@ const fmt = (v) => {
 };
 
 export default function TransportManagerPayslips() {
+  const navigation = useTransportNavigation();
   const tmContext = useTransportManagerSafe();
   const profileData = useMemo(() => tmContext?.profile || {}, [tmContext?.profile]);
 
   const [payslipList, setPayslipList] = useState([]);
-  const [payslipYear, setPayslipYear] = useState("all");
-  const [viewingPayslip, setViewingPayslip] = useState(null);
+  const [payslipYear, setPayslipYear] = useTransportRouteValue(navigation, "year", "all", value => value === "all" || /^\d{4}$/.test(value));
   const [loading, setLoading] = useState(true);
+  const [viewingPayslip, setViewingPayslip] = useTransportRecord(navigation, "payslipId", payslipList, slip => slip.payslipId || slip.id, !loading);
   const [error, setError] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
   const [toast, setToast] = useState(null);

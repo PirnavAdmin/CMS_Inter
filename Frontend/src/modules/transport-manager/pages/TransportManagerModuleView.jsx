@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "react-router-dom";
+import { useTransportNavigation, useTransportRouteValue, validTransportPage } from "../TransportManagerContext.jsx";
 import {
   AlertTriangle,
   ArrowRight,
@@ -298,9 +298,9 @@ function TableSection({
   printSubsection,
   exportFilename,
 }) {
-  const [page, setPage] = useState(1);
+  const navigation = useTransportNavigation();
+  const [page, setPage] = useTransportRouteValue(navigation, "page", 1, validTransportPage);
   const hasRowActions = Boolean(onView || onEdit || onDelete);
-  const filterKey = JSON.stringify(filterValues);
   const visibleRows = rows.filter((row) => textMatch(row, query)).filter((row) => (rowFilter ? rowFilter(row) : true));
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / TABLE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -322,14 +322,6 @@ function TableSection({
     page: currentPage,
     totalPages,
   };
-
-  useEffect(() => {
-    setPage(1);
-  }, [query, filterKey, rows.length]);
-
-  useEffect(() => {
-    setPage((value) => Math.min(value, totalPages));
-  }, [totalPages]);
 
   const filterControls = filters?.length ? filters.map((filter) => (
     <label key={filter.name} className="cms-transport-filter">
@@ -953,7 +945,9 @@ function assertTransportDeleteSucceeded(response) {
 }
 
 export default function TransportManagerModuleView({ defaultSection = "setup", defaultSubTab }) {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const navigation = useTransportNavigation();
+  const searchParams = navigation.params;
+  const setSearchParams = ({ tab }) => navigation.update({ tab, action: null, entity: null, id: null, page: null });
   const tmContext = useTransportManagerSafe();
 
   const academicContext = useAcademicContext?.() || {};
@@ -977,23 +971,36 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     ? searchParams.get("tab")
     : (defaultSubTab && reportTabs.some((t) => t.id === defaultSubTab) ? defaultSubTab : "transport-dashboard-report");
 
-  const [query, setQuery] = useState("");
-  const [tripFilters, setTripFilters] = useState({ route: "All" });
-  const [setupFilters, setSetupFilters] = useState({
+  const [query] = useTransportRouteValue(navigation, "q", "");
+  const setQuery = (value) => navigation.update({ q: value, page: null });
+  const [tripFilters, setTripFilters] = useTransportRouteValue(navigation, "tripFilters", { route: "All" });
+  const [setupFilters, setSetupFilters] = useTransportRouteValue(navigation, "filters", {
     routes: "All",
     pickupPoints: "All",
     vehicles: "All",
     drivers: "All",
     attendants: "All",
   });
-  const [reportFilters, setReportFilters] = useState({ route: "All", vehicle: "All", status: "All" });
+  const [reportFilters, setReportFilters] = useTransportRouteValue(navigation, "reportFilters", { route: "All", vehicle: "All", status: "All" });
   const [toast, setToast] = useState({ message: "", type: "success" });
   const lastErrorToastRef = useRef({ message: "", time: 0 });
-  const [formConfig, setFormConfig] = useState(null);
-  const [isAddDriverOpen, setIsAddDriverOpen] = useState(false);
-  const [isAddAttendantOpen, setIsAddAttendantOpen] = useState(false);
-  const [detailConfig, setDetailConfig] = useState(null);
-  const [deleteConfig, setDeleteConfig] = useState(null);
+  const [formConfig, setFormConfigState] = useState(null);
+  const [isAddDriverOpen, setIsAddDriverOpenState] = useState(false);
+  const [isAddAttendantOpen, setIsAddAttendantOpenState] = useState(false);
+  const [detailConfig, setDetailConfigState] = useState(null);
+  const [deleteConfig, setDeleteConfigState] = useState(null);
+  const scope = [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId].join(":");
+  const [recordsReady, setRecordsReady] = useState(null);
+  const requestSequence = useRef(0);
+  const openedAction = useRef("");
+  const closeAction = () => navigation.update({ action: null, entity: null, id: null, actionCampusId: null, actionBoardId: null, actionYearId: null });
+  const routeAction = (action, entity, id = null) => navigation.update({ action, entity, id,
+    actionCampusId: effectiveCampusId, actionBoardId: effectiveBoardId, actionYearId: effectiveAcademicYearId });
+  const setFormConfig = (value) => { setFormConfigState(value); if (!value) closeAction(); };
+  const setDetailConfig = (value) => { setDetailConfigState(value); if (!value) closeAction(); };
+  const setDeleteConfig = (value) => { setDeleteConfigState(value); if (!value) closeAction(); };
+  const setIsAddDriverOpen = (value) => value ? routeAction("add", "drivers") : (setIsAddDriverOpenState(false), closeAction());
+  const setIsAddAttendantOpen = (value) => value ? routeAction("add", "attendants") : (setIsAddAttendantOpenState(false), closeAction());
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -1090,6 +1097,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   }, [tmContext, effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
 
   const fetchTransportData = async () => {
+    const sequence = ++requestSequence.current;
+    openedAction.current = "";
     setIsLoading(true);
 
     try {
@@ -1134,6 +1143,12 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         apiClient.get(apiEndpoints.transport.dashboard, { params: commonParams }),
       ]);
 
+      if (sequence !== requestSequence.current) return;
+      setRecordsReady({ scope, entities: Object.fromEntries([
+        ["routes", routesRes], ["pickupPoints", pickupsRes], ["vehicles", vehiclesRes],
+        ["drivers", driversRes], ["attendants", attendantsRes], ["vehicleAssignments", assignmentsRes],
+        ["studentAssignments", studentRes], ["trips", tripsRes], ["maintenance", maintenanceRes],
+      ].map(([key, result]) => [key, result.status === "fulfilled"])) });
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
         const items = scoped(extractList(routesRes.value.data));
         setRoutes(
@@ -1402,7 +1417,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     } catch (err) {
       console.warn("Transport data fetch note:", err);
     } finally {
-      setIsLoading(false);
+      if (sequence === requestSequence.current) setIsLoading(false);
     }
   };
 
@@ -1474,7 +1489,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const findVehicle = (id) => vehicles.find((vehicle) => String(vehicle.id) === String(id));
   const findAssignment = (id) => vehicleAssignments.find((a) => String(a.id) === String(id));
 
-  const openForm = (key, title, fields, record = null) => {
+  const openForm = (key, title, fields, record = null, restoring = false) => {
+    if (!restoring) { routeAction(record ? "edit" : "add", key, record?.id); return; }
     const formRecord = key === "vehicles" && record
       ? {
           ...record,
@@ -1730,11 +1746,11 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   };
 
   const requestDelete = (key, row, label) => {
-    setDeleteConfig({ key, row, label });
+    routeAction("delete", key, row.id);
   };
 
   const openRecordDetails = async (key, row, title) => {
-    setDetailConfig({ title, row });
+    routeAction("view", key, row.id);
   };
 
   const confirmDelete = async () => {
@@ -1998,6 +2014,38 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     },
   };
 
+  const actionSignature = JSON.stringify([scope, activeSection, searchParams.get("tab"), searchParams.get("action"), searchParams.get("entity"), searchParams.get("id"), searchParams.get("actionCampusId"), searchParams.get("actionBoardId"), searchParams.get("actionYearId")]);
+  useEffect(() => {
+    if (openedAction.current === actionSignature) return;
+    setFormConfigState(null); setDetailConfigState(null); setDeleteConfigState(null);
+    setIsAddDriverOpenState(false); setIsAddAttendantOpenState(false);
+    const action = searchParams.get("action");
+    if (!action) { openedAction.current = actionSignature; return; }
+    if (!recordsReady || recordsReady.scope !== scope || isLoading) return;
+    const entity = searchParams.get("entity");
+    const config = tableConfigs[entity];
+    const activeEntity = activeSection === "setup" ? activeSetupTab : activeSection === "operations" ? activeOperationTab : null;
+    const matchingScope = [["actionCampusId", effectiveCampusId], ["actionBoardId", effectiveBoardId], ["actionYearId", effectiveAcademicYearId]].every(([key, value]) => !searchParams.has(key) || searchParams.get(key) === String(value));
+    openedAction.current = actionSignature;
+    if (!matchingScope || entity !== activeEntity || !config || !["add", "edit", "view", "delete"].includes(action)) {
+      showErrorToast("This transport action is not available in the selected context."); return;
+    }
+    if (!recordsReady.entities[entity]) { showErrorToast("Unable to restore this action because transport data could not be loaded. Sync Live Data to retry."); return; }
+    if (action === "add" && config.addLabel) {
+      if (entity === "drivers") setIsAddDriverOpenState(true);
+      else if (entity === "attendants") setIsAddAttendantOpenState(true);
+      else openForm(entity, config.addLabel, config.fields, null, true);
+      return;
+    }
+    const row = config.rows.find(item => item.id != null && String(item.id) === searchParams.get("id"));
+    if (!row) { showErrorToast("The requested transport record is unavailable in the selected context."); return; }
+    if (action === "view") setDetailConfigState({ title: config.title, row });
+    else if (action === "edit" && config.fields) openForm(entity, `Edit ${config.title}`, config.fields, row, true);
+    else if (action === "delete") setDeleteConfigState({ key: entity, row, label: config.title });
+    // Latest field options are read only when the URL action changes or its data arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionSignature, recordsReady, isLoading]);
+
   // Setup filters
   const setupTableFilters = {
     routes: [
@@ -2083,7 +2131,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         addLabel={config.addLabel}
         filters={setupTableFilters[key]}
         filterValues={setupFilters}
-        onFilterChange={(name, val) => setSetupFilters((current) => ({ ...current, [name]: val }))}
+        onFilterChange={(name, val) => { setSetupFilters((current) => ({ ...current, [name]: val })); navigation.update({ page: null }); }}
         rowFilter={(row) => filterSetupRow(key, row)}
         printSection={activeSection === "setup" ? "Setup" : "Operations"}
         printSubsection={config.title}
@@ -2239,7 +2287,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
             onQuery={setQuery}
             filters={reportFilterOptions}
             filterValues={reportFilters}
-            onFilterChange={(name, value) => setReportFilters((current) => ({ ...current, [name]: value }))}
+            onFilterChange={(name, value) => { setReportFilters((current) => ({ ...current, [name]: value })); navigation.update({ page: null }); }}
             printSection="Reports"
             printSubsection={reportTabs.find((tab) => tab.id === activeReportTab)?.label || "Transport Report"}
             exportFilename={`transport-${activeReportTab}.csv`}
@@ -2362,6 +2410,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       {/* Render Active Sub-Tabs & Content */}
       {renderActiveSection()}
 
+      {searchParams.get("action") && (!recordsReady || recordsReady.scope !== scope || isLoading) ? (
+        <Modal title="Loading transport record" onClose={closeAction}><SkeletonTable columns={3} rows={3} /></Modal>
+      ) : null}
       {/* Pickup Points Multi-Stop Modal */}
       {formConfig?.key === "pickupPoints" && !formConfig.record?.id ? (
         <AddPickupPointsModal

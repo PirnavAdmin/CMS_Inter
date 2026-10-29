@@ -1,3 +1,4 @@
+import { useTransportNavigation, useTransportRouteValue } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect } from "react";
 import {
   ArrowRight,
@@ -17,10 +18,11 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import "../styles/TransportManagerSettings.css";
 
 export default function TransportManagerSettings() {
+  const navigation = useTransportNavigation();
   const { showToast = () => {}, profile = {} } = useTransportManager();
   const effectiveStaffId = profile.staffId || profile.id || 1125;
-  const [modalOpen, setModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("password"); // "password" | "preferences"
+  const [modalOpen, setModalOpen] = useTransportRouteValue(navigation, "open", false);
+  const [activeTab, setActiveTab] = useTransportRouteValue(navigation, "tab", "password", value => ["password", "preferences"].includes(value)); // "password" | "preferences"
 
   // Password Form State
   const [passwordForm, setPasswordForm] = useState({
@@ -117,7 +119,7 @@ export default function TransportManagerSettings() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [modalOpen, savingPassword, savingPreferences]);
+  }, [modalOpen, savingPassword, savingPreferences, setModalOpen]);
 
   const handleOpenModal = (tab = "password") => {
     setActiveTab(tab);

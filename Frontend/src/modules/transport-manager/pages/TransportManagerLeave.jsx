@@ -1,3 +1,4 @@
+import { useTransportNavigation, useTransportRouteValue } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
@@ -17,6 +18,7 @@ const STATUS_BADGE = {
 };
 
 export default function TransportManagerLeave() {
+  const navigation = useTransportNavigation();
   const tmContext = useTransportManagerSafe();
   const profileData = useMemo(() => tmContext?.profile || {}, [tmContext?.profile]);
   const academicCtx = useAcademicContext?.() || {};
@@ -29,7 +31,7 @@ export default function TransportManagerLeave() {
   const [staffBalance, setStaffBalance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useTransportRouteValue(navigation, "apply", false);
   const [leaveForm, setLeaveForm] = useState({
     categoryId: "1",
     customLeaveType: "",
