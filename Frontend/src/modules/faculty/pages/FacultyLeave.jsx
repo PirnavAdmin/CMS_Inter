@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import "../styles/FacultyLeave.css";
@@ -28,7 +29,26 @@ export default function FacultyLeave() {
   const [staffBalance, setStaffBalance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [routeParams, setRouteParams] = useSearchParams();
+  const cardParam = routeParams.get("card");
+  const [showLeaveModal, setShowLeaveModal] = useState(() => cardParam === "apply" || cardParam === "apply-leave");
+
+  useEffect(() => {
+    const card = routeParams.get("card");
+    const shouldOpen = card === "apply" || card === "apply-leave";
+    if (shouldOpen !== showLeaveModal) {
+      setShowLeaveModal(shouldOpen);
+    }
+  }, [routeParams]);
+
+  const handleCloseModal = () => {
+    setShowLeaveModal(false);
+    setRouteParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("card");
+      return next;
+    });
+  };
   const [leaveForm, setLeaveForm] = useState({
     categoryId: "",
     customLeaveType: "",
@@ -270,6 +290,11 @@ export default function FacultyLeave() {
       fromDate: "",
       toDate: "",
       reason: "",
+    });
+    setRouteParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("card", "apply");
+      return next;
     });
   };
 
@@ -685,7 +710,7 @@ export default function FacultyLeave() {
           ? createPortal(
               <div
                 className="cms-overlay faculty-leave-modal-overlay"
-                onClick={(e) => e.target === e.currentTarget && setShowLeaveModal(false)}
+                onClick={(e) => e.target === e.currentTarget && handleCloseModal()}
               >
                 <div className="cms-modal sm faculty-leave-modal" role="dialog" aria-modal="true">
                   <div className="cms-modal-head">
@@ -693,7 +718,7 @@ export default function FacultyLeave() {
                     <button
                       type="button"
                       className="cms-icon-btn"
-                      onClick={() => setShowLeaveModal(false)}
+                      onClick={handleCloseModal}
                       aria-label="Close"
                     >
                       <X size={15} />
@@ -816,7 +841,7 @@ export default function FacultyLeave() {
                     <button
                       type="button"
                       className="cms-btn cms-btn-ghost"
-                      onClick={() => setShowLeaveModal(false)}
+                      onClick={handleCloseModal}
                     >
                       Cancel
                     </button>

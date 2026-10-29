@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   HelpCircle,
   Plus,
@@ -12,8 +13,11 @@ import {
 import { nonTeachingService } from "../services/nonTeachingService.js";
 
 export default function NonTeachingSupport() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const cardParam = searchParams.get("card");
+
   const [tickets, setTickets] = useState(() => nonTeachingService.getSupportTickets());
-  const [showNewModal, setShowNewModal] = useState(false);
+  const [showNewModal, setShowNewModal] = useState(() => cardParam === "raise-ticket" || cardParam === "new-ticket");
   const [ticketForm, setTicketForm] = useState({
     subject: "",
     category: "IT & Network Infrastructure",
@@ -21,6 +25,32 @@ export default function NonTeachingSupport() {
     description: "",
   });
   const [toastMessage, setToastMessage] = useState(null);
+
+  useEffect(() => {
+    const card = searchParams.get("card");
+    const shouldOpen = card === "raise-ticket" || card === "new-ticket";
+    if (shouldOpen !== showNewModal) {
+      setShowNewModal(shouldOpen);
+    }
+  }, [searchParams]);
+
+  const handleOpenModal = () => {
+    setShowNewModal(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("card", "raise-ticket");
+      return next;
+    });
+  };
+
+  const handleCloseModal = () => {
+    setShowNewModal(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("card");
+      return next;
+    });
+  };
 
   const showToast = (text) => {
     setToastMessage(text);
@@ -51,7 +81,7 @@ export default function NonTeachingSupport() {
 
     const created = await nonTeachingService.createSupportTicket(ticketForm);
     setTickets(nonTeachingService.getSupportTickets());
-    setShowNewModal(false);
+    handleCloseModal();
     setTicketForm({
       subject: "",
       category: "IT & Network Infrastructure",
@@ -87,7 +117,7 @@ export default function NonTeachingSupport() {
         <button
           type="button"
           className="nts-refresh-btn"
-          onClick={() => setShowNewModal(true)}
+          onClick={handleOpenModal}
         >
           <Plus size={15} /> Raise Support Ticket
         </button>
@@ -177,7 +207,7 @@ export default function NonTeachingSupport() {
               <button
                 type="button"
                 className="nts-modal-close"
-                onClick={() => setShowNewModal(false)}
+                onClick={handleCloseModal}
               >
                 <X size={16} />
               </button>
@@ -198,41 +228,41 @@ export default function NonTeachingSupport() {
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div className="nts-form-group">
-                    <label>Category *</label>
+                    <label>Category</label>
                     <select
                       className="nts-form-control"
                       value={ticketForm.category}
                       onChange={(e) => setTicketForm({ ...ticketForm, category: e.target.value })}
                     >
                       <option value="IT & Network Infrastructure">IT &amp; Network Infrastructure</option>
-                      <option value="Maintenance & Electrical">Maintenance &amp; Electrical</option>
-                      <option value="Office Supplies & Stationery">Office Supplies &amp; Stationery</option>
-                      <option value="Facility & Housekeeping">Facility &amp; Housekeeping</option>
-                      <option value="HR & Payroll Query">HR &amp; Payroll Query</option>
+                      <option value="Electrical & Power Backup">Electrical &amp; Power Backup</option>
+                      <option value="Plumbing & Sanitation">Plumbing &amp; Sanitation</option>
+                      <option value="HVAC / Air Conditioning">HVAC / Air Conditioning</option>
+                      <option value="Furniture & Civil Maintenance">Furniture &amp; Civil Maintenance</option>
+                      <option value="Campus Security & Access">Campus Security &amp; Access</option>
                     </select>
                   </div>
-
                   <div className="nts-form-group">
-                    <label>Urgency / Priority *</label>
+                    <label>Priority</label>
                     <select
                       className="nts-form-control"
                       value={ticketForm.priority}
                       onChange={(e) => setTicketForm({ ...ticketForm, priority: e.target.value })}
                     >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
+                      <option value="Urgent">Urgent</option>
                       <option value="High">High</option>
-                      <option value="Urgent">Critical / Urgent</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
                     </select>
                   </div>
                 </div>
 
                 <div className="nts-form-group">
-                  <label>Detailed Description *</label>
+                  <label>Description &amp; Exact Location Details *</label>
                   <textarea
                     rows={4}
                     className="nts-form-control"
-                    placeholder="Describe the problem, room location, equipment serial # if applicable..."
+                    placeholder="Please specify room number, equipment details, and observed problem..."
                     value={ticketForm.description}
                     onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })}
                     required
@@ -244,12 +274,15 @@ export default function NonTeachingSupport() {
                 <button
                   type="button"
                   className="nts-action-btn"
-                  onClick={() => setShowNewModal(false)}
+                  onClick={handleCloseModal}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="nts-punch-btn in">
-                  <Send size={14} /> Submit Ticket
+                <button
+                  type="submit"
+                  className="nts-punch-btn in"
+                >
+                  <Send size={14} /> Submit Query
                 </button>
               </div>
             </form>

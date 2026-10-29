@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Wallet,
   Calendar,
@@ -36,9 +37,43 @@ export default function FacultyPayslips() {
   const context = useFacultySafe();
   const profileData = context?.profileData || {};
 
+  const [routeParams, setRouteParams] = useSearchParams();
+  const yearParam = routeParams.get("year") || "all";
+  const payslipIdParam = routeParams.get("payslipId") || routeParams.get("id");
+
   const [payslipList, setPayslipList] = useState([]);
-  const [payslipYear, setPayslipYear] = useState("all");
+  const [payslipYear, setPayslipYear] = useState(yearParam);
   const [viewingPayslip, setViewingPayslip] = useState(null);
+
+  useEffect(() => {
+    const y = routeParams.get("year") || "all";
+    if (y !== payslipYear) setPayslipYear(y);
+
+    const pid = routeParams.get("payslipId") || routeParams.get("id");
+    if (!pid && viewingPayslip) {
+      setViewingPayslip(null);
+    }
+  }, [routeParams]);
+
+  const handleYearFilterChange = (yr) => {
+    setPayslipYear(yr);
+    setRouteParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (yr && yr !== "all") next.set("year", yr);
+      else next.delete("year");
+      return next;
+    });
+  };
+
+  const handleClosePayslipModal = () => {
+    setViewingPayslip(null);
+    setRouteParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("payslipId");
+      next.delete("id");
+      return next;
+    });
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
@@ -188,6 +223,14 @@ export default function FacultyPayslips() {
       return;
     }
     setViewingPayslip(slip);
+    const slipId = slip.payslipId || slip.id || slip.payrollId;
+    if (slipId) {
+      setRouteParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("payslipId", String(slipId));
+        return next;
+      });
+    }
     if (!slip.payslipId) return;
     try {
       const res = await apiClient.get(`/api/v1/Payroll/payslips/${slip.payslipId}`);
@@ -199,6 +242,16 @@ export default function FacultyPayslips() {
       console.warn("Could not fetch detailed payslip:", err);
     }
   };
+
+  useEffect(() => {
+    const pid = routeParams.get("payslipId") || routeParams.get("id");
+    if (pid && payslipList.length > 0 && (!viewingPayslip || String(viewingPayslip.payslipId || viewingPayslip.id) !== String(pid))) {
+      const match = payslipList.find((p) => String(p.payslipId || p.id || p.payrollId) === String(pid));
+      if (match) {
+        handleViewPayslip(match);
+      }
+    }
+  }, [routeParams, payslipList]);
 
   // Download PDF attachment
   const handleDownloadPdf = async (slip) => {
@@ -437,7 +490,7 @@ export default function FacultyPayslips() {
       {viewingPayslip && (
         <div
           className="cms-overlay"
-          onClick={(e) => e.target === e.currentTarget && setViewingPayslip(null)}
+          onClick={(e) => e.target === e.currentTarget && handleClosePayslipModal()}
         >
           <div className="cms-modal">
             <div className="cms-modal-head">
@@ -449,7 +502,7 @@ export default function FacultyPayslips() {
                   {viewingPayslip.departmentName ? ` · ${viewingPayslip.departmentName}` : ""}
                 </span>
               </div>
-              <button className="cms-icon-btn" onClick={() => setViewingPayslip(null)}>
+              <button className="cms-icon-btn" onClick={handleClosePayslipModal}>
                 <X size={16} />
               </button>
             </div>
@@ -660,7 +713,7 @@ export default function FacultyPayslips() {
             <div className="cms-modal-foot">
               <button
                 className="cms-btn cms-btn-ghost"
-                onClick={() => setViewingPayslip(null)}
+                onClick={handleClosePayslipModal}
               >
                 Close
               </button>
