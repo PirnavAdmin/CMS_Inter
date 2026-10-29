@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Boxes, CircleAlert, IndianRupee, ShoppingCart } from "lucide-react";
 import {
   actionColumn,
@@ -458,7 +459,42 @@ export function InventoryMasters({ kind, state, open, remove, refresh }) {
 }
 
 export function InventoryReports({ state, open, returnItem }) {
-  const [report, setReport] = useState(REPORTS[0]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const reportParam = searchParams.get("report") || searchParams.get("subtab");
+  const initialReport = useMemo(() => {
+    if (!reportParam) return REPORTS[0];
+    const match = REPORTS.find(
+      (r) =>
+        r.toLowerCase() === reportParam.toLowerCase() ||
+        r.toLowerCase().replace(/[^a-z0-9]+/g, "-") === reportParam.toLowerCase()
+    );
+    return match || REPORTS[0];
+  }, [reportParam]);
+
+  const [report, setReport] = useState(initialReport);
+
+  useEffect(() => {
+    if (reportParam) {
+      const match = REPORTS.find(
+        (r) =>
+          r.toLowerCase() === reportParam.toLowerCase() ||
+          r.toLowerCase().replace(/[^a-z0-9]+/g, "-") === reportParam.toLowerCase()
+      );
+      if (match && match !== report) {
+        setReport(match);
+      }
+    }
+  }, [reportParam, report]);
+
+  const selectReport = (name) => {
+    setReport(name);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("report", name);
+      return next;
+    });
+  };
+
   const [draft, setDraft] = useState({});
   const [applied, setApplied] = useState({});
   const [reset, setReset] = useState(0);
@@ -494,7 +530,7 @@ export function InventoryReports({ state, open, returnItem }) {
             key={name}
             className={`cms-btn ${report === name ? "cms-btn-primary" : "cms-btn-ghost"}`}
             aria-pressed={report === name}
-            onClick={() => setReport(name)}
+            onClick={() => selectReport(name)}
           >
             {name}
           </button>

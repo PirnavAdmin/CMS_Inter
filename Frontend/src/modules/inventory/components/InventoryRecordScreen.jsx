@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import InventoryForm from "@/modules/admin/AdminInventory/components/InventoryForm.jsx";
 import { Modal } from "@/shared/components/Ui.jsx";
 import {
@@ -15,9 +16,21 @@ import {
 } from "@/modules/admin/AdminInventory/inventoryApi.js";
 export default function InventoryRecordScreen({ kind, title, columns }) {
   const { state, save, remove, reverse, returnItem } = useInventory();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [modal, setModal] = useState(null);
   const [error, setError] = useState("");
   const [serverLedger, setServerLedger] = useState([]);
+
+  const closeModal = () => {
+    setModal(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("card");
+      next.delete("id");
+      return next;
+    });
+  };
+
   const openRecord = async (record, form = false) => {
     try {
       setError("");
@@ -26,10 +39,28 @@ export default function InventoryRecordScreen({ kind, title, columns }) {
         detail = await inventoryDetail(movement ? "movements" : "items", record.id);
       if (kind === "items" && !form) setServerLedger(await inventoryLedger(record.id, {}));
       setModal({ record: detail, form });
+
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("card", form ? "edit" : "detail");
+        if (record?.id != null) next.set("id", String(record.id));
+        return next;
+      });
     } catch (e) {
       setError(e.message);
     }
   };
+
+  const openAdd = () => {
+    setModal({ form: true });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("card", "add");
+      next.delete("id");
+      return next;
+    });
+  };
+
   const [department, setDepartment] = useState("");
   const movement = kind.startsWith("stock-");
   const rows = (
@@ -41,10 +72,30 @@ export default function InventoryRecordScreen({ kind, title, columns }) {
         ? state.items.map((i) => enrichItem(state, i))
         : state[kind]
   ).filter((r) => !department || r.department === department);
+
+  useEffect(() => {
+    const cardParam = searchParams.get("card");
+    const idParam = searchParams.get("id");
+    if (!cardParam) {
+      if (modal) setModal(null);
+      return;
+    }
+    if (cardParam === "add") {
+      setModal((curr) => (curr?.form && !curr?.record ? curr : { form: true }));
+      return;
+    }
+    if (idParam && rows.length > 0) {
+      const found = rows.find((r) => String(r.id) === String(idParam));
+      if (found && modal?.record?.id !== found.id) {
+        openRecord(found, cardParam === "edit");
+      }
+    }
+  }, [searchParams, rows.length]);
+
   const act = async (operation) => {
     try {
       await operation();
-      setModal(null);
+      closeModal();
       setError("");
     } catch (e) {
       setError(e.message);
@@ -67,7 +118,7 @@ export default function InventoryRecordScreen({ kind, title, columns }) {
         title={title}
         rows={rows}
         columns={columns}
-        onAdd={() => setModal({ form: true })}
+        onAdd={openAdd}
         addLabel={`Add ${movement ? title : kind === "items" ? "Item" : kind === "suppliers" ? "Supplier" : "Category"}`}
         onView={(record) => openRecord(record)}
         onEdit={movement ? undefined : (record) => openRecord(record, true)}
@@ -101,17 +152,17 @@ export default function InventoryRecordScreen({ kind, title, columns }) {
           record={modal.record}
           state={state}
           user={state.profile.name}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onSave={async (values) => {
             await save(kind, values);
-            setModal(null);
+            closeModal();
           }}
         />
       )}
       {modal && !modal.form && (
         <Modal
           title={modal.record.name || modal.record.number || "Record details"}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           className="inventory-dialog"
         >
           <dl className="ip-detail">
