@@ -8,7 +8,7 @@ import StudentDataTable from "../components/StudentDataTable.jsx";
 import StudentEmptyState from "../components/StudentEmptyState.jsx";
 import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentStatusBadge from "../components/StudentStatusBadge.jsx";
-import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { useStudentProfile, useStudentNavigation } from "../context/StudentProfileContext.jsx";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
 
 const unwrap = (data) => data?.data?.data ?? data?.data ?? data?.Data ?? data ?? {};
@@ -18,6 +18,7 @@ const date = (value) => value ? new Date(value).toLocaleDateString("en-IN", { da
 const saveFile = (blob, filename) => { const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob])); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url); };
 
 export default function StudentCertificates() {
+  const navigation = useStudentNavigation();
   const location = useLocation();
   const navigate = useNavigate();
   const consumedRequest = useRef(null);
@@ -30,7 +31,9 @@ export default function StudentCertificates() {
   const [error, setError] = useState("");
   const [requestError, setRequestError] = useState("");
   const [success, setSuccess] = useState("");
-  const [open, setOpen] = useState(false);
+  const open = navigation.params.get("action") === "request";
+  const updateNavigation = navigation.update;
+  const setOpen = useCallback((value) => updateNavigation({ action: value ? "request" : null }), [updateNavigation]);
   const [form, setForm] = useState({ type: "", purpose: "", notes: "" });
   const load = useCallback(async (showLoading = true) => {
     if (!student?.studentId) { setLoading(false); return; }
@@ -142,7 +145,7 @@ export default function StudentCertificates() {
     setRequestError("");
     setForm((current) => ({ ...current, type: defaultCertificateType }));
     setOpen(true);
-  }, [defaultCertificateType]);
+  }, [defaultCertificateType, setOpen]);
   useEffect(() => {
     if (!location.state?.openRequestCertificate || profileLoading || loading
       || consumedRequest.current === location.key) return;
@@ -154,6 +157,9 @@ export default function StudentCertificates() {
       state: Object.keys(remainingState).length ? remainingState : null,
     });
   }, [location, navigate, profileLoading, loading, defaultCertificateType, openRequestCertificate]);
+  useEffect(() => {
+    if (open && !form.type && defaultCertificateType) setForm((current) => ({ ...current, type: defaultCertificateType }));
+  }, [open, form.type, defaultCertificateType]);
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
   return <div className="sp-page">
     <StudentPageHeader title="Certificates" subtitle="View and request your student certificates." action={<button className="sp-btn primary" type="button" onClick={openRequestCertificate}><Plus size={16}/> Request Certificate</button>}/>
