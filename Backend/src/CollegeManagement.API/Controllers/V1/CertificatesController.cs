@@ -240,7 +240,7 @@ public class CertificatesController : ControllerBase
     // POST /api/v1/certificates/student-request
     // =========================================================
     [HttpPost("student-request")]
-    [AllowAnonymous] // Simulated student portal endpoint
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
     [ProducesResponseType(typeof(CertificateResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> StudentRequest(

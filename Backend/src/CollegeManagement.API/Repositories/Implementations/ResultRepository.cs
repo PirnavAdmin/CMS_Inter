@@ -561,5 +561,38 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
+
+        public async Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId)
+        {
+            var parameters = new DynamicParameters();
+            parameters.Add("p_StudentId", studentId, DbType.Int32);
+
+            return await Connection.QueryAsync<StudentSelfResultDto>(
+                "sp_GetStudentSelfResults",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task<StudentSelfResultMemoDto?> GetStudentSelfResultMemoAsync(int studentId, int examinationId)
+        {
+            var parameters = new DynamicParameters();
+            parameters.Add("p_StudentId", studentId, DbType.Int32);
+            parameters.Add("p_ExaminationId", examinationId, DbType.Int32);
+
+            using var multi = await Connection.QueryMultipleAsync(
+                "sp_GetStudentSelfResultMemo",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+
+            var memo = await multi.ReadFirstOrDefaultAsync<StudentSelfResultMemoDto>();
+            if (memo == null) return null;
+
+            if (!multi.IsConsumed)
+            {
+                memo.Subjects = (await multi.ReadAsync<StudentSubjectMarkMemoDto>()).AsList();
+            }
+
+            return memo;
+        }
     }
 }

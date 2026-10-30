@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using AutoMapper;
 using CollegeManagement.API.Data;
+using CollegeManagement.API.DTOs.Examination;
 using CollegeManagement.API.DTOs.Examination.Requests;
 using CollegeManagement.API.DTOs.Examination.Responses;
 using CollegeManagement.API.Exceptions;
@@ -2085,12 +2086,9 @@ namespace CollegeManagement.API.Services.Implementations
                             CreatedAt = DateTime.UtcNow
                         };
 
-                        _context.ExamSchedules.Add(newSchedule);
-                        plannedEntities.Add((newSchedule, sub, roomAllocs));
+                        var createdSchedule = await _examinationRepository.CreateExamScheduleAsync(newSchedule);
+                        plannedEntities.Add((createdSchedule, sub, roomAllocs));
                     }
-
-                    // Save all schedules in one DB trip
-                    await _context.SaveChangesAsync();
 
                     // Step 2: Add all InvigilatorAssignments in batch
                     var allNewAssignments = new List<InvigilatorAssignment>();
@@ -2177,17 +2175,25 @@ namespace CollegeManagement.API.Services.Implementations
                         });
                     }
 
-                    if (allNewAssignments.Any())
+                    foreach (var (newSchedule, sub, roomAllocs) in plannedEntities)
                     {
-                        _context.InvigilatorAssignments.AddRange(allNewAssignments);
-                        await _context.SaveChangesAsync();
+                        var assignments = roomAllocs
+                            .SelectMany(ra => {
+                                string rHall = !string.IsNullOrWhiteSpace(ra.room.RoomNumber) ? ra.room.RoomNumber : (ra.room.RoomName ?? string.Empty);
+                                return ra.invigilators.Select(inv => (inv.Id, rHall));
+                            })
+                            .ToList();
+                        if (assignments.Any())
+                        {
+                            await _examinationRepository.AssignInvigilatorHallsAsync(newSchedule.ExamScheduleId, assignments);
+                        }
                     }
 
                     if (request.FinalizeSchedule)
                     {
                         exam.Status = "SCHEDULED";
                         exam.UpdatedAt = DateTime.UtcNow;
-                        await _context.SaveChangesAsync();
+                        await _examinationRepository.UpdateExaminationAsync(exam);
                     }
 
                     await transaction.CommitAsync();
@@ -2418,231 +2424,18 @@ namespace CollegeManagement.API.Services.Implementations
             int? academicYearId = null,
             int? boardId = null)
         {
-            var today = DateOnly.FromDateTime(DateTime.Today);
-            var resultList = new List<FacultyExamDutyDto>();
+            return await _examinationRepository.GetFacultyExamDutiesAsync(staffId, status, campusId, academicYearId, boardId);
+        }
 
-            // 1. Query InvigilatorAssignments
-            var invQuery = _context.InvigilatorAssignments
-                .Include(ia => ia.ExamSchedule)
-                    .ThenInclude(es => es.Examination)
-                .Include(ia => ia.ExamSchedule)
-                    .ThenInclude(es => es.Subject)
-                .Include(ia => ia.InvigilatorStaff)
-                .AsNoTracking();
+        public async Task<ExaminationSettingsDto> GetExaminationSettingsAsync(int campusId)
+        {
+            return await _examinationRepository.GetExaminationSettingsAsync(campusId);
+        }
 
-            if (staffId.HasValue && staffId.Value > 0)
-            {
-                invQuery = invQuery.Where(ia => ia.InvigilatorId == staffId.Value);
-            }
-
-            var invAssignments = await invQuery.ToListAsync();
-
-            // Track processed schedule IDs to avoid duplicates
-            var processedScheduleIds = new HashSet<int>();
-
-            foreach (var ia in invAssignments)
-            {
-                var sch = ia.ExamSchedule;
-                if (sch == null) continue;
-
-                var exam = sch.Examination;
-                var subj = sch.Subject;
-
-                // Filter out inactive or soft-deleted examinations
-                if (exam == null || !exam.IsActive) continue;
-
-                bool isExamCancelled = string.Equals(exam.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
-
-                // If schedule is inactive and exam is not cancelled, schedule was deleted
-                if (!sch.IsActive && !isExamCancelled) continue;
-
-                // Multi-tenant isolation (Campus / Academic Year / Board)
-                if (campusId.HasValue && campusId.Value > 0 && exam.CampusId.HasValue && exam.CampusId.Value > 0 && exam.CampusId.Value != campusId.Value) continue;
-                if (academicYearId.HasValue && academicYearId.Value > 0 && exam.AcademicYearId > 0 && exam.AcademicYearId != academicYearId.Value) continue;
-                if (boardId.HasValue && boardId.Value > 0 && exam.BoardId > 0 && exam.BoardId != boardId.Value) continue;
-
-                processedScheduleIds.Add(sch.ExamScheduleId);
-
-                string dutyStatus = "Upcoming";
-                if (isExamCancelled || !sch.IsActive)
-                {
-                    dutyStatus = "Cancelled";
-                }
-                else if (sch.ExamDate < today)
-                {
-                    dutyStatus = "Completed";
-                }
-                else if (sch.ExamDate == today)
-                {
-                    dutyStatus = "Today";
-                }
-
-                string session = !string.IsNullOrWhiteSpace(sch.SessionId)
-                    ? sch.SessionId
-                    : (sch.StartTime.Hour < 12 ? "Morning Session" : "Afternoon Session");
-
-                string startTimeStr = sch.StartTime.ToString("hh\\:mm tt");
-                string endTimeStr = sch.EndTime.ToString("hh\\:mm tt");
-                string examHours = $"{startTimeStr} – {endTimeStr}";
-
-                var repTime = sch.StartTime.AddMinutes(-30);
-                string repTimeStr = $"{repTime.ToString("hh\\:mm tt")} (Mandatory 30 mins prior)";
-
-                string examCat = exam?.ExamCategory?.ToLowerInvariant() ?? "internal";
-                if (examCat.Contains("board") || examCat.Contains("ipe")) examCat = "board";
-                else if (examCat.Contains("prac")) examCat = "practical";
-                else examCat = "internal";
-
-                var staffName = ia.InvigilatorStaff != null
-                    ? $"{ia.InvigilatorStaff.FirstName} {ia.InvigilatorStaff.LastName}".Trim()
-                    : (!string.IsNullOrWhiteSpace(ia.InvigilatorName) ? ia.InvigilatorName : sch.Invigilator);
-
-                resultList.Add(new FacultyExamDutyDto
-                {
-                    Id = ia.InvigilatorAssignmentId,
-                    ExamScheduleId = sch.ExamScheduleId,
-                    ExaminationId = sch.ExaminationId,
-                    ExamName = exam?.ExamName ?? $"Exam #{sch.ExaminationId}",
-                    ExamCode = exam?.ExamCode ?? $"EXAM-{sch.ExaminationId}",
-                    Category = examCat,
-                    ExamType = exam?.ExamPattern ?? exam?.ExamCategory ?? "Board Theory",
-                    Role = "Invigilator",
-                    Status = dutyStatus,
-                    Subject = subj != null ? $"{subj.SubjectName} ({subj.SubjectCode})" : $"Subject #{sch.SubjectId}",
-                    SubjectCode = subj?.SubjectCode ?? "",
-                    Date = sch.ExamDate.ToString("dd MMM yyyy"),
-                    ExamDate = sch.ExamDate.ToString("yyyy-MM-dd"),
-                    Session = session,
-                    ExamHours = examHours,
-                    StartTime = startTimeStr,
-                    EndTime = endTimeStr,
-                    Venue = !string.IsNullOrWhiteSpace(ia.HallNumber) ? ia.HallNumber : (!string.IsNullOrWhiteSpace(sch.Hall) ? sch.Hall : "Examination Hall"),
-                    Invigilator = staffName,
-                    InvigilatorId = ia.InvigilatorId,
-                    ReportingTime = repTimeStr,
-                    Candidates = "30 Candidates",
-                    TotalEnrolled = 30,
-                    Present = 30,
-                    Absent = 0,
-                    Sops = new List<string>
-                    {
-                        "Collect sealed Question Paper packets from Chief Superintendent room.",
-                        "Verify Student Hall Tickets and prohibit unauthorized gadgets / smart watches.",
-                        "Cross-verify candidate signature on Nominal Roll & OMR Barcode.",
-                        "Hand over signed absentee statement within 30 minutes of start."
-                    }
-                });
-            }
-
-            // 2. Query direct ExamSchedules with InvigilatorId
-            var directSchQuery = _context.ExamSchedules
-                .Include(es => es.Examination)
-                .Include(es => es.Subject)
-                .AsNoTracking();
-
-            if (staffId.HasValue && staffId.Value > 0)
-            {
-                directSchQuery = directSchQuery.Where(es => es.InvigilatorId == staffId.Value);
-            }
-
-            var directSchedules = await directSchQuery.ToListAsync();
-            foreach (var sch in directSchedules)
-            {
-                if (processedScheduleIds.Contains(sch.ExamScheduleId)) continue;
-
-                var exam = sch.Examination;
-                var subj = sch.Subject;
-
-                // Filter out inactive or soft-deleted examinations
-                if (exam == null || !exam.IsActive) continue;
-
-                bool isExamCancelled = string.Equals(exam.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
-
-                // If schedule is inactive and exam is not cancelled, schedule was deleted
-                if (!sch.IsActive && !isExamCancelled) continue;
-
-                // Multi-tenant isolation (Campus / Academic Year / Board)
-                if (campusId.HasValue && campusId.Value > 0 && exam.CampusId.HasValue && exam.CampusId.Value > 0 && exam.CampusId.Value != campusId.Value) continue;
-                if (academicYearId.HasValue && academicYearId.Value > 0 && exam.AcademicYearId > 0 && exam.AcademicYearId != academicYearId.Value) continue;
-                if (boardId.HasValue && boardId.Value > 0 && exam.BoardId > 0 && exam.BoardId != boardId.Value) continue;
-
-                processedScheduleIds.Add(sch.ExamScheduleId);
-
-                string dutyStatus = "Upcoming";
-                if (isExamCancelled || !sch.IsActive)
-                {
-                    dutyStatus = "Cancelled";
-                }
-                else if (sch.ExamDate < today)
-                {
-                    dutyStatus = "Completed";
-                }
-                else if (sch.ExamDate == today)
-                {
-                    dutyStatus = "Today";
-                }
-
-                string session = !string.IsNullOrWhiteSpace(sch.SessionId)
-                    ? sch.SessionId
-                    : (sch.StartTime.Hour < 12 ? "Morning Session" : "Afternoon Session");
-
-                string startTimeStr = sch.StartTime.ToString("hh\\:mm tt");
-                string endTimeStr = sch.EndTime.ToString("hh\\:mm tt");
-                string examHours = $"{startTimeStr} – {endTimeStr}";
-
-                var repTime = sch.StartTime.AddMinutes(-30);
-                string repTimeStr = $"{repTime.ToString("hh\\:mm tt")} (Mandatory 30 mins prior)";
-
-                string examCat = exam?.ExamCategory?.ToLowerInvariant() ?? "internal";
-                if (examCat.Contains("board") || examCat.Contains("ipe")) examCat = "board";
-                else if (examCat.Contains("prac")) examCat = "practical";
-                else examCat = "internal";
-
-                resultList.Add(new FacultyExamDutyDto
-                {
-                    Id = sch.ExamScheduleId,
-                    ExamScheduleId = sch.ExamScheduleId,
-                    ExaminationId = sch.ExaminationId,
-                    ExamName = exam?.ExamName ?? $"Exam #{sch.ExaminationId}",
-                    ExamCode = exam?.ExamCode ?? $"EXAM-{sch.ExaminationId}",
-                    Category = examCat,
-                    ExamType = exam?.ExamPattern ?? exam?.ExamCategory ?? "Internal",
-                    Role = "Invigilator",
-                    Status = dutyStatus,
-                    Subject = subj != null ? $"{subj.SubjectName} ({subj.SubjectCode})" : $"Subject #{sch.SubjectId}",
-                    SubjectCode = subj?.SubjectCode ?? "",
-                    Date = sch.ExamDate.ToString("dd MMM yyyy"),
-                    ExamDate = sch.ExamDate.ToString("yyyy-MM-dd"),
-                    Session = session,
-                    ExamHours = examHours,
-                    StartTime = startTimeStr,
-                    EndTime = endTimeStr,
-                    Venue = !string.IsNullOrWhiteSpace(sch.Hall) ? sch.Hall : "Examination Hall",
-                    Invigilator = !string.IsNullOrWhiteSpace(sch.Invigilator) ? sch.Invigilator : "Faculty Invigilator",
-                    InvigilatorId = sch.InvigilatorId,
-                    ReportingTime = repTimeStr,
-                    Candidates = "30 Candidates",
-                    TotalEnrolled = 30,
-                    Present = 30,
-                    Absent = 0,
-                    Sops = new List<string>
-                    {
-                        "Collect sealed Question Paper packets from Chief Superintendent room.",
-                        "Verify Student Hall Tickets and prohibit unauthorized gadgets / smart watches.",
-                        "Cross-verify candidate signature on Nominal Roll & OMR Barcode.",
-                        "Hand over signed absentee statement within 30 minutes of start."
-                    }
-                });
-            }
-
-            if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "all", StringComparison.OrdinalIgnoreCase))
-            {
-                resultList = resultList
-                    .Where(r => string.Equals(r.Status, status, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-            }
-
-            return resultList.OrderByDescending(r => r.ExamDate).ThenBy(r => r.StartTime);
+        public async Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(int campusId, ExaminationSettingsDto settings)
+        {
+            settings.CampusId = campusId > 0 ? campusId : 1;
+            return await _examinationRepository.SaveExaminationSettingsAsync(settings);
         }
 
         #endregion

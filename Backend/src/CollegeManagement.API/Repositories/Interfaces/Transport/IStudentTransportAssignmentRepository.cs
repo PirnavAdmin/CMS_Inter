@@ -1,5 +1,6 @@
 using CollegeManagement.API.Common;
 using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
+using CollegeManagement.API.Dtos;
 
 namespace CollegeManagement.API.Repositories.Interfaces
 {
@@ -32,5 +33,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
         Task<IEnumerable<StudentTransportAssignmentLookupDto>>
             GetLookupAsync();
+
+        Task<StudentTransportResponseDto?> GetStudentTransportDetailsAsync(int studentId);
     }
 }

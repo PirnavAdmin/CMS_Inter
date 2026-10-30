@@ -1407,7 +1407,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   };
 
   useEffect(() => {
-    fetchTransportData();
+    if (!tmContext || (!tmContext.vehicles?.length && !tmContext.routes?.length)) {
+      fetchTransportData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
 

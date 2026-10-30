@@ -1,0 +1,100 @@
+/* Transport Manager Profile Styles */
+@import "../../FacultyDashboard/styles/FacultyProfile.css";
+
+.tm-profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+/* Ensure smooth theme compatibility */
+.tm-profile-page .sp-profile-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.tm-profile-page .sp-profile-page-head h1 {
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0;
+  color: var(--cms-text, #1e293b);
+}
+
+.tm-profile-page .sp-profile-page-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--cms-muted, #64748b);
+}
+
+/* Completion Badge matching Screenshot 2 */
+.tm-profile-completion-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-primary, #6F8400);
+  background: var(--cms-primary-soft, #f7f9ee);
+  border: 1px solid var(--cms-primary-soft-border, #e2e8b8);
+  padding: 6px 14px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Primary Button in theme */
+.tm-profile-page .cms-btn-primary {
+  background: var(--cms-primary, #6F8400);
+  color: #ffffff;
+  border: 1px solid var(--cms-primary, #6F8400);
+  padding: 0 16px;
+  height: 38px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tm-profile-page .cms-btn-primary:hover:not(:disabled) {
+  background: var(--cms-primary-dark, #576700);
+  border-color: var(--cms-primary-dark, #576700);
+}
+
+.tm-profile-page .cms-btn-secondary {
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #1e293b);
+  border: 1px solid var(--cms-border, #d1d5db);
+  padding: 0 16px;
+  height: 38px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tm-profile-page .cms-btn-secondary:hover:not(:disabled) {
+  background: var(--cms-subtle, #f8f9fa);
+  border-color: var(--cms-border-focus, #9ca3af);
+}
+
+/* Responsive adjustment */
+@media (max-width: 768px) {
+  .tm-profile-page .sp-profile-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .tm-profile-page .sp-profile-header-inline {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}

@@ -90,6 +90,10 @@ namespace CollegeManagement.API.Repositories.Interfaces
             int examId,
             int? campusId = null);
 
+        Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId);
+
+        Task<StudentSelfResultMemoDto?> GetStudentSelfResultMemoAsync(int studentId, int examinationId);
+
         Task<IEnumerable<ExportResultDto>> GetResultsForExportAsync(
             int boardId,
             int academicYearId,

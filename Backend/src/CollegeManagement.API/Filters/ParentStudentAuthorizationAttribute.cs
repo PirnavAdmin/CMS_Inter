@@ -27,8 +27,25 @@ namespace CollegeManagement.API.Filters
             // If the user is a Parent, perform the mapping check
             if (userRole == "Parent")
             {
+                int? targetStudentId = null;
+                if (context.ActionArguments.TryGetValue(_studentIdParamName, out var value) && value != null)
+                {
+                    if (value is int directId) targetStudentId = directId;
+                    else if (value is string strVal && int.TryParse(strVal, out int parsedId)) targetStudentId = parsedId;
+                }
+
                 // Try to get the studentId from route data or query string
-                if (context.ActionArguments.TryGetValue(_studentIdParamName, out var value) && value is int studentId)
+                if (!targetStudentId.HasValue && context.RouteData.Values.TryGetValue(_studentIdParamName, out var rVal) && rVal != null)
+                {
+                    if (int.TryParse(rVal.ToString(), out int parsedId)) targetStudentId = parsedId;
+                }
+
+                if (!targetStudentId.HasValue && context.HttpContext.Request.Query.TryGetValue(_studentIdParamName, out var qVal) && !string.IsNullOrEmpty(qVal))
+                {
+                    if (int.TryParse(qVal.ToString(), out int parsedId)) targetStudentId = parsedId;
+                }
+
+                if (targetStudentId.HasValue)
                 {
                     var userIdStr = context.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
                     if (int.TryParse(userIdStr, out int parentUserId))
@@ -41,12 +58,11 @@ namespace CollegeManagement.API.Filters
                             await connection.OpenAsync();
                         }
 
-                        // Using CALL syntax to prevent MySqlConnector SP parameter issues
                         var count = await Dapper.SqlMapper.ExecuteScalarAsync<int>(
                             connection,
-                            "CALL sp_CheckParentStudentMapping(@ParentUserId, @StudentId);",
-                            new { ParentUserId = parentUserId, StudentId = studentId },
-                            commandType: System.Data.CommandType.Text);
+                            "sp_CheckParentStudentMapping",
+                            new { p_ParentUserId = parentUserId, p_StudentId = targetStudentId.Value },
+                            commandType: System.Data.CommandType.StoredProcedure);
 
                         if (count == 0)
                         {
@@ -71,10 +87,23 @@ namespace CollegeManagement.API.Filters
             // If the user is a Student, ensure they can only access their own student record
             if (userRole == "Student")
             {
-                if (context.ActionArguments.TryGetValue(_studentIdParamName, out var sVal) && sVal is int targetStudentId)
+                var studentIdClaim = context.HttpContext.User.FindFirst("StudentId")?.Value;
+                if (!int.TryParse(studentIdClaim, out int ownStudentId))
                 {
-                    var studentIdClaim = context.HttpContext.User.FindFirst("StudentId")?.Value;
-                    if (!int.TryParse(studentIdClaim, out int ownStudentId) || ownStudentId != targetStudentId)
+                    context.Result = new ForbidResult();
+                    return;
+                }
+
+                int? targetStudentId = null;
+                if (context.ActionArguments.TryGetValue(_studentIdParamName, out var sVal) && sVal != null)
+                {
+                    if (sVal is int directId) targetStudentId = directId;
+                    else if (sVal is string strVal && int.TryParse(strVal, out int parsedId)) targetStudentId = parsedId;
+                }
+
+                if (targetStudentId.HasValue)
+                {
+                    if (targetStudentId.Value != ownStudentId)
                     {
                         context.Result = new ForbidResult();
                         return;
@@ -82,8 +111,8 @@ namespace CollegeManagement.API.Filters
                 }
                 else
                 {
-                    context.Result = new ForbidResult();
-                    return;
+                    // Parameter was omitted (e.g. on /me endpoints or optional parameter), automatically inject the authenticated student's ID
+                    context.ActionArguments[_studentIdParamName] = ownStudentId;
                 }
             }
 

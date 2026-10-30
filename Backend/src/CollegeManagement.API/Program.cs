@@ -193,6 +193,9 @@ builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAuditLoggingService, AuditLoggingService>();
 builder.Services.AddScoped<IDesignationRepository, DesignationRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
+builder.Services.AddScoped<IStaffSettingsRepository, StaffSettingsRepository>();
+builder.Services.AddScoped<IStaffSettingsService, StaffSettingsService>();
+builder.Services.AddScoped<IEvaluationRepository, EvaluationRepository>();
 builder.Services.AddScoped<IStaffSubjectAllocationRepository, StaffSubjectAllocationRepository>();
 builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
 builder.Services.AddScoped<IMasterGroupRepository, MasterGroupRepository>();
@@ -260,6 +263,8 @@ builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepo
 builder.Services.AddScoped<ITransportDashboardRepository, TransportDashboardRepository>();
 builder.Services.AddScoped<ITransportReportRepository, TransportReportRepository>();
 builder.Services.AddScoped<ITransportRepository, TransportRepository>();
+builder.Services.AddScoped<ITransportOperationsRepository, TransportOperationsRepository>();
+builder.Services.AddScoped<ITransportDriverDashboardRepository, TransportDriverDashboardRepository>();
 
 // Payroll Repositories
 builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
@@ -363,6 +368,8 @@ builder.Services.AddScoped<ITransportReportService, TransportReportService>();
 builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
 builder.Services.AddScoped<ITransportService, TransportService>();
 builder.Services.AddScoped<IDriverAttendanceService, DriverAttendanceService>();
+builder.Services.AddScoped<ITransportOperationsService, TransportOperationsService>();
+builder.Services.AddScoped<ITransportDriverDashboardService, TransportDriverDashboardService>();
 
 // Payroll Service
 builder.Services.AddScoped<IPayrollService, PayrollService>();
@@ -503,10 +510,47 @@ if (args.Contains("--test-timetable"))
     return;
 }
 
+if (args.Contains("--deploy-exam-cell"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var success = await CollegeManagement.API.Tests.ExamCellModuleDbDeployer.DeployProceduresAsync(connStr);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--deploy-driver"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var success = await CollegeManagement.API.Tests.DriverModuleDbDeployer.DeployProceduresAsync(connStr);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-driver"))
+{
+    var success = await CollegeManagement.API.Tests.DriverModuleBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-exam-cell"))
+{
+    var success = await CollegeManagement.API.Tests.ExamCellBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
 if (args.Contains("--deploy-inventory"))
 {
     var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
     await CollegeManagement.API.Tests.InventoryDbDeployer.DeployAsync(connStr);
+    return;
+}
+
+if (args.Contains("--test-inventory"))
+{
+    var success = await CollegeManagement.API.Tests.InventoryModuleBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
     return;
 }
 
@@ -516,10 +560,73 @@ if (args.Contains("--verify-inventory"))
     return;
 }
 
+if (args.Contains("--test-student-management"))
+{
+    var success = await CollegeManagement.API.Tests.StudentManagementModuleBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-section-allocation"))
+{
+    var success = await CollegeManagement.API.Tests.SectionAllocationModuleBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-student-attendance"))
+{
+    var success = await CollegeManagement.API.Tests.StudentAttendanceModuleBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-promotion"))
+{
+    var success = await CollegeManagement.API.Tests.PromotionModuleBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-holiday"))
+{
+    var success = await CollegeManagement.API.Tests.HolidayModuleBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-transport"))
+{
+    var success = await CollegeManagement.API.Tests.TransportModuleBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
 if (args.Contains("--test-audit"))
 {
     var tester = new CollegeManagement.API.Tests.AuditModuleBackendTester(app.Services);
     await tester.RunAllTestsAsync();
+    return;
+}
+
+if (args.Contains("--test-student-portal"))
+{
+    var success = await CollegeManagement.API.Tests.StudentPortalBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-parent-portal"))
+{
+    var success = await CollegeManagement.API.Tests.ParentPortalBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-faculty-portal"))
+{
+    var success = await CollegeManagement.API.Tests.FacultyPortalBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
     return;
 }
 

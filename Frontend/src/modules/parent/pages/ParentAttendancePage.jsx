@@ -120,16 +120,8 @@ export default function ParentAttendancePage() {
         let rawLogs = [];
 
         if (selectedMonth === "all") {
-          // Fetch all 12 months for the selected academic year in parallel
-          const monthsToFetch = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-          const results = await Promise.allSettled(
-            monthsToFetch.map((m) => getStudentDailyAttendanceLogs(activeChildId, { month: m, year: yearNum }))
-          );
-          results.forEach((res) => {
-            if (res.status === "fulfilled" && Array.isArray(res.value)) {
-              rawLogs.push(...res.value);
-            }
-          });
+          // Single-roundtrip query for all months using backend month=0 capability
+          rawLogs = await getStudentDailyAttendanceLogs(activeChildId, { month: 0, year: yearNum });
         } else {
           const mNum = parseInt(selectedMonth, 10);
           rawLogs = await getStudentDailyAttendanceLogs(activeChildId, { month: mNum, year: yearNum });

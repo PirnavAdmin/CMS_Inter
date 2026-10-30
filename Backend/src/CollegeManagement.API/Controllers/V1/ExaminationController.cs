@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using CollegeManagement.API.DTOs.Examination;
 using CollegeManagement.API.DTOs.Examination.Requests;
 using CollegeManagement.API.DTOs.Examination.Responses;
 using CollegeManagement.API.Exceptions;
@@ -50,6 +51,12 @@ namespace CollegeManagement.API.Controllers.V1
                 int.TryParse(headerVal, out var campusId) && campusId > 0)
             {
                 return campusId;
+            }
+
+            var claimCampus = User?.FindFirst("CampusId")?.Value;
+            if (int.TryParse(claimCampus, out var cId) && cId > 0)
+            {
+                return cId;
             }
 
             return 1;
@@ -535,6 +542,31 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Fetching exam duties for Staff ID: {StaffId}, Status: {Status}, CampusId: {CampusId}", staffId, status, campusId);
             var result = await _examinationService.GetFacultyExamDutiesAsync(staffId, status, campusId, academicYearId, boardId);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Retrieves the examination cell configuration and grading settings for the specified campus.
+        /// </summary>
+        [HttpGet("settings")]
+        [ProducesResponseType(typeof(ExaminationSettingsDto), StatusCodes.Status200OK)]
+        public async Task<ActionResult<ExaminationSettingsDto>> GetSettings([FromQuery] int? campusId = null)
+        {
+            var resolvedCampusId = ResolveCampusId(campusId);
+            var settings = await _examinationService.GetExaminationSettingsAsync(resolvedCampusId);
+            return Ok(settings);
+        }
+
+        /// <summary>
+        /// Updates the examination cell configuration and grading settings for the specified campus.
+        /// </summary>
+        [HttpPut("settings")]
+        [Authorize]
+        [ProducesResponseType(typeof(ExaminationSettingsDto), StatusCodes.Status200OK)]
+        public async Task<ActionResult<ExaminationSettingsDto>> UpdateSettings([FromQuery] int? campusId, [FromBody] ExaminationSettingsDto request)
+        {
+            var resolvedCampusId = ResolveCampusId(campusId ?? request.CampusId);
+            var result = await _examinationService.SaveExaminationSettingsAsync(resolvedCampusId, request);
             return Ok(result);
         }
 

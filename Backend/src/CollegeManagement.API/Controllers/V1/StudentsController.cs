@@ -176,7 +176,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Changes the current authenticated student's password after first login.
         /// </summary>
         [HttpPost("me/change-password")]
-        [Authorize(Roles = "Admin,Student")]
+        [Authorize(Roles = "Admin,Student,Parent")]
         [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -187,6 +187,12 @@ namespace CollegeManagement.API.Controllers.V1
                 return ValidationProblem(ModelState);
 
             var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
+            {
+                var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (int.TryParse(userIdClaim, out int parsedId)) userId = parsedId;
+            }
+
             if (!userId.HasValue || userId.Value <= 0)
             {
                 throw new UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
@@ -206,7 +212,51 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(new
             {
                 status = true,
-                message = "Password changed successfully. Initial login credential is now consumed."
+                message = "Password changed successfully."
+            });
+        }
+
+        /// <summary>
+        /// Changes the current authenticated parent's password.
+        /// </summary>
+        [HttpPost("parent/change-password")]
+        [Authorize(Roles = "Parent")]
+        [BypassPermission]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> ChangeParentPassword([FromBody] StudentChangePasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblem(ModelState);
+
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
+            {
+                var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (int.TryParse(userIdClaim, out int parsedId)) userId = parsedId;
+            }
+
+            if (!userId.HasValue || userId.Value <= 0)
+            {
+                return Unauthorized(new { success = false, message = "User is not authenticated or user identifier claim is missing." });
+            }
+
+            var (success, message) = await _authService.ChangePasswordAsync(
+                userId.Value,
+                request.OldPassword,
+                request.NewPassword,
+                request.ConfirmPassword);
+
+            if (!success)
+            {
+                return BadRequest(new { success = false, message });
+            }
+
+            return Ok(new
+            {
+                success = true,
+                message = "Parent password changed successfully."
             });
         }
 
@@ -551,19 +601,7 @@ namespace CollegeManagement.API.Controllers.V1
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!int.TryParse(userIdStr, out int parentUserId)) return Unauthorized();
 
-            var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
-            var connection = dbContext.Database.GetDbConnection();
-            
-            if (connection.State != System.Data.ConnectionState.Open)
-            {
-                await connection.OpenAsync();
-            }
-            
-            // Using strongly typed DTO and CALL syntax to prevent MySqlConnector SP parameter issues and JSON serialization errors
-            var children = await connection.QueryAsync<CollegeManagement.API.DTOs.Students.Responses.ParentChildDto>(
-                "CALL sp_GetParentChildren(@ParentUserId);",
-                new { ParentUserId = parentUserId },
-                commandType: System.Data.CommandType.Text);
+            var children = await _service.GetParentChildrenAsync(parentUserId);
 
             return Ok(new { success = true, data = children });
         }

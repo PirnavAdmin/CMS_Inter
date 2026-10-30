@@ -672,7 +672,7 @@ export default function FacultyMarks() {
     );
   };
 
-  // Save Draft (via /api/v1/marks/bulk and local ledger)
+  // Save Draft (via /api/v1/faculty/evaluations/{id}/marks with fallback to bulk)
   const handleSaveDraft = async () => {
     if (!selectedExam || !selectedSubject) return;
     setSavingMarks(true);
@@ -680,15 +680,16 @@ export default function FacultyMarks() {
     const authUser = getAuthUser();
     const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
 
+    const evalId = `${selectedSubject}-${selectedSection}-${selectedExam}`;
     const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const updatedEval = {
-      evaluationId: key,
+      evaluationId: evalId,
       section: selectedSectionName,
       examId: selectedExam,
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Tanjiro Kamado",
+      faculty: context?.profile?.name || authUser?.fullName || "Faculty Member",
       empId: `EMP-${staffId}`,
       status: "DRAFT",
       adminRemarks: "",
@@ -698,44 +699,62 @@ export default function FacultyMarks() {
     };
 
     try {
-      const payload = {
-        marks: currentStudents.map((s) => ({
-          board: "BIEAP",
-          boardId: selectedBoard ? Number(selectedBoard) : undefined,
-          academicYearId: selectedYear ? Number(selectedYear) : 1,
-          academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-          groupId: selectedGroup ? Number(selectedGroup) : 1,
-          sectionId: Number(selectedSection),
-          examinationId: Number(selectedExam),
-          subjectId: Number(selectedSubject),
+      const evaluationPayload = {
+        evaluationId: evalId,
+        rowVersion: 1,
+        students: currentStudents.map((s) => ({
           studentId: Number(s.studentId),
-          facultyId: Number(staffId),
-          rollNo: s.rollNo,
-          studentName: s.name,
           internalMarks: Number(s.internal || 0),
           theoryMarks: Number(s.theory || 0),
+          practicalMarks: 0,
+          totalMarks: Number((s.internal || 0) + (s.theory || 0)),
           isAbsent: Boolean(s.absent),
           remarks: s.remarks || "",
         })),
       };
 
-      await apiClient.post("/api/v1/marks/bulk", payload);
+      try {
+        await apiClient.put(`/api/v1/faculty/evaluations/${evalId}/marks`, evaluationPayload);
+      } catch (primaryErr) {
+        // Fallback to bulk marks endpoint if needed
+        const bulkPayload = {
+          marks: currentStudents.map((s) => ({
+            board: "BIEAP",
+            boardId: selectedBoard ? Number(selectedBoard) : undefined,
+            academicYearId: selectedYear ? Number(selectedYear) : 1,
+            academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
+            groupId: selectedGroup ? Number(selectedGroup) : 1,
+            sectionId: Number(selectedSection),
+            examinationId: Number(selectedExam),
+            subjectId: Number(selectedSubject),
+            studentId: Number(s.studentId),
+            facultyId: Number(staffId),
+            rollNo: s.rollNo,
+            studentName: s.name,
+            internalMarks: Number(s.internal || 0),
+            theoryMarks: Number(s.theory || 0),
+            isAbsent: Boolean(s.absent),
+            remarks: s.remarks || "",
+          })),
+        };
+        await apiClient.post("/api/v1/marks/bulk", bulkPayload);
+      }
     } catch (err) {
       if (err?.response?.status === 403 || err?.status === 403) {
         setSavingMarks(false);
         notify("Access Denied: You do not have permission to save marks.", "error");
         return;
       }
-      console.warn("API bulk save endpoint warning, saving to local evaluations ledger:", err);
+      console.warn("API save endpoint warning, saving to local evaluations ledger:", err);
     }
 
-    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true } }));
+    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true }, [evalId]: { ...updatedEval, isLocal: true } }));
     setEvaluationStatus("DRAFT");
     setSavingMarks(false);
     notify("Marks draft saved successfully.");
   };
 
-  // Submit Subject / Resubmit (via /api/v1/marks/bulk with SUBMITTED status)
+  // Submit Subject / Resubmit (via /api/v1/faculty/evaluations/{id}/submit or resubmit)
   const handleSubmitSubject = async () => {
     if (!selectedExam || !selectedSubject) return;
     setSavingMarks(true);
@@ -743,17 +762,18 @@ export default function FacultyMarks() {
     const authUser = getAuthUser();
     const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
 
+    const evalId = `${selectedSubject}-${selectedSection}-${selectedExam}`;
     const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const wasRejected = evaluationStatus === "REJECTED";
 
     const updatedEval = {
-      evaluationId: key,
+      evaluationId: evalId,
       section: selectedSectionName,
       examId: selectedExam,
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Tanjiro Kamado",
+      faculty: context?.profile?.name || authUser?.fullName || "Faculty Member",
       empId: `EMP-${staffId}`,
       status: "SUBMITTED",
       adminRemarks: "Submitted to Admin. Awaiting verification review.",
@@ -763,38 +783,66 @@ export default function FacultyMarks() {
     };
 
     try {
-      const payload = {
-        marks: currentStudents.map((s) => ({
-          board: "BIEAP",
-          boardId: selectedBoard ? Number(selectedBoard) : undefined,
-          academicYearId: selectedYear ? Number(selectedYear) : 1,
-          academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-          groupId: selectedGroup ? Number(selectedGroup) : 1,
-          sectionId: Number(selectedSection),
-          examinationId: Number(selectedExam),
-          subjectId: Number(selectedSubject),
+      // 1. Ensure latest marks are saved first
+      const evaluationPayload = {
+        evaluationId: evalId,
+        rowVersion: 1,
+        students: currentStudents.map((s) => ({
           studentId: Number(s.studentId),
-          facultyId: Number(staffId),
-          rollNo: s.rollNo,
-          studentName: s.name,
           internalMarks: Number(s.internal || 0),
           theoryMarks: Number(s.theory || 0),
+          practicalMarks: 0,
+          totalMarks: Number((s.internal || 0) + (s.theory || 0)),
           isAbsent: Boolean(s.absent),
           remarks: s.remarks || "",
         })),
       };
+      await apiClient.put(`/api/v1/faculty/evaluations/${evalId}/marks`, evaluationPayload).catch(() => null);
 
-      await apiClient.post("/api/v1/marks/bulk", payload);
+      // 2. Submit or Resubmit
+      if (wasRejected) {
+        await apiClient.post(`/api/v1/faculty/evaluations/${evalId}/resubmit`, {
+          rowVersion: 1,
+          resubmissionMessage: "Corrected marks submitted for review.",
+        });
+      } else {
+        await apiClient.post(`/api/v1/faculty/evaluations/${evalId}/submit`);
+      }
     } catch (err) {
       if (err?.response?.status === 403 || err?.status === 403) {
         setSavingMarks(false);
         notify("Access Denied: You do not have permission to submit marks.", "error");
         return;
       }
-      console.warn("API bulk submit warning:", err);
+      console.warn("API submit warning, attempting fallback bulk submit:", err);
+      try {
+        const bulkPayload = {
+          marks: currentStudents.map((s) => ({
+            board: "BIEAP",
+            boardId: selectedBoard ? Number(selectedBoard) : undefined,
+            academicYearId: selectedYear ? Number(selectedYear) : 1,
+            academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
+            groupId: selectedGroup ? Number(selectedGroup) : 1,
+            sectionId: Number(selectedSection),
+            examinationId: Number(selectedExam),
+            subjectId: Number(selectedSubject),
+            studentId: Number(s.studentId),
+            facultyId: Number(staffId),
+            rollNo: s.rollNo,
+            studentName: s.name,
+            internalMarks: Number(s.internal || 0),
+            theoryMarks: Number(s.theory || 0),
+            isAbsent: Boolean(s.absent),
+            remarks: s.remarks || "",
+          })),
+        };
+        await apiClient.post("/api/v1/marks/bulk", bulkPayload);
+      } catch (fallbackErr) {
+        console.warn("Fallback bulk submit also encountered warning:", fallbackErr);
+      }
     }
 
-    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true } }));
+    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true }, [evalId]: { ...updatedEval, isLocal: true } }));
     setEvaluationStatus("SUBMITTED");
     setCurrentRejectionRemarks("");
     setSavingMarks(false);

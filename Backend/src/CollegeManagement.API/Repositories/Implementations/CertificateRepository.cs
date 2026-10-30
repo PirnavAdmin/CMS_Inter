@@ -41,8 +41,9 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_Search", search?.Trim(), DbType.String);
         parameters.Add("p_Status", status?.Trim(), DbType.String);
         parameters.Add("p_CertificateType", certificateType?.Trim(), DbType.String);
-        // Note: The stored procedure on the DB currently only expects 3 parameters.
-        // Campus filtering is done in-memory below.
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
+        parameters.Add("p_BoardId", boardId, DbType.Int32);
+        parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
 
         try
         {
@@ -744,6 +745,7 @@ public class CertificateRepository : ICertificateRepository
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId, DbType.Int32);
 
+
             string sql = @"
                 SELECT
                     COUNT(*) AS TotalCount,
@@ -789,6 +791,7 @@ public class CertificateRepository : ICertificateRepository
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId, DbType.Int32);
+
             parameters.Add("p_BoardId", boardId, DbType.Int32);
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
 
@@ -1024,6 +1027,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_ReviewedBy", reviewedBy.Trim(), DbType.String);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
+
         try
         {
             string sql = @"
@@ -1056,6 +1060,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_ApprovedBy", approvedBy.Trim(), DbType.String);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
+
         try
         {
             string sql = @"
@@ -1087,6 +1092,7 @@ public class CertificateRepository : ICertificateRepository
         var parameters = new DynamicParameters();
         parameters.Add("p_IssuedBy", issuedBy.Trim(), DbType.String);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
+
 
         try
         {
@@ -1290,6 +1296,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_SectionId", sectionId, DbType.Int32);
         parameters.Add("p_Search", search?.Trim(), DbType.String);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
+
 
         try
         {

@@ -538,6 +538,10 @@ export function ParentPortalProvider({ children }) {
         mentorDesignation: "Faculty In-Charge",
         mentorMobile: "+91 98480 12345",
         mentorEmail: "geetha.b@college.edu",
+        campusId: c.campusId,
+        groupId: c.groupId,
+        sectionId: c.sectionId,
+        academicYearId: c.academicYearId,
         avatar: resolveStudentPhotoUrl(c.photoUrl) || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.studentName || "Student")}&background=0D8ABC&color=fff&size=128`,
         attendance: {
           overall: typeof c.attendancePercentage === "number" ? Math.round(c.attendancePercentage) : 0,
@@ -662,9 +666,9 @@ export function ParentPortalProvider({ children }) {
           }
         }
 
-        const sectionId = studentRecord?.sectionId || 30;
-        const groupId = studentRecord?.groupId || 37;
-        const campusId = studentRecord?.campusId || 1;
+        const sectionId = studentRecord?.sectionId || activeBaseChild?.sectionId || 30;
+        const groupId = studentRecord?.groupId || activeBaseChild?.groupId || 37;
+        const campusId = studentRecord?.campusId || activeBaseChild?.campusId || 1;
 
         // Parallel fetch for speed: student details, fee details, results, marks, attendance, timetable, subject attendance, exams, curriculum
         const [

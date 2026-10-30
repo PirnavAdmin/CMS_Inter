@@ -26,6 +26,7 @@ namespace CollegeManagement.API.Services.Implementations
     public class ResultService : IResultService
     {
         private readonly IResultRepository _resultRepository;
+        private readonly IExaminationRepository _examinationRepository;
         private readonly IMapper _mapper;
         private readonly AppDbContext _context;
         private readonly IMemoryCache _cache;
@@ -39,12 +40,14 @@ namespace CollegeManagement.API.Services.Implementations
         /// </summary>
         public ResultService(
             IResultRepository resultRepository,
+            IExaminationRepository examinationRepository,
             IMapper mapper,
             AppDbContext context,
             IMemoryCache cache,
             ILogger<ResultService> logger)
         {
             _resultRepository = resultRepository;
+            _examinationRepository = examinationRepository;
             _mapper = mapper;
             _context = context;
             _cache = cache;
@@ -226,10 +229,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             try
             {
-                var conn = _context.Database.GetDbConnection();
-                var junctionSubjects = await Dapper.SqlMapper.QueryAsync<int>(conn,
-                    "SELECT SubjectId FROM ExaminationSubjects WHERE ExamId = @ExamId",
-                    new { ExamId = request.ExamId });
+                var junctionSubjects = await _examinationRepository.GetExaminationSubjectIdsAsync(request.ExamId);
                 foreach (var sId in junctionSubjects)
                 {
                     if (sId > 0) scheduleSubjectIds.Add(sId);
@@ -1800,10 +1800,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             try
             {
-                var conn = _context.Database.GetDbConnection();
-                var junctionSubjects = await Dapper.SqlMapper.QueryAsync<int>(conn,
-                    "SELECT SubjectId FROM ExaminationSubjects WHERE ExamId = @ExamId",
-                    new { ExamId = exam.ExaminationId });
+                var junctionSubjects = await _examinationRepository.GetExaminationSubjectIdsAsync(exam.ExaminationId);
                 foreach (var sId in junctionSubjects)
                 {
                     if (sId > 0) scheduleSubjectIds.Add(sId);
@@ -1876,108 +1873,14 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId)
         {
-            var marks = await _context.Marks
-                .Include(m => m.Examination)
-                .Include(m => m.SectionNavigation)
-                .Include(m => m.GroupNavigation)
-                .Include(m => m.AcademicYear)
-                .Include(m => m.Subject)
-                .Where(m => m.StudentId == studentId && m.IsActive && m.IsPublished)
-                .ToListAsync();
-
-            if (!marks.Any()) return new List<StudentSelfResultDto>();
-
-            var groupedByExam = marks.GroupBy(m => m.ExaminationId);
-            var results = new List<StudentSelfResultDto>();
-
-            foreach (var g in groupedByExam)
-            {
-                var examMarks = g.ToList();
-                var first = examMarks.First();
-                var exam = first.Examination;
-
-                decimal total = examMarks.Sum(m => (decimal)m.TotalMarks);
-                decimal max = exam?.TotalMarks > 0 ? (decimal)exam.TotalMarks : (examMarks.Count * 100m);
-                decimal pct = max > 0 ? Math.Round((total / max) * 100m, 2) : 0m;
-                decimal passPct = exam?.PassPercentage > 0 ? (decimal)exam.PassPercentage : 35m;
-                string status = pct >= passPct ? "PASS" : "FAIL";
-
-                results.Add(new StudentSelfResultDto
-                {
-                    ResultId = first.MarkId,
-                    ExaminationId = first.ExaminationId,
-                    ExaminationName = exam?.ExamName ?? $"Exam #{first.ExaminationId}",
-                    ExamCode = exam?.ExamCode ?? string.Empty,
-                    AcademicYear = first.AcademicYear?.AcademicYearName ?? string.Empty,
-                    GroupName = first.GroupNavigation?.GroupName ?? string.Empty,
-                    SectionName = first.SectionNavigation?.SectionName ?? string.Empty,
-                    TotalMarks = total,
-                    MaxTotalMarks = max,
-                    Percentage = pct,
-                    Grade = GradeFor(pct),
-                    ResultStatus = status,
-                    IsPublished = true,
-                    PublishedAt = first.PublishedAt
-                });
-            }
-
-            return results;
+            if (studentId <= 0) return new List<StudentSelfResultDto>();
+            return await _resultRepository.GetStudentSelfResultsAsync(studentId);
         }
 
         public async Task<StudentSelfResultMemoDto?> GetStudentSelfResultMemoAsync(int studentId, int examinationId)
         {
-            var marks = await _context.Marks
-                .Include(m => m.Examination)
-                .Include(m => m.SectionNavigation)
-                .Include(m => m.GroupNavigation)
-                .Include(m => m.AcademicYear)
-                .Include(m => m.Subject)
-                .Where(m => m.StudentId == studentId && m.ExaminationId == examinationId && m.IsActive && m.IsPublished)
-                .ToListAsync();
-
-            if (!marks.Any()) return null;
-
-            var first = marks.First();
-            var exam = first.Examination;
-
-            decimal total = marks.Sum(m => (decimal)m.TotalMarks);
-            decimal max = exam?.TotalMarks > 0 ? (decimal)exam.TotalMarks : (marks.Count * 100m);
-            decimal pct = max > 0 ? Math.Round((total / max) * 100m, 2) : 0m;
-            decimal passPct = exam?.PassPercentage > 0 ? (decimal)exam.PassPercentage : 35m;
-            string status = pct >= passPct ? "PASS" : "FAIL";
-
-            var subjectMemos = marks.Select(m => new StudentSubjectMarkMemoDto
-            {
-                SubjectId = m.SubjectId,
-                SubjectCode = m.Subject?.SubjectCode ?? $"SUB{m.SubjectId:000}",
-                SubjectName = m.Subject?.SubjectName ?? $"Subject #{m.SubjectId}",
-                MaxMarks = m.Subject?.TotalMarks > 0 ? (decimal)m.Subject.TotalMarks : 100m,
-                PassingMarks = m.Subject?.PassingMarks > 0 ? (decimal)m.Subject.PassingMarks : 35m,
-                InternalMarks = m.InternalMarks,
-                PracticalMarks = m.PracticalMarks,
-                TheoryMarks = m.TheoryMarks,
-                TotalMarks = m.TotalMarks,
-                ResultStatus = m.TotalMarks >= (m.Subject?.PassingMarks > 0 ? (decimal)m.Subject.PassingMarks : 35m) ? "PASS" : "FAIL"
-            }).ToList();
-
-            return new StudentSelfResultMemoDto
-            {
-                StudentId = studentId,
-                RollNo = !string.IsNullOrWhiteSpace(first.RollNo) ? first.RollNo : $"STU-{studentId:D4}",
-                StudentName = !string.IsNullOrWhiteSpace(first.StudentName) ? first.StudentName : $"Student #{studentId}",
-                FatherName = string.Empty,
-                ExaminationName = exam?.ExamName ?? string.Empty,
-                ExamCode = exam?.ExamCode ?? string.Empty,
-                AcademicYear = first.AcademicYear?.AcademicYearName ?? string.Empty,
-                CourseName = first.GroupNavigation?.GroupName ?? string.Empty,
-                SectionName = first.SectionNavigation?.SectionName ?? string.Empty,
-                TotalMarks = total,
-                MaxTotalMarks = max,
-                Percentage = pct,
-                Grade = GradeFor(pct),
-                ResultStatus = status,
-                Subjects = subjectMemos
-            };
+            if (studentId <= 0 || examinationId <= 0) return null;
+            return await _resultRepository.GetStudentSelfResultMemoAsync(studentId, examinationId);
         }
 
         #endregion

@@ -128,7 +128,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves staff leave requests with filters for status, department, and staff.
         /// </summary>
         [HttpGet("leave")]
-        [RequirePermission("staff-leave-management")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffLeaves(
@@ -137,6 +137,18 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? departmentId,
             [FromQuery] CollegeManagement.API.Enums.LeaveStatus? status)
         {
+            var callerStaffId = _jwtTokenHelper.GetStaffId(User);
+            bool hasAdminPerm = User.IsInRole("Admin") || User.IsInRole("Administrator") || User.IsInRole("SuperAdmin") ||
+                                User.Claims.Any(c => (c.Type == "permission" || c.Type == "Permission") && c.Value == "staff-leave-management");
+
+            if (!hasAdminPerm)
+            {
+                if (!staffId.HasValue || (callerStaffId.HasValue && staffId.Value != callerStaffId.Value))
+                {
+                    return Forbid();
+                }
+            }
+
             var effectiveCampusId = campusId ?? GetCurrentCampusId();
             var result = await _service.GetStaffLeaveRequestsAsync(effectiveCampusId, staffId, departmentId, status);
             return Ok(new { Status = true, Message = "Staff leaves retrieved successfully.", Data = result });
@@ -177,12 +189,21 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves individual staff member leave history.
         /// </summary>
         [HttpGet("leave/history/staff/{staffId}")]
-        [RequirePermission("staff-leave-management")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffLeaveHistory(int staffId)
         {
+            var callerStaffId = _jwtTokenHelper.GetStaffId(User);
+            bool hasAdminPerm = User.IsInRole("Admin") || User.IsInRole("Administrator") || User.IsInRole("SuperAdmin") ||
+                                User.Claims.Any(c => (c.Type == "permission" || c.Type == "Permission") && c.Value == "staff-leave-management");
+
+            if (!hasAdminPerm && (!callerStaffId.HasValue || callerStaffId.Value != staffId))
+            {
+                return Forbid();
+            }
+
             var result = await _service.GetStaffLeaveHistoryAsync(staffId);
             return Ok(new { Status = true, Message = "Staff leave history retrieved successfully.", Data = result });
         }

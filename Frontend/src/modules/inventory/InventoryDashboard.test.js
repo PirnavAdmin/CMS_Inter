@@ -23,7 +23,7 @@ test("server-backed inventory portal rejects unauthenticated sessions and render
     optimizeDeps: { noDiscovery: true, include: [] },
   });
   try {
-    const root = "/src/Dashboard/InventoryDashboard/";
+    const root = "/src/modules/inventory/";
     const session = await server.ssrLoadModule(`${root}data/inventorySession.js`);
     assert.equal(session.inventorySession(), null);
     const Provider = (await server.ssrLoadModule(`${root}InventoryDataContext.jsx`))

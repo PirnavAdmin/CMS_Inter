@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using CollegeManagement.API.DTOs.Examination;
 using CollegeManagement.API.DTOs.Examination.Requests;
 using CollegeManagement.API.DTOs.Examination.Responses;
 using CollegeManagement.API.Models;
@@ -45,5 +46,9 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task AssignInvigilatorsAsync(int examScheduleId, IEnumerable<int> invigilatorIds, string hallNumber);
         Task AssignInvigilatorHallsAsync(int examScheduleId, IEnumerable<(int invigilatorId, string hallNumber)> assignments);
         Task<IEnumerable<InvigilatorAssignment>> GetInvigilatorsByScheduleIdAsync(int examScheduleId);
+
+        Task<ExaminationSettingsDto> GetExaminationSettingsAsync(int campusId);
+        Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(ExaminationSettingsDto settings);
+        Task<IEnumerable<FacultyExamDutyDto>> GetFacultyExamDutiesAsync(int? staffId, string? status, int? campusId, int? academicYearId, int? boardId);
     }
 }

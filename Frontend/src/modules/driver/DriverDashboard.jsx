@@ -55,16 +55,13 @@ export default function DriverDashboard() {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const { getStudents, getTrips } = await import("../../api/transportDriverApi.js");
+        const { getStudents } = await import("../../api/transportDriverApi.js");
         const res = await getStudents();
-        if (res.data?.students) {
-          setStudents(res.data.students);
-        } else if (Array.isArray(res.data)) {
-          setStudents(res.data);
+        const payload = res.data?.data ?? res.data ?? {};
+        const studentList = payload.students ?? (Array.isArray(payload) ? payload : null);
+        if (studentList) {
+          setStudents(studentList);
         }
-        // Optionally fetch active trip state if needed:
-        // const tripsRes = await getTrips();
-        // setActiveTripState(tripsRes.data.activeTripState);
       } catch (err) {
         console.error("Failed to load global driver data", err);
       }

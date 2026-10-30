@@ -1,12 +1,15 @@
 using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Authorization;
+using CollegeManagement.API.Filters;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/hostel")]
+    [Authorize]
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
     public class HostelController : ControllerBase
@@ -637,6 +640,8 @@ namespace CollegeManagement.API.Controllers.V1
         // ==========================================
 
         [HttpGet("student-allocations")]
+        [Authorize(Roles = "Admin,Warden,Teacher,Student,Parent")]
+        [ParentStudentAuthorization]
         public async Task<IActionResult> GetAllStudentAllocations(
             [FromQuery] int? hostelId = null,
             [FromQuery] int? roomId = null,

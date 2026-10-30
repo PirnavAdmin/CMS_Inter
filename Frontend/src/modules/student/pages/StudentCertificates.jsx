@@ -38,25 +38,15 @@ export default function StudentCertificates() {
     setError("");
     const [certResult, typeResult] = await Promise.allSettled([
       apiClient.get(studentApiEndpoints.certificates.list, { params: { search: student.admissionNo || student.studentId } }),
-      apiClient.get(studentApiEndpoints.certificates.list, { params: {
-        campusId: student.campusId,
-        boardId: student.boardId,
-        academicYearId: student.academicYearId,
-      } }),
+      apiClient.get(studentApiEndpoints.certificates.activeTemplates),
     ]);
     if (certResult.status === "fulfilled") {
       const records = list(certResult.value.data, ["items", "Items", "records", "Records", "certificates", "Certificates"]);
       setRows(records.filter((item) => String(read(item, "studentId", "StudentId") ?? "") === String(student.studentId) || (student.admissionNo && String(read(item, "admissionNo", "AdmissionNo") ?? "").toLowerCase() === String(student.admissionNo).toLowerCase())));
     }
     if (typeResult.status === "fulfilled") {
-      const records = list(typeResult.value.data, ["items", "Items", "records", "Records", "certificates", "Certificates"]);
-      setTemplates(records.filter((item) => {
-        const active = read(item, "isActive", "IsActive");
-        const status = String(read(item, "status", "Status") || "").toLowerCase();
-        const campus = read(item, "campusId", "CampusId");
-        return ![false, 0, "false", "0"].includes(active) && status !== "cancelled"
-          && (student.campusId == null || campus == null || String(campus) === String(student.campusId));
-      }));
+      const records = list(typeResult.value.data, ["items", "Items", "records", "Records", "templates", "Templates"]);
+      setTemplates(records);
     } else setTemplates([]);
     const failed = [certResult, typeResult].find((item) => item.status === "rejected");
     if (certResult.status === "rejected") setError(getApiErrorMessage(certResult.reason));

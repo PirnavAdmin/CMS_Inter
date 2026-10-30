@@ -18,15 +18,18 @@ namespace CollegeManagement.API.Services.Implementations
     public class EvaluationService : IEvaluationService
     {
         private readonly IMarksRepository _marksRepository;
+        private readonly IEvaluationRepository _evaluationRepository;
         private readonly AppDbContext _context;
         private readonly ILogger<EvaluationService> _logger;
 
         public EvaluationService(
             IMarksRepository marksRepository,
+            IEvaluationRepository evaluationRepository,
             AppDbContext context,
             ILogger<EvaluationService> logger)
         {
             _marksRepository = marksRepository;
+            _evaluationRepository = evaluationRepository;
             _context = context;
             _logger = logger;
         }
@@ -865,10 +868,8 @@ namespace CollegeManagement.API.Services.Implementations
 
             try
             {
-                var conn = _context.Database.GetDbConnection();
-                var junctionSubjects = await Dapper.SqlMapper.QueryAsync<int>(conn,
-                    "SELECT SubjectId FROM ExaminationSubjects WHERE ExamId = @ExamId",
-                    new { ExamId = exam.ExaminationId });
+
+                var junctionSubjects = await _evaluationRepository.GetExaminationSubjectIdsAsync(exam.ExaminationId);
                 foreach (var sId in junctionSubjects)
                 {
                     if (sId > 0) scheduleSubjectIds.Add(sId);
@@ -980,370 +981,39 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<IEnumerable<CollegeManagement.API.DTOs.Marks.FacultyAssignedEvaluationDto>> GetFacultyEvaluationsAsync(int? facultyId, string? status, string? examinationStatus)
         {
-            var query = _context.Marks
-                .Include(m => m.Examination)
-                .Include(m => m.SectionNavigation)
-                .Include(m => m.Subject)
-                .Where(m => m.IsActive);
-
-            if (facultyId.HasValue && facultyId.Value > 0)
-            {
-                query = query.Where(m => m.FacultyId == facultyId.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                if (Enum.TryParse<EvaluationStatus>(status, true, out var parsedStatus))
-                {
-                    query = query.Where(m => m.Status == parsedStatus);
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(examinationStatus))
-            {
-                query = query.Where(m => m.Examination != null && m.Examination.Status.ToUpper() == examinationStatus.ToUpper());
-            }
-
-            var marks = await query.ToListAsync();
-
-            var examIds = marks.Select(m => m.ExaminationId).Distinct().ToList();
-            var examSchedules = await _context.ExamSchedules.AsNoTracking()
-                .Where(s => s.IsActive && examIds.Contains(s.ExaminationId))
-                .ToListAsync();
-            var examinations = await _context.Examinations.AsNoTracking()
-                .Include(e => e.AssessmentType)
-                .Where(e => examIds.Contains(e.ExaminationId))
-                .ToDictionaryAsync(e => e.ExaminationId);
-
-            return marks
-                .GroupBy(m => new { m.SubjectId, m.SectionId, m.ExaminationId })
-                .Select(g =>
-                {
-                    var first = g.First();
-                    var examObj = examinations.GetValueOrDefault(first.ExaminationId) ?? first.Examination;
-                    var scheduleObj = examSchedules.FirstOrDefault(s => s.ExaminationId == first.ExaminationId &&
-                        (s.SubjectId == first.SubjectId || s.IncludedSubjectIdList.Contains(first.SubjectId)));
-                    if (scheduleObj == null && examSchedules.Any(s => s.ExaminationId == first.ExaminationId))
-                    {
-                        scheduleObj = examSchedules.FirstOrDefault(s => s.ExaminationId == first.ExaminationId);
-                    }
-
-                    var isObjective = ExaminationFormatHelper.IsObjectiveExam(examObj, scheduleObj);
-                    var maxMarks = scheduleObj?.MaxMarks > 0
-                        ? scheduleObj.MaxMarks
-                        : (first.Subject?.TotalMarks > 0 ? (decimal)first.Subject.TotalMarks : 100m);
-
-                    return new CollegeManagement.API.DTOs.Marks.FacultyAssignedEvaluationDto
-                    {
-                        EvaluationId = first.MarkId,
-                        ExaminationId = first.ExaminationId,
-                        ExaminationName = examObj?.ExamName ?? first.Examination?.ExamName ?? $"Exam #{first.ExaminationId}",
-                        SectionId = first.SectionId,
-                        SectionName = first.SectionNavigation?.SectionName ?? $"Section #{first.SectionId}",
-                        SubjectId = first.SubjectId,
-                        SubjectName = first.Subject?.SubjectName ?? $"Subject #{first.SubjectId}",
-                        FacultyId = first.FacultyId,
-                        Status = first.Status.ToString(),
-                        Mode = isObjective ? "OBJECTIVE" : "REGULAR",
-                        MaxMarks = maxMarks,
-                        TheoryMax = isObjective ? maxMarks : 70,
-                        PracticalMax = isObjective ? 0 : 0,
-                        InternalMax = isObjective ? 0 : 30,
-                        PassPercentage = examObj?.PassPercentage ?? 35,
-                        RejectionReason = first.RejectionReason,
-                        ResubmissionCount = first.ResubmissionCount,
-                        RowVersion = 1
-                    };
-                })
-                .ToList();
+            return await _evaluationRepository.GetFacultyEvaluationsAsync(facultyId, status, examinationStatus);
         }
 
         public async Task<CollegeManagement.API.DTOs.Marks.FacultyEvaluationStudentsResponseDto?> GetFacultyEvaluationStudentsAsync(string evaluationId, int? facultyId)
         {
-            var (subjectId, sectionId, examinationId) = ParseEvaluationId(evaluationId);
+            var (subjectId, sectionId, examinationId) = await ParseEvaluationIdAsync(evaluationId);
+            if (subjectId <= 0 || examinationId <= 0) return null;
 
-            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId);
-
-            var marks = await _context.Marks
-                .Include(m => m.Student)
-                .Include(m => m.Subject)
-                .Include(m => m.SectionNavigation)
-                .Include(m => m.Examination)
-                .Where(m => m.IsActive && m.SubjectId == subjectId && m.SectionId == sectionId && m.ExaminationId == examinationId)
-                .OrderBy(m => m.RollNo)
-                .ToListAsync();
-
-            if (!marks.Any())
-            {
-                var exam = await _context.Examinations.AsNoTracking().FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
-                var subject = await _context.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.SubjectId == subjectId);
-                var section = await _context.Sections.AsNoTracking().FirstOrDefaultAsync(sec => sec.SectionId == sectionId);
-                var (maxMarks, _) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, subject);
-
-                var students = await _context.Students.AsNoTracking()
-                    .Where(s => s.IsActive && s.SectionId == sectionId)
-                    .OrderBy(s => s.RollNo)
-                    .ToListAsync();
-
-                if (!students.Any() && section != null)
-                {
-                    students = await _context.Students.AsNoTracking()
-                        .Where(s => s.IsActive && s.GroupId == section.GroupId)
-                        .OrderBy(s => s.RollNo)
-                        .ToListAsync();
-                }
-
-                if (!students.Any()) return null;
-
-                return new CollegeManagement.API.DTOs.Marks.FacultyEvaluationStudentsResponseDto
-                {
-                    EvaluationId = 0,
-                    ExaminationId = examinationId,
-                    ExaminationName = exam?.ExamName ?? string.Empty,
-                    SectionId = sectionId,
-                    SectionName = section?.SectionName ?? string.Empty,
-                    SubjectId = subjectId,
-                    SubjectName = subject?.SubjectName ?? string.Empty,
-                    Mode = isObjective ? "OBJECTIVE" : "REGULAR",
-                    MaxMarks = maxMarks,
-                    TheoryMax = isObjective ? maxMarks : (subject?.ExternalMarks > 0 ? subject.ExternalMarks : 70),
-                    PracticalMax = isObjective ? 0 : (subject?.PracticalMarks > 0 ? subject.PracticalMarks : 20),
-                    InternalMax = isObjective ? 0 : (subject?.InternalMarks > 0 ? subject.InternalMarks : 10),
-                    IsPracticalApplicable = isObjective ? false : (subject?.Practical == true),
-                    Status = EvaluationStatus.SUBMITTED.ToString(),
-                    RejectionReason = null,
-                    RowVersion = 1,
-                    Students = students.Select(st => new CollegeManagement.API.DTOs.Marks.FacultyStudentMarkRowDto
-                    {
-                        StudentId = st.StudentId,
-                        RollNo = !string.IsNullOrWhiteSpace(st.RollNo) ? st.RollNo : (st.AdmissionNo ?? $"STU-{st.StudentId:D4}"),
-                        StudentName = !string.IsNullOrWhiteSpace(st.StudentName) ? st.StudentName : $"Student #{st.StudentId}",
-                        InternalMarks = 0,
-                        PracticalMarks = 0,
-                        TheoryMarks = 0,
-                        TotalMarks = 0,
-                        IsAbsent = false,
-                        Remarks = null
-                    }).ToList()
-                };
-            }
-
-            var first = marks.First();
-            var (resolvedMax, _) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, first.Subject);
-
-            return new CollegeManagement.API.DTOs.Marks.FacultyEvaluationStudentsResponseDto
-            {
-                EvaluationId = first.MarkId,
-                ExaminationId = first.ExaminationId,
-                ExaminationName = first.Examination?.ExamName ?? string.Empty,
-                SectionId = first.SectionId,
-                SectionName = first.SectionNavigation?.SectionName ?? string.Empty,
-                SubjectId = first.SubjectId,
-                SubjectName = first.Subject?.SubjectName ?? string.Empty,
-                Mode = isObjective ? "OBJECTIVE" : "REGULAR",
-                MaxMarks = resolvedMax,
-                TheoryMax = isObjective ? resolvedMax : 70,
-                PracticalMax = isObjective ? 0 : 20,
-                InternalMax = isObjective ? 0 : 10,
-                IsPracticalApplicable = isObjective ? false : (first.Subject?.Practical == true),
-                Status = first.Status.ToString(),
-                RejectionReason = first.RejectionReason,
-                RowVersion = 1,
-                Students = marks.Select(m => new CollegeManagement.API.DTOs.Marks.FacultyStudentMarkRowDto
-                {
-                    StudentId = m.StudentId,
-                    RollNo = !string.IsNullOrWhiteSpace(m.RollNo) ? m.RollNo : (m.Student?.RollNo ?? m.Student?.AdmissionNo ?? $"STU-{m.StudentId:D4}"),
-                    StudentName = !string.IsNullOrWhiteSpace(m.StudentName) ? m.StudentName : (m.Student?.StudentName ?? $"Student #{m.StudentId}"),
-                    InternalMarks = isObjective ? 0 : (int)m.InternalMarks,
-                    PracticalMarks = isObjective ? 0 : (int)m.PracticalMarks,
-                    TheoryMarks = isObjective ? (int)m.TotalMarks : (int)m.TheoryMarks,
-                    TotalMarks = (int)m.TotalMarks,
-                    IsAbsent = m.IsAbsent,
-                    Remarks = m.Remarks
-                }).ToList()
-            };
+            return await _evaluationRepository.GetFacultyEvaluationStudentsAsync(subjectId, sectionId, examinationId, facultyId);
         }
 
         public async Task<bool> SaveFacultyDraftMarksAsync(string evaluationId, CollegeManagement.API.DTOs.Marks.SaveFacultyMarksRequestDto request, int? facultyId)
         {
-            var (subjectId, sectionId, examinationId) = ParseEvaluationId(evaluationId);
-            if (subjectId <= 0 || examinationId <= 0)
-            {
-                return false;
-            }
+            var (subjectId, sectionId, examinationId) = await ParseEvaluationIdAsync(evaluationId);
+            if (subjectId <= 0 || examinationId <= 0) return false;
 
-            var inputList = request.Students?.Any() == true ? request.Students
-                          : request.Marks?.Any() == true ? request.Marks
-                          : request.MarksList?.Any() == true ? request.MarksList
-                          : request.StudentMarks;
-
-            if (inputList == null || !inputList.Any())
-            {
-                return false;
-            }
-
-            var marks = await _context.Marks
-                .Where(m => m.IsActive && m.SubjectId == subjectId && m.SectionId == sectionId && m.ExaminationId == examinationId)
-                .ToListAsync();
-
-            var exam = await _context.Examinations.AsNoTracking().FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
-            var subject = await _context.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.SubjectId == subjectId);
-            var section = await _context.Sections.AsNoTracking().FirstOrDefaultAsync(sec => sec.SectionId == sectionId);
-
-            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId);
-            var (maxMarks, defaultPass) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, examinationId, subjectId, subject);
-
-            int boardId = exam?.BoardId ?? subject?.BoardId ?? 1;
-            int academicYearId = exam?.AcademicYearId ?? 1;
-            int academicLevelId = exam?.AcademicLevelId ?? subject?.AcademicLevelId ?? 1;
-            int groupId = exam?.GroupId ?? subject?.GroupId ?? section?.GroupId ?? 1;
-            int passingMarks = subject?.PassingMarks > 0 ? subject.PassingMarks : (int)defaultPass;
-
-            var studentIds = inputList.Select(s => s.StudentId).Distinct().ToList();
-            var studentEntities = await _context.Students.AsNoTracking()
-                .Where(st => studentIds.Contains(st.StudentId))
-                .ToDictionaryAsync(st => st.StudentId);
-
-            var now = DateTime.UtcNow;
-
-            foreach (var studentInput in inputList)
-            {
-                var mark = marks.FirstOrDefault(m => m.StudentId == studentInput.StudentId);
-                var studentEntity = studentEntities.GetValueOrDefault(studentInput.StudentId);
-
-                int internalMarks;
-                int practicalMarks;
-                int theoryMarks;
-                int total;
-
-                bool isAbsent = studentInput.IsAbsent || string.Equals(studentInput.Status, "ABSENT", StringComparison.OrdinalIgnoreCase);
-
-                if (isObjective)
-                {
-                    int score = studentInput.ObtainedMarks.HasValue
-                        ? studentInput.ObtainedMarks.Value
-                        : (studentInput.TotalMarks.HasValue
-                            ? studentInput.TotalMarks.Value
-                            : studentInput.TheoryMarks);
-
-                    if (!isAbsent && maxMarks > 0 && score > (int)maxMarks)
-                    {
-                        throw new ValidationException($"Obtained marks ({score}) cannot exceed configured maximum marks ({maxMarks}) for this objective examination subject.");
-                    }
-
-                    total = isAbsent ? 0 : score;
-                    internalMarks = 0;
-                    practicalMarks = 0;
-                    theoryMarks = total;
-                }
-                else
-                {
-                    internalMarks = studentInput.InternalMarks;
-                    practicalMarks = studentInput.PracticalMarks;
-                    theoryMarks = studentInput.TheoryMarks;
-                    total = isAbsent ? 0 : (internalMarks + practicalMarks + theoryMarks);
-                    if (!isAbsent && maxMarks > 0 && total > (int)maxMarks)
-                    {
-                        throw new ValidationException($"Total marks ({total}) cannot exceed configured maximum marks ({maxMarks}).");
-                    }
-                }
-
-                if (mark != null)
-                {
-                    mark.InternalMarks = internalMarks;
-                    mark.PracticalMarks = practicalMarks;
-                    mark.TheoryMarks = theoryMarks;
-                    mark.TotalMarks = total;
-                    mark.IsAbsent = isAbsent;
-                    mark.Remarks = studentInput.Remarks;
-                    mark.UpdatedAt = now;
-                    if (facultyId.HasValue && facultyId.Value > 0)
-                    {
-                        mark.FacultyId = facultyId.Value;
-                    }
-                }
-                else
-                {
-                    var newMark = new Mark
-                    {
-                        BoardId = boardId,
-                        AcademicYearId = academicYearId,
-                        AcademicLevelId = academicLevelId,
-                        GroupId = groupId,
-                        SectionId = sectionId,
-                        ExaminationId = examinationId,
-                        SubjectId = subjectId,
-                        StudentId = studentInput.StudentId,
-                        RollNo = studentEntity?.RollNo ?? studentEntity?.AdmissionNo ?? string.Empty,
-                        StudentName = studentEntity?.StudentName ?? string.Empty,
-                        FacultyId = facultyId,
-                        InternalMarks = internalMarks,
-                        PracticalMarks = practicalMarks,
-                        TheoryMarks = theoryMarks,
-                        TotalMarks = total,
-                        PassingMarks = passingMarks,
-                        IsAbsent = isAbsent,
-                        Remarks = studentInput.Remarks,
-                        Status = EvaluationStatus.SUBMITTED,
-                        IsActive = true,
-                        CreatedAt = now,
-                        UpdatedAt = now
-                    };
-                    _context.Marks.Add(newMark);
-                }
-            }
-
-            await _context.SaveChangesAsync();
-            return true;
+            return await _evaluationRepository.SaveFacultyDraftMarksAsync(subjectId, sectionId, examinationId, facultyId, request);
         }
 
         public async Task<bool> SubmitFacultyEvaluationAsync(string evaluationId, int? facultyId)
         {
-            var (subjectId, sectionId, examinationId) = ParseEvaluationId(evaluationId);
+            var (subjectId, sectionId, examinationId) = await ParseEvaluationIdAsync(evaluationId);
+            if (subjectId <= 0 || examinationId <= 0) return false;
 
-            var marks = await _context.Marks
-                .Where(m => m.IsActive && m.SubjectId == subjectId && m.SectionId == sectionId && m.ExaminationId == examinationId)
-                .ToListAsync();
-
-            if (!marks.Any()) return false;
-
-            var now = DateTime.UtcNow;
-            foreach (var mark in marks)
-            {
-                mark.Status = EvaluationStatus.SUBMITTED;
-                mark.SubmittedAt = now;
-                mark.UpdatedAt = now;
-            }
-
-            await _context.SaveChangesAsync();
-            return true;
+            return await _evaluationRepository.SubmitFacultyEvaluationAsync(subjectId, sectionId, examinationId, facultyId);
         }
 
         public async Task<bool> ResubmitFacultyEvaluationAsync(string evaluationId, CollegeManagement.API.DTOs.Marks.ResubmitEvaluationRequestDto? request, int? facultyId)
         {
-            var (subjectId, sectionId, examinationId) = ParseEvaluationId(evaluationId);
+            var (subjectId, sectionId, examinationId) = await ParseEvaluationIdAsync(evaluationId);
+            if (subjectId <= 0 || examinationId <= 0) return false;
 
-            var marks = await _context.Marks
-                .Where(m => m.IsActive && m.SubjectId == subjectId && m.SectionId == sectionId && m.ExaminationId == examinationId)
-                .ToListAsync();
-
-            if (!marks.Any()) return false;
-
-            var now = DateTime.UtcNow;
-            foreach (var mark in marks)
-            {
-                mark.Status = EvaluationStatus.SUBMITTED;
-                mark.SubmittedAt = now;
-                mark.ResubmissionCount++;
-                if (!string.IsNullOrWhiteSpace(request?.ResubmissionMessage))
-                {
-                    mark.Remarks = request.ResubmissionMessage;
-                }
-                mark.UpdatedAt = now;
-            }
-
-            await _context.SaveChangesAsync();
-            return true;
+            return await _evaluationRepository.ResubmitFacultyEvaluationAsync(subjectId, sectionId, examinationId, facultyId, request?.ResubmissionMessage);
         }
 
         // --- Private Helpers ---
@@ -1362,7 +1032,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (int.TryParse(evaluationId, out int singleId))
             {
-                var mark = _context.Marks.FirstOrDefault(m => m.MarkId == singleId);
+                var mark = _marksRepository.GetByIdAsync(singleId).GetAwaiter().GetResult();
                 if (mark != null)
                 {
                     return (mark.SubjectId, mark.SectionId, mark.ExaminationId);
@@ -1373,6 +1043,31 @@ namespace CollegeManagement.API.Services.Implementations
             return (0, 0, 0);
         }
 
+        private async Task<(int subjectId, int sectionId, int examinationId)> ParseEvaluationIdAsync(string evaluationId)
+        {
+            if (string.IsNullOrWhiteSpace(evaluationId)) return (0, 0, 0);
+
+            var parts = evaluationId.Split(new[] { '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3 &&
+                int.TryParse(parts[0], out int s) &&
+                int.TryParse(parts[1], out int sec) &&
+                int.TryParse(parts[2], out int e))
+            {
+                return (s, sec, e);
+            }
+
+            if (int.TryParse(evaluationId, out int singleId))
+            {
+                var mark = await _marksRepository.GetByIdAsync(singleId);
+                if (mark != null)
+                {
+                    return (mark.SubjectId, mark.SectionId, mark.ExaminationId);
+                }
+                return (singleId, 0, 0);
+            }
+
+            return (0, 0, 0);
+        }
         private string CalculateGrade(decimal percentage)
         {
             if (percentage >= 90) return "A+";
