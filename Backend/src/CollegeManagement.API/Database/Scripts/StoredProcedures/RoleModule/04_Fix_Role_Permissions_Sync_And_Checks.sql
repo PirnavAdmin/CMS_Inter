@@ -126,6 +126,9 @@ BEGIN
 
     -- Resolve module aliases to canonical SubModule names
     SET v_TargetModule = CASE LOWER(TRIM(p_ModuleIdentifier))
+        WHEN 'academic-calendar' THEN 'Holiday Management'
+        WHEN 'academic_calendar' THEN 'Holiday Management'
+        WHEN 'academic-calendar-events' THEN 'Holiday Management'
         WHEN 'reimbursement' THEN 'Staff Reimbursements'
         WHEN 'reimbursements' THEN 'Staff Reimbursements'
         WHEN 'staff-reimbursement' THEN 'Staff Reimbursements'

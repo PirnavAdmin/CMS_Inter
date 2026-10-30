@@ -28,5 +28,11 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<int?> ResolveGroupProgramIdAsync(int? groupProgramId, int? groupId, int? programId);
         Task<(int? GroupId, int? ProgramId)> GetGroupAndProgramByGroupProgramIdAsync(int groupProgramId);
         Task<bool> IsProgramValidForGroupAsync(int groupId, int programId);
+        Task<(int? BoardId, int? AcademicLevelId, int? GroupId, int? ProgramId, int? GroupProgramId)> ResolveForeignKeysBatchAsync(
+            int? boardId, string? boardName,
+            int? academicLevelId, string? levelName,
+            int? groupId, string? groupName,
+            int? programId, string? programName,
+            int? groupProgramId);
     }
 }

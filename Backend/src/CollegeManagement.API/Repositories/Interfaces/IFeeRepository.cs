@@ -30,6 +30,7 @@ public interface IFeeRepository
     Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int studentFeeId);
     Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? campusId = null, int? academicYearId = null, int? groupId = null, int? sectionId = null, string? paymentPlan = null, string? status = null, string? search = null, int? boardId = null);
     Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int studentId);
+    Task<Dictionary<int, StudentFeeDetailsResponse?>> GetBulkStudentFeeDetailsAsync(IEnumerable<int> studentIds);
 
     Task<FeeConcessionResponse?> ApplyFeeConcessionAsync(ApplyFeeConcessionRequest request);
 
@@ -46,4 +47,9 @@ public interface IFeeRepository
     Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
     Task<FeeReportResponse> GetDailyReportAsync(int? campusId = null, DateTime? date = null);
     Task<FeeReportResponse> GetMonthlyReportAsync(int? campusId = null, int? year = null, int? month = null);
+
+    Task<FeeStructureResponse?> GetMatchingFeeStructureAsync(int? campusId, int boardId, int academicYearId, int? academicLevelId, int groupId, int? programId = null);
+    Task<CampusTransferFeePreviewDto?> PreviewCampusTransferFeeAsync(int transferId);
+    Task<bool> ApplyCampusTransferFeeAsync(int studentId, int toCampusId, int? destinationFeeStructureId, bool transferPaidCredit, string performedBy);
+    Task<ProgramFeeAdjustmentPreviewDto?> PreviewProgramFeeAdjustmentAsync(int studentId, int targetProgramId);
 }

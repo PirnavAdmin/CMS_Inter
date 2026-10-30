@@ -1,9 +1,8 @@
-using System.IO;
-using System.Collections.Generic;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Holiday;
@@ -71,7 +70,8 @@ namespace CollegeManagement.API.Services.Implementations
                 request.StartDate,
                 effectiveEndDate,
                 null,
-                request.AcademicYearId);
+                request.AcademicYearId,
+                request.CampusId);
 
             if (isDuplicate)
             {
@@ -88,6 +88,7 @@ namespace CollegeManagement.API.Services.Implementations
                 EndDate = effectiveEndDate.ToDateTime(TimeOnly.MinValue),
                 Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim(),
                 Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                CampusId = request.CampusId ?? 1,
                 AcademicYearId = request.AcademicYearId,
                 BoardId = request.BoardId
             };
@@ -113,7 +114,8 @@ namespace CollegeManagement.API.Services.Implementations
                 request.StartDate,
                 effectiveEndDate,
                 id,
-                request.AcademicYearId);
+                request.AcademicYearId,
+                request.CampusId);
 
             if (isDuplicate)
             {
@@ -128,6 +130,7 @@ namespace CollegeManagement.API.Services.Implementations
             existing.EndDate = effectiveEndDate.ToDateTime(TimeOnly.MinValue);
             existing.Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim();
             existing.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+            existing.CampusId = request.CampusId ?? existing.CampusId;
             existing.AcademicYearId = request.AcademicYearId;
             existing.BoardId = request.BoardId;
 
@@ -194,6 +197,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 Id = holiday.Id,
                 HolidayCode = holiday.HolidayCode,
+                CampusId = holiday.CampusId,
                 AcademicYearId = holiday.AcademicYearId,
                 BoardId = holiday.BoardId,
                 HolidayName = holiday.HolidayName,
@@ -210,11 +214,22 @@ namespace CollegeManagement.API.Services.Implementations
                 UpdatedAt = holiday.UpdatedAt
             };
         }
-            public async Task<byte[]> GenerateImportTemplateAsync()
+
+        public async Task<byte[]> GenerateImportTemplateAsync()
         {
             var dataList = new List<Dictionary<string, object>>
             {
-                new Dictionary<string, object> { { "HolidayName", "New Year" }, { "HolidayType", "National Holiday" }, { "DateType", "Single Date" }, { "StartDate", "2027-01-01" }, { "EndDate", "" }, { "AppliesTo", "All Students & Staff" }, { "Description", "New Year Celebration" }, { "Status", "Active" } }
+                new Dictionary<string, object>
+                {
+                    { "HolidayName", "New Year" },
+                    { "HolidayType", "National Holiday" },
+                    { "DateType", "Single Date" },
+                    { "StartDate", "2027-01-01" },
+                    { "EndDate", "" },
+                    { "AppliesTo", "All Students & Staff" },
+                    { "Description", "New Year Celebration" },
+                    { "Status", "Active" }
+                }
             };
             using var ms = new MemoryStream();
             await MiniExcelLibs.MiniExcel.SaveAsAsync(ms, dataList, true, "Holiday_Template");
@@ -230,35 +245,53 @@ namespace CollegeManagement.API.Services.Implementations
             var validCount = 0;
             var invalidCount = 0;
             int rowIndex = 2;
-            foreach(var r in rows)
+
+            foreach (var r in rows)
             {
                 var row = (IDictionary<string, object>)r;
-                if (!row.ContainsKey("HolidayName") || string.IsNullOrWhiteSpace(row["HolidayName"]?.ToString())) { invalidCount++; errors.Add($"Row {rowIndex}: HolidayName is required."); rowIndex++; continue; }
-                if (!row.ContainsKey("StartDate") || string.IsNullOrWhiteSpace(row["StartDate"]?.ToString())) { invalidCount++; errors.Add($"Row {rowIndex}: StartDate is required."); rowIndex++; continue; }
-                
-                DateTime start;
-                if (!DateTime.TryParse(row["StartDate"].ToString(), out start)) { invalidCount++; errors.Add($"Row {rowIndex}: StartDate is invalid."); rowIndex++; continue; }
-                
+                if (!row.ContainsKey("HolidayName") || string.IsNullOrWhiteSpace(row["HolidayName"]?.ToString()))
+                {
+                    invalidCount++;
+                    errors.Add($"Row {rowIndex}: HolidayName is required.");
+                    rowIndex++;
+                    continue;
+                }
+                if (!row.ContainsKey("StartDate") || string.IsNullOrWhiteSpace(row["StartDate"]?.ToString()))
+                {
+                    invalidCount++;
+                    errors.Add($"Row {rowIndex}: StartDate is required.");
+                    rowIndex++;
+                    continue;
+                }
+
+                if (!DateTime.TryParse(row["StartDate"].ToString(), out var start))
+                {
+                    invalidCount++;
+                    errors.Add($"Row {rowIndex}: StartDate is invalid.");
+                    rowIndex++;
+                    continue;
+                }
+
                 DateTime? end = null;
                 if (row.ContainsKey("EndDate") && !string.IsNullOrWhiteSpace(row["EndDate"]?.ToString()))
                 {
                     if (DateTime.TryParse(row["EndDate"].ToString(), out var e)) end = e;
                 }
-                
+
                 validCount++;
                 if (!validateOnly)
                 {
                     holidays.Add(new Holiday
                     {
                         HolidayName = row["HolidayName"].ToString() ?? "",
-                        HolidayType = row.ContainsKey("HolidayType") ? row["HolidayType"]?.ToString() : "",
+                        HolidayType = row.ContainsKey("HolidayType") ? row["HolidayType"]?.ToString() : "Festival Holiday",
                         DateType = row.ContainsKey("DateType") ? row["DateType"]?.ToString() ?? "Single Date" : "Single Date",
                         StartDate = start,
                         EndDate = end ?? start,
                         AppliesTo = row.ContainsKey("AppliesTo") ? row["AppliesTo"]?.ToString() ?? "All Students & Staff" : "All Students & Staff",
                         Description = row.ContainsKey("Description") ? row["Description"]?.ToString() : "",
                         Status = row.ContainsKey("Status") ? row["Status"]?.ToString() ?? "Active" : "Active",
-                        CampusId = campusId,
+                        CampusId = campusId ?? 1,
                         AcademicYearId = academicYearId,
                         BoardId = boardId,
                         CreatedAt = DateTime.UtcNow,
@@ -267,10 +300,13 @@ namespace CollegeManagement.API.Services.Implementations
                 }
                 rowIndex++;
             }
+
             if (!validateOnly && holidays.Any())
             {
                 await _holidayRepository.CreateRangeAsync(holidays);
+                _cache.RemoveByPrefix("lookup:holidays");
             }
+
             return new Dictionary<string, object>
             {
                 { "success", true },
@@ -282,4 +318,3 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
-

@@ -118,6 +118,16 @@ export async function getExamDuties(params = {}) {
 }
 
 /**
+ * 7d. POST /api/v1/examinations/duties/{dutyId}/reassign
+ * Reassigns an invigilator duty to another faculty/staff member.
+ * Payload: { newFacultyId: number, reason: string }
+ */
+export async function reassignFacultyExamDuty(dutyId, payload) {
+  const res = await apiClient.post(apiEndpoints.examinations.reassignDuty(dutyId), payload);
+  return unwrapResponse(res);
+}
+
+/**
  * 8. GET /api/v1/evaluations/readiness
  * Retrieves marks evaluation readiness status for an examination and section before results processing.
  * Params: boardId, academicYearId, academicLevelId, groupId, programId, sectionId, examinationId

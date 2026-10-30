@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
     public interface IStudentAdmissionRepository
     {
         // =====================================================
-        // ADMISSION
+        // ADMISSION CRUD & QUERIES
         // =====================================================
 
         Task<StudentAdmissionResponseDto> CreateAsync(
@@ -29,10 +29,15 @@ namespace CollegeManagement.API.Repositories.Interfaces
             int admissionId,
             UpdateStudentAdmissionRequest request,
             string? studentPhoto);
-        //optional check box//
+
+        Task<bool> UpdateAdmissionNumberAsync(
+            int admissionId,
+            string admissionNo);
+
         Task<int> SaveAdmissionFeeSelectionsAsync(
-     int admissionId,
-     SaveAdmissionFeeSelectionsRequest request);
+            int admissionId,
+            SaveAdmissionFeeSelectionsRequest request);
+
         // Blood groups
         public Task<IEnumerable<string>> GetBloodGroupsAsync()
         {
@@ -96,4 +101,3 @@ namespace CollegeManagement.API.Repositories.Interfaces
             BulkRollNumberAllocationRequest request);
     }
 }
-

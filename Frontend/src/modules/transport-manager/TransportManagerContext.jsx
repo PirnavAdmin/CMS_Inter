@@ -69,13 +69,13 @@ export const DEFAULT_TRANSPORT_MANAGER_PROFILE = {
   staffId: 1125,
   facultyId: 1125,
   employeeId: "MNT0044",
-  firstName: "muzan",
+  firstName: "Transport",
   middleName: null,
-  lastName: "kibutsuzi",
-  fullName: "muzan kibutsuzi",
-  name: "muzan kibutsuzi",
-  guardianName: "yorichi",
-  fatherOrHusbandName: "yorichi",
+  lastName: "Manager",
+  fullName: "Transport Manager",
+  name: "Transport Manager",
+  guardianName: "",
+  fatherOrHusbandName: "",
   gender: "Male",
   dateOfBirth: "1995-07-10T00:00:00",
   dob: "1995-07-10",
@@ -412,7 +412,7 @@ export function TransportManagerProvider({ children }) {
 
   // Normalised profile object
   const profile = useMemo(() => {
-    const name = staffProfile.fullName || staffProfile.name || authUser.fullName || authUser.name || "muzan kibutsuzi";
+    const name = staffProfile.fullName || staffProfile.name || authUser.fullName || authUser.name || "Transport Manager";
     return {
       ...DEFAULT_TRANSPORT_MANAGER_PROFILE,
       ...staffProfile,

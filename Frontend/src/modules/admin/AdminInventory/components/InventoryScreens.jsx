@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Boxes, CircleAlert, IndianRupee, ShoppingCart } from "lucide-react";
+import { Boxes, CircleAlert, Eye, IndianRupee, Pencil, ShoppingCart, Trash2 } from "lucide-react";
 import {
   actionColumn,
   Action,

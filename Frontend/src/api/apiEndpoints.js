@@ -12,6 +12,7 @@ export const apiEndpoints = {
   dashboard: {
     summary: "/api/v1/dashboard/summary",
     principal: "/api/v1/dashboard/principal",
+    notices: "/api/v1/dashboard/notices",
     studentAttendance: "/api/v1/dashboard/students-attendance-today",
     staffAttendance: "/api/v1/dashboard/staff-attendance-today",
     upcomingExaminations: "/api/v1/dashboard/upcoming-examinations",
@@ -259,7 +260,7 @@ export const apiEndpoints = {
     exportExcel: "/api/v1/results/export-excel",
     downloadPdf: "/api/v1/results/download-pdf",
     studentMemo: "/api/v1/results/students/memo",
-    memo: (studentId) => `/api/v1/results/memo/${studentId}`,
+    memo: (studentId) => `/api/v1/results/student/${studentId}/memo`,
     revaluation: "/api/v1/results/revaluation",
     revaluationById: (revaluationId) => `/api/v1/results/revaluation/${revaluationId}`,
   },
@@ -272,9 +273,10 @@ export const apiEndpoints = {
     active: "/api/v1/subjects/active",
     getByBoard: (boardId) => `/api/v1/subjects/board/${encodeURIComponent(boardId)}`,
     byBoard: (boardId) => `/api/v1/subjects/board/${encodeURIComponent(boardId)}`,
-    getByAcademicYear: (academicYearId) => `/api/v1/subjects/academic-year/${encodeURIComponent(academicYearId)}`,
     checkCode: "/api/v1/subjects/check-code",
     create: "/api/v1/subjects",
+    bulkCreate: "/api/v1/subjects/bulk",
+    changeStatus: (id, isActive) => `/api/v1/subjects/${id}/status?isActive=${isActive}`,
     getById: (id) => `/api/v1/subjects/${id}`,
     byId: (id) => `/api/v1/subjects/${id}`,
     update: (id) => `/api/v1/subjects/${id}`,
@@ -374,6 +376,8 @@ export const apiEndpoints = {
     updateStatus: (attendanceId) => `/api/v1/attendance/${attendanceId}/status`,
     lockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/lock`,
     unlockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/unlock`,
+    studentSubjects: (studentId) => `/api/v1/attendance/student/${studentId}/subjects`,
+    studentDailyLogs: (studentId) => `/api/v1/attendance/student/${studentId}/daily-logs`,
   },
   staffAttendance: {
     load: "/api/v1/staff-attendance/load",
@@ -526,6 +530,7 @@ export const apiEndpoints = {
     availableHalls: "/api/v1/examinations/available-halls",
     settings: "/api/v1/examinations/settings",
     duties: "/api/v1/examinations/duties",
+    reassignDuty: (id) => `/api/v1/examinations/duties/${id}/reassign`,
   },
   timetable: {
     getAll: "/api/v1/timetable",
@@ -552,6 +557,8 @@ export const apiEndpoints = {
   promotions: {
     eligible: "/api/v1/promotions/eligible",
     preview: "/api/v1/promotions/preview",
+    feePreview: "/api/v1/promotions/fee-preview",
+    programFeePreview: (studentId, targetProgramId) => `/api/v1/promotions/program-fee-preview?studentId=${studentId}&targetProgramId=${targetProgramId}`,
     create: "/api/v1/promotions",
     student: (studentId) => `/api/v1/promotions/student/${studentId}`,
     groupAllocation: "/api/v1/promotions/group-allocation",
@@ -567,6 +574,7 @@ export const apiEndpoints = {
     received: "/api/v1/promotions/campus-transfers/received",
     approve: (id) => `/api/v1/promotions/campus-transfers/${id}/approve`,
     reject: (id) => `/api/v1/promotions/campus-transfers/${id}/reject`,
+    feePreview: (id) => `/api/v1/promotions/campus-transfers/${id}/fee-preview`,
   },
   reports: {
     dashboard: "/api/reports/dashboard",
@@ -772,6 +780,7 @@ export const apiEndpoints = {
 
     // Payslips
     payslips: "/api/v1/Payroll/payslips",
+    myPayslips: "/api/v1/Payroll/my-payslips",
     payslipById: (id) => `/api/v1/Payroll/payslips/${id}`,
     generatePayslip: "/api/v1/Payroll/payslips/generate",
     generatePayslipsBulk: "/api/v1/Payroll/payslips/generate-bulk",

@@ -16,6 +16,7 @@ namespace CollegeManagement.API.DTOs.MasterGroups
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
 
+        public List<int> ProgramIds { get; set; } = new();
         public List<MasterGroupProgramDto> Programs { get; set; } = new();
         public List<EligibleAcademicLevelDto> EligibleLevels { get; set; } = new();
         public List<EligibleAcademicLevelDto> EligibleAcademicLevels 

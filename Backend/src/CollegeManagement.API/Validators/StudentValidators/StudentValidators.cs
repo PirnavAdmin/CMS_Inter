@@ -1,5 +1,7 @@
 using CollegeManagement.API.DTOs.Students;
+using CollegeManagement.API.DTOs.Students.Requests;
 using FluentValidation;
+using System;
 
 namespace CollegeManagement.API.Validators.StudentValidators
 {
@@ -168,11 +170,79 @@ namespace CollegeManagement.API.Validators.StudentValidators
     }
 
     // =========================================================
+    // CREATE STUDENT REQUEST VALIDATOR
+    // =========================================================
+
+    public class CreateStudentRequestValidator
+        : AbstractValidator<CreateStudentRequest>
+    {
+        public CreateStudentRequestValidator()
+        {
+            RuleFor(x => x.StudentName)
+                .NotEmpty().WithMessage("StudentName is required.")
+                .MaximumLength(150).WithMessage("StudentName cannot exceed 150 characters.");
+
+            RuleFor(x => x.AdmissionNo)
+                .NotEmpty().WithMessage("AdmissionNo is required.")
+                .MaximumLength(50).WithMessage("AdmissionNo cannot exceed 50 characters.");
+
+            RuleFor(x => x.Gender)
+                .NotEmpty().WithMessage("Gender is required.");
+
+            RuleFor(x => x.DateOfBirth)
+                .NotEmpty().WithMessage("DateOfBirth is required.");
+
+            RuleFor(x => x.BoardId)
+                .GreaterThan(0).WithMessage("Valid BoardId is required.");
+
+            RuleFor(x => x.AcademicYearId)
+                .GreaterThan(0).WithMessage("Valid AcademicYearId is required.");
+
+            When(x => !string.IsNullOrWhiteSpace(x.Email), () =>
+            {
+                RuleFor(x => x.Email)
+                    .EmailAddress().WithMessage("Invalid Email address.")
+                    .MaximumLength(150).WithMessage("Email cannot exceed 150 characters.");
+            });
+
+            When(x => !string.IsNullOrWhiteSpace(x.MobileNumber), () =>
+            {
+                RuleFor(x => x.MobileNumber)
+                    .Matches(@"^[6-9][0-9]{9}$").WithMessage("MobileNumber must be a valid 10-digit number.");
+            });
+        }
+    }
+
+    // =========================================================
+    // STUDENT PROFILE DTO VALIDATOR (ADMIN)
+    // =========================================================
+
+    public class StudentProfileDtoValidator
+        : AbstractValidator<StudentProfileDto>
+    {
+        public StudentProfileDtoValidator()
+        {
+            When(x => !string.IsNullOrWhiteSpace(x.Email), () =>
+            {
+                RuleFor(x => x.Email)
+                    .EmailAddress().WithMessage("Invalid Email address.")
+                    .MaximumLength(150).WithMessage("Email cannot exceed 150 characters.");
+            });
+
+            When(x => !string.IsNullOrWhiteSpace(x.ParentGuardianEmail), () =>
+            {
+                RuleFor(x => x.ParentGuardianEmail)
+                    .EmailAddress().WithMessage("Invalid Guardian Email address.");
+            });
+        }
+    }
+
+    // =========================================================
     // STUDENT SELF PROFILE
     // =========================================================
 
     public class StudentSelfProfileDtoValidator
-        : AbstractValidator<CollegeManagement.API.DTOs.Students.Requests.StudentSelfProfileDto>
+        : AbstractValidator<StudentSelfProfileDto>
     {
         public StudentSelfProfileDtoValidator()
         {

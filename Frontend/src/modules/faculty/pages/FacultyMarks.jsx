@@ -130,18 +130,15 @@ export default function FacultyMarks() {
   useEffect(() => {
     let isMounted = true;
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || authUser?.userId;
     if (!staffId) return;
 
     const fetchLiveEvaluations = async () => {
       setEvaluationsLoading(true);
       try {
-        let res = await apiClient.get(`/api/v1/faculty/evaluations?facultyId=${staffId}`).catch(() => null);
+        let res = await apiClient.get("/api/v1/faculty/evaluations", { params: { facultyId: staffId } }).catch(() => null);
         if (!res || !res.data) {
-          res = await apiClient.get("/api/v1/faculty/evaluations", { params: { facultyId: staffId } }).catch(() => null);
-        }
-        if (!res || !res.data) {
-          res = await apiClient.get("/api/v1/evaluations/search", { params: { facultyId: staffId } }).catch(() => null);
+          res = await apiClient.get(`/api/v1/faculty/evaluations?facultyId=${staffId}`).catch(() => null);
         }
 
         const rawList = res?.data?.data !== undefined ? res.data.data : res?.data;
@@ -232,7 +229,7 @@ export default function FacultyMarks() {
   useEffect(() => {
     let isMounted = true;
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || authUser?.userId;
     if (!staffId) return;
 
     // 1. Fetch faculty timetable (provides allocated sections and subjects)
@@ -615,8 +612,8 @@ export default function FacultyMarks() {
         mapped = raw.map((s) => {
           const sId = Number(s.studentId || s.id);
           const existingMark = savedMarksMap.get(sId);
-          const internal = existingMark ? Number(existingMark.internalMarks || 0) : 18;
-          const theory = existingMark ? Number(existingMark.theoryMarks || 0) : 55;
+          const internal = existingMark ? Number(existingMark.internalMarks || 0) : 0;
+          const theory = existingMark ? Number(existingMark.theoryMarks || 0) : 0;
           const totalScore = internal + theory;
           const isAbsent = existingMark ? Boolean(existingMark.isAbsent) : false;
           const remarks = existingMark ? (existingMark.remarks || "Regular") : "Regular";
@@ -668,8 +665,8 @@ export default function FacultyMarks() {
           ? {
               ...r,
               absent: isAbsent,
-              theory: isAbsent ? 0 : r.theory || 45,
-              internal: isAbsent ? 0 : r.internal || 15,
+              theory: isAbsent ? 0 : r.theory || 0,
+              internal: isAbsent ? 0 : r.internal || 0,
               remarks: isAbsent ? "Absent" : r.remarks === "Absent" ? "" : r.remarks,
             }
           : r
@@ -683,24 +680,28 @@ export default function FacultyMarks() {
     );
   };
 
-  // Save Draft (via /api/v1/marks/bulk and local ledger)
+  // Save Draft (via /api/v1/faculty/evaluations/{id}/marks with fallback to bulk)
   const handleSaveDraft = async () => {
     if (!selectedExam || !selectedSubject) return;
     setSavingMarks(true);
 
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || authUser?.userId;
 
-    const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
+    const evalId = `${selectedSubject}-${selectedSection}-${selectedExam}`;
+    const key = `${selectedSubject}_${selectedSection}_${selectedExam}`;
+    const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const updatedEval = {
-      evaluationId: key,
+      evaluationId: evalId,
       section: selectedSectionName,
+      sectionId: Number(selectedSection),
       examId: selectedExam,
+      examinationId: Number(selectedExam),
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Tanjiro Kamado",
-      empId: `EMP-${staffId}`,
+      faculty: context?.profile?.name || authUser?.fullName || "Faculty Member",
+      empId: staffId ? `EMP-${staffId}` : "",
       status: "DRAFT",
       adminRemarks: "",
       rows: currentStudents,
@@ -709,63 +710,93 @@ export default function FacultyMarks() {
     };
 
     try {
-      const payload = {
-        marks: currentStudents.map((s) => ({
-          board: "BIEAP",
-          boardId: selectedBoard ? Number(selectedBoard) : undefined,
-          academicYearId: selectedYear ? Number(selectedYear) : 1,
-          academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-          groupId: selectedGroup ? Number(selectedGroup) : 1,
-          sectionId: Number(selectedSection),
-          examinationId: Number(selectedExam),
-          subjectId: Number(selectedSubject),
+      const evaluationPayload = {
+        evaluationId: evalId,
+        rowVersion: 1,
+        students: currentStudents.map((s) => ({
           studentId: Number(s.studentId),
-          facultyId: Number(staffId),
-          rollNo: s.rollNo,
-          studentName: s.name,
           internalMarks: Number(s.internal || 0),
           theoryMarks: Number(s.theory || 0),
+          practicalMarks: Number(s.practical || 0),
+          totalMarks: Number(s.totalScore || ((s.internal || 0) + (s.theory || 0) + (s.practical || 0))),
           isAbsent: Boolean(s.absent),
           remarks: s.remarks || "",
         })),
       };
 
-      await apiClient.post("/api/v1/marks/bulk", payload);
+      try {
+        await apiClient.put(`/api/v1/faculty/evaluations/${evalId}/marks`, evaluationPayload)
+          .catch(() => apiClient.put(`/api/v1/faculty/evaluations/${key}/marks`, evaluationPayload))
+          .catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/marks`, evaluationPayload));
+      } catch (primaryErr) {
+        // Fallback to bulk marks endpoint if needed
+        const bulkPayload = {
+          marks: currentStudents.map((s) => ({
+            board: "BIEAP",
+            boardId: selectedBoard ? Number(selectedBoard) : undefined,
+            academicYearId: selectedYear ? Number(selectedYear) : 1,
+            academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
+            groupId: selectedGroup ? Number(selectedGroup) : 1,
+            sectionId: Number(selectedSection),
+            examinationId: Number(selectedExam),
+            subjectId: Number(selectedSubject),
+            studentId: Number(s.studentId),
+            facultyId: staffId ? Number(staffId) : undefined,
+            rollNo: s.rollNo,
+            studentName: s.name,
+            internalMarks: Number(s.internal || 0),
+            theoryMarks: Number(s.theory || 0),
+            practicalMarks: Number(s.practical || 0),
+            isAbsent: Boolean(s.absent),
+            remarks: s.remarks || "",
+          })),
+        };
+        await apiClient.post("/api/v1/marks/bulk", bulkPayload).catch(() => null);
+      }
     } catch (err) {
       if (err?.response?.status === 403 || err?.status === 403) {
         setSavingMarks(false);
         notify("Access Denied: You do not have permission to save marks.", "error");
         return;
       }
-      console.warn("API bulk save endpoint warning, saving to local evaluations ledger:", err);
+      console.warn("API save endpoint warning, saving to local evaluations ledger:", err);
     }
 
-    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true } }));
+    setEvaluationsLedger((prev) => ({
+      ...prev,
+      [key]: { ...updatedEval, isLocal: true },
+      [legacyKey]: { ...updatedEval, isLocal: true },
+      [evalId]: { ...updatedEval, isLocal: true },
+    }));
     setEvaluationStatus("DRAFT");
     setSavingMarks(false);
     notify("Marks draft saved successfully.");
   };
 
-  // Submit Subject / Resubmit (via /api/v1/marks/bulk with SUBMITTED status)
+  // Submit Subject / Resubmit (via /api/v1/faculty/evaluations/{id}/submit or resubmit)
   const handleSubmitSubject = async () => {
     if (!selectedExam || !selectedSubject) return;
     setSavingMarks(true);
 
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || authUser?.userId;
 
-    const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
+    const evalId = `${selectedSubject}-${selectedSection}-${selectedExam}`;
+    const key = `${selectedSubject}_${selectedSection}_${selectedExam}`;
+    const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const wasRejected = evaluationStatus === "REJECTED";
 
     const updatedEval = {
-      evaluationId: key,
+      evaluationId: evalId,
       section: selectedSectionName,
+      sectionId: Number(selectedSection),
       examId: selectedExam,
+      examinationId: Number(selectedExam),
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Tanjiro Kamado",
-      empId: `EMP-${staffId}`,
+      faculty: context?.profile?.name || authUser?.fullName || "Faculty Member",
+      empId: staffId ? `EMP-${staffId}` : "",
       status: "SUBMITTED",
       adminRemarks: "Submitted to Admin. Awaiting verification review.",
       rows: currentStudents,
@@ -774,38 +805,77 @@ export default function FacultyMarks() {
     };
 
     try {
-      const payload = {
-        marks: currentStudents.map((s) => ({
-          board: "BIEAP",
-          boardId: selectedBoard ? Number(selectedBoard) : undefined,
-          academicYearId: selectedYear ? Number(selectedYear) : 1,
-          academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-          groupId: selectedGroup ? Number(selectedGroup) : 1,
-          sectionId: Number(selectedSection),
-          examinationId: Number(selectedExam),
-          subjectId: Number(selectedSubject),
+      // 1. Ensure latest marks are saved first
+      const evaluationPayload = {
+        evaluationId: evalId,
+        rowVersion: 1,
+        students: currentStudents.map((s) => ({
           studentId: Number(s.studentId),
-          facultyId: Number(staffId),
-          rollNo: s.rollNo,
-          studentName: s.name,
           internalMarks: Number(s.internal || 0),
           theoryMarks: Number(s.theory || 0),
+          practicalMarks: Number(s.practical || 0),
+          totalMarks: Number(s.totalScore || ((s.internal || 0) + (s.theory || 0) + (s.practical || 0))),
           isAbsent: Boolean(s.absent),
           remarks: s.remarks || "",
         })),
       };
+      await apiClient.put(`/api/v1/faculty/evaluations/${evalId}/marks`, evaluationPayload)
+        .catch(() => apiClient.put(`/api/v1/faculty/evaluations/${key}/marks`, evaluationPayload))
+        .catch(() => null);
 
-      await apiClient.post("/api/v1/marks/bulk", payload);
+      // 2. Submit or Resubmit
+      if (wasRejected) {
+        await apiClient.post(`/api/v1/faculty/evaluations/${evalId}/resubmit`, {
+          rowVersion: 1,
+          resubmissionMessage: "Corrected marks submitted for review.",
+        }).catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/resubmit`, {
+          resubmissionMessage: "Corrected marks resubmitted by faculty."
+        })).catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/submit`));
+      } else {
+        await apiClient.post(`/api/v1/faculty/evaluations/${evalId}/submit`)
+          .catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/submit`));
+      }
     } catch (err) {
       if (err?.response?.status === 403 || err?.status === 403) {
         setSavingMarks(false);
         notify("Access Denied: You do not have permission to submit marks.", "error");
         return;
       }
-      console.warn("API bulk submit warning:", err);
+      console.warn("API submit warning, attempting fallback bulk submit:", err);
+      try {
+        const bulkPayload = {
+          marks: currentStudents.map((s) => ({
+            board: "BIEAP",
+            boardId: selectedBoard ? Number(selectedBoard) : undefined,
+            academicYearId: selectedYear ? Number(selectedYear) : 1,
+            academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
+            groupId: selectedGroup ? Number(selectedGroup) : 1,
+            sectionId: Number(selectedSection),
+            examinationId: Number(selectedExam),
+            subjectId: Number(selectedSubject),
+            studentId: Number(s.studentId),
+            facultyId: staffId ? Number(staffId) : undefined,
+            rollNo: s.rollNo,
+            studentName: s.name,
+            internalMarks: Number(s.internal || 0),
+            theoryMarks: Number(s.theory || 0),
+            practicalMarks: Number(s.practical || 0),
+            isAbsent: Boolean(s.absent),
+            remarks: s.remarks || "",
+          })),
+        };
+        await apiClient.post("/api/v1/marks/bulk", bulkPayload).catch(() => null);
+      } catch (fallbackErr) {
+        console.warn("Fallback bulk submit also encountered warning:", fallbackErr);
+      }
     }
 
-    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true } }));
+    setEvaluationsLedger((prev) => ({
+      ...prev,
+      [key]: { ...updatedEval, isLocal: true },
+      [legacyKey]: { ...updatedEval, isLocal: true },
+      [evalId]: { ...updatedEval, isLocal: true },
+    }));
     setEvaluationStatus("SUBMITTED");
     setCurrentRejectionRemarks("");
     setSavingMarks(false);

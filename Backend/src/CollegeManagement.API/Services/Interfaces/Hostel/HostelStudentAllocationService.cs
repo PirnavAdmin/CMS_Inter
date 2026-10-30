@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.DTOs.Hostel;
 
 namespace CollegeManagement.API.Services.Interfaces.Hostel
 {
@@ -27,6 +27,9 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
             UpdateAsync(
                 int allocationId,
                 UpdateHostelStudentAllocationDto dto);
+
+        Task<(bool Success, string Message)>
+            VacateAsync(int allocationId, VacateStudentAllocationDto? dto = null);
 
         Task<(bool Success, string Message)>
             DeleteAsync(int allocationId);

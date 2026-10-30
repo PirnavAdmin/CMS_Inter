@@ -15,7 +15,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/staff-leaves")]
     [EnableCors("AllowFrontend")]
-    [Authorize(Roles = "Faculty,Admin,Super Admin,HOD")]
+    [Authorize(Roles = "Faculty,Admin,Super Admin,HOD,Principal")]
     [Produces("application/json")]
     public class StaffLeaveSubstitutionController : ControllerBase
     {
@@ -73,7 +73,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Restricted strictly to administrative roles.
         /// </summary>
         [HttpPost("{leaveRequestId:int}/substitutions")]
-        [Authorize(Roles = "Admin,Super Admin,HOD")]
+        [Authorize(Roles = "Admin,Super Admin,HOD,Principal")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

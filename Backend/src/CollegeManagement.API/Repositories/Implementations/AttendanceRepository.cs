@@ -3,49 +3,28 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Attendance.Requests;
 using CollegeManagement.API.DTOs.Attendance.Responses;
+using CollegeManagement.API.DTOs.Common;
 using CollegeManagement.API.Enums;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
     /// <summary>
-    /// Repository implementation for Attendance database operations using Dapper and EF Core.
+    /// Repository implementation for Attendance database operations.
+    /// Strictly 100% Stored Procedures & Dapper (0% EF Core business CRUD, 0% Inline SQL).
     /// </summary>
     public class AttendanceRepository : IAttendanceRepository
     {
-        #region Stored Procedure Constants
-
-        private const string SpCreateAttendance = "sp_CreateAttendance";
-        private const string SpCreateBulkAttendance = "sp_CreateBulkAttendance";
-        private const string SpUpdateAttendance = "sp_UpdateAttendance";
-        private const string SpChangeAttendanceStatus = "sp_ChangeAttendanceStatus";
-        private const string SpGetAttendanceById = "sp_GetAttendanceById";
-        private const string SpGetAttendances = "sp_GetAttendances";
-        private const string SpGetAttendancesTotalCount = "sp_GetAttendancesTotalCount";
-        private const string SpGetStudentsForAttendance = "sp_GetStudentsForAttendance";
-        private const string SpGetAttendanceSummary = "sp_GetAttendanceSummary";
-        private const string SpGetAttendancePercentage = "sp_GetAttendancePercentage";
-        private const string SpGetAttendanceReport = "sp_GetAttendanceReport";
-        private const string SpAttendanceExists = "sp_AttendanceExists";
-
-        #endregion
-
-        #region Constructor
-
         private readonly AppDbContext _context;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AttendanceRepository"/> class.
-        /// </summary>
-        /// <param name="context">The database context.</param>
         public AttendanceRepository(AppDbContext context)
         {
             _context = context;
@@ -53,901 +32,384 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        #endregion
+        private async Task EnsureConnectionOpenAsync(CancellationToken cancellationToken = default)
+        {
+            if (Connection.State != ConnectionState.Open)
+            {
+                if (Connection is System.Data.Common.DbConnection dbConn)
+                {
+                    await dbConn.OpenAsync(cancellationToken);
+                }
+                else
+                {
+                    Connection.Open();
+                }
+            }
+        }
 
-        #region Helper Methods
-
-        /// <summary>
-        /// Builds common search dynamic parameters for attendance search requests.
-        /// </summary>
         private DynamicParameters BuildSearchParameters(AttendanceSearchRequest request)
         {
             var parameters = new DynamicParameters();
-
-            parameters.Add("p_CampusId", request.CampusId); parameters.Add("p_BoardId", request.BoardId);
-            parameters.Add("p_AcademicYearId", request.AcademicYearId);
-            parameters.Add("p_AcademicLevelId", request.AcademicLevelId);
-            parameters.Add("p_GroupId", request.GroupId);
-            parameters.Add("p_SectionId", request.SectionId);
-            parameters.Add("p_SubjectId", request.SubjectId);
-            parameters.Add("p_FacultyId", request.FacultyId);
-            parameters.Add("p_StudentId", request.StudentId);
+            parameters.Add("p_CampusId", request.CampusId ?? 0);
+            parameters.Add("p_BoardId", request.BoardId ?? 0);
+            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
+            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
+            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_SubjectId", request.SubjectId ?? 0);
+            parameters.Add("p_FacultyId", request.FacultyId ?? 0);
+            parameters.Add("p_StudentId", request.StudentId ?? 0);
             parameters.Add("p_Status", request.Status.HasValue ? (byte)request.Status.Value : (byte?)null);
             parameters.Add("p_FromDate", request.FromDate);
             parameters.Add("p_ToDate", request.ToDate);
-            parameters.Add("p_PageNumber", request.PageNumber);
-            parameters.Add("p_PageSize", request.PageSize);
+            parameters.Add("p_PageNumber", request.PageNumber > 0 ? request.PageNumber : 1);
+            parameters.Add("p_PageSize", request.PageSize > 0 ? request.PageSize : 10);
             parameters.Add("p_SearchText", request.SearchText);
-            parameters.Add("p_PeriodId", request.PeriodId);
-            parameters.Add("p_TimetableId", request.TimetableId);
-
+            parameters.Add("p_PeriodId", request.PeriodId ?? 0);
+            parameters.Add("p_TimetableId", request.TimetableId ?? 0);
             return parameters;
         }
 
-        private IQueryable<Attendance> FilterAttendances(AttendanceSearchRequest request)
+        // =====================================================================
+        // CRUD & SEARCH (100% Stored Procedures)
+        // =====================================================================
+
+        public async Task<int> CreateAttendanceAsync(Attendance attendance, CancellationToken cancellationToken = default)
         {
-            var query = _context.Attendances.AsNoTracking().Where(a => a.IsActive); 
+            await EnsureConnectionOpenAsync(cancellationToken);
 
-            if (request.CampusId.HasValue && request.CampusId.Value > 0)
-                query = query.Where(a => a.Student.CampusId == request.CampusId.Value);
-
-            if (request.BoardId.HasValue && request.BoardId.Value > 0)
-                query = query.Where(a => a.BoardId == request.BoardId.Value);
-
-            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0)
-                query = query.Where(a => a.AcademicYearId == request.AcademicYearId.Value);
-
-            if (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0)
-                query = query.Where(a => a.AcademicLevelId == request.AcademicLevelId.Value);
-
-            if (request.GroupId.HasValue && request.GroupId.Value > 0)
-                query = query.Where(a => a.GroupId == request.GroupId.Value);
-
-            if (request.SectionId.HasValue && request.SectionId.Value > 0)
-                query = query.Where(a => a.SectionId == request.SectionId.Value);
-
-            if (request.SubjectId.HasValue && request.SubjectId.Value > 0)
-                query = query.Where(a => a.SubjectId == request.SubjectId.Value);
-
-            if (request.FacultyId.HasValue && request.FacultyId.Value > 0)
-                query = query.Where(a => a.FacultyId == request.FacultyId.Value);
-
-            if (request.StudentId.HasValue && request.StudentId.Value > 0)
-                query = query.Where(a => a.StudentId == request.StudentId.Value);
-
-            if (request.Status.HasValue)
-                query = query.Where(a => a.Status == request.Status.Value);
-
-            if (request.FromDate.HasValue)
-                query = query.Where(a => a.AttendanceDate.Date >= request.FromDate.Value.Date);
-
-            if (request.ToDate.HasValue)
-                query = query.Where(a => a.AttendanceDate.Date <= request.ToDate.Value.Date);
-
-            if (!string.IsNullOrWhiteSpace(request.SearchText))
-            {
-                var search = request.SearchText.Trim();
-                query = query.Where(a =>
-                    a.Student.StudentName.Contains(search) || (a.Student.RollNo != null && a.Student.RollNo.Contains(search)));
-            }
-
-            return query;
-        }
-
-        private async Task<IEnumerable<AttendanceListResponse>> GetAttendancesFromDbFallbackAsync(AttendanceSearchRequest request)
-        {
-            var baseQuery = FilterAttendances(request);
-
-            int page = request.PageNumber > 0 ? request.PageNumber : 1;
-            int pageSize = request.PageSize > 0 ? request.PageSize : 10;
-
-            var raw = await (from a in baseQuery
-                             join s in _context.Students on a.StudentId equals s.StudentId
-                             join st in _context.Staffs on a.FacultyId equals (int?)st.Id into staffGroup
-                             from st in staffGroup.DefaultIfEmpty()
-                             join sub in _context.Subjects on a.SubjectId equals (int?)sub.SubjectId into subGroup
-                             from sub in subGroup.DefaultIfEmpty()
-                             orderby a.AttendanceDate descending, a.AttendanceId descending
-                             select new
-                             {
-                                 a.AttendanceId,
-                                 a.AttendanceDate,
-                                 a.StudentId,
-                                 RollNumber = s.RollNo ?? "",
-                                 StudentName = s.StudentName ?? "",
-                                 FacultyName = st != null ? (st.FirstName + " " + (st.LastName ?? "")).Trim() : "",
-                                 SubjectName = sub != null ? (sub.SubjectName ?? "") : "",
-                                 a.Status,
-                                 a.IsActive
-                             })
-                             .Skip((page - 1) * pageSize)
-                             .Take(pageSize)
-                             .ToListAsync();
-
-            return raw.Select(r => new AttendanceListResponse
-            {
-                AttendanceId = r.AttendanceId,
-                AttendanceDate = r.AttendanceDate,
-                StudentId = r.StudentId,
-                RollNumber = r.RollNumber,
-                StudentName = r.StudentName,
-                FacultyName = r.FacultyName,
-                SubjectName = r.SubjectName,
-                Status = r.Status,
-                IsActive = r.IsActive,
-                IsLocked = false
-            });
-        }
-
-        private async Task<int> GetAttendancesTotalCountFallbackAsync(AttendanceSearchRequest request)
-        {
-            return await FilterAttendances(request).CountAsync();
-        }
-
-        private async Task<AttendanceSummaryResponse> GetAttendanceSummaryFallbackAsync(AttendanceSearchRequest request)
-        {
-            var baseQuery = FilterAttendances(request);
-            var stats = await baseQuery
-                .GroupBy(a => 1)
-                .Select(g => new
-                {
-                    Total = g.Count(),
-                    Present = g.Count(a => a.Status == AttendanceStatus.Present),
-                    Absent = g.Count(a => a.Status == AttendanceStatus.Absent),
-                    Late = g.Count(a => a.Status == AttendanceStatus.Late),
-                    Leave = g.Count(a => a.Status == AttendanceStatus.Leave),
-                    MaxDate = g.Max(a => (DateTime?)a.AttendanceDate)
-                })
-                .FirstOrDefaultAsync();
-
-            if (stats == null || stats.Total == 0)
-            {
-                return new AttendanceSummaryResponse
-                {
-                    TotalStudents = 0,
-                    PresentCount = 0,
-                    AbsentCount = 0,
-                    LateCount = 0,
-                    LeaveCount = 0,
-                    AttendancePercentage = 0,
-                    AttendanceDate = request.FromDate ?? DateTime.UtcNow
-                };
-            }
-
-            decimal pct = Math.Round((decimal)(stats.Present + stats.Late) / stats.Total * 100m, 2);
-            return new AttendanceSummaryResponse
-            {
-                TotalStudents = stats.Total,
-                PresentCount = stats.Present,
-                AbsentCount = stats.Absent,
-                LateCount = stats.Late,
-                LeaveCount = stats.Leave,
-                AttendancePercentage = pct,
-                AttendanceDate = stats.MaxDate ?? request.FromDate ?? DateTime.UtcNow
-            };
-        }
-
-        private async Task<IEnumerable<AttendancePercentageResponse>> GetAttendancePercentageFallbackAsync(AttendanceSearchRequest request)
-        {
-            var baseQuery = FilterAttendances(request);
-            var grouped = await (from a in baseQuery
-                                 join s in _context.Students on a.StudentId equals s.StudentId
-                                 group a by new { a.StudentId, s.StudentName, s.RollNo } into g
-                                 select new
-                                 {
-                                     g.Key.StudentId,
-                                     StudentName = g.Key.StudentName ?? "",
-                                     RollNumber = g.Key.RollNo ?? "",
-                                     Total = g.Count(),
-                                     Present = g.Count(a => a.Status == AttendanceStatus.Present),
-                                     Absent = g.Count(a => a.Status == AttendanceStatus.Absent),
-                                     Late = g.Count(a => a.Status == AttendanceStatus.Late),
-                                     Leave = g.Count(a => a.Status == AttendanceStatus.Leave)
-                                 })
-                                 .OrderBy(x => x.RollNumber)
-                                 .ThenBy(x => x.StudentName)
-                                 .ToListAsync();
-
-            return grouped.Select(x => new AttendancePercentageResponse
-            {
-                StudentId = x.StudentId,
-                StudentName = x.StudentName,
-                RollNumber = x.RollNumber,
-                TotalClasses = x.Total,
-                PresentClasses = x.Present,
-                AbsentClasses = x.Absent,
-                LateClasses = x.Late,
-                LeaveClasses = x.Leave,
-                AttendancePercentage = x.Total > 0 ? Math.Round((decimal)(x.Present + x.Late) / x.Total * 100m, 2) : 0
-            });
-        }
-
-        private async Task<IEnumerable<AttendanceReportResponse>> GetAttendanceReportFallbackAsync(AttendanceSearchRequest request)
-        {
-            var baseQuery = FilterAttendances(request);
-            var raw = await (from a in baseQuery
-                             join s in _context.Students on a.StudentId equals s.StudentId
-                             join b in _context.Boards on a.BoardId equals (int?)b.BoardId into bGroup
-                             from b in bGroup.DefaultIfEmpty()
-                             join ay in _context.AcademicYears on a.AcademicYearId equals (int?)ay.AcademicYearId into ayGroup
-                             from ay in ayGroup.DefaultIfEmpty()
-                             join al in _context.AcademicLevels on a.AcademicLevelId equals (int?)al.AcademicLevelId into alGroup
-                             from al in alGroup.DefaultIfEmpty()
-                             join g in _context.Groups on a.GroupId equals (int?)g.GroupId into gGroup
-                             from g in gGroup.DefaultIfEmpty()
-                             join sec in _context.Sections on a.SectionId equals (int?)sec.SectionId into secGroup
-                             from sec in secGroup.DefaultIfEmpty()
-                             join sub in _context.Subjects on a.SubjectId equals (int?)sub.SubjectId into subGroup
-                             from sub in subGroup.DefaultIfEmpty()
-                             join st in _context.Staffs on a.FacultyId equals (int?)st.Id into stGroup
-                             from st in stGroup.DefaultIfEmpty()
-                             orderby a.AttendanceDate descending, s.RollNo ascending
-                             select new
-                             {
-                                 a.AttendanceId,
-                                 a.AttendanceDate,
-                                 BoardName = b != null ? (b.BoardName ?? "") : "",
-                                 AcademicYearName = ay != null ? (ay.AcademicYearName ?? "") : "",
-                                 AcademicLevelName = al != null ? (al.LevelName ?? "") : "",
-                                 GroupName = g != null ? (g.GroupName ?? "") : "",
-                                 SectionName = sec != null ? (sec.SectionName ?? "") : "",
-                                 SubjectName = sub != null ? (sub.SubjectName ?? "") : "",
-                                 FacultyName = st != null ? (st.FirstName + " " + (st.LastName ?? "")).Trim() : "",
-                                 RollNumber = s.RollNo ?? "",
-                                 StudentName = s.StudentName ?? "",
-                                 a.Status,
-                                 Remarks = a.Remarks ?? ""
-                             }).ToListAsync();
-
-            return raw.Select(r => new AttendanceReportResponse
-            {
-                AttendanceId = r.AttendanceId,
-                AttendanceDate = r.AttendanceDate,
-                BoardName = r.BoardName,
-                AcademicYearName = r.AcademicYearName,
-                AcademicLevelName = r.AcademicLevelName,
-                GroupName = r.GroupName,
-                SectionName = r.SectionName,
-                SubjectName = r.SubjectName,
-                FacultyName = r.FacultyName,
-                RollNumber = r.RollNumber,
-                StudentName = r.StudentName,
-                Status = r.Status,
-                Remarks = r.Remarks
-            });
-        }
-
-        private async Task<AttendanceResponse?> GetAttendanceByIdFallbackAsync(int attendanceId)
-        {
-            var raw = await (from a in _context.Attendances.Where(a => a.AttendanceId == attendanceId)
-                             join s in _context.Students on a.StudentId equals s.StudentId
-                             join b in _context.Boards on a.BoardId equals (int?)b.BoardId into bGroup
-                             from b in bGroup.DefaultIfEmpty()
-                             join ay in _context.AcademicYears on a.AcademicYearId equals (int?)ay.AcademicYearId into ayGroup
-                             from ay in ayGroup.DefaultIfEmpty()
-                             join al in _context.AcademicLevels on a.AcademicLevelId equals (int?)al.AcademicLevelId into alGroup
-                             from al in alGroup.DefaultIfEmpty()
-                             join g in _context.Groups on a.GroupId equals (int?)g.GroupId into gGroup
-                             from g in gGroup.DefaultIfEmpty()
-                             join sec in _context.Sections on a.SectionId equals (int?)sec.SectionId into secGroup
-                             from sec in secGroup.DefaultIfEmpty()
-                             join sub in _context.Subjects on a.SubjectId equals (int?)sub.SubjectId into subGroup
-                             from sub in subGroup.DefaultIfEmpty()
-                             join st in _context.Staffs on a.FacultyId equals (int?)st.Id into stGroup
-                             from st in stGroup.DefaultIfEmpty()
-                             select new AttendanceResponse
-                             {
-                                 AttendanceId = a.AttendanceId,
-                                 AttendanceSessionId = a.AttendanceId,
-                                 AttendanceDate = a.AttendanceDate,
-                                 StudentId = a.StudentId,
-                                 StudentName = s.StudentName ?? "",
-                                 RollNumber = s.RollNo ?? "",
-                                 FacultyId = a.FacultyId ?? 0,
-                                 FacultyName = st != null ? (st.FirstName + " " + (st.LastName ?? "")).Trim() : "",
-                                 BoardId = a.BoardId ?? 0,
-                                 BoardName = b != null ? (b.BoardName ?? "") : "",
-                                 AcademicYearId = a.AcademicYearId ?? 0,
-                                 AcademicYearName = ay != null ? (ay.AcademicYearName ?? "") : "",
-                                 AcademicLevelId = a.AcademicLevelId ?? 0,
-                                 AcademicLevelName = al != null ? (al.LevelName ?? "") : "",
-                                 GroupId = a.GroupId ?? 0,
-                                 GroupName = g != null ? (g.GroupName ?? "") : "",
-                                 SectionId = a.SectionId ?? 0,
-                                 SectionName = sec != null ? (sec.SectionName ?? "") : "",
-                                 SubjectId = a.SubjectId ?? 0,
-                                 SubjectName = sub != null ? (sub.SubjectName ?? "") : "",
-                                 Status = a.Status,
-                                 Remarks = a.Remarks,
-                                 CreatedAt = a.CreatedAt,
-                                 UpdatedAt = a.UpdatedAt
-                             }).FirstOrDefaultAsync();
-
-            return raw;
-        }
-
-        #endregion
-
-        #region CRUD
-
-        /// <summary>
-        /// Creates a new attendance record in the database using stored procedure sp_CreateAttendance.
-        /// </summary>
-        public async Task<int> CreateAttendanceAsync(Attendance attendance)
-        {
             var parameters = new DynamicParameters();
-            parameters.Add("p_AttendanceSessionId", attendance.AttendanceSessionId);
+            parameters.Add("p_AttendanceDate", attendance.AttendanceDate);
             parameters.Add("p_StudentId", attendance.StudentId);
+            parameters.Add("p_FacultyId", attendance.FacultyId);
+            parameters.Add("p_BoardId", attendance.BoardId);
+            parameters.Add("p_AcademicYearId", attendance.AcademicYearId);
+            parameters.Add("p_AcademicLevelId", attendance.AcademicLevelId);
+            parameters.Add("p_GroupId", attendance.GroupId);
+            parameters.Add("p_SectionId", attendance.SectionId);
+            parameters.Add("p_SubjectId", attendance.SubjectId);
             parameters.Add("p_Status", (byte)attendance.Status);
             parameters.Add("p_Remarks", attendance.Remarks);
 
             return await Connection.ExecuteScalarAsync<int>(
-                SpCreateAttendance,
-                parameters,
-                commandType: CommandType.StoredProcedure);
+                new CommandDefinition(
+                    "sp_CreateAttendance",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
         }
 
-        /// <summary>
-        /// Creates multiple student attendance records in bulk using stored procedure sp_CreateBulkAttendance.
-        /// </summary>
-        public async Task<int> CreateBulkAttendanceAsync(IEnumerable<Attendance> attendances, int attendanceSessionId)
+        public async Task<int> CreateBulkAttendanceAsync(IEnumerable<Attendance> attendances, int attendanceSessionId, CancellationToken cancellationToken = default)
         {
-            var bulkList = attendances.Select(a => new
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            var items = attendances.Select(a => new
             {
-                StudentId = a.StudentId,
+                AttendanceDate = a.AttendanceDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                a.StudentId,
+                a.FacultyId,
+                a.BoardId,
+                a.AcademicYearId,
+                a.AcademicLevelId,
+                a.GroupId,
+                a.SectionId,
+                a.SubjectId,
                 Status = (byte)a.Status,
-                Remarks = a.Remarks
-            }).ToList();
+                a.Remarks,
+                IsActive = a.IsActive ? 1 : 0
+            });
 
-            var json = JsonSerializer.Serialize(bulkList);
-
+            var json = JsonSerializer.Serialize(items);
             var parameters = new DynamicParameters();
-            parameters.Add("p_AttendanceSessionId", attendanceSessionId);
             parameters.Add("p_AttendanceJson", json);
 
-            return await Connection.ExecuteScalarAsync<int>(
-                SpCreateBulkAttendance,
-                parameters,
-                commandType: CommandType.StoredProcedure);
+            return await Connection.ExecuteAsync(
+                new CommandDefinition(
+                    "sp_CreateBulkAttendance",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
         }
 
-        /// <summary>
-        /// Updates an existing attendance record in the database using stored procedure sp_UpdateAttendance.
-        /// </summary>
-        public async Task<int> UpdateAttendanceAsync(Attendance attendance)
+        public async Task<int> UpdateAttendanceAsync(Attendance attendance, CancellationToken cancellationToken = default)
         {
-            var existing = await _context.Attendances.FindAsync(attendance.AttendanceId);
-            if (existing == null) return 0;
-            existing.Status = attendance.Status;
-            existing.Remarks = attendance.Remarks;
-            existing.ModifiedByUserId = attendance.ModifiedByUserId;
-            existing.ModifiedAt = DateTime.UtcNow;
-            existing.UpdatedAt = DateTime.UtcNow;
-            return await _context.SaveChangesAsync();
-        }
+            await EnsureConnectionOpenAsync(cancellationToken);
 
-        /// <summary>
-        /// Changes the active/inactive status of an attendance record using stored procedure sp_ChangeAttendanceStatus.
-        /// </summary>
-        public async Task<int> ChangeAttendanceActiveStatusAsync(int attendanceId, bool isActive)
-        {
             var parameters = new DynamicParameters();
-            parameters.Add("p_AttendanceId", attendanceId);
-            parameters.Add("p_IsActive", isActive);
+            parameters.Add("p_AttendanceId", attendance.AttendanceId);
+            parameters.Add("p_AttendanceDate", attendance.AttendanceDate);
+            parameters.Add("p_StudentId", attendance.StudentId);
+            parameters.Add("p_FacultyId", attendance.FacultyId);
+            parameters.Add("p_BoardId", attendance.BoardId);
+            parameters.Add("p_AcademicYearId", attendance.AcademicYearId);
+            parameters.Add("p_AcademicLevelId", attendance.AcademicLevelId);
+            parameters.Add("p_GroupId", attendance.GroupId);
+            parameters.Add("p_SectionId", attendance.SectionId);
+            parameters.Add("p_SubjectId", attendance.SubjectId);
+            parameters.Add("p_Status", (byte)attendance.Status);
+            parameters.Add("p_Remarks", attendance.Remarks);
 
             return await Connection.ExecuteAsync(
-                SpChangeAttendanceStatus,
-                parameters,
-                commandType: CommandType.StoredProcedure);
-        }
-
-        #endregion
-
-        #region Queries
-
-        /// <summary>
-        /// Retrieves a single detailed attendance response by its unique identifier using stored procedure sp_GetAttendanceById.
-        /// </summary>
-        public async Task<AttendanceResponse?> GetAttendanceByIdAsync(int attendanceId)
-        {
-            try
-            {
-                var parameters = new DynamicParameters();
-                parameters.Add("p_AttendanceId", attendanceId);
-
-                return await Connection.QueryFirstOrDefaultAsync<AttendanceResponse>(
-                    SpGetAttendanceById,
+                new CommandDefinition(
+                    "sp_UpdateAttendance",
                     parameters,
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                return await GetAttendanceByIdFallbackAsync(attendanceId);
-            }
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
         }
 
-        /// <summary>
-        /// Retrieves a filtered list of attendance records using stored procedure sp_GetAttendances.
-        /// </summary>
-        public async Task<IEnumerable<AttendanceListResponse>> GetAttendancesAsync(AttendanceSearchRequest request)
+        public async Task<AttendanceResponse?> GetAttendanceByIdAsync(int attendanceId, CancellationToken cancellationToken = default)
         {
-            try
-            {
-                var parameters = BuildSearchParameters(request);
+            await EnsureConnectionOpenAsync(cancellationToken);
 
-                return await Connection.QueryAsync<AttendanceListResponse>(
-                    SpGetAttendances,
+            return await Connection.QueryFirstOrDefaultAsync<AttendanceResponse>(
+                new CommandDefinition(
+                    "sp_GetAttendanceById",
+                    new { p_AttendanceId = attendanceId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        public async Task<IEnumerable<AttendanceListResponse>> GetAttendancesAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+            var parameters = BuildSearchParameters(request);
+
+            return await Connection.QueryAsync<AttendanceListResponse>(
+                new CommandDefinition(
+                    "sp_GetAttendances",
                     parameters,
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                return await GetAttendancesFromDbFallbackAsync(request);
-            }
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
         }
 
-        /// <summary>
-        /// Retrieves the total count of attendance records matching the search filters (without pagination).
-        /// Mirrors the WHERE clause from sp_GetAttendances for accurate pagination metadata.
-        /// </summary>
-        public async Task<int> GetAttendancesTotalCountAsync(AttendanceSearchRequest request)
+        public async Task<int> GetAttendancesTotalCountAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default)
         {
-            try
-            {
-                var parameters = BuildSearchParameters(request);
+            await EnsureConnectionOpenAsync(cancellationToken);
+            var parameters = BuildSearchParameters(request);
 
-                return await Connection.ExecuteScalarAsync<int>(
-                    SpGetAttendancesTotalCount,
+            return await Connection.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "sp_GetAttendancesTotalCount",
                     parameters,
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                return await GetAttendancesTotalCountFallbackAsync(request);
-            }
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
         }
 
-        /// <summary>
-        /// Retrieves students available to mark attendance for the specified criteria using stored procedure sp_GetStudentsForAttendance.
-        /// </summary>
-        public async Task<IEnumerable<StudentAttendanceResponse>> GetStudentsForAttendanceAsync(AttendanceSearchRequest request)
+        public async Task<AttendanceSummaryResponse> GetAttendanceSummaryAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default)
         {
-            try
-            {
-                var parameters = new DynamicParameters();
-                parameters.Add("p_BoardId", request.BoardId.HasValue && request.BoardId.Value > 0 ? request.BoardId.Value : null, DbType.Int32);
-                parameters.Add("p_AcademicYearId", request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0 ? request.AcademicYearId.Value : null, DbType.Int32);
-                parameters.Add("p_AcademicLevelId", request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0 ? request.AcademicLevelId.Value : null, DbType.Int32);
-                parameters.Add("p_GroupId", request.GroupId.HasValue && request.GroupId.Value > 0 ? request.GroupId.Value : null, DbType.Int32);
-                parameters.Add("p_SectionId", request.SectionId.HasValue && request.SectionId.Value > 0 ? request.SectionId.Value : null, DbType.Int32);
-                parameters.Add("p_SubjectId", request.SubjectId.HasValue && request.SubjectId.Value > 0 ? request.SubjectId.Value : null, DbType.Int32);
-                parameters.Add("p_FromDate", request.FromDate ?? (string.IsNullOrEmpty(request.AttendanceDate) ? (string.IsNullOrEmpty(request.Date) ? null : DateTime.Parse(request.Date)) : DateTime.Parse(request.AttendanceDate)), DbType.Date);
-                parameters.Add("p_StudentId", request.StudentId.HasValue && request.StudentId.Value > 0 ? request.StudentId.Value : null, DbType.Int32);
-                parameters.Add("p_SearchText", string.IsNullOrWhiteSpace(request.SearchText) ? null : request.SearchText.Trim(), DbType.String);
-                parameters.Add("p_CampusId", request.CampusId.HasValue && request.CampusId.Value > 0 ? request.CampusId.Value : null, DbType.Int32);
+            await EnsureConnectionOpenAsync(cancellationToken);
+            var parameters = BuildSearchParameters(request);
 
-                return await Connection.QueryAsync<StudentAttendanceResponse>(
-                    SpGetStudentsForAttendance,
+            var result = await Connection.QueryFirstOrDefaultAsync<AttendanceSummaryResponse>(
+                new CommandDefinition(
+                    "sp_GetAttendanceSummary",
                     parameters,
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            return result ?? new AttendanceSummaryResponse
             {
-                return await GetAdminStudentsForAttendanceAsync(request);
-            }
+                TotalStudents = 0,
+                PresentCount = 0,
+                AbsentCount = 0,
+                LateCount = 0,
+                LeaveCount = 0,
+                AttendancePercentage = 0,
+                AttendanceDate = request.FromDate ?? DateTime.UtcNow
+            };
         }
 
-        public async Task<IEnumerable<StudentAttendanceResponse>> GetAdminStudentsForAttendanceAsync(AttendanceSearchRequest request)
+        public async Task<IEnumerable<AttendancePercentageResponse>> GetAttendancePercentageAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default)
         {
-            TimeZoneInfo indiaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
-            DateTime date = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, indiaTimeZone).Date;
+            await EnsureConnectionOpenAsync(cancellationToken);
+            var parameters = BuildSearchParameters(request);
+
+            return await Connection.QueryAsync<AttendancePercentageResponse>(
+                new CommandDefinition(
+                    "sp_GetAttendancePercentage",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        public async Task<IEnumerable<AttendanceReportResponse>> GetAttendanceReportAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+            var parameters = BuildSearchParameters(request);
+
+            return await Connection.QueryAsync<AttendanceReportResponse>(
+                new CommandDefinition(
+                    "sp_GetAttendanceReport",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        public async Task<bool> AttendanceExistsAsync(int studentId, int attendanceSessionId, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            var count = await Connection.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "sp_AttendanceExists",
+                    new { p_StudentId = studentId, p_AttendanceSessionId = attendanceSessionId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            return count > 0;
+        }
+
+        public async Task<int> ChangeAttendanceActiveStatusAsync(int attendanceId, bool isActive, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            return await Connection.ExecuteAsync(
+                new CommandDefinition(
+                    "sp_ChangeAttendanceStatus",
+                    new { p_AttendanceId = attendanceId, p_IsActive = isActive ? 1 : 0 },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        public async Task<IEnumerable<StudentAttendanceResponse>> GetStudentsForAttendanceAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+            var parameters = BuildSearchParameters(request);
+
+            return await Connection.QueryAsync<StudentAttendanceResponse>(
+                new CommandDefinition(
+                    "sp_GetStudentsForAttendance",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        // =====================================================================
+        // ADMIN SESSION-BASED ATTENDANCE (100% Stored Procedures)
+        // =====================================================================
+
+        public async Task<IEnumerable<StudentAttendanceResponse>> GetAdminStudentsForAttendanceAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            DateTime date = DateTime.UtcNow.Date;
             if (request.FromDate.HasValue) date = request.FromDate.Value.Date;
-            else if (!string.IsNullOrEmpty(request.AttendanceDate)) date = DateTime.Parse(request.AttendanceDate).Date;
-            else if (!string.IsNullOrEmpty(request.Date)) date = DateTime.Parse(request.Date).Date;
+            else if (!string.IsNullOrEmpty(request.AttendanceDate) && DateTime.TryParse(request.AttendanceDate, out var dt1)) date = dt1.Date;
+            else if (!string.IsNullOrEmpty(request.Date) && DateTime.TryParse(request.Date, out var dt2)) date = dt2.Date;
 
-            var session = request.Session;
-
-            // Base query for students matching the criteria
-            var studentsQuery = _context.Students.AsQueryable();
-
-            if (request.CampusId.HasValue && request.CampusId.Value > 0) studentsQuery = studentsQuery.Where(s => s.CampusId == request.CampusId);
-            if (request.BoardId.HasValue && request.BoardId.Value > 0) studentsQuery = studentsQuery.Where(s => s.BoardId == request.BoardId);
-            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == request.AcademicYearId);
-            if (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0) studentsQuery = studentsQuery.Where(s => s.AcademicLevelId == request.AcademicLevelId);
-            if (request.GroupId.HasValue && request.GroupId.Value > 0) studentsQuery = studentsQuery.Where(s => s.GroupId == request.GroupId);
-            if (request.ProgramId.HasValue && request.ProgramId.Value > 0) studentsQuery = studentsQuery.Where(s => s.ProgramId == request.ProgramId);
-            if (request.SectionId.HasValue && request.SectionId.Value > 0) studentsQuery = studentsQuery.Where(s => s.SectionId == request.SectionId);
-            if (request.StudentId.HasValue && request.StudentId.Value > 0) studentsQuery = studentsQuery.Where(s => s.StudentId == request.StudentId);
-            
-            if (!string.IsNullOrEmpty(request.SearchText))
-            {
-                studentsQuery = studentsQuery.Where(s => 
-                    s.StudentName.Contains(request.SearchText) || 
-                    s.RollNo.Contains(request.SearchText) || 
-                    s.AdmissionNo.Contains(request.SearchText));
-            }
-
-            var students = await studentsQuery
-                .OrderBy(s => s.RollNo)
-                .ThenBy(s => s.StudentName)
-                .Select(s => new 
-                {
-                    s.StudentId,
-                    s.AdmissionNo,
-                    s.RollNo,
-                    s.StudentName,
-                    AcademicLevelId = s.AcademicLevelId,
-                    AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : string.Empty,
-                    GroupId = s.GroupId,
-                    GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : string.Empty,
-                    SectionId = s.SectionId,
-                    SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : string.Empty
-                })
-                .ToListAsync();
-
-            var studentIds = students.Select(s => s.StudentId).ToList();
-            
-            var attendancesQuery = _context.Attendances
-                .Where(a => a.IsActive && 
-                            a.AttendanceDate.Date == date && 
-                            studentIds.Contains(a.StudentId));
-
-            if (session.HasValue)
-            {
-                attendancesQuery = attendancesQuery.Where(a => a.Session == session.Value);
-            }
-
-            var existingAttendances = await attendancesQuery
-                .Select(a => new 
-                {
-                    a.AttendanceId,
-                    a.StudentId,
-                    a.Status,
-                    a.Remarks,
-                    a.Session,
-                    a.ModifiedByUserId,
-                    a.ModifiedAt
-                })
-                .ToListAsync();
-
-            var userIds = existingAttendances.Where(a => a.ModifiedByUserId.HasValue).Select(a => a.ModifiedByUserId!.Value).Distinct().ToList();
-            var users = await _context.Users.Where(u => userIds.Contains(u.UserId)).ToDictionaryAsync(u => u.UserId, u => u.FullName);
-
-            var result = new List<StudentAttendanceResponse>();
-            
-            foreach (var student in students)
-            {
-                var morningAtt = existingAttendances
-                    .Where(a => a.StudentId == student.StudentId && a.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Morning)
-                    .OrderByDescending(a => a.ModifiedAt)
-                    .ThenByDescending(a => a.AttendanceId)
-                    .FirstOrDefault();
-                    
-                var afternoonAtt = existingAttendances
-                    .Where(a => a.StudentId == student.StudentId && a.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Afternoon)
-                    .OrderByDescending(a => a.ModifiedAt)
-                    .ThenByDescending(a => a.AttendanceId)
-                    .FirstOrDefault();
-                    
-                var latestAtt = existingAttendances
-                    .Where(a => a.StudentId == student.StudentId)
-                    .OrderByDescending(a => a.ModifiedAt)
-                    .ThenByDescending(a => a.AttendanceId)
-                    .FirstOrDefault();
-                
-                result.Add(new StudentAttendanceResponse
-                {
-                    StudentId = student.StudentId,
-                    AdmissionNumber = student.AdmissionNo ?? "",
-                    RollNumber = student.RollNo ?? "",
-                    StudentName = student.StudentName,
-                    AcademicLevelId = student.AcademicLevelId,
-                    AcademicLevelName = student.AcademicLevelName ?? "",
-                    GroupId = student.GroupId,
-                    GroupName = student.GroupName ?? "",
-                    SectionId = student.SectionId,
-                    SectionName = student.SectionName ?? "",
-                    MorningStatus = morningAtt?.Status,
-                    AfternoonStatus = afternoonAtt?.Status,
-                    Status = latestAtt?.Status,
-                    Remarks = latestAtt?.Remarks,
-                    IsAttendanceMarked = morningAtt != null || afternoonAtt != null || latestAtt != null,
-                    Session = latestAtt?.Session,
-                    AttendanceId = latestAtt?.AttendanceId,
-                    ModifiedByUserName = latestAtt?.ModifiedByUserId.HasValue == true && users.ContainsKey(latestAtt.ModifiedByUserId.Value) ? users[latestAtt.ModifiedByUserId.Value] : null,
-                    ModifiedAt = latestAtt?.ModifiedAt
-                });
-            }
-
-            return result;
-        }
-
-        public async Task<IEnumerable<AttendanceDefaulterResponse>> GetAttendanceDefaultersAsync(AttendanceDefaultersRequest request)
-        {
-            var studentsQuery = _context.Students.AsQueryable();
-
-            if (request.CampusId.HasValue && request.CampusId.Value > 0) studentsQuery = studentsQuery.Where(s => s.CampusId == request.CampusId);
-            if (request.BoardId.HasValue) studentsQuery = studentsQuery.Where(s => s.BoardId == request.BoardId);
-            if (request.AcademicYearId.HasValue) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == request.AcademicYearId);
-            if (request.AcademicLevelId.HasValue) studentsQuery = studentsQuery.Where(s => s.AcademicLevelId == request.AcademicLevelId);
-            if (request.GroupId.HasValue) studentsQuery = studentsQuery.Where(s => s.GroupId == request.GroupId);
-            if (request.ProgramId.HasValue) studentsQuery = studentsQuery.Where(s => s.ProgramId == request.ProgramId);
-            if (request.SectionId.HasValue) studentsQuery = studentsQuery.Where(s => s.SectionId == request.SectionId);
-
-            var students = await studentsQuery
-                .Select(s => new 
-                {
-                    s.StudentId,
-                    s.StudentName,
-                    s.RollNo,
-                    s.AdmissionNo,
-                    GroupName = s.GroupNavigation.GroupName,
-                    SectionName = s.SectionNavigation.SectionName
-                })
-                .ToListAsync();
-
-            var studentIds = students.Select(s => s.StudentId).ToList();
-
-            var attendancesQuery = _context.Attendances
-                .Where(a => a.IsActive && studentIds.Contains(a.StudentId));
-
-            if (request.Month.HasValue)
-                attendancesQuery = attendancesQuery.Where(a => a.AttendanceDate.Month == request.Month.Value);
-            
-            if (request.Year.HasValue)
-                attendancesQuery = attendancesQuery.Where(a => a.AttendanceDate.Year == request.Year.Value);
-
-            var existingAttendances = await attendancesQuery
-                .Select(a => new { a.StudentId, a.Status })
-                .ToListAsync();
-
-            var result = new List<AttendanceDefaulterResponse>();
-
-            foreach (var student in students)
-            {
-                var studentAttendances = existingAttendances.Where(a => a.StudentId == student.StudentId).ToList();
-                int totalMarked = studentAttendances.Count;
-                if (totalMarked == 0) continue;
-
-                int presentOrLateCount = studentAttendances.Count(a => a.Status == Enums.AttendanceStatus.Present || a.Status == Enums.AttendanceStatus.Late);
-                
-                double percentage = Math.Round((double)presentOrLateCount / totalMarked * 100, 1);
-                
-                if (percentage < request.Threshold)
-                {
-                    result.Add(new AttendanceDefaulterResponse
-                    {
-                        StudentId = student.StudentId,
-                        StudentName = student.StudentName,
-                        RollNumber = student.RollNo ?? "",
-                        AdmissionNumber = student.AdmissionNo ?? "",
-                        GroupName = student.GroupName ?? "",
-                        SectionName = student.SectionName ?? "",
-                        AttendancePercentage = percentage,
-                        ShortagePercentage = Math.Round(request.Threshold - percentage, 1)
-                    });
-                }
-            }
-
-            return result.OrderBy(r => r.AttendancePercentage).ToList();
-        }
-
-        /// <summary>
-        /// Retrieves statistical summary metrics for the specified filters using stored procedure sp_GetAttendanceSummary.
-        /// </summary>
-        public async Task<AttendanceSummaryResponse> GetAttendanceSummaryAsync(AttendanceSearchRequest request)
-        {
-            try
-            {
-                var parameters = BuildSearchParameters(request);
-
-                var result = await Connection.QueryFirstOrDefaultAsync<AttendanceSummaryResponse>(
-                    SpGetAttendanceSummary,
-                    parameters,
-                    commandType: CommandType.StoredProcedure);
-
-                return result ?? new AttendanceSummaryResponse();
-            }
-            catch
-            {
-                return await GetAttendanceSummaryFallbackAsync(request);
-            }
-        }
-
-        /// <summary>
-        /// Retrieves attendance percentages and class counts per student using stored procedure sp_GetAttendancePercentage.
-        /// </summary>
-        public async Task<IEnumerable<AttendancePercentageResponse>> GetAttendancePercentageAsync(AttendanceSearchRequest request)
-        {
-            try
-            {
-                var parameters = BuildSearchParameters(request);
-
-                return await Connection.QueryAsync<AttendancePercentageResponse>(
-                    SpGetAttendancePercentage,
-                    parameters,
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                return await GetAttendancePercentageFallbackAsync(request);
-            }
-        }
-
-        /// <summary>
-        /// Generates a flat report listing attendance details for the specified filters using stored procedure sp_GetAttendanceReport.
-        /// </summary>
-        public async Task<IEnumerable<AttendanceReportResponse>> GetAttendanceReportAsync(AttendanceSearchRequest request)
-        {
-            try
-            {
-                var parameters = BuildSearchParameters(request);
-
-                return await Connection.QueryAsync<AttendanceReportResponse>(
-                    SpGetAttendanceReport,
-                    parameters,
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                return await GetAttendanceReportFallbackAsync(request);
-            }
-        }
-
-        /// <summary>
-        /// Checks if an active attendance record already exists for a student in a specific session using stored procedure sp_AttendanceExists.
-        /// </summary>
-        public async Task<bool> AttendanceExistsAsync(int studentId, int attendanceSessionId)
-        {
             var parameters = new DynamicParameters();
-            parameters.Add("p_StudentId", studentId);
-            parameters.Add("p_AttendanceSessionId", attendanceSessionId);
+            parameters.Add("p_CampusId", request.CampusId ?? 0);
+            parameters.Add("p_BoardId", request.BoardId ?? 0);
+            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
+            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
+            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_ProgramId", request.ProgramId ?? 0);
+            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_StudentId", request.StudentId ?? 0);
+            parameters.Add("p_AttendanceDate", date);
+            parameters.Add("p_Session", request.Session.HasValue ? (int)request.Session.Value : 0);
+            parameters.Add("p_SearchText", request.SearchText ?? "");
 
-            var exists = await Connection.ExecuteScalarAsync<int>(
-                SpAttendanceExists,
-                parameters,
-                commandType: CommandType.StoredProcedure);
-
-            return exists > 0;
+            return await Connection.QueryAsync<StudentAttendanceResponse>(
+                new CommandDefinition(
+                    "sp_GetAdminStudentsForAttendance",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
         }
 
-        public async Task<AcademicContextResponse?> GetAcademicContextAsync(int groupId, int sectionId)
+        public async Task<int> AdminBulkSaveStudentAttendanceAsync(AdminBulkSaveStudentAttendanceRequest request, string userName, int? userId = null, CancellationToken cancellationToken = default)
         {
-            var group = await _context.Groups
-                .Include(g => g.BoardNavigation)
-                .Include(g => g.AcademicYear)
-                .FirstOrDefaultAsync(g => g.GroupId == groupId)
-                ?? await _context.Groups.Include(g => g.BoardNavigation).Include(g => g.AcademicYear).FirstOrDefaultAsync();
+            await EnsureConnectionOpenAsync(cancellationToken);
 
-            var section = await _context.Sections
-                .FirstOrDefaultAsync(s => s.SectionId == sectionId)
-                ?? await _context.Sections.FirstOrDefaultAsync();
-
-            if (group == null || section == null) return null;
-
-            return new AcademicContextResponse
+            var date = request.AttendanceDate.Date;
+            var items = request.Attendances.Select(a => new
             {
-                BoardId = group.BoardId,
-                BoardName = group.BoardNavigation?.BoardName ?? "Board",
-                AcademicYearId = group.AcademicYearId,
-                AcademicYearName = group.AcademicYear?.AcademicYearName ?? "Academic Year",
-                GroupId = group.GroupId,
-                GroupName = group.GroupName,
-                SectionId = section.SectionId,
-                SectionName = section.SectionName
-            };
+                a.StudentId,
+                MorningStatus = a.MorningStatus.HasValue ? (int)a.MorningStatus.Value : 0,
+                AfternoonStatus = a.AfternoonStatus.HasValue ? (int)a.AfternoonStatus.Value : 0,
+                Remarks = a.Remarks ?? ""
+            });
+
+            var json = JsonSerializer.Serialize(items);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_AttendanceDate", date);
+            parameters.Add("p_BoardId", request.BoardId ?? 0);
+            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
+            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
+            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_UserId", userId ?? 0);
+            parameters.Add("p_UserName", userName ?? "Admin");
+            parameters.Add("p_ItemsJson", json);
+
+            return await Connection.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "sp_AdminBulkSaveStudentAttendance",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
         }
 
-        public async Task<FacultySubjectDerivationResponse?> GetFacultySubjectAllocationAsync(DateTime date, int? groupId = null, int? sectionId = null, int? periodId = null, string? sessionType = null)
+        public async Task<IEnumerable<AttendanceDefaulterResponse>> GetAttendanceDefaultersAsync(AttendanceDefaultersRequest request, CancellationToken cancellationToken = default)
         {
-            int secId = sectionId ?? 0;
-            int grpId = groupId ?? 0;
+            await EnsureConnectionOpenAsync(cancellationToken);
 
-            // 1. If periodId is not specified or sessionType indicates Full Day / Morning / Afternoon session, fetch the Section Class Teacher!
-            bool isSessionLevel = !periodId.HasValue || periodId.Value <= 0 ||
-                                  (!string.IsNullOrEmpty(sessionType) && (sessionType.ToLower().Contains("session") || sessionType.ToLower() == "allperiods"));
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", request.CampusId ?? 0);
+            parameters.Add("p_BoardId", request.BoardId ?? 0);
+            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
+            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
+            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_ProgramId", request.ProgramId ?? 0);
+            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_Month", request.Month ?? 0);
+            parameters.Add("p_Year", request.Year ?? 0);
+            parameters.Add("p_Threshold", (decimal)request.Threshold);
 
-            if (isSessionLevel)
-            {
-                if (secId > 0)
-                {
-                    var sec = await _context.Sections.FirstOrDefaultAsync(s => s.SectionId == secId);
-                    if (sec != null && (sec.InchargeId.HasValue || sec.ClassTeacherId.HasValue))
-                    {
-                        int teacherId = sec.InchargeId ?? sec.ClassTeacherId!.Value;
-                        var ctStaff = await _context.Staffs.FirstOrDefaultAsync(st => st.Id == teacherId);
-                        if (ctStaff != null)
-                        {
-                            return new FacultySubjectDerivationResponse
-                            {
-                                SubjectId = 0,
-                                SubjectName = "All Subjects",
-                                FacultyId = ctStaff.Id,
-                                FacultyName = $"{ctStaff.FirstName} {ctStaff.LastName}".Trim(),
-                                PeriodId = periodId ?? 0,
-                                PeriodName = sessionType ?? "Class Teacher Session"
-                            };
-                        }
-                    }
-                }
-
-                return new FacultySubjectDerivationResponse
-                {
-                    SubjectId = 0,
-                    SubjectName = "All Subjects",
-                    FacultyId = 0,
-                    FacultyName = "Not assigned",
-                    PeriodId = periodId ?? 0,
-                    PeriodName = sessionType ?? "AllPeriods"
-                };
-            }
-
-            // 2. If a specific subject period is selected (e.g. Period 1), look up the Timetable slot!
-            int dayOfWeekInt = date.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)date.DayOfWeek;
-            int reqPeriodId = periodId ?? 0;
-
-            if (reqPeriodId > 0 && secId > 0)
-            {
-                var ttSlot = await _context.Timetables
-                    .Include(t => t.Subject)
-                    .Include(t => t.Staff)
-                    .Include(t => t.Period)
-                    .FirstOrDefaultAsync(t => (grpId == 0 || t.GroupId == grpId)
-                                              && t.SectionId == secId
-                                              && t.PeriodId == reqPeriodId
-                                              && t.DayOfWeek == dayOfWeekInt);
-
-                if (ttSlot != null && ttSlot.Subject != null && ttSlot.Staff != null)
-                {
-                    return new FacultySubjectDerivationResponse
-                    {
-                        SubjectId = ttSlot.SubjectId ?? 0,
-                        SubjectName = ttSlot.Subject.SubjectName,
-                        FacultyId = ttSlot.StaffId ?? 0,
-                        FacultyName = $"{ttSlot.Staff.FirstName} {ttSlot.Staff.LastName}".Trim(),
-                        PeriodId = reqPeriodId,
-                        PeriodName = ttSlot.Period?.PeriodName ?? $"Period {reqPeriodId}"
-                    };
-                }
-            }
-
-            // 3. Fallback: Return Class Teacher if available or "Not assigned"
-            if (secId > 0)
-            {
-                var sectionObj = await _context.Sections.FirstOrDefaultAsync(s => s.SectionId == secId);
-                if (sectionObj != null && (sectionObj.InchargeId.HasValue || sectionObj.ClassTeacherId.HasValue))
-                {
-                    int teacherId = sectionObj.InchargeId ?? sectionObj.ClassTeacherId!.Value;
-                    var ctStaff = await _context.Staffs.FirstOrDefaultAsync(st => st.Id == teacherId);
-                    if (ctStaff != null)
-                    {
-                        var subFirst = await _context.Subjects.FirstOrDefaultAsync(s => s.IsActive);
-                        return new FacultySubjectDerivationResponse
-                        {
-                            SubjectId = subFirst?.SubjectId ?? 0,
-                            SubjectName = subFirst?.SubjectName ?? "General",
-                            FacultyId = ctStaff.Id,
-                            FacultyName = $"{ctStaff.FirstName} {ctStaff.LastName}".Trim(),
-                            PeriodId = reqPeriodId,
-                            PeriodName = $"Period {reqPeriodId}"
-                        };
-                    }
-                }
-            }
-
-            return new FacultySubjectDerivationResponse
-            {
-                SubjectId = 0,
-                SubjectName = "All Subjects",
-                FacultyId = 0,
-                FacultyName = "Not assigned",
-                PeriodId = reqPeriodId,
-                PeriodName = $"Period {reqPeriodId}"
-            };
+            return await Connection.QueryAsync<AttendanceDefaulterResponse>(
+                new CommandDefinition(
+                    "sp_GetAttendanceDefaulters",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
         }
 
-        public async Task<StudentMonthlyReportResponse> GetStudentMonthlyReportGridAsync(StudentMonthlyReportRequest request)
+        public async Task<AcademicContextResponse?> GetAcademicContextAsync(int groupId, int sectionId, CancellationToken cancellationToken = default)
         {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            return await Connection.QueryFirstOrDefaultAsync<AcademicContextResponse>(
+                new CommandDefinition(
+                    "sp_GetStudentAttendanceAcademicContext",
+                    new { p_GroupId = groupId, p_SectionId = sectionId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        public async Task<FacultySubjectDerivationResponse?> GetFacultySubjectAllocationAsync(DateTime date, int? groupId = null, int? sectionId = null, int? periodId = null, string? sessionType = null, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            return await Connection.QueryFirstOrDefaultAsync<FacultySubjectDerivationResponse>(
+                new CommandDefinition(
+                    "sp_GetFacultySubjectDerivation",
+                    new
+                    {
+                        p_Date = date.Date,
+                        p_GroupId = groupId ?? 0,
+                        p_SectionId = sectionId ?? 0,
+                        p_PeriodId = periodId ?? 0,
+                        p_SessionType = sessionType ?? "AllPeriods"
+                    },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        public async Task<StudentMonthlyReportResponse> GetStudentMonthlyReportGridAsync(StudentMonthlyReportRequest request, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
             int targetMonth = request.Month.HasValue && request.Month.Value > 0 ? request.Month.Value : 0;
             int targetYear = request.Year.HasValue && request.Year.Value > 0 ? request.Year.Value : 0;
 
@@ -965,208 +427,118 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
             }
 
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", request.CampusId ?? 0);
+            parameters.Add("p_BoardId", request.BoardId ?? 0);
+            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
+            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
+            parameters.Add("p_ProgramId", request.ProgramId ?? 0);
+            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_StudentId", request.StudentId ?? 0);
+            parameters.Add("p_Month", targetMonth);
+            parameters.Add("p_Year", targetYear);
+
+            using var grid = await Connection.QueryMultipleAsync(
+                new CommandDefinition(
+                    "sp_GetStudentMonthlyReportGrid",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            var contextMeta = await grid.ReadFirstOrDefaultAsync<dynamic>();
+            var students = (await grid.ReadAsync<dynamic>()).ToList();
+            var attendances = (await grid.ReadAsync<dynamic>()).ToList();
+            var holidays = (await grid.ReadAsync<dynamic>()).ToList();
+
             int daysInMonth = DateTime.DaysInMonth(targetYear, targetMonth);
-            var monthStartDate = new DateTime(targetYear, targetMonth, 1);
-            var monthEndDate = new DateTime(targetYear, targetMonth, daysInMonth);
-
-            var monthHolidays = await _context.Holidays
-                .Where(h => !h.IsDeleted && h.Status == "Active" 
-                         && h.StartDate <= monthEndDate && h.EndDate >= monthStartDate
-                         && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Students Only")
-                         && (!request.CampusId.HasValue || h.CampusId == null || h.CampusId == request.CampusId.Value)
-                         && (!request.BoardId.HasValue || h.BoardId == null || h.BoardId == request.BoardId.Value)
-                         && (!request.AcademicYearId.HasValue || h.AcademicYearId == null || h.AcademicYearId == request.AcademicYearId.Value))
-                .ToListAsync();
-
             var dayHeaders = new List<DayHeaderDto>();
+
             for (int day = 1; day <= daysInMonth; day++)
             {
                 var dt = new DateTime(targetYear, targetMonth, day);
                 bool isSunday = dt.DayOfWeek == DayOfWeek.Sunday;
-                var matchingHoliday = monthHolidays.FirstOrDefault(h => dt.Date >= h.StartDate.Date && dt.Date <= h.EndDate.Date);
-                bool isOfficialHoliday = matchingHoliday != null;
+                bool isOfficialHoliday = holidays.Any(h => dt.Date >= ((DateTime)h.StartDate).Date && dt.Date <= ((DateTime)h.EndDate).Date);
                 bool isHoliday = isSunday || isOfficialHoliday;
-                string dayNameUpper = dt.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture).ToUpper();
 
                 dayHeaders.Add(new DayHeaderDto
                 {
                     DayNumber = day,
                     DateString = dt.ToString("yyyy-MM-dd"),
-                    DayName = dayNameUpper,
-                    CombinedHeader = $"{day} {dayNameUpper}",
+                    DayName = dt.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture).ToUpper(),
+                    CombinedHeader = $"{day} {dt.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture).ToUpper()}",
                     IsHoliday = isHoliday
                 });
             }
-
-            // Fetch active students with Group and Section navigation
-            var studentQuery = _context.Students
-                .Include(s => s.GroupNavigation)
-                .Include(s => s.SectionNavigation)
-                .AsQueryable();
-
-            if (request.CampusId.HasValue && request.CampusId.Value > 0)
-            {
-                studentQuery = studentQuery.Where(s => s.CampusId == request.CampusId.Value);
-            }
-
-            if (request.BoardId.HasValue && request.BoardId.Value > 0)
-            {
-                studentQuery = studentQuery.Where(s => s.BoardId == request.BoardId.Value);
-            }
-
-            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0)
-            {
-                studentQuery = studentQuery.Where(s => s.AcademicYearId == request.AcademicYearId.Value);
-            }
-
-            if (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0)
-            {
-                studentQuery = studentQuery.Where(s => s.AcademicLevelId == request.AcademicLevelId.Value);
-            }
-
-            if (request.ProgramId.HasValue && request.ProgramId.Value > 0)
-            {
-                studentQuery = studentQuery.Where(s => s.ProgramId == request.ProgramId.Value);
-            }
-
-            if (request.GroupId.HasValue && request.GroupId.Value > 0)
-            {
-                studentQuery = studentQuery.Where(s => s.GroupId == request.GroupId.Value);
-            }
-
-            if (request.SectionId.HasValue && request.SectionId.Value > 0)
-            {
-                studentQuery = studentQuery.Where(s => s.SectionId == request.SectionId.Value);
-            }
-
-            if (request.StudentId.HasValue && request.StudentId.Value > 0)
-            {
-                studentQuery = studentQuery.Where(s => s.StudentId == request.StudentId.Value);
-            }
-
-            var studentList = await studentQuery.OrderBy(s => s.RollNo).ThenBy(s => s.StudentName).ToListAsync();
-
-            var startDate = new DateTime(targetYear, targetMonth, 1);
-            var endDate = new DateTime(targetYear, targetMonth, daysInMonth);
-
-            var studentIds = studentList.Select(s => s.StudentId).ToList();
-
-            // Fetch attendance records for this month for the selected students
-            var monthAttendancesQuery = _context.Attendances
-                .Where(a => a.AttendanceDate.Date >= startDate
-                            && a.AttendanceDate.Date <= endDate
-                            && a.IsActive
-                            && studentIds.Contains(a.StudentId));
-
-            if (request.GroupId.HasValue && request.GroupId.Value > 0)
-            {
-                monthAttendancesQuery = monthAttendancesQuery.Where(a => a.GroupId == request.GroupId.Value);
-            }
-
-            if (request.SectionId.HasValue && request.SectionId.Value > 0)
-            {
-                monthAttendancesQuery = monthAttendancesQuery.Where(a => a.SectionId == request.SectionId.Value);
-            }
-
-            var monthAttendances = await monthAttendancesQuery.ToListAsync();
 
             var studentRows = new List<StudentMonthlyGridRowDto>();
             int totalPresentAll = 0, totalAbsentAll = 0;
             int workingDaysCount = dayHeaders.Count(d => !d.IsHoliday);
 
-            foreach (var student in studentList)
+            foreach (var student in students)
             {
+                int studentId = (int)student.StudentId;
+                var studentAttendances = attendances.Where(a => (int)a.StudentId == studentId).ToList();
                 var dailyStatus = new List<string>();
                 int presentCount = 0, absentCount = 0, leaveCount = 0;
 
                 for (int day = 1; day <= daysInMonth; day++)
                 {
                     var dt = new DateTime(targetYear, targetMonth, day);
-                    bool isSunday = dt.DayOfWeek == DayOfWeek.Sunday;
-                    var matchingHoliday = monthHolidays.FirstOrDefault(h => dt.Date >= h.StartDate.Date && dt.Date <= h.EndDate.Date);
-                    bool isOfficialHoliday = matchingHoliday != null;
+                    var header = dayHeaders[day - 1];
 
-                    if (isOfficialHoliday)
+                    if (header.IsHoliday)
                     {
                         dailyStatus.Add("H");
                         continue;
                     }
-                    if (isSunday)
+
+                    var dayRecords = studentAttendances.Where(a => ((DateTime)a.AttendanceDate).Date == dt.Date).ToList();
+                    if (!dayRecords.Any())
                     {
                         dailyStatus.Add("-");
                         continue;
                     }
 
-                    var dayRecords = monthAttendances
-                        .Where(a => a.StudentId == student.StudentId && a.AttendanceDate.Day == day)
-                        .ToList();
+                    var morning = dayRecords.FirstOrDefault(r => r.Session == 1);
+                    var afternoon = dayRecords.FirstOrDefault(r => r.Session == 2);
 
-                    if (!dayRecords.Any())
+                    int morningStatus = morning != null ? (int)morning.Status : (int)dayRecords.First().Status;
+                    int afternoonStatus = afternoon != null ? (int)afternoon.Status : morningStatus;
+
+                    if (morningStatus == (int)AttendanceStatus.Present && afternoonStatus == (int)AttendanceStatus.Present)
                     {
-                        dailyStatus.Add("-");
+                        dailyStatus.Add("P");
+                        presentCount++;
+                    }
+                    else if (morningStatus == (int)AttendanceStatus.Absent && afternoonStatus == (int)AttendanceStatus.Absent)
+                    {
+                        dailyStatus.Add("A");
+                        absentCount++;
+                    }
+                    else if (morningStatus == (int)AttendanceStatus.Leave || afternoonStatus == (int)AttendanceStatus.Leave)
+                    {
+                        dailyStatus.Add("L");
+                        leaveCount++;
                     }
                     else
                     {
-                        var morning = dayRecords.FirstOrDefault(r => (int?)r.Session == 1);
-                        var afternoon = dayRecords.FirstOrDefault(r => (int?)r.Session == 2);
-
-                        if (morning != null && afternoon != null)
-                        {
-                            bool morningPresent = morning.Status == Enums.AttendanceStatus.Present;
-                            bool afternoonPresent = afternoon.Status == Enums.AttendanceStatus.Present;
-                            bool morningAbsent = morning.Status == Enums.AttendanceStatus.Absent;
-                            bool afternoonAbsent = afternoon.Status == Enums.AttendanceStatus.Absent;
-
-                            if (morningPresent && afternoonPresent)
-                            {
-                                dailyStatus.Add("P");
-                                presentCount++;
-                            }
-                            else if (morningAbsent && afternoonAbsent)
-                            {
-                                dailyStatus.Add("A");
-                                absentCount++;
-                            }
-                            else
-                            {
-                                // One present & one absent/other, or student half-day -> HalfDay (HD)
-                                dailyStatus.Add("HD");
-                                leaveCount++;
-                            }
-                        }
-                        else
-                        {
-                            // Only 1 session record found for the day
-                            var single = dayRecords.First();
-                            if (single.Status == Enums.AttendanceStatus.Present)
-                            {
-                                dailyStatus.Add("P");
-                                presentCount++;
-                            }
-                            else if (single.Status == Enums.AttendanceStatus.Absent)
-                            {
-                                dailyStatus.Add("A");
-                                absentCount++;
-                            }
-                            else
-                            {
-                                dailyStatus.Add("HD");
-                                leaveCount++;
-                            }
-                        }
+                        dailyStatus.Add("HD");
+                        presentCount++;
                     }
                 }
 
-                int markedCount = presentCount + absentCount + leaveCount;
-                double percentage = markedCount > 0 ? Math.Round((double)(presentCount + 0.5 * leaveCount) / markedCount * 100, 1) : 0;
+                double percentage = workingDaysCount > 0
+                    ? Math.Round((double)presentCount / workingDaysCount * 100, 1)
+                    : 0;
 
                 studentRows.Add(new StudentMonthlyGridRowDto
                 {
-                    StudentId = student.StudentId,
-                    RollNumber = string.IsNullOrEmpty(student.RollNo) ? $"STU{student.StudentId:D3}" : student.RollNo,
-                    StudentName = student.StudentName,
-                    GroupName = student.GroupNavigation?.GroupName ?? "Group",
-                    SectionName = student.SectionNavigation?.SectionName ?? "Section",
+                    StudentId = studentId,
+                    RollNumber = (string)(student.RollNo ?? ""),
+                    StudentName = (string)(student.StudentName ?? ""),
+                    GroupName = (string)(student.GroupName ?? ""),
+                    SectionName = (string)(student.SectionName ?? ""),
                     DailyStatus = dailyStatus,
                     PresentCount = presentCount,
                     AbsentCount = absentCount,
@@ -1187,27 +559,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 ? Math.Round((double)(totalPresentAll + 0.5 * totalHalfDayAll) / totalMarkedAll * 100, 1)
                 : 0;
 
-            string groupName = "All Groups";
-            string sectionName = "All Sections";
-
-            if (request.GroupId.HasValue && request.GroupId.Value > 0)
-            {
-                var grp = await _context.Groups.FirstOrDefaultAsync(g => g.GroupId == request.GroupId.Value);
-                if (grp != null) groupName = grp.GroupName;
-            }
-
-            if (request.SectionId.HasValue && request.SectionId.Value > 0)
-            {
-                var sec = await _context.Sections.FirstOrDefaultAsync(s => s.SectionId == request.SectionId.Value);
-                if (sec != null) sectionName = sec.SectionName;
-            }
-
             return new StudentMonthlyReportResponse
             {
                 Month = targetMonth,
                 Year = targetYear,
-                GroupName = groupName,
-                SectionName = sectionName,
+                GroupName = (string)(contextMeta?.GroupName ?? "All Groups"),
+                SectionName = (string)(contextMeta?.SectionName ?? "All Sections"),
                 TotalWorkingDays = workingDaysCount,
                 TotalPresent = totalPresentAll,
                 TotalAbsent = totalAbsentAll,
@@ -1217,6 +574,223 @@ namespace CollegeManagement.API.Repositories.Implementations
             };
         }
 
-        #endregion
+        // =====================================================================
+        // STUDENT & PARENT PORTAL ATTENDANCE (100% Stored Procedures)
+        // =====================================================================
+
+        public async Task<YearlyOverviewResponse> GetStudentYearlyOverviewAsync(int studentId, int academicYearId, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            using var multi = await Connection.QueryMultipleAsync(
+                new CommandDefinition(
+                    "sp_GetStudentAttendances",
+                    new { p_StudentId = studentId, p_AcademicYearId = academicYearId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            var yearInfo = await multi.ReadSingleOrDefaultAsync<dynamic>();
+            if (yearInfo == null || yearInfo.StartDate == null || yearInfo.EndDate == null)
+            {
+                throw new KeyNotFoundException("No active Academic Year found in the system for this student.");
+            }
+
+            DateTime startDate = yearInfo.StartDate;
+            DateTime endDate = yearInfo.EndDate;
+            var records = (await multi.ReadAsync<Attendance>()).ToList();
+
+            var response = new YearlyOverviewResponse();
+            var months = new List<MonthlyOverviewItem>();
+
+            var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
+            var endMonth = new DateTime(endDate.Year, endDate.Month, 1);
+
+            while (currentMonth <= endMonth)
+            {
+                var monthRecords = records.Where(r => r.AttendanceDate.Month == currentMonth.Month && r.AttendanceDate.Year == currentMonth.Year).ToList();
+                var distinctDays = monthRecords.Select(r => r.AttendanceDate.Date).Distinct().ToList();
+                int workingDays = distinctDays.Count;
+
+                int presentDays = 0, absentDays = 0, halfDays = 0;
+
+                foreach (var day in distinctDays)
+                {
+                    var dayRecords = monthRecords.Where(r => r.AttendanceDate.Date == day).ToList();
+                    var morning = dayRecords.FirstOrDefault(r => r.Session == StudentAttendanceSession.Morning);
+                    var afternoon = dayRecords.FirstOrDefault(r => r.Session == StudentAttendanceSession.Afternoon);
+
+                    bool isMorningPresent = morning != null && morning.Status == AttendanceStatus.Present;
+                    bool isAfternoonPresent = afternoon != null && afternoon.Status == AttendanceStatus.Present;
+                    bool hasMorning = morning != null, hasAfternoon = afternoon != null;
+
+                    if (isMorningPresent && isAfternoonPresent) presentDays++;
+                    else if ((isMorningPresent && hasAfternoon && !isAfternoonPresent) || (isAfternoonPresent && hasMorning && !isMorningPresent)) halfDays++;
+                    else if (isMorningPresent || isAfternoonPresent) presentDays++;
+                    else absentDays++;
+                }
+
+                months.Add(new MonthlyOverviewItem
+                {
+                    MonthName = currentMonth.ToString("MMMM"),
+                    Month = currentMonth.Month,
+                    Year = currentMonth.Year,
+                    WorkingDays = workingDays,
+                    Present = presentDays,
+                    Absent = absentDays,
+                    HalfDays = halfDays,
+                    AttendancePercentage = workingDays > 0 ? Math.Round(((presentDays + (halfDays * 0.5)) / workingDays) * 100, 2) : 0
+                });
+
+                currentMonth = currentMonth.AddMonths(1);
+            }
+
+            response.MonthlyRecords = months;
+            response.TotalWorkingDays = months.Sum(m => m.WorkingDays);
+            response.TotalPresent = months.Sum(m => m.Present);
+            response.TotalAbsent = months.Sum(m => m.Absent);
+            response.TotalHalfDays = months.Sum(m => m.HalfDays);
+            response.OverallAttendancePercentage = response.TotalWorkingDays > 0
+                ? Math.Round(((response.TotalPresent + (response.TotalHalfDays * 0.5)) / response.TotalWorkingDays) * 100, 2)
+                : 0;
+
+            return response;
+        }
+
+        public async Task<IEnumerable<SubjectWiseAttendanceResponse>> GetStudentSubjectAttendanceAsync(int studentId, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            return await Connection.QueryAsync<SubjectWiseAttendanceResponse>(
+                new CommandDefinition(
+                    "sp_GetStudentSubjectAttendance",
+                    new { p_StudentId = studentId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        public async Task<IEnumerable<DailyPunchLogResponse>> GetStudentDailyPunchLogsAsync(int studentId, int month, int year, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            return await Connection.QueryAsync<DailyPunchLogResponse>(
+                new CommandDefinition(
+                    "sp_GetStudentDailyPunchLogs",
+                    new { p_StudentId = studentId, p_Month = month, p_Year = year },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+        }
+
+        public async Task<bool> LockSessionAsync(int sessionId, int lockedByUserId, string userName, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            var parameters = new DynamicParameters();
+            parameters.Add("p_SessionId", sessionId);
+            parameters.Add("p_LockedBy", lockedByUserId);
+            parameters.Add("p_UserName", userName);
+            parameters.Add("p_Success", dbType: DbType.Int32, direction: ParameterDirection.Output);
+
+            await Connection.ExecuteAsync(
+                new CommandDefinition(
+                    "sp_LockAttendanceSession",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            int result = parameters.Get<int>("p_Success");
+            if (result == -1) throw new KeyNotFoundException($"Attendance session with ID {sessionId} was not found.");
+            if (result == 0) throw new InvalidOperationException("This attendance session is already locked.");
+            return result == 1;
+        }
+
+        public async Task<bool> UnlockSessionAsync(int sessionId, string userName, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            var parameters = new DynamicParameters();
+            parameters.Add("p_SessionId", sessionId);
+            parameters.Add("p_UserName", userName);
+            parameters.Add("p_Success", dbType: DbType.Int32, direction: ParameterDirection.Output);
+
+            await Connection.ExecuteAsync(
+                new CommandDefinition(
+                    "sp_UnlockAttendanceSession",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            int result = parameters.Get<int>("p_Success");
+            if (result == -1) throw new KeyNotFoundException($"Attendance session with ID {sessionId} was not found.");
+            return result == 1;
+        }
+
+        public async Task<PagedResponse<AttendanceAuditHistoryResponse>> GetAuditHistoryAsync(AuditHistorySearchRequest request, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            var parameters = new DynamicParameters();
+            parameters.Add("p_FromDate", request.FromDate);
+            parameters.Add("p_ToDate", request.ToDate);
+            parameters.Add("p_UserId", request.UserId ?? 0);
+            parameters.Add("p_StudentId", request.StudentId ?? 0);
+            parameters.Add("p_FacultyId", request.FacultyId ?? 0);
+            parameters.Add("p_EntityType", request.EntityType ?? "");
+            parameters.Add("p_Action", request.Action ?? "");
+            parameters.Add("p_PageNumber", request.PageNumber > 0 ? request.PageNumber : 1);
+            parameters.Add("p_PageSize", request.PageSize > 0 ? request.PageSize : 10);
+
+            using var multi = await Connection.QueryMultipleAsync(
+                new CommandDefinition(
+                    "sp_GetAttendanceAuditHistory",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            var totalCount = await multi.ReadSingleOrDefaultAsync<int>();
+            var items = (await multi.ReadAsync<AttendanceAuditHistoryResponse>()).ToList();
+            int pageNumber = request.PageNumber > 0 ? request.PageNumber : 1;
+            int pageSize = request.PageSize > 0 ? request.PageSize : 10;
+
+            return new PagedResponse<AttendanceAuditHistoryResponse>
+            {
+                Items = items,
+                CurrentPage = pageNumber,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+            };
+        }
+
+        public async Task<(int SessionId, bool IsLocked)> GetOrCreateSessionAsync(int campusId, DateTime attendanceDate, int? periodId, int sectionId, int? subjectId, int? facultyId, int? boardId, int? academicYearId, int? academicLevelId, int? groupId, int? timetableId, CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", campusId);
+            parameters.Add("p_AttendanceDate", attendanceDate);
+            parameters.Add("p_PeriodId", periodId);
+            parameters.Add("p_SectionId", sectionId);
+            parameters.Add("p_SubjectId", subjectId);
+            parameters.Add("p_FacultyId", facultyId);
+            parameters.Add("p_BoardId", boardId);
+            parameters.Add("p_AcademicYearId", academicYearId);
+            parameters.Add("p_AcademicLevelId", academicLevelId);
+            parameters.Add("p_GroupId", groupId);
+            parameters.Add("p_TimetableId", timetableId);
+
+            var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                new CommandDefinition(
+                    "sp_GetOrCreateAttendanceSession",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            if (result != null)
+            {
+                return ((int)result.AttendanceSessionId, (bool)(result.IsLocked == 1 || result.IsLocked == true));
+            }
+
+            return (0, false);
+        }
     }
 }

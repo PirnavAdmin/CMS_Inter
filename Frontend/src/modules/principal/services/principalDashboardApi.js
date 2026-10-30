@@ -1,8 +1,6 @@
 import axios from "axios";
 import sharedApiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { getStudentOverviewMetrics } from "@/api/studentApi.js";
-import { summarizeStudentAttendance } from "@/modules/admin/AdminAttendance/dashboardStudentAttendance.js";
 
 const unwrap = (value, depth = 0) => {
   if (!value || typeof value !== "object" || Array.isArray(value) || depth > 5) return value;
@@ -159,93 +157,51 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
   }
   const todayParams = contextParams({ campusId, boardId, academicYearId, date: endDate });
   const contextOnlyParams = contextParams({ campusId, boardId, academicYearId });
-  const staffParams = {
-    BoardId: boardId || undefined,
-    CampusId: campusId || undefined,
-    PageNumber: 1,
-    PageSize: 10000,
-  };
 
-  // Common metrics use the same sources and calculations as Admin Dashboard.
+  // Consolidated principal dashboard snapshot: unified endpoint returns KPIs,
+  // student/staff attendance, upcoming exams, fee collection summary & chart, notices, and stream metrics in 1 call.
   const results = await Promise.allSettled([
     apiClient.get(apiEndpoints.dashboard.principal, { params: todayParams }),
-    apiClient.get(apiEndpoints.dashboard.summary, { params: todayParams }),
-    getStudentOverviewMetrics({ campusId, boardId, academicYearId }),
-    apiClient.get("/api/v1/attendance/admin/students", { params: todayParams }),
-    apiClient.post("/api/v1/staff-attendance/load", todayParams),
-    apiClient.get("/api/v1/staff", { params: staffParams }),
-    apiClient.get(apiEndpoints.dashboard.upcomingExaminations, { params: contextOnlyParams }),
-    apiClient.get(apiEndpoints.dashboard.highlights, { params: todayParams }),
     apiClient.get(apiEndpoints.dashboard.recentActivity, { params: { ...contextOnlyParams, limit: 5 } }),
-    apiClient.get(apiEndpoints.fee.dashboard, { params: contextOnlyParams }),
-    apiClient.get(apiEndpoints.fee.collection, { params: contextOnlyParams }),
-    apiClient.get(apiEndpoints.results.statistics, { params: contextOnlyParams }),
   ]);
 
-  const [principalResult, summaryResult, studentsResult, studentAttendanceResult, staffAttendanceResult, staffResult, examsResult, highlightsResult, activitiesResult, feeResult, paymentsResult, resultStatsResult] = results;
+  const [principalResult, activitiesResult] = results;
   const principalData = resolvedResult(principalResult, {}) || {};
-  const summary = resolvedResult(summaryResult, {}) || {};
-  const studentMetrics = studentsResult.status === "fulfilled" ? studentsResult.value : null;
-  const highlights = resolvedResult(highlightsResult, {}) || {};
-  const fee = resolvedResult(feeResult, {}) || {};
-  const resultStats = resolvedResult(resultStatsResult, {}) || {};
+  const summary = principalData.summary || {};
 
-  let studentAttendance = null;
-  let sectionAttendance = null;
-  if (studentAttendanceResult.status === "fulfilled") {
-    try {
-      // Admin Dashboard uses Overall for its primary attendance figures.
-      studentAttendance = summarizeStudentAttendance(studentAttendanceResult.value.data, "Overall");
-      // Keep the Principal-only class bars, while deriving their groups from
-      // the same campus-scoped attendance response.
-      sectionAttendance = summarizeStudentAttendance(studentAttendanceResult.value.data, "Section");
-    } catch {
-      studentAttendance = null;
-      sectionAttendance = null;
-    }
-  }
-
-  let staffAttendance = null;
-  if (staffAttendanceResult.status === "fulfilled") {
-    try {
-      staffAttendance = summarizeStaffAttendance(staffAttendanceResult.value.data);
-    } catch {
-      staffAttendance = null;
-    }
-  }
-
-  const studentTotal = studentMetrics?.totalStudents ?? numberOf(summary, ["totalStudents", "TotalStudents", "studentCount", "StudentCount"]);
-  const staffTotal = staffResult.status === "fulfilled"
-    ? activeStaffCount(staffResult.value.data)
-    : undefined;
-  const attendance = studentAttendance ? {
-    present: studentAttendance.present,
-    absent: studentAttendance.absent,
-    leave: studentAttendance.halfDay,
-    total: studentAttendance.total,
-    percentage: studentAttendance.percentage,
-  } : {
-    present: undefined,
-    absent: undefined,
-    leave: undefined,
-    total: undefined,
-    percentage: undefined,
+  const studentAttData = principalData.studentAttendance || {};
+  const attendance = {
+    present: studentAttData.present,
+    absent: studentAttData.absent,
+    leave: studentAttData.halfDay ?? studentAttData.late,
+    total: studentAttData.totalStudents ?? studentAttData.total,
+    percentage: studentAttData.attendancePercentage ?? studentAttData.percentage,
   };
-  const staff = staffAttendance ? {
-    present: staffAttendance.present,
-    absent: staffAttendance.absent,
-    late: staffAttendance.late,
-    leave: staffAttendance.leave,
-    total: staffAttendance.total,
-    percentage: staffAttendance.percentage,
-  } : { present: undefined, absent: undefined, late: undefined, leave: undefined, total: undefined, percentage: undefined };
 
-  const feeCollected = numberOf(fee, ["totalCollected", "TotalCollected", "collected", "Collected", "totalPaid", "TotalPaid"]);
-  const feePending = numberOf(fee, ["totalOutstanding", "TotalOutstanding", "outstanding", "Outstanding", "pendingAmount", "PendingAmount", "dueFees", "DueFees"]);
-  const collectionRate = feeCollected !== undefined && feePending !== undefined && feeCollected + feePending > 0
-    ? (feeCollected / (feeCollected + feePending)) * 100
-    : numberOf(fee, ["collectionPercentage", "CollectionPercentage"]);
-  const passPercentage = numberOf(resultStats, ["passPercentage", "PassPercentage", "overallPassPercentage", "OverallPassPercentage"]);
+  const staffAttData = principalData.staffAttendance || {};
+  const staff = {
+    present: staffAttData.present,
+    absent: staffAttData.absent,
+    late: staffAttData.late,
+    leave: staffAttData.onLeave,
+    total: staffAttData.totalStaff ?? staffAttData.total,
+    percentage: staffAttData.attendancePercentage ?? staffAttData.percentage,
+  };
+
+  const studentTotal = principalData.studentCount ?? numberOf(summary, ["totalStudents", "TotalStudents", "studentCount", "StudentCount"]);
+  const staffTotal = principalData.staffCount ?? (summary.totalStaff || (summary.teachingStaff + summary.nonTeachingStaff));
+
+  const backendFee = principalData.fees || {};
+  const feeCollected = numberOf(backendFee, ["collected", "totalCollected", "Collected", "totalPaid", "TotalPaid"], 0);
+  const feePending = numberOf(backendFee, ["pending", "totalOutstanding", "Pending", "dueFees", "DueFees"], 0);
+  const collectionRate = numberOf(backendFee, ["collectionRate", "collectionPercentage", "CollectionRate"],
+    feeCollected + feePending > 0 ? (feeCollected / (feeCollected + feePending)) * 100 : 0
+  );
+  const feeChart = (Array.isArray(backendFee.chart) && backendFee.chart.length > 0)
+    ? backendFee.chart
+    : [];
+
+  const passPercentage = principalData.passPercentage;
   const performanceStreams = rowsOf(principalData.performanceStreams);
   const performance = performanceStreams.length
     ? performanceStreams.map((stream) => ({
@@ -254,15 +210,16 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
         previous: numberOf(stream, ["previous", "Previous"]),
       })).filter((stream) => stream.current !== undefined)
     : (passPercentage === undefined ? [] : [{ label: "Overall", current: passPercentage }]);
-  const exams = toExams(resolvedResult(examsResult, []));
-  const classes = sectionAttendance ? toClasses(sectionAttendance.breakdownList) : [];
+  
+  const exams = toExams(principalData.upcomingExaminations || []);
+  const classes = toClasses(studentAttData.breakdown || []);
 
   return {
     partial: results.some((result) => result.status === "rejected"),
     studentCount: studentTotal,
     staffCount: staffTotal,
     studentsGrowth: numberOf(summary, ["studentsVsLastYearPercentage", "StudentsVsLastYearPercentage"]),
-    staffGrowth: numberOf(summary, ["staffVsLastYearPercentage", "StaffVsLastYearPercentage"]),
+    staffGrowth: numberOf(summary, ["teachingStaffVsLastYearPercentage", "staffVsLastYearPercentage", "StaffVsLastYearPercentage"]),
     attendance,
     staffAttendance: staff,
     passPercentage,
@@ -275,10 +232,10 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
       collected: feeCollected,
       pending: feePending,
       collectionRate,
-      chart: groupFeeCollection(rowsOf(resolvedResult(paymentsResult, []))),
+      chart: feeChart,
     },
-    activeClasses: numberOf(summary, ["totalSections", "TotalSections", "sectionsCount", "SectionsCount"]),
-    upcomingExamCount: examsResult.status === "fulfilled" ? exams.length : undefined,
-    admissions: numberOf(highlights, ["admissionsToday", "AdmissionsToday", "admissions", "Admissions"]),
+    activeClasses: principalData.activeClasses ?? numberOf(summary, ["totalSections", "TotalSections", "sectionsCount", "SectionsCount"]),
+    upcomingExamCount: exams.length || principalData.upcomingExamCount || 0,
+    admissions: principalData.admissions ?? numberOf(summary, ["admissions", "Admissions"]),
   };
 }

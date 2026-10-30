@@ -7,7 +7,7 @@ import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/shared/components/
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
-import { holidayRecords } from "@/data/mockData.js";
+// Mock data removed in favor of live API
 import "./HolidayManagementPage.css";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
 import nationalHolidaysIcon from "@/assets/sidebar-3d/holiday-national.svg";
@@ -98,7 +98,11 @@ function HolidayStatus({ holiday }) {
 }
 
 function HolidayForm({ holiday, onClose, onSave, saving }) {
-  const [values, setValues] = useState(holiday || EMPTY_HOLIDAY);
+  const [values, setValues] = useState(() => ({
+    ...EMPTY_HOLIDAY,
+    ...(holiday || {}),
+    description: holiday?.description ?? "",
+  }));
   const [errors, setErrors] = useState({});
   const setValue = (name, value) => {
     setValues((current) => ({ ...current, [name]: value, ...(name === "dateType" && value === "Single Day" ? { endDate: "" } : {}) }));
@@ -185,7 +189,7 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
         ) : null}
         <div className={`${fieldClass("description")} full`}>
           <label htmlFor="holiday-description">Description</label>
-          <textarea id="holiday-description" value={values.description} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
+          <textarea id="holiday-description" value={values.description ?? ""} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
         </div>
       </div>
     </Modal>
@@ -208,8 +212,8 @@ export default function HolidayManagementPage() {
   const [holidayLoadError, setHolidayLoadError] = useState("");
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
-  const [holidays, setHolidays] = useState(holidayRecords);
-  const [summary, setSummary] = useState({ total: 8, national: 3, festival: 5, upcoming: 7, completed: 1 });
+  const [holidays, setHolidays] = useState([]);
+  const [summary, setSummary] = useState({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const query = searchParams.get("q") || "";

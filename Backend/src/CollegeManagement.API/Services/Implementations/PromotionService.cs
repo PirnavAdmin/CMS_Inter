@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Promotion;
 using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Repositories.Interfaces;
@@ -16,7 +21,9 @@ namespace CollegeManagement.API.Services.Implementations
             _feeService = feeService;
         }
 
-        public Task<IEnumerable<EligibleStudentDto>> GetEligibleStudentsAsync(PromotionEligibilityQuery query)
+        public Task<IEnumerable<EligibleStudentDto>> GetEligibleStudentsAsync(
+            PromotionEligibilityQuery query,
+            CancellationToken cancellationToken = default)
         {
             if (query.AcademicYearId.HasValue && query.TargetAcademicYearId.HasValue && query.AcademicYearId.Value == query.TargetAcademicYearId.Value)
                 throw new ValidationException("Source and target academic year cannot be the same.");
@@ -25,22 +32,27 @@ namespace CollegeManagement.API.Services.Implementations
                 !new[] { "Eligible", "Not Eligible" }.Contains(query.EligibilityStatus, StringComparer.OrdinalIgnoreCase))
                 throw new ValidationException("EligibilityStatus must be Eligible or Not Eligible.");
 
-            return _repository.GetEligibleStudentsAsync(query);
+            return _repository.GetEligibleStudentsAsync(query, cancellationToken);
         }
 
-        public Task<PromotionPreviewResponse> PreviewAsync(PromotionPreviewRequest request)
+        public Task<PromotionPreviewResponse> PreviewAsync(
+            PromotionPreviewRequest request,
+            CancellationToken cancellationToken = default)
         {
             ValidateConfiguration(request.SourceAcademicYearId, request.SourceAcademicLevel, request.SourceGroupId, request.TargetAcademicYearId, request.TargetAcademicLevel, request.TargetGroupId);
             ValidateIds(request.StudentIds);
-            return _repository.PreviewAsync(request);
+            return _repository.PreviewAsync(request, cancellationToken);
         }
 
-        public async Task<PromotionExecutionResponse> PromoteStudentsAsync(PromoteStudentsRequest request, string performedBy = "System")
+        public async Task<PromotionExecutionResponse> PromoteStudentsAsync(
+            PromoteStudentsRequest request,
+            string performedBy = "System",
+            CancellationToken cancellationToken = default)
         {
             ValidateConfiguration(request.SourceAcademicYearId, request.SourceAcademicLevel, request.SourceGroupId, request.TargetAcademicYearId, request.TargetAcademicLevel, request.TargetGroupId);
             ValidateIds(request.StudentIds);
             
-            var result = await _repository.PromoteStudentsAsync(request, performedBy);
+            var result = await _repository.PromoteStudentsAsync(request, performedBy, cancellationToken);
 
             if (result != null && result.Students != null && result.Students.Any(s => s.PromotionStatus == "Promoted"))
             {
@@ -77,7 +89,7 @@ namespace CollegeManagement.API.Services.Implementations
                         }
                         catch
                         {
-                            // Avoid failing entire batch if single student fee assignment encounters non-critical issue
+                            // Non-critical fee assignment exception
                         }
                     }
                 }
@@ -86,16 +98,25 @@ namespace CollegeManagement.API.Services.Implementations
             return result ?? new PromotionExecutionResponse();
         }
 
-        public Task<IEnumerable<PromotionHistoryDto>> GetHistoryAsync(PromotionHistoryQuery query) => _repository.GetHistoryAsync(query);
+        public Task<IEnumerable<PromotionHistoryDto>> GetHistoryAsync(
+            PromotionHistoryQuery query,
+            CancellationToken cancellationToken = default) => _repository.GetHistoryAsync(query, cancellationToken);
 
-        public Task<RollbackResponse> RollbackAsync(RollbackPromotionRequest request, string performedBy = "System")
+        public Task<RollbackResponse> RollbackAsync(
+            RollbackPromotionRequest request,
+            string performedBy = "System",
+            CancellationToken cancellationToken = default)
         {
             if (request.PromotionId <= 0) throw new ValidationException("Promotion ID is required.");
             if (string.IsNullOrWhiteSpace(request.Reason)) throw new ValidationException("Rollback reason is required.");
-            return _repository.RollbackAsync(request, performedBy);
+            return _repository.RollbackAsync(request, performedBy, cancellationToken);
         }
 
-        public async Task<PromotionHistoryDto> PromoteSingleStudentAsync(int studentId, PromoteSingleStudentRequest request, string performedBy = "System")
+        public async Task<PromotionHistoryDto> PromoteSingleStudentAsync(
+            int studentId,
+            PromoteSingleStudentRequest request,
+            string performedBy = "System",
+            CancellationToken cancellationToken = default)
         {
             if (studentId <= 0) throw new ValidationException("Student ID is required.");
             if (request.TargetAcademicYearId <= 0) throw new ValidationException("Target academic year is required.");
@@ -103,7 +124,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (request.TargetGroupId <= 0) throw new ValidationException("Target group is required.");
             if (string.IsNullOrWhiteSpace(request.TargetSection)) throw new ValidationException("Target section is required.");
             
-            var row = await _repository.PromoteSingleStudentAsync(studentId, request, performedBy);
+            var row = await _repository.PromoteSingleStudentAsync(studentId, request, performedBy, cancellationToken);
             if (row == null) throw new NotFoundException($"Student {studentId} was not found.");
 
             int? feeStructureId = request.TargetFeeStructureId;
@@ -139,21 +160,25 @@ namespace CollegeManagement.API.Services.Implementations
             return row;
         }
 
-        public Task<AllocationResponse> AllocateGroupAsync(GroupAllocationRequest request)
+        public Task<AllocationResponse> AllocateGroupAsync(
+            GroupAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
             ValidateIds(request.StudentIds);
             if (request.TargetAcademicYearId <= 0 || request.TargetGroupId <= 0 || string.IsNullOrWhiteSpace(request.TargetAcademicLevel))
                 throw new ValidationException("Target academic configuration is required.");
-            return _repository.AllocateGroupAsync(request);
+            return _repository.AllocateGroupAsync(request, cancellationToken);
         }
 
-        public async Task<AllocationResponse> AllocateProgramAsync(ProgramAllocationRequest request)
+        public async Task<AllocationResponse> AllocateProgramAsync(
+            ProgramAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
             ValidateIds(request.StudentIds);
             if (request.TargetAcademicYearId <= 0 || request.TargetGroupId <= 0 || request.TargetProgramId <= 0 || string.IsNullOrWhiteSpace(request.TargetAcademicLevel))
                 throw new ValidationException("Target academic configuration (including Program) is required.");
             
-            var response = await _repository.AllocateProgramAsync(request);
+            var response = await _repository.AllocateProgramAsync(request, cancellationToken);
 
             if (request.UpdateFees && response != null && response.Students != null)
             {
@@ -174,15 +199,19 @@ namespace CollegeManagement.API.Services.Implementations
             return response ?? new AllocationResponse();
         }
 
-        public Task<AllocationResponse> AllocateSectionAsync(SectionAllocationRequest request)
+        public Task<AllocationResponse> AllocateSectionAsync(
+            SectionAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
             ValidateIds(request.StudentIds);
             if (request.TargetAcademicYearId <= 0 || request.TargetGroupId <= 0 || string.IsNullOrWhiteSpace(request.TargetAcademicLevel) || string.IsNullOrWhiteSpace(request.TargetSection))
                 throw new ValidationException("Target academic configuration is required.");
-            return _repository.AllocateSectionAsync(request);
+            return _repository.AllocateSectionAsync(request, cancellationToken);
         }
 
-        public Task<PromotionReportResponse> GetPromotionReportAsync(PromotionReportQuery query) => _repository.GetPromotionReportAsync(query);
+        public Task<PromotionReportResponse> GetPromotionReportAsync(
+            PromotionReportQuery query,
+            CancellationToken cancellationToken = default) => _repository.GetPromotionReportAsync(query, cancellationToken);
 
         private static void ValidateConfiguration(int? sourceYear, string? sourceLevel, int? sourceGroup, int? targetYear, string? targetLevel, int? targetGroup)
         {

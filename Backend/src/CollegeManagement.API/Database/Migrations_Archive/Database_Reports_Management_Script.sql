@@ -34,7 +34,7 @@ BEGIN
            AND (p_AcademicYearId IS NULL OR sa.`AcademicYearId` = p_AcademicYearId) 
            AND (p_AcademicLevelId IS NULL OR sa.`AcademicLevelId` = p_AcademicLevelId)
            AND (p_GroupId IS NULL OR sa.`GroupId` = p_GroupId) 
-           AND (p_SectionId IS NULL OR sa.`SectionId` = p_SectionId) 
+           AND (p_SectionId IS NULL OR EXISTS (SELECT 1 FROM `Students` s WHERE s.`AdmissionId` = sa.`AdmissionId` AND s.`SectionId` = p_SectionId)) 
            AND (p_FromDate IS NULL OR sa.`AdmissionDate` >= p_FromDate) 
            AND (p_ToDate IS NULL OR sa.`AdmissionDate` <= p_ToDate)
         ) AS `Admissions`,

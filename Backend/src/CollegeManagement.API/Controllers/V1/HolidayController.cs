@@ -1,18 +1,22 @@
 using System;
 using System.ComponentModel.DataAnnotations;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using System.IO;
+using System.Security.Claims;
+using System.Threading.Tasks;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.Holiday;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
+    [ApiVersion("1.0")]
     [Route("api/v1/holidays")]
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
@@ -21,10 +25,12 @@ namespace CollegeManagement.API.Controllers.V1
     public class HolidayController : ControllerBase
     {
         private readonly IHolidayService _holidayService;
+        private readonly ILogger<HolidayController> _logger;
 
-        public HolidayController(IHolidayService holidayService)
+        public HolidayController(IHolidayService holidayService, ILogger<HolidayController> logger)
         {
             _holidayService = holidayService;
+            _logger = logger;
         }
 
         // GET: api/v1/holidays
@@ -49,11 +55,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error occurred while retrieving holidays.");
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while retrieving holidays.",
-                    details = ex.Message
+                    message = "An error occurred while retrieving holidays."
                 });
             }
         }
@@ -76,11 +82,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error occurred while retrieving holiday summary.");
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while retrieving holiday summary.",
-                    details = ex.Message
+                    message = "An error occurred while retrieving holiday summary."
                 });
             }
         }
@@ -111,11 +117,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error occurred while retrieving holiday details for ID {Id}.", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while retrieving holiday details.",
-                    details = ex.Message
+                    message = "An error occurred while retrieving holiday details."
                 });
             }
         }
@@ -155,11 +161,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error occurred while creating holiday {HolidayName}.", request?.HolidayName);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while creating holiday.",
-                    details = ex.Message
+                    message = "An error occurred while creating holiday."
                 });
             }
         }
@@ -208,11 +214,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error occurred while updating holiday {Id}.", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while updating holiday.",
-                    details = ex.Message
+                    message = "An error occurred while updating holiday."
                 });
             }
         }
@@ -242,15 +248,15 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error occurred while deleting holiday {Id}.", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while deleting holiday.",
-                    details = ex.Message
+                    message = "An error occurred while deleting holiday."
                 });
             }
         }
-    
+
         [HttpGet("import/template")]
         public async Task<IActionResult> DownloadImportTemplate()
         {
@@ -262,13 +268,13 @@ namespace CollegeManagement.API.Controllers.V1
         [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> ImportExcel(IFormFile file, [FromQuery] bool validateOnly = false, [FromQuery] int? campusId = null, [FromQuery] int? academicYearId = null, [FromQuery] int? boardId = null)
         {
-            if (file == null || file.Length == 0) return BadRequest(new { success = false, message = "File is empty or not provided." });
-            
+            if (file == null || file.Length == 0)
+                return BadRequest(new { success = false, message = "File is empty or not provided." });
+
             using var ms = new MemoryStream();
             await file.CopyToAsync(ms);
-            
             int? currentUserId = null;
-            var idClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (int.TryParse(idClaim, out int uid)) currentUserId = uid;
 
             var result = await _holidayService.ImportHolidaysFromExcelAsync(ms.ToArray(), validateOnly, currentUserId, campusId, academicYearId, boardId);

@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
@@ -503,7 +503,22 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                         updatedRecord));
         }
 
-        public async Task<(bool Success, string Message)>
+        
+        public async Task<(bool Success, string Message, int SavedCount)>
+            BulkSaveAsync(BulkHostelAttendanceDto dto)
+        {
+            if (dto == null || dto.Records == null || dto.Records.Count == 0)
+            {
+                return (false, "No attendance records provided.", 0);
+            }
+
+            var session = NormalizeSession(dto.Session) ?? "Morning";
+            dto.Session = session;
+
+            var saved = await _attendanceRepository.BulkSaveAsync(dto);
+            return (true, $"Successfully recorded attendance for {saved} students.", saved);
+        }
+public async Task<(bool Success, string Message)>
             DeleteAsync(int attendanceId)
         {
             if (!await _attendanceRepository

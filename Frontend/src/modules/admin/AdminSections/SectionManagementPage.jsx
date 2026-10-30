@@ -1079,25 +1079,18 @@ export default function SectionManagementPage() {
     }
   }, [effectiveCampusId]);
 
-  const loadStudentCounts = useCallback(async () => {
-    try {
-      const res = await apiClient.get(apiEndpoints.students.getAll);
-      const studentList = unwrapList(res);
-      const counts = {};
-      if (Array.isArray(studentList)) {
-        studentList.forEach((s) => {
-          const sId = normalizeId(s.sectionId);
-          if (sId) {
-            counts[sId] = (counts[sId] || 0) + 1;
-          }
-        });
-      }
-      setSectionStudentCounts(counts);
-      return counts;
-    } catch (err) {
-      console.warn("Could not fetch student counts for sections:", err);
-      return {};
+  const loadStudentCounts = useCallback((sectionsList = []) => {
+    const counts = {};
+    if (Array.isArray(sectionsList)) {
+      sectionsList.forEach((s) => {
+        const sId = normalizeId(s.id);
+        if (sId) {
+          counts[sId] = Number(s.enrolledCount ?? s.currentStrength ?? 0);
+        }
+      });
     }
+    setSectionStudentCounts(counts);
+    return counts;
   }, []);
 
   const loadSections = useCallback(async (targetCampusId = effectiveCampusId) => {
@@ -1112,7 +1105,7 @@ export default function SectionManagementPage() {
         return 0;
       });
       setSections(next);
-      loadStudentCounts();
+      loadStudentCounts(next);
       return next;
     } catch (err) {
       console.warn("Could not load sections:", err);
@@ -1132,10 +1125,9 @@ export default function SectionManagementPage() {
       apiClient.get(apiEndpoints.rooms.getAll),
       apiClient.get(apiEndpoints.sections.getAll),
       apiClient.get("/api/v1/staff/dropdown", { params: { staffType: "Teaching" } }),
-      apiClient.get(apiEndpoints.students.getAll),
     ]).then((results) => {
       if (!active) return;
-      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult, studentsResult] = results;
+      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult] = results;
       if (campusesResult?.status === "fulfilled") {
         const loadedCampuses = unwrapList(campusesResult.value).map(normalizeCampus).filter((item) => item.id && item.isActive);
         setCampusesList(loadedCampuses);

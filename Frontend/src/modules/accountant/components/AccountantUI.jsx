@@ -63,6 +63,41 @@ export function PageState({ loading, error, onRetry }) {
   return null;
 }
 
+export function AccountantCard({ title, subtitle, action, children, className = "" }) {
+  return <section className={`sp-card ${className}`}><header className="sp-card-head"><div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>{action}</header><div className="sp-card-body">{children}</div></section>;
+}
+
+export function AccountantSummaryCard({ icon: Icon, label, value, note, tone = "green" }) {
+  const iconNode = typeof Icon === "string"
+    ? <img className="sp-summary-3d-icon" src={Icon} alt="" aria-hidden="true" />
+    : Icon?.src
+      ? <span className="sp-summary-3d-icon sp-summary-generated-icon" style={{ backgroundImage: `url(${Icon.src})`, backgroundPosition: Icon.position }} aria-hidden="true" />
+      : Icon ? <Icon size={20} /> : null;
+  return <article className={`sp-summary sp-tone-${tone}`}><span className="sp-summary-icon">{iconNode}</span><div><small>{label}</small><strong>{value}</strong>{note ? <em>{note}</em> : null}</div></article>;
+}
+
+export function AccountantPageHeader({ title, subtitle, action }) {
+  return <header className="sp-page-header">
+    <div className="sp-page-heading">
+      <div><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div>
+    </div>
+    {action}
+  </header>;
+}
+
+export function AccountantStatusBadge({ value }) {
+  const val = String(value || "").toLowerCase();
+  const tone = ["active", "paid", "success", "approved"].includes(val) ? "active"
+    : ["pending", "in review", "generated"].includes(val) ? "warning"
+    : ["rejected", "cancelled", "failed"].includes(val) ? "danger"
+    : "neutral";
+  return <span className={`sp-badge sp-badge-${tone}`}>{value ?? "—"}</span>;
+}
+
+export function AccountantDataTable({ columns, rows, statusColumns = [], renderCell, empty = "No records available." }) {
+  return <div className="sp-table-wrap"><table className="sp-table"><thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, rowIndex) => <tr key={row.id || rowIndex}>{columns.map((column, columnIndex) => { const value = Array.isArray(row) ? row[columnIndex] : row[column]; return <td key={column}>{renderCell ? renderCell(value, row, column, columnIndex) : statusColumns.includes(columnIndex) ? <AccountantStatusBadge value={value}/> : value ?? "—"}</td>; })}</tr>) : <tr><td colSpan={columns.length}><div className="sp-empty">{empty}</div></td></tr>}</tbody></table></div>;
+}
+
 
 // Combine related view changes into one complete browser history entry.
 export function useAccountantViewParams() {

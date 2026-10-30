@@ -1,8 +1,10 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.StaffAttendance;
 using CollegeManagement.API.Enums;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,6 +13,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [Route("api/v1/attendance-timing-config")]
     [EnableCors("AllowFrontend")]
+    [Authorize]
     [Produces("application/json")]
     public class AttendanceTimingConfigController : ControllerBase
     {
@@ -22,11 +25,11 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll(CancellationToken ct = default)
         {
             try
             {
-                var configs = await _timingConfigService.GetAllConfigsAsync();
+                var configs = await _timingConfigService.GetAllConfigsAsync(ct);
                 return Ok(new
                 {
                     success = true,
@@ -46,11 +49,11 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetById([FromRoute] int id)
+        public async Task<IActionResult> GetById([FromRoute] int id, CancellationToken ct = default)
         {
             try
             {
-                var config = await _timingConfigService.GetConfigByIdAsync(id);
+                var config = await _timingConfigService.GetConfigByIdAsync(id, ct);
                 if (config == null)
                 {
                     return NotFound(new
@@ -78,11 +81,11 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("effective")]
-        public async Task<IActionResult> GetEffective([FromQuery] StaffType? staffType, [FromQuery] int? departmentId)
+        public async Task<IActionResult> GetEffective([FromQuery] StaffType? staffType, [FromQuery] int? departmentId, CancellationToken ct = default)
         {
             try
             {
-                var config = await _timingConfigService.GetEffectiveConfigAsync(staffType, departmentId);
+                var config = await _timingConfigService.GetEffectiveConfigAsync(staffType, departmentId, ct);
                 return Ok(new
                 {
                     success = true,
@@ -101,7 +104,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateTimingConfigRequest request)
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> Create([FromBody] CreateTimingConfigRequest request, CancellationToken ct = default)
         {
             if (!ModelState.IsValid)
             {
@@ -115,7 +119,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
-                var created = await _timingConfigService.CreateConfigAsync(request);
+                var created = await _timingConfigService.CreateConfigAsync(request, ct);
                 return CreatedAtAction(nameof(GetById), new { id = created.Id }, new
                 {
                     success = true,
@@ -135,7 +139,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update([FromRoute] int id, [FromBody] UpdateTimingConfigRequest request)
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> Update([FromRoute] int id, [FromBody] UpdateTimingConfigRequest request, CancellationToken ct = default)
         {
             if (!ModelState.IsValid)
             {
@@ -149,7 +154,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
-                var updated = await _timingConfigService.UpdateConfigAsync(id, request);
+                var updated = await _timingConfigService.UpdateConfigAsync(id, request, ct);
                 if (updated == null)
                 {
                     return NotFound(new
@@ -178,11 +183,12 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete([FromRoute] int id)
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> Delete([FromRoute] int id, CancellationToken ct = default)
         {
             try
             {
-                var deleted = await _timingConfigService.DeleteConfigAsync(id);
+                var deleted = await _timingConfigService.DeleteConfigAsync(id, ct);
                 if (!deleted)
                 {
                     return NotFound(new

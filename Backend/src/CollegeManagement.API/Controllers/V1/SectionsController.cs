@@ -140,14 +140,24 @@ namespace CollegeManagement.API.Controllers.V1
             if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
                 return explicitlyProvided.Value;
 
+            var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+            int claimCampusId = 0;
+            if (campusClaim != null && int.TryParse(campusClaim.Value, out int parsedClaimId) && parsedClaimId > 0)
+            {
+                claimCampusId = parsedClaimId;
+            }
+
+            // Allow X-Campus-Id header if SuperAdmin or matches user's assigned campus
             if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
                 int.TryParse(headerVal.FirstOrDefault(), out int campusId) && campusId > 0)
             {
-                return campusId;
+                if (claimCampusId == 0 || claimCampusId == campusId || User.IsInRole("SuperAdmin"))
+                {
+                    return campusId;
+                }
             }
 
-            var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
-            if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+            if (claimCampusId > 0)
             {
                 return claimCampusId;
             }

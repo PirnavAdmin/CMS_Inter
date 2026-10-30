@@ -4,26 +4,23 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using CollegeManagement.API.DTOs.Attendance.Responses;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.DTOs.StaffAttendance.Responses;
+using CollegeManagement.API.Enums;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
-using Microsoft.EntityFrameworkCore;
 using MiniExcelLibs;
-using CollegeManagement.API.Models;
-using CollegeManagement.API.Enums;
 
 namespace CollegeManagement.API.Services.Implementations
 {
     public class StaffAttendanceService : IStaffAttendanceService
     {
         private readonly IStaffAttendanceRepository _repository;
-        private readonly CollegeManagement.API.Data.AppDbContext _context;
 
-        public StaffAttendanceService(IStaffAttendanceRepository repository, CollegeManagement.API.Data.AppDbContext context)
+        public StaffAttendanceService(IStaffAttendanceRepository repository)
         {
             _repository = repository;
-            _context = context;
         }
 
         public async Task<IEnumerable<StaffAttendanceItemResponse>> LoadStaffAttendanceAsync(LoadStaffAttendanceRequest request)
@@ -128,87 +125,9 @@ namespace CollegeManagement.API.Services.Implementations
             return ms.ToArray();
         }
 
-        public async Task<CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse> GetStaffYearlyOverviewAsync(int staffId, int academicYearId)
+        public async Task<YearlyOverviewResponse> GetStaffYearlyOverviewAsync(int staffId, int academicYearId, int? campusId = null)
         {
-            var staff = await _context.Faculties.FindAsync(staffId);
-            if (staff == null) throw new CollegeManagement.API.Exceptions.NotFoundException($"Staff with ID {staffId} was not found.");
-
-            // Fetch the academic year details with fallback
-            AcademicYear? academicYear = null;
-            if (academicYearId > 0)
-            {
-                academicYear = await _context.AcademicYears.FindAsync(academicYearId);
-            }
-
-            if (academicYear == null)
-            {
-                academicYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsActive)
-                               ?? await _context.AcademicYears.OrderByDescending(y => y.AcademicYearId).FirstOrDefaultAsync();
-            }
-
-            if (academicYear == null)
-            {
-                throw new CollegeManagement.API.Exceptions.NotFoundException("No active Academic Year found in the system.");
-            }
-
-            academicYearId = academicYear.AcademicYearId;
-
-            var startDate = academicYear.StartDate.ToDateTime(TimeOnly.MinValue);
-            var endDate = academicYear.EndDate.ToDateTime(TimeOnly.MaxValue);
-
-            // Fetch all staff attendance records and join with sessions to get dates
-            var records = await (from a in _context.StaffAttendances
-                                 join s in _context.StaffAttendanceSessions on a.StaffSessionId equals s.StaffSessionId
-                                 where a.FacultyId == staffId && s.AttendanceDate >= startDate && s.AttendanceDate <= endDate
-                                 select new { a.Status, s.AttendanceDate })
-                                 .ToListAsync();
-
-            var response = new CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse();
-            var months = new List<CollegeManagement.API.DTOs.Attendance.Responses.MonthlyOverviewItem>();
-
-            var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
-            var endMonth = new DateTime(endDate.Year, endDate.Month, 1);
-
-            while (currentMonth <= endMonth)
-            {
-                var monthRecords = records.Where(r => r.AttendanceDate.Month == currentMonth.Month && r.AttendanceDate.Year == currentMonth.Year).ToList();
-                
-                int workingDays = monthRecords.Count;
-                
-                int presentDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Present);
-                int lateDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Late);
-                int leaveDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Leave || r.Status == Enums.AttendanceStatus.HalfDay);
-                int absentDays = monthRecords.Count(r => r.Status == Enums.AttendanceStatus.Absent);
-
-                months.Add(new CollegeManagement.API.DTOs.Attendance.Responses.MonthlyOverviewItem
-                {
-                    MonthName = currentMonth.ToString("MMMM"),
-                    Month = currentMonth.Month,
-                    Year = currentMonth.Year,
-                    WorkingDays = workingDays,
-                    Present = presentDays,
-                    Late = lateDays,
-                    Absent = absentDays,
-                    Leave = leaveDays,
-                    AttendancePercentage = workingDays > 0 ? Math.Round((double)(presentDays + lateDays) / workingDays * 100, 1) : 0
-                });
-
-                currentMonth = currentMonth.AddMonths(1);
-            }
-
-            response.MonthlyRecords = months;
-            response.TotalWorkingDays = months.Sum(m => m.WorkingDays);
-            response.TotalPresent = months.Sum(m => m.Present);
-            response.TotalAbsent = months.Sum(m => m.Absent);
-            response.TotalLeave = months.Sum(m => m.Leave);
-            response.TotalLate = months.Sum(m => m.Late);
-            
-            int totalAttended = response.TotalPresent + response.TotalLate;
-            response.OverallAttendancePercentage = response.TotalWorkingDays > 0 
-                ? Math.Round((double)totalAttended / response.TotalWorkingDays * 100, 1) 
-                : 0;
-
-            return response;
+            return await _repository.GetStaffYearlyOverviewAsync(staffId, academicYearId, campusId);
         }
 
         public async Task<byte[]> GenerateImportTemplateAsync()
@@ -235,7 +154,7 @@ namespace CollegeManagement.API.Services.Implementations
             return ms.ToArray();
         }
 
-        public async Task<object> ImportStaffAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId)
+        public async Task<object> ImportStaffAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId, int? campusId = null)
         {
             using var ms = new MemoryStream(fileBytes);
             List<dynamic> rows;
@@ -251,9 +170,22 @@ namespace CollegeManagement.API.Services.Implementations
 
             var errors = new List<object>();
             int validCount = 0;
-            var toSave = new List<StaffAttendance>();
-            var sessionsToUpdate = new Dictionary<string, StaffAttendanceSession>();
             int rowIndex = 1;
+
+            var importContext = await _repository.GetStaffImportContextAsync(campusId);
+            var staffMap = new Dictionary<string, StaffImportStaffItem>(StringComparer.OrdinalIgnoreCase);
+            var staffByIdMap = new Dictionary<int, StaffImportStaffItem>();
+
+            foreach (var s in importContext.StaffList)
+            {
+                if (!string.IsNullOrWhiteSpace(s.EmployeeId))
+                {
+                    staffMap[s.EmployeeId.Trim()] = s;
+                }
+                staffByIdMap[s.FacultyId] = s;
+            }
+
+            var validRecordsToSave = new List<UpdateStaffAttendanceRequest>();
 
             foreach (var r in rows)
             {
@@ -305,10 +237,15 @@ namespace CollegeManagement.API.Services.Implementations
                 TimeSpan? outTime = null;
                 if (!string.IsNullOrWhiteSpace(outTimeStr) && TimeSpan.TryParse(outTimeStr, out var ot)) outTime = ot;
 
-                var faculty = await _context.Faculties.FirstOrDefaultAsync(f => f.EmployeeId == empId);
-                if (faculty == null && int.TryParse(empId, out var parsedFacultyId))
+                StaffImportStaffItem? faculty = null;
+                var trimmedEmpId = empId.Trim();
+                if (staffMap.TryGetValue(trimmedEmpId, out var foundStaff))
                 {
-                    faculty = await _context.Faculties.FirstOrDefaultAsync(f => f.Id == parsedFacultyId);
+                    faculty = foundStaff;
+                }
+                else if (int.TryParse(trimmedEmpId, out var parsedFacultyId) && staffByIdMap.TryGetValue(parsedFacultyId, out var foundById))
+                {
+                    faculty = foundById;
                 }
 
                 if (faculty == null)
@@ -317,96 +254,47 @@ namespace CollegeManagement.API.Services.Implementations
                     continue;
                 }
 
-                string actualName = $"{faculty.FirstName} {faculty.LastName}".Trim();
+                string actualName = faculty.FullName;
+                var attendanceKey = $"{faculty.FacultyId}_{attDate:yyyyMMdd}";
 
-                StaffType staffType = faculty.FacultyType?.Equals("Non-Teaching", StringComparison.OrdinalIgnoreCase) == true
-                    ? StaffType.NonTeaching
-                    : StaffType.Teaching;
-
-                if (!string.IsNullOrWhiteSpace(staffTypeStr) && Enum.TryParse<StaffType>(staffTypeStr.Replace(" ", "").Replace("-", ""), true, out var st))
-                {
-                    staffType = st;
-                }
-
-                var exists = await _context.StaffAttendances
-                    .Include(a => a.StaffAttendanceSession)
-                    .AnyAsync(a => a.FacultyId == faculty.Id && a.StaffAttendanceSession.AttendanceDate.Date == attDate.Date && a.IsActive);
-
-                if (exists)
+                if (importContext.ExistingAttendanceKeys.Contains(attendanceKey))
                 {
                     errors.Add(new[] { rowIndex.ToString(), empId, actualName, dateStr, "Attendance already exists for this staff member on this date" });
                     continue;
+                }
+
+                StaffType staffType = (StaffType)faculty.StaffType;
+                if (!string.IsNullOrWhiteSpace(staffTypeStr) && Enum.TryParse<StaffType>(staffTypeStr.Replace(" ", "").Replace("-", ""), true, out var st))
+                {
+                    staffType = st;
                 }
 
                 validCount++;
 
                 if (!validateOnly)
                 {
-                    var sessionKey = $"{attDate.Date:yyyyMMdd}_{(byte)staffType}_{faculty.DepartmentId ?? 0}";
-                    if (!sessionsToUpdate.TryGetValue(sessionKey, out var session))
+                    validRecordsToSave.Add(new UpdateStaffAttendanceRequest
                     {
-                        session = await _context.StaffAttendanceSessions
-                            .FirstOrDefaultAsync(s => s.AttendanceDate.Date == attDate.Date
-                                                      && s.StaffType == staffType
-                                                      && (faculty.DepartmentId == null || s.DepartmentId == faculty.DepartmentId));
-
-                        if (session == null)
-                        {
-                            session = new StaffAttendanceSession
-                            {
-                                CampusId = faculty.CampusId ?? 1,
-                                AttendanceDate = attDate.Date,
-                                DepartmentId = faculty.DepartmentId > 0 ? faculty.DepartmentId : null,
-                                StaffType = staffType,
-                                TotalStaffCount = 0,
-                                CreatedByUserId = userId,
-                                CreatedAt = DateTime.UtcNow
-                            };
-                            await _context.StaffAttendanceSessions.AddAsync(session);
-                            await _context.SaveChangesAsync();
-                        }
-                        sessionsToUpdate[sessionKey] = session;
-                    }
-
-                    var newAttendance = new StaffAttendance
-                    {
-                        StaffSessionId = session.StaffSessionId,
-                        FacultyId = faculty.Id,
+                        FacultyId = faculty.FacultyId,
+                        AttendanceDate = attDate.Date,
+                        StaffType = staffType,
                         Status = status,
                         InTime = inTime,
                         OutTime = outTime,
-                        VerificationMethod = VerificationMethod.Manual,
                         Remarks = remarks,
-                        CreatedByUserId = userId,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    toSave.Add(newAttendance);
+                        DepartmentId = faculty.DepartmentId,
+                        CampusId = faculty.CampusId ?? campusId
+                    });
+                    importContext.ExistingAttendanceKeys.Add(attendanceKey);
                 }
             }
 
-            if (!validateOnly && errors.Count == 0 && toSave.Any())
+            if (!validateOnly && errors.Count == 0 && validRecordsToSave.Any())
             {
-                await _context.StaffAttendances.AddRangeAsync(toSave);
-                await _context.SaveChangesAsync();
-
-                var sessionIds = toSave.Select(a => a.StaffSessionId).Distinct().ToList();
-                foreach (var sId in sessionIds)
+                foreach (var record in validRecordsToSave)
                 {
-                    var sess = await _context.StaffAttendanceSessions
-                        .Include(s => s.StaffAttendances)
-                        .FirstOrDefaultAsync(s => s.StaffSessionId == sId);
-
-                    if (sess != null)
-                    {
-                        sess.TotalStaffCount = sess.StaffAttendances.Count;
-                        sess.PresentCount = sess.StaffAttendances.Count(a => a.Status == AttendanceStatus.Present);
-                        sess.AbsentCount = sess.StaffAttendances.Count(a => a.Status == AttendanceStatus.Absent);
-                        sess.LateCount = sess.StaffAttendances.Count(a => a.Status == AttendanceStatus.Late);
-                        sess.LeaveCount = sess.StaffAttendances.Count(a => a.Status == AttendanceStatus.Leave);
-                        sess.UpdatedAt = DateTime.UtcNow;
-                    }
+                    await _repository.UpdateStaffAttendanceAsync(record, userId);
                 }
-                await _context.SaveChangesAsync();
             }
 
             return new { total = rows.Count, valid = validCount, errors = errors };
@@ -447,6 +335,11 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId)
         {
             return await _repository.ReviewRegularizationAsync(regularizationId, request, reviewerUserId);
+        }
+
+        public async Task<int> ResolveStaffIdByUserIdAsync(int userId)
+        {
+            return await _repository.ResolveStaffIdByUserIdAsync(userId);
         }
 
         #endregion
