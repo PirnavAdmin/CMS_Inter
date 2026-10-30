@@ -221,9 +221,10 @@ export default function FacultyPayslips() {
   };
 
   useEffect(() => {
-    if (!sourcePayslip?.payslipId) return;
+    const idToFetch = sourcePayslip?.payslipId || sourcePayslip?.id || sourcePayslip?.payrollId;
+    if (!idToFetch) return;
     let cancelled = false;
-    apiClient.get(`/api/v1/Payroll/payslips/${sourcePayslip.payslipId}`)
+    apiClient.get(`/api/v1/Payroll/payslips/${idToFetch}`)
       .then((res) => {
         const detail = res?.data?.data || res?.data;
         if (!cancelled && detail && typeof detail === "object" && String(detail.payslipId) === payslipIdParam) setPayslipDetail(detail);
