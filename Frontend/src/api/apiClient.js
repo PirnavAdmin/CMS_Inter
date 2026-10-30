@@ -280,6 +280,17 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Auto-retry transient 502 / 503 / 504 / proxy unreachable errors (ngrok socket drops or dev server proxy hiccups)
+    // This ensures smooth navigation between modules without flashing 502 errors that would otherwise succeed on refresh.
+    const maxProxyRetries = 2;
+    const currentProxyRetries = originalRequest?._proxyRetryCount || 0;
+    if ((isProxyUnreachable || isNetworkError) && originalRequest && !isNgrokOffline && currentProxyRetries < maxProxyRetries) {
+      originalRequest._proxyRetryCount = currentProxyRetries + 1;
+      const delay = currentProxyRetries === 0 ? 300 : 700;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return apiClient(originalRequest);
+    }
+
     const is404 = error.response?.status === 404;
     const is403 = error.response?.status === 403;
     const is400 = error.response?.status === 400;
