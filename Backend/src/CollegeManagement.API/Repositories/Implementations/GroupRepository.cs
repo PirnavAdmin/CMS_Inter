@@ -53,7 +53,9 @@ namespace CollegeManagement.API.Repositories
 
                     p_AcademicLevelId = academicLevelId,
 
-                    p_IsActive = isActive
+                    p_IsActive = isActive,
+
+                    p_MasterGroupId = masterGroupId
                 },
                 commandType: CommandType.StoredProcedure
             );
