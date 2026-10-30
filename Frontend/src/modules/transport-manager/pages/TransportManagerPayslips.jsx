@@ -1,3 +1,5 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
+import { useTransportNavigation, useTransportRouteValue, useTransportRecord } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Wallet,
@@ -35,13 +37,14 @@ const fmt = (v) => {
 };
 
 export default function TransportManagerPayslips() {
+  const navigation = useTransportNavigation();
   const tmContext = useTransportManagerSafe();
   const profileData = useMemo(() => tmContext?.profile || {}, [tmContext?.profile]);
 
   const [payslipList, setPayslipList] = useState([]);
-  const [payslipYear, setPayslipYear] = useState("all");
-  const [viewingPayslip, setViewingPayslip] = useState(null);
+  const [payslipYear, setPayslipYear] = useTransportRouteValue(navigation, "year", "all", value => value === "all" || /^\d{4}$/.test(value));
   const [loading, setLoading] = useState(true);
+  const [viewingPayslip, setViewingPayslip] = useTransportRecord(navigation, "payslipId", payslipList, slip => slip.payslipId || slip.id, !loading);
   const [error, setError] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -309,14 +312,7 @@ export default function TransportManagerPayslips() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan="6" style={{ textAlign: "center", padding: "32px 0" }}>
-                    <Loader2 size={20} className="spin" style={{ margin: "0 auto" }} />
-                    <span style={{ fontSize: 13, color: "var(--cms-muted)", display: "block", marginTop: 8 }}>
-                      Loading payslips...
-                    </span>
-                  </td>
-                </tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={6} />)
               ) : filteredPayslips.length === 0 ? (
                 <tr>
                   <td colSpan="6" style={{ textAlign: "center", padding: "32px 0", color: "var(--cms-muted)" }}>

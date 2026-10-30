@@ -1826,3 +1826,14 @@
   align-items: flex-start;
   gap: 6px;
 }
+/* Group menus escape clipped containers and match Examination scrolling. */
+.cms-custom-select-menu.bay-style-menu.cms-group-scroll-menu {
+  position: fixed !important;
+  right: auto;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}

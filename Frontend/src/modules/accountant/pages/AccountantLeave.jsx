@@ -1,3 +1,5 @@
+import { useAccountantViewParams } from "../components/AccountantUI.jsx";
+import { SkeletonTable, SkeletonRow, Skeleton } from "@/shared/components/Skeleton.jsx";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
@@ -45,7 +47,9 @@ export default function AccountantLeave() {
   const [prerequisitesLoading, setPrerequisitesLoading] = useState(true);
   const [error, setError] = useState(null);
   const [historyError, setHistoryError] = useState(null);
-  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const { params: viewParams, setParam } = useAccountantViewParams();
+  const showLeaveModal = viewParams.get("modal") === "apply";
+  const setShowLeaveModal = useCallback((open) => setParam("modal", open ? "apply" : null), [setParam]);
   const [leaveForm, setLeaveForm] = useState(blankForm);
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
   const [cancelId, setCancelId] = useState(null);
@@ -156,7 +160,7 @@ export default function AccountantLeave() {
     };
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("keydown", onKey); previous?.focus?.(); };
-  }, [showLeaveModal]);
+  }, [showLeaveModal, setShowLeaveModal]);
 
   const categoryCards = categories.map(category => ({
     category,
@@ -249,7 +253,7 @@ export default function AccountantLeave() {
       {/* Cards and dropdown share the same active, eligibility-filtered catalog. */}
       <div className="sp-stat-grid" aria-label="Leave category policies" style={{ marginBottom: 16, "--accountant-leave-columns": Math.min(Math.max(categories.length, 1), 4), "--accountant-leave-small-columns": Math.min(Math.max(categories.length, 1), 2) }}>
         {prerequisitesLoading ? (
-          <div className="accountant-leave-category-state" role="status">Loading leave categories...</div>
+          <SkeletonTable columns={6} rows={5} />
         ) : !categoriesAvailable || !staffId ? (
           <div className="accountant-leave-category-state">Leave categories are unavailable. Please retry using the error banner.</div>
         ) : !categories.length ? (
@@ -259,7 +263,7 @@ export default function AccountantLeave() {
             <div className={`cms-stat-icon tone-${["green", "blue", "amber", "violet"][index % 4]}`}><Calendar size={20} /></div>
             <div>
               <div className="cms-stat-label">{accountantLeaveCategoryLabel(category)}</div>
-              <div className="cms-stat-value" title={stats.message}>{loading ? "Loading..." : stats.text}</div>
+              <div className="cms-stat-value" title={stats.message}>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : stats.text}</div>
             </div>
           </div>
         ))}
@@ -294,14 +298,7 @@ export default function AccountantLeave() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan="9" style={{ textAlign: "center", padding: "32px 20px" }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                      <Loader2 size={24} className="accountant-leave-spin" style={{ color: "var(--cms-primary)" }} />
-                      <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>Loading leave applications...</span>
-                    </div>
-                  </td>
-                </tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />)
               ) : historyError ? (
                 <tr><td colSpan="9" style={{ textAlign: "center", padding: 40 }}>Leave history unavailable. {historyError}</td></tr>
               ) : leaveList.length === 0 ? (

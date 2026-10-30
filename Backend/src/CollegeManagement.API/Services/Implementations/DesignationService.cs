@@ -65,11 +65,21 @@ namespace CollegeManagement.API.Services.Implementations
                 deptCode = dept.DepartmentCode;
             }
 
+            await ValidateDesignationHierarchyAsync(0, dto.ReportsToDesignationId);
+
+            string? reportsToName = null;
+            if (dto.ReportsToDesignationId.HasValue && dto.ReportsToDesignationId.Value > 0)
+            {
+                var parent = await _designationRepository.GetByIdAsync(dto.ReportsToDesignationId.Value);
+                reportsToName = parent?.Name;
+            }
+
             var entity = new Designation
             {
                 Name = trimmedName,
                 DepartmentId = (dto.DepartmentId.HasValue && dto.DepartmentId.Value > 0) ? dto.DepartmentId : null,
                 StaffType = !string.IsNullOrWhiteSpace(dto.StaffType) ? dto.StaffType.Trim() : "Both",
+                ReportsToDesignationId = (dto.ReportsToDesignationId.HasValue && dto.ReportsToDesignationId.Value > 0) ? dto.ReportsToDesignationId : null,
                 IsActive = dto.IsActive,
                 CreatedAt = DateTime.UtcNow,
                 CampusId = campusId
@@ -85,6 +95,8 @@ namespace CollegeManagement.API.Services.Implementations
                 DepartmentName = deptName,
                 DepartmentCode = deptCode,
                 StaffType = created.StaffType,
+                ReportsToDesignationId = created.ReportsToDesignationId,
+                ReportsToDesignationName = reportsToName,
                 IsActive = created.IsActive,
                 AssignedStaffCount = 0,
                 CreatedAt = created.CreatedAt,
@@ -119,9 +131,19 @@ namespace CollegeManagement.API.Services.Implementations
                 deptCode = dept.DepartmentCode;
             }
 
+            await ValidateDesignationHierarchyAsync(id, dto.ReportsToDesignationId);
+
+            string? reportsToName = null;
+            if (dto.ReportsToDesignationId.HasValue && dto.ReportsToDesignationId.Value > 0)
+            {
+                var parent = await _designationRepository.GetByIdAsync(dto.ReportsToDesignationId.Value);
+                reportsToName = parent?.Name;
+            }
+
             existing.Name = trimmedName;
             existing.DepartmentId = (dto.DepartmentId.HasValue && dto.DepartmentId.Value > 0) ? dto.DepartmentId : null;
             existing.StaffType = !string.IsNullOrWhiteSpace(dto.StaffType) ? dto.StaffType.Trim() : "Both";
+            existing.ReportsToDesignationId = (dto.ReportsToDesignationId.HasValue && dto.ReportsToDesignationId.Value > 0) ? dto.ReportsToDesignationId : null;
             existing.IsActive = dto.IsActive;
 
             await _designationRepository.UpdateAsync(existing);
@@ -136,11 +158,48 @@ namespace CollegeManagement.API.Services.Implementations
                 DepartmentName = deptName,
                 DepartmentCode = deptCode,
                 StaffType = existing.StaffType,
+                ReportsToDesignationId = existing.ReportsToDesignationId,
+                ReportsToDesignationName = reportsToName,
                 IsActive = existing.IsActive,
                 AssignedStaffCount = staffCount,
                 CreatedAt = existing.CreatedAt,
                 UpdatedAt = existing.UpdatedAt
             };
+        }
+
+        private async Task ValidateDesignationHierarchyAsync(int currentId, int? proposedReportsToId)
+        {
+            if (!proposedReportsToId.HasValue || proposedReportsToId.Value <= 0)
+                return;
+
+            if (currentId > 0 && proposedReportsToId.Value == currentId)
+                throw new ValidationException("A designation cannot report to itself.");
+
+            var parent = await _designationRepository.GetByIdAsync(proposedReportsToId.Value);
+            if (parent == null)
+                throw new ValidationException($"The reporting designation with ID {proposedReportsToId.Value} does not exist.");
+
+            if (currentId <= 0)
+                return;
+
+            // Directed Acyclic Graph (DAG) cycle detection
+            var visited = new HashSet<int> { currentId };
+            int? nextParentId = proposedReportsToId;
+
+            while (nextParentId.HasValue && nextParentId.Value > 0)
+            {
+                if (visited.Contains(nextParentId.Value))
+                {
+                    throw new ValidationException("Circular reporting hierarchy detected. A designation cannot report to itself or to one of its subordinate designations.");
+                }
+                visited.Add(nextParentId.Value);
+
+                var parentDesig = await _designationRepository.GetByIdAsync(nextParentId.Value);
+                if (parentDesig == null)
+                    break;
+
+                nextParentId = parentDesig.ReportsToDesignationId;
+            }
         }
 
         public async Task<(bool Success, string Message)> DeleteAsync(int id)

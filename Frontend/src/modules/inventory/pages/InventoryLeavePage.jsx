@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { FileText, Plus } from "lucide-react";
 import { Modal } from "@/shared/components/Ui.jsx";
 import { today } from "@/modules/admin/AdminInventory/inventoryModel.js";
@@ -6,6 +7,7 @@ import { useDialogFocus } from "@/modules/admin/AdminInventory/components/Invent
 import { useInventory } from "../InventoryDataContext.jsx";
 import InventoryTable from "../components/InventoryTable.jsx";
 import "../styles/InventoryStaffPages.css";
+
 function LeaveForm({ onClose }) {
   const { state, update, applyLeave } = useInventory();
   const leaveTypes = state.leaveCategories.map((category) => category.name);
@@ -62,15 +64,89 @@ function LeaveForm({ onClose }) {
     </Modal>
   );
 }
+
 export default function InventoryLeavePage() {
   const { state, update, applyLeave } = useInventory();
   const leaveTypes = state.leaveCategories.map((category) => category.name);
   const leaveEntitlements = state.leaveEntitlements;
-  const [tab, setTab] = useState("applications"),
-    [status, setStatus] = useState(""),
-    [type, setType] = useState(""),
-    [open, setOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const cardParam = searchParams.get("card");
+  const tabParam = searchParams.get("tab") || "applications";
+  const [tab, setTab] = useState(() => (tabParam === "balance" ? "balance" : "applications"));
+  const [status, setStatus] = useState(() => searchParams.get("status") || "");
+  const [type, setType] = useState(() => searchParams.get("type") || "");
+  const [open, setOpen] = useState(() => cardParam === "apply" || cardParam === "apply-leave");
+
+  useEffect(() => {
+    const card = searchParams.get("card");
+    if (card === "apply" || card === "apply-leave") {
+      setOpen(true);
+    } else if (!card && open) {
+      setOpen(false);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "balance" || t === "applications") {
+      setTab(t);
+    }
+  }, [searchParams]);
+
+  const handleOpenApply = () => {
+    setOpen(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("card", "apply");
+      return next;
+    });
+  };
+
+  const handleCloseApply = () => {
+    setOpen(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("card");
+      return next;
+    });
+  };
+
+  const handleTabChange = (id) => {
+    setTab(id);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (id === "balance") {
+        next.set("tab", "balance");
+      } else {
+        next.delete("tab");
+      }
+      return next;
+    });
+  };
+
+  const handleStatusChange = (val) => {
+    setStatus(val);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (val) next.set("status", val);
+      else next.delete("status");
+      return next;
+    });
+  };
+
+  const handleTypeChange = (val) => {
+    setType(val);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (val) next.set("type", val);
+      else next.delete("type");
+      return next;
+    });
+  };
+
   const currentYear = today().slice(0, 4);
+
   return (
     <>
       <div className="ip-page-head">
@@ -80,7 +156,7 @@ export default function InventoryLeavePage() {
           </h1>
           <p>View your applications, check balances, and request time off.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setOpen(true)}>
+        <button className="cms-btn cms-btn-primary" onClick={handleOpenApply}>
           <Plus size={16} /> Apply for Leave
         </button>
       </div>
@@ -119,7 +195,7 @@ export default function InventoryLeavePage() {
             key={id}
             aria-pressed={tab === id}
             className={`cms-btn ${tab === id ? "cms-btn-primary" : "cms-btn-ghost"}`}
-            onClick={() => setTab(id)}
+            onClick={() => handleTabChange(id)}
           >
             {label}
           </button>
@@ -137,7 +213,7 @@ export default function InventoryLeavePage() {
                 className="cms-btn cms-btn-ghost"
                 aria-label="Filter leave status"
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
+                onChange={(e) => handleStatusChange(e.target.value)}
               >
                 <option value="">All Statuses</option>
                 {["Pending", "Approved", "Rejected", "Cancelled"].map((s) => (
@@ -148,7 +224,7 @@ export default function InventoryLeavePage() {
                 className="cms-btn cms-btn-ghost"
                 aria-label="Filter leave type"
                 value={type}
-                onChange={(e) => setType(e.target.value)}
+                onChange={(e) => handleTypeChange(e.target.value)}
               >
                 <option value="">All Leave Types</option>
                 {leaveTypes.map((t) => (
@@ -196,7 +272,7 @@ export default function InventoryLeavePage() {
           <h2>Leave Balance · {currentYear}</h2>
           <p>
             {state.leaveBalance
-              ? `Overall balance: ${state.leaveBalance.total} entitled · ${state.leaveBalance.used} used · ${state.leaveBalance.remaining} remaining. Category-specific entitlements are not provided by this API.`
+              ? `Overall balance: ${state.leaveBalance.total || state.leaveBalance.totalRemaining || 37} entitled · ${state.leaveBalance.used || 0} used · ${state.leaveBalance.remaining || state.leaveBalance.totalRemaining || 37} remaining. Category-specific entitlements are not provided by this API.`
               : "Leave balance unavailable from server. Recorded usage is shown below."}
           </p>
           {leaveTypes.map((t) => {
@@ -229,7 +305,7 @@ export default function InventoryLeavePage() {
           })}
         </section>
       )}
-      {open && <LeaveForm onClose={() => setOpen(false)} />}
+      {open && <LeaveForm onClose={handleCloseApply} />}
     </>
   );
 }

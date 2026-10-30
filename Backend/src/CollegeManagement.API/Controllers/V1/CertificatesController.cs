@@ -566,7 +566,27 @@ public class CertificatesController : ControllerBase
     // =========================================================
     [HttpGet("verify/{certificateNo}")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(PublicCertificateVerificationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Verify(string certificateNo, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(certificateNo)) return BadRequest(new { message = "Certificate number is required" });
+
+        var result = await _service.VerifyPublicAsync(certificateNo, ct);
+        if (result == null) return NotFound(new { message = "Certificate not found or cancelled" });
+
+        return Ok(result);
+    }
+
+    // =========================================================
+    // 15.1. VERIFY CERTIFICATE FULL (Authorized Admin/Principal)
+    // GET /api/v1/certificates/verify-full/{certificateNo}
+    // =========================================================
+    [HttpGet("verify-full/{certificateNo}")]
+    [Authorize]
+    [ProducesResponseType(typeof(CertificateResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> VerifyFull(string certificateNo, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(certificateNo)) return BadRequest(new { message = "Certificate number is required" });
 

@@ -1,3 +1,4 @@
+import { useTransportNavigation, useTransportRouteValue, useTransportRecord, validTransportPage, validTransportDate } from "../TransportManagerContext.jsx";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, Search } from "lucide-react";
 import { SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
@@ -66,6 +67,7 @@ function HolidayStatus({ holiday }) {
 }
 
 export default function TransportManagerHolidays() {
+  const navigation = useTransportNavigation();
   const tmContext = useTransportManagerSafe();
   const { selectedAcademicYearId } = useAcademicContext?.() || {};
   const { selectedCampusId } = useCampusContext?.() || {};
@@ -73,15 +75,28 @@ export default function TransportManagerHolidays() {
 
   const [holidays, setHolidays] = useState(holidayRecords);
   const [apiSummary, setApiSummary] = useState(null);
+  const [restorableHolidays, setRestorableHolidays] = useState({ scope: "", rows: [] });
+  const scope = [selectedAcademicYearId, selectedBoardId, selectedCampusId].join(":");
   const [loading, setLoading] = useState(false);
-  const [query, setQuery] = useState("");
-  const [month, setMonth] = useState("All");
-  const [customRange, setCustomRange] = useState({ from: "", to: "" });
-  const [appliedRange, setAppliedRange] = useState(null);
-  const [type, setType] = useState("All");
-  const [status, setStatus] = useState("All");
-  const [page, setPage] = useState(1);
-  const [viewHoliday, setViewHoliday] = useState(null);
+  const [completedScope, setCompletedScope] = useState("");
+  const [query, setQuery] = useTransportRouteValue(navigation, "q", "");
+  const [month, setMonth] = useTransportRouteValue(navigation, "month", "All", value => value === "All" || value === "Custom Range" || /^(?:[1-9]|1[0-2])$/.test(value));
+  const [customRange, setCustomRange] = useTransportRouteValue(navigation, "dates", { from: "", to: "" }, value => (!value.from || validTransportDate(value.from)) && (!value.to || validTransportDate(value.to)));
+  const [appliedRange, setAppliedRange] = useTransportRouteValue(navigation, "range", null, value => value === null || (value && validTransportDate(value.from) && validTransportDate(value.to) && value.from <= value.to));
+  const [type, setType] = useTransportRouteValue(navigation, "type", "All", value => value === "All" || TYPES.includes(value));
+  const [status, setStatus] = useTransportRouteValue(navigation, "status", "All", value => ["All", "Active", "Completed", "Inactive"].includes(value));
+  const [page, setPage] = useTransportRouteValue(navigation, "page", 1, validTransportPage);
+  // Existing local fallback details can still open during this session; only API records hydrate on reload.
+  const [localHoliday, setLocalHoliday] = useState(null);
+  const [localHolidayScope, setLocalHolidayScope] = useState("");
+  const localHolidayMatches = localHolidayScope === scope && localHoliday && navigation.params.get("holidayId") === String(localHoliday.holidayId || localHoliday.id);
+  const [restoredHoliday, setRestoredHoliday] = useTransportRecord(navigation, "holidayId", restorableHolidays.scope === scope ? restorableHolidays.rows : [], holiday => holiday.holidayId || holiday.id, completedScope === scope && !loading && !localHolidayMatches);
+  const viewHoliday = restoredHoliday || (localHolidayMatches ? localHoliday : null);
+  const setViewHoliday = (holiday) => {
+    setLocalHoliday(completedScope === scope && !loading ? holiday : null);
+    setLocalHolidayScope(scope);
+    setRestoredHoliday(holiday);
+  };
   const [toast, setToast] = useState({ message: "", type: "success" });
 
   const months = useMemo(
@@ -96,6 +111,7 @@ export default function TransportManagerHolidays() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      setRestorableHolidays({ scope, rows: [] });
       const [summaryRes, listRes] = await Promise.allSettled([
         holidayApi.getSummary({
           academicYearId: selectedAcademicYearId || undefined,
@@ -124,6 +140,7 @@ export default function TransportManagerHolidays() {
           return campusId == null || String(campusId) === String(selectedCampusId);
         });
         setHolidays(filteredList.length > 0 ? filteredList : holidayRecords);
+        setRestorableHolidays({ scope, rows: filteredList });
       } else {
         setHolidays(holidayRecords);
       }
@@ -131,9 +148,10 @@ export default function TransportManagerHolidays() {
       console.warn("Using local holiday data fallback:", err);
       setHolidays(holidayRecords);
     } finally {
+      setCompletedScope(scope);
       setLoading(false);
     }
-  }, [selectedAcademicYearId, selectedBoardId, selectedCampusId]);
+  }, [selectedAcademicYearId, selectedBoardId, selectedCampusId, scope]);
 
   useEffect(() => {
     loadData();

@@ -18,6 +18,7 @@ import {
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Toast } from "@/shared/components/Ui.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useExamCellTab } from "../statePersistence.js";
 import { getExaminationSettings, updateExaminationSettings } from "@/services/examinationService.js";
 import attendanceTimingImg from "@/assets/settings-3d/attendance-timing.png";
 import templatesImg from "@/assets/settings-3d/templates.png";
@@ -55,7 +56,22 @@ export default function ExamCellSettingsPage() {
   const campusCtx = useCampusContext();
   const campusId = campusCtx?.selectedCampusId || campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || 1;
 
-  const [activeTab, setActiveTab] = useState("grading");
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "settings",
+    defaultTab: "grading",
+    tabAliases: {
+      "grading": "grading",
+      "grading-evaluation": "grading",
+      "evaluation": "grading",
+      "halltickets": "halltickets",
+      "hall-ticket": "halltickets",
+      "attendance": "halltickets",
+      "results": "results",
+      "publishing": "results",
+      "publishing-notifications": "results",
+      "notifications": "results",
+    },
+  });
   const [settings, setSettings] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);

@@ -3,7 +3,7 @@ import { Modal } from "@/shared/components/Ui.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useFinancePage, requestError } from "../services/accountantService.js";
 import { feeMoney, feeStatus, feeText, readFee, scopedFeeMasters } from "../utils/feeViewData.js";
-import { loadFeeOptions, loadSetupEditor, saveSetupRecord, setupDraft, setupNames, structureDraftPreview, validateSetupDraft } from "../services/accountantService.js";
+import { loadFeeOptions, loadSetupEditor, saveSetupRecord, setupDraft, setupId, setupNames, structureDraftPreview, validateSetupDraft } from "../services/accountantService.js";
 import { FeeLoadState, FeeNotice, FeeTable } from "./AccountantUI.jsx";
 
 const categories = ["Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous"];
@@ -115,8 +115,12 @@ function ViewRecord({ kind, detail, warnings, onClose }) {
   </Modal>;
 }
 
-export default function AccountantFeeSetupModal({ kind, row, rows, params, viewOnly = false, authorize, onSaved, onClose, yearSettings, onDraftTotalChange }) {
-  const load = useCallback((signal) => loadSetupEditor(kind, row, params, signal, viewOnly), [kind, row, params, viewOnly]);
+export default function AccountantFeeSetupModal({ kind, row, rows, params, viewOnly = false, restoreScope = false, authorize, onSaved, onClose, yearSettings, onDraftTotalChange }) {
+  const load = useCallback(async (signal) => {
+    const result = await loadSetupEditor(kind, row, params, signal, viewOnly);
+    if (restoreScope && (Number(setupId(kind, result.detail)) !== Number(setupId(kind, row)) || (readFee(result.detail, "campusId") != null && params.campusId != null && Number(readFee(result.detail, "campusId")) !== Number(params.campusId)))) throw new Error("This saved record is unavailable in the current scope.");
+    return result;
+  }, [kind, row, params, viewOnly, restoreScope]);
   const state = useFinancePage(load);
   if (state.loading || state.error) return <Modal title={`${viewOnly ? "View" : row ? "Edit" : "Add"} ${setupNames[kind]}`} onClose={onClose}><FeeLoadState state={state} /></Modal>;
   return viewOnly ? <ViewRecord kind={kind} detail={state.data.detail} warnings={state.data.warnings} onClose={onClose} /> : <SetupEditor kind={kind} row={row} rows={rows} params={params} data={state.data} authorize={authorize} onSaved={onSaved} onClose={onClose} yearSettings={yearSettings} onDraftTotalChange={onDraftTotalChange} />;

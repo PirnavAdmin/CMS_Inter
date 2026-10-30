@@ -1,6 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { createPortal } from "react-dom";
+import React, { useCallback, useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { getCatalogGroups } from "@/modules/admin/AdminResults/services/resultsService.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -890,7 +893,7 @@ const isLegalStatusTransition = (from, to) =>
   }[from] || []).includes(to);
 
 // Reusable Hook for Independent Academic Cascading Filters
-function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => { }, { embedded = false } = {}) {
+function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => { }, { embedded = false, routeEnabled = false } = {}) {
   const {
     selectedCampus,
     selectedCampusId,
@@ -915,7 +918,10 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? "");
   }, [selectedAcademicYearId, selectedAcademicYear]);
 
-  const [filters, setFilters] = useState({
+  const [filterParams, setFilterParams] = useSearchParams();
+  const filterQuery = filterParams.toString();
+  const readRouteFilters = () => Object.fromEntries(["board", "year", "level", "group", "program", "section", "exam"].map((key) => [key, filterParams.get(key + "Id") || (key === "board" ? effectiveBoardId : key === "year" ? effectiveYearId : "")]));
+  const [filters, setFilters] = useState(routeEnabled ? readRouteFilters : () => ({
     board: effectiveBoardId,
     year: effectiveYearId,
     level: "",
@@ -923,10 +929,19 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     program: "",
     section: "",
     exam: "",
-  });
+  }));
+  useEffect(() => {
+    if (!routeEnabled) return;
+    const restored = readRouteFilters();
+    if (!Object.keys(restored).every((key) => String(filters[key] || "") === String(restored[key] || ""))) { onReset(); setFilters(restored); }
+  // Only browser navigation restores filters; API loading must not write them back to the URL.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeEnabled, filterQuery]);
   const [years, setYears] = useState([]);
   const [levels, setLevels] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState("");
   const [programs, setPrograms] = useState([]);
   const [sections, setSections] = useState([]);
   const [exams, setExams] = useState([]);
@@ -1107,53 +1122,24 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     };
   }, [filters.board, effectiveBoardId, activeCampusId, selectedBoard]);
 
-  // Load Groups (Independent)
+  const selectedGroupRef = useRef(filters.group);
+  useEffect(() => { selectedGroupRef.current = filters.group; }, [filters.group]);
+  // Use the master catalog to validate contextual IDs for both marks tabs.
   useEffect(() => {
-    const currentBoard = filters.board || effectiveBoardId;
-    let isMounted = true;
-
-    const loadGroups = async () => {
-      try {
-        const groupsRes = await apiClient
-          .get("/api/v1/groups", {
-            params: {
-              CampusId: activeCampusId,
-              campusId: activeCampusId,
-              ...(currentBoard ? { boardId: currentBoard, BoardId: currentBoard } : {}),
-              isActive: true,
-            },
-            headers: {
-              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-            },
-          })
-          .catch(() => apiClient.get("/api/v1/groups"))
-          .catch(() => null);
-
-        const rawGroups = unwrapRecords(groupsRes);
-        const listGroups = rawGroups
-          .map((g) => ({
-            id: normalizeId(g.groupId ?? g.id),
-            name: g.groupName ?? g.name ?? "",
-            groupName: g.groupName ?? g.name ?? "",
-            groupCode: g.groupCode ?? "",
-            boardId: normalizeId(g.boardId),
-            programs: g.programs || [],
-            isActive: g.isActive !== false,
-          }))
-          .filter((g) => g.isActive && (!g.boardId || !currentBoard || eq(g.boardId, currentBoard)));
-
-        if (isMounted) setGroups(listGroups);
-      } catch (err) {
-        console.error("Error fetching groups:", err);
-        if (isMounted) setGroups([]);
-      }
-    };
-
-    loadGroups();
-    return () => {
-      isMounted = false;
-    };
-  }, [filters.board, effectiveBoardId, activeCampusId]);
+    let active = true;
+    const controller = new AbortController();
+    const scope = { levelIndependentGroups: true, selectedGroupId: selectedGroupRef.current, boardId: filters.board || effectiveBoardId, academicYearId: filters.year || effectiveYearId, academicLevelId: filters.level, campusId: activeCampusId };
+    setGroups([]); setGroupsLoading(Boolean(scope.boardId && scope.academicYearId)); setGroupsError("");
+    getCatalogGroups(scope, { signal: controller.signal }).then((rows) => {
+      if (!active) return;
+      const groups = rows.map((g) => ({ ...g, id: normalizeId(g.groupId), name: g.groupName }));
+      setGroups(groups);
+      setFilters((current) => current.group && !groups.some((group) => eq(group.id, current.group))
+        ? { ...current, group: "", program: "", section: "", exam: "" } : current);
+    }).catch((error) => { if (active) setGroupsError(getApiErrorMessage(error) || "Unable to load groups."); })
+      .finally(() => { if (active) setGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [filters.board, filters.year, filters.level, effectiveBoardId, effectiveYearId, activeCampusId]);
 
   // Load Programs (Independent: group-specific if group is selected, otherwise all programs for campus/board)
   useEffect(() => {
@@ -1466,7 +1452,9 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   const initialCampusRef = useRef(activeCampusId);
   useEffect(() => {
     if (initialCampusRef.current === activeCampusId) return;
+    const previousCampus = initialCampusRef.current;
     initialCampusRef.current = activeCampusId;
+    if (!previousCampus && routeEnabled && filterParams.get("sectionId") && (!filterParams.get("campusId") || String(activeCampusId) === filterParams.get("campusId"))) return;
     onReset();
     setFilters((prev) => ({
       board: effectiveBoardId || prev.board,
@@ -1477,15 +1465,15 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
       section: "",
       exam: "",
     }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCampusId, effectiveBoardId, effectiveYearId]);
 
   // Change filter handler (Clears dependent section/exam when higher-level context changes)
   const changeFilter = (key, value) =>
     guard(() => {
       onReset();
-      setFilters((prev) => {
-        const next = { ...prev, [key]: value };
-        if (key === "level" || key === "group" || key === "program") {
+      const next = { ...filters, [key]: value };
+        if (key === "group" || key === "program") {
           next.section = "";
           next.exam = "";
         } else if (key === "section") {
@@ -1499,8 +1487,13 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             }
           }
         }
-        return next;
-      });
+        if (routeEnabled) {
+          const params = new URLSearchParams(filterParams);
+          Object.entries(next).forEach(([key, value]) => value ? params.set(key + "Id", String(value)) : params.delete(key + "Id"));
+          ["workflow", "action", "subjectId", "studentId", "evaluationId"].forEach((key) => params.delete(key));
+          if (params.toString() !== filterParams.toString()) setFilterParams(params);
+        }
+        setFilters(next);
     });
 
   return {
@@ -1509,6 +1502,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     years,
     levels,
     groups,
+    groupsLoading,
+    groupsError,
     programs,
     sections,
     exams,
@@ -1571,19 +1566,54 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     return normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId ?? "");
   }, [selectedAcademicYearId, selectedAcademicYear]);
   // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
-  const [tab, setTab] = useState(forcedTab || initialTab || "entry");
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isAdminNavigation = !embedded && !forcedTab && /^\/dashboard\/marks-entry(?:\/|$)/.test(location.pathname);
+  const [legacyTab, setLegacyTab] = useState(forcedTab || initialTab || "entry");
+  const tab = isAdminNavigation ? (searchParams.get("tab") === "evaluation" ? "evaluation" : searchParams.get("tab") === "entry" ? "entry" : initialTab || "entry") : legacyTab;
+  const setTab = (nextTab) => {
+    if (!isAdminNavigation) { setLegacyTab(nextTab); return; }
+    updateMarksRoute((next) => {
+      next.set("tab", nextTab === "evaluation" ? "evaluation" : "entry");
+      ["subtab", "workflow", "action", "subjectId", "studentId", "evaluationId"].forEach((key) => next.delete(key));
+    });
+  };
 
   useEffect(() => {
-    if (forcedTab) setTab(forcedTab);
-    else if (initialTab && initialTab !== tab) setTab(initialTab);
+    if (forcedTab) setLegacyTab(forcedTab);
+    else if (initialTab) setLegacyTab(initialTab);
   }, [forcedTab, initialTab]);
 
 
+  const restoringWorkspace = useRef(false);
+  const restoredWorkspaceKey = useRef("");
+  const marksLoaders = useRef({});
+  const pendingMarksNavigation = useRef(null);
+  const updateMarksRoute = (change) => {
+    if (!isAdminNavigation || restoringWorkspace.current) return;
+    const pending = pendingMarksNavigation.current;
+    const next = pending || new URLSearchParams(searchParams);
+    change(next); pendingMarksNavigation.current = next;
+    if (!pending) queueMicrotask(() => {
+      const target = pendingMarksNavigation.current; pendingMarksNavigation.current = null;
+      if (target && target.toString() !== searchParams.toString()) setSearchParams(target);
+    });
+  };
+  const routeWorkspace = (scope, mode) => updateMarksRoute((next) => {
+    Object.entries(scope).forEach(([key, value]) => value ? next.set(key + "Id", String(value)) : next.delete(key + "Id"));
+    next.set("tab", mode); next.set("workflow", "workspace");
+    if (effectiveCampusId) next.set("campusId", String(effectiveCampusId));
+    restoredWorkspaceKey.current = [mode, effectiveCampusId, ...["board", "year", "level", "group", "program", "section", "exam"].map((key) => scope[key] || "")].join(":");
+  });
   // Shared UI Notifications and Unsaved Modals
   const [toast, setToast] = useState(null);
   const [pending, setPending] = useState(null);
   const [processing, setProcessing] = useState("");
-  const [editingKey, setEditingKey] = useState("");
+  const [editingKey, setEditingKeyState] = useState("");
+  const setEditingKey = (key) => {
+    setEditingKeyState(key);
+    updateMarksRoute((next) => key ? next.set("action", "edit") : next.delete("action"));
+  };
   const snapshots = useRef({});
   const timer = useRef(null);
   const fileInputRef = useRef(null);
@@ -1786,22 +1816,33 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   const [entryApplied, setEntryApplied] = useState(false);
   const [entryStudents, setEntryStudents] = useState([]);
   const [entryConfigs, setEntryConfigs] = useState([]);
-  const [entryExamId, setEntryExamId] = useState("");
-  const [entrySubjectId, setEntrySubjectId] = useState("");
+  const [entryExamId, setEntryExamId] = useState(isAdminNavigation ? searchParams.get("examId") || "" : "");
+  const [entrySubjectId, setEntrySubjectId] = useState(isAdminNavigation ? searchParams.get("subjectId") || "" : "");
+  useEffect(() => {
+    if (!isAdminNavigation || tab !== "entry") return;
+    const examId = searchParams.get("examId");
+    const subjectId = searchParams.get("subjectId") || entryConfigs[0]?.subjectId;
+    if (examId) setEntryExamId(examId);
+    if (subjectId) setEntrySubjectId(String(subjectId));
+  }, [isAdminNavigation, tab, searchParams, entryConfigs]);
   const [entryPage, setEntryPage] = useState(1);
   const [entryPageSize, setEntryPageSize] = useState(5);
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const activeFetchRef = useRef(0);
 
   // Bulk Import Modal State (Ref Image 5)
-  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showBulkModal, setShowBulkModalState] = useState(false);
+  const setShowBulkModal = (open) => {
+    setShowBulkModalState(open);
+    updateMarksRoute((next) => open ? next.set("action", "import") : next.delete("action"));
+  };
   const [bulkFile, setBulkFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false), { embedded });
+  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false), { embedded, routeEnabled: isAdminNavigation && tab === "entry" });
 
   // Helper to load schedules & search evaluations for an examination in Marks Entry
   const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
@@ -2050,6 +2091,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   // Button Click Action: "Enter Marks" (Enabled when 6 filters selected)
   const applyEntryContext = async () => {
     if (!entry.filters.section || processing) return;
+    routeWorkspace({ ...entry.filters, exam: entryExamId || entry.filters.exam }, "entry");
     setProcessing("ENTER_MARKS");
     setLoadingWorkspace(true);
     try {
@@ -2225,6 +2267,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   // Change Examination inside Marks Entry Workspace
   const changeEntryExam = (newExamId) => {
     guard(async () => {
+      updateMarksRoute((next) => { next.set("examId", newExamId); next.delete("subjectId"); });
       setEntryExamId(newExamId);
       setEntrySubjectId("");
       setEntryPage(1);
@@ -3152,10 +3195,40 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   const [evalApplied, setEvalApplied] = useState(false);
   const [evalConfigs, setEvalConfigs] = useState([]);
   const [evalStudents, setEvalStudents] = useState([]);
-  const [evalSubTab, setEvalSubTab] = useState("evaluation"); // "evaluation" | "students"
-  const [selectedEvaluation, setSelectedEvaluation] = useState(null);
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [modal, setModal] = useState(null);
+  const [legacyEvalSubTab, setLegacyEvalSubTab] = useState("evaluation");
+  const evalSubTab = isAdminNavigation ? (searchParams.get("subtab") === "students" ? "students" : "evaluation") : legacyEvalSubTab;
+  const setEvalSubTab = (nextTab) => {
+    setLegacyEvalSubTab(nextTab);
+    // Main-tab entry already defaults to evaluation; avoid a second push.
+    if (!isAdminNavigation || tab !== "evaluation") return;
+    updateMarksRoute((next) => {
+      next.set("tab", "evaluation");
+      next.set("subtab", nextTab === "students" ? "students" : "evaluation");
+    });
+  };
+  const [selectedEvaluation, setSelectedEvaluationState] = useState(null);
+  const setSelectedEvaluation = (value) => {
+    setSelectedEvaluationState(value);
+    if (typeof value === "function") return;
+    updateMarksRoute((next) => {
+      if (value) { next.set("subjectId", String(value.subjectId || value.subject?.id)); next.set("workflow", "workspace"); }
+      else { next.delete("subjectId"); next.delete("action"); }
+    });
+  };
+  const [selectedStudent, setSelectedStudentState] = useState(null);
+  const setSelectedStudent = (value) => {
+    setSelectedStudentState(value);
+    if (typeof value === "function") return;
+    updateMarksRoute((next) => {
+      if (value) { next.set("studentId", String(value.studentId)); next.set("workflow", "workspace"); }
+      else { next.delete("studentId"); next.delete("action"); }
+    });
+  };
+  const [modal, setModalState] = useState(null);
+  const setModal = (value) => {
+    setModalState(value);
+    updateMarksRoute((next) => value ? next.set("action", String(value)) : next.delete("action"));
+  };
   const [message, setMessage] = useState("");
   const [backendAnalysis, setBackendAnalysis] = useState([]);
 
@@ -3168,7 +3241,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   const [evaluationSearch, setEvaluationSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
 
-  const evalState = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEvalApplied(false));
+  const evalState = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEvalApplied(false), { routeEnabled: isAdminNavigation && tab === "evaluation" });
 
   // Handle Switching Between Main Tabs: Reset cascading filters from scratch (preserving Board and Year)
   const handleTabChange = (nextTab) => {
@@ -3217,6 +3290,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   // Button Click Action: "Check Evaluations" (Enabled when all 7 filters selected)
   const applyEvalContext = async () => {
     if (!evalState.filters.section || !evalState.filters.exam || processing) return;
+    routeWorkspace(evalState.filters, "evaluation");
     setProcessing("CHECK_EVALUATIONS");
     try {
       const effectiveEvalFilters = {
@@ -3451,7 +3525,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
       setSelectedStudent(null);
       setEvaluationPage(1);
       setStudentPage(1);
-      setEvalSubTab("evaluation");
+      if (!restoringWorkspace.current) setEvalSubTab("evaluation");
       notify("Evaluations loaded for selected examination.");
     } catch (err) {
       notify(getApiErrorMessage(err), "error");
@@ -3892,6 +3966,45 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     evaluation: ["Marks Evaluation", "Verify, reject, and approve submitted marks"],
   }[tab] || ["Marks Entry", "Enter and submit subject-wise examination marks"];
 
+  marksLoaders.current = { entry: applyEntryContext, evaluation: applyEvalContext, student: handleViewStudentDetails };
+  const workspaceRouteKey = [tab, effectiveCampusId, ...["board", "year", "level", "group", "program", "section", "exam"].map((key) => searchParams.get(key + "Id") || "")].join(":");
+  useEffect(() => {
+    if (!isAdminNavigation || searchParams.get("workflow") !== "workspace") return;
+    const state = tab === "entry" ? entry : evalState;
+    if (!effectiveCampusId || processing || restoringWorkspace.current || restoredWorkspaceKey.current === workspaceRouteKey) return;
+    if ((searchParams.get("campusId") && searchParams.get("campusId") !== String(effectiveCampusId)) || (searchParams.get("boardId") && effectiveBoardId && !eq(searchParams.get("boardId"), effectiveBoardId)) || (searchParams.get("yearId") && effectiveYearId && !eq(searchParams.get("yearId"), effectiveYearId))) { restoredWorkspaceKey.current = workspaceRouteKey; notify("The saved marks workflow belongs to a different campus, board or academic year.", "error"); return; }
+    if (["levelId", "groupId", "sectionId", "examId", "subjectId", "studentId"].some((key) => searchParams.get(key) && !/^[A-Za-z0-9_-]+$/.test(searchParams.get(key)))) { restoredWorkspaceKey.current = workspaceRouteKey; notify("Invalid marks workflow identifier.", "error"); return; }
+    if (!state.filters.section || state.groupsLoading || state.groupsError || !state.sections.some((section) => eq(section.id, state.filters.section))) return;
+    if (tab === "evaluation" && !state.exams.some((exam) => eq(exam.id, state.filters.exam))) return;
+    const matches = ["level", "group", "program", "section"].every((key) => String(state.filters[key] || "") === String(searchParams.get(key + "Id") || ""));
+    if (!matches) return;
+    if (tab === "entry" && searchParams.get("examId") && !eq(entryExamId, searchParams.get("examId"))) return;
+    if (!restoredWorkspaceKey.current && ((tab === "entry" && entryApplied) || (tab === "evaluation" && evalApplied))) { restoredWorkspaceKey.current = workspaceRouteKey; return; }
+    restoredWorkspaceKey.current = workspaceRouteKey;
+    restoringWorkspace.current = true;
+    Promise.resolve(marksLoaders.current[tab]()).finally(() => { restoringWorkspace.current = false; });
+  }, [isAdminNavigation, tab, searchParams, workspaceRouteKey, effectiveCampusId, effectiveBoardId, effectiveYearId, processing, entry, evalState, entryApplied, evalApplied, entryExamId]);
+  useEffect(() => {
+    if (!isAdminNavigation) return;
+    const action = searchParams.get("action");
+    setShowBulkModalState(action === "import" && entryApplied && !processing);
+    if (tab === "entry" && entryApplied) setEditingKeyState(action === "edit" ? workspaceKey : "");
+    setModalState(evalApplied && !processing && ["VERIFY", "REJECT", "VERIFY_ALL", "APPROVE_ALL"].includes(action) ? action : null);
+    if (tab === "evaluation" && evalApplied && !processing) {
+      const subjectId = searchParams.get("subjectId");
+      const studentId = searchParams.get("studentId");
+      const item = subjectId ? evaluationItems.find((row) => eq(row.subjectId || row.subject?.id, subjectId)) : null;
+      setSelectedEvaluationState(item || null);
+      if (subjectId && !item && evaluationItems.length) { setModalState(null); notify("Selected evaluation is unavailable for this academic context.", "error"); }
+      if (studentId) {
+        const student = analysis.find((row) => eq(row.studentId, studentId));
+        if (student && !eq(selectedStudent?.studentId, studentId)) marksLoaders.current.student(student);
+      } else setSelectedStudentState(null);
+    }
+  // The existing data loaders resolve saved marks; URL restoration never calls transition/save/submit.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminNavigation, searchParams, tab, entryApplied, evalApplied, processing, evaluationItems]);
+
   const content = (
     <div className={`cms-marks-entry ${embedded ? "cms-marks-entry-embedded" : ""}`}>
       {toast && (
@@ -3951,6 +4064,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             years={entry.years}
             levels={entry.levels}
             groups={entry.groups}
+            groupsLoading={entry.groupsLoading}
+            groupsError={entry.groupsError}
             programs={entry.programs}
             sections={entry.sections}
             changeFilter={entry.changeFilter}
@@ -3992,6 +4107,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
                 subjectId={entrySubjectId}
                 changeSubject={(value) =>
                   guard(() => {
+                    updateMarksRoute((next) => { next.set("subjectId", value); if (entryExamId) next.set("examId", entryExamId); });
                     setEntrySubjectId(value);
                     setEntryPage(1);
                   })
@@ -4034,6 +4150,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             years={evalState.years}
             levels={evalState.levels}
             groups={evalState.groups}
+            groupsLoading={evalState.groupsLoading}
+            groupsError={evalState.groupsError}
             programs={evalState.programs}
             sections={evalState.sections}
             exams={evalState.exams}
@@ -4327,6 +4445,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
 // FilterCard with Dynamic Action Button (Enter Marks / Check Evaluations)
 function FilterCard({
   mode = "entry",
+  groupsLoading = false,
+  groupsError = "",
   filters,
   boards,
   years,
@@ -4347,7 +4467,7 @@ function FilterCard({
     { key: "board", label: "Board", options: boards, disabled: true },
     { key: "year", label: "Academic Year", options: years, disabled: true },
     { key: "level", label: "Academic Level", options: levels, disabled: false },
-    { key: "group", label: "Group", options: groups, disabled: false },
+    { key: "group", label: "Group", options: groups, disabled: groupsLoading },
     { key: "program", label: "Program", options: programs, disabled: false },
     { key: "section", label: "Section", options: sections, disabled: false },
     ...(mode === "evaluation"
@@ -4376,13 +4496,14 @@ function FilterCard({
           <button
             type="button"
             className="cms-btn cms-btn-primary"
-            disabled={Boolean(actionDisabled || processing)}
+            disabled={Boolean(actionDisabled || processing || groupsLoading || groupsError)}
             onClick={onAction}
           >
             {processing ? "Loading..." : actionLabel}
           </button>
         )}
       </div>
+      {groupsError && <p role="alert">{groupsError}</p>}
       <div className="cms-filter-grid">
         {fields.map((field) => (
           <SearchableSelect
@@ -5130,6 +5251,9 @@ function SearchableSelect({
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const ref = useRef(null);
+  const menuRef = useRef(null);
+  const isGroup = id === "marks-group";
+  const [menuStyle, setMenuStyle] = useState({});
   const inputRef = useRef(null);
   const listId = `${id}-listbox`;
 
@@ -5147,7 +5271,7 @@ function SearchableSelect({
   useEffect(() => {
     if (!open) return;
     const outside = (event) => {
-      if (!ref.current?.contains(event.target)) {
+      if (!ref.current?.contains(event.target) && !menuRef.current?.contains(event.target)) {
         setOpen(false);
         setQuery("");
       }
@@ -5156,9 +5280,35 @@ function SearchableSelect({
     return () => document.removeEventListener("mousedown", outside);
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (!isGroup || !open || disabled) return undefined;
+    const position = (event) => {
+      if (event && menuRef.current?.contains(event.target)) return;
+      const rect = ref.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const upwards = below < 160 && above > below;
+      const width = Math.min(rect.width, window.innerWidth - 16);
+      setMenuStyle({ left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), width,
+        top: upwards ? "auto" : rect.bottom + 4,
+        bottom: upwards ? window.innerHeight - rect.top + 4 : "auto",
+        maxHeight: Math.max(0, Math.min(220, upwards ? above : below)) });
+    };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => { window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
+  }, [isGroup, open, disabled]);
+
+  useEffect(() => {
+    if (isGroup && open) menuRef.current?.querySelector('[data-group-index="' + highlight + '"]')?.scrollIntoView({ block: "nearest" });
+  }, [isGroup, open, highlight, query]);
+
   const keyDown = (event) => {
     if (disabled) return;
     if (event.key === "Escape") {
+      if (isGroup) ref.current?.querySelector('[role="combobox"]')?.focus();
       setOpen(false);
       setQuery("");
     } else if (["ArrowDown", "ArrowUp"].includes(event.key)) {
@@ -5176,11 +5326,58 @@ function SearchableSelect({
       if (open && filtered[highlight]) {
         event.preventDefault();
         onChange(filtered[highlight].id);
-        setOpen(false);
+        if (isGroup) ref.current?.querySelector('[role="combobox"]')?.focus();
+      setOpen(false);
         setQuery("");
       }
     }
   };
+
+  const menu = (
+<div ref={menuRef} className={`cms-custom-select-menu bay-style-menu ${isGroup ? "cms-group-scroll-menu" : ""}`} style={isGroup ? menuStyle : undefined} id={listId} role="listbox" onMouseDown={isGroup ? (event) => event.preventDefault() : undefined}>
+            <button
+              type="button"
+              role="option"
+              aria-selected={!value}
+              className={`cms-custom-select-option ${!value ? "selected" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange("");
+                if (isGroup) ref.current?.querySelector('[role="combobox"]')?.focus();
+                setOpen(false);
+                setQuery("");
+              }}
+            >
+              <span className="cms-option-text">Select {label}</span>
+            </button>
+            {filtered.length ? (
+              filtered.map((item, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={eq(item.id, value)}
+                  className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${highlight === index ? "highlighted" : ""
+                    }`}
+                  key={item.id}
+                  id={isGroup ? `${listId}-option-${index}` : undefined}
+                  data-group-index={isGroup ? index : undefined}
+                  onMouseEnter={() => setHighlight(index)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(item.id);
+                    if (isGroup) ref.current?.querySelector('[role="combobox"]')?.focus();
+                setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <span className="cms-option-text">{item.name}</span>
+                </button>
+              ))
+            ) : (
+              <div className="cms-custom-select-empty">{emptyText}</div>
+            )}
+          </div>
+  );
 
   const isBoard = id === "marks-board";
   const isYear = id === "marks-year";
@@ -5234,6 +5431,7 @@ function SearchableSelect({
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-controls={listId}
+          aria-activedescendant={isGroup && open && filtered[highlight] ? `${listId}-option-${highlight}` : undefined}
           aria-label={label}
           className={`cms-custom-select-combobox ${open ? "is-focused" : ""} ${disabled ? "is-disabled" : ""}`}
           onClick={() => {
@@ -5294,47 +5492,7 @@ function SearchableSelect({
           </button>
         </div>
 
-        {open && !disabled && (
-          <div className="cms-custom-select-menu bay-style-menu" id={listId} role="listbox">
-            <button
-              type="button"
-              role="option"
-              aria-selected={!value}
-              className={`cms-custom-select-option ${!value ? "selected" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange("");
-                setOpen(false);
-                setQuery("");
-              }}
-            >
-              <span className="cms-option-text">Select {label}</span>
-            </button>
-            {filtered.length ? (
-              filtered.map((item, index) => (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={eq(item.id, value)}
-                  className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${highlight === index ? "highlighted" : ""
-                    }`}
-                  key={item.id}
-                  onMouseEnter={() => setHighlight(index)}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange(item.id);
-                    setOpen(false);
-                    setQuery("");
-                  }}
-                >
-                  <span className="cms-option-text">{item.name}</span>
-                </button>
-              ))
-            ) : (
-              <div className="cms-custom-select-empty">{emptyText}</div>
-            )}
-          </div>
-        )}
+        {open && !disabled && (isGroup ? createPortal(menu, document.body) : menu)}
       </div>
     </div>
   );

@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Wallet, CreditCard, CheckCircle2, Download, Printer, Users, Eye, AlertCircle, Clock } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, getStoredFeeRecords, saveStoredFeeRecords } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { getStoredFeeRecords, saveStoredFeeRecords } from "../parentData.js";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
@@ -16,8 +19,27 @@ export default function ParentFeesPage() {
     currentAcademicYear,
     loading,
   } = useParentPortal();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [feeRecords, setFeeRecords] = useState(getStoredFeeRecords());
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+
+  const handleOpenReceipt = (rec) => {
+    setSelectedReceipt(rec);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("receiptId", String(rec.id || rec.receiptNo));
+      return next;
+    });
+  };
+
+  const handleCloseReceipt = () => {
+    setSelectedReceipt(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("receiptId");
+      return next;
+    });
+  };
   const [toastMessage, setToastMessage] = useState("");
 
   const isCurrentYear = currentAcademicYear === "2026-2027";
@@ -25,7 +47,7 @@ export default function ParentFeesPage() {
   const rawChildFee = contextChildFee && contextChildFee.total !== undefined
     ? contextChildFee
     : (child
-        ? (feeRecords[feeKey] || (isCurrentYear ? feeRecords[child.id] || child.fees : null)) || {
+        ? (feeRecords[feeKey] || (isCurrentYear ? feeRecords[child?.id] || child?.fees : null)) || {
             total: 0,
             paid: 0,
             pending: 0,
@@ -48,6 +70,14 @@ export default function ParentFeesPage() {
     status: breakdownTotal > 0 ? (breakdownPending === 0 ? "Paid" : breakdownPaid > 0 ? "Partial" : "Due") : rawChildFee.status,
   };
 
+  useEffect(() => {
+    const receiptParam = searchParams.get("receiptId");
+    if (receiptParam && childFee?.receipts?.length > 0) {
+      const match = childFee.receipts.find((r) => String(r.id || r.receiptNo) === String(receiptParam));
+      if (match) setSelectedReceipt(match);
+    }
+  }, [searchParams, childFee?.receipts]);
+
   const handleSelectChild = (id) => {
     setActiveChildId(id);
     setSelectedReceipt(null);
@@ -61,13 +91,7 @@ export default function ParentFeesPage() {
         breadcrumb={["Parent Portal", "Fees & Payments"]}
       >
         <div className="parent-dashboard-wrapper">
-          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
-            <Wallet size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Fee Account Details...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to campus finance ledger to retrieve pending fees and breakdown.
-            </p>
-          </div>
+          <SkeletonPage variant="dashboard" columns={4} />
         </div>
       </DashboardLayout>
     );
@@ -116,7 +140,7 @@ export default function ParentFeesPage() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${child.id === c.id ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <Users size={14} /> {c.name}
@@ -265,7 +289,7 @@ export default function ParentFeesPage() {
                           <button
                             type="button"
                             className="cms-btn cms-btn-sm cms-btn-outline"
-                            onClick={() => setSelectedReceipt(rec)}
+                            onClick={() => handleOpenReceipt(rec)}
                           >
                             <Eye size={13} /> View Receipt
                           </button>
@@ -291,11 +315,11 @@ export default function ParentFeesPage() {
         {selectedReceipt && (
           <Modal
             title={`Fee Payment Receipt — ${selectedReceipt.receiptNo}`}
-            onClose={() => setSelectedReceipt(null)}
+            onClose={handleCloseReceipt}
             size="lg"
             footer={
               <>
-                <button type="button" className="cms-btn cms-btn-outline" onClick={() => setSelectedReceipt(null)}>Close</button>
+                <button type="button" className="cms-btn cms-btn-outline" onClick={handleCloseReceipt}>Close</button>
                 <button type="button" className="cms-btn cms-btn-primary" onClick={() => window.print()}>
                   <Printer size={15} /> Print Receipt
                 </button>

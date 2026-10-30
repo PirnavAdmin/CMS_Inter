@@ -1,5 +1,5 @@
 import React from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import TransportManagerDashboard from "./TransportManagerDashboard.jsx";
 import { TransportManagerProvider } from "./TransportManagerContext.jsx";
 import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
@@ -16,6 +16,13 @@ import TransportManagerMyAttendance from "./pages/TransportManagerMyAttendance.j
 import TransportManagerProfile from "./pages/TransportManagerProfile.jsx";
 import TransportManagerSettings from "./pages/TransportManagerSettings.jsx";
 
+function TransportManagerLegacyRedirect({ path, tab }) {
+  const [params] = useSearchParams();
+  const next = new URLSearchParams(params);
+  next.set("tab", tab);
+  return <Navigate to={`/transport-manager/${path}?${next}`} replace />;
+}
+
 export function TransportManagerContent() {
   return (
     <ErrorBoundary>
@@ -28,10 +35,10 @@ export function TransportManagerContent() {
           <Route path="reports" element={<TransportManagerReports />} />
 
           {/* Legacy route redirects to internal sub-tabs */}
-          <Route path="drivers" element={<Navigate to="/transport-manager/setup?tab=drivers" replace />} />
-          <Route path="vehicles" element={<Navigate to="/transport-manager/setup?tab=vehicles" replace />} />
-          <Route path="assignments" element={<Navigate to="/transport-manager/operations?tab=vehicleAssignments" replace />} />
-          <Route path="maintenance" element={<Navigate to="/transport-manager/operations?tab=maintenance" replace />} />
+          <Route path="drivers" element={<TransportManagerLegacyRedirect path="setup" tab="drivers" />} />
+          <Route path="vehicles" element={<TransportManagerLegacyRedirect path="setup" tab="vehicles" />} />
+          <Route path="assignments" element={<TransportManagerLegacyRedirect path="operations" tab="vehicleAssignments" />} />
+          <Route path="maintenance" element={<TransportManagerLegacyRedirect path="operations" tab="maintenance" />} />
           <Route path="my-attendance" element={<TransportManagerMyAttendance />} />
           <Route path="payslips" element={<TransportManagerPayslips />} />
           <Route path="reimbursements" element={<TransportManagerReimbursements />} />

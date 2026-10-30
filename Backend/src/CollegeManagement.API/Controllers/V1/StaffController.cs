@@ -42,6 +42,18 @@ namespace CollegeManagement.API.Controllers.V1
             _nonTeachingRepo = nonTeachingRepo;
         }
 
+        private bool IsAdminOrPrincipal()
+        {
+            return User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal");
+        }
+
+        private int? GetCallerStaffId()
+        {
+            var staffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            if (int.TryParse(staffClaim, out int sId) && sId > 0) return sId;
+            return null;
+        }
+
         /// <summary>
         /// 1. GET /api/v1/staff/dashboard-stats
         /// Returns real database aggregated counts for summary cards and completion overview.
@@ -97,7 +109,32 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _staffService.GetPagedStaffAsync(queryParams);
+            if (!IsAdminOrPrincipal() && !User.IsInRole("HR"))
+            {
+                foreach (var item in result.Items)
+                {
+                    if (!string.IsNullOrWhiteSpace(item.Aadhaar))
+                        item.Aadhaar = "XXXXXXXX" + (item.Aadhaar.Length >= 4 ? item.Aadhaar[^4..] : "****");
+                    if (!string.IsNullOrWhiteSpace(item.PanNumber))
+                        item.PanNumber = "*****" + (item.PanNumber.Length >= 4 ? item.PanNumber[^4..] : "****");
+                }
+            }
             return Ok(result);
+        }
+
+        /// <summary>
+        /// GET /api/v1/staff/{id}/payroll-details
+        /// Restricted to Super Admin, Admin, Principal, and HR roles. Returns detailed banking and payroll information.
+        /// </summary>
+        [HttpGet("{id:int}/payroll-details")]
+        [Authorize(Roles = "Super Admin,SuperAdmin,Admin,Principal,HR")]
+        [ProducesResponseType(typeof(StaffPayrollDetailsDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetStaffPayrollDetails([FromRoute] int id)
+        {
+            var details = await _staffService.GetStaffPayrollDetailsAsync(id);
+            if (details == null)
+                return NotFound(new { message = $"Staff payroll details for ID {id} not found." });
+            return Ok(details);
         }
 
         /// <summary>
@@ -272,6 +309,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffById(int id)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id)
+                {
+                    return Forbid();
+                }
+            }
+
             var result = await _staffService.GetStaffProfileFullAsync(id);
             return Ok(result);
         }
@@ -285,6 +331,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffByEmployeeId(string employeeId)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerEmp = User.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+                if (string.IsNullOrWhiteSpace(callerEmp) || !string.Equals(callerEmp, employeeId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid();
+                }
+            }
+
             var result = await _staffService.GetStaffProfileByEmployeeIdAsync(employeeId);
             return Ok(result);
         }
@@ -298,6 +353,16 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffProfileByIdentifier(string identifier)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                var callerEmp = User.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+                bool matches = false;
+                if (int.TryParse(identifier, out int pId) && callerId.HasValue && callerId.Value == pId) matches = true;
+                if (!string.IsNullOrWhiteSpace(callerEmp) && string.Equals(callerEmp, identifier, StringComparison.OrdinalIgnoreCase)) matches = true;
+                if (!matches) return Forbid();
+            }
+
             if (int.TryParse(identifier, out int id) && id > 0)
             {
                 var res = await _staffService.GetStaffProfileFullAsync(id);
@@ -366,6 +431,27 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> UpdateStaff(int id, [FromBody] UpdateStaffDto dto)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id)
+                {
+                    return Forbid();
+                }
+
+                // Protect institutional & financial fields from unverified employee tampering
+                var existing = await _db.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id);
+                if (existing != null)
+                {
+                    dto.DesignationId = existing.DesignationId;
+                    dto.DepartmentId = existing.DepartmentId;
+                    dto.StaffType = existing.StaffType;
+                    dto.Status = existing.Status;
+                    dto.PanNumber = existing.PanNumber;
+                    dto.Aadhaar = existing.Aadhaar;
+                }
+            }
+
             var result = await _staffService.UpdateStaffAsync(id, dto);
             return Ok(result);
         }
@@ -379,6 +465,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> DeleteStaff(int id)
         {
+            if (!IsAdminOrPrincipal()) return Forbid();
             await _staffService.DeleteStaffAsync(id);
             return NoContent();
         }
@@ -449,6 +536,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraft(int id, [FromBody] UpdateStaffProfileSectionDto dto)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var result = await _staffService.SaveProfileDraftAsync(id, dto);
             return Ok(result);
         }
@@ -474,6 +567,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SubmitProfile(int id)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var result = await _staffService.SubmitProfileAsync(id);
             return Ok(result);
         }
@@ -565,6 +664,12 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("{id:int}/print")]
         public async Task<IActionResult> PrintProfilePdf(int id)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var (bytes, contentType, fileName) = await _staffService.GenerateProfilePdfAsync(id);
             return File(bytes, contentType, fileName);
         }
@@ -578,6 +683,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadDocument(int id, [FromForm] UploadStaffDocumentDto dto)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var result = await _staffService.UploadDocumentAsync(id, dto.DocumentType, dto.File);
             return Ok(result);
         }
@@ -604,6 +715,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> DeleteDocument(int id, string documentType)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var result = await _staffService.DeleteDocumentAsync(id, documentType);
             return Ok(result);
         }
@@ -630,7 +747,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadPhoto([FromForm] UploadStaffPhotoDto dto)
         {
-            if (dto.StaffId <= 0)
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (callerId.HasValue)
+                {
+                    dto.StaffId = callerId.Value;
+                }
+            }
+            else if (dto.StaffId <= 0)
             {
                 var staffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId");
                 if (staffClaim != null && int.TryParse(staffClaim.Value, out int claimStaffId) && claimStaffId > 0)

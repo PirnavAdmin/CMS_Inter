@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import apiClient from "@/api/apiClient.js";
 import {
   Building,
@@ -70,10 +71,65 @@ const DEPARTMENT_MODULES = {
 
 export default function NonTeachingDepartment() {
   const profile = nonTeachingService.getProfile();
-  const [activeDept, setActiveDept] = useState("ADMINISTRATION");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const deptParam = (searchParams.get("dept") || searchParams.get("department") || "ADMINISTRATION").toUpperCase();
+  const validDept = DEPARTMENT_MODULES[deptParam] ? deptParam : "ADMINISTRATION";
+  const statusParam = (searchParams.get("status") || "ALL").toUpperCase();
+  const searchParam = searchParams.get("search") || "";
+
+  const [activeDept, setActiveDept] = useState(validDept);
+  const [searchQuery, setSearchQuery] = useState(searchParam);
+  const [statusFilter, setStatusFilter] = useState(statusParam);
   const [liveData, setLiveData] = useState(null);
+
+  useEffect(() => {
+    const d = (searchParams.get("dept") || searchParams.get("department") || "ADMINISTRATION").toUpperCase();
+    if (DEPARTMENT_MODULES[d] && d !== activeDept) {
+      setActiveDept(d);
+    }
+    const st = (searchParams.get("status") || "ALL").toUpperCase();
+    if (st !== statusFilter) {
+      setStatusFilter(st);
+    }
+    const q = searchParams.get("search") || "";
+    if (q !== searchQuery) {
+      setSearchQuery(q);
+    }
+  }, [searchParams]);
+
+  const handleDeptChange = (key) => {
+    setActiveDept(key);
+    setSearchQuery("");
+    setStatusFilter("ALL");
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("dept", key);
+      next.delete("search");
+      next.delete("status");
+      return next;
+    });
+  };
+
+  const handleStatusFilterChange = (st) => {
+    setStatusFilter(st);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (st && st !== "ALL") next.set("status", st);
+      else next.delete("status");
+      return next;
+    });
+  };
+
+  const handleSearchChange = (q) => {
+    setSearchQuery(q);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (q) next.set("search", q);
+      else next.delete("search");
+      return next;
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -136,11 +192,7 @@ export default function NonTeachingDepartment() {
                   key={key}
                   type="button"
                   className={`nts-tab-btn ${activeDept === key ? "active" : ""}`}
-                  onClick={() => {
-                    setActiveDept(key);
-                    setSearchQuery("");
-                    setStatusFilter("ALL");
-                  }}
+                  onClick={() => handleDeptChange(key)}
                 >
                   {item.name.split(" ")[0]}
                 </button>
@@ -207,7 +259,7 @@ export default function NonTeachingDepartment() {
                 placeholder="Search log entries..."
                 className="nts-search-input"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 style={{
                   height: 32,
                   fontSize: 12,
@@ -223,7 +275,7 @@ export default function NonTeachingDepartment() {
 
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => handleStatusFilterChange(e.target.value)}
               style={{
                 height: 32,
                 fontSize: 12,

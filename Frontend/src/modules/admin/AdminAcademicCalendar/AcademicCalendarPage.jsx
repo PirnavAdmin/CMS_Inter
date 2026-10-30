@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Plus, Printer, Download, Eye, Pencil, Trash2, RotateCcw, CalendarDays, Clock3, FileText, Sun } from 'lucide-react';
 import DashboardLayout from '@/shared/layouts/DashboardLayout/DashboardLayout.jsx';
 import { Modal, ConfirmDialog, Toast, Skeleton, SkeletonCard, SkeletonTable } from '@/shared/components/Ui.jsx';
@@ -147,7 +149,7 @@ export function validateCalendarEvent(payload, eventTypes = EVENT_TYPES, masters
   }
   if (!Number.isInteger(Number(payload.boardId)) || Number(payload.boardId) <= 0) errors.boardId = 'Select a board.';
   if (payload.academicLevelId && !masters.levels.some((r) => r.id === payload.academicLevelId && (!r.boardId || r.boardId === payload.boardId))) errors.academicLevelId = 'Academic level must belong to the selected board.';
-  if (payload.groupId && !masters.groups.some((r) => r.id === payload.groupId && r.academicLevelId === payload.academicLevelId && r.boardId === payload.boardId)) errors.groupId = 'Group must belong to the selected academic level.';
+  if (payload.groupId && (!payload.academicLevelId || !masters.groups.some((r) => r.id === payload.groupId && r.boardId === payload.boardId && (!r.academicYearId || r.academicYearId === payload.academicYearId)))) errors.groupId = 'Select an eligible group for the selected board and academic year.';
   if (payload.programId && !masters.programs.some((r) => r.id === payload.programId && r.groupId === payload.groupId)) errors.programId = 'Programme must belong to the selected group.';
   if (payload.sectionId && !masters.sections.some((r) => r.id === payload.sectionId && r.programId === payload.programId)) errors.sectionId = 'Section must belong to the selected programme.';
   if (!CALENDAR_STATUSES.includes(payload.status)) errors.status = 'Select a valid status.';
@@ -334,14 +336,14 @@ function AcademicCalendarEventForm({ event, defaults, onClose, onSave, eventType
       {select('type', 'Event Type *', [...Object.entries(eventTypes).map(([id, type]) => ({ id, name: type.label })), { id: 'other', name: 'Other' }], false, 'Select event type')}
       {select('status', 'Status', CALENDAR_STATUSES.map((id) => ({ id, name: id })), false, 'Select status')}
       {values.type === 'other' && <label className="cms-field is-wide custom-event-type-field"><span>Enter Event Type *</span><input name="customType" value={values.customType || ''} placeholder="e.g., Sports Activities, Workshop, Seminar" required aria-invalid={Boolean(errors.customType)} aria-describedby={errors.customType ? 'event-error-customType' : undefined} onChange={(e) => change('customType', e.target.value)} /><small className="cms-error" id="event-error-customType">{errors.customType}</small></label>}
-      <label className="cms-field is-wide"><span>Description</span><textarea value={values.description} onChange={(e) => change('description', e.target.value)} rows={3} /></label>
+      <label className="cms-field is-wide"><span>Description</span><textarea value={values.description ?? ""} onChange={(e) => change('description', e.target.value)} rows={3} /></label>
       {field('start', 'Start Date', 'date', true)}{field('end', 'End Date', 'date', true)}
       <label className="academic-calendar-checkbox is-wide"><input type="checkbox" checked={values.allDay} onChange={(e) => change('allDay', e.target.checked)} />All day</label>
       {!values.allDay && <>{field('startTime', 'Start Time', 'time', true)}{field('endTime', 'End Time', 'time', true)}</>}
       {select('boardId', 'Board *', masters.boards, false, 'Select board')}
       {select('academicYearId', 'Academic Year *', masters.years, yearsLoading || !values.boardId, 'Select academic year')}
       {select('academicLevelId', 'Academic Level', masters.levels.filter((r) => !r.boardId || r.boardId === values.boardId), lookupLoading || !values.boardId || !values.academicYearId)}
-      {select('groupId', 'Group', masters.groups.filter((r) => r.academicLevelId === values.academicLevelId), lookupLoading || !values.academicLevelId)}
+      {select('groupId', 'Group', masters.groups.filter((r) => r.boardId === values.boardId), lookupLoading || !values.academicLevelId)}
       {select('programId', 'Programme', masters.programs.filter((r) => r.groupId === values.groupId), lookupLoading || !values.groupId)}
       {select('sectionId', 'Section', masters.sections.filter((r) => r.programId === values.programId && r.groupId === values.groupId && r.academicLevelId === values.academicLevelId), lookupLoading || !values.programId)}
       {field('location', 'Location')}
@@ -444,8 +446,21 @@ const PAGE_SIZE = 5;
 const displayDate = (key) => new Date(`${key}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
 function StatusBadge({ status }) { return <span className={`academic-calendar-status is-${status.toLowerCase()}`}>{status}</span>; }
+const validNavigationDate = (date) => /^\d{4}-\d{2}-\d{2}$/.test(date || '') && !Number.isNaN(Date.parse(date)) ? date : todayKey();
 
 export default function AcademicCalendarPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigationParams = useRef(searchParams);
+  navigationParams.current = searchParams;
+  const updateNavigation = useCallback((changes) => {
+    const params = new URLSearchParams(navigationParams.current);
+    Object.entries(changes).forEach(([key, value]) => { if (value == null || value === '') params.delete(key); else params.set(key, String(value)); });
+    if (params.toString() !== navigationParams.current.toString()) { navigationParams.current = params; setSearchParams(params); }
+  }, [setSearchParams]);
+  const dialog = searchParams.get('modal');
+  const eventId = searchParams.get('eventId') || '';
+  const eventSource = searchParams.get('source') || 'calendar';
+  const navigateDialog = useCallback((modal, event, date) => updateNavigation({ modal, eventId: event?.id, source: event?.source, eventDate: date }), [updateNavigation]);
   const { boards, academicYears, selectedBoardId, selectedAcademicYearId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
   const [masterLists, setMasterLists] = useState({ levels: [], groups: [], programs: [], sections: [] });
@@ -462,13 +477,20 @@ export default function AcademicCalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const filters = useMemo(() => ({ ...DEFAULT_FILTERS, campusId: selectedCampusId ? String(selectedCampusId) : '', boardId: selectedBoardId ? String(selectedBoardId) : '', academicYearId: selectedAcademicYearId ? String(selectedAcademicYearId) : '' }), [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
-  const [view, setView] = useState('month');
-  const [anchor, setAnchor] = useState(todayKey);
-  const [selectedDate, setSelectedDate] = useState(todayKey);
-  const [detail, setDetail] = useState(null);
-  const [editor, setEditor] = useState(null);
-  const [confirmation, setConfirmation] = useState(null);
-  const [upcomingOnly, setUpcomingOnly] = useState(false);
+  const view = ['month', 'week', 'list'].includes(searchParams.get('view')) ? searchParams.get('view') : 'month';
+  const anchor = validNavigationDate(searchParams.get('date'));
+  const selectedDate = anchor;
+  const [dialogData, setDialogData] = useState(null);
+  const [dialogError, setDialogError] = useState('');
+  const dialogKey = JSON.stringify([dialog, eventId, eventSource, filters]);
+  const dialogEvent = dialogData?.key === dialogKey ? dialogData.event : null;
+  const detail = dialog === 'details' ? dialogEvent : null;
+  const editor = useMemo(() => dialog === 'add' || (dialog === 'edit' && dialogEvent) ? { event: dialog === 'edit' ? dialogEvent : null, defaults: { ...filters, ...(searchParams.get('eventDate') ? { start: validNavigationDate(searchParams.get('eventDate')), end: validNavigationDate(searchParams.get('eventDate')) } : {}) } } : null, [dialog, dialogEvent, filters, searchParams]);
+  const confirmation = useMemo(() => dialog === 'delete' && dialogEvent ? { event: dialogEvent } : null, [dialog, dialogEvent]);
+  const setDetail = useCallback((event) => navigateDialog(event ? 'details' : null, event), [navigateDialog]);
+  const setEditor = () => navigateDialog(null);
+  const setConfirmation = useCallback(() => navigateDialog(null), [navigateDialog]);
+  const upcomingOnly = searchParams.get('upcoming') === 'true';
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -492,7 +514,7 @@ export default function AcademicCalendarPage() {
 
   useEffect(() => {
     const request = new AbortController(); let active = true;
-    detailRequest.current += 1; setLoading(true); setError(''); setEvents([]); setRangeEvents([]); setSidebarEvents([]); setMetrics(null); setDetail(null); setEditor(null); setConfirmation(null); setPage(1);
+    detailRequest.current += 1; setLoading(true); setError(''); setEvents([]); setRangeEvents([]); setSidebarEvents([]); setMetrics(null); setPage(1);
     const scope = Object.fromEntries(['campusId', 'boardId', 'academicYearId'].filter((key) => filters[key]).map((key) => [key, Number(filters[key])]));
     const listScope = Object.fromEntries(Object.entries(scope).map(([key, value]) => [key[0].toUpperCase() + key.slice(1), value]));
     setWidgetsError('');
@@ -537,7 +559,7 @@ export default function AcademicCalendarPage() {
     };
     document.addEventListener('keydown', closeOnEscape);
     return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [detail, confirmation, busy]);
+  }, [detail, confirmation, busy, setDetail, setConfirmation]);
   const filtered = useMemo(() => filterEvents(events, filters), [events, filters]);
   const range = calendarRange(anchor, view);
   const combinedRangeEvents = uniqueEvents([...events, ...rangeEvents]);
@@ -554,19 +576,14 @@ export default function AcademicCalendarPage() {
   const currentPage = Math.min(page, pages);
   const periodLabel = view === 'list' ? (upcomingOnly ? 'Upcoming events' : 'All events') : view === 'week' ? `${displayDate(range.start)} – ${displayDate(range.end)}` : new Date(`${anchor}T12:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
   const yearName = masterName('years', filters.academicYearId) || 'All academic years';
-  const selectDate = (date) => { setSelectedDate(date); setAnchor(date); };
+  const selectDate = (date) => updateNavigation({ date });
   const move = (amount) => {
     if (view === 'week') selectDate(shiftDay(anchor, amount * 7));
     else { const date = new Date(`${anchor}T12:00:00`); date.setDate(1); date.setMonth(date.getMonth() + amount); selectDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`); }
   };
-  const openEditor = async (event = null, date = '') => {
+  const openEditor = (event = null, date = '') => {
     if (event?.source && event.source !== 'calendar') return;
-    if (event) {
-      try { event = await service.getEvent(event.id); }
-      catch (err) { setToast({ message: getApiErrorMessage(err), type: 'error' }); return; }
-    }
-    setDetail(null);
-    setEditor({ event, defaults: { campusId: filters.campusId, boardId: filters.boardId, academicYearId: filters.academicYearId, academicLevelId: filters.academicLevelId, groupId: filters.groupId, programId: filters.programId, sectionId: filters.sectionId, ...(filters.type ? { type: filters.type } : {}), ...(date ? { start: date, end: date } : {}) } });
+    navigateDialog(event ? 'edit' : 'add', event, date);
   };
   const refresh = async () => { setReload((value) => value + 1); };
   const saveEvent = async (payload, id) => {
@@ -574,7 +591,7 @@ export default function AcademicCalendarPage() {
     mutationLock.current = true; setBusy(true);
     try {
       if (id) await service.updateCalendarEvent(id, calendarEventPayload(payload, eventTypes)); else await service.createCalendarEvent(calendarEventPayload(payload, eventTypes));
-      await refresh(); setEditor(null); setPage(1); selectDate(payload.start);
+      await refresh(); updateNavigation({ modal: null, eventId: null, source: null, eventDate: null, date: payload.start }); setPage(1);
       setToast({ message: `Event ${id ? 'updated' : 'created'} as ${payload.status.toLowerCase()}.` });
     } finally { mutationLock.current = false; setBusy(false); }
   };
@@ -585,13 +602,25 @@ export default function AcademicCalendarPage() {
     catch (err) { setToast({ message: err.message, type: 'error' }); }
     finally { mutationLock.current = false; setBusy(false); }
   };
-  const showDetail = async (event) => {
-    if (event.source !== 'calendar') { detailRequest.current += 1; setDetail(event); return; }
-    const requestId = ++detailRequest.current;
-    try { const current = await service.getEvent(event.id); if (requestId === detailRequest.current) setDetail(current); }
-    catch (err) { setToast({ message: getApiErrorMessage(err), type: 'error' }); }
-  };
-  const confirmDelete = (event) => { if (event.source !== 'calendar') return; setDetail(null); setConfirmation({ event }); };
+  const showDetail = (event) => setDetail(event);
+  const confirmDelete = (event) => { if (event.source !== 'calendar') return; navigateDialog('delete', event); };
+  const externalDialogEvent = eventSource !== 'calendar' ? events.find((event) => String(event.id) === eventId && event.source === eventSource) : null;
+  useEffect(() => {
+    if (!['edit', 'details', 'delete'].includes(dialog)) return;
+    let active = true;
+    setDialogError('');
+    if (eventSource !== 'calendar' && loading) return;
+    const restore = async () => {
+      try {
+        if (!eventId || (dialog !== 'details' && eventSource !== 'calendar')) throw new Error('Event is unavailable.');
+        const event = eventSource === 'calendar' ? await service.getEvent(eventId) : externalDialogEvent;
+        if (!event?.id || !filterEvents([event], filters).length) throw new Error('Event is unavailable in the current context.');
+        if (active) setDialogData({ key: dialogKey, event });
+      } catch (error) { if (active) setDialogError(getApiErrorMessage(error) || 'Unable to load event.'); }
+    };
+    restore();
+    return () => { active = false; };
+  }, [dialog, eventId, eventSource, dialogKey, filters, service, externalDialogEvent, loading]);
   const exportFile = async (format) => {
     if (exporting) return;
     setExporting(true);
@@ -643,7 +672,7 @@ export default function AcademicCalendarPage() {
       <PlannerHeader filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} exporting={exporting} visible={visible} yearName={yearName} selectedDate={selectedDate} metrics={null} onPrint={printCalendar} openEditor={openEditor} exportFile={exportFile} />
       <div className="academic-planner-layout">
       <section className="academic-planner-main" aria-label="Academic event planner">
-      <PlannerNavigation view={view} periodLabel={periodLabel} move={move} today={() => selectDate(todayKey())} changeView={(mode) => { setView(mode); setUpcomingOnly(false); setPage(1); }} />
+      <PlannerNavigation view={view} periodLabel={periodLabel} move={move} today={() => selectDate(todayKey())} changeView={(mode) => { updateNavigation({ view: mode, upcoming: null }); setPage(1); }} />
       <div className="academic-calendar-print-heading"><h1>Pirnav College — Academic Calendar </h1><p>{yearName} | {periodLabel}</p></div>
       {(error || widgetsError || rangeError) && <p role="alert">{error || widgetsError || rangeError}</p>}
       {loading || (view !== 'list' && rangeLoading) ? <CalendarLoadingSkeleton view={view} /> : <>
@@ -656,8 +685,9 @@ export default function AcademicCalendarPage() {
         </> : <PlannerTimeline timeline={timeline} view={view} eventButton={eventButton} openEditor={openEditor} anchor={anchor} events={combinedRangeEvents} selectedDate={selectedDate} onSelectDate={selectDate} onEvent={showDetail} eventTypes={eventTypes} actions={actions} />}
       </>}
       </section>
-      <PlannerAside filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} setDetail={showDetail} viewAll={() => { setView("list"); setUpcomingOnly(true); setPage(1); }} reset={refresh} eventTypes={eventTypes} metrics={null} />
+      <PlannerAside filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} setDetail={showDetail} viewAll={() => { updateNavigation({ view: 'list', upcoming: 'true' }); setPage(1); }} reset={refresh} eventTypes={eventTypes} metrics={null} />
       </div>
+      {['edit', 'details', 'delete'].includes(dialog) && !dialogEvent && <Modal className="academic-calendar-modal" title={dialog === 'edit' ? 'Edit Event' : dialog === 'delete' ? 'Delete event?' : 'Event Details'} onClose={() => navigateDialog(null)}>{dialogError ? <p role={dialogError ? 'alert' : 'status'}>{dialogError || 'Loading event...'}</p> : <SkeletonPage variant="form" rows={4} />}</Modal>}
       {detail && <Modal className="academic-calendar-modal" title={detail.title} onClose={() => setDetail(null)} footer={<>
         <button className="cms-btn cms-btn-ghost" onClick={() => setDetail(null)}>Close</button>{detail.source === 'calendar' && <><button className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => openEditor(detail)}>Edit</button>
         <button className="cms-btn cms-btn-danger" disabled={busy} onClick={() => confirmDelete(detail)}>Delete</button>
@@ -666,7 +696,7 @@ export default function AcademicCalendarPage() {
       </>}><dl className="academic-calendar-details">{[
         ['Source', detail.source === 'calendar' ? 'Academic Calendar' : detail.source === 'holidays' ? 'Holiday Management (read-only)' : 'Examination Management (read-only)'], ['Holiday Type', detail.holidayType], ['Subject', detail.subjectName], ['Event Type', eventTypes[detail.type].label], ['Status', detail.status], ['Description', detail.description || detail.reason], ['Remarks', detail.remarks], ['Start Date', displayDate(detail.start)], ['End Date', displayDate(detail.end)], ['Time', detail.allDay ? 'All day' : `${detail.startTime} – ${detail.endTime}`], ['Board', masterName('boards', detail.boardId)], ['Academic Year', masterName('years', detail.academicYearId)], ['Academic Level', masterName('levels', detail.academicLevelId) || detail.academicLevelName || detail.academicLevel], ['Group', masterName('groups', detail.groupId) || detail.groupName], ['Programme', masterName('programs', detail.programId) || detail.programName], ['Section', masterName('sections', detail.sectionId) || detail.sectionName], ['Location', detail.location],
       ].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{label === 'Status' ? <StatusBadge status={value} /> : value}</dd></div>)}</dl></Modal>}
-      {editor && <AcademicCalendarEventForm event={editor.event} defaults={editor.defaults} onClose={() => setEditor(null)} onSave={saveEvent} eventTypes={eventTypes} masters={masters} />}
+      {editor && <AcademicCalendarEventForm key={`${dialog}:${eventId}:${searchParams.get('eventDate') || ''}`} event={editor.event} defaults={editor.defaults} onClose={() => setEditor(null)} onSave={saveEvent} eventTypes={eventTypes} masters={masters} />}
       {confirmation && <ConfirmDialog title="Delete event?" message={`Delete "${confirmation.event.title}" from the academic calendar?`} onCancel={() => !busy && setConfirmation(null)} loading={busy} confirmLabel="Delete Event" danger onConfirm={() => mutate(() => service.deleteCalendarEvent(confirmation.event.id), 'Event deleted.')} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>

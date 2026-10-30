@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -5,11 +6,10 @@ import {
   ChevronRight, Eye, Download, Printer, Clock
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import { useParentPortal, transformMemoSubjects } from "../context/ParentPortalContext.jsx";
 import {
-  useParentPortal,
   academicSubjectsData, examResultsData
 } from "../parentData.js";
-import { transformMemoSubjects } from "../context/ParentPortalContext.jsx";
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
@@ -41,6 +41,11 @@ export default function ParentAcademicsPage() {
     } else if (tabFromUrl === "results") {
       setActiveTab("results");
     }
+    const examParam = searchParams.get("exam");
+    if (examParam && yearResults.length > 0) {
+      const match = yearResults.find((r) => r.examName?.toLowerCase() === examParam.toLowerCase());
+      if (match) setSelectedResult(match);
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -49,17 +54,23 @@ export default function ParentAcademicsPage() {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    setSearchParams({ tab });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tab);
+      return next;
+    });
   };
 
   const subjects = useMemo(() => {
     if (curriculumSubjects && curriculumSubjects.length > 0) {
       return curriculumSubjects;
     }
-    return [];
-  }, [curriculumSubjects]);
+    return academicSubjectsData[activeChildId] || academicSubjectsData["860"] || [];
+  }, [curriculumSubjects, activeChildId]);
 
-  const rawResults = contextResults && contextResults.length > 0 ? contextResults : [];
+  const rawResults = (contextResults && contextResults.length > 0)
+    ? contextResults
+    : (examResultsData[activeChildId] || examResultsData["860"] || []);
   const yearResults = rawResults.filter((r) => r.academicYear === currentAcademicYear || !r.academicYear);
   const currentExam = (selectedResult && (selectedResult.academicYear === currentAcademicYear || !selectedResult.academicYear))
     ? selectedResult
@@ -97,13 +108,7 @@ export default function ParentAcademicsPage() {
         breadcrumb={["Parent Portal", "Academics & Results"]}
       >
         <div className="parent-dashboard-wrapper">
-          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
-            <Award size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Academic Records...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to campus examination branch to retrieve published grade sheets and results.
-            </p>
-          </div>
+          <SkeletonPage variant="dashboard" columns={4} />
         </div>
       </DashboardLayout>
     );
@@ -150,7 +155,7 @@ export default function ParentAcademicsPage() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${child.id === c.id ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <Users size={14} /> {c.name}
@@ -268,7 +273,14 @@ export default function ParentAcademicsPage() {
                   value={currentExam?.examName || ""}
                   onChange={(e) => {
                     const found = yearResults.find((r) => r.examName === e.target.value);
-                    if (found) setSelectedResult(found);
+                    if (found) {
+                      setSelectedResult(found);
+                      setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set("exam", found.examName);
+                        return next;
+                      });
+                    }
                   }}
                   disabled={yearResults.length === 0}
                   style={{

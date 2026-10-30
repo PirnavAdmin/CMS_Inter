@@ -136,10 +136,25 @@ namespace CollegeManagement.API.Controllers.V1
         /// Gets weekly timetable grid for a faculty member.
         /// </summary>
         [HttpGet("faculty/{facultyId:int}")]
+        [HttpGet("faculty/me")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetByFaculty(int facultyId, [FromQuery] int? academicYearId = null, [FromQuery] int? campusId = null)
+        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
+        [BypassPermission]
+        public async Task<IActionResult> GetByFaculty([FromRoute] int? facultyId = null, [FromQuery] int? academicYearId = null, [FromQuery] int? campusId = null)
         {
-            var result = await _timetableService.GetFacultyTimetableAsync(facultyId, academicYearId, campusId);
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
+
+            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal"))
+            {
+                facultyId = callerStaffId ?? 0;
+            }
+            else if (!facultyId.HasValue || facultyId.Value <= 0)
+            {
+                facultyId = callerStaffId ?? 0;
+            }
+
+            var result = await _timetableService.GetFacultyTimetableAsync(facultyId.Value, academicYearId, campusId);
             return Ok(result);
         }
 

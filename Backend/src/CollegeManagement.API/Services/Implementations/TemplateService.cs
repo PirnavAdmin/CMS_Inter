@@ -55,6 +55,26 @@ namespace CollegeManagement.API.Services.Implementations
             return set.ToList();
         }
 
+        private static string SanitizeHtml(string? html)
+        {
+            if (string.IsNullOrWhiteSpace(html)) return string.Empty;
+
+            // 1. Strip <script>...</script> tags and contents
+            html = Regex.Replace(html, @"<script[\s\S]*?>[\s\S]*?</script>", string.Empty, RegexOptions.IgnoreCase);
+            html = Regex.Replace(html, @"<script[\s\S]*?>", string.Empty, RegexOptions.IgnoreCase);
+
+            // 2. Strip <iframe>, <object>, <embed>, <applet>, <form>, <input>, <meta>
+            html = Regex.Replace(html, @"</?(iframe|object|embed|applet|form|input|meta)[\s\S]*?>", string.Empty, RegexOptions.IgnoreCase);
+
+            // 3. Strip inline event handlers (onload, onerror, onclick, onmouseover, etc.)
+            html = Regex.Replace(html, @"\s+on[a-zA-Z]+\s*=\s*(""[^""]*""|'[^']*'|[^\s>]+)", string.Empty, RegexOptions.IgnoreCase);
+
+            // 4. Strip javascript: and vbscript: URIs in href/src
+            html = Regex.Replace(html, @"(href|src)\s*=\s*[""']?\s*(javascript|vbscript|data):[^""'>]*[""']?", string.Empty, RegexOptions.IgnoreCase);
+
+            return html.Trim();
+        }
+
         private static TemplateResponseDto MapToDto(Template t)
         {
             List<string> placeholders;
@@ -140,14 +160,15 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException($"A template with code '{cleanCode}' already exists.");
             }
 
-            var placeholders = ExtractPlaceholders(dto.ContentBody, dto.Placeholders);
+            var sanitizedBody = SanitizeHtml(dto.ContentBody);
+            var placeholders = ExtractPlaceholders(sanitizedBody, dto.Placeholders);
 
             var template = new Template
             {
                 TemplateCode = cleanCode,
                 Title = dto.Title.Trim(),
                 Category = string.IsNullOrWhiteSpace(dto.Category) ? "Certificate" : dto.Category.Trim(),
-                ContentBody = dto.ContentBody,
+                ContentBody = sanitizedBody,
                 PlaceholdersJson = JsonSerializer.Serialize(placeholders),
                 IsActive = dto.IsActive,
                 Version = "v1",
@@ -171,8 +192,13 @@ namespace CollegeManagement.API.Services.Implementations
             if (existing == null)
                 return null;
 
+<<<<<<< HEAD
             if (!string.IsNullOrWhiteSpace(dto.Title))
                 existing.Title = dto.Title.Trim();
+=======
+            var sanitizedBody = SanitizeHtml(dto.ContentBody);
+            var placeholders = ExtractPlaceholders(sanitizedBody, dto.Placeholders);
+>>>>>>> origin/main
 
             if (!string.IsNullOrWhiteSpace(dto.Category))
                 existing.Category = dto.Category.Trim();
@@ -189,11 +215,22 @@ namespace CollegeManagement.API.Services.Implementations
             int currentVer = 1;
             if (!string.IsNullOrWhiteSpace(existing.Version))
             {
+<<<<<<< HEAD
                 int.TryParse(existing.Version.Trim().TrimStart('v', 'V'), out currentVer);
                 if (currentVer < 1) currentVer = 1;
             }
             existing.Version = $"v{currentVer + 1}";
             existing.UpdatedAt = DateTime.UtcNow;
+=======
+                Id = id,
+                Title = dto.Title.Trim(),
+                Category = string.IsNullOrWhiteSpace(dto.Category) ? existing.Category : dto.Category.Trim(),
+                ContentBody = sanitizedBody,
+                PlaceholdersJson = JsonSerializer.Serialize(placeholders),
+                IsActive = dto.IsActive,
+                CampusId = campusId
+            };
+>>>>>>> origin/main
 
             var updated = await _repository.UpdateAsync(id, existing, campusId, ct);
             return updated == null ? null : MapToDto(updated);
@@ -351,14 +388,15 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // Replace in content body
-            var renderedHtml = template.ContentBody;
+            // Replace in content body with HTML-encoded dynamic values to prevent injection
+            var renderedHtml = SanitizeHtml(template.ContentBody);
             foreach (var kvp in placeholderValues)
             {
+                var safeVal = System.Net.WebUtility.HtmlEncode(kvp.Value ?? string.Empty);
                 renderedHtml = Regex.Replace(
                     renderedHtml,
                     Regex.Escape(kvp.Key),
-                    kvp.Value ?? string.Empty,
+                    safeVal,
                     RegexOptions.IgnoreCase);
             }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   User,
   Briefcase,
@@ -35,8 +36,36 @@ function safeStringifyAddress(val) {
 }
 
 export default function NonTeachingProfile() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const modeParam = searchParams.get("mode");
   const [profile, setProfile] = useState(() => nonTeachingService.getProfile());
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(() => modeParam === "edit");
+
+  useEffect(() => {
+    const mode = searchParams.get("mode");
+    const shouldEdit = mode === "edit";
+    if (shouldEdit !== isEditing) setIsEditing(shouldEdit);
+  }, [searchParams]);
+
+  const handleToggleEdit = () => {
+    const nextState = !isEditing;
+    setIsEditing(nextState);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (nextState) next.set("mode", "edit");
+      else next.delete("mode");
+      return next;
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("mode");
+      return next;
+    });
+  };
   const [formData, setFormData] = useState({
     mobile: profile.mobile || "+91 98765 43299",
     emergencyContact: safeStringifyEmergency(profile.emergencyContact),
@@ -240,7 +269,7 @@ export default function NonTeachingProfile() {
               fontWeight: 600,
               fontSize: "13px",
             }}
-            onClick={() => setIsEditing(!isEditing)}
+            onClick={handleToggleEdit}
           >
             <Edit3 size={14} /> {isEditing ? "Cancel Editing" : "Edit Contact Info"}
           </button>
@@ -290,7 +319,7 @@ export default function NonTeachingProfile() {
               <button
                 type="button"
                 className="nts-action-btn"
-                onClick={() => setIsEditing(false)}
+                onClick={handleCancelEdit}
                 disabled={saving}
               >
                 Cancel

@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Megaphone, Calendar, Search, Eye, CheckCircle2, Clock, MapPin } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, collegeAnnouncements, upcomingEvents } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { collegeAnnouncements, upcomingEvents } from "../parentData.js";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
@@ -22,13 +23,23 @@ export default function ParentAnnouncementsPage() {
     ? contextEvents
     : upcomingEvents;
 
+  const categories = ["all", "Examinations", "Academic", "Holidays", "Events"];
+
+  const resolveCategoryFromParam = (param) => {
+    if (!param) return "all";
+    const lower = param.toLowerCase().trim();
+    const found = categories.find((c) => c.toLowerCase() === lower);
+    return found || "all";
+  };
+
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") === "events" ? "events" : "notices";
   const [activeMainTab, setActiveMainTab] = useState(initialTab);
 
-  // Notices state
-  const [query, setQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
+  // Notices state with URL synchronization
+  const initialCategory = resolveCategoryFromParam(searchParams.get("category"));
+  const [query, setQuery] = useState(() => searchParams.get("q") || searchParams.get("search") || "");
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
 
   // Events state
@@ -42,6 +53,7 @@ export default function ParentAnnouncementsPage() {
     }
   }, [contextEvents]);
 
+  // Synchronize active tab, category, search query, and open modals from searchParams
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     if (tabParam === "events") {
@@ -49,11 +61,99 @@ export default function ParentAnnouncementsPage() {
     } else if (tabParam === "notices") {
       setActiveMainTab("notices");
     }
-  }, [searchParams]);
+
+    const catParam = searchParams.get("category");
+    const resolvedCat = resolveCategoryFromParam(catParam);
+    setSelectedCategory(resolvedCat);
+
+    const qParam = searchParams.get("q") || searchParams.get("search");
+    if (qParam !== null && qParam !== undefined) {
+      setQuery(qParam);
+    }
+
+    const noticeIdParam = searchParams.get("noticeId");
+    if (noticeIdParam && allAnnouncements.length > 0) {
+      const found = allAnnouncements.find((a) => String(a.id) === String(noticeIdParam));
+      if (found) setSelectedAnnouncement(found);
+    }
+
+    const eventIdParam = searchParams.get("eventId");
+    if (eventIdParam && events.length > 0) {
+      const found = events.find((e) => String(e.id) === String(eventIdParam));
+      if (found) setSelectedEventModal(found);
+    }
+  }, [searchParams, allAnnouncements, events]);
 
   const handleSwitchTab = (tab) => {
     setActiveMainTab(tab);
-    setSearchParams(tab === "events" ? { tab: "events" } : {});
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tab);
+      return next;
+    });
+  };
+
+  const handleSelectCategory = (cat) => {
+    setSelectedCategory(cat);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (cat === "all") {
+        next.set("category", "all");
+      } else {
+        next.set("category", cat.toLowerCase());
+      }
+      return next;
+    });
+  };
+
+  const handleSearchChange = (val) => {
+    setQuery(val);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (val.trim()) {
+        next.set("q", val);
+      } else {
+        next.delete("q");
+        next.delete("search");
+      }
+      return next;
+    });
+  };
+
+  const handleOpenAnnouncement = (ann) => {
+    setSelectedAnnouncement(ann);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("noticeId", String(ann.id));
+      return next;
+    });
+  };
+
+  const handleCloseAnnouncement = () => {
+    setSelectedAnnouncement(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("noticeId");
+      return next;
+    });
+  };
+
+  const handleOpenEventModal = (ev) => {
+    setSelectedEventModal(ev);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("eventId", String(ev.id));
+      return next;
+    });
+  };
+
+  const handleCloseEventModal = () => {
+    setSelectedEventModal(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("eventId");
+      return next;
+    });
   };
 
   const handleToggleRsvp = (eventId) => {
@@ -67,8 +167,6 @@ export default function ParentAnnouncementsPage() {
     });
     setEvents(updated);
   };
-
-  const categories = ["all", "Examinations", "Academic", "Holidays", "Events"];
 
   const filteredNotices = allAnnouncements.filter((ann) => {
     const matchesCat = selectedCategory === "all" || ann.category.toLowerCase() === selectedCategory.toLowerCase();
@@ -117,7 +215,7 @@ export default function ParentAnnouncementsPage() {
                     className="cms-input"
                     placeholder="Search circulars and notices..."
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     style={{ width: "100%" }}
                   />
                 </div>
@@ -126,8 +224,8 @@ export default function ParentAnnouncementsPage() {
                     <button
                       key={cat}
                       type="button"
-                      className={`cms-btn cms-btn-sm ${selectedCategory === cat ? "cms-btn-primary" : "cms-btn-outline"}`}
-                      onClick={() => setSelectedCategory(cat)}
+                      className={`cms-btn cms-btn-sm ${selectedCategory.toLowerCase() === cat.toLowerCase() ? "cms-btn-primary" : "cms-btn-outline"}`}
+                      onClick={() => handleSelectCategory(cat)}
                     >
                       {cat === "all" ? "All Notices" : cat}
                     </button>
@@ -162,7 +260,7 @@ export default function ParentAnnouncementsPage() {
                       <button
                         type="button"
                         className="cms-btn cms-btn-sm cms-btn-outline"
-                        onClick={() => setSelectedAnnouncement(ann)}
+                        onClick={() => handleOpenAnnouncement(ann)}
                       >
                         <Eye size={13} /> Read Full Circular
                       </button>
@@ -211,7 +309,7 @@ export default function ParentAnnouncementsPage() {
                       type="button"
                       className="cms-btn cms-btn-sm cms-btn-outline"
                       style={{ flex: 1 }}
-                      onClick={() => setSelectedEventModal(ev)}
+                      onClick={() => handleOpenEventModal(ev)}
                     >
                       <Eye size={13} /> View Details
                     </button>
@@ -236,10 +334,10 @@ export default function ParentAnnouncementsPage() {
         {selectedAnnouncement && (
           <Modal
             title={selectedAnnouncement.title}
-            onClose={() => setSelectedAnnouncement(null)}
+            onClose={handleCloseAnnouncement}
             size="md"
             footer={
-              <button type="button" className="cms-btn cms-btn-primary" onClick={() => setSelectedAnnouncement(null)}>
+              <button type="button" className="cms-btn cms-btn-primary" onClick={handleCloseAnnouncement}>
                 Close
               </button>
             }
@@ -254,7 +352,7 @@ export default function ParentAnnouncementsPage() {
               </p>
               <div style={{ padding: 12, background: "var(--cms-bg)", borderRadius: 8, fontSize: 12.5 }}>
                 <div><strong>Authority:</strong> {selectedAnnouncement.author}</div>
-                <div><strong>Notice Ref:</strong> CIR-2026-{selectedAnnouncement.id.toUpperCase()}</div>
+                <div><strong>Notice Ref:</strong> CIR-2026-{String(selectedAnnouncement.id).toUpperCase()}</div>
               </div>
             </div>
           </Modal>
@@ -264,10 +362,10 @@ export default function ParentAnnouncementsPage() {
         {selectedEventModal && (
           <Modal
             title={selectedEventModal.title}
-            onClose={() => setSelectedEventModal(null)}
+            onClose={handleCloseEventModal}
             size="md"
             footer={
-              <button type="button" className="cms-btn cms-btn-primary" onClick={() => setSelectedEventModal(null)}>
+              <button type="button" className="cms-btn cms-btn-primary" onClick={handleCloseEventModal}>
                 Close
               </button>
             }

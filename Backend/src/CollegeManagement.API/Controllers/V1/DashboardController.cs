@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Dashboard;
 using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -61,6 +62,7 @@ public class DashboardController : ControllerBase
         return (true, access.EffectiveCampusId, null);
     }
 
+<<<<<<< HEAD
     // =========================================================================
     // 0. PRINCIPAL DASHBOARD SNAPSHOT (/api/v1/dashboard/principal)
     // =========================================================================
@@ -145,6 +147,12 @@ public class DashboardController : ControllerBase
         int effectiveCampusId = campusCheck.EffectiveCampusId ?? (_campusAuthService != null ? await _campusAuthService.GetDefaultCampusIdAsync(ct) : 1);
         var notices = await _dashboardService.GetNoticesAsync(effectiveCampusId, targetAudience, limit, ct);
         return Ok(notices);
+=======
+    private int? ResolveCampus(int? campusId)
+    {
+        int cid = CampusContextResolver.ResolveAndValidateCampusId(User, campusId);
+        return cid > 0 ? cid : null;
+>>>>>>> origin/main
     }
 
     // =========================================================================
@@ -165,13 +173,43 @@ public class DashboardController : ControllerBase
     }
 
     // =========================================================================
+    // 1B. PRINCIPAL DASHBOARD OVERVIEW & PERFORMANCE
+    // =========================================================================
+    /// <summary>
+    /// 1B. GET /api/v1/dashboard/principal
+    /// Retrieves consolidated principal dashboard data including student & staff counts,
+    /// attendance, fee metrics, performance streams, and notices scoped strictly to caller's campus.
+    /// </summary>
+    [HttpGet("principal")]
+    [ProducesResponseType(typeof(PrincipalDashboardResponseDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPrincipalDashboard(
+        [FromQuery] int? campusId = null,
+        [FromQuery] int? academicYearId = null,
+        [FromQuery] int? boardId = null,
+        CancellationToken ct = default)
+    {
+        int resolvedCampusId = CampusContextResolver.ResolveAndValidateCampusId(User, campusId);
+        if (resolvedCampusId <= 0)
+        {
+            resolvedCampusId = 1;
+        }
+
+        var result = await _dashboardService.GetPrincipalOverviewAsync(resolvedCampusId, academicYearId, boardId, ct);
+        return Ok(result);
+    }
+
+    // =========================================================================
     // 2. DASHBOARD SUMMARY / OVERVIEW (TOP 5 KPI CARDS + VS LAST YEAR METRICS)
     // =========================================================================
     /// <summary>
     /// 2. GET /api/v1/dashboard/summary and /api/v1/dashboard/stats
+<<<<<<< HEAD
     /// Retrieves top 5 Primary KPI Cards (Total Students, Teaching Staff, Non-Teaching Staff, Total Groups, Total Sections)
     /// alongside Prior Academic Year baseline comparisons and Year-over-Year (YoY) percentage change metrics.
     /// Scoped to the caller's assigned campus for Principals.
+=======
+    /// Retrieves top 5 Primary KPI Cards alongside Prior Academic Year baseline comparisons.
+>>>>>>> origin/main
     /// </summary>
     [HttpGet("summary")]
     [HttpGet("stats")]
@@ -185,10 +223,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetSummaryAsync(academicYearId, boardId, date, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetSummaryAsync(academicYearId, boardId, date, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -197,8 +240,8 @@ public class DashboardController : ControllerBase
     // =========================================================================
     /// <summary>
     /// 3. GET /api/v1/dashboard/students-overview
-    /// Retrieves student breakdown statistics including active/inactive status, gender distribution (Boys, Girls, Others),
-    /// academic level distribution (1st Year, 2nd Year), and monthly admission trajectory.
+    /// Retrieves student breakdown statistics including active/inactive status, gender distribution,
+    /// academic level distribution, and monthly admission trajectory.
     /// </summary>
     [HttpGet("students-overview")]
     [ProducesResponseType(typeof(StudentsOverviewResponseDto), StatusCodes.Status200OK)]
@@ -211,10 +254,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetStudentsOverviewAsync(academicYearId, boardId, date, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetStudentsOverviewAsync(academicYearId, boardId, date, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -235,10 +283,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetAdmissionTrendAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetAdmissionTrendAsync(academicYearId, boardId, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -247,7 +300,7 @@ public class DashboardController : ControllerBase
     // =========================================================================
     /// <summary>
     /// 5. GET /api/v1/dashboard/group-distribution
-    /// Retrieves distribution of enrolled students per academic group/stream (e.g., MPC, BiPC, CEC, MEC, HEC).
+    /// Retrieves distribution of enrolled students per academic group/stream.
     /// </summary>
     [HttpGet("group-distribution")]
     [ProducesResponseType(typeof(GroupDistributionResponseDto), StatusCodes.Status200OK)]
@@ -259,10 +312,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetGroupDistributionAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetGroupDistributionAsync(academicYearId, boardId, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -271,9 +329,10 @@ public class DashboardController : ControllerBase
     // =========================================================================
     /// <summary>
     /// 6. GET /api/v1/dashboard/students-attendance-today
-    /// Retrieves today's student attendance metrics and category breakdowns (Overall, Academic Level, Group, Section).
+    /// Retrieves today's student attendance metrics and category breakdowns.
     /// </summary>
     [HttpGet("students-attendance-today")]
+    [BypassPermission]
     [ProducesResponseType(typeof(StudentsAttendanceTodayResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -284,10 +343,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetStudentsAttendanceTodayAsync(academicYearId, boardId, viewBy, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetStudentsAttendanceTodayAsync(academicYearId, boardId, viewBy, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -296,7 +360,7 @@ public class DashboardController : ControllerBase
     // =========================================================================
     /// <summary>
     /// 7. GET /api/v1/dashboard/staff-attendance-today
-    /// Retrieves today's staff attendance metrics filtered by staff type (All Staff, Teaching Staff, Non-Teaching Staff).
+    /// Retrieves today's staff attendance metrics filtered by staff type.
     /// </summary>
     [HttpGet("staff-attendance-today")]
     [ProducesResponseType(typeof(StaffAttendanceTodayResponseDto), StatusCodes.Status200OK)]
@@ -309,10 +373,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetStaffAttendanceTodayAsync(boardId, staffType, date, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetStaffAttendanceTodayAsync(boardId, staffType, date, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -321,7 +390,7 @@ public class DashboardController : ControllerBase
     // =========================================================================
     /// <summary>
     /// 8. GET /api/v1/dashboard/certificate-requests
-    /// Retrieves certificate request counts categorized by type (Bonafide, Study, Conduct, Transfer, Others) and recent request records.
+    /// Retrieves certificate request counts categorized by type and recent request records.
     /// </summary>
     [HttpGet("certificate-requests")]
     [ProducesResponseType(typeof(CertificateRequestsSummaryResponseDto), StatusCodes.Status200OK)]
@@ -334,10 +403,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetCertificateRequestsAsync(academicYearId, boardId, date, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetCertificateRequestsAsync(academicYearId, boardId, date, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -358,10 +432,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetUpcomingExaminationsAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetUpcomingExaminationsAsync(academicYearId, boardId, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -384,10 +463,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetUpcomingHolidaysAsync(academicYearId, boardId, limit, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetUpcomingHolidaysAsync(academicYearId, boardId, limit, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -408,10 +492,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetTodaysHighlightsAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetTodaysHighlightsAsync(academicYearId, boardId, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -431,10 +520,15 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
         var result = await _dashboardService.GetWeeklyAttendanceAsync(academicYearId, boardId, date, startDate, endDate, campusCheck.EffectiveCampusId, ct);
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetWeeklyAttendanceAsync(academicYearId, boardId, date, startDate, endDate, resolvedCampusId, ct);
+>>>>>>> origin/main
         return Ok(result);
     }
 
@@ -467,6 +561,7 @@ public class DashboardController : ControllerBase
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
+<<<<<<< HEAD
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
@@ -510,6 +605,28 @@ public class DashboardController : ControllerBase
         var examRes = await UpcomingExaminations(academicYearId, boardId, effectiveCampusId, ct) as OkObjectResult;
         var highlightsRes = await TodaysHighlights(academicYearId, boardId, effectiveCampusId, ct) as OkObjectResult;
         var weeklyAttRes = await WeeklyAttendance(academicYearId, boardId, null, null, null, effectiveCampusId, ct) as OkObjectResult;
+=======
+        var resolvedCampusId = ResolveCampus(campusId);
+        var result = await _dashboardService.GetFacultyWorkloadAsync(academicYearId, boardId, resolvedCampusId, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("test-verify-all")]
+    [Authorize(Roles = "Super Admin,SuperAdmin")]
+    public async Task<IActionResult> TestVerifyAll([FromQuery] int? academicYearId = null, [FromQuery] int? boardId = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
+    {
+        var resolvedCampusId = ResolveCampus(campusId);
+        var filtersRes = await GetFilterOptions(ct) as OkObjectResult;
+        var summaryRes = await Summary(academicYearId, boardId, null, resolvedCampusId, ct) as OkObjectResult;
+        var overviewRes = await StudentsOverview(academicYearId, boardId, null, resolvedCampusId, ct) as OkObjectResult;
+        var groupRes = await GroupDistribution(academicYearId, boardId, resolvedCampusId, ct) as OkObjectResult;
+        var stdAttRes = await StudentsAttendanceToday(academicYearId, boardId, "Overall", resolvedCampusId, ct) as OkObjectResult;
+        var stfAttRes = await StaffAttendanceToday(boardId, "All Staff", null, resolvedCampusId, ct) as OkObjectResult;
+        var certRes = await CertificateRequests(academicYearId, boardId, null, resolvedCampusId, ct) as OkObjectResult;
+        var examRes = await UpcomingExaminations(academicYearId, boardId, resolvedCampusId, ct) as OkObjectResult;
+        var highlightsRes = await TodaysHighlights(academicYearId, boardId, resolvedCampusId, ct) as OkObjectResult;
+        var weeklyAttRes = await WeeklyAttendance(academicYearId, boardId, null, null, null, resolvedCampusId, ct) as OkObjectResult;
+>>>>>>> origin/main
 
         return Ok(new
         {

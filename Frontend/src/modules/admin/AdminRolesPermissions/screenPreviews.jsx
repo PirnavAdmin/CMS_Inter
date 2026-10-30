@@ -612,8 +612,8 @@ export const SCREEN_PREVIEWS = {
   // 19. Staff Reimbursements
   "reimbursement:submit-claim": {
     title: "Submit Reimbursement Claim",
-    route: "/dashboard/reimbursements",
-    section: "Staff",
+    route: "/dashboard/reimbursement?tab=claims",
+    section: "Finance",
     description: "Staff expense claims for travel, academic paper publications, stationery, and seminars.",
     layoutType: "form",
     accentColor: "#14b8a6",
@@ -622,8 +622,8 @@ export const SCREEN_PREVIEWS = {
   },
   "reimbursement:claim-approvals": {
     title: "Claim Approvals Desk",
-    route: "/dashboard/reimbursements?tab=approvals",
-    section: "Staff",
+    route: "/dashboard/reimbursement?tab=review",
+    section: "Finance",
     description: "Accounts manager review of expense receipts, budget verification, and sanction.",
     layoutType: "split-pane",
     accentColor: "#0d9488",
@@ -632,8 +632,8 @@ export const SCREEN_PREVIEWS = {
   },
   "reimbursement:disbursement-history": {
     title: "Disbursement History",
-    route: "/dashboard/reimbursements?tab=history",
-    section: "Staff",
+    route: "/dashboard/reimbursement?tab=history",
+    section: "Finance",
     description: "Paid claims audit ledger with bank transaction reference numbers and payment vouchers.",
     layoutType: "table",
     accentColor: "#0f766e",

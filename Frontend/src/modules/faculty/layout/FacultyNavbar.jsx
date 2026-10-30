@@ -389,10 +389,8 @@ export default function FacultyNavbar() {
   }, [searchQuery]);
 
   const handleSelectSearchResult = (item) => {
-    setActiveModule(item.moduleId);
-    if (item.step) {
-      setProfileStep(item.step);
-    }
+    if (item.step) navigate(`/faculty-dashboard/profile?step=${item.step}`);
+    else setActiveModule(item.moduleId);
     setSearchOpen(false);
     setSearchQuery("");
     if (window.innerWidth <= 768) setSidebarOpen(false);

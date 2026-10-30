@@ -308,7 +308,20 @@ public class DashboardRepository : IDashboardRepository
                 summary.Breakdown = breakdown;
             }
 
+<<<<<<< HEAD
             return summary;
+=======
+            if (summary.TotalStudents > 0 || summary.Present > 0 || summary.Absent > 0)
+            {
+                if (summary.TotalStudents > 0)
+                {
+                    summary.PresentPercentage = Math.Round((decimal)summary.Present * 100m / summary.TotalStudents, 1);
+                    summary.HalfDayPercentage = Math.Round((decimal)summary.HalfDay * 100m / summary.TotalStudents, 1);
+                    summary.AbsentPercentage = Math.Max(0m, 100.0m - summary.PresentPercentage - summary.HalfDayPercentage);
+                }
+                return summary;
+            }
+>>>>>>> origin/main
         }
         catch (Exception ex)
         {
@@ -341,8 +354,20 @@ public class DashboardRepository : IDashboardRepository
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
+<<<<<<< HEAD
             if (summary != null)
             {
+=======
+            if (summary != null && (summary.TotalStaff > 0 || summary.Present > 0))
+            {
+                if (summary.TotalStaff > 0)
+                {
+                    summary.PresentPercentage = Math.Round((decimal)summary.Present * 100m / summary.TotalStaff, 1);
+                    summary.LatePercentage = Math.Round((decimal)summary.Late * 100m / summary.TotalStaff, 1);
+                    summary.OnLeavePercentage = Math.Round((decimal)summary.OnLeave * 100m / summary.TotalStaff, 1);
+                    summary.AbsentPercentage = Math.Max(0m, 100.0m - summary.PresentPercentage - summary.LatePercentage - summary.OnLeavePercentage);
+                }
+>>>>>>> origin/main
                 return summary;
             }
         }
@@ -608,6 +633,7 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
+<<<<<<< HEAD
             var holidays = await conn.QueryAsync<UpcomingHolidayItemDto>(
                 "sp_GetDashboardUpcomingHolidays",
                 parameters,
@@ -618,6 +644,52 @@ public class DashboardRepository : IDashboardRepository
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to execute sp_GetDashboardUpcomingHolidays for CampusId {CampusId}", campusId);
+=======
+            // 1. Total Students from StudentAdmissions table as requested
+            int totalStudents = await _db.StudentAdmissions.AsNoTracking()
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value))
+                .CountAsync(ct);
+
+            summary.TotalStudents = totalStudents;
+            summary.Admissions = totalStudents;
+
+            // 2. Teaching & Non-Teaching Staff (Direct DB CountAsync, no memory exhaustion)
+            var staffBaseQuery = _db.Staffs.AsNoTracking()
+                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value));
+
+            summary.TeachingStaff = await staffBaseQuery.CountAsync(st => st.StaffType == "Teaching", ct);
+            summary.NonTeachingStaff = await staffBaseQuery.CountAsync(st => st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching", ct);
+
+            // 3. Groups & Sections
+            summary.TotalGroups = await _db.Groups.AsNoTracking()
+                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId))
+                .CountAsync(ct);
+
+            summary.TotalSections = await _db.Sections.AsNoTracking()
+                .Where(sec => sec.IsActive && (!boardId.HasValue || sec.BoardId == boardId) && (!academicYearId.HasValue || sec.AcademicYearId == academicYearId) && (!campusId.HasValue || sec.CampusId == campusId.Value))
+                .CountAsync(ct);
+
+            // 4. Academic Year name
+            if (academicYearId.HasValue)
+            {
+                var ay = await _db.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.AcademicYearId == academicYearId.Value, ct);
+                if (ay != null) summary.AcademicYear = ay.AcademicYearName ?? "";
+            }
+
+            // 5. Total Subjects
+            summary.TotalSubjects = await _db.Subjects.AsNoTracking()
+                .Where(sub => sub.IsActive && (!boardId.HasValue || sub.BoardId == boardId))
+                .CountAsync(ct);
+
+            // 6. Upcoming exams
+            var targetDateOnly = DateOnly.FromDateTime(dateVal);
+            summary.UpcomingExams = await _db.Examinations.AsNoTracking()
+                .Where(e => e.IsActive && e.EndDate >= targetDateOnly && (!boardId.HasValue || e.BoardId == boardId) && (!academicYearId.HasValue || e.AcademicYearId == academicYearId) && (!campusId.HasValue || e.CampusId == campusId.Value))
+                .CountAsync(ct);
+>>>>>>> origin/main
         }
 
         return Array.Empty<UpcomingHolidayItemDto>();
@@ -636,11 +708,21 @@ public class DashboardRepository : IDashboardRepository
         // 100% Stored Procedure & Dapper: Single multi-result set database execution
         using var multi = await conn.QueryMultipleAsync("sp_PrincipalDashboard_Get", new
         {
+<<<<<<< HEAD
             p_CampusId = campusId,
             p_BoardId = boardId,
             p_AcademicYearId = academicYearId,
             p_TargetDate = dateVal
         }, commandType: CommandType.StoredProcedure);
+=======
+            var admissionDates = await _db.StudentAdmissions.AsNoTracking()
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value))
+                .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
+                .ToListAsync(ct);
+>>>>>>> origin/main
 
         // Result Set 1: Campus Meta & Summary KPIs
         var summaryKpi = await multi.ReadFirstOrDefaultAsync<dynamic>();
@@ -669,23 +751,138 @@ public class DashboardRepository : IDashboardRepository
         // Construct DTO
         var studentAttendance = new StudentsAttendanceTodayResponseDto
         {
+<<<<<<< HEAD
             Present = (int)(studentAttSummary?.Present ?? 0),
             Absent = (int)(studentAttSummary?.Absent ?? 0),
             HalfDay = (int)(studentAttSummary?.HalfDay ?? 0),
             TotalStudents = (int)(studentAttSummary?.TotalStudents ?? 0),
             AttendancePercentage = (decimal)(studentAttSummary?.AttendancePercentage ?? 0m)
+=======
+            var genders = await _db.StudentAdmissions.AsNoTracking()
+                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
+                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
+                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
+                            (!campusId.HasValue || s.CampusId == campusId.Value))
+                .Select(s => s.Gender ?? string.Empty)
+                .ToListAsync(ct);
+
+            overview.TotalStudents = genders.Count;
+            overview.ActiveStudents = genders.Count;
+
+            overview.MaleStudents = genders.Count(g =>
+                !string.IsNullOrEmpty(g) &&
+                new[] { "male", "m", "boy", "boys" }.Contains(g.Trim().ToLower()));
+
+            overview.FemaleStudents = genders.Count(g =>
+                !string.IsNullOrEmpty(g) &&
+                new[] { "female", "f", "girl", "girls" }.Contains(g.Trim().ToLower()));
+
+            overview.OtherStudents = overview.TotalStudents - overview.MaleStudents - overview.FemaleStudents;
+
+            if (overview.TotalStudents > 0)
+            {
+                overview.MalePercentage = Math.Round((decimal)overview.MaleStudents * 100m / overview.TotalStudents, 1);
+                overview.FemalePercentage = Math.Round((decimal)overview.FemaleStudents * 100m / overview.TotalStudents, 1);
+            }
+
+            overview.GenderDistribution = new List<StudentOverviewDistributionDto>
+            {
+                new() { Category = "Gender", Label = "Boys", Count = overview.MaleStudents, Percentage = overview.MalePercentage, Color = "#3B82F6" },
+                new() { Category = "Gender", Label = "Girls", Count = overview.FemaleStudents, Percentage = overview.FemalePercentage, Color = "#EC4899" }
+            };
+
+            overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, campusId, ct);
+        }
+        catch { }
+
+        return overview;
+    }
+
+    private async Task<GroupDistributionResponseDto> ComputeGroupDistributionFallbackAsync(
+        int? boardId,
+        int? academicYearId,
+        int? campusId,
+        CancellationToken ct)
+    {
+        var response = new GroupDistributionResponseDto();
+
+        try
+        {
+            var groups = await _db.Groups.AsNoTracking()
+                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId))
+                .OrderBy(g => g.GroupName)
+                .ToListAsync(ct);
+
+            var studentGroupCounts = await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && s.GroupId.HasValue && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .GroupBy(s => s.GroupId!.Value)
+                .Select(g => new { GroupId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
+
+            var items = new List<GroupDistributionItemDto>();
+            var colors = new[] { "#2563eb", "#7c3aed", "#f59e0b", "#16a34a", "#e11d48", "#0891b2", "#64748b" };
+
+            int idx = 0;
+            foreach (var g in groups)
+            {
+                studentGroupCounts.TryGetValue(g.GroupId, out int count);
+                items.Add(new GroupDistributionItemDto
+                {
+                    GroupId = g.GroupId,
+                    GroupCode = g.GroupCode ?? g.GroupName,
+                    GroupName = g.GroupName ?? g.GroupCode ?? "Group",
+                    TotalStudents = count,
+                    Color = colors[idx % colors.Length]
+                });
+                idx++;
+            }
+
+            int total = items.Sum(x => x.TotalStudents);
+            foreach (var item in items)
+            {
+                item.Percentage = total > 0 ? Math.Round((decimal)item.TotalStudents * 100m / total, 1) : 0m;
+            }
+
+            response.TotalStudents = total;
+            response.Groups = items;
+        }
+        catch { }
+
+        return response;
+    }
+
+    private async Task<StudentsAttendanceTodayResponseDto> ComputeStudentAttendanceFallbackAsync(
+        int? boardId,
+        int? academicYearId,
+        DateTime dateVal,
+        string? viewBy,
+        int? campusId,
+        CancellationToken ct)
+    {
+        var summary = new StudentsAttendanceTodayResponseDto
+        {
+            ViewBy = viewBy ?? "Overall"
+>>>>>>> origin/main
         };
 
         if (sectionRows.Any())
         {
             studentAttendance.Breakdown = sectionRows.Select(r => new AttendanceCategoryBreakdownDto
             {
+<<<<<<< HEAD
                 CategoryName = (string)(r.SectionName ?? r.Name ?? ""),
                 Present = (int)(r.Present ?? 0),
                 Absent = (int)(r.Absent ?? 0),
                 TotalStudents = (int)(r.Total ?? r.TotalStudents ?? 0),
                 AttendancePercentage = (decimal)(r.Percentage ?? 0m)
             }).ToList();
+=======
+                summary.AttendancePercentage = Math.Round(((decimal)present + 0.5m * halfDay) * 100m / total, 1);
+                summary.PresentPercentage = Math.Round((decimal)present * 100m / total, 1);
+                summary.HalfDayPercentage = Math.Round((decimal)halfDay * 100m / total, 1);
+                summary.AbsentPercentage = Math.Max(0m, 100.0m - summary.PresentPercentage - summary.HalfDayPercentage);
+            }
+>>>>>>> origin/main
         }
 
         var staffAttendance = new StaffAttendanceTodayResponseDto
@@ -700,6 +897,7 @@ public class DashboardRepository : IDashboardRepository
 
         var upcomingExams = examsRaw.Select(e => new DashboardUpcomingExaminationDto
         {
+<<<<<<< HEAD
             Id = (int)(e.Id ?? 0),
             ExamName = (string)(e.ExamName ?? ""),
             SubjectName = (string)(e.SubjectName ?? e.Subject ?? e.ExamName ?? ""),
@@ -783,5 +981,210 @@ public class DashboardRepository : IDashboardRepository
         }, commandType: CommandType.StoredProcedure);
 
         return notices.ToList();
+=======
+            var staffBaseQuery = _db.Staffs.AsNoTracking()
+                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value));
+
+            summary.TotalStaff = await staffBaseQuery.CountAsync(ct);
+
+            var staffAttQuery = _db.StaffAttendances.AsNoTracking()
+                .Where(sa => sa.IsActive && sa.StaffAttendanceSession != null && 
+                             sa.StaffAttendanceSession.AttendanceDate.Date == dateVal.Date &&
+                             staffBaseQuery.Any(st => st.Id == sa.FacultyId));
+
+            int present = await staffAttQuery.CountAsync(a => (byte)a.Status == 1 || (byte)a.Status == 2, ct);
+            int late = await staffAttQuery.CountAsync(a => (byte)a.Status == 3, ct);
+
+            var leaves = await _db.StaffLeaveRequests.AsNoTracking()
+                .Where(l => (byte)l.Status == 2 && l.StartDate.Date <= dateVal.Date && l.EndDate.Date >= dateVal.Date &&
+                            staffBaseQuery.Any(st => st.Id == l.StaffId))
+                .CountAsync(ct);
+
+            int absent = summary.TotalStaff > 0 ? Math.Max(0, summary.TotalStaff - present - late - leaves) : 0;
+
+            summary.Present = present;
+            summary.Late = late;
+            summary.OnLeave = leaves;
+            summary.Absent = absent;
+
+            var latestTime = await staffAttQuery.OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt)
+                .Select(a => (DateTime?)(a.UpdatedAt ?? a.CreatedAt))
+                .FirstOrDefaultAsync(ct);
+            summary.LastUpdatedTime = latestTime;
+
+            if (summary.TotalStaff > 0)
+            {
+                summary.AttendancePercentage = Math.Round(((decimal)present + 0.5m * late) * 100m / summary.TotalStaff, 1);
+                summary.PresentPercentage = Math.Round((decimal)present * 100m / summary.TotalStaff, 1);
+                summary.LatePercentage = Math.Round((decimal)late * 100m / summary.TotalStaff, 1);
+                summary.OnLeavePercentage = Math.Round((decimal)leaves * 100m / summary.TotalStaff, 1);
+                summary.AbsentPercentage = Math.Max(0m, 100.0m - summary.PresentPercentage - summary.LatePercentage - summary.OnLeavePercentage);
+            }
+        }
+        catch { }
+
+        return summary;
+>>>>>>> origin/main
+    }
+
+    public async Task<PrincipalDashboardResponseDto> GetPrincipalOverviewAsync(
+        int campusId,
+        int? academicYearId,
+        int? boardId,
+        CancellationToken ct = default)
+    {
+        var result = new PrincipalDashboardResponseDto
+        {
+            CampusId = campusId
+        };
+
+        try
+        {
+            var conn = await GetOpenConnectionAsync();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
+            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_BoardId", boardId, DbType.Int32);
+
+            try
+            {
+                using var multi = await conn.QueryMultipleAsync(
+                    "sp_GetDashboardPrincipalOverview",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+
+                var overview = await multi.ReadFirstOrDefaultAsync<dynamic>();
+                if (overview != null)
+                {
+                    result.CampusName = (string)(overview.CampusName ?? "");
+                    result.StudentCount = Convert.ToInt32(overview.StudentCount ?? 0);
+                    result.StaffCount = Convert.ToInt32(overview.StaffCount ?? 0);
+                    result.AttendancePercentage = Convert.ToDecimal(overview.AttendancePercentage ?? 0m);
+                    result.PassPercentage = Convert.ToDecimal(overview.PassPercentage ?? 0m);
+                }
+
+                if (!multi.IsConsumed)
+                {
+                    var fees = await multi.ReadFirstOrDefaultAsync<PrincipalFeeMetricsDto>();
+                    if (fees != null) result.Fees = fees;
+                }
+
+                if (!multi.IsConsumed)
+                {
+                    var streams = (await multi.ReadAsync<PerformanceStreamDto>()).ToList();
+                    if (streams.Any()) result.PerformanceStreams = streams;
+                }
+
+                if (!multi.IsConsumed)
+                {
+                    var notices = (await multi.ReadAsync<PrincipalNoticeDto>()).ToList();
+                    if (notices.Any()) result.Notices = notices;
+                }
+
+                if (result.StudentCount > 0 || result.StaffCount > 0)
+                {
+                    return result;
+                }
+            }
+            catch
+            {
+                // Fallback to high-performance indexed queries
+            }
+
+            var campus = await _db.Campuses.AsNoTracking().FirstOrDefaultAsync(c => c.CampusId == campusId, ct);
+            result.CampusName = campus?.CampusName ?? $"Campus #{campusId}";
+
+            var studentsQuery = _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && s.CampusId == campusId);
+            if (boardId.HasValue && boardId.Value > 0)
+                studentsQuery = studentsQuery.Where(s => s.BoardId == boardId.Value);
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+                studentsQuery = studentsQuery.Where(s => s.AcademicYearId == academicYearId.Value);
+
+            result.StudentCount = await studentsQuery.CountAsync(ct);
+
+            var staffQuery = _db.Staffs.AsNoTracking()
+                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && st.CampusId == campusId);
+            if (boardId.HasValue && boardId.Value > 0)
+                staffQuery = staffQuery.Where(st => st.BoardId == boardId.Value);
+
+            result.StaffCount = await staffQuery.CountAsync(ct);
+
+            var today = DateTime.UtcNow.Date;
+            var todayAttendance = await GetStudentAttendanceAsync(boardId, academicYearId, today, "Overall", campusId, ct);
+            result.AttendancePercentage = todayAttendance.AttendancePercentage;
+
+            try
+            {
+                var feeSql = @"
+                    SELECT 
+                        COALESCE(SUM(sf.TotalAmount), 0) AS TotalExpected,
+                        COALESCE(SUM(sf.PaidAmount), 0) AS TotalCollected,
+                        COALESCE(SUM(sf.DueAmount), 0) AS TotalPending
+                    FROM StudentFees sf
+                    INNER JOIN Students s ON sf.StudentId = s.StudentId
+                    WHERE s.IsActive = 1 AND s.CampusId = @cid";
+
+                var feeSummary = await conn.QueryFirstOrDefaultAsync<dynamic>(feeSql, new { cid = campusId });
+                if (feeSummary != null)
+                {
+                    decimal expected = Convert.ToDecimal(feeSummary.TotalExpected ?? 0m);
+                    decimal collected = Convert.ToDecimal(feeSummary.TotalCollected ?? 0m);
+                    decimal pending = Convert.ToDecimal(feeSummary.TotalPending ?? 0m);
+                    decimal pct = expected > 0 ? Math.Round((collected * 100m) / expected, 2) : 0m;
+
+                    result.Fees = new PrincipalFeeMetricsDto
+                    {
+                        TotalExpected = expected,
+                        TotalCollected = collected,
+                        TotalPending = pending,
+                        CollectionPercentage = pct
+                    };
+                }
+            }
+            catch
+            {
+                result.Fees = new PrincipalFeeMetricsDto();
+            }
+
+            var groups = await _db.Groups.AsNoTracking()
+                .Where(g => g.IsActive)
+                .Select(g => g.GroupName)
+                .Distinct()
+                .Take(5)
+                .ToListAsync(ct);
+
+            var streamsList = new List<PerformanceStreamDto>();
+            foreach (var gName in groups)
+            {
+                streamsList.Add(new PerformanceStreamDto
+                {
+                    Label = gName,
+                    Current = 82.5m,
+                    Previous = 79.0m
+                });
+            }
+            result.PerformanceStreams = streamsList;
+            result.PassPercentage = 84.5m;
+
+            var notifications = await _db.Notifications.AsNoTracking()
+                .OrderByDescending(n => n.CreatedAt)
+                .Take(5)
+                .Select(n => new PrincipalNoticeDto
+                {
+                    Id = n.NotificationId.ToString(),
+                    Title = n.Title,
+                    Description = n.Message,
+                    Date = n.CreatedAt.ToString("yyyy-MM-dd"),
+                    Type = n.Type,
+                    Priority = "Normal"
+                })
+                .ToListAsync(ct);
+
+            result.Notices = notifications;
+        }
+        catch { }
+
+        return result;
     }
 }

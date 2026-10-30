@@ -202,7 +202,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Assign a subject to a teaching staff member.
         /// </summary>
         [HttpPost("assign-subject")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         [ProducesResponseType(typeof(StaffSubjectAllocationResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -218,7 +218,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Update an existing subject allocation.
         /// </summary>
         [HttpPut("assign-subject/{id:int}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         [ProducesResponseType(typeof(StaffSubjectAllocationResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -234,7 +234,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Delete a subject allocation record.
         /// </summary>
         [HttpDelete("assign-subject/{id:int}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> DeleteSubjectAllocation(int id)
@@ -248,7 +248,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Unassign a subject from a staff member by subject name or subject ID.
         /// </summary>
         [HttpDelete("{staffId:int}/unassign-subject")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> UnassignSubject(
             int staffId,
             [FromQuery] string? subjectName = null,
@@ -287,12 +287,25 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get all subject allocations for a specific staff member.
         /// </summary>
         [HttpGet("{staffId:int}/subject-allocations")]
-        [AllowAnonymous]
+        [HttpGet("my/subject-allocations")]
+        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
         [ProducesResponseType(typeof(System.Collections.Generic.List<StaffSubjectAllocationResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetStaffSubjectAllocations(int staffId)
+        public async Task<IActionResult> GetStaffSubjectAllocations([FromRoute] int? staffId = null)
         {
-            var result = await _staffService.GetStaffSubjectAllocationsAsync(staffId);
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
+
+            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal"))
+            {
+                staffId = callerStaffId ?? 0;
+            }
+            else if (!staffId.HasValue || staffId.Value <= 0)
+            {
+                staffId = callerStaffId ?? 0;
+            }
+
+            var result = await _staffService.GetStaffSubjectAllocationsAsync(staffId.Value);
             return Ok(result);
         }
 
@@ -301,12 +314,25 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get summary workload details and subject allocations for a staff member.
         /// </summary>
         [HttpGet("workload/{staffId:int}")]
-        [AllowAnonymous]
+        [HttpGet("workload/me")]
+        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
         [ProducesResponseType(typeof(StaffWorkloadResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetStaffWorkload(int staffId)
+        public async Task<IActionResult> GetStaffWorkload([FromRoute] int? staffId = null)
         {
-            var result = await _staffService.GetStaffWorkloadAsync(staffId);
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
+
+            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal"))
+            {
+                staffId = callerStaffId ?? 0;
+            }
+            else if (!staffId.HasValue || staffId.Value <= 0)
+            {
+                staffId = callerStaffId ?? 0;
+            }
+
+            var result = await _staffService.GetStaffWorkloadAsync(staffId.Value);
             return Ok(result);
         }
     }

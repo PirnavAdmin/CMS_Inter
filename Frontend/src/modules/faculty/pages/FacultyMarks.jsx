@@ -1,3 +1,4 @@
+import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Upload,
@@ -36,7 +37,9 @@ export default function FacultyMarks() {
   };
 
   // Main Tabs State: "entry" | "report"
-  const [activeTab, setActiveTab] = useState("entry");
+  const { params, setParam } = useFacultyViewParams();
+  const activeTab = params.get("tab") === "report" ? "report" : "entry";
+  const setActiveTab = (tab) => setParam("tab", tab);
 
   // 1. Academic Context Filters
   const [selectedBoard, setSelectedBoard] = useState("");
@@ -100,7 +103,14 @@ export default function FacultyMarks() {
   const fileInputRef = useRef(null);
 
   // View Results Modal State
-  const [viewResultsEval, setViewResultsEval] = useState(null);
+  const evaluationId = params.get("evaluationId");
+  const sourceResultsEval = evaluationId == null ? null : Object.values(evaluationsLedger).find((ev) => String(ev.evaluationId) === evaluationId);
+  const [resultsDetail, setResultsDetail] = useState(null);
+  const viewResultsEval = useMemo(() => sourceResultsEval ? { ...sourceResultsEval, ...(resultsDetail?.id === evaluationId ? { rows: resultsDetail.rows } : {}) } : null, [sourceResultsEval, resultsDetail, evaluationId]);
+  const resultsLoading = sourceResultsEval && !sourceResultsEval.rows?.length && resultsDetail?.id !== evaluationId;
+  const resultsError = resultsDetail?.id === evaluationId ? resultsDetail.error : "";
+  const setViewResultsEval = (ev) => setParam("evaluationId", ev?.evaluationId ?? null);
+  const [evaluationsLoading, setEvaluationsLoading] = useState(true);
   const [resultsModalPage, setResultsModalPage] = useState(1);
   const resultsPageSize = 5;
 
@@ -124,6 +134,7 @@ export default function FacultyMarks() {
     if (!staffId) return;
 
     const fetchLiveEvaluations = async () => {
+      setEvaluationsLoading(true);
       try {
         let res = await apiClient.get("/api/v1/faculty/evaluations", { params: { facultyId: staffId } }).catch(() => null);
         if (!res || !res.data) {
@@ -171,7 +182,7 @@ export default function FacultyMarks() {
       } catch (err) {
         console.warn("Could not load faculty evaluations from API:", err);
         if (isMounted) setEvaluationsLedger({});
-      }
+      } finally { if (isMounted) setEvaluationsLoading(false); }
     };
 
     fetchLiveEvaluations();
@@ -828,9 +839,12 @@ export default function FacultyMarks() {
   };
 
   // Open student results modal with API fallback
-  const handleOpenResultsModal = async (ev) => {
-    setViewResultsEval(ev);
-    setResultsModalPage(1);
+  const handleOpenResultsModal = (ev) => { setViewResultsEval(ev); setResultsModalPage(1); };
+  useEffect(() => {
+    const ev = sourceResultsEval;
+    if (!ev) return;
+    let cancelled = false;
+    const load = async () => {
     if (!ev.rows || ev.rows.length === 0) {
       try {
         const res = await apiClient.get(`/api/v1/faculty/evaluations/${ev.evaluationId}/students`).catch(() =>
@@ -838,7 +852,7 @@ export default function FacultyMarks() {
         );
         const data = res?.data?.data || res?.data || {};
         const studentsList = data.students || data.studentMarks || data.items || [];
-        if (studentsList.length > 0) {
+        {
           const mappedRows = studentsList.map((s) => ({
             studentId: s.studentId,
             rollNo: s.rollNo || s.admissionNo || "",
@@ -850,13 +864,17 @@ export default function FacultyMarks() {
             absent: Boolean(s.isAbsent || s.absent),
             remarks: s.remarks || "",
           }));
-          setViewResultsEval((prev) => ({ ...prev, rows: mappedRows }));
+          if (!cancelled) setResultsDetail({ id: String(ev.evaluationId), rows: mappedRows });
         }
       } catch (err) {
         console.warn("Could not fetch evaluation students:", err);
+        if (!cancelled) setResultsDetail({ id: String(ev.evaluationId), rows: [], error: "Unable to load evaluation results." });
       }
     }
-  };
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [sourceResultsEval]);
 
   // Switch to Marks Entry to edit and resubmit
   const handleEditAndResubmit = (ev) => {
@@ -1316,8 +1334,9 @@ export default function FacultyMarks() {
         </div>
       )}
 
+      {evaluationId != null && (!viewResultsEval || resultsLoading || resultsError) && <div className="sp-modal-overlay"><div className="sp-modal-card" role="dialog" aria-label="Evaluation Results"><p role="status">{evaluationsLoading || resultsLoading ? "Loading evaluation results..." : resultsError || "This evaluation is unavailable."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setViewResultsEval(null)}>Close</button></div></div>}
       {/* MODAL 2: View Results Modal */}
-      {viewResultsEval && (
+      {viewResultsEval && !resultsLoading && !resultsError && (
         <div className="sp-modal-overlay" onClick={() => setViewResultsEval(null)}>
           <div className="sp-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680 }}>
             <div className="sp-modal-head">

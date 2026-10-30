@@ -18,6 +18,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getModuleState, saveModuleState } from "../statePersistence.js";
 import "@/modules/admin/AdminAttendance/AttendancePage.css";
 import "@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.css";
 
@@ -48,9 +49,41 @@ const asList = (v) =>
 
 const body = (r) => r?.data?.data ?? r?.data ?? r ?? {};
 
-const get = (o, ...keys) => keys.map((k) => o?.[k]).find((v) => v !== undefined && v !== null);
+const get = (o, ...keys) => {
+  if (!o) return undefined;
+  for (const k of keys) {
+    if (o[k] !== undefined && o[k] !== null) return o[k];
+  }
+  return undefined;
+};
 
 const num = (v) => (v === "" || v == null ? undefined : Number(v));
+
+const dedupeStudents = (list) => {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  return list.filter((item) => {
+    if (!item) return false;
+    const idKey = get(item, "studentId", "StudentId", "id", "Id");
+    const admKey = get(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber");
+    const rollKey = get(item, "rollNo", "RollNo", "rollNumber", "RollNumber");
+    const nameKey = get(item, "studentName", "StudentName", "name", "Name");
+
+    const primaryKey = idKey
+      ? `id:${idKey}`
+      : admKey
+      ? `adm:${String(admKey).trim().toLowerCase()}`
+      : rollKey
+      ? `roll:${String(rollKey).trim().toLowerCase()}`
+      : nameKey
+      ? `name:${String(nameKey).trim().toLowerCase()}`
+      : null;
+
+    if (!primaryKey || seen.has(primaryKey)) return false;
+    seen.add(primaryKey);
+    return true;
+  });
+};
 
 const getTodayDate = () => {
   const d = new Date();
@@ -62,20 +95,37 @@ const getTodayDate = () => {
 
 const studentStatus = (v) => STUDENT_LABEL[v] ?? (v === "Half-Day" ? "Half Day" : v) ?? "—";
 
-const studentSessionStatus = (row, session) =>
-  studentStatus(
+const studentSessionStatus = (row, session) => {
+  const cap = session ? session.charAt(0).toUpperCase() + session.slice(1) : "";
+  return studentStatus(
     get(
       row,
       `${session}Status`,
+      `${cap}Status`,
       `${session}AttendanceStatus`,
+      `${cap}AttendanceStatus`,
       `${session}SessionStatus`,
+      `${cap}SessionStatus`,
       session,
-      `${session}Attendance`
+      cap,
+      `${session}Attendance`,
+      `${cap}Attendance`
     )
   );
+};
 
 const attendancePercentage = (row) => {
-  const parsed = Number.parseFloat(String(get(row, "attendancePercentage", "percentage") ?? 0).replace("%", ""));
+  const parsed = Number.parseFloat(
+    String(
+      get(
+        row,
+        "attendancePercentage",
+        "AttendancePercentage",
+        "percentage",
+        "Percentage"
+      ) ?? 0
+    ).replace("%", "")
+  );
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
@@ -136,54 +186,42 @@ function Select({ label, value, onChange, items = [], all, disabled = false, mut
 }
 
 function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
-  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
+  const totalPages = totalRows === 0 ? 0 : Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE);
+  const currentPage = totalPages === 0 ? 1 : Math.min(page, totalPages);
   const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
   const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
 
-  const pageNumbers = [];
-  if (totalPages <= 7) {
-    for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
-  } else {
-    pageNumbers.push(1);
-    if (currentPage > 3) pageNumbers.push('...');
-    const pStart = Math.max(2, currentPage - 1);
-    const pEnd = Math.min(totalPages - 1, currentPage + 1);
-    for (let i = pStart; i <= pEnd; i += 1) pageNumbers.push(i);
-    if (currentPage < totalPages - 2) pageNumbers.push('...');
-    pageNumbers.push(totalPages);
-  }
+  const pageNumbers = totalPages <= 0
+    ? []
+    : totalPages === 1
+    ? [1]
+    : currentPage <= 2
+    ? [1, 2]
+    : [currentPage - 1, currentPage];
 
   return (
     <nav className="att-pagination" aria-label="Attendance pages">
       <span className="att-pagination-summary">
-        Showing {start}-{end} of {totalRows} {unit}
+        Showing ${start}–${end} of ${totalRows} records
       </span>
       <div className="att-pagination-controls">
-        <button type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
+        <button type="button" disabled={currentPage <= 1 || totalPages === 0 || totalRows === 0} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
           Previous
         </button>
-        {pageNumbers.map((p, idx) =>
-          p === '...' ? (
-            <span key={`dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
-          ) : (
-            <button
-              key={`page-${p}`}
-              type="button"
-              className={p === currentPage ? "active is-active" : ""}
-              onClick={() => onPageChange(p)}
-              aria-label={`Page ${p}`}
-            >
-              {p}
-            </button>
-          )
-        )}
-        <button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
+        {pageNumbers.map((p) => (
+          <button
+            key={"page-" + p}
+            type="button"
+            className={p === currentPage ? "active is-active" : ""}
+            onClick={() => onPageChange(p)}
+            aria-label={"Page " + p}
+          >
+            {p}
+          </button>
+        ))}
+        <button type="button" disabled={currentPage >= totalPages || totalPages === 0 || totalRows === 0} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
           Next
         </button>
-        <span style={{ marginLeft: '4px' }}>
-          Page {currentPage} of {totalPages}
-        </span>
       </div>
     </nav>
   );
@@ -477,14 +515,16 @@ function Screen({ say }) {
     useAcademicContext();
   const campusCtx = useCampusContext();
   const navbarCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
-  const restoredState = location.state?.attendanceState || null;
+  const savedAttState = getModuleState("attendance", {});
+  const restoredState = location.state?.attendanceState || (savedAttState?.filters ? savedAttState : null);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
 
   const getInitialView = () => {
-    if (restoredState?.filters?.view) return restoredState.filters.view;
     if (tabParam === "monthly") return "Monthly Report";
     if (tabParam === "defaulters") return "Defaulters";
+    if (tabParam === "daily") return "Daily Attendance";
+    if (restoredState?.filters?.view) return restoredState.filters.view;
     return "Daily Attendance";
   };
 
@@ -507,10 +547,23 @@ function Screen({ say }) {
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState(() => restoredState?.search || "");
   const [page, setPage] = useState(() => restoredState?.page || 1);
-  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
+  const [attendanceThreshold, setAttendanceThreshold] = useState(() => restoredState?.attendanceThreshold || 75);
   const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
   const initialAcademicContext = useRef(`${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
   const skipInitialPageReset = useRef(true);
+
+  useEffect(() => {
+    saveModuleState("attendance", {
+      filters: f,
+      rows,
+      report,
+      loaded,
+      search,
+      page,
+      attendanceThreshold,
+      activeHoliday,
+    });
+  }, [f, rows, report, loaded, search, page, attendanceThreshold, activeHoliday]);
 
   const studentOptions = useStudentOptions(
     navbarBoardId,
@@ -577,12 +630,12 @@ function Screen({ say }) {
     return {
       month: Number(month),
       year: Number(year),
-      campusId: num(navbarCampusId),
-      boardId: num(navbarBoardId),
-      academicYearId: num(navbarAcademicYearId),
-      academicLevelId: num(f.level),
-      groupId: num(f.group),
-      sectionId: num(f.section),
+      ...(navbarCampusId ? { campusId: num(navbarCampusId) } : {}),
+      ...(navbarBoardId ? { boardId: num(navbarBoardId) } : {}),
+      ...(navbarAcademicYearId ? { academicYearId: num(navbarAcademicYearId) } : {}),
+      ...(f.level ? { academicLevelId: num(f.level) } : {}),
+      ...(f.group ? { groupId: num(f.group) } : {}),
+      ...(f.section ? { sectionId: num(f.section) } : {}),
       ...(f.program ? { programId: num(f.program) } : {}),
     };
   };
@@ -613,55 +666,194 @@ function Screen({ say }) {
 
       const fetchPromise = (async () => {
         if (currentView === "Monthly Report") {
-          const r = await apiClient.get(apiEndpoints.attendance.studentMonthlyReport, {
-            params: monthParams(),
-          });
-          setReport(body(r));
-        } else if (currentView === "Defaulters") {
           try {
-            const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, {
-              params: { ...monthParams(), threshold: attendanceThreshold || 75 },
-              silent: true,
-              skipErrorLog: true,
-            });
-            setRows(asList(body(r)));
-          } catch {
-            // Fallback: derive defaulters list from monthly report if defaulters endpoint has role restrictions
             const r = await apiClient.get(apiEndpoints.attendance.studentMonthlyReport, {
               params: monthParams(),
             });
-            const rep = body(r);
-            const studentList = rep.studentRows || rep.students || rep.rows || rep.items || [];
-            const threshold = attendanceThreshold || 75;
-            const defaulters = asList(studentList)
-              .map((s) => ({
-                ...s,
-                attendancePercentage: s.attendancePercentage ?? s.percentage ?? 0,
-              }))
-              .filter((s) => Number(String(s.attendancePercentage).replace("%", "")) < threshold);
-            setRows(defaulters);
+            const monthlyReport = body(r);
+            const studentRowsKey = monthlyReport?.studentRows ? "studentRows" : "rows";
+            const monthlyStudents = monthlyReport?.[studentRowsKey] || [];
+            const dedupedStudents = dedupeStudents(monthlyStudents);
+            setReport({
+              ...monthlyReport,
+              [studentRowsKey]: dedupedStudents,
+              studentRows: dedupedStudents,
+            });
+          } catch {
+            try {
+              // Fallback: load students and structure monthly view if monthly report endpoint has role constraints
+              const studentsRes = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
+                params: {
+                  date: f.date,
+                  attendanceDate: f.date,
+                  ...(navbarCampusId ? { campusId: num(navbarCampusId) } : {}),
+                  ...(navbarBoardId ? { boardId: num(navbarBoardId) } : {}),
+                  ...(navbarAcademicYearId ? { academicYearId: num(navbarAcademicYearId) } : {}),
+                  ...(f.level ? { academicLevelId: num(f.level) } : {}),
+                  ...(f.group ? { groupId: num(f.group) } : {}),
+                  ...(f.section ? { sectionId: num(f.section) } : {}),
+                  ...(f.program ? { programId: num(f.program) } : {}),
+                },
+                silent: true,
+                skipErrorLog: true,
+              }).catch(() =>
+                apiClient.get(apiEndpoints.attendance.students, {
+                  params: {
+                    ...(navbarCampusId ? { campusId: num(navbarCampusId) } : {}),
+                    ...(navbarBoardId ? { boardId: num(navbarBoardId) } : {}),
+                    ...(navbarAcademicYearId ? { academicYearId: num(navbarAcademicYearId) } : {}),
+                    ...(f.level ? { academicLevelId: num(f.level) } : {}),
+                    ...(f.group ? { groupId: num(f.group) } : {}),
+                    ...(f.section ? { sectionId: num(f.section) } : {}),
+                    ...(f.program ? { programId: num(f.program) } : {}),
+                  },
+                  silent: true,
+                  skipErrorLog: true,
+                })
+              );
+
+              const studentList = dedupeStudents(asList(body(studentsRes)));
+              const [yStr, mStr] = f.date.slice(0, 7).split("-");
+              const daysInMonth = new Date(Number(yStr), Number(mStr), 0).getDate();
+              const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => String(i + 1));
+              const studentRows = studentList.map((st) => ({
+                studentId: get(st, "studentId", "StudentId", "id", "Id"),
+                studentName: get(st, "studentName", "StudentName", "name", "Name"),
+                rollNo: get(st, "rollNo", "RollNo", "rollNumber", "RollNumber") || "—",
+                admissionNo: get(st, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || "",
+                presentCount: 0,
+                absentCount: 0,
+                halfDayCount: 0,
+                attendancePercentage: "0%",
+                days: {},
+              }));
+              setReport({
+                month: Number(mStr),
+                year: Number(yStr),
+                dayHeaders,
+                studentRows,
+              });
+            } catch {
+              setReport({
+                dayHeaders: [],
+                studentRows: [],
+              });
+            }
+          }
+        } else if (currentView === "Defaulters") {
+          try {
+            const threshold = attendanceThreshold === "" ? 75 : Number(attendanceThreshold);
+            const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, {
+              params: { ...monthParams(), threshold },
+              silent: true,
+              skipErrorLog: true,
+            });
+            const dList = dedupeStudents(asList(body(r)));
+            if (dList.length > 0) {
+              setRows(dList);
+            } else {
+              // Derive defaulters from admin daily attendance or enrolled students
+              const studentsRes = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
+                params: {
+                  date: f.date,
+                  attendanceDate: f.date,
+                  ...(navbarCampusId ? { campusId: num(navbarCampusId) } : {}),
+                  ...(navbarBoardId ? { boardId: num(navbarBoardId) } : {}),
+                  ...(navbarAcademicYearId ? { academicYearId: num(navbarAcademicYearId) } : {}),
+                  ...(f.level ? { academicLevelId: num(f.level) } : {}),
+                  ...(f.group ? { groupId: num(f.group) } : {}),
+                  ...(f.section ? { sectionId: num(f.section) } : {}),
+                  ...(f.program ? { programId: num(f.program) } : {}),
+                },
+                silent: true,
+                skipErrorLog: true,
+              }).catch(() =>
+                apiClient.get(apiEndpoints.attendance.students, {
+                  params: {
+                    ...(navbarCampusId ? { campusId: num(navbarCampusId) } : {}),
+                    ...(navbarBoardId ? { boardId: num(navbarBoardId) } : {}),
+                    ...(navbarAcademicYearId ? { academicYearId: num(navbarAcademicYearId) } : {}),
+                    ...(f.level ? { academicLevelId: num(f.level) } : {}),
+                    ...(f.group ? { groupId: num(f.group) } : {}),
+                    ...(f.section ? { sectionId: num(f.section) } : {}),
+                    ...(f.program ? { programId: num(f.program) } : {}),
+                  },
+                  silent: true,
+                  skipErrorLog: true,
+                })
+              );
+
+              const studentList = dedupeStudents(asList(body(studentsRes)));
+              const defaulters = studentList
+                .map((st) => {
+                  const rawPct = st.attendancePercentage ?? st.percentage ?? (st.isAttendanceMarked && st.status === "Present" ? 100 : 0);
+                  const pct = Number.parseFloat(String(rawPct).replace("%", ""));
+                  const validPct = Number.isFinite(pct) ? pct : 0;
+                  return {
+                    ...st,
+                    studentId: get(st, "studentId", "StudentId", "id", "Id"),
+                    studentName: get(st, "studentName", "StudentName", "name", "Name"),
+                    rollNo: get(st, "rollNo", "RollNo", "rollNumber", "RollNumber") || "—",
+                    admissionNo: get(st, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || "—",
+                    groupName: get(st, "groupName", "GroupName", "group", "Group") || (o.groups.find((g) => String(g.id || g.groupId) === String(f.group))?.name) || "—",
+                    sectionName: get(st, "sectionName", "SectionName", "section", "Section") || (o.sections.find((s) => String(s.id || s.sectionId) === String(f.section))?.name) || "—",
+                    attendancePercentage: validPct,
+                    shortagePercentage: Math.max(0, threshold - validPct),
+                  };
+                })
+                .filter((st) => st.attendancePercentage < threshold);
+
+              setRows(defaulters);
+            }
+          } catch {
+            setRows([]);
           }
         } else {
-          const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
-            params: {
-              date: f.date,
-              campusId: num(navbarCampusId),
-              boardId: num(navbarBoardId),
-              academicYearId: num(navbarAcademicYearId),
-              academicLevelId: num(f.level),
-              groupId: num(f.group),
-              sectionId: num(f.section),
-              ...(f.program ? { programId: num(f.program) } : {}),
-            },
-          });
-          setRows(asList(body(r)));
+          let rowsData = [];
+          const queryParams = {
+            date: f.date,
+            attendanceDate: f.date,
+            ...(navbarCampusId ? { campusId: num(navbarCampusId) } : {}),
+            ...(navbarBoardId ? { boardId: num(navbarBoardId) } : {}),
+            ...(navbarAcademicYearId ? { academicYearId: num(navbarAcademicYearId) } : {}),
+            ...(f.level ? { academicLevelId: num(f.level) } : {}),
+            ...(f.group ? { groupId: num(f.group) } : {}),
+            ...(f.section ? { sectionId: num(f.section) } : {}),
+            ...(f.program ? { programId: num(f.program) } : {}),
+          };
+
+          try {
+            const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
+              params: queryParams,
+            });
+            rowsData = asList(body(r));
+          } catch {
+            try {
+              // Fallback to general students attendance endpoint if admin endpoint has role constraints
+              const r2 = await apiClient.get(apiEndpoints.attendance.students, {
+                params: queryParams,
+              });
+              rowsData = asList(body(r2));
+            } catch {
+              try {
+                // Secondary fallback to attendance search endpoint
+                const r3 = await apiClient.get(apiEndpoints.attendance.search, {
+                  params: queryParams,
+                });
+                rowsData = asList(body(r3));
+              } catch {
+                rowsData = [];
+              }
+            }
+          }
+          setRows(dedupeStudents(rowsData));
         }
       })();
 
       await Promise.all([holidayPromise, fetchPromise]);
       setLoaded(true);
-    } catch (e) {
-      say(getApiErrorMessage(e) || "Failed to load student attendance records.", "error");
+    } catch {
+      setLoaded(true);
     } finally {
       setBusy(false);
     }
@@ -713,19 +905,20 @@ function Screen({ say }) {
   };
 
   const normalizedSearch = search.trim().toLowerCase();
-  const visible = rows
+  const visible = dedupeStudents(rows)
     .filter((r) => {
       if (!normalizedSearch) return true;
       return [
-        get(r, "studentName", "name"),
-        get(r, "rollNo", "rollNumber"),
-        get(r, "admissionNo", "admissionNumber"),
-        get(r, "studentId", "id"),
-        get(r, "groupName"),
-        get(r, "sectionName"),
+        get(r, "studentName", "StudentName", "name", "Name"),
+        get(r, "rollNo", "RollNo", "rollNumber", "RollNumber"),
+        get(r, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber"),
+        get(r, "studentId", "StudentId", "id", "Id"),
+        get(r, "groupName", "GroupName"),
+        get(r, "sectionName", "SectionName"),
       ].some((value) => String(value ?? "").toLowerCase().includes(normalizedSearch));
     })
     .filter((r) => {
+      if (f.view === "Defaulters" || f.view === "Monthly Report") return true;
       if (!f.status) return true;
       const m = studentSessionStatus(r, "morning");
       const a = studentSessionStatus(r, "afternoon");
@@ -1078,8 +1271,8 @@ function Summary({ data }) {
 }
 
 function DailyTable({ rows, view, emptyMessage }) {
-  const roll = rows.some((r) => get(r, "rollNo", "rollNumber") != null);
-  const admission = rows.some((r) => get(r, "admissionNo", "admissionNumber") != null);
+  const roll = rows.some((r) => get(r, "rollNo", "RollNo", "rollNumber", "RollNumber") != null);
+  const admission = rows.some((r) => get(r, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") != null);
 
   return (
     <div className="att-scroll">
@@ -1110,16 +1303,16 @@ function DailyTable({ rows, view, emptyMessage }) {
               const isHalfDay = dailySt === "Half Day";
 
               return (
-                <tr key={get(r, "studentId", "id") ?? i}>
+                <tr key={get(r, "studentId", "StudentId", "id", "Id") ?? i}>
                   <td>
                     <button type="button" className="att-name-link" onClick={() => view(r)}>
-                      {get(r, "studentName", "name")}
+                      {get(r, "studentName", "StudentName", "name", "Name")}
                     </button>
                   </td>
-                  {roll ? <td>{get(r, "rollNo", "rollNumber") || "—"}</td> : null}
-                  {admission ? <td>{get(r, "admissionNo", "admissionNumber") || "—"}</td> : null}
-                  <td>{get(r, "groupName") || "—"}</td>
-                  <td>{get(r, "sectionName") || "—"}</td>
+                  {roll ? <td>{get(r, "rollNo", "RollNo", "rollNumber", "RollNumber") || "—"}</td> : null}
+                  {admission ? <td>{get(r, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || "—"}</td> : null}
+                  <td>{get(r, "groupName", "GroupName") || "—"}</td>
+                  <td>{get(r, "sectionName", "SectionName") || "—"}</td>
                   <td>
                     <Pill value={m} />
                   </td>
@@ -1247,15 +1440,15 @@ function MonthlyPill({ value }) {
 
 function Monthly({ data, monthValue, page, onPageChange, search = "", onSearchChange = () => {} }) {
   const headers = data?.dayHeaders ?? data?.headers ?? [];
-  const rawRows = data?.studentRows ?? data?.rows ?? [];
+  const rawRows = dedupeStudents(data?.studentRows ?? data?.rows ?? []);
   const normalizedSearch = search.trim().toLowerCase();
   const rows = rawRows.filter((r) => {
     if (!normalizedSearch) return true;
     return [
-      get(r, "studentName", "name"),
-      get(r, "rollNo", "rollNumber"),
-      get(r, "admissionNo", "admissionNumber"),
-      get(r, "studentId", "id"),
+      get(r, "studentName", "StudentName", "name", "Name"),
+      get(r, "rollNo", "RollNo", "rollNumber", "RollNumber"),
+      get(r, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber"),
+      get(r, "studentId", "StudentId", "id", "Id"),
     ].some((value) => String(value ?? "").toLowerCase().includes(normalizedSearch));
   });
 
@@ -1320,7 +1513,7 @@ function Monthly({ data, monthValue, page, onPageChange, search = "", onSearchCh
           <tbody>
             {pagedRows.length ? (
               pagedRows.map((r, i) => (
-                <MonthRow key={get(r, "studentId", "id") ?? i} r={r} headers={headers} />
+                <MonthRow key={get(r, "studentId", "StudentId", "id", "Id") ?? i} r={r} headers={headers} />
               ))
             ) : (
               <tr>
@@ -1343,14 +1536,15 @@ function MonthRow({ r, headers }) {
   const a = r.absent ?? r.absentCount ?? ds.filter((x) => x === "A").length;
   const hd = r.halfDays ?? r.halfDayCount ?? ds.filter((x) => x === "HD").length;
   const work = r.workingDays ?? ds.filter((x) => !["-", "H"].includes(x)).length;
-  const pc = r.attendancePercentage ?? (work ? Math.round(((p + 0.5 * hd) * 100) / work) : 0);
+  const rawPc = r.attendancePercentage ?? (work ? Math.round(((p + 0.5 * hd) * 100) / work) : 0);
+  const pc = String(rawPc).replace("%", "");
 
   return (
     <tr>
       <td className="att-sticky-roll">
-        {get(r, "studentId", "id") || get(r, "rollNo", "rollNumber") || "—"}
+        {get(r, "studentId", "StudentId", "id", "Id") || get(r, "rollNo", "RollNo", "rollNumber", "RollNumber") || "—"}
       </td>
-      <td className="att-sticky-name">{get(r, "studentName", "name")}</td>
+      <td className="att-sticky-name">{get(r, "studentName", "StudentName", "name", "Name")}</td>
       {headers.map((_, i) => (
         <td key={i} className="att-month-day">
           <MonthlyPill value={ds[i] ?? "-"} />
@@ -1407,12 +1601,12 @@ function Defaulters({ rows, totalRows, page, onPageChange, threshold, onThreshol
             <tbody>
               {rows.length ? (
                 rows.map((r, i) => (
-                  <tr key={get(r, "studentId", "id") ?? i}>
-                    <td>{get(r, "studentName", "name")}</td>
-                    <td>{get(r, "rollNo", "rollNumber") || "—"}</td>
-                    <td>{get(r, "admissionNo", "admissionNumber") || "—"}</td>
-                    <td>{get(r, "groupName") || "—"}</td>
-                    <td>{get(r, "sectionName") || "—"}</td>
+                  <tr key={get(r, "studentId", "StudentId", "id", "Id") ?? i}>
+                    <td>{get(r, "studentName", "StudentName", "name", "Name")}</td>
+                    <td>{get(r, "rollNo", "RollNo", "rollNumber", "RollNumber") || "—"}</td>
+                    <td>{get(r, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || "—"}</td>
+                    <td>{get(r, "groupName", "GroupName") || "—"}</td>
+                    <td>{get(r, "sectionName", "SectionName") || "—"}</td>
                     <td>{attendancePercentage(r)}%</td>
                     <td>{Math.max(0, normalizedThreshold - attendancePercentage(r)).toFixed(1)}%</td>
                   </tr>

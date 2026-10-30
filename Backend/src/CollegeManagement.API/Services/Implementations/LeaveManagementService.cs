@@ -143,6 +143,15 @@ namespace CollegeManagement.API.Services.Implementations
                         
                     if (leave == null) throw new CollegeManagement.API.Exceptions.NotFoundException("Leave request not found");
 
+                    if (userId > 0)
+                    {
+                        var approverUser = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+                        if (approverUser?.StaffId.HasValue == true && approverUser.StaffId.Value == leave.StaffId)
+                        {
+                            throw new CollegeManagement.API.Exceptions.ValidationException("Staff members are not permitted to approve or reject their own leave requests.");
+                        }
+                    }
+
                     if (leave.Status != CollegeManagement.API.Enums.LeaveStatus.Pending && request.Status != CollegeManagement.API.Enums.LeaveStatus.Pending)
                     {
                         if (leave.Status == request.Status) 

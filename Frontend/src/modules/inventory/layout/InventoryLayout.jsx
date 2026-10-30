@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -153,13 +154,13 @@ export default function InventoryLayout({ children }) {
               </button>
             </div>
           )}
-          {loading && <p role="status">Loading server records…</p>}
+          {loading && <SkeletonPage variant="dashboard" columns={4} rows={4} />}
           {Object.entries(errors).map(([service, error]) => (
             <p key={service} className="ip-error" role="alert">
               {service}: {error}
             </p>
           ))}
-          {children}
+          <div style={{ display: loading ? "none" : "contents" }}>{children}</div>
         </main>
       </div>
     </div>

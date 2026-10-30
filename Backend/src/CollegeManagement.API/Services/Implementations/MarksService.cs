@@ -42,6 +42,17 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<MarkResponseDto> SaveMarkAsync(SaveMarkDto dto)
         {
+<<<<<<< HEAD
+=======
+            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, dto.ExaminationId, dto.SubjectId);
+            var (maxMarks, defaultPass) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, dto.ExaminationId, dto.SubjectId);
+
+            if (dto.InternalMarks < 0 || dto.PracticalMarks < 0 || dto.TheoryMarks < 0 || (dto.ObtainedMarks.HasValue && dto.ObtainedMarks.Value < 0))
+            {
+                throw new ValidationException("Marks cannot be negative.");
+            }
+
+>>>>>>> origin/main
             if (dto.PassingMarks <= 0)
             {
                 dto.PassingMarks = 35;
@@ -65,9 +76,20 @@ namespace CollegeManagement.API.Services.Implementations
             var existing = await _marksRepository.GetByExamSubjectStudentAsync(dto.ExaminationId, dto.SubjectId, dto.StudentId);
             if (existing != null)
             {
+<<<<<<< HEAD
                 existing.InternalMarks = dto.IsAbsent ? 0 : dto.InternalMarks;
                 existing.PracticalMarks = dto.IsAbsent ? 0 : dto.PracticalMarks;
                 existing.TheoryMarks = dto.IsAbsent ? 0 : dto.TheoryMarks;
+=======
+                if (existing.IsLocked || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.VERIFIED)
+                {
+                    throw new ConflictException("Cannot edit verified, approved or locked marks.");
+                }
+
+                existing.InternalMarks = dto.InternalMarks;
+                existing.PracticalMarks = dto.PracticalMarks;
+                existing.TheoryMarks = dto.TheoryMarks;
+>>>>>>> origin/main
                 existing.TotalMarks = finalScore;
                 if (dto.PassingMarks > 0)
                 {
@@ -178,8 +200,20 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<MarkResponseDto> UpdateMarkAsync(int id, UpdateMarkDto dto)
         {
             var existing = await _marksRepository.GetByIdAsync(id);
+<<<<<<< HEAD
             if (existing == null) throw new NotFoundException($"Mark record with ID {id} not found.");
             if (existing.IsLocked || existing.Status == EvaluationStatus.APPROVED) throw new ConflictException("Cannot edit approved or locked marks.");
+=======
+            if (existing.IsLocked || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.VERIFIED)
+            {
+                throw new ConflictException("Cannot edit verified, approved or locked marks.");
+            }
+
+            if (dto.InternalMarks < 0 || dto.PracticalMarks < 0 || dto.TheoryMarks < 0 || (dto.ObtainedMarks.HasValue && dto.ObtainedMarks.Value < 0))
+            {
+                throw new ValidationException("Marks cannot be negative.");
+            }
+>>>>>>> origin/main
 
             int finalScore = dto.IsAbsent ? 0 : (dto.TotalMarks ?? (dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks));
 
@@ -199,7 +233,14 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var existing = await _marksRepository.GetByIdAsync(id);
             if (existing == null) throw new NotFoundException($"Mark record with ID {id} not found.");
+<<<<<<< HEAD
             if (existing.IsLocked || existing.Status == EvaluationStatus.APPROVED) throw new ConflictException("Cannot delete approved or locked marks.");
+=======
+            if (existing.IsLocked || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.VERIFIED)
+            {
+                throw new ConflictException("Cannot delete verified, approved or locked marks.");
+            }
+>>>>>>> origin/main
             return await _marksRepository.DeleteAsync(id);
         }
 

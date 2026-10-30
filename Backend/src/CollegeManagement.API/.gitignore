@@ -12,3 +12,6 @@ obj/
 
 # Temporary files
 *.tmp
+
+Logs/
+logs/

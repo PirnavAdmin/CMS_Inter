@@ -1,3 +1,4 @@
+import { SkeletonRow, Skeleton } from "@/shared/components/Skeleton.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Clock,
@@ -23,6 +24,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Pagination } from "@/shared/components/Ui.jsx";
+import { getModuleState, saveModuleState } from "../statePersistence.js";
 import "./CheckInOut.css";
 
 const PUNCH_PAGE_SIZE = 10;
@@ -143,9 +145,11 @@ export default function CheckInOut() {
     };
   }, []);
 
+  const savedCheckInState = useMemo(() => getModuleState("check_in_out", {}), []);
+
   const [date] = useState(getTodayDateStr);
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthStr);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState(() => savedCheckInState?.selectedMonth || getCurrentMonthStr());
+  const [statusFilter, setStatusFilter] = useState(() => savedCheckInState?.statusFilter || "all");
 
   const [todayRecord, setTodayRecord] = useState({
     inTime: null,
@@ -649,7 +653,15 @@ export default function CheckInOut() {
     }
   };
 
-  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(() => savedCheckInState?.historyPage || 1);
+
+  useEffect(() => {
+    saveModuleState("check_in_out", {
+      selectedMonth,
+      statusFilter,
+      historyPage,
+    });
+  }, [selectedMonth, statusFilter, historyPage]);
 
   // Filter history rows by status
   const visibleHistoryRows = useMemo(() => {
@@ -981,7 +993,7 @@ export default function CheckInOut() {
                   <th>Remarks</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody>{isLoading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : <>
                 {visibleHistoryRows.length > 0 ? (
                   pagedHistoryRows.map((r) => {
                     const statusClass =
@@ -1033,11 +1045,11 @@ export default function CheckInOut() {
                 ) : (
                   <tr>
                     <td colSpan="7" style={{ textAlign: "center", padding: "32px 16px", color: "var(--cms-muted)" }}>
-                      {isLoading ? "Loading attendance records..." : "No attendance records found for the selected filter."}
+                      {isLoading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No attendance records found for the selected filter."}
                     </td>
                   </tr>
                 )}
-              </tbody>
+              </>}</tbody>
             </table>
           </div>
 

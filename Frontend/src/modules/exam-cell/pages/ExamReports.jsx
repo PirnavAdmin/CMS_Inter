@@ -1,3 +1,4 @@
+import { SkeletonDashboard } from "@/shared/components/Skeleton.jsx";
 import React, { useEffect, useState, useMemo } from "react";
 import {
   FileSpreadsheet,
@@ -18,6 +19,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
+import { getModuleState, saveModuleState } from "../statePersistence.js";
 import { Toast, Pagination } from "@/shared/components/Ui.jsx";
 import "@/modules/admin/AdminExaminations/ExaminationPage.css";
 import "./ExamReports.css";
@@ -172,14 +174,57 @@ export default function ExamReports() {
   const { selectedCampusId: campusId } = useCampusContext();
   const { selectedBoardId: boardId, selectedAcademicYearId: academicYearId } = useAcademicContext();
 
+  const savedReportState = useMemo(() => getModuleState("exam_reports", {}), []);
+
   const [exams, setExams] = useState([]);
-  const [examId, setExamId] = useState("");
+  const [examId, setExamIdState] = useState(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("examId")) return p.get("examId");
+    }
+    return savedReportState?.examId || "";
+  });
+
+  const setExamId = (val) => {
+    setExamIdState(val);
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        if (val) {
+          url.searchParams.set("examId", String(val));
+        } else {
+          url.searchParams.delete("examId");
+        }
+        window.history.replaceState(window.history.state, "", url.toString());
+      } catch {}
+    }
+  };
+
+  useEffect(() => {
+    if (examId && typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("examId") !== String(examId)) {
+          url.searchParams.set("examId", String(examId));
+          window.history.replaceState(window.history.state, "", url.toString());
+        }
+      } catch {}
+    }
+  }, [examId]);
   const [analytics, setAnalytics] = useState(null);
   const [ranks, setRanks] = useState([]);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [reportPage, setReportPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState(() => savedReportState?.searchTerm || "");
+  const [reportPage, setReportPage] = useState(() => savedReportState?.reportPage || 1);
+
+  useEffect(() => {
+    saveModuleState("exam_reports", {
+      examId,
+      searchTerm,
+      reportPage,
+    });
+  }, [examId, searchTerm, reportPage]);
 
   const showToast = (message, type = "success") => {
     setToast({ message, type });
@@ -416,7 +461,8 @@ export default function ExamReports() {
         </form>
       </div>
 
-      {analytics && (
+      {busy && <SkeletonDashboard cards={4} tableColumns={7} />}
+      {!busy && analytics && (
         <>
           {/* KPI METRIC CARDS */}
           <div className="ec-reports-kpi-grid">

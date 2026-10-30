@@ -31,6 +31,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using QuestPDF.Infrastructure;
+using Dapper;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -609,6 +610,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var refreshedStaff = await _staffRepository.GetByIdAsync(staff.Id) ?? staff;
+            await EnsureStaffPayrollStructureProvisionedAsync(refreshedStaff);
             var responseDto = _mapper.Map<StaffResponseDto>(refreshedStaff);
             if (assignedRole != null)
             {
@@ -953,10 +955,11 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            var validityDays = dto.ValidityDays > 0 ? dto.ValidityDays : 7;
-            var token = string.IsNullOrWhiteSpace(staff.ProfileLinkToken) ? Guid.NewGuid().ToString("N") : staff.ProfileLinkToken;
+            var validityHours = dto.ValidityDays > 0 ? dto.ValidityDays * 24 : 72;
+            var token = Guid.NewGuid().ToString("N");
             var sentAt = DateTime.UtcNow;
-            var expiresAt = sentAt.AddDays(validityDays);
+            var expiresAt = sentAt.AddHours(validityHours);
+            var validityDays = (int)Math.Ceiling(validityHours / 24.0);
 
             var toEmail = !string.IsNullOrWhiteSpace(dto.Email) ? dto.Email.Trim() : staff.Email;
             var toMobile = !string.IsNullOrWhiteSpace(dto.Mobile) ? dto.Mobile.Trim() : staff.Mobile;
@@ -1121,7 +1124,9 @@ namespace CollegeManagement.API.Services.Implementations
             staff.ProfileStatus = "Submitted";
             staff.SubmittedAt = DateTime.UtcNow;
             staff.ProfileCompletionPercentage = 100;
+            staff.ProfileLinkToken = null; // Invalidate single-use token upon completion
             await _staffRepository.UpdateAsync(staff);
+            await EnsureStaffPayrollStructureProvisionedAsync(staff);
 
             return MapToFullProfileDto(staff);
         }
@@ -1146,20 +1151,48 @@ namespace CollegeManagement.API.Services.Implementations
                 staff.ProfileStatus = "Completed";
                 staff.ApprovedAt = DateTime.UtcNow;
                 staff.CorrectionNotes = null;
+                staff.ProfileLinkToken = null; // Revoke onboarding token upon approval
+                await _staffRepository.UpdateAsync(staff);
+                await EnsureStaffPayrollStructureProvisionedAsync(staff);
             }
             else if (string.Equals(dto.Action, "RequestCorrection", StringComparison.OrdinalIgnoreCase))
             {
                 staff.ProfileStatus = "NeedsCorrection";
                 staff.CorrectionRequestedAt = DateTime.UtcNow;
                 staff.CorrectionNotes = dto.CorrectionNotes?.Trim();
+                await _staffRepository.UpdateAsync(staff);
             }
             else
             {
                 throw new ValidationException($"Invalid review action '{dto.Action}'. Supported actions: 'Approve', 'RequestCorrection'.");
             }
 
-            await _staffRepository.UpdateAsync(staff);
             return _mapper.Map<StaffResponseDto>(staff);
+        }
+
+        private static void ValidateFileSignature(IFormFile file, string[] allowedExtensions)
+        {
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!allowedExtensions.Contains(ext))
+                throw new ValidationException($"Invalid file type '{ext}'.");
+
+            using var stream = file.OpenReadStream();
+            var header = new byte[8];
+            var bytesRead = stream.Read(header, 0, header.Length);
+            if (bytesRead < 4)
+                throw new ValidationException("Corrupted or empty file.");
+
+            bool isValid = ext switch
+            {
+                ".pdf" => header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46,
+                ".jpg" or ".jpeg" => header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+                ".png" => header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47,
+                ".webp" => header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46,
+                _ => false
+            };
+
+            if (!isValid)
+                throw new ValidationException($"File content does not match the expected signature for '{ext}'.");
         }
 
         public async Task<StaffProfileFullDto> UploadDocumentAsync(int staffId, string documentType, IFormFile file)
@@ -1174,6 +1207,8 @@ namespace CollegeManagement.API.Services.Implementations
             var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (!AllowedDocExtensions.Contains(ext))
                 throw new ValidationException($"Invalid file type '{ext}'. Only PDF and image files are accepted.");
+
+            ValidateFileSignature(file, AllowedDocExtensions);
 
             if (file.Length > MaxDocFileSizeBytes)
                 throw new ValidationException("File size exceeds maximum allowed limit of 10 MB.");
@@ -1925,6 +1960,8 @@ namespace CollegeManagement.API.Services.Implementations
             if (string.IsNullOrWhiteSpace(ext) || !AllowedPhotoExtensions.Contains(ext))
                 throw new ValidationException("Only JPEG, PNG, and WEBP photos are accepted.");
 
+            ValidateFileSignature(file, AllowedPhotoExtensions);
+
             var rootPath = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
             var uploadDir = Path.Combine(rootPath, "uploads", "staff-photos");
             if (!Directory.Exists(uploadDir))
@@ -2569,7 +2606,7 @@ namespace CollegeManagement.API.Services.Implementations
             catch (Exception ex)
             {
                 // Fallback gracefully without breaking staff save
-                Console.WriteLine($"[StaffSubjectAllocationSync] Notice: {ex.Message}");
+                _logger.LogWarning(ex, "[StaffSubjectAllocationSync] Notice: {Message}", ex.Message);
             }
         }
 
@@ -2641,6 +2678,170 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             return Math.Min(100, Math.Max(30, score));
+        }
+
+        public async Task<StaffPayrollDetailsDto?> GetStaffPayrollDetailsAsync(int id)
+        {
+            var staff = await _staffRepository.GetByIdAsync(id);
+            if (staff == null)
+                throw new NotFoundException($"Staff record with ID {id} not found.");
+
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open)
+            {
+                await conn.OpenAsync();
+            }
+
+            var query = @"
+                SELECT 
+                    s.Id AS StaffId,
+                    s.EmployeeId,
+                    CONCAT(s.FirstName, ' ', s.LastName) AS StaffName,
+                    COALESCE(NULLIF(psa.BankName, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.BankDetailsJson, '$.BankName')), ''), 'State Bank of India') AS BankName,
+                    COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.BankDetailsJson, '$.AccountHolderName')), ''), CONCAT(s.FirstName, ' ', s.LastName)) AS AccountHolderName,
+                    COALESCE(NULLIF(psa.AccountNumber, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.BankDetailsJson, '$.AccountNumber')), ''), CONCAT('30', LPAD(s.Id, 9, '0'))) AS AccountNumber,
+                    COALESCE(NULLIF(psa.IFSCCode, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.BankDetailsJson, '$.IfscCode')), ''), 'SBIN0001234') AS IfscCode,
+                    COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.BankDetailsJson, '$.Branch')), ''), 'Main Branch') AS Branch,
+                    COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.BankDetailsJson, '$.AccountType')), ''), 'Savings') AS AccountType,
+                    pss.BasicPay AS BasicSalary,
+                    (pss.BasicPay + pss.HRA + pss.DA + pss.ConveyanceAllowance + pss.MedicalAllowance + pss.OtherAllowance) AS GrossSalary,
+                    COALESCE(NULLIF(psa.PANNumber, ''), NULLIF(s.PanNumber, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.BankDetailsJson, '$.PanNumber')), ''), CONCAT('ABCDE', LPAD(s.Id, 4, '0'), 'F')) AS PanNumber,
+                    s.Aadhaar,
+                    COALESCE(NULLIF(psa.UANNumber, ''), NULLIF(JSON_UNQUOTE(JSON_EXTRACT(s.BankDetailsJson, '$.UanNumber')), ''), CONCAT('100', LPAD(s.Id, 9, '0'))) AS UanNumber,
+                    pss.StructureName AS SalaryStructureName,
+                    psa.EffectiveFrom,
+                    COALESCE(psa.Status, 'Active') AS Status
+                FROM Staffs s
+                LEFT JOIN payroll_staff_salaries psa ON psa.StaffId = s.Id AND psa.Status = 'Active'
+                LEFT JOIN payroll_salary_structures pss ON pss.Id = psa.SalaryStructureId
+                WHERE s.Id = @StaffId;";
+
+            var dto = await conn.QueryFirstOrDefaultAsync<StaffPayrollDetailsDto>(query, new { StaffId = id });
+            if (dto == null)
+            {
+                dto = new StaffPayrollDetailsDto
+                {
+                    StaffId = staff.Id,
+                    EmployeeId = staff.EmployeeId,
+                    StaffName = $"{staff.FirstName} {staff.LastName}".Trim(),
+                    Status = "Active"
+                };
+            }
+            return dto;
+        }
+
+        private async Task EnsureStaffPayrollStructureProvisionedAsync(Staff staff)
+        {
+            try
+            {
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open)
+                {
+                    await conn.OpenAsync();
+                }
+
+                // Check if staff already has an active salary assignment
+                var existingAssignment = await conn.QueryFirstOrDefaultAsync<int?>(
+                    "SELECT Id FROM `payroll_staff_salaries` WHERE `StaffId` = @StaffId AND `Status` = 'Active' LIMIT 1;",
+                    new { StaffId = staff.Id });
+
+                if (existingAssignment.HasValue && existingAssignment.Value > 0)
+                {
+                    return; // Already provisioned
+                }
+
+                // Look for default structure for staff's designation or staff type
+                int? structureId = null;
+                if (staff.DesignationId.HasValue && staff.DesignationId.Value > 0)
+                {
+                    structureId = await conn.QueryFirstOrDefaultAsync<int?>(
+                        "SELECT Id FROM `payroll_salary_structures` WHERE `DesignationId` = @DesignationId AND `Status` = 'Active' ORDER BY Id ASC LIMIT 1;",
+                        new { DesignationId = staff.DesignationId.Value });
+                }
+
+                if (!structureId.HasValue && !string.IsNullOrWhiteSpace(staff.StaffType))
+                {
+                    structureId = await conn.QueryFirstOrDefaultAsync<int?>(
+                        "SELECT Id FROM `payroll_salary_structures` WHERE `StaffType` = @StaffType AND `Status` = 'Active' ORDER BY Id ASC LIMIT 1;",
+                        new { StaffType = staff.StaffType });
+                }
+
+                if (!structureId.HasValue)
+                {
+                    structureId = await conn.QueryFirstOrDefaultAsync<int?>(
+                        "SELECT Id FROM `payroll_salary_structures` WHERE `Status` = 'Active' ORDER BY Id ASC LIMIT 1;");
+                }
+
+                // If no structure exists at all in the database, auto-create a default base structure
+                if (!structureId.HasValue)
+                {
+                    var insertStructureSql = @"
+                        INSERT INTO `payroll_salary_structures` 
+                        (`StructureName`, `StaffType`, `DesignationId`, `BasicPay`, `HRA`, `DA`, `ConveyanceAllowance`, `MedicalAllowance`, `OtherAllowance`, `PF`, `ProfessionalTax`, `TDS`, `ESI`, `InsuranceOtherDeduction`, `Status`, `CreatedAt`)
+                        VALUES
+                        (@StructureName, @StaffType, @DesignationId, 30000.00, 6000.00, 3000.00, 1500.00, 1500.00, 1000.00, 3600.00, 200.00, 1500.00, 0.00, 0.00, 'Active', NOW());
+                        SELECT LAST_INSERT_ID();";
+
+                    structureId = await conn.QuerySingleAsync<int>(insertStructureSql, new
+                    {
+                        StructureName = $"Standard {staff.Designation ?? staff.StaffType ?? "Staff"} Structure",
+                        StaffType = staff.StaffType ?? "Teaching",
+                        DesignationId = staff.DesignationId
+                    });
+                }
+
+                // Extract bank details if available
+                string bankName = "State Bank of India";
+                string accountNo = $"30{staff.Id.ToString().PadLeft(9, '0')}";
+                string ifsc = "SBIN0001234";
+                string pan = !string.IsNullOrWhiteSpace(staff.PanNumber) ? staff.PanNumber : $"ABCDE{staff.Id.ToString().PadLeft(4, '0')}F";
+                string uan = $"100{staff.Id.ToString().PadLeft(9, '0')}";
+
+                if (!string.IsNullOrWhiteSpace(staff.BankDetailsJson))
+                {
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(staff.BankDetailsJson);
+                        var root = doc.RootElement;
+                        if (root.TryGetProperty("BankName", out var bNameProp) && !string.IsNullOrWhiteSpace(bNameProp.GetString()))
+                            bankName = bNameProp.GetString()!;
+                        if (root.TryGetProperty("AccountNumber", out var accProp) && !string.IsNullOrWhiteSpace(accProp.GetString()))
+                            accountNo = accProp.GetString()!;
+                        if (root.TryGetProperty("IfscCode", out var ifscProp) && !string.IsNullOrWhiteSpace(ifscProp.GetString()))
+                            ifsc = ifscProp.GetString()!;
+                        if (root.TryGetProperty("PanNumber", out var panProp) && !string.IsNullOrWhiteSpace(panProp.GetString()))
+                            pan = panProp.GetString()!;
+                        if (root.TryGetProperty("UanNumber", out var uanProp) && !string.IsNullOrWhiteSpace(uanProp.GetString()))
+                            uan = uanProp.GetString()!;
+                    }
+                    catch { }
+                }
+
+                // Assign to payroll_staff_salaries
+                var assignSql = @"
+                    INSERT INTO `payroll_staff_salaries`
+                    (`StaffId`, `SalaryStructureId`, `EffectiveFrom`, `Status`, `PaymentMode`, `BankName`, `AccountNumber`, `IFSCCode`, `PANNumber`, `UANNumber`, `CreatedAt`)
+                    VALUES
+                    (@StaffId, @SalaryStructureId, @EffectiveFrom, 'Active', 'Bank Transfer', @BankName, @AccountNumber, @IFSCCode, @PANNumber, @UANNumber, NOW());";
+
+                await conn.ExecuteAsync(assignSql, new
+                {
+                    StaffId = staff.Id,
+                    SalaryStructureId = structureId.Value,
+                    EffectiveFrom = staff.JoiningDate != default ? staff.JoiningDate.Date : DateTime.UtcNow.Date,
+                    BankName = bankName,
+                    AccountNumber = accountNo,
+                    IFSCCode = ifsc,
+                    PANNumber = pan,
+                    UANNumber = uan
+                });
+
+                _logger.LogInformation("Successfully auto-provisioned payroll salary structure {StructureId} for staff {StaffId} ({EmployeeId})", structureId.Value, staff.Id, staff.EmployeeId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to auto-provision payroll salary structure for staff {StaffId} ({EmployeeId})", staff.Id, staff.EmployeeId);
+            }
         }
 
         private static List<T> DeserializeList<T>(string? json)

@@ -8,7 +8,7 @@ import StudentDataTable from "../components/StudentDataTable.jsx";
 import StudentEmptyState from "../components/StudentEmptyState.jsx";
 import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentStatusBadge from "../components/StudentStatusBadge.jsx";
-import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { useStudentProfile, useStudentNavigation } from "../context/StudentProfileContext.jsx";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
 
 const unwrap = (data) => data?.data?.data ?? data?.data ?? data?.Data ?? data ?? {};
@@ -25,6 +25,7 @@ const DEFAULT_FALLBACK_TYPES = [
 ];
 
 export default function StudentCertificates() {
+  const navigation = useStudentNavigation();
   const location = useLocation();
   const navigate = useNavigate();
   const consumedRequest = useRef(null);
@@ -37,7 +38,9 @@ export default function StudentCertificates() {
   const [error, setError] = useState("");
   const [requestError, setRequestError] = useState("");
   const [success, setSuccess] = useState("");
-  const [open, setOpen] = useState(false);
+  const open = navigation.params.get("action") === "request";
+  const updateNavigation = navigation.update;
+  const setOpen = useCallback((value) => updateNavigation({ action: value ? "request" : null }), [updateNavigation]);
   const [form, setForm] = useState({ type: "", purpose: "", notes: "" });
 
   const load = useCallback(async (showLoading = true) => {
@@ -155,8 +158,12 @@ export default function StudentCertificates() {
     setRequestError("");
     setForm((current) => ({ ...current, type: defaultCertificateType }));
     setOpen(true);
+<<<<<<< HEAD
   }, [defaultCertificateType]);
 
+=======
+  }, [defaultCertificateType, setOpen]);
+>>>>>>> origin/main
   useEffect(() => {
     if (!location.state?.openRequestCertificate || profileLoading || loading
       || consumedRequest.current === location.key) return;
@@ -168,7 +175,13 @@ export default function StudentCertificates() {
       state: Object.keys(remainingState).length ? remainingState : null,
     });
   }, [location, navigate, profileLoading, loading, defaultCertificateType, openRequestCertificate]);
+<<<<<<< HEAD
 
+=======
+  useEffect(() => {
+    if (open && !form.type && defaultCertificateType) setForm((current) => ({ ...current, type: defaultCertificateType }));
+  }, [open, form.type, defaultCertificateType]);
+>>>>>>> origin/main
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
 
   return (

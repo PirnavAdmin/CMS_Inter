@@ -5,6 +5,7 @@ import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getModuleState, saveModuleState, useExamCellAction } from "../statePersistence.js";
 import holidayApi from "@/api/holidayApi.js";
 import "@/modules/admin/AdminAcademicCalendar/HolidayManagementPage.css";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
@@ -76,7 +77,19 @@ function HolidayStatus({ holiday }) {
 }
 
 function HolidayForm({ holiday, onClose, onSave, saving }) {
-  const [values, setValues] = useState(holiday || EMPTY_HOLIDAY);
+  const [values, setValues] = useState(() => {
+    if (holiday) return { ...EMPTY_HOLIDAY, ...holiday, description: holiday.description ?? "" };
+    const draft = getModuleState("holidays", {})?.draftHoliday;
+    if (draft && typeof draft === "object") return { ...EMPTY_HOLIDAY, ...draft, description: draft.description ?? "" };
+    return EMPTY_HOLIDAY;
+  });
+
+  useEffect(() => {
+    if (!holiday) {
+      saveModuleState("holidays", { draftHoliday: values });
+    }
+  }, [values, holiday]);
+
   const [errors, setErrors] = useState({});
   const setValue = (name, value) => {
     setValues((current) => ({ ...current, [name]: value, ...(name === "dateType" && value === "Single Day" ? { endDate: "" } : {}) }));
@@ -163,7 +176,7 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
         ) : null}
         <div className={`${fieldClass("description")} full`}>
           <label htmlFor="holiday-description">Description</label>
-          <textarea id="holiday-description" value={values.description} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
+          <textarea id="holiday-description" value={values.description ?? ""} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
         </div>
       </div>
     </Modal>
@@ -175,21 +188,60 @@ export default function HolidayManagementPage() {
   const { selectedCampusId } = useCampusContext();
   const [holidays, setHolidays] = useState([]);
   const [summary, setSummary] = useState({ total: "—", national: "—", festival: "—", upcoming: "—", completed: "—" });
+  const savedHolidayState = useMemo(() => getModuleState("holidays", {}), []);
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [query, setQuery] = useState("");
-  const [month, setMonth] = useState("All");
-  const [customRange, setCustomRange] = useState({ from: "", to: "" });
-  const [appliedRange, setAppliedRange] = useState(null);
-  const [type, setType] = useState("All");
-  const [status, setStatus] = useState("All");
-  const [page, setPage] = useState(1);
-  const [importModal, setImportModal] = useState(false);
+  const [query, setQuery] = useState(() => savedHolidayState?.query || "");
+  const [month, setMonth] = useState(() => savedHolidayState?.month || "All");
+  const [customRange, setCustomRange] = useState(() => savedHolidayState?.customRange || { from: "", to: "" });
+  const [appliedRange, setAppliedRange] = useState(() => savedHolidayState?.appliedRange || null);
+  const [type, setType] = useState(() => savedHolidayState?.type || "All");
+  const [status, setStatus] = useState(() => savedHolidayState?.status || "All");
+  const [page, setPage] = useState(() => savedHolidayState?.page || 1);
+
+  useEffect(() => {
+    saveModuleState("holidays", {
+      query,
+      month,
+      customRange,
+      appliedRange,
+      type,
+      status,
+      page,
+    });
+  }, [query, month, customRange, appliedRange, type, status, page]);
+  const [action, setAction] = useExamCellAction({
+    moduleKey: "holidays",
+    paramKey: "action",
+    defaultAction: null,
+    aliases: {
+      "add": "add",
+      "add-holiday": "add",
+      "create": "add",
+      "import": "import",
+    },
+  });
+
+  const [importModal, setImportModalState] = useState(() => action === "import");
+  const setImportModal = useCallback((isOpen) => {
+    setImportModalState(isOpen);
+    setAction(isOpen ? "import" : null);
+  }, [setAction]);
+
   const [importFile, setImportFile] = useState(null);
   const [importValidation, setImportValidation] = useState(null);
   const [importBusy, setImportBusy] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
-  const [formHoliday, setFormHoliday] = useState(undefined);
+  const [formHoliday, setFormHolidayState] = useState(() => (action === "add" ? null : undefined));
+  const setFormHoliday = useCallback((item) => {
+    setFormHolidayState(item);
+    if (item === null) {
+      setAction("add");
+    } else if (item === undefined) {
+      setAction(null);
+    }
+  }, [setAction]);
   const [viewHoliday, setViewHoliday] = useState(null);
   const [deleteHoliday, setDeleteHoliday] = useState(null);
   const [toast, setToast] = useState({ message: "", type: "success" });
@@ -300,8 +352,8 @@ export default function HolidayManagementPage() {
   }, [sortedHolidays, query, type, status, month, appliedRange]);
 
   const totalCount = filteredHolidays.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
+  const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / PAGE_SIZE);
+  const currentPage = totalPages === 0 ? 1 : Math.min(page, totalPages);
   const rows = filteredHolidays.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const updateFilter = (setter) => (value) => { setter(value); setPage(1); };
@@ -344,6 +396,7 @@ export default function HolidayManagementPage() {
         setToast({ message: "Holiday added successfully.", type: "success" });
       }
 
+      saveModuleState("holidays", { draftHoliday: null });
       setFormHoliday(undefined);
       await loadData();
     } catch (err) {
@@ -542,54 +595,47 @@ export default function HolidayManagementPage() {
 
           <div className="holiday-pagination">
             <span>
-              Showing {totalCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0} to {Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} holiday{totalCount === 1 ? "" : "s"}
+              Showing {totalCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} records
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label="Previous Page">
-                Prev
+              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1 || loading || totalCount === 0 || totalPages === 0} onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label="Previous Page">
+                Previous
               </button>
               {(() => {
-                const pages = [];
-                if (totalPages <= 7) {
-                  for (let i = 1; i <= totalPages; i += 1) pages.push(i);
-                } else {
-                  pages.push(1);
-                  if (currentPage > 3) pages.push('...');
-                  const start = Math.max(2, currentPage - 1);
-                  const end = Math.min(totalPages - 1, currentPage + 1);
-                  for (let i = start; i <= end; i += 1) pages.push(i);
-                  if (currentPage < totalPages - 2) pages.push('...');
-                  pages.push(totalPages);
-                }
-                return pages.map((p, idx) =>
-                  p === '...' ? (
-                    <span key={`dots-${idx}`} style={{ padding: '0 4px', color: 'var(--cms-muted)' }}>...</span>
-                  ) : (
-                    <button
-                      key={`page-${p}`}
-                      type="button"
-                      className={`cms-btn ${p === currentPage ? 'cms-btn-primary is-active' : 'cms-btn-ghost'}`}
-                      disabled={loading}
-                      onClick={() => setPage(p)}
-                      aria-label={`Page ${p}`}
-                      style={{ minWidth: '32px', height: '32px', padding: '0 8px' }}
-                    >
-                      {p}
-                    </button>
-                  )
-                );
+                if (totalCount === 0 || totalPages === 0) return null;
+                const pages = totalPages === 1 ? [1] : currentPage <= 2 ? [1, 2] : [currentPage - 1, currentPage];
+                return pages.map((p) => (
+                  <button
+                    key={"page-" + p}
+                    type="button"
+                    className={"cms-btn " + (p === currentPage ? 'cms-btn-primary is-active' : 'cms-btn-ghost')}
+                    disabled={loading}
+                    onClick={() => setPage(p)}
+                    aria-label={"Page " + p}
+                    style={{ minWidth: '32px', height: '32px', padding: '0 8px' }}
+                  >
+                    {p}
+                  </button>
+                ));
               })()}
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages || loading} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} aria-label="Next Page">
+              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages || loading || totalCount === 0 || totalPages === 0} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} aria-label="Next Page">
                 Next
               </button>
-              <span style={{ marginLeft: '4px' }}>Page {currentPage} of {totalPages}</span>
             </div>
           </div>
         </section>
       </div>
 
       {formHoliday !== undefined ? (
-        <HolidayForm holiday={formHoliday} saving={saving} onClose={() => setFormHoliday(undefined)} onSave={saveHoliday} />
+        <HolidayForm
+          holiday={formHoliday}
+          saving={saving}
+          onClose={() => {
+            saveModuleState("holidays", { draftHoliday: null });
+            setFormHoliday(undefined);
+          }}
+          onSave={saveHoliday}
+        />
       ) : null}
 
       {viewHoliday ? (

@@ -1,3 +1,4 @@
+import { SkeletonRow, SkeletonTable } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -36,6 +37,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getExamDuties } from "@/services/examinationService.js";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
+import { useExamCellTab, getModuleState, saveModuleState } from "../statePersistence.js";
 import { Modal, Toast, Pagination } from "@/shared/components/Ui.jsx";
 import {
   d,
@@ -387,43 +389,74 @@ export default function HallAllocation({ initialTab = "rooms" }) {
   const navExamId = location?.state?.examId ? String(location.state.examId) : "";
 
   // Tab State: "rooms" | "duties"
-  const [activeTab, setActiveTab] = useState(() => {
-    return location?.state?.activeTab || initialTab || "rooms";
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "hall_allocation",
+    defaultTab: "rooms",
+    initialProp: location?.state?.activeTab || initialTab,
+    tabAliases: {
+      "rooms": "rooms",
+      "room": "rooms",
+      "hall-allocation": "rooms",
+      "allocation": "rooms",
+      "duties": "duties",
+      "invigilation": "duties",
+      "invigilation-duties": "duties",
+    },
   });
 
-  useEffect(() => {
-    if (location?.state?.activeTab) {
-      setActiveTab(location.state.activeTab);
-    } else if (initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [location?.state?.activeTab, initialTab]);
+  const savedHallState = useMemo(() => getModuleState("hall_allocation", {}), []);
 
   const { selectedCampusId } = useCampusContext();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
 
   const [exams, setExams] = useState([]);
-  const [examId, setExamId] = useState(navExamId);
+  const [examId, setExamId] = useState(() => navExamId || savedHallState?.examId || "");
   const [schedules, setSchedules] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [faculty, setFaculty] = useState([]);
   const [schedulingContext, setSchedulingContext] = useState(null);
 
   // Filters for Rooms tab
-  const [dateFilter, setDateFilter] = useState("");
-  const [sessionFilter, setSessionFilter] = useState("");
-  const [roomFilter, setRoomFilter] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [dateFilter, setDateFilter] = useState(() => savedHallState?.dateFilter || "");
+  const [sessionFilter, setSessionFilter] = useState(() => savedHallState?.sessionFilter || "");
+  const [roomFilter, setRoomFilter] = useState(() => savedHallState?.roomFilter || "");
+  const [searchTerm, setSearchTerm] = useState(() => savedHallState?.searchTerm || "");
 
   // Invigilation Duties state
   const [duties, setDuties] = useState([]);
   const [loadingDuties, setLoadingDuties] = useState(false);
-  const [dutyStaffFilter, setDutyStaffFilter] = useState("all");
-  const [dutyStatusFilter, setDutyStatusFilter] = useState("all");
-  const [dutySearch, setDutySearch] = useState("");
-  const [dutyViewMode, setDutyViewMode] = useState("table"); // 'table' | 'cards'
+  const [dutyStaffFilter, setDutyStaffFilter] = useState(() => savedHallState?.dutyStaffFilter || "all");
+  const [dutyStatusFilter, setDutyStatusFilter] = useState(() => savedHallState?.dutyStatusFilter || "all");
+  const [dutySearch, setDutySearch] = useState(() => savedHallState?.dutySearch || "");
+  const [dutyViewMode, setDutyViewMode] = useState(() => savedHallState?.dutyViewMode || "table"); // 'table' | 'cards'
   const [selectedDutyForModal, setSelectedDutyForModal] = useState(null);
-  const [dutyPage, setDutyPage] = useState(1);
+  const [dutyPage, setDutyPage] = useState(() => savedHallState?.dutyPage || 1);
+
+  useEffect(() => {
+    saveModuleState("hall_allocation", {
+      examId,
+      dateFilter,
+      sessionFilter,
+      roomFilter,
+      searchTerm,
+      dutyStaffFilter,
+      dutyStatusFilter,
+      dutySearch,
+      dutyViewMode,
+      dutyPage,
+    });
+  }, [
+    examId,
+    dateFilter,
+    sessionFilter,
+    roomFilter,
+    searchTerm,
+    dutyStaffFilter,
+    dutyStatusFilter,
+    dutySearch,
+    dutyViewMode,
+    dutyPage,
+  ]);
   const DUTIES_PER_PAGE = 10;
 
   // UI state
@@ -1699,14 +1732,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
               </thead>
               <tbody>
                 {loadingSchedules ? (
-                  <tr>
-                    <td colSpan="9" style={{ textAlign: "center", padding: "36px 16px" }}>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "var(--cms-muted)" }}>
-                        <RefreshCw size={16} className="cms-spin" />
-                        <span>Loading examination timetable and hall allocations...</span>
-                      </div>
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />)
                 ) : filteredRows.length === 0 ? (
                   <tr>
                     <td colSpan="9" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
@@ -1823,15 +1849,13 @@ export default function HallAllocation({ initialTab = "rooms" }) {
             </table>
           </div>
 
-          {filteredRows.length > 0 && (
-            <Pagination
+          <Pagination
               currentPage={slotPage}
               totalRecords={filteredRows.length}
               pageSize={SLOTS_PAGE_SIZE}
               onPageChange={setSlotPage}
-              unit="slots"
+              unit="records"
             />
-          )}
         </section>
       </>
     )}
@@ -2033,10 +2057,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         {/* 3. DUTIES LIST (Table or Cards) */}
         <section className="hall-table-card">
           {loadingDuties ? (
-            <div style={{ textAlign: "center", padding: "48px 0" }}>
-              <RefreshCw size={24} className="cms-spin" style={{ color: "var(--cms-primary, #15803d)", marginBottom: "8px" }} />
-              <p style={{ margin: 0, fontSize: "13px", color: "var(--cms-muted, #64748b)" }}>Loading invigilation duties...</p>
-            </div>
+            <SkeletonTable columns={6} rows={5} />
           ) : filteredDuties.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 20px" }}>
               <ShieldAlert size={36} style={{ color: "var(--cms-muted, #94a3b8)", marginBottom: "10px" }} />
@@ -2222,17 +2243,15 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           )}
 
           {/* Duties Pagination */}
-          {filteredDuties.length > DUTIES_PER_PAGE && (
-            <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ padding: "0 16px 16px" }}>
               <Pagination
                 currentPage={dutyPage}
                 totalRecords={filteredDuties.length}
                 pageSize={DUTIES_PER_PAGE}
                 onPageChange={setDutyPage}
-                unit="duties"
+                unit="records"
               />
             </div>
-          )}
         </section>
       </div>
     )}

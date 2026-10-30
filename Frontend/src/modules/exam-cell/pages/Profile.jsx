@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useCallback, useState } from "react";
+import { useExamCellTab } from "../statePersistence.js";
 import {
   UserRound,
   Landmark,
@@ -166,7 +167,32 @@ export default function Profile() {
   const identifier = user.staffId || user.staff?.id || user.employeeId || profile.employeeId;
   const staffId = profile.staffId || user.staffId || user.employeeId || profile.employeeId || "MNT0043";
 
-  const [step, setStep] = useState(0);
+  const SECTION_KEYS = useMemo(() => ["personal", "bank", "address", "experience", "documents", "preview"], []);
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "profile",
+    defaultTab: "personal",
+    tabAliases: {
+      "personal": "personal",
+      "personal-info": "personal",
+      "bank": "bank",
+      "bank-info": "bank",
+      "address": "address",
+      "address-info": "address",
+      "experience": "experience",
+      "documents": "documents",
+      "preview": "preview",
+    },
+  });
+
+  const step = useMemo(() => {
+    const idx = SECTION_KEYS.indexOf(activeTab.toLowerCase());
+    return idx >= 0 ? idx : 0;
+  }, [activeTab, SECTION_KEYS]);
+
+  const setStep = useCallback((newStep) => {
+    const key = SECTION_KEYS[newStep] || "personal";
+    setActiveTab(key);
+  }, [setActiveTab, SECTION_KEYS]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
   const [busy, setBusy] = useState(false);

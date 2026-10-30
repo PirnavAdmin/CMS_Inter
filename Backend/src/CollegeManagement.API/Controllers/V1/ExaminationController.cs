@@ -546,6 +546,7 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicYearId = null,
             [FromQuery] int? boardId = null)
         {
+<<<<<<< HEAD
             if (!staffId.HasValue || staffId.Value <= 0)
             {
                 var staffClaim = User.FindFirst("staff_id")?.Value
@@ -560,6 +561,17 @@ namespace CollegeManagement.API.Controllers.V1
             var resolvedCampusId = ResolveCampusId(campusId);
             _logger.LogInformation("Fetching exam duties for Staff ID: {StaffId}, Status: {Status}, CampusId: {CampusId}", staffId, status, resolvedCampusId);
             var result = await _examinationService.GetFacultyExamDutiesAsync(staffId, status, resolvedCampusId, academicYearId, boardId);
+=======
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
+            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal") && !User.IsInRole("Examination Cell"))
+            {
+                staffId = callerStaffId ?? 0;
+            }
+
+            _logger.LogInformation("Fetching exam duties for Staff ID: {StaffId}, Status: {Status}, CampusId: {CampusId}", staffId, status, campusId);
+            var result = await _examinationService.GetFacultyExamDutiesAsync(staffId, status, campusId, academicYearId, boardId);
+>>>>>>> origin/main
             return Ok(result);
         }
 
@@ -816,6 +828,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Assigns invigilators to an examination schedule.
         /// </summary>
         [HttpPost("invigilators")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,Examination Cell")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]

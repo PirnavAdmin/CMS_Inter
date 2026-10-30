@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   AlertTriangle,
@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
-import { Modal, Toast } from "@/shared/components/Ui.jsx";
+import { Modal, Skeleton, Toast } from "@/shared/components/Ui.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import * as reimbursementService from "@/services/reimbursementService.js";
 import {
@@ -73,7 +73,22 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   );
 
   // Allow switching view between "Finance & Admin Review", "Claims", and "My Claims"
-  const [activePortalTab, setActivePortalTab] = useState("all-claims");
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [legacyPortalTab, setLegacyPortalTab] = useState("all-claims");
+  const isAdminRoute = !isAccountantView && /^\/dashboard\/(?:reimbursement|finance\/reimbursements?)(?:\/|$)/.test(location.pathname);
+  const isAccountantRoute = isAccountantView && /^\/accountant-dashboard\/reimbursements?(?:\/|$)/.test(location.pathname);
+  const usesRouteNavigation = isAdminRoute || isAccountantRoute;
+  const tabsByQuery = { review: "all-claims", "all-claims": "all-claims", claims: "submit", submit: "submit", "my-claims": "my-claims", history: "history" };
+  const tabQuery = searchParams.get("tab");
+  const activePortalTab = usesRouteNavigation ? (Object.hasOwn(tabsByQuery, tabQuery) ? tabsByQuery[tabQuery] : "all-claims") : legacyPortalTab;
+  const setActivePortalTab = useCallback((tab) => {
+    if (!usesRouteNavigation) { setLegacyPortalTab(tab); return; }
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", tab === "all-claims" ? "review" : tab === "submit" ? "claims" : tab);
+    next.delete("action"); next.delete("claimId");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  }, [usesRouteNavigation, searchParams, setSearchParams]);
 
   // ── Live Claims & Account Entries State (API v1 Integration) ───────────
   const [claims, setClaims] = useState([]);
@@ -223,14 +238,77 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   const [currentPage, setCurrentPage] = useState(1);
 
   // ── Modal Dialog States ─────────────────────────────────────────────
-  const [selectedClaim, setSelectedClaim] = useState(null);
-  const [claimDetailModalOpen, setClaimDetailModalOpen] = useState(false);
-  const [approvalModalOpen, setApprovalModalOpen] = useState(false);
-  const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
-  const [clarificationModalOpen, setClarificationModalOpen] = useState(false);
-  const [disbursementModalOpen, setDisbursementModalOpen] = useState(false);
-  const [previewDocModalOpen, setPreviewDocModalOpen] = useState(false);
-  const [viewAccountsDrawerOpen, setViewAccountsDrawerOpen] = useState(false);
+  const routeAction = usesRouteNavigation ? searchParams.get("action") || "" : "";
+  const routeClaimId = usesRouteNavigation ? searchParams.get("claimId") || "" : "";
+  const [actionLoading, setActionLoading] = useState(false);
+  const closeClaimAction = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("action"); next.delete("claimId");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  };
+  const openClaimAction = (action, claim) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("action", action);
+    if (claim) {
+      const id = claim.id || claim.claimId;
+      if (!id) { setToast({ type: "error", message: "Claim has no stable identifier." }); return; }
+      next.set("claimId", String(id));
+    } else next.delete("claimId");
+    if (!next.has("tab")) next.set("tab", "review");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  };
+
+
+
+  const actionKey = JSON.stringify([routeAction, routeClaimId, activePortalTab, campusId]);
+  const [actionState, setActionState] = useState(null);
+  const [draftProof, setDraftProof] = useState(null);
+  const [loadedClaim, setSelectedClaim] = useState(null);
+  const selectedClaim = isAccountantRoute ? (actionState?.key === actionKey && actionState.status === "ready" ? loadedClaim : null) : loadedClaim;
+  const [legacyClaimDetailModalOpen, setClaimDetailModalOpenState] = useState(false);
+  const claimDetailModalOpen = isAccountantRoute ? routeAction === "view" && Boolean(selectedClaim) : legacyClaimDetailModalOpen;
+  const setClaimDetailModalOpen = (open) => {
+    setClaimDetailModalOpenState(open);
+    if (usesRouteNavigation && !open && routeAction === "view") closeClaimAction();
+  };
+  const [legacyApprovalModalOpen, setApprovalModalOpenState] = useState(false);
+  const approvalModalOpen = isAccountantRoute ? routeAction === "approve" && Boolean(selectedClaim) : legacyApprovalModalOpen;
+  const setApprovalModalOpen = (open) => {
+    setApprovalModalOpenState(open);
+    if (usesRouteNavigation && !open && routeAction === "approve") closeClaimAction();
+  };
+  const [legacyRejectionModalOpen, setRejectionModalOpenState] = useState(false);
+  const rejectionModalOpen = isAccountantRoute ? routeAction === "reject" && Boolean(selectedClaim) : legacyRejectionModalOpen;
+  const setRejectionModalOpen = (open) => {
+    setRejectionModalOpenState(open);
+    if (usesRouteNavigation && !open && routeAction === "reject") closeClaimAction();
+  };
+  const [legacyClarificationModalOpen, setClarificationModalOpenState] = useState(false);
+  const clarificationModalOpen = isAccountantRoute ? routeAction === "remarks" && Boolean(selectedClaim) : legacyClarificationModalOpen;
+  const setClarificationModalOpen = (open) => {
+    setClarificationModalOpenState(open);
+    if (usesRouteNavigation && !open && routeAction === "remarks") closeClaimAction();
+  };
+  const [legacyDisbursementModalOpen, setDisbursementModalOpenState] = useState(false);
+  const disbursementModalOpen = isAccountantRoute ? routeAction === "disburse" && Boolean(selectedClaim) : legacyDisbursementModalOpen;
+  const setDisbursementModalOpen = (open) => {
+    setDisbursementModalOpenState(open);
+    if (usesRouteNavigation && !open && routeAction === "disburse") closeClaimAction();
+  };
+  const [legacyPreviewDocModalOpen, setPreviewDocModalOpenState] = useState(false);
+  const proofClaim = isAccountantRoute && draftProof ? draftProof : selectedClaim;
+  const previewDocModalOpen = isAccountantRoute ? routeAction === "proof" && Boolean(selectedClaim) : legacyPreviewDocModalOpen;
+  const setPreviewDocModalOpen = (open) => {
+    if (isAccountantRoute && draftProof && !open) { setDraftProof(null); return; }
+    setPreviewDocModalOpenState(open);
+    if (usesRouteNavigation && !open && routeAction === "proof") closeClaimAction();
+  };
+  const [legacyViewAccountsDrawerOpen, setViewAccountsDrawerOpenState] = useState(false);
+  const viewAccountsDrawerOpen = isAccountantRoute ? routeAction === "accounts" : legacyViewAccountsDrawerOpen;
+  const setViewAccountsDrawerOpen = (open) => {
+    if (!usesRouteNavigation) return setViewAccountsDrawerOpenState(open);
+    if (open) openClaimAction("accounts"); else closeClaimAction();
+  };
   const [previewClaimModalOpen, setPreviewClaimModalOpen] = useState(false);
   const [previewDraftDocModalOpen, setPreviewDraftDocModalOpen] = useState(false);
 
@@ -245,6 +323,49 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
   // ── File Upload Handler with Real Validation ────────────────────────
+
+  useEffect(() => {
+    if (!usesRouteNavigation) return undefined;
+    let active = true;
+    setClaimDetailModalOpenState(false); setApprovalModalOpenState(false);
+    setRejectionModalOpenState(false); setClarificationModalOpenState(false);
+    setDisbursementModalOpenState(false); setPreviewDocModalOpenState(false);
+    setViewAccountsDrawerOpenState(false); setSelectedClaim(null); setActionLoading(false);
+    if (!routeAction) return undefined;
+    if (routeAction === "accounts") { setViewAccountsDrawerOpenState(true); return undefined; }
+    if (!["view", "proof", "remarks", "approve", "reject", "disburse"].includes(routeAction) || !/^[A-Za-z0-9_-]+$/.test(routeClaimId) || /^0+$/.test(routeClaimId)) {
+      setToast({ type: "error", message: "Invalid reimbursement action or claim identifier." });
+      if (isAccountantRoute) setActionState({ key: actionKey, status: "error", error: "Invalid reimbursement action or claim identifier." });
+      return undefined;
+    }
+    setActionLoading(true);
+    if (isAccountantRoute) setActionState(null);
+    reimbursementService.fetchClaimById(routeClaimId).then((claim) => {
+      if (!active) return;
+      if (!claim || ![claim.id, claim.claimId].some((id) => id != null && String(id) === routeClaimId)) throw new Error("Claim details could not be loaded. The claim may be unavailable or the request failed.");
+      const reviewAction = ["approve", "reject", "remarks"].includes(routeAction);
+      if ((reviewAction && (!isFinanceUser || ![CLAIM_STATUSES.PENDING, CLAIM_STATUSES.UNDER_REVIEW].includes(claim.status))) || (routeAction === "disburse" && (!isFinanceUser || claim.status !== CLAIM_STATUSES.APPROVED))) throw new Error("This action is not available for the current claim status or permissions.");
+      if (routeAction === "proof" && !claim.proof) throw new Error("This claim has no receipt document.");
+      setSelectedClaim(claim);
+      if (isAccountantRoute) setActionState({ key: actionKey, status: "ready" });
+      if (routeAction === "view") setClaimDetailModalOpenState(true);
+      if (routeAction === "proof") setPreviewDocModalOpenState(true);
+      if (routeAction === "approve") {
+        setApprovalAmount(String(claim.amount)); setApprovalRemarks("Approved in accordance with institutional policy.");
+        setApprovalModalOpenState(true);
+      }
+      if (routeAction === "reject") { setRejectionReason(""); setRejectionModalOpenState(true); }
+      if (routeAction === "remarks") { setClarificationNote(""); setClarificationModalOpenState(true); }
+      if (routeAction === "disburse") {
+        setDisbursementRef(`NEFT-UTR-${Math.floor(1000000 + Math.random() * 9000000)}`);
+        setDisbursementMode(claim.paymentMethod || "Bank Transfer"); setOtherDisbursementMode("");
+        setDisbursementModalOpenState(true);
+      }
+    }).catch((error) => { if (active) { setToast({ type: "error", message: error.message || "Unable to load claim details." }); if (isAccountantRoute) setActionState({ key: actionKey, status: "error", error: error.message || "Unable to load claim details." }); } })
+      .finally(() => { if (active) setActionLoading(false); });
+    return () => { active = false; };
+  }, [usesRouteNavigation, routeAction, routeClaimId, activePortalTab, campusId, isFinanceUser, isAccountantRoute, actionKey]);
+
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -394,6 +515,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
   // ── View Detailed Claim (Endpoint 4: GET /api/v1/reimbursements/{id}) ──
   const handleOpenClaimDetails = async (claim) => {
+    if (usesRouteNavigation) { openClaimAction("view", claim); return; }
     setSelectedClaim(claim);
     setClaimDetailModalOpen(true);
     if (claim.id || claim.claimId) {
@@ -465,6 +587,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
   // ── Approval Workflow ───────────────────────────────────────────────
   const openApprovalModal = (claim) => {
+    if (usesRouteNavigation) { openClaimAction("approve", claim); return; }
     setSelectedClaim(claim);
     setApprovalAmount(String(claim.amount));
     setApprovalRemarks("Approved in accordance with institutional policy.");
@@ -501,6 +624,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
   // ── Rejection Workflow ──────────────────────────────────────────────
   const openRejectionModal = (claim) => {
+    if (usesRouteNavigation) { openClaimAction("reject", claim); return; }
     setSelectedClaim(claim);
     setRejectionReason("");
     setRejectionModalOpen(true);
@@ -543,6 +667,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
   // ── Clarification / Additional Docs Workflow (Pending/Under Review -> Under Review) ──
   const openClarificationModal = (claim) => {
+    if (usesRouteNavigation) { openClaimAction("remarks", claim); return; }
     setSelectedClaim(claim);
     setClarificationNote("");
     setClarificationModalOpen(true);
@@ -585,6 +710,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
   // ── Payment Disbursement Workflow (Approved -> Paid) ────────────────
   const openDisbursementModal = (claim) => {
+    if (usesRouteNavigation) { openClaimAction("disburse", claim); return; }
     setSelectedClaim(claim);
     setDisbursementRef(`NEFT-UTR-${Math.floor(1000000 + Math.random() * 9000000)}`);
     setDisbursementMode(claim.paymentMethod || "Bank Transfer");
@@ -721,9 +847,6 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     });
   }, [
     claims,
-    activePortalTab,
-    authUser,
-    defaultFacultyName,
     statusFilter,
     categoryFilter,
     deptFilter,
@@ -1264,8 +1387,8 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                             className="reimb-file-btn preview"
                             title="Preview Document"
                             onClick={() => {
-                              setSelectedClaim({ proof: uploadedFile, claimId: "DRAFT-PROOF" });
-                              setPreviewDocModalOpen(true);
+                              if (isAccountantRoute) setDraftProof({ proof: uploadedFile, claimId: "DRAFT-PROOF" });
+                              else { setSelectedClaim({ proof: uploadedFile, claimId: "DRAFT-PROOF" }); setPreviewDocModalOpen(true); }
                             }}
                           >
                             <Eye size={14} /> Preview
@@ -1613,6 +1736,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                               className="reimb-btn-icon"
                               title={`View Proof (${claim.proof.name})`}
                               onClick={() => {
+                                if (usesRouteNavigation) { openClaimAction("proof", claim); return; }
                                 setSelectedClaim(claim);
                                 setPreviewDocModalOpen(true);
                               }}
@@ -1723,6 +1847,8 @@ export default function ReimbursementPage({ isAccountantView = false }) {
       {/* ── MODALS ── */}
 
         {/* 1. Claim Details Modal */}
+        {isAccountantRoute && routeAction && routeAction !== "accounts" && !selectedClaim && <Modal title="Claim Details" onClose={closeClaimAction}>{actionState?.key === actionKey && actionState.status === "error" ? <p role="alert">{actionState.error}</p> : <Skeleton />}</Modal>}
+        {usesRouteNavigation && !isAccountantRoute && actionLoading && <Modal title="Loading Claim" onClose={closeClaimAction}><Skeleton /></Modal>}
         {claimDetailModalOpen && selectedClaim && (
           <Modal
             title={`Claim Details: ${selectedClaim.claimId}`}
@@ -1881,7 +2007,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                       type="button"
                       className="reimb-btn reimb-btn-secondary"
                       style={{ padding: "4px 10px", fontSize: 12 }}
-                      onClick={() => setPreviewDocModalOpen(true)}
+                      onClick={() => usesRouteNavigation ? openClaimAction("proof", selectedClaim) : setPreviewDocModalOpen(true)}
                     >
                       <Eye size={13} /> View Receipt
                     </button>
@@ -2325,16 +2451,16 @@ export default function ReimbursementPage({ isAccountantView = false }) {
         )}
 
         {/* 5. Document Preview Modal */}
-        {previewDocModalOpen && selectedClaim?.proof && (
+        {(previewDocModalOpen || (isAccountantRoute && draftProof)) && proofClaim?.proof && (
           <Modal
-            title={`Receipt Proof: ${selectedClaim.proof.name}`}
+            title={`Receipt Proof: ${proofClaim.proof.name}`}
             onClose={() => setPreviewDocModalOpen(false)}
             footer={
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", width: "100%" }}>
-                {selectedClaim.proof.dataUrl && (
+                {proofClaim.proof.dataUrl && (
                   <a
-                    href={selectedClaim.proof.dataUrl}
-                    download={selectedClaim.proof.name}
+                    href={proofClaim.proof.dataUrl}
+                    download={proofClaim.proof.name}
                     className="reimb-btn reimb-btn-secondary"
                     style={{ textDecoration: "none" }}
                   >
@@ -2352,24 +2478,24 @@ export default function ReimbursementPage({ isAccountantView = false }) {
             }
           >
             <div style={{ textAlign: "center", maxHeight: "65vh", overflowY: "auto" }}>
-              {selectedClaim.proof.type?.startsWith("image/") && selectedClaim.proof.dataUrl ? (
+              {proofClaim.proof.type?.startsWith("image/") && proofClaim.proof.dataUrl ? (
                 <img
-                  src={selectedClaim.proof.dataUrl}
-                  alt={selectedClaim.proof.name}
+                  src={proofClaim.proof.dataUrl}
+                  alt={proofClaim.proof.name}
                   style={{ maxWidth: "100%", maxHeight: "55vh", borderRadius: 8, border: "1px solid #e2e8f0" }}
                 />
-              ) : selectedClaim.proof.dataUrl?.startsWith("data:application/pdf") ? (
+              ) : proofClaim.proof.dataUrl?.startsWith("data:application/pdf") ? (
                 <iframe
-                  src={selectedClaim.proof.dataUrl}
-                  title={selectedClaim.proof.name}
+                  src={proofClaim.proof.dataUrl}
+                  title={proofClaim.proof.name}
                   style={{ width: "100%", height: "50vh", border: "1px solid #e2e8f0", borderRadius: 8 }}
                 />
               ) : (
                 <div style={{ padding: 30, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
                   <FileText size={48} style={{ color: "#6F8400", margin: "0 auto 12px" }} />
-                  <h4 style={{ margin: "0 0 6px" }}>{selectedClaim.proof.name}</h4>
+                  <h4 style={{ margin: "0 0 6px" }}>{proofClaim.proof.name}</h4>
                   <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
-                    File size: {(selectedClaim.proof.size / 1024).toFixed(1)} KB • Type: {selectedClaim.proof.type || "Document"}
+                    File size: {(proofClaim.proof.size / 1024).toFixed(1)} KB • Type: {proofClaim.proof.type || "Document"}
                   </p>
                 </div>
               )}
@@ -2769,13 +2895,13 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
   return (
     <DashboardLayout
-      title={isFinanceUser ? "Staff Reimbursements" : "Faculty Reimbursement"}
+      title={isAdminRoute ? "Reimbursement" : isFinanceUser ? "Staff Reimbursements" : "Faculty Reimbursement"}
       subtitle={
         isFinanceUser
           ? "Review, approve, and disburse faculty & staff expense reimbursement claims."
           : "Submit, track, and manage faculty expense reimbursement claims."
       }
-      breadcrumb={["Home", isFinanceUser ? "Staff" : "Finance", "Reimbursements"]}
+      breadcrumb={["Home", isAdminRoute ? "Finance" : isFinanceUser ? "Staff" : "Finance", "Reimbursements"]}
     >
       {pageContent}
     </DashboardLayout>

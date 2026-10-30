@@ -6,7 +6,7 @@ import StudentCard from "../components/StudentCard.jsx";
 import StudentDataTable from "../components/StudentDataTable.jsx";
 import StudentEmptyState from "../components/StudentEmptyState.jsx";
 import StudentPageHeader from "../components/StudentPageHeader.jsx";
-import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { useStudentProfile, useStudentNavigation, studentRouteValue, validStudentPage } from "../context/StudentProfileContext.jsx";
 import { getStudentExaminations } from "../services/studentAcademicService.js";
 
 const dateValue = (value) => {
@@ -56,21 +56,22 @@ function Pagination({ page, total, label, onChange }) {
 }
 
 export default function StudentExaminations() {
+  const navigation = useStudentNavigation();
   const { profile: student, loading: profileLoading, error: profileError } = useStudentProfile();
   const [examinations, setExaminations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [upcomingPage, setUpcomingPage] = useState(1);
-  const [completedPage, setCompletedPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [selectedExam, setSelectedExam] = useState("");
+  const [upcomingPage, setUpcomingPage] = studentRouteValue(navigation, "upcomingPage", 1, validStudentPage);
+  const [completedPage, setCompletedPage] = studentRouteValue(navigation, "completedPage", 1, validStudentPage);
+  const [search, setSearch] = studentRouteValue(navigation, "q", "");
+  const [selectedExam, setSelectedExam] = studentRouteValue(navigation, "examId", "", (value) => value.length <= 100);
   const detailsRef = useRef(null);
   useEffect(() => {
-    if (!selectedExam) return undefined;
+    if (!selectedExam || loading || !examinations.some((exam) => examKey(exam) === selectedExam)) return undefined;
     const dialog = detailsRef.current;
     dialog?.showModal();
     return () => { if (dialog?.open) dialog.close(); };
-  }, [selectedExam]);
+  }, [selectedExam, loading, examinations]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 60000);
@@ -82,15 +83,12 @@ export default function StudentExaminations() {
     const load = async () => {
       setLoading(true);
       setError("");
-      setSelectedExam("");
       setExaminations([]);
       try {
         if (!student?.studentId) return;
         const rows = await getStudentExaminations(student);
         if (active) {
           setExaminations(rows);
-          setUpcomingPage(1);
-          setCompletedPage(1);
         }
       } catch (requestError) {
         if (active) setError(getApiErrorMessage(requestError));
@@ -155,6 +153,7 @@ export default function StudentExaminations() {
 
   return <div className="sp-page sp-examinations-page">
     <StudentPageHeader title="Examinations" subtitle="View published examination schedules and instructions."/>
+    {selectedExam && !selectedDetails && !error ? <div className="sp-api-state is-error" role="alert">Selected examination is unavailable for your academic context.</div> : null}
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
     {!loading && !error && !examinations.length ? <StudentCard><StudentEmptyState icon={CalendarX} title="No examinations available" text="There are no scheduled or published examinations for your academic context."/></StudentCard> : null}
     {!loading && !error && examinations.length ? <>

@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import React, { useState, useEffect } from "react";
 import {
   User,
@@ -38,7 +39,15 @@ export default function DriverProfilePage() {
   });
 
   const [toastMessage, setToastMessage] = useState("");
-  const [activeDocModal, setActiveDocModal] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const documentId = searchParams.get("documentId");
+  const activeDocModal = documentId == null ? null : driverDocuments.find((doc) => String(doc.id) === documentId);
+  const setActiveDocModal = (doc) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (doc) next.set("documentId", String(doc.id));
+    else next.delete("documentId");
+    return next;
+  });
 
   const triggerToast = (msg) => {
     setToastMessage(msg);
@@ -92,6 +101,7 @@ export default function DriverProfilePage() {
 
   return (
     <div className="dp-page-container">
+      {documentId != null && !activeDocModal && <div className="dp-modal-backdrop"><div className="dp-modal-card" role="dialog" aria-modal="true" aria-label="Document unavailable"><p role="alert">This document is no longer available.</p><button type="button" className="dp-btn dp-btn-outline" onClick={() => setActiveDocModal(null)}>Close</button></div></div>}
       {/* Toast Notification */}
       {toastMessage && (
         <div className="dp-floating-toast">

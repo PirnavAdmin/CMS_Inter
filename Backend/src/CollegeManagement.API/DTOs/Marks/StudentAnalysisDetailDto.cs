@@ -24,6 +24,7 @@ namespace CollegeManagement.API.DTOs.Evaluations
         public string ExamType { get; set; } = "Written";
         public string ExamPattern { get; set; } = "Regular Academic Pattern";
         public int RequiredSubjects { get; set; } = 4;
+        public int RequiredSubjectCount { get => RequiredSubjects; set => RequiredSubjects = value; }
         public int ApprovedSubjects { get; set; } = 4;
         public decimal TotalMarks { get; set; }
         public decimal Total { get => TotalMarks; set => TotalMarks = value; }

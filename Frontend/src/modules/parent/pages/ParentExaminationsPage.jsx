@@ -1,8 +1,10 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Calendar, Clock, MapPin, FileText, CheckCircle2, AlertTriangle, Download, Printer, Eye, Users } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, upcomingExamsData } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { upcomingExamsData } from "../parentData.js";
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
@@ -46,14 +48,6 @@ export default function ParentExaminationsPage() {
     currentAcademicYear,
     loading,
   } = useParentPortal();
-  const [selectedExamModal, setSelectedExamModal] = useState(null);
-  const [hallTicketOpen, setHallTicketOpen] = useState(false);
-
-  useEffect(() => {
-    setSelectedExamModal(null);
-    setHallTicketOpen(false);
-  }, [currentAcademicYear, activeChildId]);
-
   // Find the primary scheduled or active examination from live backend
   const activeExam = useMemo(() => {
     if (!contextExaminations || contextExaminations.length === 0) return null;
@@ -98,8 +92,10 @@ export default function ParentExaminationsPage() {
         syllabus: `Official curriculum for ${r.examName}. Maximum Total Marks: ${r.maxMarks}. Grade: ${r.grade}.`,
       }));
     }
+    const fallback = upcomingExamsData[activeChildId] || upcomingExamsData["860"] || [];
+    if (fallback.length > 0) return fallback;
     return [];
-  }, [activeExam, results, child, dataKey]);
+  }, [activeExam, results, child, dataKey, activeChildId]);
 
   const examMeta = useMemo(() => {
     if (activeExam) {
@@ -116,6 +112,62 @@ export default function ParentExaminationsPage() {
     return getExamMetaForYear(currentAcademicYear);
   }, [activeExam, currentAcademicYear, child]);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedExamModal, setSelectedExamModal] = useState(null);
+  const [hallTicketOpen, setHallTicketOpen] = useState(() => searchParams.get("hallTicket") === "open");
+
+  useEffect(() => {
+    const isHall = searchParams.get("hallTicket") === "open";
+    setHallTicketOpen(isHall);
+
+    const examIdParam = searchParams.get("examId");
+    if (examIdParam && exams && exams.length > 0) {
+      const match = exams.find((e) => String(e.id) === String(examIdParam));
+      if (match) setSelectedExamModal(match);
+    }
+  }, [searchParams, exams]);
+
+  const handleOpenHallTicket = () => {
+    setHallTicketOpen(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("hallTicket", "open");
+      return next;
+    });
+  };
+
+  const handleCloseHallTicket = () => {
+    setHallTicketOpen(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("hallTicket");
+      return next;
+    });
+  };
+
+  const handleOpenExamModal = (ex) => {
+    setSelectedExamModal(ex);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("examId", String(ex.id));
+      return next;
+    });
+  };
+
+  const handleCloseExamModal = () => {
+    setSelectedExamModal(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("examId");
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    setSelectedExamModal(null);
+    setHallTicketOpen(false);
+  }, [currentAcademicYear, activeChildId]);
+
   const handleSelectChild = (id) => {
     setActiveChildId(id);
   };
@@ -128,13 +180,7 @@ export default function ParentExaminationsPage() {
         breadcrumb={["Parent Portal", "Examinations"]}
       >
         <div className="parent-dashboard-wrapper">
-          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
-            <Calendar size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Examinations...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to campus examination branch to retrieve timetable and admit cards.
-            </p>
-          </div>
+          <SkeletonPage variant="dashboard" columns={4} />
         </div>
       </DashboardLayout>
     );
@@ -181,7 +227,7 @@ export default function ParentExaminationsPage() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${child.id === c.id ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <Users size={14} /> {c.name}
@@ -226,7 +272,7 @@ export default function ParentExaminationsPage() {
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
-                onClick={() => setHallTicketOpen(true)}
+                onClick={handleOpenHallTicket}
                 disabled={exams.length === 0}
                 style={exams.length === 0 ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
               >
@@ -289,7 +335,7 @@ export default function ParentExaminationsPage() {
                           <button
                             type="button"
                             className="cms-btn cms-btn-sm cms-btn-outline"
-                            onClick={() => setSelectedExamModal(ex)}
+                            onClick={() => handleOpenExamModal(ex)}
                           >
                             <Eye size={13} /> Syllabus & Info
                           </button>
@@ -331,10 +377,10 @@ export default function ParentExaminationsPage() {
         {selectedExamModal && (
           <Modal
             title={`Exam Details — ${selectedExamModal.subject} (${selectedExamModal.code})`}
-            onClose={() => setSelectedExamModal(null)}
+            onClose={handleCloseExamModal}
             size="md"
             footer={
-              <button type="button" className="cms-btn cms-btn-primary" onClick={() => setSelectedExamModal(null)}>
+              <button type="button" className="cms-btn cms-btn-primary" onClick={handleCloseExamModal}>
                 Close
               </button>
             }
@@ -376,11 +422,11 @@ export default function ParentExaminationsPage() {
         {hallTicketOpen && (
           <Modal
             title="Official Examination Hall Ticket"
-            onClose={() => setHallTicketOpen(false)}
+            onClose={handleCloseHallTicket}
             size="lg"
             footer={
               <>
-                <button type="button" className="cms-btn cms-btn-outline" onClick={() => setHallTicketOpen(false)}>Close</button>
+                <button type="button" className="cms-btn cms-btn-outline" onClick={handleCloseHallTicket}>Close</button>
                 <button type="button" className="cms-btn cms-btn-primary" onClick={() => window.print()}>
                   <Printer size={15} /> Print Hall Ticket
                 </button>

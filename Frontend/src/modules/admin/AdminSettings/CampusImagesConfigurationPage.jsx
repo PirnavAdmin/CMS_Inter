@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ImagePlus, Save } from "lucide-react";
@@ -195,7 +196,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
             </section>
           )}
           {loading ? (
-            <p role="status">Loading configuration...</p>
+            <SkeletonPage variant="form" rows={4} />
           ) : (
             <div className="campus-images-grid">
               {imageFields.map(([slot, title, description, kind]) => (

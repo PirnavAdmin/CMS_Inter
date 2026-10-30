@@ -1,3 +1,6 @@
+import { useCallback, useEffect, useRef } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { SkeletonText, SkeletonTable } from "@/shared/components/Skeleton.jsx";
 import { AlertCircle, RefreshCw, Search } from "lucide-react";
 
 export function FeeNotice({ children, error = false }) {
@@ -5,7 +8,7 @@ export function FeeNotice({ children, error = false }) {
 }
 
 export function FeeLoadState({ state }) {
-  if (state.loading) return <div className="accountant-fee-loading" role="status"><RefreshCw size={16} /> Loading fee data...</div>;
+  if (state.loading) return <SkeletonText lines={2} />;
   if (!state.error) return null;
   return <FeeNotice error>{state.error} <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" onClick={state.reload}><RefreshCw size={14} /> Retry</button></FeeNotice>;
 }
@@ -55,11 +58,12 @@ export function FeeTabs({ items, value, onChange, label, secondary = false }) {
 }
 
 export function PageState({ loading, error, onRetry }) {
-  if (loading) return <div className="sp-api-state">Loading finance data...</div>;
+  if (loading) return <SkeletonTable columns={6} rows={5} />;
   if (error) return <div className="sp-api-state is-error"><AlertCircle size={15} /> {error} {onRetry ? <button type="button" className="sp-btn" onClick={onRetry}><RefreshCw size={14} /> Retry</button> : null}</div>;
   return null;
 }
 
+<<<<<<< HEAD
 export function AccountantCard({ title, subtitle, action, children, className = "" }) {
   return <section className={`sp-card ${className}`}><header className="sp-card-head"><div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>{action}</header><div className="sp-card-body">{children}</div></section>;
 }
@@ -93,4 +97,31 @@ export function AccountantStatusBadge({ value }) {
 
 export function AccountantDataTable({ columns, rows, statusColumns = [], renderCell, empty = "No records available." }) {
   return <div className="sp-table-wrap"><table className="sp-table"><thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, rowIndex) => <tr key={row.id || rowIndex}>{columns.map((column, columnIndex) => { const value = Array.isArray(row) ? row[columnIndex] : row[column]; return <td key={column}>{renderCell ? renderCell(value, row, column, columnIndex) : statusColumns.includes(columnIndex) ? <AccountantStatusBadge value={value}/> : value ?? "—"}</td>; })}</tr>) : <tr><td colSpan={columns.length}><div className="sp-empty">{empty}</div></td></tr>}</tbody></table></div>;
+=======
+
+// Combine related view changes into one complete browser history entry.
+export function useAccountantViewParams() {
+  const [params, setParams] = useSearchParams();
+  const { pathname } = useLocation();
+  const current = useRef(null);
+  current.current = { key: pathname + "?" + params.toString(), params, setParams };
+  const pending = useRef(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; pending.current = null; }; }, []);
+  const updateParams = useCallback((change) => {
+    if (!mounted.current) return;
+    const existing = pending.current;
+    const next = existing?.key === current.current.key ? existing : { key: current.current.key, params: new URLSearchParams(current.current.params) };
+    change(next.params); pending.current = next;
+    if (!existing) queueMicrotask(() => {
+      const target = pending.current; pending.current = null;
+      if (mounted.current && target?.key === current.current.key && target.params.toString() !== current.current.params.toString()) current.current.setParams(target.params);
+    });
+  }, []);
+  const setParam = useCallback((key, value) => updateParams((next) => {
+    if (value == null || value === "") next.delete(key);
+    else next.set(key, String(value));
+  }), [updateParams]);
+  return { params, setParam, updateParams };
+>>>>>>> origin/main
 }
