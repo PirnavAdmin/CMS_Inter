@@ -1,7 +1,8 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ImagePlus, Save } from "lucide-react";
+import { ArrowLeft, ImagePlus, Save, Settings, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
+import { Modal } from "../../../shared/components/Ui.jsx";
 import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
 import {
@@ -9,10 +10,20 @@ import {
   readCampusImages,
   saveCampusImages,
   readCampusImageFile,
+  headerBrandDefaults,
+  getHeaderBrand,
 } from "./campusImages.js";
 import defaultLogo from "../../../assets/pirnav-colleges-logo.png";
+import defaultHeaderLogo from "../../../assets/pirnav-college-crest.png";
+import { HeaderBrand } from "../../../shared/components/CampusBrandImage.jsx";
 import { campusContentDefaults, campusTextFields } from "./campusContent.js";
 import "./CampusImagesConfigurationPage.css";
+
+const brandLines = [
+  { key: "dashboardTitle", label: "First Line Text", description: "Main college title", min: 12, max: 48 },
+  { key: "dashboardSubtitle", label: "Second Line Text", description: "College subtitle", min: 8, max: 48 },
+  { key: "dashboardTagline", label: "Tagline Text", description: "Optional college tagline", min: 6, max: 24 },
+];
 
 export default function CampusImagesConfigurationPage({ page = "landing" }) {
   const title = page === "login" ? "Login Page Configuration" : "Landing Page Configuration";
@@ -24,7 +35,9 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
   const textFields = campusTextFields[page];
   const { selectedCampusId, selectedCampus } = useCampusContext();
   const [images, setImages] = useState({});
-  const [text, setText] = useState(campusContentDefaults);
+  const [headerSnapshot, setHeaderSnapshot] = useState(null);
+  const configureButton = useRef(null);
+  const [text, setText] = useState({ ...campusContentDefaults, ...headerBrandDefaults });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(0);
@@ -39,7 +52,8 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
     let active = true;
     setLoading(true);
     setImages({});
-    setText(campusContentDefaults);
+    setHeaderSnapshot(null);
+    setText({ ...campusContentDefaults, ...headerBrandDefaults });
     setError("");
     setMessage("");
     setUploading(0);
@@ -47,7 +61,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
       .then((value) => {
         if (active) {
           setImages(value);
-          setText({ ...campusContentDefaults, ...value });
+          setText({ ...campusContentDefaults, ...value, ...getHeaderBrand(value) });
         }
       })
       .catch((failure) => {
@@ -69,7 +83,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
     setError("");
     setMessage("");
     try {
-      const src = await readCampusImageFile(file);
+      const src = await readCampusImageFile(file, { allowSvg: slot === "dashboardLogo" });
       if (scope.current === campus && uploadSequence.current[slot] === sequence)
         setImages((previous) => ({ ...previous, [slot]: src }));
     } catch (failure) {
@@ -87,6 +101,10 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
       setError("Complete the required text fields before saving.");
       return;
     }
+    if (page === "landing" && !text.dashboardTitle.trim()) {
+      setError("Enter the Header Title Text before saving.");
+      return;
+    }
     saveLock.current = true;
     setBusy(true);
     setError("");
@@ -101,6 +119,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
       textFields.forEach(([key]) => {
         next[key] = text[key].trim();
       });
+      if (page === "landing") Object.assign(next, getHeaderBrand({ ...text, dashboardTitle: text.dashboardTitle.trim() }));
       await saveCampusImages(campus, next);
       if (scope.current === activeScope)
         setMessage(`${title} saved in this browser. Open the page to see your changes.`);
@@ -111,6 +130,146 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
       setBusy(false);
     }
   };
+  const cancelHeader = useCallback(() => {
+    if (saveLock.current || !headerSnapshot) return;
+    uploadSequence.current.dashboardLogo = (uploadSequence.current.dashboardLogo || 0) + 1;
+    setText((previous) => ({ ...previous, ...headerSnapshot.brand }));
+    setImages((previous) => {
+      const next = { ...previous };
+      if (headerSnapshot.logo) next.dashboardLogo = headerSnapshot.logo;
+      else delete next.dashboardLogo;
+      return next;
+    });
+    setHeaderSnapshot(null);
+    setError("");
+    queueMicrotask(() => configureButton.current?.focus());
+  }, [headerSnapshot]);
+  useEffect(() => {
+    if (!headerSnapshot) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") cancelHeader();
+      if (event.key !== "Tab") return;
+      const dialog = document.querySelector(".campus-header-dialog");
+      const controls = dialog?.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]');
+      if (!controls?.length) return;
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [headerSnapshot, cancelHeader]);
+  const saveHeader = async () => {
+    if (saveLock.current || uploading || !headerSnapshot || !selectedCampusId) return;
+    if (!text.dashboardTitle.trim()) { setError("Enter the First Line Text before saving."); return; }
+    const activeScope = pageScope;
+    const campus = selectedCampusId;
+    const brand = getHeaderBrand({ ...text, dashboardTitle: text.dashboardTitle.trim() });
+    const logo = images.dashboardLogo;
+    saveLock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const latest = await readCampusImages(campus);
+      const next = { ...latest, ...brand };
+      if (logo) next.dashboardLogo = logo;
+      else delete next.dashboardLogo;
+      await saveCampusImages(campus, next);
+      if (scope.current === activeScope) {
+        setText((previous) => ({ ...previous, ...brand }));
+        setHeaderSnapshot(null);
+        setMessage("Header configuration saved in this browser.");
+        queueMicrotask(() => configureButton.current?.focus());
+      }
+    } catch (failure) {
+      if (scope.current === activeScope) setError(failure.message);
+    } finally {
+      saveLock.current = false;
+      setBusy(false);
+    }
+  };
+  const renderImageCards = (fields) => fields.map(([slot, title, description, kind]) => (
+                <Fragment key={slot}>
+                <section className={`campus-images-card ${slot === "dashboardLogo" ? "campus-header-logo-card" : ""}`}>
+                  <h2>{slot === "dashboardLogo" ? "Header Logo" : title}</h2>
+                  <p>{slot === "dashboardLogo" ? "Logo shown at the top left of the application. Upload the logo only; configure the name separately." : description}</p>
+                  <div className={`campus-images-preview ${kind}`}>
+                    {images[slot] ? (
+                      <img src={images[slot]} alt={`${title} preview`} style={slot === "dashboardLogo" ? { width: Number(text.dashboardLogoSize), height: Number(text.dashboardLogoSize), padding: 0 } : undefined} />
+                    ) : kind === "logo" ? (
+                      <img src={slot === "dashboardLogo" ? defaultHeaderLogo : defaultLogo} alt="Default college logo" style={slot === "dashboardLogo" ? { width: Number(text.dashboardLogoSize), height: Number(text.dashboardLogoSize), padding: 0 } : undefined} />
+                    ) : (
+                      <span>Existing image slider will be used</span>
+                    )}
+                  </div>
+                  <label className="campus-images-upload">
+                    Choose {slot === "dashboardLogo" ? "Header Logo" : title}
+                    <input
+                      type="file"
+                      autoFocus={slot === "dashboardLogo"}
+                      accept={slot === "dashboardLogo" ? "image/png,image/svg+xml,image/jpeg,image/webp" : "image/png,image/jpeg,image/webp"}
+                      disabled={busy || !selectedCampusId}
+                      onChange={(event) => {
+                        upload(slot, event.target.files?.[0]);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {slot === "dashboardLogo" && <label className="campus-brand-control">
+                    Logo Size <output>{text.dashboardLogoSize}px</output>
+                    <input type="range" min="24" max="72" value={text.dashboardLogoSize} disabled={busy} onChange={(event) => { setText((previous) => ({ ...previous, dashboardLogoSize: event.target.value })); setMessage(""); }} />
+                  </label>}
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-ghost"
+                    disabled={busy || !images[slot]}
+                    onClick={() => {
+                      uploadSequence.current[slot] = (uploadSequence.current[slot] || 0) + 1;
+                      setImages((previous) => {
+                        const next = { ...previous };
+                        delete next[slot];
+                        return next;
+                      });
+                      setMessage("");
+                    }}
+                  >
+                    Restore default
+                  </button>
+                </section>
+                {slot === "dashboardLogo" && <>
+                  <section className="campus-images-card campus-header-title-card">
+                    <h2>Header Title Text</h2>
+                    <p>Customize each header line independently.</p>
+                    {brandLines.map((line) => <fieldset key={line.key} className="campus-brand-line-fields">
+                      <legend>{line.label}{line.key === "dashboardTagline" ? " (Optional)" : ""}</legend>
+                      <label className="campus-brand-control">{line.label}
+                        <input type="text" maxLength={300} required={line.key === "dashboardTitle"} disabled={busy} value={text[line.key]} onChange={(event) => { setText((previous) => ({ ...previous, [line.key]: event.target.value })); setMessage(""); }} />
+                      </label>
+                      <label className="campus-brand-control">{line.label.replace(" Text", "")} Font Size <output>{Math.round(Number(text[line.key + "Size"]))}px</output>
+                        <input type="range" min={line.min} max={line.max} step="1" disabled={busy} value={text[line.key + "Size"]} onChange={(event) => { setText((previous) => ({ ...previous, [line.key + "Size"]: event.target.value })); setMessage(""); }} />
+                      </label>
+                      <label className="campus-brand-control">Text Color
+                        <span className="campus-brand-color"><input type="color" disabled={busy} value={text[line.key + "Color"]} onChange={(event) => { setText((previous) => ({ ...previous, [line.key + "Color"]: event.target.value })); setMessage(""); }} /><output>{text[line.key + "Color"]}</output></span>
+                      </label>
+                      <label className="campus-brand-control">Font Weight
+                        <select disabled={busy} value={text[line.key + "Weight"]} onChange={(event) => { setText((previous) => ({ ...previous, [line.key + "Weight"]: event.target.value })); setMessage(""); }}>
+                          <option value="400">Regular</option><option value="500">Medium</option><option value="600">Semi Bold</option><option value="700">Bold</option><option value="800">Extra Bold</option>
+                        </select>
+                      </label>
+                      <fieldset className="campus-brand-alignment"><legend>Text Alignment</legend>
+                        {[["left", AlignLeft], ["center", AlignCenter], ["right", AlignRight]].map(([alignment, Icon]) => <button key={alignment} type="button" disabled={busy} aria-label={`${line.label}: align ${alignment}`} aria-pressed={text[line.key + "Align"] === alignment} onClick={() => { setText((previous) => ({ ...previous, [line.key + "Align"]: alignment })); setMessage(""); }}><Icon size={18} /></button>)}
+                      </fieldset>
+                    </fieldset>)}
+                  </section>
+                  <section className="campus-images-card campus-header-preview-card">
+                    <h2>Live Preview (Header)</h2>
+                    <div className="campus-header-live-preview"><HeaderBrand configuration={{ ...text, dashboardLogo: images.dashboardLogo }} /></div>
+                    <p>The header scales to the available space. Long lines use ellipsis without wrapping.</p>
+                  </section>
+                </>}
+                </Fragment>
+  ));
+
   return (
     <DashboardLayout
       title={title}
@@ -127,7 +286,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
             {selectedCampus?.campusName || selectedCampus?.name || "Selected campus"}
           </h2>
           <p>
-            PNG, JPEG, or WebP. Maximum 2 MB per image. Logo images work best with a transparent
+            PNG, JPEG, or WebP (also SVG for Header Logo). Maximum 2 MB per image. Logo images work best with a transparent
             background.
           </p>
           <p>
@@ -198,50 +357,16 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
           {loading ? (
             <SkeletonPage variant="form" rows={4} />
           ) : (
-            <div className="campus-images-grid">
-              {imageFields.map(([slot, title, description, kind]) => (
-                <section className="campus-images-card" key={slot}>
-                  <h2>{title}</h2>
-                  <p>{description}</p>
-                  <div className={`campus-images-preview ${kind}`}>
-                    {images[slot] ? (
-                      <img src={images[slot]} alt={`${title} preview`} />
-                    ) : kind === "logo" ? (
-                      <img src={defaultLogo} alt="Default college logo" />
-                    ) : (
-                      <span>Existing image slider will be used</span>
-                    )}
-                  </div>
-                  <label className="campus-images-upload">
-                    Choose {title}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      disabled={busy || !selectedCampusId}
-                      onChange={(event) => {
-                        upload(slot, event.target.files?.[0]);
-                        event.target.value = "";
-                      }}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    disabled={busy || !images[slot]}
-                    onClick={() => {
-                      uploadSequence.current[slot] = (uploadSequence.current[slot] || 0) + 1;
-                      setImages((previous) => {
-                        const next = { ...previous };
-                        delete next[slot];
-                        return next;
-                      });
-                      setMessage("");
-                    }}
-                  >
-                    Restore default
-                  </button>
-                </section>
-              ))}
+            <div className={`campus-images-grid ${page === "landing" ? "campus-images-grid-with-brand" : ""}`}>
+              {page === "landing" && <section className="campus-images-card campus-header-summary">
+                <h2>Header Configuration</h2>
+                <p>Manage header logo, title text and preview.</p>
+                <div className="campus-header-summary-row">
+                  <div className="campus-header-summary-preview"><HeaderBrand configuration={{ ...text, dashboardLogo: images.dashboardLogo }} /></div>
+                  <button ref={configureButton} type="button" className="cms-btn cms-btn-primary" disabled={busy || !selectedCampusId} onClick={() => { setHeaderSnapshot({ brand: getHeaderBrand(text), logo: images.dashboardLogo }); setError(""); }}><Settings size={16} /> Configure</button>
+                </div>
+              </section>}
+              {renderImageCards(imageFields.filter(([slot]) => slot !== "dashboardLogo"))}
             </div>
           )}
           <div className="campus-images-actions">
@@ -255,6 +380,13 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
             </button>
           </div>
         </form>
+        {headerSnapshot && page === "landing" && <Modal title="Header Configuration" className="campus-header-dialog" onClose={cancelHeader} closeOnOverlay={!busy} footer={<>
+          <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={cancelHeader}>Cancel</button>
+          <button type="button" className="cms-btn cms-btn-primary" disabled={busy || uploading > 0 || !selectedCampusId} onClick={saveHeader}>{busy ? "Saving..." : uploading ? "Reading image..." : "Save Changes"}</button>
+        </>}>
+          {error && <p className="campus-images-error" role="alert">{error}</p>}
+          <div className="campus-images-page campus-header-dialog-content"><div className="campus-images-grid campus-images-grid-with-brand">{renderImageCards(imageFields.filter(([slot]) => slot === "dashboardLogo"))}</div></div>
+        </Modal>}
       </main>
     </DashboardLayout>
   );
