@@ -1,10 +1,4 @@
-<<<<<<< HEAD
 import { useEffect, useState } from "react";
-=======
-﻿import { useEffect, useRef, useState } from "react";
-import collegeLogo from "@/assets/pirnav-colleges-logo.png";
-import { COLLEGE_NAME } from "@/data/feeManagementData.js";
->>>>>>> origin/main
 import { Download } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -137,7 +131,6 @@ export default function StudentFees() {
     if (!receiptNo || receiptNo === "?" || receiptRequest.current || !student?.studentId) return;
     receiptRequest.current = true; setReceiptLoading(receiptNo); setError("");
     try {
-<<<<<<< HEAD
       const response = await apiClient.get(apiEndpoints.fee.receiptByNumber(receiptNo));
       const receiptData = response.data?.data ?? response.data?.Data ?? response.data;
       if (receiptData) {
@@ -154,18 +147,6 @@ export default function StudentFees() {
     } finally {
       setReceiptLoading("");
     }
-=======
-      const response = await apiClient.get(apiEndpoints.fee.receiptByNumber(receiptNo), { responseType: "blob" });
-      const blob = await studentReceiptPdf(response, payment, student);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      try {
-        anchor.href = url; anchor.download = receiptNo.replace(/[\\/:*?"<>|]/g, "-") + ".pdf";
-        document.body.appendChild(anchor); anchor.click();
-      } finally { anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-    } catch (requestError) { setError(getApiErrorMessage(requestError)); }
-    finally { receiptRequest.current = false; setReceiptLoading(""); }
->>>>>>> origin/main
   };
 
   if (profileLoading) return <div className="sp-page"><SkeletonPage variant="table" columns={7} rows={5}/></div>;
@@ -198,11 +179,7 @@ export default function StudentFees() {
           if (index === 2) return money(row.amount);
           if (index === 3) return row.mode;
           if (index === 4) return <span className="sp-badge">{row.status}</span>;
-<<<<<<< HEAD
           if (index === 5) return <button className="sp-icon-action" title="Download receipt PDF" aria-label="Download receipt PDF" disabled={row.receiptNo === "—" || Boolean(receiptLoading)} onClick={() => downloadReceipt(row.receiptNo)}><Download size={16}/></button>;
-=======
-          if (index === 5) return <button className="sp-icon-action" title="Download receipt" aria-label="Download receipt" disabled={row.receiptNo === "—" || Boolean(receiptLoading)} onClick={() => downloadReceipt(row)}><Download size={16}/></button>;
->>>>>>> origin/main
           return row.paymentFor;
         }}/ >}
     </StudentCard>

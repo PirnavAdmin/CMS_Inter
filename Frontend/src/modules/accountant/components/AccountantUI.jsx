@@ -63,7 +63,6 @@ export function PageState({ loading, error, onRetry }) {
   return null;
 }
 
-<<<<<<< HEAD
 export function AccountantCard({ title, subtitle, action, children, className = "" }) {
   return <section className={`sp-card ${className}`}><header className="sp-card-head"><div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>{action}</header><div className="sp-card-body">{children}</div></section>;
 }
@@ -97,7 +96,8 @@ export function AccountantStatusBadge({ value }) {
 
 export function AccountantDataTable({ columns, rows, statusColumns = [], renderCell, empty = "No records available." }) {
   return <div className="sp-table-wrap"><table className="sp-table"><thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, rowIndex) => <tr key={row.id || rowIndex}>{columns.map((column, columnIndex) => { const value = Array.isArray(row) ? row[columnIndex] : row[column]; return <td key={column}>{renderCell ? renderCell(value, row, column, columnIndex) : statusColumns.includes(columnIndex) ? <AccountantStatusBadge value={value}/> : value ?? "—"}</td>; })}</tr>) : <tr><td colSpan={columns.length}><div className="sp-empty">{empty}</div></td></tr>}</tbody></table></div>;
-=======
+}
+
 
 // Combine related view changes into one complete browser history entry.
 export function useAccountantViewParams() {
@@ -123,5 +123,4 @@ export function useAccountantViewParams() {
     else next.set(key, String(value));
   }), [updateParams]);
   return { params, setParam, updateParams };
->>>>>>> origin/main
 }

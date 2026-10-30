@@ -78,7 +78,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             bool? isActive = null,
             string? seriesName = null)
         {
-<<<<<<< HEAD
             var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_SeriesCode", seriesCode.Trim());
@@ -90,18 +89,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_CampusId", campusId);
             parameters.Add("p_IsActive", isActive.HasValue ? (isActive.Value ? (byte)1 : (byte)0) : (byte?)null);
             parameters.Add("p_SeriesName", string.IsNullOrWhiteSpace(seriesName) ? null : seriesName.Trim());
-=======
-            var maxIssued = await GetMaxSequenceForBaseSeriesAsync(seriesCode, campusId);
-            if (startNumber <= maxIssued && maxIssued > 0)
-            {
-                throw new InvalidOperationException($"Cannot reset series start number to {startNumber}. Maximum sequence number already issued is {maxIssued}. Resetting below issued numbers would create duplicate identifiers.");
-            }
-
-            var existing = await _context.Set<NumberSeriesConfiguration>()
-                .Where(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
-                .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
-                .FirstOrDefaultAsync();
->>>>>>> origin/main
 
             return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                 "sp_UpdateNumberSeriesByCode",
@@ -118,128 +105,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_BaseSeriesCode", string.IsNullOrWhiteSpace(baseSeriesCode) ? null : baseSeriesCode.Trim());
             parameters.Add("p_BaseCode", string.IsNullOrWhiteSpace(baseSeriesCode) ? null : baseSeriesCode.Trim());
 
-<<<<<<< HEAD
             return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                 "sp_GenerateNextNumberSeries",
                 parameters,
                 commandType: CommandType.StoredProcedure);
-=======
-            if (existing == null && !string.IsNullOrWhiteSpace(baseSeriesCode))
-            {
-                var baseTemplate = await _context.Set<NumberSeriesConfiguration>()
-                    .Where(n => n.SeriesCode == baseSeriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
-                    .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
-                    .FirstOrDefaultAsync();
-
-                if (baseTemplate != null)
-                {
-                    // Create new scoped sequence
-                    var autoPrefix = seriesCode.Contains("|")
-                        ? seriesCode.Split('|').Last().ToUpperInvariant()
-                        : baseTemplate.Prefix;
-
-                    var newConfig = new NumberSeriesConfiguration
-                    {
-                        SeriesCode = seriesCode,
-                        SeriesName = seriesCode.Contains("|") ? $"Student Roll No. - {autoPrefix}" : baseTemplate.SeriesName,
-                        Prefix = autoPrefix,
-                        FormatPattern = baseTemplate.FormatPattern,
-                        NumberLength = baseTemplate.NumberLength,
-                        StartNumber = baseTemplate.StartNumber,
-                        CurrentSequence = baseTemplate.StartNumber,
-                        Description = baseTemplate.Description,
-                        CampusId = campusId,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    
-                    _context.Set<NumberSeriesConfiguration>().Add(newConfig);
-                    await _context.SaveChangesAsync();
-                    return newConfig;
-                }
-            }
-
-            // Pipeline 5 Auto-Initialization: If series definition is missing entirely, auto-provision default sequence
-            if (existing == null)
-            {
-                var (defaultName, defaultPrefix, defaultPattern, defaultLen, defaultStart) = GetDefaultSeriesDefinition(baseSeriesCode ?? seriesCode);
-                var autoConfig = new NumberSeriesConfiguration
-                {
-                    SeriesCode = seriesCode.Trim(),
-                    SeriesName = defaultName,
-                    Prefix = defaultPrefix,
-                    FormatPattern = defaultPattern,
-                    NumberLength = defaultLen,
-                    StartNumber = defaultStart,
-                    CurrentSequence = defaultStart,
-                    Description = $"Auto-provisioned default sequence for {seriesCode}",
-                    CampusId = campusId,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _context.Set<NumberSeriesConfiguration>().Add(autoConfig);
-                await _context.SaveChangesAsync();
-                return autoConfig;
-            }
-            else if (existing != null)
-            {
-                // If we need a sequence for a specific campus but only found the global fallback,
-                // we must NOT increment the global fallback. We must create a new sequence counter for this campus.
-                if (campusId.HasValue && existing.CampusId != campusId)
-                {
-                    // Fetch base template for format/prefix/length defaults
-                    var baseTemplate = !string.IsNullOrWhiteSpace(baseSeriesCode)
-                        ? await _context.Set<NumberSeriesConfiguration>()
-                            .Where(n => n.SeriesCode == baseSeriesCode && n.CampusId == null)
-                            .FirstOrDefaultAsync() ?? existing
-                        : existing;
-
-                    // Auto-derive prefix from the subCode (e.g. "ROLL_NO|1|MPC" -> "MPC")
-                    var autoPrefix = seriesCode.Contains("|")
-                        ? seriesCode.Split('|').Last().ToUpperInvariant()
-                        : baseTemplate.Prefix;
-
-                    var newConfig = new NumberSeriesConfiguration
-                    {
-                        SeriesCode = seriesCode,
-                        SeriesName = seriesCode.Contains("|") ? $"Student Roll No. - {autoPrefix}" : existing.SeriesName,
-                        Prefix = autoPrefix,
-                        FormatPattern = baseTemplate.FormatPattern,
-                        NumberLength = baseTemplate.NumberLength,
-                        StartNumber = baseTemplate.StartNumber,
-                        CurrentSequence = baseTemplate.StartNumber, // Initial sequence used!
-                        Description = baseTemplate.Description,
-                        CampusId = campusId,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    
-                    _context.Set<NumberSeriesConfiguration>().Add(newConfig);
-                    await _context.SaveChangesAsync();
-                    return newConfig;
-                }
-                else
-                {
-                    // Thread-safe atomic increment using MySQL LAST_INSERT_ID(CurrentSequence + 1)
-                    var conn = await GetOpenConnectionAsync();
-                    var updatedSequence = await conn.QuerySingleAsync<int>(
-                        @"UPDATE `NumberSeriesConfigurations` 
-                          SET `CurrentSequence` = LAST_INSERT_ID(CASE WHEN `CurrentSequence` < `StartNumber` THEN `StartNumber` ELSE `CurrentSequence` + 1 END), 
-                              `UpdatedAt` = UTC_TIMESTAMP() 
-                          WHERE `Id` = @Id;
-                          SELECT LAST_INSERT_ID();",
-                        new { Id = existing.Id });
-
-                    existing.CurrentSequence = updatedSequence;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                }
-            }
-
-            return existing;
->>>>>>> origin/main
         }
 
         private static (string Name, string Prefix, string Pattern, int Length, int Start) GetDefaultSeriesDefinition(string code)

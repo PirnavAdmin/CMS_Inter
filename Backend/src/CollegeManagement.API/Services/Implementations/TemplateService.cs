@@ -192,13 +192,8 @@ namespace CollegeManagement.API.Services.Implementations
             if (existing == null)
                 return null;
 
-<<<<<<< HEAD
             if (!string.IsNullOrWhiteSpace(dto.Title))
                 existing.Title = dto.Title.Trim();
-=======
-            var sanitizedBody = SanitizeHtml(dto.ContentBody);
-            var placeholders = ExtractPlaceholders(sanitizedBody, dto.Placeholders);
->>>>>>> origin/main
 
             if (!string.IsNullOrWhiteSpace(dto.Category))
                 existing.Category = dto.Category.Trim();
@@ -215,22 +210,11 @@ namespace CollegeManagement.API.Services.Implementations
             int currentVer = 1;
             if (!string.IsNullOrWhiteSpace(existing.Version))
             {
-<<<<<<< HEAD
                 int.TryParse(existing.Version.Trim().TrimStart('v', 'V'), out currentVer);
                 if (currentVer < 1) currentVer = 1;
             }
             existing.Version = $"v{currentVer + 1}";
             existing.UpdatedAt = DateTime.UtcNow;
-=======
-                Id = id,
-                Title = dto.Title.Trim(),
-                Category = string.IsNullOrWhiteSpace(dto.Category) ? existing.Category : dto.Category.Trim(),
-                ContentBody = sanitizedBody,
-                PlaceholdersJson = JsonSerializer.Serialize(placeholders),
-                IsActive = dto.IsActive,
-                CampusId = campusId
-            };
->>>>>>> origin/main
 
             var updated = await _repository.UpdateAsync(id, existing, campusId, ct);
             return updated == null ? null : MapToDto(updated);

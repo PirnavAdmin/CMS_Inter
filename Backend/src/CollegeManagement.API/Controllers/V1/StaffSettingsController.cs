@@ -185,7 +185,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var newEmail = request.PersonalEmail.Trim();
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.StaffId == staffId.Value);
                 if (user != null && !string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
                 {
                     var emailExists = await _context.Users.AnyAsync(u => u.Email == newEmail && u.UserId != user.UserId);
@@ -196,29 +196,11 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var nameParts = trimmedName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-<<<<<<< HEAD
                 var firstName = nameParts.Length > 0 ? nameParts[0] : trimmedName;
                 var lastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
 
                 var conn = _context.Database.GetDbConnection();
                 if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
-=======
-                staff.FirstName = nameParts.Length > 0 ? nameParts[0] : trimmedName;
-                staff.LastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
-                staff.Mobile = cleanedMobile;
-                staff.Email = newEmail;
-                staff.CurrentAddress = request.Address?.Trim();
-                staff.AlternateMobile = request.EmergencyContact?.Trim();
-                staff.UpdatedAt = DateTime.UtcNow;
-
-                if (user != null)
-                {
-                    user.FullName = trimmedName;
-                    user.PhoneNumber = staff.Mobile;
-                    user.Email = staff.Email;
-                    user.UpdatedAt = DateTime.UtcNow;
-                }
->>>>>>> origin/main
 
                 var affected = await conn.ExecuteAsync(
                     "sp_UpdateStaffSettingsProfile",

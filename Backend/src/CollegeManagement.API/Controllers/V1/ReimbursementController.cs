@@ -210,11 +210,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 5. Get Account Ledger Entries (For Account Ledger Modal)
         /// </summary>
         [HttpGet("account-entries")]
-<<<<<<< HEAD
         [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
-=======
-        [Authorize(Roles = "Accountant,Admin,Super Admin,Principal")]
->>>>>>> origin/main
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAccountEntries([FromQuery] int? campusId)
         {
@@ -238,19 +234,9 @@ namespace CollegeManagement.API.Controllers.V1
                 return NotFound(new { Status = false, Message = "Reimbursement claim not found." });
             }
 
-<<<<<<< HEAD
             if (!isPrivileged && staffId.HasValue && result.StaffId != staffId.Value)
             {
                 return Forbid();
-=======
-            if (!IsAdminOrFinance())
-            {
-                var callerStaffId = ResolveStaffId();
-                if (result.StaffId != callerStaffId)
-                {
-                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view reimbursement claims belonging to other staff members." });
-                }
->>>>>>> origin/main
             }
 
             return Ok(new { Status = true, Message = "Reimbursement claim details retrieved.", Data = result });
@@ -348,7 +334,6 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { Status = false, Message = "A valid receipt or invoice file is required." });
             }
 
-<<<<<<< HEAD
             var (userId, staffId, isPrivileged) = GetCallerIdentity();
             var existing = await _service.GetClaimByIdAsync(id);
             if (existing == null)
@@ -359,17 +344,6 @@ namespace CollegeManagement.API.Controllers.V1
             if (!isPrivileged && staffId.HasValue && existing.StaffId != staffId.Value)
             {
                 return Forbid();
-=======
-            if (!IsAdminOrFinance())
-            {
-                var existing = await _service.GetClaimByIdAsync(id);
-                if (existing == null) return NotFound(new { Status = false, Message = "Reimbursement claim not found." });
-                var callerStaffId = ResolveStaffId();
-                if (existing.StaffId != callerStaffId)
-                {
-                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to upload proofs for claims belonging to other staff members." });
-                }
->>>>>>> origin/main
             }
 
             var filePath = await _service.UploadProofAsync(id, file);

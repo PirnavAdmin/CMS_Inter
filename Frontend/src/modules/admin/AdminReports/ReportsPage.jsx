@@ -40,7 +40,6 @@ import {
   Legend,
 } from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-<<<<<<< HEAD
 import {
   getReportBoards,
   getReportAcademicYears,
@@ -63,10 +62,6 @@ import {
   exportReportExcel,
 } from "@/api/reportApi.js";
 import { uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
-=======
-import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
-import { fetchAdminGroups, fetchAdminLevels, flagIsFalse, flagIsTrue } from "@/api/studentApi.js";
->>>>>>> origin/main
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -842,18 +837,12 @@ export default function ReportsPage() {
     setBoardsLoading(true);
     setYearsLoading(true);
     try {
-<<<<<<< HEAD
       const [boardsRes, yearsRes, levelsRes, groupsRes, sectionsRes] = await Promise.allSettled([
         getReportBoards({}, { signal: controller.signal, skipGlobalLoader: true }),
         getReportAcademicYears({}, { signal: controller.signal, skipGlobalLoader: true }),
         getReportAcademicLevels({}, { signal: controller.signal, skipGlobalLoader: true }),
         getReportGroups({}, { signal: controller.signal, skipGlobalLoader: true }),
         getReportSections({}, { signal: controller.signal, skipGlobalLoader: true }),
-=======
-      const [boardsRes, yearsRes] = await Promise.allSettled([
-        apiClient.get(REPORTS_API.filters.boards, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.academicYears, { signal: controller.signal, skipGlobalLoader: true }),
->>>>>>> origin/main
       ]);
       if (!mountedRef.current || controller.signal.aborted) return;
 
@@ -934,18 +923,11 @@ export default function ReportsPage() {
       return () => controller.abort();
     }
     setLevelLoading(true);
-<<<<<<< HEAD
     const params = boardId ? { boardId } : {};
     getReportAcademicLevels(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
-=======
-    const request = scope.boardId
-      ? fetchAdminLevels(scope, { signal: controller.signal })
-      : apiClient.get(REPORTS_API.filters.academicLevels, { signal: controller.signal, skipGlobalLoader: true }).then((response) => response.data);
-    request.then((rows) => {
->>>>>>> origin/main
       if (controller.signal.aborted) return;
       if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load academic levels.");
       const levels = activeFilterOptions(rows, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]);
@@ -979,7 +961,6 @@ export default function ReportsPage() {
       return () => controller.abort();
     }
     setGroupsLoading(true);
-<<<<<<< HEAD
     const params = {};
     if (boardId) params.boardId = boardId;
     if (academicYearId) params.academicYearId = academicYearId;
@@ -988,12 +969,6 @@ export default function ReportsPage() {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
-=======
-    const request = scope.boardId
-      ? fetchAdminGroups(scope, { signal: controller.signal })
-      : apiClient.get(REPORTS_API.filters.groups, { params: { campusId: scope.campusId, academicYearId: scope.academicYearId }, signal: controller.signal, skipGlobalLoader: true }).then((response) => response.data);
-    request.then((rows) => {
->>>>>>> origin/main
       if (controller.signal.aborted) return;
       if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load groups.");
       const groups = activeFilterOptions(rows, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
@@ -1028,7 +1003,6 @@ export default function ReportsPage() {
       return () => controller.abort();
     }
     setSectionsLoading(true);
-<<<<<<< HEAD
     const params = {};
     if (groupId) params.groupId = groupId;
     if (boardId) params.boardId = boardId;
@@ -1038,9 +1012,6 @@ export default function ReportsPage() {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
-=======
-    apiClient.get(apiEndpoints.sections.list, { params: { ...scope, IsActive: true }, signal: controller.signal, skipGlobalLoader: true }).then((response) => {
->>>>>>> origin/main
       if (controller.signal.aborted) return;
       if (response.data?.success === false || response.data?.Success === false) throw new Error(response.data.message || response.data.Message || "Unable to load sections.");
       const rows = collection(response.data, ["sections", "Sections"]).filter((row) => {

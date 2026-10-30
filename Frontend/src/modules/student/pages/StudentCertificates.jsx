@@ -158,12 +158,8 @@ export default function StudentCertificates() {
     setRequestError("");
     setForm((current) => ({ ...current, type: defaultCertificateType }));
     setOpen(true);
-<<<<<<< HEAD
   }, [defaultCertificateType]);
 
-=======
-  }, [defaultCertificateType, setOpen]);
->>>>>>> origin/main
   useEffect(() => {
     if (!location.state?.openRequestCertificate || profileLoading || loading
       || consumedRequest.current === location.key) return;
@@ -175,13 +171,7 @@ export default function StudentCertificates() {
       state: Object.keys(remainingState).length ? remainingState : null,
     });
   }, [location, navigate, profileLoading, loading, defaultCertificateType, openRequestCertificate]);
-<<<<<<< HEAD
 
-=======
-  useEffect(() => {
-    if (open && !form.type && defaultCertificateType) setForm((current) => ({ ...current, type: defaultCertificateType }));
-  }, [open, form.type, defaultCertificateType]);
->>>>>>> origin/main
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
 
   return (

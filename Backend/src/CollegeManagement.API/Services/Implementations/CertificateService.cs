@@ -7,11 +7,6 @@ using CollegeManagement.API.Hubs;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.SignalR;
-<<<<<<< HEAD
-=======
-using Microsoft.EntityFrameworkCore;
-using CollegeManagement.API.Exceptions;
->>>>>>> origin/main
 
 namespace CollegeManagement.API.Services;
 
@@ -135,16 +130,7 @@ public class CertificateService : ICertificateService
         var student = await _repository.GetStudentForGenerationAsync(request.AdmissionNo.Trim(), ct);
 
         if (student == null)
-            throw new NotFoundException($"Student with AdmissionNo '{request.AdmissionNo}' not found.");
-
-        // Pipeline 5 Gating: verify no pending fee dues unless PrincipalOverride is provided
-        var hasPendingDues = await _context.StudentFees
-            .AnyAsync(sf => sf.StudentId == student.StudentId && sf.BalanceAmount > 0 && sf.Status != "Cancelled", ct);
-
-        if (hasPendingDues && !string.Equals(request.Remarks, "PrincipalOverride", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ValidationException($"Cannot generate certificate for student '{student.StudentName}' (AdmissionNo: {request.AdmissionNo}) due to outstanding fee dues. Principal override permission required.");
-        }
+            throw new InvalidOperationException($"Student with AdmissionNo '{request.AdmissionNo}' not found.");
 
         if (string.IsNullOrWhiteSpace(request.CertificateNo))
         {

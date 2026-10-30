@@ -812,7 +812,6 @@ export default function FacultyExamDuties() {
         </nav>
       )}
 
-<<<<<<< HEAD
       {/* Reassign Duty Modal */}
       {reassignDuty && (
         <div className="sp-modal-overlay" onClick={() => !submittingReassign && setReassignDuty(null)}>
@@ -901,9 +900,6 @@ export default function FacultyExamDuties() {
         </div>
       )}
 
-=======
-      {dutyId != null && !selectedDuty && <div className="sp-modal-overlay"><div className="sp-modal-card" role="dialog" aria-label="Exam Duty Details"><p role="status">{loading ? "Loading exam duty details..." : "This exam duty is unavailable."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setSelectedDuty(null)}>Close</button></div></div>}
->>>>>>> origin/main
       {/* MODAL 1: Duty Details & SOPs Modal */}
       {selectedDuty && (
         <div className="sp-modal-overlay" onClick={() => setSelectedDuty(null)}>

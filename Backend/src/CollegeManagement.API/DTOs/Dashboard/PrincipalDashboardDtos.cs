@@ -50,6 +50,7 @@ public class PrincipalDashboardResponseDto
 
     /// <summary>Overall published examination pass percentage for this campus (null if no published results exist).</summary>
     public decimal? PassPercentage { get; set; }
+    public decimal AttendancePercentage { get; set; }
 
     // --- Detailed Sub-DTOs ---
     /// <summary>Today's student attendance breakdown (reused from Admin Student Attendance calculation).</summary>
@@ -79,10 +80,13 @@ public class PrincipalDashboardResponseDto
 /// </summary>
 public class PrincipalFeeSummaryDto
 {
+    public decimal TotalExpected { get; set; }
     public decimal Collected { get; set; }
     public decimal TotalCollected => Collected;
     public decimal Pending { get; set; }
+    public decimal TotalPending => Pending;
     public decimal TotalOutstanding => Pending;
+    public decimal TotalPaid => Collected;
     public decimal CollectionRate { get; set; }
     public decimal CollectionPercentage => CollectionRate;
     public List<PrincipalDailyFeeCollectionDto> Chart { get; set; } = new();
@@ -150,3 +154,6 @@ public class DashboardUpcomingExaminationDto
     public string Hall { get; set; } = "Main Hall";
     public int StudentCount { get; set; }
 }
+
+public class PrincipalFeeMetricsDto : PrincipalFeeSummaryDto {}
+public class PerformanceStreamDto : PrincipalPerformanceStreamDto {}

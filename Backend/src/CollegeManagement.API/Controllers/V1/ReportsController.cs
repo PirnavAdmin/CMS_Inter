@@ -1,3 +1,4 @@
+using CollegeManagement.API.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,13 +11,6 @@ using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
-<<<<<<< HEAD
-=======
-using Microsoft.EntityFrameworkCore;
-
-using CollegeManagement.API.Filters;
-using CollegeManagement.API.Helpers;
->>>>>>> origin/main
 
 namespace CollegeManagement.API.Controllers.V1;
 

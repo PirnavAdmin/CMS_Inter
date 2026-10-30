@@ -73,21 +73,7 @@ export default function PrincipalDashboard() {
     setTimeout(() => setToast(""), 3000);
   };
   const [notices, setNotices] = useState(() => announcementService.getAllAnnouncements());
-<<<<<<< HEAD
   const [showNoticeModal, setShowNoticeModal] = useState(false);
-=======
-  const showNoticeModal = searchParams.get("action") === "post-notice";
-  const setShowNoticeModal = (open) => updateNavigation("action", open ? "post-notice" : null);
-  const [noticeForm, setNoticeForm] = useState({
-    title: "",
-    targetAudience: "Non-Teaching Staff",
-    category: "Administrative",
-    priority: "Normal",
-    publisher: "Principal Office",
-    content: "",
-  });
-  const [noticeError, setNoticeError] = useState("");
->>>>>>> origin/main
 
   useEffect(() => {
     if (assignedCampusId) {

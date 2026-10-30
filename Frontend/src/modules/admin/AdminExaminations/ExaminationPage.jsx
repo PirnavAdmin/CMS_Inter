@@ -4155,13 +4155,10 @@ export default function ExaminationPage() {
             apiClient.get("/api/v1/examinations/types", { signal }),
             apiClient.get("/api/v1/staff/dropdown", { signal, params: { staffType: "Teaching" } }).catch(() => apiClient.get("/api/v1/staff", { signal, params: { staffType: "Teaching", pageSize: 1000 } })),
             apiClient.get("/api/v1/academic-levels", { signal }),
-<<<<<<< HEAD
             apiClient.get("/api/v1/groups", { signal }).catch((err) => {
               if (signal?.aborted) throw err;
               return apiClient.get("/api/v1/groups/dropdown", { signal }).catch(() => null);
             }),
-=======
->>>>>>> origin/main
             apiClient.get("/api/v1/subjects", { signal }).catch(() => null),
             apiClient.get("/api/v1/programs", { signal }),
             apiClient.get("/api/v1/campuses", { signal, params: { isActive: true } }).catch(() => null),
@@ -4260,7 +4257,6 @@ export default function ExaminationPage() {
           );
         }
 
-<<<<<<< HEAD
         if (groupsRes.status === "fulfilled" && groupsRes.value) {
           const rawGroups = ensureArray(unwrap(groupsRes.value));
           const mappedGroups = rawGroups.map((g) => {
@@ -4290,10 +4286,9 @@ export default function ExaminationPage() {
           if (extractedPrograms.length > 0) {
             setPrograms(extractedPrograms);
           }
+        }
 
-=======
->>>>>>> origin/main
-          try {
+        try {
             if (programsRes.status === "rejected") throw programsRes.reason;
             const progsRes = programsRes.value;
             const rawProgs = unwrap(progsRes);
@@ -8852,15 +8847,17 @@ function ScheduleSection({
     [groups, examGroupIds, exam],
   );
 
-<<<<<<< HEAD
-  const [selectedGroupId, setSelectedGroupId] = useState(() => examGroups[0]?.id || exam?.groupId || "");
-=======
-  const [selectedGroupId, setSelectedGroupId] = useState(() => scheduleRoute.get("scheduleGroupId") || examGroups[0]?.id || "");
+  const [selectedGroupId, setSelectedGroupId] = useState(() => (typeof scheduleRoute !== "undefined" && scheduleRoute.get("scheduleGroupId")) || examGroups[0]?.id || exam?.groupId || "");
   useEffect(() => {
-    const id = scheduleRoute.get("scheduleGroupId");
-    if (id && examGroups.some((group) => normalizeId(group.id) === normalizeId(id))) setSelectedGroupId(id);
-  }, [scheduleRoute, examGroups]);
->>>>>>> origin/main
+    if (typeof scheduleRoute !== "undefined" && scheduleRoute.get) {
+      const id = scheduleRoute.get("scheduleGroupId");
+      if (id && examGroups.some((group) => normalizeId(group.id) === normalizeId(id))) {
+        setSelectedGroupId(id);
+      } else if (!selectedGroupId && examGroups.length > 0) {
+        setSelectedGroupId(examGroups[0].id);
+      }
+    }
+  }, [scheduleRoute, examGroups, selectedGroupId]);
 
   useEffect(() => {
     if (examGroups.length > 0) {
