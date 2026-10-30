@@ -1,3 +1,5 @@
+import { SkeletonTable, SkeletonRow } from "@/shared/components/Skeleton.jsx";
+import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import {
@@ -113,7 +115,10 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return "daily";
   }, [initialView, location?.pathname, searchParams]);
 
-  const [attView, setAttView] = useState(resolvedDefaultView); // "daily" | "monthly" | "defaulters"
+  const { params: viewParams, setParam: setViewParam } = useFacultyViewParams();
+  const requestedView = viewParams.get("tab") || viewParams.get("view");
+  const attView = ["daily", "monthly", "defaulters"].includes(requestedView) ? requestedView : resolvedDefaultView;
+  const setAttView = (view) => setViewParam("tab", view); // "daily" | "monthly" | "defaulters"
   // Date auto-defaults to today
   const getLocalTodayDate = () => {
     const now = new Date();
@@ -185,7 +190,8 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
   const [timetableSlots, setTimetableSlots] = useState([]);
 
   // Import Attendance Modal State & Handlers
-  const [showImportModal, setShowImportModal] = useState(false);
+  const showImportModal = viewParams.get("modal") === "import";
+  const setShowImportModal = (open) => setViewParam("modal", open ? "import" : null);
   const [showTemplateStructure, setShowTemplateStructure] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -1485,7 +1491,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
 
       {/* 4. Prompt Card (Shown below the tabs when no section selected or while loading) */}
       {!attSection || !dailyFetched ? (
-        <div className="sp-att-notice-card">
+        (fetchingDaily ? <SkeletonTable columns={8} rows={5} /> : <div className="sp-att-notice-card">
           <div className="sp-att-notice-content">
             <div className="sp-att-notice-icon">
               {fetchingDaily ? (
@@ -1503,7 +1509,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
               </p>
             </div>
           </div>
-        </div>
+        </div>)
       ) : (
         <>
           {/* VIEW 1: Daily Attendance Table */}
@@ -1606,7 +1612,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                       <th style={{ width: 80, textAlign: "center" }}>Report</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody>{fetchingDaily ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />) : <>
                     {pagedDailyStudents.length > 0 ? (
                       pagedDailyStudents.map((s, idx) => {
                         const dailyStatus = getStudentDailyStatus(s.morningStatus, s.afternoonStatus);
@@ -1695,7 +1701,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                         </td>
                       </tr>
                     )}
-                  </tbody>
+                  </>}</tbody>
                 </table>
               </div>
 
@@ -1826,7 +1832,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                       <th>Board Eligibility</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody>{monthlyLoading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={monthDays.length + 7} />) : <>
                     {pagedMonthlyRows.length ? (
                       pagedMonthlyRows.map((r) => (
                         <tr key={r.id || r.studentId}>
@@ -1867,7 +1873,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                         </td>
                       </tr>
                     )}
-                  </tbody>
+                  </>}</tbody>
                 </table>
               </div>
 
@@ -1973,7 +1979,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                       <th style={{ textAlign: "center" }}>Action</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody>{defaultersLoading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={6} />) : <>
                     {computedDefaultersList.length ? (
                       computedDefaultersList.map((s) => {
                         const shortage = (defaulterThreshold - s.attendancePct).toFixed(1);
@@ -2029,7 +2035,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
                         </td>
                       </tr>
                     )}
-                  </tbody>
+                  </>}</tbody>
                 </table>
               </div>
             </div>

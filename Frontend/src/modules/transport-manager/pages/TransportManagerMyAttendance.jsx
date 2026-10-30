@@ -1,3 +1,4 @@
+import { useTransportNavigation, useTransportRouteValue, validTransportDate } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
@@ -83,6 +84,7 @@ const normalizeTodayData = (raw) => {
 };
 
 export default function TransportManagerMyAttendance() {
+  const navigation = useTransportNavigation();
   const context = useTransportManagerSafe();
   const [activeStaffTab, setActiveStaffTab] = useState("my-attendance");
   const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
@@ -94,7 +96,7 @@ export default function TransportManagerMyAttendance() {
     return () => clearInterval(timer);
   }, []);
 
-  const [activeFilter, setActiveFilter] = useState("week");
+  const [activeFilter, setActiveFilter] = useTransportRouteValue(navigation, "range", "week", value => ["week", "last_week", "month", "last_month"].includes(value));
   const [loadingToday, setLoadingToday] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -133,7 +135,10 @@ export default function TransportManagerMyAttendance() {
     },
   });
 
-  const [regModalOpen, setRegModalOpen] = useState(false);
+  const [regularizeDate, setRegularizeDate] = useTransportRouteValue(navigation, "regularize", "", value => value === "" || validTransportDate(value));
+  const [historyPeriod, setHistoryPeriod] = useState(null);
+  const regModalOpen = Boolean(regularizeDate && historyPeriod === activeFilter && !loadingHistory && historyData.logs.some(log => log.rawDate === regularizeDate && log.canRegularize));
+  const setRegModalOpen = (open) => { if (!open) setRegularizeDate(""); };
   const [regSubmitting, setRegSubmitting] = useState(false);
   const [regForm, setRegForm] = useState({
     rawDate: "",
@@ -199,10 +204,13 @@ export default function TransportManagerMyAttendance() {
     }
   }, [syncGlobalPunchState]);
 
+  const historyRequest = useRef(0);
   const fetchHistory = useCallback(async (period) => {
+    const request = ++historyRequest.current;
     try {
       setLoadingHistory(true);
       const res = await attendanceService.getMyAttendanceHistory(period);
+      if (request !== historyRequest.current) return;
       const payload = res?.data || res?.Data || (res?.status ? res : null);
       if (payload) {
         const rawLogs = payload.logs || payload.Logs || [];
@@ -251,6 +259,7 @@ export default function TransportManagerMyAttendance() {
         });
       }
     } catch (err) {
+      if (request !== historyRequest.current) return;
       console.warn("Could not fetch attendance history", err);
       setHistoryData({
         logs: [],
@@ -266,7 +275,7 @@ export default function TransportManagerMyAttendance() {
         },
       });
     } finally {
-      setLoadingHistory(false);
+      if (request === historyRequest.current) { setHistoryPeriod(period); setLoadingHistory(false); }
     }
   }, []);
 
@@ -376,8 +385,23 @@ export default function TransportManagerMyAttendance() {
       requestedOutTime: "17:00",
       reason: "",
     });
-    setRegModalOpen(true);
+    setRegularizeDate(log.rawDate || log.RawDate || new Date().toISOString().split("T")[0]);
   };
+
+  const reportedRegularization = useRef("");
+  const regularizationNotify = useRef(notify);
+  regularizationNotify.current = notify;
+  useEffect(() => {
+    if (!regularizeDate || loadingHistory || historyPeriod !== activeFilter) return;
+    const log = historyData.logs.find(item => item.rawDate === regularizeDate && item.canRegularize);
+    if (!log) {
+      if (reportedRegularization.current !== regularizeDate) regularizationNotify.current("This attendance record is unavailable or cannot be regularized.", "error");
+      reportedRegularization.current = regularizeDate;
+      return;
+    }
+    reportedRegularization.current = "";
+    setRegForm({ rawDate: log.rawDate, displayDate: log.date || log.day || "Selected Date", requestedInTime: "09:00", requestedOutTime: "17:00", reason: "" });
+  }, [regularizeDate, loadingHistory, historyPeriod, activeFilter, historyData.logs]);
 
   const handleSubmitRegularization = async (e) => {
     e.preventDefault();

@@ -7,7 +7,7 @@ import StudentDataTable from "../components/StudentDataTable.jsx";
 import StudentEmptyState from "../components/StudentEmptyState.jsx";
 import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
-import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { useStudentProfile, useStudentNavigation, studentRouteValue, validStudentPage } from "../context/StudentProfileContext.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
 import { getStudentResult, getStudentExaminations, getPublishedStudentResults } from "../services/studentAcademicService.js";
 
@@ -123,16 +123,17 @@ const listDateLabel = (value) => value && !Number.isNaN(new Date(value).getTime(
   ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const DEFAULT_PAGE_SIZE = 5;
 function StudentResultsList({ renderDetails }) {
+  const navigation = useStudentNavigation();
   const { profile: student, loading: profileLoading, error: profileError } = useStudentProfile();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedId, setSelectedId] = useState("");
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [pageSizeOption, setPageSizeOption] = useState(String(DEFAULT_PAGE_SIZE));
+  const [selectedId, setSelectedId] = studentRouteValue(navigation, "examId", "", (value) => value.length <= 100);
+  const [search, setSearch] = studentRouteValue(navigation, "q", "");
+  const [filter, setFilter] = studentRouteValue(navigation, "status", "");
+  const [page, setPage] = studentRouteValue(navigation, "page", 1, validStudentPage);
+  const [pageSize, setPageSize] = studentRouteValue(navigation, "pageSize", DEFAULT_PAGE_SIZE, (value) => Number.isInteger(value) && value > 0 && value <= 1000);
+  const [pageSizeOption, setPageSizeOption] = studentRouteValue(navigation, "sizeOption", [5, 10, 20, 50].includes(pageSize) ? String(pageSize) : "custom", (value) => ["5", "10", "20", "50", "custom"].includes(value));
   const [customPageSize, setCustomPageSize] = useState(String(DEFAULT_PAGE_SIZE));
   const [refresh, setRefresh] = useState(0);
   const [now, setNow] = useState(Date.now);
@@ -140,7 +141,7 @@ function StudentResultsList({ renderDetails }) {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      setLoading(true); setError(""); setEntries([]); setSelectedId(""); setPage(1);
+      setLoading(true); setError(""); setEntries([]);
       try {
         if (!["studentId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => Number(student?.[key]) > 0)) throw new Error("Your student academic placement or section is unavailable. Please contact the college office.");
         const [exams, publishedResults] = await Promise.all([getStudentExaminations(student, { allPages: true }), getPublishedStudentResults(student)]);
@@ -165,7 +166,8 @@ function StudentResultsList({ renderDetails }) {
     return () => { active = false; };
   }, [profileLoading, student, refresh]);
   const classified = useMemo(() => entries.filter((entry) => isCompletedExamination(entry.exam, now)).map((entry) => ({ ...entry, state: entry.error ? "Unable to load result" : entry.notPublished ? "Not Published" : resultState(entry.exam, entry.memo, now) })), [entries, now]);
-  const visible = classified.filter(({ exam, state }) => (!filter || state === filter)
+  const activeFilter = classified.some((entry) => entry.state === filter) ? filter : "";
+  const visible = classified.filter(({ exam, state }) => (!activeFilter || state === activeFilter)
     && `${resultRead(exam, "examName", "examinationName", "name") || ""} ${resultRead(exam, "examCode", "code") || ""}`.toLowerCase().includes(search.trim().toLowerCase())).sort(compareResultEntries);
   const pages = Math.max(1, Math.ceil(visible.length / pageSize));
   const currentPage = Math.min(page, pages);
@@ -175,12 +177,13 @@ function StudentResultsList({ renderDetails }) {
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={7} rows={5}/></div>;
   return <div className="sp-page sp-results-page">
     <StudentPageHeader title="Results" subtitle="Examination results for your section." action={<button className="sp-btn" onClick={() => setRefresh((value) => value + 1)}>Refresh</button>}/>
+    {selectedId && !selected && !error ? <div className="sp-api-state is-error" role="alert">Selected published result is unavailable for your academic context.</div> : null}
     {profileError || error ? <div className="sp-api-state is-error" role="alert">{profileError || error}</div> : null}
     {!error && !entries.length ? <StudentEmptyState icon={Award} title="No Completed Examinations" text="Completed examinations will appear here after the exam period ends."/> : null}
     {entries.length ? <StudentCard title="Examination Results" subtitle={[student?.academicYearName, student?.academicLevelName, student?.groupName, student?.programName, student?.sectionName].filter(Boolean).join(" · ")}>
       <div className="sp-results-toolbar">
         <input type="search" aria-label="Search examinations" placeholder="Search exam name or code..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/>
-        <select aria-label="Filter result status" value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }}><option value="">All Results</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select>
+        <select aria-label="Filter result status" value={activeFilter} onChange={(event) => { setFilter(event.target.value); setPage(1); }}><option value="">All Results</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select>
       </div>
       <StudentDataTable columns={["Exam Name", "Group", "Program", "Section", "Academic Year", "Exam Period", "Status", "Actions"]} rows={visible.slice((currentPage - 1) * pageSize, currentPage * pageSize).map(({ exam, state, error: rowError }) => [
         <strong>{resultRead(exam, "examName", "examinationName", "name") || resultRead(exam, "examCode", "code") || `Examination ${examKey(exam)}`}</strong>,

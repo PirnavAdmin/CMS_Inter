@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ArrowLeft, Check, Eye, Inbox, Info, Loader2, Search, Send, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -124,13 +125,34 @@ function DetailsSection({ title, fields }) {
 }
 
 export default function AdmissionRequests({ campusOptions, currentCampusId, onClose }) {
-  const [tab, setTab] = useState("outgoing");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("requestTab") === "incoming" ? "incoming" : "outgoing";
+  const detailId = searchParams.get("requestId");
+  const detailsOpen = searchParams.has("requestId");
+  const setTab = (nextTab) => {
+    setSearchParams((previous) => {
+      const params = new URLSearchParams(previous);
+      params.set("requestTab", nextTab === "incoming" ? "incoming" : "my-campus");
+      params.delete("requestId");
+      return params;
+    });
+  };
+  const setDetailId = (requestId) => {
+    setSearchParams((previous) => {
+      const params = new URLSearchParams(previous);
+      params.set("requestTab", tab === "incoming" ? "incoming" : "my-campus");
+      if (requestId) params.set("requestId", String(requestId));
+      else params.delete("requestId");
+      return params;
+    });
+  };
   const [search, setSearch] = useState("");
   const [campusFilter, setCampusFilter] = useState("");
   const [page, setPage] = useState(1);
-  const [detailId, setDetailId] = useState(null);
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [settledCampusId, setSettledCampusId] = useState(null);
   const [actionBusy, setActionBusy] = useState("");
   const [requestsByTab, setRequestsByTab] = useState({ outgoing: [], incoming: [] });
   const [loadedCampusId, setLoadedCampusId] = useState("");
@@ -144,6 +166,7 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
       return;
     }
     setLoading(true);
+    setLoadError("");
     try {
       const config = { headers: { "X-Campus-Id": String(currentCampusId) } };
       const [outgoingResponse, incomingResponse] = await Promise.all([
@@ -157,19 +180,30 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
         incoming: getCollection(incomingResponse.data).map((item) => normalizeAdmissionRequest(item, campusOptions, currentCampusId, "incoming")),
       });
     } catch (err) {
-      if (requestsVersionRef.current === version) setToast(getApiErrorMessage(err));
+      if (requestsVersionRef.current === version) {
+        const message = getApiErrorMessage(err);
+        setLoadError(message);
+        setToast(message);
+      }
     } finally {
-      if (requestsVersionRef.current === version) setLoading(false);
+      if (requestsVersionRef.current === version) {
+        setSettledCampusId(String(currentCampusId));
+        setLoading(false);
+      }
     }
   }, [campusOptions, currentCampusId]);
 
   useEffect(() => {
-    setDetailId(null);
     setPage(1);
     setToast("");
     loadRequests();
     return () => { requestsVersionRef.current += 1; };
   }, [loadRequests]);
+
+  useEffect(() => {
+    setCampusFilter("");
+    setPage(1);
+  }, [tab]);
 
   const outgoing = loadedCampusId === String(currentCampusId) ? requestsByTab.outgoing : [];
   const incoming = loadedCampusId === String(currentCampusId) ? requestsByTab.incoming : [];
@@ -186,6 +220,7 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
   const currentPage = Math.min(page, totalPages);
   const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const detail = scopedRequests.find((request) => request.id === detailId);
+  const detailsLoading = !detail && (loading || !currentCampusId || settledCampusId !== String(currentCampusId));
 
   const changeStatus = async (status) => {
     if (!isIncoming || !detail || detail.status !== "Pending" || actionBusy || String(detail.toCampus.value) !== String(currentCampusId)) return;
@@ -218,13 +253,13 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
 
   return (
     <DashboardLayout
-      title={detail ? `${isIncoming ? "Incoming" : "Outgoing"} Admission Request Details` : "Admission Requests"}
-      subtitle={detail ? `Request ${isIncoming ? "received from" : "sent to"} another campus.` : "View and manage admission requests."}
+      title={detailsOpen ? `${isIncoming ? "Incoming" : "Outgoing"} Admission Request Details` : "Admission Requests"}
+      subtitle={detailsOpen ? `Request ${isIncoming ? "received from" : "sent to"} another campus.` : "View and manage admission requests."}
       breadcrumb={["People", "Student Admission"]}
-      actions={<button type="button" className="cms-btn cms-btn-ghost" onClick={detail ? () => setDetailId(null) : onClose}><ArrowLeft size={15} />{detail ? "Back to Requests" : "Back to Student Admission"}</button>}
+      actions={<button type="button" className="cms-btn cms-btn-ghost" onClick={detailsOpen ? () => setDetailId(null) : onClose}><ArrowLeft size={15} />{detailsOpen ? "Back to Requests" : "Back to Student Admission"}</button>}
     >
       <div className="cms-admission-requests">
-        {detail ? (
+        {detailsOpen ? (detail ? (
           <div className={`cms-requests-details ${isIncoming ? "has-action" : ""}`}>
             <div className="cms-requests-sections">
               <DetailsSection title="Request Information" fields={[
@@ -250,7 +285,19 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
               </div>
             </aside> : null}
           </div>
-        ) : <>
+        ) : (
+          <div className="cms-requests-details">
+            <div className="cms-requests-sections">
+              <section className="cms-preview-section" aria-busy={detailsLoading}>
+                <div className="cms-preview-head"><h3>Request Information</h3></div>
+                <div className="cms-requests-empty" role={detailsLoading ? "status" : "alert"}>
+                  {detailsLoading ? <><Loader2 size={16} className="cms-spin" /> Loading request details...</>
+                    : loadError || "This admission request is unavailable or you do not have access to it."}
+                </div>
+              </section>
+            </div>
+          </div>
+        )) : <>
           <div className="cms-admission-main-tabs cms-requests-tabs" role="tablist" aria-label="Admission requests">
             {[{ id: "outgoing", label: "My Campus Requests", count: outgoing.length, Icon: Send }, { id: "incoming", label: "Incoming Requests", count: incoming.length, Icon: Inbox }].map(({ id, label, count, Icon }) => (
               <button key={id} type="button" id={`requests-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls="requests-panel" className={`cms-admission-main-tab ${tab === id ? "is-active" : ""}`} onClick={() => { setTab(id); setCampusFilter(""); setPage(1); }}><Icon size={14} /><span>{label}</span><span className="cms-requests-count">{count}</span></button>

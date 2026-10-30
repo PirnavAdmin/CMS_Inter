@@ -1,6 +1,7 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Search, X } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { adminIconAssets } from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import StudentCard from "@/modules/student/components/StudentCard.jsx";
 import StudentDataTable from "@/modules/student/components/StudentDataTable.jsx";
@@ -11,7 +12,7 @@ import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import "@/modules/admin/AdminProfile/AdminProfilePage.css";
 
 import { formatMoney, formatDate, normalizePayment, loadPaymentHistory, useFinancePage, useFinanceParams } from "../services/accountantService.js";
-import { PageState, FeePagination } from "../components/AccountantUI.jsx";
+import { useAccountantViewParams, PageState, FeePagination } from "../components/AccountantUI.jsx";
 import { pageOf } from "../utils/feeViewData.js";
 import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 import { feeCollectionAccess } from "../services/accountantService.js";
@@ -24,22 +25,34 @@ export function AccountantPayments() {
   const permissions = useEffectivePermissions();
   const canReadHistory = feeCollectionAccess(permissions);
   const canReadReceipt = feeReceiptAccess(permissions);
-  const [receiptSelection, setReceiptSelection] = useState(null);
+  const { params: viewParams, setParam, updateParams } = useAccountantViewParams();
+  const [printSelection, setPrintSelection] = useState(null);
+  const receiptId = viewParams.get("receiptId");
+  const setReceiptSelection = (selection) => {
+    setPrintSelection(selection?.autoPrint ? { ...selection, viewKey: viewParams.toString() } : null);
+    if (!selection?.autoPrint) setParam("receiptId", selection ? readFee(selection.payment, "feePaymentId") : null);
+  };
   const receiptScope = JSON.stringify(campusParams);
-  const [query] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => query.get("tab") === "fees" ? "fees" : "reimbursements"); // "reimbursements" | "fees"
-  useEffect(() => { setReceiptSelection(null); }, [receiptScope, activeTab]);
+  const activeTab = viewParams.get("tab") === "fees" ? "fees" : "reimbursements";
+  const setActiveTab = (tab) => updateParams((next) => {
+    next.set("tab", tab); next.delete("receiptId"); next.delete("disburse");
+  }); // "reimbursements" | "fees"
+  useEffect(() => { setPrintSelection(null); }, [receiptScope, activeTab]);
   const [feePageNumber, setFeePageNumber] = useState(1);
   const [search, setSearch] = useState("");
   const [reimbFilter, setReimbFilter] = useState("all");
-  const [disburseModal, setDisburseModal] = useState(null);
+  const disburseId = viewParams.get("disburse");
+  const setDisburseModal = (entry) => setParam("disburse", entry?.voucherId ?? null);
   const [disburseForm, setDisburseForm] = useState({ paymentMode: "Bank Transfer", paymentRef: "", remarks: "" });
   const [disburseLoading, setDisburseLoading] = useState(false);
   const [disburseSuccess, setDisburseSuccess] = useState("");
 
   const [accountEntries, setAccountEntries] = useState([]);
+  const [entriesLoading, setEntriesLoading] = useState(true);
+  const disburseModal = activeTab !== "reimbursements" || disburseId == null ? null : accountEntries.find((entry) => String(entry.voucherId) === disburseId && entry.paymentStatus.includes("Awaiting"));
 
   const refreshAccountEntries = useCallback(async () => {
+    setEntriesLoading(true);
     try {
       let payables = await fetchAccountEntries();
       if (!payables || payables.length === 0) {
@@ -64,7 +77,7 @@ export function AccountantPayments() {
       setAccountEntries(payables);
     } catch (err) {
       console.warn("Could not fetch account payables from API:", err);
-    }
+    } finally { setEntriesLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -86,6 +99,8 @@ export function AccountantPayments() {
     return loadPaymentHistory(campusParams, signal, () => canReadHistory);
   }, [campusParams, activeTab, permissions.loading, canReadHistory]);
   const state = useFinancePage(load);
+  const receiptPayment = receiptId == null ? null : (state.data?.payments || []).find((payment) => String(readFee(payment, "feePaymentId")) === receiptId);
+  const receiptSelection = (printSelection?.viewKey === viewParams.toString() ? printSelection : null) || (receiptPayment ? { payment: receiptPayment, autoPrint: false, scope: receiptScope } : null);
   const reloadFees = state.reload;
   const feeRows = (state.data?.payments || []).map(payment => ({
     ...normalizePayment(payment),
@@ -340,7 +355,7 @@ export function AccountantPayments() {
       ) : (
         <>
           <PageState {...state} onRetry={permissions.refresh} />
-          {permissions.loading ? <div className="sp-api-state" role="status">Verifying payment history permission...</div> : null}
+          {permissions.loading ? <SkeletonPage variant="form" rows={3} /> : null}
           {state.data?.errors?.length ? <div className="sp-api-state is-error" role="alert">History is incomplete: {state.data.errors.join(" ")} Access must be granted by your administrator if permission is denied. <button type="button" className="sp-btn" onClick={permissions.refresh}>Retry</button></div> : null}
           {!state.loading && !state.error && !permissions.loading ? (
             <StudentCard title="Fee Transactions" subtitle={`${feeRows.length} transactions`}>
@@ -383,6 +398,8 @@ export function AccountantPayments() {
         payment={receiptSelection.payment} autoPrint={receiptSelection.autoPrint} onClose={() => setReceiptSelection(null)}
       /> : null}
 
+      {activeTab === "fees" && receiptId != null && !receiptSelection ? <div className="cms-overlay"><div className="cms-modal" role="dialog" aria-label="Payment Receipt"><p role="status">{state.loading || permissions.loading ? "Loading saved receipt..." : state.error || "This payment is unavailable in the current scope."}</p><button type="button" className="cms-btn cms-btn-ghost" onClick={() => setReceiptSelection(null)}>Close</button></div></div> : null}
+      {activeTab === "reimbursements" && disburseId != null && !disburseModal ? <div className="cms-overlay"><div className="cms-modal" role="dialog" aria-label="Disburse Payment"><p role="status">{entriesLoading ? "Loading payable..." : "This payable is unavailable or has already been disbursed."}</p><button type="button" className="cms-btn cms-btn-ghost" onClick={() => setDisburseModal(null)}>Close</button></div></div> : null}
       {/* Disburse Payment Modal Dialog */}
       {disburseModal ? (
         <div

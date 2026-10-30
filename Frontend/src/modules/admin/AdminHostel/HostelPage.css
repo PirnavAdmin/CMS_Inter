@@ -4075,3 +4075,18 @@ input[type="number"] {
   background: var(--cms-subtle);
   font-size: 12.5px;
 }
+
+/* Hostel loading layouts reuse the shared Student Management shimmer primitives. */
+.cms-hostel-loading { min-width: 0; }
+.cms-hostel-loading-metric { display: grid; gap: 8px; flex: 1; min-width: 0; }
+.cms-hostel-loading-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.cms-hostel-loading-filters { display: grid; grid-template-columns: minmax(160px, 1.2fr) minmax(160px, 1fr); gap: 12px; }
+.cms-hostel-loading-filters:empty { display: none; }
+.cms-hostel-loading-table { min-width: 0; overflow: hidden; }
+.cms-hostel-loading-table .cms-card-head { gap: 12px; flex-wrap: wrap; }
+.cms-hostel-loading-table .cms-card-head > div { min-width: 0; }
+.cms-hostel-loading-table .cms-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; flex-wrap: wrap; }
+.cms-hostel-loading-table .cms-skeleton-table-row td { height: 64px; }
+@media (max-width: 700px) {
+  .cms-hostel-loading-stats, .cms-hostel-loading-filters { grid-template-columns: 1fr; }
+}

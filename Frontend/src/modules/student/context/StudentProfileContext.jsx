@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { getCurrentStudent, getCurrentStudentPhotoFile } from "../services/studentAcademicService.js";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
@@ -66,11 +67,11 @@ export function StudentProfileProvider({ children }) {
     try {
       const storedRead = JSON.parse(localStorage.getItem(`cms_student_read_notifs_${profile.admissionNo}`) || "[]");
       if (Array.isArray(storedRead)) setReadNotifIds(storedRead);
-    } catch {}
+    } catch { /* Ignore unavailable or malformed storage; keep the default read notifications. */ }
     try {
       const storedDismissed = JSON.parse(sessionStorage.getItem(`cms_student_dismissed_notifs_${profile.admissionNo}`) || "[]");
       if (Array.isArray(storedDismissed)) setDismissedNotifIds(storedDismissed);
-    } catch {}
+    } catch { /* Ignore unavailable or malformed storage; keep the default dismissed notifications. */ }
   }, [profile?.admissionNo]);
 
   // Fetch certificate notifications from API
@@ -168,9 +169,9 @@ export function StudentProfileProvider({ children }) {
           }
         }
       };
-    } catch {}
+    } catch { /* Live notification broadcasts are optional; API refresh remains available. */ }
     return () => {
-      try { channel?.close(); } catch {}
+      try { channel?.close(); } catch { /* The optional notification channel may already be closed. */ }
     };
   }, [profile?.admissionNo, refreshNotifications]);
 
@@ -180,7 +181,7 @@ export function StudentProfileProvider({ children }) {
       const next = [...prev, id];
       try {
         localStorage.setItem(`cms_student_read_notifs_${profile?.admissionNo}`, JSON.stringify(next));
-      } catch {}
+      } catch { /* Keep the in-memory read state when local storage is unavailable. */ }
       return next;
     });
   }, [profile?.admissionNo]);
@@ -190,7 +191,7 @@ export function StudentProfileProvider({ children }) {
     setReadNotifIds(allIds);
     try {
       localStorage.setItem(`cms_student_read_notifs_${profile?.admissionNo}`, JSON.stringify(allIds));
-    } catch {}
+    } catch { /* Keep the in-memory read state when local storage is unavailable. */ }
   }, [notifications, profile?.admissionNo]);
 
   const dismissNotification = useCallback((id) => {
@@ -199,7 +200,7 @@ export function StudentProfileProvider({ children }) {
       const next = [...prev, id];
       try {
         sessionStorage.setItem(`cms_student_dismissed_notifs_${profile?.admissionNo}`, JSON.stringify(next));
-      } catch {}
+      } catch { /* Keep the in-memory dismissed state when session storage is unavailable. */ }
       return next;
     });
   }, [profile?.admissionNo]);
@@ -239,3 +240,36 @@ export function StudentProfileProvider({ children }) {
 }
 
 export const useStudentProfile = () => useContext(StudentProfileContext);
+
+// Student-only URL state: batch related controls into a single browser history entry.
+export function useStudentNavigation() {
+  const [params, setParams] = useSearchParams();
+  const current = useRef({ params, setParams });
+  current.current = { params, setParams };
+  const pending = useRef(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const update = useCallback((changes, { replace = false } = {}) => {
+    if (!mounted.current) return;
+    const existing = pending.current;
+    const next = existing?.params || new URLSearchParams(current.current.params);
+    Object.entries(changes).forEach(([key, value]) => value == null || value === "" ? next.delete(key) : next.set(key, String(value)));
+    pending.current = { params: next, replace: existing ? existing.replace && replace : replace };
+    if (!existing) queueMicrotask(() => {
+      const target = pending.current; pending.current = null;
+      if (mounted.current && target && target.params.toString() !== current.current.params.toString()) current.current.setParams(target.params, { replace: target.replace });
+    });
+  }, []);
+  return { params, update };
+}
+
+export function studentRouteValue(navigation, key, fallback, validate = () => true) {
+  const raw = navigation.params.get(key);
+  const candidate = typeof fallback === "number" ? Number(raw) : typeof fallback === "boolean" ? raw === "true" : raw;
+  const value = raw != null && raw !== "" && validate(candidate) ? candidate : fallback;
+  const setValue = (next) => navigation.update({ [key]: typeof next === "function" ? next(value) : next });
+  return [value, setValue];
+}
+
+export const validStudentPage = (value) => Number.isSafeInteger(value) && value > 0 && value <= 100000;
+export const validStudentDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;

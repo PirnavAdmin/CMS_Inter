@@ -49,6 +49,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Bulk saves/submits staff attendance records.
         /// </summary>
         [HttpPost("bulk")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,College Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -64,6 +65,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates a single staff attendance record.
         /// </summary>
         [HttpPut("update")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,College Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -84,6 +86,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffDetails(int facultyId, [FromQuery] DateTime date)
         {
+            if (!IsCurrentUserAdmin())
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                if (facultyId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view attendance details for other staff members." });
+                }
+            }
+
             var result = await _service.GetStaffDetailsAsync(facultyId, date);
             if (result == null)
             {
@@ -96,6 +107,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Generates Staff Monthly Calendar Matrix Grid Report via GET query string.
         /// </summary>
         [HttpGet("monthly-report")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffMonthlyReportGridGet([FromQuery] StaffMonthlyReportRequest request)
@@ -145,6 +157,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffYearlyOverview(int staffId, [FromQuery] int academicYearId)
         {
+            if (!IsCurrentUserAdmin())
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                if (staffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view yearly attendance for other staff members." });
+                }
+            }
+
             var campusId = GetCurrentCampusId();
             var result = await _service.GetStaffYearlyOverviewAsync(staffId, academicYearId, campusId);
             return Ok(result);
@@ -244,6 +265,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves today's punch status and shift information for the logged-in staff member.
         /// </summary>
         [HttpGet("my-today")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyTodayStatus()
@@ -257,6 +279,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Records check-in (punch in) timestamp for the logged-in staff member.
         /// </summary>
         [HttpPost("punch-in")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -281,6 +304,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Records check-out (punch out) timestamp for the logged-in staff member.
         /// </summary>
         [HttpPost("punch-out")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -305,6 +329,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves personal attendance logs and analytics metrics for the requested period (week, last_week, month, last_month).
         /// </summary>
         [HttpGet("my-history")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceHistoryResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyAttendanceHistory([FromQuery] string period = "week")
@@ -318,6 +343,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Submits an attendance regularization request for missing punch, late arrival, or official on-duty.
         /// </summary>
         [HttpPost("regularize")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -340,20 +366,26 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Retrieves pending/all regularization requests for review by Admin/Principal.
+        /// Retrieves pending/all regularization requests. For non-admin faculty, strictly scopes to caller's own requests.
         /// </summary>
         [HttpGet("regularizations")]
         [ProducesResponseType(typeof(IEnumerable<RegularizationItemDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetRegularizations([FromQuery] string? status, [FromQuery] int? departmentId)
         {
             var list = await _service.GetRegularizationsAsync(status, departmentId);
+            if (!IsCurrentUserAdmin())
+            {
+                var staffId = await ResolveStaffIdAsync();
+                list = list.Where(r => (r.StaffId == staffId) || (r.FacultyId == staffId));
+            }
             return Ok(new { Status = true, Message = "Regularization requests loaded successfully.", Data = list });
         }
 
         /// <summary>
-        /// Approves or rejects a staff attendance regularization request.
+        /// Approves or rejects a staff attendance regularization request (Restricted to Admin, Super Admin, Principal).
         /// </summary>
         [HttpPut("regularizations/{id:int}/review")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,College Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]

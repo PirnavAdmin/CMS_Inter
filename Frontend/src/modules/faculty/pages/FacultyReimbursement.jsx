@@ -1,3 +1,5 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
+import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -91,28 +93,31 @@ export default function FacultyReimbursement() {
     profileData.id ||
     authUser.employeeId ||
     authUser.staffId ||
+    authUser.userId ||
     authUser.id ||
-    "EMP-1042";
+    "";
 
   const defaultFacultyName =
     profileData.fullName ||
     (profileData.firstName ? `${profileData.firstName} ${profileData.lastName || ""}`.trim() : "") ||
     authUser.fullName ||
     authUser.name ||
-    "tangiro kamado";
+    authUser.username ||
+    "";
 
   const defaultDepartment =
     profileData.department ||
     authUser.department ||
     authUser.departmentName ||
-    "Languages";
+    "";
 
   const defaultDesignation =
     profileData.designation ||
     profileData.role ||
     authUser.designation ||
     authUser.designationName ||
-    "Assistant Professor";
+    authUser.role ||
+    "";
 
   const defaultEmail =
     profileData.email ||
@@ -127,12 +132,14 @@ export default function FacultyReimbursement() {
   );
 
   // Two tabs only: "submit" (Claims) and "my-claims" (My Claims)
-  const [activePortalTab, setActivePortalTab] = useState("submit");
+  const { params, setParam } = useFacultyViewParams();
+  const activePortalTab = params.get("tab") === "my-claims" ? "my-claims" : "submit";
+  const setActivePortalTab = (tab) => setParam("tab", tab);
 
   // ── Live Claims & Account Entries State ─────────────────────────────
   const [claims, setClaims] = useState([]);
   const [accountEntries, setAccountEntries] = useState([]);
-  const [isLoadingClaims, setIsLoadingClaims] = useState(false);
+  const [isLoadingClaims, setIsLoadingClaims] = useState(params.has("claimId"));
   const [toast, setToast] = useState(null);
 
   /**
@@ -327,10 +334,29 @@ export default function FacultyReimbursement() {
   const [currentPage, setCurrentPage] = useState(1);
 
   // ── Modal Dialog States ─────────────────────────────────────────────
-  const [selectedClaim, setSelectedClaim] = useState(null);
-  const [claimDetailModalOpen, setClaimDetailModalOpen] = useState(false);
-  const [previewDocModalOpen, setPreviewDocModalOpen] = useState(false);
-  const [viewAccountsDrawerOpen, setViewAccountsDrawerOpen] = useState(false);
+  const [draftClaim, setDraftClaim] = useState(null);
+  const draftClaimRef = useRef(null);
+  const [draftProofOpen, setDraftProofOpen] = useState(false);
+  const claimId = params.get("claimId");
+  const selectedClaim = draftProofOpen ? draftClaim : claimId == null ? null : claims.find((claim) => String(claim.id || claim.claimId) === claimId && isClaimOwnedByFaculty(claim));
+  const setSelectedClaim = (claim) => {
+    if (claim?.claimId === "DRAFT-PROOF") { draftClaimRef.current = claim; setDraftClaim(claim); }
+    else { draftClaimRef.current = null; setDraftProofOpen(false); setParam("claimId", claim ? claim.id || claim.claimId : null); }
+  };
+  const claimDetailModalOpen = params.get("modal") === "claim";
+  const setClaimDetailModalOpen = (open) => setParam("modal", open ? "claim" : null);
+  const previewDocModalOpen = draftProofOpen || params.get("proof") === "1";
+  const setPreviewDocModalOpen = (open) => {
+    // A locally selected file is a temporary preview, not a saved detail link.
+    if (draftClaimRef.current) {
+      setDraftProofOpen(open);
+      if (!open) { draftClaimRef.current = null; setDraftClaim(null); }
+      return;
+    }
+    setParam("proof", open ? "1" : null);
+  };
+  const viewAccountsDrawerOpen = params.get("ledger") === "1";
+  const setViewAccountsDrawerOpen = (open) => setParam("ledger", open ? "1" : null);
   const [previewClaimModalOpen, setPreviewClaimModalOpen] = useState(false);
   const [previewDraftDocModalOpen, setPreviewDraftDocModalOpen] = useState(false);
 
@@ -1513,7 +1539,7 @@ export default function FacultyReimbursement() {
                   <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody>{isLoadingClaims ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />) : <>
                 {paginatedClaims.length === 0 ? (
                   <tr>
                     <td colSpan={9}>
@@ -1601,7 +1627,7 @@ export default function FacultyReimbursement() {
                     </tr>
                   ))
                 )}
-              </tbody>
+              </>}</tbody>
             </table>
           </div>
 
@@ -1647,6 +1673,7 @@ export default function FacultyReimbursement() {
 
       {/* ── MODALS ── */}
 
+      {(claimDetailModalOpen || previewDocModalOpen) && !selectedClaim && <Modal title="Claim Details" onClose={() => { setClaimDetailModalOpen(false); setPreviewDocModalOpen(false); }}><p role="status">{isLoadingClaims ? "Loading claim details..." : "This claim or unsaved document preview is unavailable."}</p></Modal>}
       {/* 1. Claim Details Modal */}
       {claimDetailModalOpen && selectedClaim && (
         <Modal

@@ -282,6 +282,18 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int pageSize = 10,
             [FromQuery] int? page = null)
         {
+            var effectiveCampusId = campusId;
+            if (User.IsInRole("Principal"))
+            {
+                var campusClaim = User.FindFirst("campus_id")?.Value
+                    ?? User.FindFirst("CampusId")?.Value
+                    ?? User.FindFirst(System.Security.Claims.ClaimTypes.PrimaryGroupSid)?.Value
+                    ?? User.FindFirst(System.Security.Claims.ClaimTypes.GroupSid)?.Value;
+                if (!string.IsNullOrEmpty(campusClaim) && int.TryParse(campusClaim, out int principalCampusId) && principalCampusId > 0)
+                {
+                    effectiveCampusId = principalCampusId;
+                }
+            }
             var effectivePageNumber = page.HasValue && page.Value > 0 ? page.Value : pageNumber;
             var students = await _service.GetPagedAsync(
                 search,
@@ -293,7 +305,7 @@ namespace CollegeManagement.API.Controllers.V1
                 sectionId,
                 status,
                 isActive,
-                campusId,
+                effectiveCampusId,
                 effectivePageNumber,
                 pageSize);
 
@@ -306,7 +318,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetById(int studentId)
@@ -611,7 +623,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}/dashboard")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetDashboard(int studentId)

@@ -6,7 +6,7 @@ import StudentCard from "../components/StudentCard.jsx";
 import StudentEmptyState from "../components/StudentEmptyState.jsx";
 import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
-import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { useStudentProfile, useStudentNavigation, studentRouteValue, validStudentDate } from "../context/StudentProfileContext.jsx";
 import { getStudentAttendance } from "../services/studentAcademicService.js";
 
 const STATUS = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
@@ -54,13 +54,14 @@ function AttendancePill({ value, compact = false }) {
 }
 
 export default function StudentAttendance() {
+  const navigation = useStudentNavigation();
   const { profile: student, loading: profileLoading, error: profileError } = useStudentProfile();
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [view, setView] = useState("daily");
-  const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH);
-  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [view, setView] = studentRouteValue(navigation, "tab", "daily", (value) => ["daily", "monthly"].includes(value));
+  const [selectedMonth, setSelectedMonth] = studentRouteValue(navigation, "month", CURRENT_MONTH, (value) => validStudentDate(value + "-01") && value <= CURRENT_MONTH);
+  const [selectedDate, setSelectedDate] = studentRouteValue(navigation, "date", todayKey(), validStudentDate);
   const [refreshVersion, setRefreshVersion] = useState(0);
   useEffect(() => {
     const refresh = () => setRefreshVersion((version) => version + 1);

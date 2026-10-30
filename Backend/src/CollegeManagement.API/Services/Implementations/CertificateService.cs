@@ -7,14 +7,12 @@ using CollegeManagement.API.Hubs;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Services;
 
 public class CertificateService : ICertificateService
 {
     private readonly ICertificateRepository _repository;
-    private readonly CollegeManagement.API.Data.AppDbContext _context;
     private readonly INumberSeriesService _numberSeriesService;
     private readonly ITemplateService _templateService;
     private readonly IHubContext<NotificationHub>? _hubContext;
@@ -22,14 +20,12 @@ public class CertificateService : ICertificateService
 
     public CertificateService(
         ICertificateRepository repository, 
-        CollegeManagement.API.Data.AppDbContext context, 
         INumberSeriesService numberSeriesService,
         ITemplateService templateService,
         IHubContext<NotificationHub>? hubContext = null,
         Microsoft.Extensions.Logging.ILogger<CertificateService>? logger = null)
     {
         _repository = repository;
-        _context = context;
         _numberSeriesService = numberSeriesService;
         _templateService = templateService;
         _hubContext = hubContext;
@@ -131,10 +127,12 @@ public class CertificateService : ICertificateService
         if (string.IsNullOrWhiteSpace(request.Purpose))
             throw new ArgumentException("Purpose is required.");
 
-        var student = await _context.Students
-            .FirstOrDefaultAsync(s => s.AdmissionNo == request.AdmissionNo, ct);
+        var student = await _repository.GetStudentForGenerationAsync(request.AdmissionNo.Trim(), ct);
 
-        if (student != null && string.IsNullOrWhiteSpace(request.CertificateNo))
+        if (student == null)
+            throw new InvalidOperationException($"Student with AdmissionNo '{request.AdmissionNo}' not found.");
+
+        if (string.IsNullOrWhiteSpace(request.CertificateNo))
         {
             var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
             { 
@@ -149,12 +147,13 @@ public class CertificateService : ICertificateService
             }
             else
             {
-                request.CertificateNo = $"CERT-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 5).ToUpper()}";
+                // Pipeline 5: Strict atomic sequence lock. Eliminate silent random GUID fallback.
+                throw new InvalidOperationException("Certificate number series 'CERTIFICATE_NUMBER' could not be generated. Please ensure the sequence configuration is initialized.");
             }
         }
 
         var generatedCert = await _repository.GenerateAsync(request, ct);
-        if (generatedCert != null)
+        if (generatedCert != null && _hubContext != null)
         {
             try
             {
@@ -212,6 +211,48 @@ public class CertificateService : ICertificateService
         return await _repository.VerifyAsync(certificateNo.Trim(), ct);
     }
 
+    public async Task<PublicCertificateVerificationDto?> VerifyPublicAsync(
+        string certificateNo,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(certificateNo))
+            throw new ArgumentException("Certificate number is required.");
+
+        var cert = await _repository.VerifyAsync(certificateNo.Trim(), ct);
+        if (cert == null) return null;
+
+        string maskedName = MaskStudentName(cert.StudentName);
+        var issueDate = cert.IssueDate != default ? cert.IssueDate : DateTime.UtcNow;
+
+        // Deterministic verification hash (SHA256 of certificateNo + issueDate + type)
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var hashBytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes($"{cert.CertificateNumber}:{issueDate:yyyy-MM-dd}:{cert.CertificateType}"));
+        var verificationHash = Convert.ToHexString(hashBytes)[..16];
+
+        return new PublicCertificateVerificationDto
+        {
+            CertificateNumber = cert.CertificateNumber,
+            StudentNameMasked = maskedName,
+            CertificateType = cert.CertificateType,
+            IssueDate = issueDate,
+            IssuingInstitution = !string.IsNullOrWhiteSpace(cert.BoardName) ? cert.BoardName : "College Management System",
+            ValidityStatus = string.Equals(cert.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) ? "Cancelled" : "Valid",
+            VerificationHash = verificationHash
+        };
+    }
+
+    private static string MaskStudentName(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return "****";
+        var parts = fullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var maskedParts = parts.Select(p =>
+        {
+            if (p.Length <= 2) return p[0] + "*";
+            return p[0] + new string('*', Math.Max(1, p.Length - 2)) + p[^1];
+        });
+        return string.Join(" ", maskedParts);
+    }
+
     public async Task<CertificateResponseDto?> ReissueAsync(
         ReissueCertificateDto request,
         CancellationToken ct = default)
@@ -230,7 +271,7 @@ public class CertificateService : ICertificateService
             return false;
 
         var moveResult = await _repository.MoveStatusAsync(id, status, issuedBy, ct);
-        if (moveResult)
+        if (moveResult && _hubContext != null)
         {
             try
             {
@@ -304,7 +345,7 @@ public class CertificateService : ICertificateService
     {
         ArgumentNullException.ThrowIfNull(request);
         var list = await _repository.BulkGenerateAsync(request, ct);
-        if (list.Count > 0)
+        if (list.Count > 0 && _hubContext != null)
         {
             try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "NEW_CERTIFICATE_REQUEST" }, ct); } catch { }
         }

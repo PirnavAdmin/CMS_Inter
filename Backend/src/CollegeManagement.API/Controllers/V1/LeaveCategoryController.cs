@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.LeaveCategory;
@@ -29,9 +30,9 @@ namespace CollegeManagement.API.Controllers.V1
         [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll(CancellationToken ct = default)
         {
-            var result = await _service.GetAllAsync();
+            var result = await _service.GetAllAsync(ct);
             return Ok(new { Status = true, Message = "Leave categories retrieved successfully.", Data = result });
         }
 
@@ -39,9 +40,9 @@ namespace CollegeManagement.API.Controllers.V1
         [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<IActionResult> GetSummary()
+        public async Task<IActionResult> GetSummary(CancellationToken ct = default)
         {
-            var result = await _service.GetSummaryAsync();
+            var result = await _service.GetSummaryAsync(ct);
             return Ok(new { Status = true, Message = "Leave category summary retrieved successfully.", Data = result });
         }
 
@@ -50,9 +51,9 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetById(int id)
+        public async Task<IActionResult> GetById(int id, CancellationToken ct = default)
         {
-            var result = await _service.GetByIdAsync(id);
+            var result = await _service.GetByIdAsync(id, ct);
             if (result == null)
             {
                 return NotFound(new { Status = false, Message = $"Leave category with ID {id} not found." });
@@ -66,9 +67,9 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<IActionResult> Create([FromBody] CreateLeaveCategoryDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateLeaveCategoryDto dto, CancellationToken ct = default)
         {
-            var result = await _service.CreateAsync(dto);
+            var result = await _service.CreateAsync(dto, ct);
             return StatusCode(StatusCodes.Status201Created, new { Status = true, Message = "Leave category created successfully.", Data = result });
         }
 
@@ -79,9 +80,9 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdateLeaveCategoryDto dto)
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateLeaveCategoryDto dto, CancellationToken ct = default)
         {
-            var result = await _service.UpdateAsync(id, dto);
+            var result = await _service.UpdateAsync(id, dto, ct);
             return Ok(new { Status = true, Message = "Leave category updated successfully.", Data = result });
         }
 
@@ -90,9 +91,9 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Delete(int id)
+        public async Task<IActionResult> Delete(int id, CancellationToken ct = default)
         {
-            await _service.DeleteAsync(id);
+            await _service.DeleteAsync(id, ct);
             return Ok(new { Status = true, Message = "Leave category deleted successfully." });
         }
 
@@ -100,9 +101,9 @@ namespace CollegeManagement.API.Controllers.V1
         [Authorize(Roles = "Admin,College Admin,Super Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<IActionResult> ResetDefaults()
+        public async Task<IActionResult> ResetDefaults(CancellationToken ct = default)
         {
-            await _service.ResetDefaultsAsync();
+            await _service.ResetDefaultsAsync(ct);
             return Ok(new { Status = true, Message = "Default leave categories restored successfully." });
         }
     }

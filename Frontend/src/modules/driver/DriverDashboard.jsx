@@ -21,7 +21,7 @@ export default function DriverDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Active Tab state synced with URL pathname if present
+  // Resolve the screen directly from the current URL, including history navigation.
   const getTabFromPath = () => {
     const path = location.pathname.toLowerCase();
     if (path.includes("/payslip")) return "payslips";
@@ -38,12 +38,7 @@ export default function DriverDashboard() {
     return "home";
   };
 
-  const [activeTab, setActiveTab] = useState(getTabFromPath);
-
-  // Sync tab with URL changes
-  useEffect(() => {
-    setActiveTab(getTabFromPath());
-  }, [location.pathname]);
+  const activeTab = getTabFromPath();
 
   // Global shared state for students & active trip
   const [students, setStudents] = useState([]);
@@ -75,7 +70,6 @@ export default function DriverDashboard() {
   };
 
   const handleSelectTab = (tabId) => {
-    setActiveTab(tabId);
     // Optionally update URL if under /driver route
     if (location.pathname.startsWith("/driver")) {
       navigate(`/driver/${tabId === "home" ? "" : tabId}`);

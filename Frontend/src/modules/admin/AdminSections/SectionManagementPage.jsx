@@ -1,4 +1,6 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Eye,
   Plus,
@@ -759,7 +761,24 @@ export default function SectionManagementPage() {
   } = useAcademicContext();
 
   // First Tab is Room Management ("rooms"), Second Tab is Section Management ("sections")
-  const [activeTab, setActiveTab] = useState("rooms");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const managementNavigation = useRef(null);
+  managementNavigation.current = { params: searchParams, setSearchParams };
+  const updateManagementQuery = useCallback((changes, replace = false) => {
+    const current = managementNavigation.current;
+    const params = new URLSearchParams(current.params);
+    Object.entries(changes).forEach(([key, value]) => { if (value == null || value === "") params.delete(key); else params.set(key, String(value)); });
+    if (params.toString() !== current.params.toString()) {
+      managementNavigation.current = { ...current, params };
+      current.setSearchParams(params, { replace });
+    }
+  }, []);
+  const activeTab = searchParams.get("tab") === "sections" ? "sections" : "rooms";
+  const navigationView = ["add", "edit", "preview"].includes(searchParams.get("view")) ? searchParams.get("view") : "list";
+  const navigateManagement = (tab, view = "list", id = "") => {
+    updateManagementQuery({ tab, view: view === "list" ? null : view, sectionId: tab === "sections" ? id : null, roomId: tab === "rooms" ? id : null, mode: null });
+  };
+  const setActiveTab = (tab) => navigateManagement(tab);
 
   const [campusesList, setCampusesList] = useState([]);
   const [boardsList, setBoardsList] = useState([]);
@@ -799,7 +818,12 @@ export default function SectionManagementPage() {
   const programRequestRef = useRef(0);
 
   // Filter & Search state for tables
-  const [filters, setFilters] = useState({ boardId: "", academicYearId: "", groupId: "", programId: "", academicLevelId: "" });
+  const filters = useMemo(() => Object.fromEntries(["boardId", "academicYearId", "groupId", "programId", "academicLevelId"].map((key) => [key, searchParams.get(`filter_${key}`) || ""])), [searchParams]);
+  const setFilters = useCallback((update) => {
+    const current = Object.fromEntries(["boardId", "academicYearId", "groupId", "programId", "academicLevelId"].map((key) => [key, managementNavigation.current.params.get(`filter_${key}`) || ""]));
+    const next = typeof update === "function" ? update(current) : update;
+    updateManagementQuery(Object.fromEntries(Object.entries(next).map(([key, value]) => [`filter_${key}`, value])), true);
+  }, [updateManagementQuery]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
@@ -901,14 +925,14 @@ export default function SectionManagementPage() {
       const bId = normalizeId(effectiveNavbarBoard.id);
       setFilters((current) => (normalizeId(current.boardId) === bId ? current : { ...current, boardId: bId }));
     }
-  }, [effectiveNavbarBoard]);
+  }, [effectiveNavbarBoard, setFilters]);
 
   useEffect(() => {
     if (effectiveNavbarYear) {
       const yId = normalizeId(effectiveNavbarYear.id);
       setFilters((current) => (normalizeId(current.academicYearId) === yId ? current : { ...current, academicYearId: yId }));
     }
-  }, [effectiveNavbarYear]);
+  }, [effectiveNavbarYear, setFilters]);
 
   const [roomFilters, setRoomFilters] = useState({ building: "", floor: "", roomType: "" });
   const [roomSearch, setRoomSearch] = useState("");
@@ -924,7 +948,12 @@ export default function SectionManagementPage() {
   const [customSectionPageInput, setCustomSectionPageInput] = useState("");
 
   // Room Excel Global Upload Modal state
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const isUploadModalOpen = searchParams.get("modal") === "upload";
+  const setIsUploadModalOpen = (open) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (open) params.set("modal", "upload"); else params.delete("modal");
+    return params;
+  });
   const [uploadFile, setUploadFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -934,7 +963,7 @@ export default function SectionManagementPage() {
 
   // Section Student Counts & Delete Guard Modal state
   const [sectionStudentCounts, setSectionStudentCounts] = useState({});
-  const [deleteModalState, setDeleteModalState] = useState({
+  const [deleteModalData, setDeleteModalState] = useState({
     isOpen: false,
     section: null,
     loading: false,
@@ -942,23 +971,40 @@ export default function SectionManagementPage() {
   });
 
   // Room Delete Modal state (Unconstrained, matches Section Delete confirmation modal)
-  const [deleteRoomModalState, setDeleteRoomModalState] = useState({
+  const [deleteRoomModalData, setDeleteRoomModalState] = useState({
     isOpen: false,
     room: null,
     assignedSection: null,
   });
+  const confirmationView = searchParams.get("modal");
+  const confirmationId = searchParams.get("modalRecordId");
+  const deleteModalState = { ...deleteModalData, isOpen: confirmationView === "delete-section" && deleteModalData.isOpen && String(deleteModalData.section?.id) === confirmationId };
+  const deleteRoomModalState = { ...deleteRoomModalData, isOpen: confirmationView === "delete-room" && deleteRoomModalData.isOpen && String(deleteRoomModalData.room?.id) === confirmationId };
+  const navigateConfirmation = (modal, id) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (modal) { params.set("modal", modal); params.set("modalRecordId", String(id)); }
+    else { params.delete("modal"); params.delete("modalRecordId"); }
+    return params;
+  });
 
   // Screen View state replacing modals
-  const [sectionView, setSectionView] = useState("list");
-  const [sectionFormMode, setSectionFormMode] = useState("add");
-  const [sectionCreationType, setSectionCreationType] = useState("single");
-
-  const [roomView, setRoomView] = useState("list");
-  const [roomFormMode, setRoomFormMode] = useState("add");
-  const [roomCreationType, setRoomCreationType] = useState("single");
+  const sectionView = activeTab === "sections" && navigationView !== "list" ? "form" : "list";
+  const roomView = activeTab === "rooms" && navigationView !== "list" ? "form" : "list";
+  const sectionFormMode = navigationView === "list" ? "add" : navigationView;
+  const roomFormMode = sectionFormMode;
+  const setSectionView = () => navigateManagement("sections");
+  const setRoomView = () => navigateManagement("rooms");
+  const sectionCreationType = searchParams.get("mode") === "bulk" ? "bulk" : "single";
+  const roomCreationType = sectionCreationType;
+  const setSectionCreationType = (mode) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (mode === "bulk") params.set("mode", mode); else params.delete("mode");
+    return params;
+  });
+  const setRoomCreationType = setSectionCreationType;
 
   // Form Data state: STATUS IS MANUAL ENTRY (STARTS EMPTY "")
-  const [selectedSectionId, setSelectedSectionId] = useState(null);
+  const selectedSectionId = navigationView === "add" ? null : searchParams.get("sectionId");
   const [sectionForm, setSectionForm] = useState({
     boardId: "",
     academicYearId: "",
@@ -975,7 +1021,7 @@ export default function SectionManagementPage() {
     { name: "", roomId: "", classTeacherId: "", strength: "", status: "" },
   ]);
 
-  const [selectedRoomId, setSelectedRoomId] = useState(null);
+  const selectedRoomId = navigationView === "add" ? null : searchParams.get("roomId");
   const [roomForm, setRoomForm] = useState({
     roomNo: "",
     capacity: "",
@@ -1000,6 +1046,8 @@ export default function SectionManagementPage() {
 
   // UI Toast feedback
   const [toast, setToast] = useState(null);
+  const [restoredNavigation, setRestoredNavigation] = useState("");
+  const [navigationError, setNavigationError] = useState("");
   const toastTimer = useRef(null);
 
   const say = useCallback((message, type = "success") => {
@@ -1031,25 +1079,18 @@ export default function SectionManagementPage() {
     }
   }, [effectiveCampusId]);
 
-  const loadStudentCounts = useCallback(async () => {
-    try {
-      const res = await apiClient.get(apiEndpoints.students.getAll);
-      const studentList = unwrapList(res);
-      const counts = {};
-      if (Array.isArray(studentList)) {
-        studentList.forEach((s) => {
-          const sId = normalizeId(s.sectionId);
-          if (sId) {
-            counts[sId] = (counts[sId] || 0) + 1;
-          }
-        });
-      }
-      setSectionStudentCounts(counts);
-      return counts;
-    } catch (err) {
-      console.warn("Could not fetch student counts for sections:", err);
-      return {};
+  const loadStudentCounts = useCallback((sectionsList = []) => {
+    const counts = {};
+    if (Array.isArray(sectionsList)) {
+      sectionsList.forEach((s) => {
+        const sId = normalizeId(s.id);
+        if (sId) {
+          counts[sId] = Number(s.enrolledCount ?? s.currentStrength ?? 0);
+        }
+      });
     }
+    setSectionStudentCounts(counts);
+    return counts;
   }, []);
 
   const loadSections = useCallback(async (targetCampusId = effectiveCampusId) => {
@@ -1064,7 +1105,7 @@ export default function SectionManagementPage() {
         return 0;
       });
       setSections(next);
-      loadStudentCounts();
+      loadStudentCounts(next);
       return next;
     } catch (err) {
       console.warn("Could not load sections:", err);
@@ -1084,10 +1125,9 @@ export default function SectionManagementPage() {
       apiClient.get(apiEndpoints.rooms.getAll),
       apiClient.get(apiEndpoints.sections.getAll),
       apiClient.get("/api/v1/staff/dropdown", { params: { staffType: "Teaching" } }),
-      apiClient.get(apiEndpoints.students.getAll),
     ]).then((results) => {
       if (!active) return;
-      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult, studentsResult] = results;
+      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult] = results;
       if (campusesResult?.status === "fulfilled") {
         const loadedCampuses = unwrapList(campusesResult.value).map(normalizeCampus).filter((item) => item.id && item.isActive);
         setCampusesList(loadedCampuses);
@@ -1477,15 +1517,12 @@ export default function SectionManagementPage() {
   const roomFloors = useMemo(() => [...new Set(campusRooms.map((r) => String(r.floor)).filter(Boolean))], [campusRooms]);
   const roomFilterTypes = useMemo(() => [...new Set(campusRooms.map((r) => r.roomType).filter(Boolean))], [campusRooms]);
 
-  const openAddSection = () => {
+  const openAddSection = ({ restoring = false } = {}) => {
     if (operationRef.current) return;
     ++boardRequestRef.current;
     ++groupRequestRef.current;
     ++programRequestRef.current;
     setDependentLoading({ board: false, group: false, program: false });
-    setSelectedSectionId(null);
-    setSectionFormMode("add");
-    setSectionCreationType("single");
     setFieldErrors({});
     const pool = campusBoards.length ? campusBoards : boardsList;
     const boardId = effectiveNavbarBoard ? normalizeId(effectiveNavbarBoard.id) : (pool.some((item) => item.id === normalizeId(filters.boardId)) ? normalizeId(filters.boardId) : (pool[0]?.id ? normalizeId(pool[0].id) : ""));
@@ -1509,7 +1546,8 @@ export default function SectionManagementPage() {
     setGroupsList([]);
     setProgramsList([]);
     setBulkSections([{ name: "", roomId: "", classTeacherId: "", strength: "", status: "" }]);
-    setSectionView("form");
+    if (!restoring) navigateManagement("sections", "add");
+    setRestoredNavigation(`sections|add||${effectiveCampusId}`);
     loadBoardDependencies(boardId, { groupId, programId, academicLevelId });
   };
 
@@ -1526,11 +1564,8 @@ export default function SectionManagementPage() {
     }
   }, [sectionView, sectionFormMode, effectiveNavbarBoard, effectiveNavbarYear, sectionForm.boardId, sectionForm.academicYearId, loadBoardDependencies]);
 
-  const openEditSection = (sec, isPreview = false) => {
+  const openEditSection = (sec, isPreview = false, restoring = false) => {
     if (operationRef.current) return;
-    setSelectedSectionId(sec.id);
-    setSectionFormMode(isPreview ? "preview" : "edit");
-    setSectionCreationType("single");
     setFieldErrors({});
     setSectionForm({
       campusId: sec.campusId || effectiveCampusId,
@@ -1545,7 +1580,8 @@ export default function SectionManagementPage() {
       strength: String(sec.strength || ""),
       status: sec.status || "",
     });
-    setSectionView("form");
+    if (!restoring) navigateManagement("sections", isPreview ? "preview" : "edit", sec.id);
+    setRestoredNavigation(`sections|${isPreview ? "preview" : "edit"}|${sec.id}|${effectiveCampusId}`);
     if (isPreview) {
       ++boardRequestRef.current;
       ++groupRequestRef.current;
@@ -1563,10 +1599,7 @@ export default function SectionManagementPage() {
     }
   };
 
-  const openAddRoom = () => {
-    setSelectedRoomId(null);
-    setRoomFormMode("add");
-    setRoomCreationType("single");
+  const openAddRoom = ({ restoring = false } = {}) => {
     setRoomFieldErrors({});
     setRoomForm({
       campusId: effectiveCampusId,
@@ -1580,13 +1613,11 @@ export default function SectionManagementPage() {
     setBulkRoomForm(EMPTY_BULK_ROOM_FORM);
     setBulkRoomAllocations([]);
     setBulkRoomPage(1);
-    setRoomView("form");
+    if (!restoring) navigateManagement("rooms", "add");
+    setRestoredNavigation(`rooms|add||${effectiveCampusId}`);
   };
 
-  const openEditRoom = (room, isPreview = false) => {
-    setSelectedRoomId(room.id);
-    setRoomFormMode(isPreview ? "preview" : "edit");
-    setRoomCreationType("single");
+  const openEditRoom = (room, isPreview = false, restoring = false) => {
     setRoomFieldErrors({});
     setRoomForm({
       campusId: room.campusId || effectiveCampusId,
@@ -1597,8 +1628,27 @@ export default function SectionManagementPage() {
       floor: String(room.floor ?? ""),
       isActive: room.status ?? (room.isActive === true ? "Active" : room.isActive === false ? "Inactive" : ""),
     });
-    setRoomView("form");
+    if (!restoring) navigateManagement("rooms", isPreview ? "preview" : "edit", room.id);
+    setRestoredNavigation(`rooms|${isPreview ? "preview" : "edit"}|${room.id}|${effectiveCampusId}`);
   };
+
+  const navigationRecordId = activeTab === "rooms" ? selectedRoomId : selectedSectionId;
+  const navigationKey = `${activeTab}|${navigationView}|${navigationRecordId || ""}|${effectiveCampusId}`;
+  const navigationLoaders = useRef(null);
+  navigationLoaders.current = { openAddRoom, openAddSection, openEditRoom, openEditSection };
+  useEffect(() => {
+    if (navigationView === "list" || restoredNavigation === navigationKey || initialLoading) return;
+    setNavigationError("");
+    const loaders = navigationLoaders.current;
+    if (navigationView === "add") {
+      (activeTab === "rooms" ? loaders.openAddRoom : loaders.openAddSection)({ restoring: true });
+      return;
+    }
+    const record = (activeTab === "rooms" ? rooms : sections).find((item) => String(item.id) === navigationRecordId
+      && (!effectiveCampusId || !item.campusId || String(item.campusId) === String(effectiveCampusId)));
+    if (!record) { setNavigationError("This record is unavailable in the current campus."); return; }
+    (activeTab === "rooms" ? loaders.openEditRoom : loaders.openEditSection)(record, navigationView === "preview", true);
+  }, [activeTab, navigationView, navigationRecordId, navigationKey, restoredNavigation, initialLoading, rooms, sections, effectiveCampusId]);
 
   const handleSectionRoomChange = (roomId) => {
     const selectedRoom = roomsById.get(String(roomId));
@@ -2102,8 +2152,9 @@ export default function SectionManagementPage() {
     }
   };
 
-  const openDeleteSectionModal = async (sec) => {
+  const openDeleteSectionModal = async (sec, restoring = false) => {
     if (operationRef.current || initialLoading) return;
+    if (!restoring) navigateConfirmation("delete-section", sec.id);
     setDeleteModalState({
       isOpen: true,
       section: sec,
@@ -2144,6 +2195,7 @@ export default function SectionManagementPage() {
 
   const closeDeleteSectionModal = (force = false) => {
     if (operationRef.current && !force) return;
+    navigateConfirmation(null);
     setDeleteModalState({
       isOpen: false,
       section: null,
@@ -2174,8 +2226,9 @@ export default function SectionManagementPage() {
     );
   };
 
-  const openDeleteRoomModal = (room) => {
+  const openDeleteRoomModal = (room, restoring = false) => {
     if (operationRef.current || initialLoading || !room) return;
+    if (!restoring) navigateConfirmation("delete-room", room.id);
     const assignedSection = activeSectionsByRoomId.get(normalizeId(room.id)) || getActiveSectionForRoom(room, sections);
     if (assignedSection) {
       say("Cannot delete this room because it is assigned to an active section.", "error");
@@ -2189,6 +2242,7 @@ export default function SectionManagementPage() {
 
   const closeDeleteRoomModal = (force = false) => {
     if (operationRef.current && !force) return;
+    navigateConfirmation(null);
     setDeleteRoomModalState({
       isOpen: false,
       room: null,
@@ -2232,6 +2286,20 @@ export default function SectionManagementPage() {
     say("Section and room allocation workbook downloaded successfully.");
   };
 
+  const confirmationLoaders = useRef(null);
+  confirmationLoaders.current = { openDeleteSectionModal, openDeleteRoomModal };
+  const [confirmationError, setConfirmationError] = useState("");
+  useEffect(() => {
+    if (!["delete-section", "delete-room"].includes(confirmationView) || initialLoading) return;
+    setConfirmationError("");
+    if (confirmationView === "delete-section" ? deleteModalState.isOpen : deleteRoomModalState.isOpen) return;
+    const record = (confirmationView === "delete-section" ? sections : rooms).find((item) => String(item.id) === confirmationId
+      && (!effectiveCampusId || !item.campusId || String(item.campusId) === String(effectiveCampusId)));
+    if (!record) { setConfirmationError("This record is unavailable in the current campus."); return; }
+    if (confirmationView === "delete-section") confirmationLoaders.current.openDeleteSectionModal(record, true);
+    else confirmationLoaders.current.openDeleteRoomModal(record, true);
+  }, [confirmationView, confirmationId, initialLoading, sections, rooms, effectiveCampusId, deleteModalState.isOpen, deleteRoomModalState.isOpen]);
+
   // DYNAMIC HEADER DETAILS BASED ON ACTIVE TAB
   const dynamicHeader = useMemo(() => {
     if (activeTab === "rooms") {
@@ -2245,6 +2313,12 @@ export default function SectionManagementPage() {
       subtitle: "Manage academic sections, classrooms and teacher assignments.",
     };
   }, [activeTab]);
+
+  if (navigationView !== "list" && restoredNavigation !== navigationKey) return (
+    <DashboardLayout title={`${navigationView === "add" ? "Add" : navigationView === "preview" ? "View" : "Edit"} ${activeTab === "rooms" ? "Room" : "Section"}`} breadcrumb={pageConfig.breadcrumb}>
+      <div className="cms-card"><button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigateManagement(activeTab)}>Back to {activeTab === "rooms" ? "Rooms" : "Sections"}</button>{navigationError ? <p role={navigationError ? "alert" : "status"}>{navigationError || "Loading form..."}</p> : <SkeletonPage variant="form" rows={4} />}</div>
+    </DashboardLayout>
+  );
 
   return (
     <DashboardLayout
@@ -2262,7 +2336,6 @@ export default function SectionManagementPage() {
             className={`cms-room-tab ${activeTab === "rooms" ? "cms-room-tab-active" : ""}`}
             onClick={() => {
               setActiveTab("rooms");
-              setRoomView("list");
             }}
           >
             Room Management
@@ -2274,7 +2347,6 @@ export default function SectionManagementPage() {
             className={`cms-room-tab ${activeTab === "sections" ? "cms-room-tab-active" : ""}`}
             onClick={() => {
               setActiveTab("sections");
-              setSectionView("list");
             }}
           >
             Section Management
@@ -3715,6 +3787,7 @@ export default function SectionManagementPage() {
           </div>
         )}
 
+        {["delete-section", "delete-room"].includes(confirmationView) && !deleteModalState.isOpen && !deleteRoomModalState.isOpen && <div className="cms-overlay"><section className="cms-modal" role="dialog" aria-modal="true" aria-label="Delete confirmation"><div className="cms-modal-head"><h3>{confirmationView === "delete-section" ? "Delete Section" : "Delete Room"}</h3></div><div className="cms-modal-body">{confirmationError ? <p role={confirmationError ? "alert" : "status"}>{confirmationError || "Loading record..."}</p> : <SkeletonPage variant="form" rows={4} />}</div><div className="cms-modal-foot"><button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigateConfirmation(null)}>Cancel</button></div></section></div>}
         {/* Section Delete Confirmation Modal */}
         {deleteModalState.isOpen && (
           <div className="cms-overlay" onClick={closeDeleteSectionModal}>

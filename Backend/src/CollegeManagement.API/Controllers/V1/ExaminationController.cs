@@ -1,5 +1,5 @@
-using Asp.Versioning;
 using CollegeManagement.API.DTOs.Examination;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.Examination.Requests;
 using CollegeManagement.API.DTOs.Examination.Responses;
 using CollegeManagement.API.Exceptions;
@@ -44,13 +44,24 @@ namespace CollegeManagement.API.Controllers.V1
 
         private int ResolveCampusId(int? explicitlyProvided = null)
         {
+            var campusClaim = User.FindFirst("campus_id")?.Value
+                ?? User.FindFirst("CampusId")?.Value
+                ?? User.FindFirst(System.Security.Claims.ClaimTypes.PrimaryGroupSid)?.Value
+                ?? User.FindFirst(System.Security.Claims.ClaimTypes.GroupSid)?.Value;
+
+            if (!string.IsNullOrEmpty(campusClaim) && int.TryParse(campusClaim, out int userCampusId) && userCampusId > 0)
+            {
+                var isSuper = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
+                if (!isSuper) return userCampusId;
+            }
+
             if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
                 return explicitlyProvided.Value;
 
             if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
-                int.TryParse(headerVal, out var campusId) && campusId > 0)
+                int.TryParse(headerVal, out var headerCampusId) && headerCampusId > 0)
             {
-                return campusId;
+                return headerCampusId;
             }
 
             var claimCampus = User?.FindFirst("CampusId")?.Value;
@@ -135,7 +146,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet]
         [ProducesResponseType(typeof(IEnumerable<ExaminationResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell,Principal")]
         [BypassPermission]
         public async Task<ActionResult<IEnumerable<ExaminationResponse>>> GetExaminations([FromQuery] ExaminationSearchRequestDto filter)
         {
@@ -157,7 +168,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(ExaminationResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell,Principal")]
         [BypassPermission]
         public async Task<ActionResult<ExaminationResponse>> GetExaminationById(int examinationId)
         {
@@ -516,7 +527,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("{examinationId:int}/schedules")]
         [ProducesResponseType(typeof(IEnumerable<ExamScheduleResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell,Principal")]
         [BypassPermission]
         public async Task<ActionResult<IEnumerable<ExamScheduleResponse>>> GetExamSchedules(
             [FromRoute] int examinationId)
@@ -530,7 +541,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves invigilation exam duties for a faculty/staff member.
         /// </summary>
         [HttpGet("duties")]
-        [Authorize]
+        [Authorize(Roles = "Admin,Teacher,Staff,Faculty,Examination Cell,Principal")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<FacultyExamDutyDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<FacultyExamDutyDto>>> GetFacultyExamDuties(
@@ -540,34 +552,87 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicYearId = null,
             [FromQuery] int? boardId = null)
         {
-            _logger.LogInformation("Fetching exam duties for Staff ID: {StaffId}, Status: {Status}, CampusId: {CampusId}", staffId, status, campusId);
-            var result = await _examinationService.GetFacultyExamDutiesAsync(staffId, status, campusId, academicYearId, boardId);
+            if (!staffId.HasValue || staffId.Value <= 0)
+            {
+                var staffClaim = User.FindFirst("staff_id")?.Value
+                    ?? User.FindFirst("StaffId")?.Value
+                    ?? User.FindFirst("id")?.Value;
+                if (!string.IsNullOrEmpty(staffClaim) && int.TryParse(staffClaim, out int parsedStaffId))
+                {
+                    staffId = parsedStaffId;
+                }
+            }
+
+            var resolvedCampusId = ResolveCampusId(campusId);
+            _logger.LogInformation("Fetching exam duties for Staff ID: {StaffId}, Status: {Status}, CampusId: {CampusId}", staffId, status, resolvedCampusId);
+            var result = await _examinationService.GetFacultyExamDutiesAsync(staffId, status, resolvedCampusId, academicYearId, boardId);
             return Ok(result);
         }
 
         /// <summary>
-        /// Retrieves the examination cell configuration and grading settings for the specified campus.
+        /// Reassigns an invigilator duty to another faculty/staff member.
+        /// </summary>
+        [HttpPost("duties/{dutyId:int}/reassign")]
+        [Authorize(Roles = "Admin,Teacher,Staff,Faculty,Examination Cell,Principal")]
+        [BypassPermission]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> ReassignFacultyExamDuty(
+            [FromRoute] int dutyId,
+            [FromBody] ReassignInvigilatorDutyRequest request)
+        {
+            if (request == null || request.NewStaffId <= 0)
+            {
+                return BadRequest(new { message = "Valid target staff ID must be specified." });
+            }
+
+            var success = await _examinationService.ReassignInvigilatorDutyAsync(dutyId, request);
+            if (!success)
+            {
+                return NotFound(new { message = $"Duty assignment with ID {dutyId} was not found or could not be updated." });
+            }
+
+            return Ok(new { success = true, message = "Exam invigilation duty reassigned successfully." });
+        }
+
+        /// <summary>
+        /// Retrieves examination cell grading and moderation settings for a campus.
         /// </summary>
         [HttpGet("settings")]
+        [Authorize(Roles = "Admin,Examination Cell,Principal")]
+        [BypassPermission]
         [ProducesResponseType(typeof(ExaminationSettingsDto), StatusCodes.Status200OK)]
-        public async Task<ActionResult<ExaminationSettingsDto>> GetSettings([FromQuery] int? campusId = null)
+        public async Task<ActionResult<ExaminationSettingsDto>> GetExaminationSettings([FromQuery] int? campusId = null)
         {
             var resolvedCampusId = ResolveCampusId(campusId);
             var settings = await _examinationService.GetExaminationSettingsAsync(resolvedCampusId);
+            if (settings == null)
+            {
+                settings = new ExaminationSettingsDto { CampusId = resolvedCampusId };
+            }
             return Ok(settings);
         }
 
         /// <summary>
-        /// Updates the examination cell configuration and grading settings for the specified campus.
+        /// Updates examination cell grading and moderation settings for a campus.
         /// </summary>
         [HttpPut("settings")]
-        [Authorize]
+        [Authorize(Roles = "Admin,Examination Cell")]
+        [BypassPermission]
         [ProducesResponseType(typeof(ExaminationSettingsDto), StatusCodes.Status200OK)]
-        public async Task<ActionResult<ExaminationSettingsDto>> UpdateSettings([FromQuery] int? campusId, [FromBody] ExaminationSettingsDto request)
+        public async Task<ActionResult<ExaminationSettingsDto>> UpdateExaminationSettings(
+            [FromQuery] int? campusId = null,
+            [FromBody] ExaminationSettingsDto request = null!)
         {
-            var resolvedCampusId = ResolveCampusId(campusId ?? request.CampusId);
-            var result = await _examinationService.SaveExaminationSettingsAsync(resolvedCampusId, request);
-            return Ok(result);
+            var resolvedCampusId = ResolveCampusId(campusId ?? request?.CampusId);
+            if (request == null)
+            {
+                request = new ExaminationSettingsDto { CampusId = resolvedCampusId };
+            }
+            request.CampusId = resolvedCampusId;
+            var updated = await _examinationService.UpdateExaminationSettingsAsync(resolvedCampusId, request);
+            return Ok(updated);
         }
 
         /// <summary>
@@ -577,7 +642,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(ExamScheduleResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Examination Cell,Principal")]
         [BypassPermission]
         public async Task<ActionResult<ExamScheduleResponse>> GetExamScheduleById(
             [FromRoute] int examinationId,
@@ -757,6 +822,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Assigns invigilators to an examination schedule.
         /// </summary>
         [HttpPost("invigilators")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,Examination Cell")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]

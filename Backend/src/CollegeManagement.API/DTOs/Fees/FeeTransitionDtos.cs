@@ -47,6 +47,7 @@ namespace CollegeManagement.API.DTOs.Fees
         public int TransferId { get; set; }
         public int StudentId { get; set; }
         public string StudentName { get; set; } = string.Empty;
+        public int? CampusId { get; set; }
         public int FromCampusId { get; set; }
         public string FromCampusName { get; set; } = string.Empty;
         public int ToCampusId { get; set; }
@@ -76,6 +77,7 @@ namespace CollegeManagement.API.DTOs.Fees
     {
         public int StudentId { get; set; }
         public string StudentName { get; set; } = string.Empty;
+        public int? CampusId { get; set; }
         public int? CurrentProgramId { get; set; }
         public string? CurrentProgramName { get; set; }
         public int TargetProgramId { get; set; }

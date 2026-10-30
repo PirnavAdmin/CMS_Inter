@@ -17,6 +17,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<IEnumerable<ExaminationResponse>> GetExaminationResponsesAsync(ExaminationSearchRequestDto filter);
         Task UpdateExaminationAsync(Examination examination);
         Task<bool> DeleteExaminationAsync(Examination examination);
+        Task UpdateExaminationStatusAsync(int examinationId, string status);
         Task<List<int>> GetExaminationSubjectIdsAsync(int examinationId);
         Task SaveExaminationSubjectsAsync(int examinationId, IEnumerable<int> subjectIds);
 
@@ -25,6 +26,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<IEnumerable<ExamSchedule>> GetExamSchedulesAsync(int? examinationId);
         Task UpdateExamScheduleAsync(ExamSchedule schedule);
         Task<bool> DeleteExamScheduleAsync(ExamSchedule schedule);
+        Task<bool> DeleteExamSchedulesByExamIdAsync(int examinationId);
         Task<int> PublishExamSchedulesAsync(IEnumerable<int> scheduleIds);
 
         Task<IEnumerable<Subject>> GetEligibleSubjectsForExamAsync(int examinationId);
@@ -47,8 +49,12 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task AssignInvigilatorHallsAsync(int examScheduleId, IEnumerable<(int invigilatorId, string hallNumber)> assignments);
         Task<IEnumerable<InvigilatorAssignment>> GetInvigilatorsByScheduleIdAsync(int examScheduleId);
 
-        Task<ExaminationSettingsDto> GetExaminationSettingsAsync(int campusId);
+        Task<IEnumerable<FacultyExamDutyDto>> GetFacultyExamDutiesAsync(int? staffId = null, string? status = null, int? campusId = null, int? academicYearId = null, int? boardId = null);
+        Task<bool> ReassignInvigilatorDutyAsync(int dutyId, int newStaffId, string? hallNumber = null, string? reason = null);
+
+        Task<ExaminationSettingsDto?> GetExaminationSettingsAsync(int campusId);
+        Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(int campusId, ExaminationSettingsDto settings);
         Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(ExaminationSettingsDto settings);
-        Task<IEnumerable<FacultyExamDutyDto>> GetFacultyExamDutiesAsync(int? staffId, string? status, int? campusId, int? academicYearId, int? boardId);
+        Task<int> AutoTransitionExaminationStatusesAsync(DateTime currentTime);
     }
 }

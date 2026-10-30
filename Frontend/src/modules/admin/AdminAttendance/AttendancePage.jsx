@@ -6,6 +6,7 @@ import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { Modal, SkeletonPage, Toast } from "@/shared/components/Ui.jsx";
 import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { fetchAdminGroups, fetchAdminLevels } from "@/api/studentApi.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -94,7 +95,7 @@ const staffType = (v) => {
 };
 const ATTENDANCE_PAGE_SIZE = 5;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
-function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
+function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false, error }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select>{error && <small className="attendance-import-error" role="alert">{error}</small>}</Field>; }
 
 function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
   const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
@@ -132,31 +133,31 @@ export default function AttendancePage({ area: areaProp } = {}) {
     if (clean === "my-attendance" || clean === "my") return "my-attendance";
     return "my-attendance";
   };
-  const [activeStaffTab, setActiveStaffTabState] = useState(() => normalizeStaffTab(tabFromUrl));
+  const activeStaffTab = normalizeStaffTab(tabFromUrl);
 
   const setActiveStaffTab = (tab) => {
     const normalized = normalizeStaffTab(tab);
-    setActiveStaffTabState(normalized);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.set("tab", normalized);
+        if (normalized !== "my-attendance") next.delete("regularize");
         return next;
-      },
-      { replace: true }
+      }
     );
   };
 
-  useEffect(() => {
-    const normalized = normalizeStaffTab(tabFromUrl);
-    if (tabFromUrl && normalized !== activeStaffTab) {
-      setActiveStaffTabState(normalized);
-    }
-  }, [tabFromUrl, activeStaffTab]);
-
   const [notice, setNotice] = useState({ message: "", type: "success" });
-  const [importOpen, setImportOpen] = useState(false);
+  const importOpen = searchParams.get("modal") === "import";
+  const setImportOpen = (open) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (open) params.set("modal", "import"); else params.delete("modal");
+    if (open && attendanceDateRef.current) params.set("importDate", attendanceDateRef.current); else params.delete("importDate");
+    return params;
+  });
   const [studentAttendanceLocked, setStudentAttendanceLocked] = useState(true);
+  const attendanceDateRef = useRef(null);
+  const handleHolidayLockChange = useCallback((locked, date) => { setStudentAttendanceLocked(locked); attendanceDateRef.current = date; }, []);
   const say = useCallback((message, type = "success") => setNotice({ message, type }), []);
 
   const dynamicHeader = useMemo(() => {
@@ -242,7 +243,7 @@ export default function AttendancePage({ area: areaProp } = {}) {
                 </div>
               }
             >
-              <FacultyMyAttendance />
+              <FacultyMyAttendance adminRouting />
             </ErrorBoundary>
           ) : (
             <ErrorBoundary
@@ -254,12 +255,13 @@ export default function AttendancePage({ area: areaProp } = {}) {
                 </div>
               }
             >
-              <Screen key={staff ? "staff" : "student"} staff={staff} say={say} onHolidayLockChange={setStudentAttendanceLocked} />
+              <Screen key={staff ? "staff" : "student"} staff={staff} say={say} onHolidayLockChange={handleHolidayLockChange} />
             </ErrorBoundary>
           )}
         </main>
       </DashboardLayout>
-      {importOpen && (staff || !studentAttendanceLocked) && <AttendanceImportModal staff={staff} say={say} onClose={() => setImportOpen(false)} />}
+      {importOpen && dynamicHeader.showImport && (staff || !studentAttendanceLocked) && <AttendanceImportModal staff={staff} say={say} onClose={() => setImportOpen(false)} />}
+      {importOpen && !staff && studentAttendanceLocked && <Modal title="Student Attendance Import" onClose={() => setImportOpen(false)}><p role="status">Attendance import is unavailable until this date is confirmed as an eligible working day. Close this dialog to review any holiday or loading error.</p></Modal>}
       <Toast message={notice.message} type={notice.type} onClose={() => setNotice({ message: "", type: "success" })} />
     </>
   );
@@ -352,8 +354,8 @@ function AttendanceImportModal({ staff, say, onClose }) {
 
 function useOptions(staff, boardId) { const [o, setO] = useState({}); useEffect(() => { if (!staff) return undefined; let mounted = true; const calls = [apiEndpoints.departments.getAll, boardId ? `${apiEndpoints.faculty.list}?boardId=${boardId}` : apiEndpoints.faculty.list]; Promise.allSettled(calls.map((url) => apiClient.get(url))).then((rs) => { if (!mounted) return; const values = rs.map((r) => r.status === "fulfilled" ? asList(body(r.value)) : []); setO({ departments: values[0], faculty: values[1] }); }); return () => { mounted = false; }; }, [staff, boardId]); return o; }
 
-function useStudentOptions(boardId, academicYearId, levelId, groupId, programId) {
-  const [options, setOptions] = useState({ levels: [], groups: [], programs: [], sections: [], loadingLevels: false, loadingGroups: false, loadingPrograms: false, loadingSections: false });
+function useStudentOptions(boardId, academicYearId, levelId, groupId, programId, campusId, setFilters) {
+  const [options, setOptions] = useState({ levels: [], groups: [], programs: [], sections: [], loadingLevels: false, loadingGroups: false, groupsError: "", loadingPrograms: false, loadingSections: false });
   const scoped = (rows, selected, keys) => rows.filter((row) => {
     const rowValue = get(row, ...keys);
     return rowValue == null || rowValue === "" || String(rowValue) === String(selected);
@@ -371,30 +373,26 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId)
     if (!boardId) { setOptions((value) => ({ ...value, levels: [], groups: [], programs: [], sections: [] })); return undefined; }
     let active = true;
     setOptions((value) => ({ ...value, levels: [], loadingLevels: true }));
-    apiClient.get(apiEndpoints.boards.academicLevels, { params: { boardId } })
-      .then((response) => active && setOptions((value) => ({ ...value, levels: unique(scoped(asList(body(response)), boardId, ["boardId", "BoardId"]), ["academicLevelId", "AcademicLevelId", "levelId", "LevelId", "id", "Id"]), loadingLevels: false })))
+    fetchAdminLevels({ boardId, academicYearId })
+      .then((levels) => active && setOptions((value) => ({ ...value, levels, loadingLevels: false })))
       .catch(() => active && setOptions((value) => ({ ...value, levels: [], loadingLevels: false })));
     return () => { active = false; };
-  }, [boardId]);
+  }, [boardId, academicYearId]);
   useEffect(() => {
-    if (!boardId) { setOptions((value) => ({ ...value, groups: [], loadingGroups: false })); return undefined; }
     let active = true;
-    setOptions((value) => ({ ...value, groups: [], loadingGroups: true }));
-    const params = { academicYearId, isActive: true };
-    if (levelId) params.academicLevelId = levelId;
-    apiClient.get(apiEndpoints.groups.getByBoard(boardId), { params }).then((response) => {
+    const controller = new AbortController();
+    setOptions((current) => ({ ...current, groups: [], loadingGroups: Boolean(boardId), groupsError: "" }));
+    if (!boardId) return () => controller.abort();
+    fetchAdminGroups({ boardId, academicYearId, academicLevelId: levelId, campusId }, { signal: controller.signal }).then((groups) => {
       if (!active) return;
-      const payload = body(response);
-      const wrappers = asList(payload);
-      let groupRows = Array.isArray(payload?.groups) ? payload.groups : Array.isArray(payload?.Groups) ? payload.Groups : wrappers.flatMap((item) => Array.isArray(item?.groups) ? item.groups : Array.isArray(item?.Groups) ? item.Groups : Array.isArray(item?.groupList) ? item.groupList : Array.isArray(item?.data) ? item.data : get(item, "groupId", "GroupId", "id", "Id") != null ? [item] : []);
-      groupRows = scoped(scoped(groupRows, boardId, ["boardId", "BoardId"]), academicYearId, ["academicYearId", "AcademicYearId"]);
-      if (levelId) {
-        groupRows = scoped(groupRows, levelId, ["academicLevelId", "AcademicLevelId", "levelId", "LevelId"]);
-      }
-      setOptions((value) => ({ ...value, groups: unique(groupRows.filter((item) => item?.isActive !== false && item?.IsActive !== false), ["groupId", "GroupId", "id", "Id"]), loadingGroups: false }));
-    }).catch(() => active && setOptions((value) => ({ ...value, groups: [], loadingGroups: false })));
-    return () => { active = false; };
-  }, [boardId, academicYearId, levelId]);
+      setOptions((current) => ({ ...current, groups, loadingGroups: false, groupsError: levelId && !groups.length ? "No active groups are available for this board and academic year." : "" }));
+      setFilters((current) => current.group && !groups.some((group) => String(get(group, "groupId", "GroupId", "id", "Id")) === String(current.group))
+        ? { ...current, group: "", program: "", section: "" } : current);
+    }).catch((error) => {
+      if (active) setOptions((current) => ({ ...current, groups: [], loadingGroups: false, groupsError: getApiErrorMessage(error) }));
+    });
+    return () => { active = false; controller.abort(); };
+  }, [boardId, academicYearId, levelId, campusId, setFilters]);
   useEffect(() => {
     let active = true;
     setOptions((value) => ({ ...value, programs: [], loadingPrograms: true }));
@@ -417,6 +415,10 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId)
   }, [groupId]);
   useEffect(() => {
     let active = true;
+    if (groupId && (options.loadingGroups || options.groupsError)) {
+      setOptions((current) => ({ ...current, loadingSections: false }));
+      return undefined;
+    }
     const selectedProgram = options.programs.find((program) => String(get(program, "id", "Id", "programId", "ProgramId", "programmeId", "ProgrammeId", "groupProgramId", "GroupProgramId")) === String(programId));
     const validProgramIds = new Set([programId, get(selectedProgram, "programId", "ProgramId", "programmeId", "ProgrammeId"), get(selectedProgram, "groupProgramId", "GroupProgramId")].filter((id) => id != null && id !== "").map(String));
     const selectedProgramName = String(get(selectedProgram, "programName", "ProgramName", "programmeName", "ProgrammeName", "name", "Name") ?? "").trim().toLowerCase();
@@ -440,28 +442,98 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId)
           return Boolean(selectedProgramName && sectionProgramName === selectedProgramName);
         });
       }
-      setOptions((value) => ({ ...value, sections: unique(sectionRows.filter((section) => section?.isActive !== false && section?.IsActive !== false), ["sectionId", "SectionId", "id", "Id"]), loadingSections: false }));
+      const sections = unique(sectionRows.filter((section) => section?.isActive !== false && section?.IsActive !== false), ["sectionId", "SectionId", "id", "Id"]);
+      setOptions((value) => ({ ...value, sections, loadingSections: false }));
+      setFilters((current) => current.section && !sections.some((section) => String(get(section, "sectionId", "SectionId", "id", "Id")) === String(current.section))
+        ? { ...current, section: "" } : current);
     }).catch(() => active && setOptions((value) => ({ ...value, sections: [], loadingSections: false })));
     return () => { active = false; };
-  }, [boardId, academicYearId, levelId, groupId, programId, options.programs]);
+  }, [boardId, academicYearId, levelId, groupId, programId, options.programs, options.loadingGroups, options.groupsError, setFilters]);
   return options;
 }
 
 function Screen({ staff = false, say, onHolidayLockChange }) {
  const navigate = useNavigate();
  const location = useLocation();
+ const [editParams, setEditParams] = useSearchParams();
+ const editRequested = editParams.has("edit");
+ const editId = editParams.get("edit") || "";
+ const editDate = editParams.get("date") || "";
+ const validEditDate = /^\d{4}-\d{2}-\d{2}$/.test(editDate) && !Number.isNaN(Date.parse(editDate)) && new Date(editDate).toISOString().slice(0, 10) === editDate;
+ const importDate = editParams.get("modal") === "import" ? editParams.get("importDate") || "" : "";
+ const validImportDate = /^\d{4}-\d{2}-\d{2}$/.test(importDate) && !Number.isNaN(Date.parse(importDate)) && new Date(importDate).toISOString().slice(0, 10) === importDate;
  const { selectedBoardId: navbarBoardId, selectedAcademicYearId: navbarAcademicYearId } = useAcademicContext();
  const campusCtx = useCampusContext();
  const navbarCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
  const restoredState = !staff ? location.state?.attendanceState : null;
- const defaultFilters = { date: getTodayDate(), level: "", group: "", section: "", program: "", department: "", type: "", person: "", status: "", view: "Attendance" };
- const [f, setF] = useState(() => restoredState?.filters || defaultFilters);
+ const defaultFilters = { date: editId && validEditDate ? editDate : validImportDate ? importDate : getTodayDate(), level: !staff && editId ? editParams.get("editLevel") || "" : "", group: !staff && editId ? editParams.get("editGroup") || "" : "", section: !staff && editId ? editParams.get("editSection") || "" : "", program: !staff && editId ? editParams.get("editProgram") || "" : "", department: "", type: "", person: "", status: "" };
+ const [filterState, setF] = useState(() => {
+   const filters = { ...(restoredState?.filters || defaultFilters) };
+   delete filters.view;
+   return filters;
+ });
+ const viewParam = editParams.get(staff ? "view" : "tab");
+ const viewNames = { attendance: "Attendance", "monthly-report": "Monthly Report", ...(!staff ? { defaulters: "Defaulters" } : {}) };
+ const selectedView = viewNames[viewParam] || (!viewParam && Object.values(viewNames).includes(restoredState?.filters?.view) ? restoredState.filters.view : "Attendance");
+ const f = useMemo(() => ({ ...filterState, view: selectedView }), [filterState, selectedView]);
  const [rows, setRows] = useState(() => restoredState?.rows || []);
  const [report, setReport] = useState(() => restoredState?.report || null);
  const [loaded, setLoaded] = useState(() => Boolean(restoredState?.loaded));
  const [busy, setBusy] = useState(false);
  const [editing, setEditing] = useState(null);
  const [editSaving, setEditSaving] = useState(false);
+ const [editLoading, setEditLoading] = useState(false);
+ const [restoredEditKey, setRestoredEditKey] = useState("");
+ const [editError, setEditError] = useState("");
+ const editKey = JSON.stringify([staff, editId, editDate, navbarCampusId, navbarBoardId, navbarAcademicYearId, ...(!staff ? ["editLevel", "editGroup", "editProgram", "editSection"].map((key) => editParams.get(key) || "") : [])]);
+ const closeEdit = () => {
+   setEditing(null);
+   setRestoredEditKey("");
+   setEditError("");
+   const next = new URLSearchParams(editParams);
+   ["edit", "date", "editLevel", "editGroup", "editProgram", "editSection"].forEach((key) => next.delete(key));
+   setEditParams(next);
+ };
+ useEffect(() => {
+   if (editRequested && restoredEditKey === editKey) return undefined;
+   let active = true;
+   setEditing(null);
+   setEditLoading(false);
+   setEditError("");
+   if (!editRequested) return undefined;
+   if (!/^[1-9]\d*$/.test(editId) || !validEditDate) {
+     setEditError("Invalid attendance edit link.");
+     return undefined;
+   }
+   setF((current) => ({ ...current, date: editDate, ...(!staff ? { level: editParams.get("editLevel") || "", group: editParams.get("editGroup") || "", program: editParams.get("editProgram") || "", section: editParams.get("editSection") || "" } : {}) }));
+   if (!navbarCampusId || !navbarBoardId || !navbarAcademicYearId) return undefined;
+   setEditLoading(true);
+   const request = staff ? apiClient.post(apiEndpoints.staffAttendance.load, {
+     date: editDate,
+     campusId: num(navbarCampusId),
+     boardId: num(navbarBoardId),
+     academicYearId: num(navbarAcademicYearId),
+     departmentId: undefined,
+     staffType: undefined,
+     facultyId: num(editId)
+   }) : apiClient.get(apiEndpoints.attendance.studentAdminDaily, { params: {
+     date: editDate, campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId),
+     academicLevelId: num(editParams.get("editLevel")), groupId: num(editParams.get("editGroup")), sectionId: num(editParams.get("editSection")),
+     ...(editParams.get("editProgram") ? { programId: num(editParams.get("editProgram")) } : {})
+   } });
+   request.then((response) => {
+     if (!active) return;
+     const record = asList(body(response)).find((row) => String(staff ? get(row, "facultyId", "staffId", "id") : get(row, "studentId", "id")) === editId);
+     if (!record) throw new Error("Attendance record is unavailable for this date and campus.");
+     const status = staffStatus(record.status);
+     setEditing(staff ? { record, status: STAFF_STATUSES.includes(status) ? status : "Present", inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" }
+       : { record, morning: studentSessionStatus(record, "morning"), afternoon: studentSessionStatus(record, "afternoon"), remarks: get(record, "remarks", "remark") || "" });
+     setRestoredEditKey(editKey);
+     setEditLoading(false);
+   }).catch((error) => { if (active) setEditError(getApiErrorMessage(error) || "Unable to load attendance."); })
+     .finally(() => { if (active) setEditLoading(false); });
+   return () => { active = false; };
+ }, [staff, editRequested, editId, editDate, validEditDate, editKey, restoredEditKey, editParams, navbarCampusId, navbarBoardId, navbarAcademicYearId]);
  const [search, setSearch] = useState(() => restoredState?.search || "");
  const [page, setPage] = useState(() => restoredState?.page || 1);
  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
@@ -470,7 +542,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const [holidayError, setHolidayError] = useState("");
  const holidayKey = `${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}:${f.date}`;
  const holidayLocked = !staff && (holidayCheckedKey !== holidayKey || Boolean(activeHoliday) || Boolean(holidayError));
- useEffect(() => { onHolidayLockChange?.(holidayLocked); }, [holidayLocked, onHolidayLockChange]);
+ useEffect(() => { onHolidayLockChange?.(holidayLocked, f.date); }, [holidayLocked, f.date, onHolidayLockChange]);
  const [dirty, setDirty] = useState(false);
  const holidaysCacheRef = useRef(new Map());
  const [admissionDates, setAdmissionDates] = useState(new Map());
@@ -491,17 +563,21 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  }, [staff, navbarCampusId, say]);
  const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
- const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
+ const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, navbarCampusId, setF);
  const options = staff ? staffOptions : studentOptions;
 
  const update = (key) => (e) => {
    setPage(1);
-   setF((old) => ({ ...old, [key]: e.target.value, ...(key === "level" ? { group: "", program: "", section: "" } : {}), ...(key === "group" ? { program: "", section: "" } : {}), ...(key === "program" ? { section: "" } : {}) }));
+   setF((old) => ({ ...old, [key]: e.target.value, ...(key === "level" && !e.target.value ? { group: "", program: "", section: "" } : {}), ...(key === "group" ? { program: "", section: "" } : {}), ...(key === "program" ? { section: "" } : {}) }));
  };
 
  const switchView = (newView) => {
    setPage(1);
-   setF((old) => ({ ...old, view: newView }));
+   setEditParams((previous) => {
+     const params = new URLSearchParams(previous);
+     params.set(staff ? "view" : "tab", newView === "Monthly Report" ? "monthly-report" : newView === "Defaulters" ? "defaulters" : "attendance");
+     return params;
+   });
  };
 
  useEffect(() => {
@@ -738,7 +814,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
        });
      }
      await load();
-     setEditing(null);
+     closeEdit();
      say(`${staff ? "Staff" : "Student"} attendance saved successfully.`);
    } catch (e) {
      say(getApiErrorMessage(e) || "Failed to update attendance.", "error");
@@ -892,8 +968,23 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
              emptyMessage={!staff && normalizedSearch ? "No students found matching your search." : undefined}
              edit={(record) => {
                if (busy || holidayLocked) return;
+               if (staff) {
+                 const id = get(record, "facultyId", "staffId", "id");
+                 if (id == null) return say("Staff attendance has no stable staff ID.", "error");
+                 const next = new URLSearchParams(editParams);
+                 next.set("edit", String(id)); next.set("date", f.date);
+                 setEditParams(next);
+                 return;
+               }
                const s = staffStatus(record.status);
                const initialStatus = STAFF_STATUSES.includes(s) ? s : "Present";
+               const studentId = get(record, "studentId", "id");
+               if (studentId == null) return say("Student attendance has no stable student ID.", "error");
+               const next = new URLSearchParams(editParams);
+               next.set("edit", String(studentId)); next.set("date", f.date);
+               Object.entries({ editLevel: f.level, editGroup: f.group, editProgram: f.program, editSection: f.section }).forEach(([key, value]) => { if (value) next.set(key, value); else next.delete(key); });
+               setRestoredEditKey(JSON.stringify([staff, String(studentId), f.date, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, f.section]));
+               setEditParams(next);
                setEditing(
                  staff
                    ? { record, status: initialStatus, inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" }
@@ -902,7 +993,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
              }}
              view={(record) => {
                const personId = staff ? get(record, "facultyId", "staffId", "id") : get(record, "studentId", "id");
-               if (personId != null) navigate(`/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`, {
+               if (personId != null) navigate({ pathname: `/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`, search: editParams.toString() }, {
                  state: staff ? undefined : {
                    attendanceState: { filters: f, rows, report, loaded, search, page: currentPage, activeHoliday }
                  }
@@ -914,8 +1005,9 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
        </>
      ))}
      {!staff && holidayError ? <p role="alert" className="att-holiday-banner">{holidayError}</p> : null}
-     {editing && !holidayLocked ? (
-       <Edit editing={editing} setEditing={setEditing} staff={staff} date={f.date} save={save} close={() => { if (!editSaving) setEditing(null); }} busy={busy || editSaving} />
+     {editRequested && (editLoading || !editing || restoredEditKey !== editKey || holidayLocked) ? <Modal title={`Edit ${staff ? "Staff" : "Student"} Attendance`} onClose={closeEdit}>{editError || (!staff && holidayError) || (!staff && activeHoliday) ? <p role="alert">{editError || holidayError || "Attendance cannot be edited on this holiday."}</p> : <SkeletonPage variant="table" columns={2} rows={3} />}</Modal> : null}
+     {editRequested && editing && restoredEditKey === editKey && !editLoading && !holidayLocked ? (
+       <Edit editing={editing} setEditing={setEditing} staff={staff} date={f.date} save={save} close={() => { if (!editSaving) closeEdit(); }} busy={busy || editSaving} />
      ) : null}
    </>
  );
@@ -956,7 +1048,7 @@ function StaffAttendanceFilters({ f, update, o }) {
 function StudentAttendanceFilters({ f, update, o }) {
   return <div className="att-student-relocated-filters">
     <Select label="Academic Level" value={f.level} onChange={update("level")} items={o.levels} all="All Academic Levels" disabled={o.loadingLevels} />
-    <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all="All Groups" disabled={o.loadingGroups} />
+    <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all={o.loadingGroups ? "Loading groups..." : o.groupsError ? "Groups unavailable" : "All Groups"} error={o.groupsError} disabled={o.loadingGroups} />
     <Select label="Program" value={f.program} onChange={update("program")} items={o.programs} all="All Programs" disabled={o.loadingPrograms} />
     <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all="All Sections" disabled={o.loadingSections} />
     <Select label="Status" value={f.status} onChange={update("status")} items={STUDENT_STATUSES} all="All Status" />

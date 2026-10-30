@@ -40,7 +40,6 @@ import {
 import axios from "axios";
 import sharedApiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { getStudentOverviewMetrics as loadStudentOverviewMetrics } from "@/api/studentApi.js";
 import { getAuthToken } from "@/modules/auth/authStorage.js";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/shared/components/Ui.jsx";
@@ -77,11 +76,6 @@ const serverConfig = (config = {}) => ({
 const apiClient = {
   get: (url, config) => sharedApiClient.get(url, serverConfig(config)),
   post: (url, data, config) => sharedApiClient.post(url, data, serverConfig(config)),
-};
-const getStudentOverviewMetrics = (params) => {
-  const mockSession = /^(mock-|demo-|non-teaching-|warden-|parent-)/.test(getAuthToken());
-  if (mockSession || import.meta.env.VITE_USE_MOCK_DATA === "true") return Promise.resolve(null);
-  return loadStudentOverviewMetrics(params);
 };
 
 const DASHBOARD_API = {
@@ -436,7 +430,7 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 1. GET /api/v1/dashboard/summary & GET /api/v1/staff & getStudentOverviewMetrics (Student Management Parity)
+  // 1. GET /api/v1/dashboard/summary
   const fetchSummary = useCallback(async () => {
     const seq = ++summarySeq.current;
     setSummaryState((prev) => ({ ...prev, loading: true, error: null }));
@@ -447,67 +441,24 @@ export default function DashboardPage() {
         ...(campusId ? { campusId } : {}),
         date: todayDate,
       };
-      
-      const staffParams = {
-        BoardId: boardId || undefined,
-        CampusId: campusId || undefined,
-        PageNumber: 1,
-        PageSize: 10000
-      };
 
-      const studentMetricsPromise = getStudentOverviewMetrics({
-        campusId,
-        boardId,
-        academicYearId,
-      }).catch((e) => {
-        console.warn("Failed to load placed student metrics for dashboard summary:", e);
-        return null;
-      });
-      
-      const [res, staffRes, studentMetrics] = await Promise.all([
-        apiClient.get(DASHBOARD_API.summary, { params }),
-        apiClient.get("/api/v1/staff", { params: staffParams }),
-        studentMetricsPromise,
-      ]);
+      const res = await apiClient.get(DASHBOARD_API.summary, { params });
 
       if (summarySeq.current === seq) {
         const summaryData = unwrap(res.data) || {};
-        
-        let staffRecords = [];
-        if (staffRes?.data?.items && Array.isArray(staffRes.data.items)) {
-          staffRecords = staffRes.data.items;
-        } else if (staffRes?.data?.data && Array.isArray(staffRes.data.data)) {
-          staffRecords = staffRes.data.data;
-        } else if (Array.isArray(staffRes?.data)) {
-          staffRecords = staffRes.data;
-        }
-        
-        // Exact logic from StaffManagementPage
-        const totalCount = staffRecords.filter((r) => !r?.status || r?.status === "Active").length;
-        const teachingCount = staffRecords.filter((r) => {
-          if (r?.status && r.status !== "Active") return false;
-          const s = String(r?.staffType || "").toLowerCase();
-          return s.includes("teach") && !s.includes("non");
-        }).length;
-        const nonTeachingCount = Math.max(0, totalCount - teachingCount);
+        const teachingCount = summaryData.teachingStaff ?? summaryData.teachingStaffCount ?? 0;
+        const nonTeachingCount = summaryData.nonTeachingStaff ?? summaryData.nonTeachingStaffCount ?? 0;
 
-        // Merge teaching/non-teaching staff counts and placed student management counts to override dashboard summary
         const mergedData = {
           ...summaryData,
           teachingStaff: teachingCount,
           teachingStaffCount: teachingCount,
           nonTeachingStaff: nonTeachingCount,
           nonTeachingStaffCount: nonTeachingCount,
-          ...(studentMetrics ? {
-            totalStudents: studentMetrics.totalStudents,
-            totalStudentCount: studentMetrics.totalStudents,
-            studentCount: studentMetrics.totalStudents,
-            admissions: studentMetrics.totalStudents,
-            boys: studentMetrics.boysCount,
-            boysCount: studentMetrics.boysCount,
-            girls: studentMetrics.girlsCount,
-            girlsCount: studentMetrics.girlsCount,
-          } : {}),
+          totalStudents: summaryData.totalStudents ?? summaryData.studentCount ?? 0,
+          totalStudentCount: summaryData.totalStudents ?? summaryData.studentCount ?? 0,
+          studentCount: summaryData.totalStudents ?? summaryData.studentCount ?? 0,
+          admissions: summaryData.admissions ?? summaryData.totalStudents ?? 0,
         };
 
         setSummaryState({ loading: false, error: null, data: mergedData });
@@ -519,79 +470,39 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 2. Admission Overview (All admissions irrespective of section/roll no allocation)
+  // 2. Admission Overview (Direct from /api/v1/dashboard/students-overview)
   const fetchStudentsOverview = useCallback(async () => {
     const seq = ++overviewSeq.current;
     setOverviewState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const params = {
         ...(campusId ? { campusId } : {}),
+        ...(boardId ? { boardId } : {}),
+        ...(academicYearId ? { academicYearId } : {}),
       };
 
-      const url = apiEndpoints?.studentAdmissions?.getAll || "/api/v1/student-admissions";
-      const res = await apiClient.get(url, { params }).catch(async () => {
-        return apiClient.get("/api/v1/student-admissions", { params });
-      });
+      const res = await apiClient.get(DASHBOARD_API.studentsOverview, { params });
 
       if (overviewSeq.current === seq) {
-        const rawAdmissions = unwrap(res.data) || [];
-        const admissionsList = Array.isArray(rawAdmissions) ? rawAdmissions : (rawAdmissions.items || rawAdmissions.records || rawAdmissions.data || []);
+        const overviewData = unwrap(res.data) || {};
+        const rawTrend = overviewData.monthlyTrend || overviewData.trend || [];
+        const calculatedTrend = rawTrend.map((item) => ({
+          ...item,
+          period: item.period || item.month,
+          month: item.month || item.period,
+          studentsJoined: item.studentsJoined ?? item.count ?? item.value ?? 0,
+          count: item.studentsJoined ?? item.count ?? item.value ?? 0,
+          value: item.studentsJoined ?? item.count ?? item.value ?? 0,
+          boys: item.boys ?? 0,
+          girls: item.girls ?? 0,
+        }));
 
-        // Filter by the 3 dashboard header parameters: campusId, boardId, academicYearId
-        const filteredAdmissions = admissionsList.filter((item) => {
-          if (campusId && Number(item.campusId ?? item.sourceCampusId) !== Number(campusId)) return false;
-          if (boardId && Number(item.boardId) !== Number(boardId)) return false;
-          if (academicYearId && Number(item.academicYearId) !== Number(academicYearId)) return false;
-          return true;
-        });
-
-        const isMale = (g) => ["male", "m", "boy", "boys"].includes(String(g || "").trim().toLowerCase());
-        const isFemale = (g) => ["female", "f", "girl", "girls"].includes(String(g || "").trim().toLowerCase());
-
-        const totalAdmissions = filteredAdmissions.length;
-        let boysCount = filteredAdmissions.filter((a) => isMale(a.gender)).length;
-        let girlsCount = filteredAdmissions.filter((a) => isFemale(a.gender)).length;
-        const unassigned = totalAdmissions - (boysCount + girlsCount);
-        if (unassigned > 0) {
-          girlsCount += unassigned;
-        }
-
-        const monthMap = new Map();
-        filteredAdmissions.forEach((a) => {
-          const rawDate = a.admissionDate || a.createdAt;
-          let d = rawDate ? new Date(rawDate) : null;
-          if (!d || isNaN(d.getTime()) || d.getFullYear() <= 2000) {
-            d = new Date();
-          }
-          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-          const entry = monthMap.get(key) || { total: 0, boys: 0, girls: 0 };
-          entry.total += 1;
-          if (isMale(a.gender)) entry.boys += 1;
-          else entry.girls += 1;
-          monthMap.set(key, entry);
-        });
-
-        let calculatedTrend = [];
-        if (monthMap.size > 0) {
-          calculatedTrend = Array.from(monthMap.entries())
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([key, item]) => {
-              const [y, m] = key.split("-");
-              const dt = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
-              return {
-                period: dt.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
-                month: dt.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
-                studentsJoined: item.total,
-                count: item.total,
-                value: item.total,
-                boys: item.boys,
-                girls: item.girls,
-                sortDate: key,
-              };
-            });
-        }
+        const totalAdmissions = overviewData.totalStudents ?? overviewData.totalCount ?? 0;
+        const boysCount = overviewData.maleStudents ?? overviewData.boys ?? overviewData.boysCount ?? 0;
+        const girlsCount = overviewData.femaleStudents ?? overviewData.girls ?? overviewData.girlsCount ?? 0;
 
         const mergedData = {
+          ...overviewData,
           totalAdmissions,
           totalStudents: totalAdmissions,
           totalCount: totalAdmissions,
@@ -612,7 +523,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId]);
 
-  // 3. GET /api/v1/dashboard/group-distribution & getStudentOverviewMetrics (Shows ALL groups)
+  // 3. GET /api/v1/dashboard/group-distribution
   const fetchGroupDistribution = useCallback(async () => {
     const seq = ++groupSeq.current;
     setGroupState((prev) => ({ ...prev, loading: true, error: null }));
@@ -622,106 +533,34 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
       };
-      const [res, studentMetrics, allGroupsRes] = await Promise.all([
-        apiClient.get(DASHBOARD_API.groupDistribution, { params }),
-        getStudentOverviewMetrics({ campusId, boardId, academicYearId }).catch(() => null),
-        apiClient.get("/api/v1/groups", { params: { ...(boardId ? { boardId } : {}), ...(academicYearId ? { academicYearId } : {}) } }).catch(() => ({ data: null })),
-      ]);
+
+      const res = await apiClient.get(DASHBOARD_API.groupDistribution, { params });
+
       if (groupSeq.current === seq) {
-        let groupData = unwrap(res.data) || {};
+        const groupData = unwrap(res.data) || {};
         const rawItems = groupData?.items || groupData?.groups || (Array.isArray(groupData) ? groupData : []);
-        const rawAllGroups = unwrap(allGroupsRes?.data) || [];
-        const configuredGroups = Array.isArray(rawAllGroups) ? rawAllGroups : (rawAllGroups.items || rawAllGroups.data || []);
 
-        const normalizedCounts = {};
-        if (studentMetrics?.groupCounts) {
-          Object.entries(studentMetrics.groupCounts).forEach(([k, v]) => {
-            normalizedCounts[k.trim().toUpperCase()] = v;
-          });
-        }
+        const normalizedItems = rawItems.map((item) => {
+          const gName = String(item.groupName || item.name || item.groupCode || item.code || "Group").trim();
+          const count = Number(item.totalStudents ?? item.studentCount ?? item.value ?? item.count ?? 0);
+          return {
+            ...item,
+            id: item.groupId || item.id,
+            name: gName,
+            groupName: gName,
+            value: count,
+            studentCount: count,
+            count: count,
+          };
+        });
 
-        // Map containing all unique groups to display
-        const groupsMap = new Map();
-
-        // 1. Seed from configured groups endpoint if available
-        if (Array.isArray(configuredGroups) && configuredGroups.length > 0) {
-          configuredGroups.forEach((g) => {
-            const gName = String(g.groupName || g.groupCode || g.name || "").trim();
-            if (gName) {
-              const upper = gName.toUpperCase();
-              groupsMap.set(upper, {
-                id: g.groupId || g.id,
-                name: gName,
-                groupName: gName,
-                value: normalizedCounts[upper] ?? 0,
-                studentCount: normalizedCounts[upper] ?? 0,
-                count: normalizedCounts[upper] ?? 0,
-              });
-            }
-          });
-        }
-
-        // 2. Add or merge from groupDistribution API
-        if (Array.isArray(rawItems) && rawItems.length > 0) {
-          rawItems.forEach((item) => {
-            const gName = String(item.groupName || item.name || item.groupCode || item.code || "").trim();
-            if (gName) {
-              const upper = gName.toUpperCase();
-              const existing = groupsMap.get(upper);
-              const cnt = normalizedCounts[upper] ?? Number(item.totalStudents ?? item.studentCount ?? item.value ?? item.count ?? 0);
-              groupsMap.set(upper, {
-                ...item,
-                ...existing,
-                name: existing?.name || gName,
-                groupName: existing?.groupName || gName,
-                value: cnt,
-                studentCount: cnt,
-                count: cnt,
-              });
-            }
-          });
-        }
-
-        // 3. Ensure any groups from studentMetrics are also present
-        if (studentMetrics?.groupCounts) {
-          Object.entries(studentMetrics.groupCounts).forEach(([gName, gCount]) => {
-            const trimmed = String(gName).trim();
-            const upper = trimmed.toUpperCase();
-            if (trimmed && upper !== "UNKNOWN") {
-              const existing = groupsMap.get(upper);
-              if (existing) {
-                existing.value = gCount;
-                existing.studentCount = gCount;
-                existing.count = gCount;
-              } else {
-                groupsMap.set(upper, {
-                  name: trimmed,
-                  groupName: trimmed,
-                  value: gCount,
-                  studentCount: gCount,
-                  count: gCount,
-                });
-              }
-            }
-          });
-        }
-
-        // Keep ALL groups (including 0 students) so all groups configured in the system appear
-        const finalItems = Array.from(groupsMap.values());
-        finalItems.sort((a, b) => (b.value - a.value) || a.name.localeCompare(b.name));
-
-        const totalEnrolled = finalItems.reduce((acc, curr) => acc + (curr.value || 0), 0) || (studentMetrics?.totalStudents ?? 0);
-        const boysVal = studentMetrics?.boysCount ?? studentMetrics?.boys ?? (summaryState.data?.boysCount ?? 0);
-        const girlsVal = studentMetrics?.girlsCount ?? studentMetrics?.girls ?? (summaryState.data?.girlsCount ?? 0);
+        normalizedItems.sort((a, b) => (b.value - a.value) || a.name.localeCompare(b.name));
+        const totalEnrolled = groupData?.totalStudents ?? normalizedItems.reduce((acc, curr) => acc + (curr.value || 0), 0);
 
         const groupPayload = {
-          items: finalItems,
-          groups: finalItems,
+          items: normalizedItems,
+          groups: normalizedItems,
           totalStudents: totalEnrolled,
-          boys: boysVal,
-          boysCount: boysVal,
-          girls: girlsVal,
-          girlsCount: girlsVal,
         };
 
         setGroupState({ loading: false, error: null, data: groupPayload });
@@ -734,7 +573,7 @@ export default function DashboardPage() {
   }, [campusId, boardId, academicYearId]);
 
 
-  // 4. GET /api/v1/attendance/admin/students
+  // 4. GET /api/v1/dashboard/students-attendance-today
   const fetchStudentAttendance = useCallback(async () => {
     const seq = ++studentAttSeq.current;
     setStudentAttState((prev) => ({ ...prev, loading: true, error: null }));
@@ -744,13 +583,21 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
         date: todayDate,
+        viewBy: "Overall",
       };
 
-      const res = await apiClient.get("/api/v1/attendance/admin/students", { params });
+      const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
 
       if (studentAttSeq.current === seq) {
-        const attendance = summarizeStudentAttendance(res.data, "Overall");
-        setStudentAttState({ loading: false, error: null, data: attendance, timestamp: "Today" });
+        const att = unwrap(res.data) || {};
+        const attendance = {
+          total: att.totalStudents ?? att.total ?? 0,
+          present: att.present ?? att.presentCount ?? 0,
+          absent: att.absent ?? att.absentCount ?? 0,
+          halfDay: att.halfDay ?? att.late ?? 0,
+          percentage: att.attendancePercentage ?? att.percentage ?? 0,
+        };
+        setStudentAttState({ loading: false, error: null, data: attendance, timestamp: att.lastUpdated || "Today" });
       }
     } catch (err) {
       if (studentAttSeq.current === seq) {
@@ -759,62 +606,37 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 5. POST /api/v1/staff-attendance/load
+  // 5. GET /api/v1/dashboard/staff-attendance-today
   const fetchStaffAttendance = useCallback(async () => {
     const seq = ++staffAttSeq.current;
     setStaffAttState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const payload = {
+      const params = {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
         ...(academicYearId ? { academicYearId } : {}),
         date: todayDate,
+        staffType: "all",
       };
 
-      const res = await apiClient.post("/api/v1/staff-attendance/load", payload);
+      const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
 
       if (staffAttSeq.current === seq) {
-        if (res.data?.success === false || res.data?.Success === false) {
-          throw new Error(res.data.message || res.data.Message || "Unable to load staff attendance.");
-        }
-        const resData = res.data?.data ?? res.data?.Data ?? res.data;
-        const rows = Array.isArray(resData) ? resData : resData?.items ?? resData?.Items ?? resData?.records;
-        if (!Array.isArray(rows)) throw new Error("The staff attendance API returned an unsupported response.");
-
-        const STAFF_LABEL = { 1: "Present", 2: "Absent", 3: "Late", 4: "Leave", 5: "Holiday" };
-        const staffStatus = (v) => STAFF_LABEL[v] ?? ({ present: "Present", absent: "Absent", late: "Late", leave: "Leave", onleave: "Leave", holiday: "Holiday" })[String(v ?? "").toLowerCase().replace(/[\s_-]/g, "")];
-
-        let presentCount = 0;
-        let absentCount = 0;
-        let lateCount = 0;
-        let onLeaveCount = 0;
-
-        rows.forEach(r => {
-           const st = staffStatus(r.status ?? r.Status);
-           if (st === "Present") presentCount++;
-           else if (st === "Absent") absentCount++;
-           else if (st === "Late") lateCount++;
-           else if (st === "Leave") onLeaveCount++;
-        });
-
-        const totalCount = rows.length;
-        if (absentCount === 0 && totalCount > 0 && (presentCount + lateCount + onLeaveCount < totalCount)) {
-          absentCount = Math.max(0, totalCount - presentCount - lateCount - onLeaveCount);
-        }
-        const percentage = totalCount ? Math.round(((presentCount + 0.5 * lateCount) * 100) / totalCount) : 0;
+        const stf = unwrap(res.data) || {};
+        const staffData = {
+          total: stf.totalStaff ?? stf.total ?? 0,
+          present: stf.present ?? stf.presentCount ?? 0,
+          absent: stf.absent ?? stf.absentCount ?? 0,
+          late: stf.late ?? stf.lateCount ?? 0,
+          onLeave: stf.onLeave ?? stf.onLeaveCount ?? 0,
+          percentage: stf.attendancePercentage ?? stf.percentage ?? 0,
+        };
 
         setStaffAttState({
           loading: false,
           error: null,
-          data: {
-            total: totalCount,
-            present: presentCount,
-            absent: absentCount,
-            late: lateCount,
-            onLeave: onLeaveCount,
-            percentage: percentage
-          },
-          timestamp: "Today"
+          data: staffData,
+          timestamp: stf.lastUpdated || "Today",
         });
       }
     } catch (err) {

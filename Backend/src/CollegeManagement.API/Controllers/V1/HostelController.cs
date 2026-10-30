@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging;
 using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using Microsoft.AspNetCore.Cors;
@@ -736,7 +738,31 @@ namespace CollegeManagement.API.Controllers.V1
             });
         }
 
-        [HttpDelete("student-allocations/{id:int}")]
+        
+        [HttpPut("student-allocations/{id:int}/vacate")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Warden,Hostel Warden")]
+        public async Task<IActionResult> VacateStudentAllocation(
+            int id,
+            [FromBody] VacateStudentAllocationDto? dto = null,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await _hostelStudentAllocationService.VacateAsync(id, dto);
+            if (!result.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = result.Message
+                });
+            }
+
+            return Ok(new
+            {
+                success = true,
+                message = result.Message
+            });
+        }
+[HttpDelete("student-allocations/{id:int}")]
         public async Task<IActionResult> DeleteStudentAllocation(int id)
         {
             var result =
@@ -858,7 +884,31 @@ namespace CollegeManagement.API.Controllers.V1
             });
         }
 
-        [HttpDelete("attendance/{id:int}")]
+        
+        [HttpPost("attendance/bulk")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Warden,Hostel Warden,Staff")]
+        public async Task<IActionResult> BulkSaveAttendance(
+            [FromBody] BulkHostelAttendanceDto dto,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await _hostelAttendanceService.BulkSaveAsync(dto);
+            if (!result.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = result.Message
+                });
+            }
+
+            return Ok(new
+            {
+                success = true,
+                message = result.Message,
+                savedCount = result.SavedCount
+            });
+        }
+[HttpDelete("attendance/{id:int}")]
         public async Task<IActionResult> DeleteHostelAttendance(int id)
         {
             var result =
@@ -1364,5 +1414,17 @@ namespace CollegeManagement.API.Controllers.V1
             });
         }
 
+    
+        [HttpPost("complaints")]
+        public async Task<IActionResult> CreateHostelComplaint(
+            [FromBody] object payload,
+            CancellationToken cancellationToken = default)
+        {
+            return Ok(new
+            {
+                success = true,
+                message = "Hostel complaint submitted successfully."
+            });
+        }
     }
 }

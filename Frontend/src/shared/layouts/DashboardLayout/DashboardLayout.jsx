@@ -215,7 +215,6 @@ export const menu = [
       { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department, moduleKey: "department-designation" },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance" },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management" },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll, moduleKey: "reimbursement" },
     ],
   },
   {
@@ -368,7 +367,7 @@ const EMPTY_CAMPUS_CONTEXT = Object.freeze({
   setSelectedCampus: () => undefined,
 });
 const MOCK_NOTIFICATIONS = [
-  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/dashboard/reimbursements", label: "reimbursements" }
+  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/dashboard/reimbursement", label: "reimbursements" }
 ];
 const PARENT_NOTIFICATIONS = [
   { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
@@ -535,6 +534,81 @@ function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
 
+// Module-level cache for broken or placeholder photo URLs to prevent 404 console errors across module switches
+const BROKEN_PHOTO_URLS = new Set();
+try {
+  const cached = JSON.parse(sessionStorage.getItem("cms_broken_photos") || "[]");
+  if (Array.isArray(cached)) cached.forEach((u) => BROKEN_PHOTO_URLS.add(u));
+} catch { }
+
+function isInvalidOrBrokenPhoto(url) {
+  if (!url || typeof url !== "string") return true;
+  const trimmed = url.trim().toLowerCase();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return true;
+  if (
+    trimmed.includes("admin_photo_1_test") ||
+    trimmed.includes("photo_1_test") ||
+    trimmed.endsWith("_test.png") ||
+    trimmed.endsWith("_test.jpg") ||
+    trimmed.includes("/test.png")
+  ) {
+    return true;
+  }
+  return BROKEN_PHOTO_URLS.has(url) || BROKEN_PHOTO_URLS.has(trimmed);
+}
+
+function markPhotoBroken(url) {
+  if (!url) return;
+  const raw = String(url).trim();
+  const lower = raw.toLowerCase();
+  BROKEN_PHOTO_URLS.add(raw);
+  BROKEN_PHOTO_URLS.add(lower);
+  try {
+    sessionStorage.setItem("cms_broken_photos", JSON.stringify(Array.from(BROKEN_PHOTO_URLS)));
+    if (localStorage.getItem("cms_admin_photo") === raw || isInvalidOrBrokenPhoto(localStorage.getItem("cms_admin_photo"))) {
+      localStorage.removeItem("cms_admin_photo");
+    }
+    const profile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
+    if (profile && (profile.photo === raw || isInvalidOrBrokenPhoto(profile.photo))) {
+      delete profile.photo;
+      delete profile.photoUrl;
+      delete profile.photoPath;
+      localStorage.setItem("cms_admin_profile", JSON.stringify(profile));
+    }
+    const authUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
+    if (authUser && (authUser.photoUrl === raw || authUser.photoPath === raw || isInvalidOrBrokenPhoto(authUser.photoUrl) || isInvalidOrBrokenPhoto(authUser.photoPath))) {
+      authUser.photo = null;
+      authUser.photoUrl = null;
+      authUser.photoPath = null;
+      try { localStorage.setItem("user", JSON.stringify(authUser)); } catch { }
+      try { sessionStorage.setItem("user", JSON.stringify(authUser)); } catch { }
+    }
+  } catch { }
+}
+
+// Initial purge of known stale/broken test photos from browser storage
+try {
+  const currentAdminPhoto = localStorage.getItem("cms_admin_photo");
+  if (isInvalidOrBrokenPhoto(currentAdminPhoto)) {
+    localStorage.removeItem("cms_admin_photo");
+  }
+  const currentProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
+  if (currentProfile && isInvalidOrBrokenPhoto(currentProfile.photo)) {
+    delete currentProfile.photo;
+    delete currentProfile.photoUrl;
+    delete currentProfile.photoPath;
+    localStorage.setItem("cms_admin_profile", JSON.stringify(currentProfile));
+  }
+  const authUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
+  if (authUser && (isInvalidOrBrokenPhoto(authUser.photoUrl) || isInvalidOrBrokenPhoto(authUser.photoPath) || isInvalidOrBrokenPhoto(authUser.photo))) {
+    authUser.photo = null;
+    authUser.photoUrl = null;
+    authUser.photoPath = null;
+    try { localStorage.setItem("user", JSON.stringify(authUser)); } catch { }
+    try { sessionStorage.setItem("user", JSON.stringify(authUser)); } catch { }
+  }
+} catch { }
+
 // Module-level notifications cache to prevent duplicate backend requests on route navigation
 let cachedLiveNotifications = [];
 let lastNotifFetchTimestamp = 0;
@@ -645,7 +719,7 @@ export default function DashboardLayout({
           if (!active) return;
           const dataObj = res.data?.data || res.data?.Data || res.data;
           const photo = dataObj?.photoPath || dataObj?.PhotoPath || dataObj?.photoUrl || dataObj?.PhotoUrl;
-          if (photo) {
+          if (photo && !isInvalidOrBrokenPhoto(photo)) {
             const current = readUser() || u;
             if (current.photoUrl !== photo) {
               const updated = { ...current, photoUrl: photo, photoPath: photo, photo: photo };
@@ -695,6 +769,9 @@ export default function DashboardLayout({
   }, []);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
+  const parentStudentId = isParent
+    ? (new URLSearchParams(location.search).get("studentId") || (typeof window !== "undefined" ? window.sessionStorage?.getItem("cms-parent-active-child") : null))
+    : null;
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
   const isExamCell = !isWarden && (isExamCellRole(user?.role) || pathname.startsWith("/exam-cell-dashboard"));
   const activeMenu = useMemo(() => {
@@ -775,7 +852,7 @@ export default function DashboardLayout({
                     id: "admin-notif-reimbursement",
                     title: "New Staff Reimbursement Request",
                     count: claims.length,
-                    to: "/dashboard/reimbursements",
+                    to: "/dashboard/reimbursement",
                     label: "reimbursements"
                   });
                 }
@@ -940,14 +1017,15 @@ export default function DashboardLayout({
       (typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
       null
     );
-    if (!rawPhoto || typeof rawPhoto !== "string") return null;
+    if (!rawPhoto || typeof rawPhoto !== "string" || isInvalidOrBrokenPhoto(rawPhoto)) return null;
     const trimmed = rawPhoto.trim();
-    if (!trimmed) return null;
+    if (!trimmed || isInvalidOrBrokenPhoto(trimmed)) return null;
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
-      return trimmed;
+      return isInvalidOrBrokenPhoto(trimmed) ? null : trimmed;
     }
     const apiBase = (env.apiBaseUrl || "http://localhost:5167").replace(/\/$/, "");
-    return `${apiBase}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+    const candidate = `${apiBase}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+    return isInvalidOrBrokenPhoto(candidate) ? null : candidate;
   }, [user]);
 
   useEffect(() => {
@@ -997,7 +1075,7 @@ export default function DashboardLayout({
     if (pathname.startsWith("/dashboard/certificates")) {
       setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-certificate"));
     }
-    if (pathname.startsWith("/dashboard/reimbursements")) {
+    if (/^\/dashboard\/(?:finance\/)?reimbursements?(?:\/|$)/.test(pathname)) {
       setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-reimbursement"));
     }
   }, [pathname]);
@@ -1210,10 +1288,14 @@ export default function DashboardLayout({
                     </div>
                   );
                 }
+                const linkTarget = (isParent && item.to.startsWith("/parent-dashboard") && parentStudentId)
+                  ? `${item.to}?studentId=${encodeURIComponent(parentStudentId)}`
+                  : item.to;
+
                 return (
                   <Link
                     key={item.to}
-                    to={item.to}
+                    to={linkTarget}
                     title={navOpen ? undefined : item.label}
                     className={`cms-nav-link ${active ? "is-active" : ""}`}
                     onClick={() => { setAttendanceOpen(false); closeOnMobile(); }}
@@ -1496,7 +1578,7 @@ export default function DashboardLayout({
             <ThemeToggle variant="dashboard" />
             {isParent ? (
               <Link
-                to="/parent-dashboard/notifications"
+                to={parentStudentId ? `/parent-dashboard/notifications?studentId=${encodeURIComponent(parentStudentId)}` : "/parent-dashboard/notifications"}
                 className="cms-icon-btn"
                 style={{ textDecoration: "none" }}
                 aria-label={`${pendingActionCount} notifications`}
@@ -1536,13 +1618,16 @@ export default function DashboardLayout({
               </button>
             )}
             <button className="cms-profile-btn" onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}>
-              {activeAdminPhoto && !adminPhotoError ? (
+              {activeAdminPhoto && !adminPhotoError && !isInvalidOrBrokenPhoto(activeAdminPhoto) ? (
                 <img
                   src={activeAdminPhoto}
                   alt={profileName}
                   className="cms-avatar"
                   style={{ objectFit: 'cover' }}
-                  onError={() => setAdminPhotoError(true)}
+                  onError={() => {
+                    markPhotoBroken(activeAdminPhoto);
+                    setAdminPhotoError(true);
+                  }}
                 />
               ) : (
                 <TransparentAvatar size={34} className="cms-avatar" />

@@ -8,12 +8,15 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/period-structures")]
     [Authorize]
+    [RequirePermission("timetable")]
     public class PeriodStructureController : ControllerBase
     {
         private readonly IPeriodStructureService _periodStructureService;

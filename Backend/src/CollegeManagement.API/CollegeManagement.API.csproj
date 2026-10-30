@@ -45,4 +45,10 @@
 	  <Folder Include="Database\Scripts\StoredProcedures\BoardManagement\" />
 	  <Folder Include="wwwroot\uploads\Submissions\" />
 	</ItemGroup>
+
+  <ItemGroup>
+    <None Update="Database\99_FixFrontendRelationsAndAdmissionFlow.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

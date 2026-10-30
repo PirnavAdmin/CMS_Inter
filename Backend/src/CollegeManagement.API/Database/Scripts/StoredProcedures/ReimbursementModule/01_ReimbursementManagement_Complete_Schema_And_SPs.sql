@@ -2,8 +2,10 @@
 -- MODULE: REIMBURSEMENT MANAGEMENT
 -- SCRIPT: 01_ReimbursementManagement_Complete_Schema_And_SPs.sql
 -- PURPOSE: Complete Database Schema and Stored Procedures for Reimbursement Module
--- DATABASE: MySQL 8.x / MariaDB compatible (utf8mb4 / utf8mb4_unicode_ci)
+-- DATABASE: CollegeManagement (MySQL 8.0 / utf8mb4_unicode_ci)
 -- =============================================================================
+
+USE `CollegeManagement`;
 
 -- =============================================================================
 -- SECTION 1: CREATE TABLE
@@ -57,14 +59,14 @@ DELIMITER //
 CREATE PROCEDURE `sp_Reimbursement_Create`(
     IN p_StaffId INT,
     IN p_CampusId INT,
-    IN p_AcademicYear VARCHAR(20),
-    IN p_ExpenseCategory VARCHAR(100),
+    IN p_AcademicYear VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_ExpenseCategory VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_ExpenseDate DATE,
     IN p_Amount DECIMAL(18,2),
-    IN p_PreferredPaymentMethod VARCHAR(50),
-    IN p_Purpose TEXT,
-    IN p_AdditionalNotes VARCHAR(500),
-    IN p_ReceiptUrl VARCHAR(500)
+    IN p_PreferredPaymentMethod VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Purpose TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_AdditionalNotes VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_ReceiptUrl VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 )
 BEGIN
     DECLARE v_Year INT;
@@ -75,7 +77,8 @@ BEGIN
     SELECT IFNULL(MAX(CAST(SUBSTRING_INDEX(ClaimNumber, '-', -1) AS UNSIGNED)), 0) + 1
     INTO v_NextNum
     FROM `reimbursement_claims`
-    WHERE `ClaimNumber` LIKE CONCAT('CLM-', v_Year, '-%');
+    WHERE `ClaimNumber` LIKE CONCAT('CLM-', v_Year, '-%')
+    FOR UPDATE;
 
     SET v_ClaimNumber = CONCAT('CLM-', v_Year, '-', LPAD(v_NextNum, 3, '0'));
 
@@ -123,9 +126,9 @@ DROP PROCEDURE IF EXISTS `sp_Reimbursement_GetAll`;
 DELIMITER //
 CREATE PROCEDURE `sp_Reimbursement_GetAll`(
     IN p_CampusId INT,
-    IN p_Status VARCHAR(50),
-    IN p_Category VARCHAR(100),
-    IN p_Search VARCHAR(150)
+    IN p_Status VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Category VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Search VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 )
 BEGIN
     SELECT 
@@ -133,9 +136,9 @@ BEGIN
         rc.`ClaimNumber`,
         rc.`StaffId`,
         s.`EmployeeId`,
-        TRIM(CONCAT(s.`FirstName`, ' ', COALESCE(s.`LastName`, ''))) AS `StaffName`,
+        CONCAT(s.`FirstName`, ' ', s.`LastName`) AS `StaffName`,
         s.`Designation`,
-        COALESCE(d.`DepartmentName`, s.`Department`, 'General') AS `Department`,
+        d.`DepartmentName` AS `Department`,
         s.`Email`,
         rc.`CampusId`,
         rc.`AcademicYear`,
@@ -151,11 +154,11 @@ BEGIN
         rc.`AccountRef`,
         rc.`SubmissionDate`,
         rc.`ReviewedBy`,
-        TRIM(CONCAT(rev.`FirstName`, ' ', COALESCE(rev.`LastName`, ''))) AS `ReviewerName`,
+        CONCAT(rev.`FirstName`, ' ', rev.`LastName`) AS `ReviewerName`,
         rc.`ReviewedAt`,
         rc.`ReviewNotes`,
         rc.`PaidBy`,
-        TRIM(CONCAT(pay.`FirstName`, ' ', COALESCE(pay.`LastName`, ''))) AS `PayerName`,
+        CONCAT(pay.`FirstName`, ' ', pay.`LastName`) AS `PayerName`,
         rc.`PaidAt`,
         rc.`PaymentReference`,
         rc.`CreatedAt`,
@@ -167,15 +170,15 @@ BEGIN
     LEFT JOIN `Staffs` pay ON pay.`Id` = rc.`PaidBy`
     WHERE (rc.`IsDeleted` = 0)
       AND (p_CampusId IS NULL OR p_CampusId = 0 OR rc.`CampusId` = p_CampusId)
-      AND (p_Status IS NULL OR p_Status = '' OR p_Status = 'All' OR rc.`Status` = p_Status)
-      AND (p_Category IS NULL OR p_Category = '' OR p_Category = 'All' OR rc.`ExpenseCategory` = p_Category)
+      AND (p_Status IS NULL OR p_Status = '' OR p_Status = 'All' OR rc.`Status` COLLATE utf8mb4_unicode_ci = p_Status COLLATE utf8mb4_unicode_ci)
+      AND (p_Category IS NULL OR p_Category = '' OR p_Category = 'All' OR rc.`ExpenseCategory` COLLATE utf8mb4_unicode_ci = p_Category COLLATE utf8mb4_unicode_ci)
       AND (p_Search IS NULL OR p_Search = '' OR
-           rc.`ClaimNumber` LIKE CONCAT('%', TRIM(p_Search), '%') OR
-           s.`EmployeeId` LIKE CONCAT('%', TRIM(p_Search), '%') OR
-           s.`FirstName` LIKE CONCAT('%', TRIM(p_Search), '%') OR
-           s.`LastName` LIKE CONCAT('%', TRIM(p_Search), '%') OR
-           CONCAT(s.`FirstName`, ' ', COALESCE(s.`LastName`, '')) LIKE CONCAT('%', TRIM(p_Search), '%') OR
-           rc.`Purpose` LIKE CONCAT('%', TRIM(p_Search), '%'))
+           rc.`ClaimNumber` COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', TRIM(p_Search), '%') COLLATE utf8mb4_unicode_ci OR
+           s.`EmployeeId` COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', TRIM(p_Search), '%') COLLATE utf8mb4_unicode_ci OR
+           s.`FirstName` COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', TRIM(p_Search), '%') COLLATE utf8mb4_unicode_ci OR
+           s.`LastName` COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', TRIM(p_Search), '%') COLLATE utf8mb4_unicode_ci OR
+           CONCAT(s.`FirstName`, ' ', s.`LastName`) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', TRIM(p_Search), '%') COLLATE utf8mb4_unicode_ci OR
+           rc.`Purpose` COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', TRIM(p_Search), '%') COLLATE utf8mb4_unicode_ci)
     ORDER BY rc.`Id` DESC;
 END //
 DELIMITER ;
@@ -196,9 +199,9 @@ BEGIN
         rc.`ClaimNumber`,
         rc.`StaffId`,
         s.`EmployeeId`,
-        TRIM(CONCAT(s.`FirstName`, ' ', COALESCE(s.`LastName`, ''))) AS `StaffName`,
+        CONCAT(s.`FirstName`, ' ', s.`LastName`) AS `StaffName`,
         s.`Designation`,
-        COALESCE(d.`DepartmentName`, s.`Department`, 'General') AS `Department`,
+        d.`DepartmentName` AS `Department`,
         s.`Email`,
         rc.`CampusId`,
         rc.`AcademicYear`,
@@ -214,11 +217,11 @@ BEGIN
         rc.`AccountRef`,
         rc.`SubmissionDate`,
         rc.`ReviewedBy`,
-        TRIM(CONCAT(rev.`FirstName`, ' ', COALESCE(rev.`LastName`, ''))) AS `ReviewerName`,
+        CONCAT(rev.`FirstName`, ' ', rev.`LastName`) AS `ReviewerName`,
         rc.`ReviewedAt`,
         rc.`ReviewNotes`,
         rc.`PaidBy`,
-        TRIM(CONCAT(pay.`FirstName`, ' ', COALESCE(pay.`LastName`, ''))) AS `PayerName`,
+        CONCAT(pay.`FirstName`, ' ', pay.`LastName`) AS `PayerName`,
         rc.`PaidAt`,
         rc.`PaymentReference`,
         rc.`CreatedAt`,
@@ -250,9 +253,9 @@ BEGIN
         rc.`ClaimNumber`,
         rc.`StaffId`,
         s.`EmployeeId`,
-        TRIM(CONCAT(s.`FirstName`, ' ', COALESCE(s.`LastName`, ''))) AS `StaffName`,
+        CONCAT(s.`FirstName`, ' ', s.`LastName`) AS `StaffName`,
         s.`Designation`,
-        COALESCE(d.`DepartmentName`, s.`Department`, 'General') AS `Department`,
+        d.`DepartmentName` AS `Department`,
         s.`Email`,
         rc.`CampusId`,
         rc.`AcademicYear`,
@@ -268,11 +271,11 @@ BEGIN
         rc.`AccountRef`,
         rc.`SubmissionDate`,
         rc.`ReviewedBy`,
-        TRIM(CONCAT(rev.`FirstName`, ' ', COALESCE(rev.`LastName`, ''))) AS `ReviewerName`,
+        CONCAT(rev.`FirstName`, ' ', rev.`LastName`) AS `ReviewerName`,
         rc.`ReviewedAt`,
         rc.`ReviewNotes`,
         rc.`PaidBy`,
-        TRIM(CONCAT(pay.`FirstName`, ' ', COALESCE(pay.`LastName`, ''))) AS `PayerName`,
+        CONCAT(pay.`FirstName`, ' ', pay.`LastName`) AS `PayerName`,
         rc.`PaidAt`,
         rc.`PaymentReference`,
         rc.`CreatedAt`,
@@ -289,7 +292,7 @@ DELIMITER ;
 
 -- -----------------------------------------------------------------------------
 -- 5. sp_Reimbursement_GetSummary
--- Calculates top 4 status KPI cards, 5 financial review cards, and integrated payables count
+-- Calculates top 4 status KPI cards, 5 financial review cards, and integrated payables pill
 -- -----------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS `sp_Reimbursement_GetSummary`;
 DELIMITER //
@@ -299,17 +302,17 @@ CREATE PROCEDURE `sp_Reimbursement_GetSummary`(
 BEGIN
     SELECT 
         COUNT(*) AS `TotalClaims`,
-        COUNT(CASE WHEN `Status` IN ('Pending', 'Under Review') THEN 1 END) AS `PendingClaims`,
-        COUNT(CASE WHEN `Status` = 'Under Review' THEN 1 END) AS `UnderReviewClaims`,
-        COUNT(CASE WHEN `Status` = 'Approved' THEN 1 END) AS `ApprovedClaims`,
-        COUNT(CASE WHEN `Status` = 'Rejected' THEN 1 END) AS `RejectedClaims`,
-        COUNT(CASE WHEN `Status` = 'Paid' THEN 1 END) AS `PaidClaims`,
+        COUNT(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci IN ('Pending', 'Under Review') THEN 1 END) AS `PendingClaims`,
+        COUNT(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci = 'Under Review' THEN 1 END) AS `UnderReviewClaims`,
+        COUNT(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci = 'Approved' THEN 1 END) AS `ApprovedClaims`,
+        COUNT(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci = 'Rejected' THEN 1 END) AS `RejectedClaims`,
+        COUNT(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci = 'Paid' THEN 1 END) AS `PaidClaims`,
         IFNULL(SUM(`Amount`), 0.00) AS `TotalClaimedAmount`,
-        IFNULL(SUM(CASE WHEN `Status` IN ('Pending', 'Under Review') THEN `Amount` ELSE 0 END), 0.00) AS `AwaitingReviewAmount`,
-        IFNULL(SUM(CASE WHEN `Status` = 'Approved' THEN IFNULL(`ApprovedAmount`, `Amount`) ELSE 0 END), 0.00) AS `ApprovedUnpaidAmount`,
-        IFNULL(SUM(CASE WHEN `Status` = 'Paid' THEN IFNULL(`ApprovedAmount`, `Amount`) ELSE 0 END), 0.00) AS `TotalPaidAmount`,
-        IFNULL(SUM(CASE WHEN `Status` = 'Rejected' THEN `Amount` ELSE 0 END), 0.00) AS `TotalRejectedAmount`,
-        COUNT(CASE WHEN `Status` = 'Approved' AND `AccountRef` IS NOT NULL AND `AccountRef` != '' THEN 1 END) AS `IntegratedPayablesCount`
+        IFNULL(SUM(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci IN ('Pending', 'Under Review') THEN `Amount` ELSE 0 END), 0.00) AS `AwaitingReviewAmount`,
+        IFNULL(SUM(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci = 'Approved' THEN IFNULL(`ApprovedAmount`, `Amount`) ELSE 0 END), 0.00) AS `ApprovedUnpaidAmount`,
+        IFNULL(SUM(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci = 'Paid' THEN IFNULL(`ApprovedAmount`, `Amount`) ELSE 0 END), 0.00) AS `TotalPaidAmount`,
+        IFNULL(SUM(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci = 'Rejected' THEN `Amount` ELSE 0 END), 0.00) AS `TotalRejectedAmount`,
+        COUNT(CASE WHEN `Status` COLLATE utf8mb4_unicode_ci = 'Approved' AND `AccountRef` IS NOT NULL AND `AccountRef` != '' THEN 1 END) AS `IntegratedPayablesCount`
     FROM `reimbursement_claims`
     WHERE `IsDeleted` = 0
       AND (p_CampusId IS NULL OR p_CampusId = 0 OR `CampusId` = p_CampusId);
@@ -325,7 +328,7 @@ DELIMITER //
 CREATE PROCEDURE `sp_Reimbursement_Verify`(
     IN p_Id INT,
     IN p_ApprovedAmount DECIMAL(18,2),
-    IN p_ReviewNotes VARCHAR(500),
+    IN p_ReviewNotes VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_ReviewedBy INT
 )
 BEGIN
@@ -341,7 +344,8 @@ BEGIN
         SELECT IFNULL(MAX(CAST(SUBSTRING_INDEX(AccountRef, '-', -1) AS UNSIGNED)), 0) + 1
         INTO v_NextSeq
         FROM `reimbursement_claims`
-        WHERE `AccountRef` LIKE CONCAT('ACC-PAY-CLM-', v_Year, '-%');
+        WHERE `AccountRef` LIKE CONCAT('ACC-PAY-CLM-', v_Year, '-%')
+        FOR UPDATE;
 
         SET v_AccountRef = CONCAT('ACC-PAY-CLM-', v_Year, '-', LPAD(v_NextSeq, 3, '0'));
     ELSE
@@ -370,7 +374,7 @@ DROP PROCEDURE IF EXISTS `sp_Reimbursement_RequestClarification`;
 DELIMITER //
 CREATE PROCEDURE `sp_Reimbursement_RequestClarification`(
     IN p_Id INT,
-    IN p_ClarificationNotes VARCHAR(500),
+    IN p_ClarificationNotes VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_ReviewedBy INT
 )
 BEGIN
@@ -394,7 +398,7 @@ DROP PROCEDURE IF EXISTS `sp_Reimbursement_Reject`;
 DELIMITER //
 CREATE PROCEDURE `sp_Reimbursement_Reject`(
     IN p_Id INT,
-    IN p_RejectNotes VARCHAR(500),
+    IN p_RejectNotes VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_ReviewedBy INT
 )
 BEGIN
@@ -418,7 +422,7 @@ DROP PROCEDURE IF EXISTS `sp_Reimbursement_MarkPaid`;
 DELIMITER //
 CREATE PROCEDURE `sp_Reimbursement_MarkPaid`(
     IN p_Id INT,
-    IN p_PaymentReference VARCHAR(100),
+    IN p_PaymentReference VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_PaidBy INT
 )
 BEGIN
@@ -442,7 +446,7 @@ DROP PROCEDURE IF EXISTS `sp_Reimbursement_UploadProof`;
 DELIMITER //
 CREATE PROCEDURE `sp_Reimbursement_UploadProof`(
     IN p_Id INT,
-    IN p_ReceiptUrl VARCHAR(500)
+    IN p_ReceiptUrl VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 )
 BEGIN
     UPDATE `reimbursement_claims`
@@ -469,16 +473,16 @@ BEGIN
         rc.`AccountRef` AS `AccountEntryId`,
         rc.`ClaimNumber` AS `ClaimId`,
         s.`EmployeeId` AS `FacultyId`,
-        TRIM(CONCAT(s.`FirstName`, ' ', COALESCE(s.`LastName`, ''))) AS `FacultyName`,
-        COALESCE(d.`DepartmentName`, s.`Department`, 'General') AS `Department`,
+        CONCAT(s.`FirstName`, ' ', s.`LastName`) AS `FacultyName`,
+        d.`DepartmentName` AS `Department`,
         rc.`ExpenseCategory` AS `Category`,
         IFNULL(rc.`ApprovedAmount`, rc.`Amount`) AS `Amount`,
         'Faculty Expense Reimbursement Payable' AS `EntryType`,
         'Faculty Benefits & Travel Reimbursements' AS `LedgerCategory`,
         DATE_FORMAT(rc.`ReviewedAt`, '%Y-%m-%d') AS `ApprovalDate`,
-        IFNULL(TRIM(CONCAT(rev.`FirstName`, ' ', COALESCE(rev.`LastName`, ''))), 'Finance Officer') AS `ApprovedBy`,
+        IFNULL(CONCAT(rev.`FirstName`, ' ', rev.`LastName`), 'Finance Officer') AS `ApprovedBy`,
         CASE 
-            WHEN rc.`Status` = 'Paid' THEN 'Paid / Disbursed'
+            WHEN rc.`Status` COLLATE utf8mb4_unicode_ci = 'Paid' THEN 'Paid / Disbursed'
             ELSE 'Payable (Awaiting Disbursement)'
         END AS `PaymentStatus`,
         DATE_FORMAT(rc.`PaidAt`, '%Y-%m-%d') AS `DisbursedDate`,

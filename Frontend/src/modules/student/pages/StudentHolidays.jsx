@@ -6,7 +6,7 @@ import StudentCard from "../components/StudentCard.jsx";
 import StudentDataTable from "../components/StudentDataTable.jsx";
 import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
-import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { useStudentProfile, useStudentNavigation, studentRouteValue, validStudentPage } from "../context/StudentProfileContext.jsx";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
 
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
@@ -35,14 +35,15 @@ const normalizeHoliday = (item, today) => {
 };
 
 export default function StudentHolidays() {
+  const navigation = useStudentNavigation();
   const { profile: student, loading: profileLoading, error: profileError } = useStudentProfile();
   const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [type, setType] = useState("All Types");
-  const [period, setPeriod] = useState("All Holidays");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = studentRouteValue(navigation, "q", "");
+  const [type, setType] = studentRouteValue(navigation, "type", "All Types");
+  const [period, setPeriod] = studentRouteValue(navigation, "period", "All Holidays", (value) => ["All Holidays", "Upcoming", "Ongoing", "Past"].includes(value));
+  const [page, setPage] = studentRouteValue(navigation, "page", 1, validStudentPage);
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -50,7 +51,7 @@ export default function StudentHolidays() {
       setLoading(true); setError("");
       try {
         const response = await apiClient.get(studentApiEndpoints.holidays.list, { params: { CampusId: student.campusId, AcademicYearId: student.academicYearId, BoardId: student.boardId, Page: 1, PageSize: 100 } });
-        if (active) { setHolidays(extract(response.data)); setPage(1); }
+        if (active) { setHolidays(extract(response.data)); }
       } catch (requestError) { if (active) setError(getApiErrorMessage(requestError)); }
       finally { if (active) setLoading(false); }
     };
@@ -63,7 +64,8 @@ export default function StudentHolidays() {
   const items = holidays.map((item) => normalizeHoliday(item, today)).sort((a, b) => (a.start?.getTime() ?? Infinity) - (b.start?.getTime() ?? Infinity));
   const upcoming = items.filter((item) => item.status === "Upcoming");
   const types = [...new Set(items.map((item) => item.type))];
-  const filtered = items.filter((item) => (type === "All Types" || item.type === type) && (period === "All Holidays" || item.status === period) && `${item.name} ${item.description}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const activeType = type === "All Types" || types.includes(type) ? type : "All Types";
+  const filtered = items.filter((item) => (activeType === "All Types" || item.type === activeType) && (period === "All Holidays" || item.status === period) && `${item.name} ${item.description}`.toLowerCase().includes(search.trim().toLowerCase()));
   const pages = Math.max(1, Math.ceil(filtered.length / 5));
   const currentPage = Math.min(page, pages);
   return <div className="sp-page sp-holidays-page">
@@ -80,7 +82,7 @@ export default function StudentHolidays() {
       <StudentCard title={period === "All Holidays" ? "Holiday List" : `${period} Holidays`} subtitle={`${filtered.length} holiday${filtered.length === 1 ? "" : "s"}`}>
         <div className="sp-holiday-list-filters">
           <label className="sp-holiday-search"><Search size={17} aria-hidden="true"/><input type="search" aria-label="Search holidays" placeholder="Search holidays..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></label>
-          <select aria-label="Holiday type" value={type} onChange={(event) => { setType(event.target.value); setPage(1); }}><option>All Types</option>{types.map((label) => <option key={label}>{label}</option>)}</select>
+          <select aria-label="Holiday type" value={activeType} onChange={(event) => { setType(event.target.value); setPage(1); }}><option>All Types</option>{types.map((label) => <option key={label}>{label}</option>)}</select>
           <select aria-label="Holiday status" value={period} onChange={(event) => { setPeriod(event.target.value); setPage(1); }}>{["All Holidays", "Upcoming", "Ongoing", "Past"].map((label) => <option key={label}>{label}</option>)}</select>
           <span className="sp-college-managed">{student?.academicYearName || "Academic calendar"}</span>
         </div>

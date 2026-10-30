@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import React, { useState, useEffect } from "react";
 import {
   Route as RouteIcon,
@@ -20,7 +21,13 @@ import { SkeletonPage } from "../../../shared/components/Ui.jsx";
 
 export default function DriverRoutePage({ onNavigateTab }) {
   const [routeDetails, setRouteDetails] = useState(null);
-  const [selectedStopId, setSelectedStopId] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedStopId = searchParams.get("stopId") ?? routeDetails?.stops?.[0]?.id;
+  const setSelectedStopId = (id) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    next.set("stopId", String(id));
+    return next;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -47,9 +54,6 @@ export default function DriverRoutePage({ onNavigateTab }) {
           stops: []
         };
         setRouteDetails(routeData);
-        if (routeData.stops && routeData.stops.length > 0) {
-          setSelectedStopId(routeData.stops[0].id);
-        }
       } catch (err) {
         console.error(err);
         setError("Failed to load route details.");
@@ -68,7 +72,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
     return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
   }
 
-  const activeStop = routeDetails?.stops?.find((s) => s.id === selectedStopId) || routeDetails?.stops?.[0];
+  const activeStop = routeDetails?.stops?.find((s) => String(s.id) === String(selectedStopId));
 
   return (
     <div className="dp-page-container">
@@ -170,7 +174,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
         <div className="dp-card-body">
           <div className="dp-visual-route-track">
             {routeDetails?.stops?.map((stop, index) => {
-              const isSelected = selectedStopId === stop.id;
+              const isSelected = String(selectedStopId) === String(stop.id);
               const isCompleted = stop.status === "Completed";
               const isInProgress = stop.status === "In Progress";
 
@@ -204,6 +208,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
           </div>
 
           {/* Selected Stop Callout Card */}
+          {searchParams.has("stopId") && !activeStop && <p role="alert" className="dp-text-danger">This route stop is no longer available.</p>}
           {activeStop && (
             <div className="dp-selected-stop-banner">
               <div className="dp-ssb-left">
@@ -271,7 +276,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
                 {routeDetails?.stops?.map((stop) => (
                   <tr
                     key={stop.id}
-                    className={selectedStopId === stop.id ? "dp-row-highlight" : ""}
+                    className={String(selectedStopId) === String(stop.id) ? "dp-row-highlight" : ""}
                     onClick={() => setSelectedStopId(stop.id)}
                     style={{ cursor: "pointer" }}
                   >

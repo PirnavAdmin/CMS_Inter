@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.StaffAttendance;
 using CollegeManagement.API.Enums;
@@ -22,32 +23,32 @@ namespace CollegeManagement.API.Services.Implementations
             _cache = cache;
         }
 
-        public async Task<IEnumerable<TimingConfigResponse>> GetAllConfigsAsync()
+        public async Task<IEnumerable<TimingConfigResponse>> GetAllConfigsAsync(CancellationToken ct = default)
         {
             return await _cache.GetOrCreateAsync("lookup:timingconfigs:all", async () =>
             {
-                var entities = await _repository.GetAllAsync();
+                var entities = await _repository.GetAllAsync(ct);
                 return entities.Select(MapToResponse).ToList();
             });
         }
 
-        public async Task<TimingConfigResponse?> GetConfigByIdAsync(int id)
+        public async Task<TimingConfigResponse?> GetConfigByIdAsync(int id, CancellationToken ct = default)
         {
-            var entity = await _repository.GetByIdAsync(id);
+            var entity = await _repository.GetByIdAsync(id, ct);
             return entity == null ? null : MapToResponse(entity);
         }
 
-        public async Task<TimingConfigResponse?> GetEffectiveConfigAsync(StaffType? staffType, int? departmentId)
+        public async Task<TimingConfigResponse?> GetEffectiveConfigAsync(StaffType? staffType, int? departmentId, CancellationToken ct = default)
         {
             string cacheKey = $"lookup:timingconfigs:effective:{staffType}:{departmentId}";
             return await _cache.GetOrCreateAsync(cacheKey, async () =>
             {
-                var entity = await _repository.GetEffectiveConfigAsync(staffType, departmentId);
+                var entity = await _repository.GetEffectiveConfigAsync(staffType, departmentId, ct);
                 return entity == null ? null : MapToResponse(entity);
             });
         }
 
-        public async Task<TimingConfigResponse> CreateConfigAsync(CreateTimingConfigRequest request)
+        public async Task<TimingConfigResponse> CreateConfigAsync(CreateTimingConfigRequest request, CancellationToken ct = default)
         {
             var entity = new AttendanceTimingConfig
             {
@@ -64,14 +65,14 @@ namespace CollegeManagement.API.Services.Implementations
                 IsActive = request.IsActive
             };
 
-            var created = await _repository.CreateAsync(entity);
+            var created = await _repository.CreateAsync(entity, ct);
             _cache.RemoveByPrefix("lookup:timingconfigs");
             return MapToResponse(created);
         }
 
-        public async Task<TimingConfigResponse?> UpdateConfigAsync(int id, UpdateTimingConfigRequest request)
+        public async Task<TimingConfigResponse?> UpdateConfigAsync(int id, UpdateTimingConfigRequest request, CancellationToken ct = default)
         {
-            var existing = await _repository.GetByIdAsync(id);
+            var existing = await _repository.GetByIdAsync(id, ct);
             if (existing == null) return null;
 
             existing.ConfigName = request.ConfigName.Trim();
@@ -86,14 +87,14 @@ namespace CollegeManagement.API.Services.Implementations
             existing.Description = request.Description?.Trim();
             existing.IsActive = request.IsActive;
 
-            var updated = await _repository.UpdateAsync(id, existing);
+            var updated = await _repository.UpdateAsync(id, existing, ct);
             _cache.RemoveByPrefix("lookup:timingconfigs");
             return updated == null ? null : MapToResponse(updated);
         }
 
-        public async Task<bool> DeleteConfigAsync(int id)
+        public async Task<bool> DeleteConfigAsync(int id, CancellationToken ct = default)
         {
-            var res = await _repository.DeleteAsync(id);
+            var res = await _repository.DeleteAsync(id, ct);
             if (res) _cache.RemoveByPrefix("lookup:timingconfigs");
             return res;
         }

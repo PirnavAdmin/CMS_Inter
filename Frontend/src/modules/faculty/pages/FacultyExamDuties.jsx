@@ -1,3 +1,5 @@
+import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
+import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Download,
@@ -26,6 +28,7 @@ import "../styles/FacultyExamDuties.css";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import apiClient from "@/api/axios.js";
 import { getAuthUser, getAuthToken } from "@/modules/auth/authStorage.js";
+import { reassignFacultyExamDuty } from "@/services/examinationService.js";
 
 const ITEMS_PER_PAGE = 8;
 
@@ -46,7 +49,7 @@ function getFacultyStaffId(context) {
       // ignore
     }
   }
-  return 1108; // Active staff Tanjiro Kamado
+  return null;
 }
 
 export default function FacultyExamDuties() {
@@ -56,20 +59,27 @@ export default function FacultyExamDuties() {
   const [facultyMembers, setFacultyMembers] = useState([]);
 
   // View Mode: "table" | "cards"
-  const [viewMode, setViewMode] = useState("table");
+  const { params, setParam } = useFacultyViewParams();
+  const viewMode = params.get("view") === "cards" ? "cards" : "table";
+  const setViewMode = (view) => setParam("view", view);
 
   // Filter States
-  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'upcoming' | 'today' | 'completed' | 'cancelled'
+  const activeTab = ["all", "upcoming", "today", "completed", "cancelled"].includes(params.get("tab")) ? params.get("tab") : "all";
+  const setActiveTab = (tab) => setParam("tab", tab); // 'all' | 'upcoming' | 'today' | 'completed' | 'cancelled'
   const [searchQuery, setSearchQuery] = useState("");
   const [examTypeFilter, setExamTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   // Modals State
-  const [selectedDuty, setSelectedDuty] = useState(null);
+  const dutyId = params.get("dutyId");
+  const selectedDuty = dutyId == null ? null : dutiesList.find((duty) => String(duty.id) === dutyId);
+  const setSelectedDuty = (duty) => setParam("dutyId", duty?.id ?? null);
   const [reassignDuty, setReassignDuty] = useState(null);
   const [reassignTarget, setReassignTarget] = useState("");
   const [reassignReason, setReassignReason] = useState("");
+  const [reassignFacultyId, setReassignFacultyId] = useState("");
+  const [submittingReassign, setSubmittingReassign] = useState(false);
   const [toast, setToast] = useState(null);
 
   const notify = (text, type = "success") => {
@@ -189,10 +199,10 @@ export default function FacultyExamDuties() {
   };
 
   // Reassignment Submission
-  const handleReassignSubmit = (e) => {
+  const handleReassignSubmit = async (e) => {
     e.preventDefault();
-    if (!reassignTarget.trim()) {
-      notify("Please select a target faculty member.", "error");
+    if (!reassignFacultyId) {
+      notify("Please select a substitute faculty member.", "error");
       return;
     }
     if (!reassignReason.trim()) {
@@ -200,22 +210,24 @@ export default function FacultyExamDuties() {
       return;
     }
 
-    setDutiesList((prev) =>
-      prev.map((d) =>
-        d.id === reassignDuty.id
-          ? {
-              ...d,
-              status: "Pending Confirmation",
-              reassignedTo: reassignTarget,
-              reassignReason: reassignReason,
-            }
-          : d
-      )
-    );
-
-    notify(`Reassignment request submitted to Controller of Examinations for review.`);
-    setReassignDuty(null);
-    setReassignReason("");
+    setSubmittingReassign(true);
+    try {
+      const dutyId = reassignDuty.id || reassignDuty.invigilatorAssignmentId;
+      await reassignFacultyExamDuty(dutyId, {
+        newFacultyId: Number(reassignFacultyId),
+        reason: reassignReason.trim(),
+      });
+      notify("Duty reassignment submitted and updated successfully!");
+      setReassignDuty(null);
+      setReassignReason("");
+      setReassignFacultyId("");
+      fetchExamDuties();
+    } catch (err) {
+      console.error("Failed to reassign duty:", err);
+      notify("Failed to reassign duty: " + (err?.response?.data?.message || err.message || "Server error"), "error");
+    } finally {
+      setSubmittingReassign(false);
+    }
   };
 
   // Confirm Duty Slot
@@ -511,12 +523,7 @@ export default function FacultyExamDuties() {
 
       {/* 4. Examination Duties View (Table or Cards) */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <Loader2 size={32} className="spin" style={{ marginInline: "auto", color: "var(--cms-primary, #6F8400)" }} />
-          <p style={{ marginTop: 12, fontSize: 13.5, color: "var(--cms-muted)" }}>
-            Loading live examination duties and hall allotments...
-          </p>
-        </div>
+        <SkeletonTable columns={6} rows={5} />
       ) : paginatedDuties.length === 0 ? (
         <div className="fed-empty-state">
           <div className="fed-empty-icon">
@@ -622,6 +629,22 @@ export default function FacultyExamDuties() {
                       >
                         <Download size={13} /> Slip
                       </button>
+                      {duty.status !== "Completed" && duty.status !== "Cancelled" && (
+                        <button
+                          type="button"
+                          className="cms-btn cms-btn-xs cms-btn-outline"
+                          onClick={() => {
+                            setReassignDuty(duty);
+                            setReassignReason("");
+                            if (facultyMembers.length > 0) {
+                              setReassignFacultyId(String(facultyMembers[0].staffId || facultyMembers[0].id || ""));
+                            }
+                          }}
+                          title="Request duty reassignment"
+                        >
+                          <RefreshCw size={13} /> Reassign
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -739,6 +762,22 @@ export default function FacultyExamDuties() {
                     <Check size={13} /> Confirm
                   </button>
                 )}
+                {duty.status !== "Completed" && duty.status !== "Cancelled" && (
+                  <button
+                    type="button"
+                    className="fed-action-btn outline"
+                    onClick={() => {
+                      setReassignDuty(duty);
+                      setReassignReason("");
+                      if (facultyMembers.length > 0) {
+                        setReassignFacultyId(String(facultyMembers[0].staffId || facultyMembers[0].id || ""));
+                      }
+                    }}
+                    title="Request duty reassignment"
+                  >
+                    <RefreshCw size={13} /> Reassign
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -771,6 +810,94 @@ export default function FacultyExamDuties() {
             </button>
           </div>
         </nav>
+      )}
+
+      {/* Reassign Duty Modal */}
+      {reassignDuty && (
+        <div className="sp-modal-overlay" onClick={() => !submittingReassign && setReassignDuty(null)}>
+          <div className="sp-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="sp-modal-head">
+              <div>
+                <h3 className="sp-modal-title" style={{ display: "flex", alignItems: "center", gap: 8, margin: 0, fontSize: 16 }}>
+                  <RefreshCw size={18} /> Reassign Invigilation Duty
+                </h3>
+              </div>
+              <button type="button" className="sp-modal-close-btn" disabled={submittingReassign} onClick={() => setReassignDuty(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleReassignSubmit}>
+              <div className="sp-modal-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ background: "var(--cms-subtle, #f8f9fa)", padding: 12, borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)" }}>ASSIGNED DUTY</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>{reassignDuty.examName} ({reassignDuty.examCode})</div>
+                  <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 2 }}>
+                    Date: {reassignDuty.date || reassignDuty.examDate} | Hall: {reassignDuty.venue}
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 6 }}>
+                    Select Substitute Faculty Member <span style={{ color: "red" }}>*</span>
+                  </label>
+                  <select
+                    className="cms-select"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--cms-border)" }}
+                    value={reassignFacultyId}
+                    onChange={(e) => setReassignFacultyId(e.target.value)}
+                    required
+                  >
+                    <option value="">-- Choose Faculty Member --</option>
+                    {facultyMembers.map((m) => {
+                      const id = String(m.staffId || m.id);
+                      const name = m.fullName || `${m.firstName || m.name || ""} ${m.lastName || ""}`.trim();
+                      const code = m.employeeId ? ` (${m.employeeId})` : "";
+                      const dept = m.department ? ` - ${m.department}` : "";
+                      return (
+                        <option key={id} value={id}>
+                          {name}{code}{dept}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 6 }}>
+                    Reason for Reassignment <span style={{ color: "red" }}>*</span>
+                  </label>
+                  <textarea
+                    className="cms-input"
+                    rows={3}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--cms-border)", resize: "vertical" }}
+                    placeholder="Enter valid reason (e.g. Medical emergency, University duty, Subject conflict)..."
+                    value={reassignReason}
+                    onChange={(e) => setReassignReason(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="sp-modal-foot">
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-outline"
+                  disabled={submittingReassign}
+                  onClick={() => setReassignDuty(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="cms-btn cms-btn-primary"
+                  disabled={submittingReassign || !reassignFacultyId}
+                >
+                  {submittingReassign ? "Submitting..." : "Submit Reassignment"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* MODAL 1: Duty Details & SOPs Modal */}

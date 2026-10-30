@@ -128,6 +128,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         // POST: api/v1/holidays
         [HttpPost]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> CreateHoliday([FromBody] CreateHolidayRequest request)
         {
             if (!ModelState.IsValid)
@@ -171,6 +172,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         // PUT: api/v1/holidays/{id}
         [HttpPut("{id:int}")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> UpdateHoliday([FromRoute] int id, [FromBody] UpdateHolidayRequest request)
         {
             if (!ModelState.IsValid)
@@ -223,6 +225,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         // DELETE: api/v1/holidays/{id}
         [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> DeleteHoliday([FromRoute] int id)
         {
             try
@@ -262,6 +265,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("import/excel")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> ImportExcel(IFormFile file, [FromQuery] bool validateOnly = false, [FromQuery] int? campusId = null, [FromQuery] int? academicYearId = null, [FromQuery] int? boardId = null)
         {
             if (file == null || file.Length == 0)
@@ -269,9 +273,9 @@ namespace CollegeManagement.API.Controllers.V1
 
             using var ms = new MemoryStream();
             await file.CopyToAsync(ms);
-
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            int? currentUserId = int.TryParse(userIdClaim, out var uid) ? uid : null;
+            int? currentUserId = null;
+            var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(idClaim, out int uid)) currentUserId = uid;
 
             var result = await _holidayService.ImportHolidaysFromExcelAsync(ms.ToArray(), validateOnly, currentUserId, campusId, academicYearId, boardId);
             return Ok(result);

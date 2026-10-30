@@ -169,16 +169,21 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
                 throw new KeyNotFoundException("Reimbursement claim not found.");
             }
 
+            if (existing.StaffId == reviewedBy)
+            {
+                throw new InvalidOperationException("Claimants are not permitted to approve or verify their own reimbursement claims.");
+            }
+
             // If frontend passes { status: "Under Review", notes: "..." }, route to clarification request!
             if (string.Equals(request.Status, "Under Review", StringComparison.OrdinalIgnoreCase))
             {
-                var noteText = request.Notes ?? request.ReviewNotes;
+                var noteText = request.Notes ?? request.ReviewNotes ?? request.Remarks;
                 var clarSuccess = await _repository.RequestClarificationAsync(id, noteText, reviewedBy);
                 return (clarSuccess, null);
             }
 
             decimal approvedAmount = request.ApprovedAmount ?? existing.Amount;
-            var reviewNotes = request.ReviewNotes ?? request.Notes;
+            var reviewNotes = request.ReviewNotes ?? request.Remarks ?? request.AdminNotes ?? request.Notes;
             var verifyResult = await _repository.VerifyClaimAsync(id, approvedAmount, reviewNotes, reviewedBy);
             if (verifyResult.Success)
             {
@@ -262,6 +267,21 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             if (Array.IndexOf(allowedExtensions, fileExtension) < 0)
             {
                 throw new ArgumentException("Invalid file format. Only PDF, JPG, and PNG files are allowed.");
+            }
+
+            using (var stream = file.OpenReadStream())
+            {
+                var header = new byte[8];
+                var read = await stream.ReadAsync(header, 0, header.Length);
+                bool validMagic = false;
+                if (fileExtension == ".pdf" && read >= 4 && header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46) validMagic = true;
+                else if ((fileExtension == ".jpg" || fileExtension == ".jpeg") && read >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) validMagic = true;
+                else if (fileExtension == ".png" && read >= 8 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47) validMagic = true;
+
+                if (!validMagic)
+                {
+                    throw new ArgumentException("File signature does not match the expected extension format.");
+                }
             }
 
             var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "Reimbursements");

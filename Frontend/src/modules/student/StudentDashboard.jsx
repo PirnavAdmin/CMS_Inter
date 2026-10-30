@@ -288,7 +288,7 @@ export default function StudentDashboard() {
             ["Results", "View performance", "results", resultsIcon, "orange"],
             ["Fees", "View fee details", "fees", feeIcon, "blue"],
             ["Request Certificate", "Request certificates", "certificates", certificateIcon, "purple"],
-          ].map(([title, description, route, icon, tone]) => <Link key={route} className={`sp-dashboard-action tone-${tone}`} to={route} state={route === "certificates" ? { openRequestCertificate: true } : undefined}><img src={icon} alt="" aria-hidden="true" /><strong>{title}</strong><small>{description}</small></Link>)}
+          ].map(([title, description, route, icon, tone]) => <Link key={route} className={`sp-dashboard-action tone-${tone}`} to={route === "certificates" ? "certificates?action=request" : route}><img src={icon} alt="" aria-hidden="true" /><strong>{title}</strong><small>{description}</small></Link>)}
         </div>
       </StudentCard>
 

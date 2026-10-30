@@ -164,6 +164,8 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpPost("admin/students")]
         [HttpGet("admin/students")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<StudentAttendanceResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -195,7 +197,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("admin/bulk-save")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -366,6 +369,8 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("reports/student-monthly")]
         [HttpPost("student-monthly")]
         [HttpGet("student-monthly")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
+        [BypassPermission]
         public async Task<IActionResult> GetStudentMonthlyReportGrid(
             [FromQuery] StudentMonthlyReportRequest requestQuery,
             [FromBody] StudentMonthlyReportRequest? requestBody = null,

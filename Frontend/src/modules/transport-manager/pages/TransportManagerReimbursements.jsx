@@ -1,3 +1,5 @@
+import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
+import { useTransportNavigation, useTransportRouteValue, useTransportRecord, validTransportPage } from "../TransportManagerContext.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -45,6 +47,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function TransportManagerReimbursements() {
+  const navigation = useTransportNavigation();
   const tmContext = useTransportManagerSafe();
   const profile = useMemo(() => tmContext?.profile || {}, [tmContext?.profile]);
 
@@ -59,14 +62,17 @@ export default function TransportManagerReimbursements() {
     profile.id ||
     authUser.employeeId ||
     authUser.staffId ||
-    "MNT0044";
+    authUser.userId ||
+    authUser.id ||
+    "";
 
   const defaultStaffName =
     profile.name ||
     profile.fullName ||
     authUser.fullName ||
     authUser.name ||
-    "muzan kibutsuzi";
+    authUser.username ||
+    "";
 
   const defaultDepartment =
     profile.department ||
@@ -83,10 +89,10 @@ export default function TransportManagerReimbursements() {
   const defaultEmail =
     profile.email ||
     authUser.email ||
-    "pondara.venkatesh@pirnav.com";
+    "";
 
   // Navigation tab: 'claims' (submission) or 'my-claims' (history)
-  const [activeTab, setActiveTab] = useState("claims");
+  const [activeTab, setActiveTab] = useTransportRouteValue(navigation, "tab", "claims", value => ["claims", "my-claims"].includes(value));
 
   // Summary Metrics (Default matching Reference Screenshot 4)
   const [summary, setSummary] = useState({
@@ -102,6 +108,7 @@ export default function TransportManagerReimbursements() {
 
   // Claims List
   const [claimsList, setClaimsList] = useState([]);
+  const [claimsLoaded, setClaimsLoaded] = useState(false);
   const [loadingClaims, setLoadingClaims] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -132,12 +139,12 @@ export default function TransportManagerReimbursements() {
   const [uploadedFile, setUploadedFile] = useState(null);
 
   // Filter State in My Claims Tab
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useTransportRouteValue(navigation, "q", "");
+  const [statusFilter, setStatusFilter] = useTransportRouteValue(navigation, "status", "All", value => ["All", "Pending", "Approved", "Rejected"].includes(value));
+  const [selectedPage, setCurrentPage] = useTransportRouteValue(navigation, "page", 1, validTransportPage);
 
   // Detail Modal & Toast
-  const [selectedClaim, setSelectedClaim] = useState(null);
+  const [selectedClaim, setSelectedClaim] = useTransportRecord(navigation, "claimId", claimsList, claim => claim.reimbursementId || claim.id, claimsLoaded && !loadingClaims);
   const [toast, setToast] = useState({ message: "", type: "success" });
 
   const notify = (message, type = "success") => {
@@ -183,6 +190,7 @@ export default function TransportManagerReimbursements() {
     } catch (err) {
       console.warn("Could not fetch claims from backend", err);
     } finally {
+      setClaimsLoaded(true);
       setLoadingClaims(false);
       setRefreshing(false);
     }
@@ -394,6 +402,7 @@ export default function TransportManagerReimbursements() {
   }, [claimsList, searchQuery, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredClaims.length / PAGE_SIZE));
+  const currentPage = Math.min(selectedPage, totalPages);
   const displayedClaims = filteredClaims.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
@@ -869,7 +878,7 @@ export default function TransportManagerReimbursements() {
                   <th>ACTION</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody>{loadingClaims ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : <>
                 {displayedClaims.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="reimb-empty-state">
@@ -921,7 +930,7 @@ export default function TransportManagerReimbursements() {
                     </tr>
                   ))
                 )}
-              </tbody>
+              </>}</tbody>
             </table>
           </div>
 

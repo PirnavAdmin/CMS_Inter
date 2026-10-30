@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -20,8 +21,8 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useParentPortal } from "./context/ParentPortalContext.jsx";
 import {
-  useParentPortal,
   subjectAttendanceData,
   academicSubjectsData,
   upcomingExamsData,
@@ -66,11 +67,12 @@ export default function ParentDashboard() {
   const [toastMessage, setToastMessage] = useState("");
 
   const isCurrentYear = currentAcademicYear === "2026-2027";
+  const childParam = child?.id ? `?studentId=${encodeURIComponent(child.id)}` : "";
 
   const rawChildFee = contextChildFee && contextChildFee.total !== undefined
     ? contextChildFee
     : (child
-        ? feeRecords[dataKey] || (isCurrentYear ? (feeRecords[child.id] || child.fees) : null) || { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] }
+        ? feeRecords[dataKey] || (isCurrentYear ? (feeRecords[child?.id] || child?.fees) : null) || { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] }
         : { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] });
 
   const breakdownTotal = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.amount || 0), 0);
@@ -87,7 +89,7 @@ export default function ParentDashboard() {
   const subjects = child?.attendance?.subjectRecords || [];
   const academics = useMemo(() => {
     if (curriculumSubjects && curriculumSubjects.length > 0) return curriculumSubjects;
-    return child ? academicSubjectsData[dataKey] || (isCurrentYear ? (academicSubjectsData[child.id] || []) : []) : [];
+    return child ? academicSubjectsData[dataKey] || (isCurrentYear ? (academicSubjectsData[child?.id] || []) : []) : [];
   }, [curriculumSubjects, child, dataKey, isCurrentYear]);
   
   // Bridge real published examination results or live scheduled exams
@@ -134,7 +136,7 @@ export default function ParentDashboard() {
     return notifs.filter((n) => {
       if (!n.studentId) return true;
       const baseId = n.studentId.replace(/-\d{4}$/, "");
-      return baseId === child.id || n.studentId === child.id;
+      return baseId === child?.id || n.studentId === child?.id;
     });
   }, [notifs, child?.id]);
 
@@ -161,13 +163,7 @@ export default function ParentDashboard() {
         breadcrumb={["Parent Portal", "Dashboard"]}
       >
         <div className="parent-dashboard-wrapper" style={{ padding: "40px 20px", textAlign: "center" }}>
-          <div className="parent-card" style={{ padding: "30px", maxWidth: 500, margin: "0 auto" }}>
-            <Users size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Enrolled Children...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to campus database to retrieve student enrollment and fee records.
-            </p>
-          </div>
+          <SkeletonPage variant="dashboard" columns={4} />
         </div>
       </DashboardLayout>
     );
@@ -223,7 +219,7 @@ export default function ParentDashboard() {
               <button
                 key={c.id}
                 type="button"
-                className={`parent-child-switch-btn ${child.id === c.id ? "is-active" : ""}`}
+                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
                 onClick={() => handleSelectChild(c.id)}
               >
                 <Users size={14} /> {c.name} ({c.group})
@@ -235,7 +231,7 @@ export default function ParentDashboard() {
         {/* 1. Dashboard Summary Cards */}
         <div className="parent-stat-grid">
           {/* Children Summary */}
-          <div className="parent-stat-card" onClick={() => navigate("/parent-dashboard/children")}>
+          <div className="parent-stat-card" onClick={() => navigate(`/parent-dashboard/children${childParam}`)}>
             <div className="parent-stat-icon-wrap">
               <Users size={22} />
             </div>
@@ -247,7 +243,7 @@ export default function ParentDashboard() {
           </div>
 
           {/* Attendance Summary */}
-          <div className="parent-stat-card" onClick={() => navigate("/parent-dashboard/attendance")}>
+          <div className="parent-stat-card" onClick={() => navigate(`/parent-dashboard/attendance${childParam}`)}>
             <div className="parent-stat-icon-wrap green">
               <CalendarCheck size={22} />
             </div>
@@ -259,7 +255,7 @@ export default function ParentDashboard() {
           </div>
 
           {/* Academic Performance */}
-          <div className="parent-stat-card" onClick={() => navigate("/parent-dashboard/academics")}>
+          <div className="parent-stat-card" onClick={() => navigate(`/parent-dashboard/academics${childParam}`)}>
             <div className="parent-stat-icon-wrap">
               <Award size={22} />
             </div>
@@ -273,7 +269,7 @@ export default function ParentDashboard() {
           {/* Fees Summary */}
           <div
             className="parent-stat-card"
-            onClick={() => navigate("/parent-dashboard/fees")}
+            onClick={() => navigate(`/parent-dashboard/fees${childParam}`)}
           >
             <div className="parent-stat-icon-wrap" style={{ background: (childFee?.pending || 0) > 0 ? "var(--cms-red-soft)" : "var(--cms-green-soft)", color: (childFee?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
               <Wallet size={22} />
@@ -288,7 +284,7 @@ export default function ParentDashboard() {
           </div>
 
           {/* Upcoming Exams */}
-          <div className="parent-stat-card" onClick={() => navigate("/parent-dashboard/examinations")}>
+          <div className="parent-stat-card" onClick={() => navigate(`/parent-dashboard/examinations${childParam}`)}>
             <div className="parent-stat-icon-wrap amber">
               <Calendar size={22} />
             </div>
@@ -363,7 +359,7 @@ export default function ParentDashboard() {
                 <h3 className="parent-card-title">
                   <CalendarCheck size={18} /> Attendance Breakdown
                 </h3>
-                <Link to="/parent-dashboard/attendance" className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                <Link to={`/parent-dashboard/attendance${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
                   Detailed Register <ChevronRight size={13} />
                 </Link>
               </div>
@@ -420,7 +416,7 @@ export default function ParentDashboard() {
                 <h3 className="parent-card-title">
                   <Award size={18} /> Academic Performance
                 </h3>
-                <Link to="/parent-dashboard/academics" className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                <Link to={`/parent-dashboard/academics${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
                   View Syllabus & Marks <ChevronRight size={13} />
                 </Link>
               </div>
@@ -452,7 +448,7 @@ export default function ParentDashboard() {
                 <h3 className="parent-card-title">
                   <Wallet size={18} /> Fee Account Status
                 </h3>
-                <Link to="/parent-dashboard/fees" className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                <Link to={`/parent-dashboard/fees${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
                   All Transactions <ChevronRight size={13} />
                 </Link>
               </div>
@@ -493,7 +489,7 @@ export default function ParentDashboard() {
                 <h3 className="parent-card-title">
                   <Megaphone size={18} /> College Announcements
                 </h3>
-                <Link to="/parent-dashboard/announcements" className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                <Link to={`/parent-dashboard/announcements${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
                   All Notices <ChevronRight size={13} />
                 </Link>
               </div>
@@ -534,7 +530,7 @@ export default function ParentDashboard() {
                 <h3 className="parent-card-title">
                   <Calendar size={18} /> Upcoming Examinations
                 </h3>
-                <Link to="/parent-dashboard/examinations" className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                <Link to={`/parent-dashboard/examinations${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
                   Schedule <ChevronRight size={13} />
                 </Link>
               </div>
@@ -577,7 +573,7 @@ export default function ParentDashboard() {
                 <h3 className="parent-card-title">
                   <Bell size={18} /> Recent Notifications
                 </h3>
-                <Link to="/parent-dashboard/notifications" className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                <Link to={`/parent-dashboard/notifications${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
                   View All <ChevronRight size={13} />
                 </Link>
               </div>
@@ -621,7 +617,7 @@ export default function ParentDashboard() {
                   type="button"
                   className="cms-btn cms-btn-primary"
                   onClick={() => {
-                    navigate(`/parent-dashboard/children/${child.id}`);
+                    if (child?.id) navigate(`/parent-dashboard/children/${child.id}`);
                     setStudentModalOpen(false);
                   }}
                 >

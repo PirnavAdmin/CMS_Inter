@@ -4,6 +4,7 @@ import { Bus, ClipboardList, GraduationCap, Mail, MapPin, School, User, Users } 
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { SkeletonPage, Toast } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { fetchAdminGroups, fetchAdminLevels } from "@/api/studentApi.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getHostelBlocks, getRoomTypes, getRooms } from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
@@ -46,7 +47,9 @@ const academicDependencies = {
 };
 async function loadAcademicLookup(endpoint, scope, signal) {
   if (scope.PageSize === undefined) {
-    return asList((await apiClient.get(endpoint, { params: scope, signal })).data);
+    const response = await apiClient.get(endpoint, { params: scope, signal });
+    if (response.data?.success === false) throw new Error(response.data.message || "Unable to load academic options.");
+    return asList(response.data);
   }
   const records = [];
   let previousPage = "";
@@ -54,6 +57,7 @@ async function loadAcademicLookup(endpoint, scope, signal) {
     const response = await apiClient.get(endpoint, {
       params: { ...scope, PageSize: 100, PageNumber: pageNumber }, signal,
     });
+    if (response.data?.success === false) throw new Error(response.data.message || "Unable to load academic options.");
     const rows = asList(response.data);
     const fingerprint = JSON.stringify(rows);
     if (rows.length && fingerprint === previousPage) throw new Error("Unable to load all academic options: the server repeated a page.");
@@ -63,7 +67,7 @@ async function loadAcademicLookup(endpoint, scope, signal) {
   }
   throw new Error("Unable to load all academic options. Please narrow the academic selection.");
 }
-function useAcademicLookup(key, endpoint, params, enabled, setLookups, setLookupState) {
+function useAcademicLookup(key, endpoint, params, enabled, setLookups, setLookupState, setForm) {
   const requestKey = JSON.stringify(params);
   useEffect(() => {
     const controller = new AbortController();
@@ -71,21 +75,31 @@ function useAcademicLookup(key, endpoint, params, enabled, setLookups, setLookup
     setLookupState((current) => ({ ...current, [key]: { loading: Boolean(enabled), error: "" } }));
     if (!enabled) return () => controller.abort();
     const scope = JSON.parse(requestKey);
-    loadAcademicLookup(endpoint, scope, controller.signal).then((records) => {
+    const request = key === "groups" ? fetchAdminGroups(scope, { signal: controller.signal }) : key === "levels" ? fetchAdminLevels(scope, { signal: controller.signal }) : loadAcademicLookup(endpoint, scope, controller.signal);
+    request.then((records) => {
       if (controller.signal.aborted) return;
-      const scoped = records.filter((record) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((field) => {
+      const scoped = records.filter((record) => key === "groups" || key === "levels" || ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((field) => {
         const expected = scope[field] ?? scope[field[0].toUpperCase() + field.slice(1)];
         const actual = valueOf(record, field, field[0].toUpperCase() + field.slice(1));
         return !expected || actual === "" || String(actual) === String(expected);
       }));
-      setLookups((current) => ({ ...current, [key]: optionsFrom(scoped, ...academicLookupFields[key]) }));
+      const options = optionsFrom(scoped, ...academicLookupFields[key]);
+      setLookups((current) => ({ ...current, [key]: options }));
+      if (setForm) {
+        const field = { groups: "groupId", programs: "programId", sections: "sectionId" }[key];
+        setForm((current) => {
+          if (!field || !current[field] || options.some((option) => option.value === String(current[field]))) return current;
+          return { ...current, [field]: "", ...Object.fromEntries((academicDependencies[field] || []).map((dependent) => [dependent, ""])) };
+        });
+      }
+      if (key === "groups" && !options.length) setLookupState((current) => ({ ...current, [key]: { loading: false, error: "No active groups are available for this board and academic year." } }));
     }).catch((error) => {
       if (!controller.signal.aborted) setLookupState((current) => ({ ...current, [key]: { loading: false, error: getApiErrorMessage(error) } }));
     }).finally(() => {
       if (!controller.signal.aborted) setLookupState((current) => ({ ...current, [key]: { ...current[key], loading: false } }));
     });
     return () => controller.abort();
-  }, [key, endpoint, requestKey, enabled, setLookups, setLookupState]);
+  }, [key, endpoint, requestKey, enabled, setLookups, setLookupState, setForm]);
 }
 const asDateInput = (value) => value ? String(value).slice(0, 10) : "";
 const stringValue = (value) => String(value ?? "");
@@ -389,10 +403,10 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     .filter(Boolean), [campuses]);
   useAcademicLookup("boards", apiEndpoints.boards.list, { Status: true, PageSize: 1000 }, true, setLookups, setAcademicLookupState);
   useAcademicLookup("years", apiEndpoints.academicYears.list, { CampusId: form.campusId, BoardId: form.boardId, Status: true, PageSize: 1000 }, Boolean(form.campusId && form.boardId), setLookups, setAcademicLookupState);
-  useAcademicLookup("levels", apiEndpoints.boards.academicLevels, { boardId: form.boardId }, Boolean(form.boardId), setLookups, setAcademicLookupState);
-  useAcademicLookup("groups", apiEndpoints.groups.getByBoard(form.boardId || 0), { boardId: form.boardId, academicYearId: form.academicYearId, academicLevelId: form.academicLevelId, isActive: true, PageSize: 1000 }, Boolean(form.boardId && form.academicYearId && form.academicLevelId), setLookups, setAcademicLookupState);
-  useAcademicLookup("programs", apiEndpoints.groups.programs(form.groupId || 0), {}, Boolean(form.groupId), setLookups, setAcademicLookupState);
-  useAcademicLookup("sections", apiEndpoints.sections.search, { CampusId: form.campusId, BoardId: form.boardId, AcademicYearId: form.academicYearId, AcademicLevelId: form.academicLevelId, GroupId: form.groupId, ProgramId: form.programId, IsActive: true, PageSize: 1000 }, Boolean(form.campusId && form.boardId && form.academicYearId && form.academicLevelId && form.groupId && form.programId), setLookups, setAcademicLookupState);
+  useAcademicLookup("levels", apiEndpoints.boards.academicLevels, { boardId: form.boardId, academicYearId: form.academicYearId }, Boolean(form.boardId), setLookups, setAcademicLookupState);
+  useAcademicLookup("groups", apiEndpoints.groups.getAll, { campusId: form.campusId, boardId: form.boardId, academicYearId: form.academicYearId, academicLevelId: form.academicLevelId, isActive: true, PageSize: 1000 }, Boolean(form.boardId && form.academicYearId && form.academicLevelId), setLookups, setAcademicLookupState, setForm);
+  useAcademicLookup("programs", apiEndpoints.groups.programs(form.groupId || 0), {}, Boolean(form.groupId && lookups.groups.some((group) => group.value === String(form.groupId))), setLookups, setAcademicLookupState, setForm);
+  useAcademicLookup("sections", apiEndpoints.sections.search, { CampusId: form.campusId, BoardId: form.boardId, AcademicYearId: form.academicYearId, AcademicLevelId: form.academicLevelId, GroupId: form.groupId, ProgramId: form.programId, IsActive: true, PageSize: 1000 }, Boolean(form.campusId && form.boardId && form.academicYearId && form.academicLevelId && form.groupId && form.programId && lookups.groups.some((group) => group.value === String(form.groupId)) && lookups.programs.some((program) => program.value === String(form.programId))), setLookups, setAcademicLookupState, setForm);
   useEffect(() => {
     let active = true;
     const loadAllocationLookups = async () => {
@@ -513,7 +527,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   const updateField = (key, value) => setForm((current) => {
     const next = { ...current, [key]: value };
     if (current[key] !== value && academicDependencies[key]) {
-      academicDependencies[key].forEach((dependent) => { next[dependent] = ""; });
+      if (!value || !["academicLevelId", "groupId", "programId"].includes(key)) academicDependencies[key].forEach((dependent) => { next[dependent] = ""; });
       setPlacementChanged(true);
       setErrors((currentErrors) => Object.fromEntries(Object.entries(currentErrors).filter(([field]) => field !== key && !academicDependencies[key].includes(field))));
     }

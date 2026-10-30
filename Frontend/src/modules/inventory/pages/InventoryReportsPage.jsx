@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { inventoryReport } from "@/modules/admin/AdminInventory/inventoryApi.js";
 import { useInventory } from "../InventoryDataContext.jsx";
 import { buildReport, REPORTS } from "@/modules/admin/AdminInventory/inventoryReports.js";
@@ -6,7 +7,40 @@ import { money } from "@/modules/admin/AdminInventory/inventoryModel.js";
 import InventoryTable from "../components/InventoryTable.jsx";
 export default function InventoryReportsPage() {
   const { state } = useInventory();
-  const [report, setReport] = useState(REPORTS[0]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const reportParam = searchParams.get("report") || searchParams.get("subtab");
+  const initialReport = useMemo(() => {
+    if (!reportParam) return REPORTS[0];
+    const match = REPORTS.find(
+      (r) =>
+        r.toLowerCase() === reportParam.toLowerCase() ||
+        r.toLowerCase().replace(/[^a-z0-9]+/g, "-") === reportParam.toLowerCase()
+    );
+    return match || REPORTS[0];
+  }, [reportParam]);
+
+  const [report, setReport] = useState(initialReport);
+
+  useEffect(() => {
+    if (reportParam) {
+      const match = REPORTS.find(
+        (r) =>
+          r.toLowerCase() === reportParam.toLowerCase() ||
+          r.toLowerCase().replace(/[^a-z0-9]+/g, "-") === reportParam.toLowerCase()
+      );
+      if (match && match !== report) setReport(match);
+    }
+  }, [reportParam, report]);
+
+  const selectReport = (name) => {
+    setReport(name);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("report", name);
+      return next;
+    });
+  };
+
   const [dates, setDates] = useState({});
   const [remote, setRemote] = useState(null),
     [error, setError] = useState("");
@@ -34,7 +68,7 @@ export default function InventoryReportsPage() {
         </div>
       </div>
       <div className="ip-card ip-actions">
-        <select aria-label="Report type" value={report} onChange={(e) => setReport(e.target.value)}>
+        <select aria-label="Report type" value={report} onChange={(e) => selectReport(e.target.value)}>
           {REPORTS.map((r) => (
             <option key={r}>{r}</option>
           ))}

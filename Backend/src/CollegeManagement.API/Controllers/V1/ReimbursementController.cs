@@ -21,6 +21,7 @@ namespace CollegeManagement.API.Controllers.V1
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("reimbursement")]
     public class ReimbursementController : ControllerBase
     {
         private readonly IReimbursementService _service;
@@ -37,6 +38,19 @@ namespace CollegeManagement.API.Controllers.V1
             _staffAttendanceService = staffAttendanceService;
         }
 
+        private (int UserId, int? StaffId, bool IsPrivileged) GetCallerIdentity()
+        {
+            var userId = _jwtTokenHelper.GetUserId(User) ?? 0;
+            var staffId = ResolveStaffId();
+            bool isPrivileged = User.IsInRole("Admin") ||
+                               User.IsInRole("Super Admin") ||
+                               User.IsInRole("Accountant") ||
+                               User.IsInRole("Principal") ||
+                               User.IsInRole("Finance") ||
+                               User.IsInRole("Transport Manager");
+            return (userId, staffId, isPrivileged);
+        }
+
         private int ResolveUserId()
         {
             var userId = _jwtTokenHelper.GetUserId(User);
@@ -45,6 +59,15 @@ namespace CollegeManagement.API.Controllers.V1
                 throw new CollegeManagement.API.Exceptions.UnauthorizedException("User is not authenticated or identifier claim is missing.");
             }
             return userId.Value;
+        }
+
+        private int? ResolveStaffId()
+        {
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId.HasValue && staffId.Value > 0) return staffId.Value;
+            var staffClaim = User?.Claims?.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId");
+            if (staffClaim != null && int.TryParse(staffClaim.Value, out int sId) && sId > 0) return sId;
+            return null;
         }
 
         private async Task<int?> ResolveStaffIdAsync()
@@ -127,7 +150,15 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { Status = false, Message = "Invalid request payload." });
             }
 
-            if (request.StaffId <= 0)
+            if (!IsAdminOrFinance())
+            {
+                var resolvedStaff = ResolveStaffId();
+                if (resolvedStaff.HasValue && resolvedStaff.Value > 0)
+                {
+                    request.StaffId = resolvedStaff.Value;
+                }
+            }
+            else if (request.StaffId <= 0)
             {
                 var resolvedStaff = await ResolveStaffIdAsync();
                 if (resolvedStaff.HasValue && resolvedStaff.Value > 0)
@@ -159,6 +190,17 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? search)
         {
             var resolvedCampus = ResolveCampusId(campusId);
+            if (!IsAdminOrFinance())
+            {
+                var staffId = ResolveStaffId();
+                if (!staffId.HasValue || staffId.Value <= 0)
+                {
+                    return BadRequest(new { Status = false, Message = "Unable to determine staff identity." });
+                }
+                var myResult = await _service.GetMyClaimsAsync(staffId.Value, resolvedCampus);
+                return Ok(new { Status = true, Message = "Personal reimbursement claims retrieved successfully.", Data = myResult });
+            }
+
             var result = await _service.GetAllClaimsAsync(resolvedCampus, status, category, search);
             return Ok(new { Status = true, Message = "Reimbursement claims retrieved successfully.", Data = result });
         }
@@ -219,11 +261,18 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetClaimById(int id)
         {
+            var (userId, staffId, isPrivileged) = GetCallerIdentity();
             var result = await _service.GetClaimByIdAsync(id);
             if (result == null)
             {
                 return NotFound(new { Status = false, Message = "Reimbursement claim not found." });
             }
+
+            if (!isPrivileged && staffId.HasValue && result.StaffId != staffId.Value)
+            {
+                return Forbid();
+            }
+
             return Ok(new { Status = true, Message = "Reimbursement claim details retrieved.", Data = result });
         }
 
@@ -314,6 +363,8 @@ namespace CollegeManagement.API.Controllers.V1
         [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> UploadProof(int id, IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -321,8 +372,22 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { Status = false, Message = "A valid receipt or invoice file is required." });
             }
 
+            var (userId, staffId, isPrivileged) = GetCallerIdentity();
+            var existing = await _service.GetClaimByIdAsync(id);
+            if (existing == null)
+            {
+                return NotFound(new { Status = false, Message = "Reimbursement claim not found." });
+            }
+
+            if (!isPrivileged && staffId.HasValue && existing.StaffId != staffId.Value)
+            {
+                return Forbid();
+            }
+
             var filePath = await _service.UploadProofAsync(id, file);
             return Ok(new { Status = true, Message = "Proof document uploaded successfully.", Data = filePath });
         }
+
+        private bool IsAdminOrFinance() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Transport Manager");
     }
 }

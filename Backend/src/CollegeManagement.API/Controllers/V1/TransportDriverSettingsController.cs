@@ -13,7 +13,8 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/transport/driver/settings")]
-    [Authorize(Roles = "Driver, Bus Driver")]
+    [Route("api/v1/transport/driver/settings")]
+    [Authorize(Roles = "Driver, Bus Driver, Super Admin, Admin")]
     public class TransportDriverSettingsController : ControllerBase
     {
         private readonly ITransportDriverDashboardService _driverDashboardService;
@@ -72,11 +73,6 @@ namespace CollegeManagement.API.Controllers.V1
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            if (request.AutoLogoutMinutes != 15 && request.AutoLogoutMinutes != 30 && request.AutoLogoutMinutes != 60)
-            {
-                return BadRequest(new { success = false, message = "AutoLogoutMinutes must be 15, 30, or 60." });
-            }
-
             var staffId = GetStaffId();
             if (staffId == null) return Unauthorized(new { success = false, message = "Staff ID not found in token." });
 
@@ -93,14 +89,14 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = GetUserId();
             if (userId == null) return Unauthorized(new { success = false, message = "User ID not found in token." });
 
-            var result = await _authService.ChangePasswordAsync(userId.Value, request.CurrentPassword, request.NewPassword, request.ConfirmPassword);
-            
-            if (result.Success)
+            var (success, message) = await _authService.ChangePasswordAsync(userId.Value, request.CurrentPassword, request.NewPassword, request.ConfirmPassword);
+
+            if (!success)
             {
-                return Ok(new { success = true, message = "Password changed successfully. Please log in again if required." });
+                return BadRequest(new { success = false, message });
             }
-            
-            return BadRequest(new { success = false, message = result.Message });
+
+            return Ok(new { success = true, message });
         }
     }
 }

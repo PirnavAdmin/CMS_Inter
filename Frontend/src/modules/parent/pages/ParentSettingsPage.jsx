@@ -3,8 +3,8 @@ import { Settings, Bell, Lock, Globe, Shield, CheckCircle2, Save } from "lucide-
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import { changeParentPassword } from "@/api/parentApi.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
 import {
-  useParentPortal,
   getStoredSettings,
   saveStoredSettings,
   getStoredParentPassword,

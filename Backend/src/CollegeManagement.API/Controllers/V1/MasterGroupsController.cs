@@ -33,7 +33,7 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] string? search = null,
             [FromQuery] bool? isActive = null)
         {
-            var result = await _masterGroupService.GetAllAsync(boardId, search, isActive);
+            var result = await _masterGroupService.GetAllAsync(boardId, search, isActive, HttpContext.RequestAborted);
             return Ok(result);
         }
 
@@ -47,7 +47,7 @@ namespace CollegeManagement.API.Controllers
             if (masterGroupId <= 0)
                 throw new ValidationException("Valid MasterGroupId is required.");
 
-            var group = await _masterGroupService.GetByIdAsync(masterGroupId);
+            var group = await _masterGroupService.GetByIdAsync(masterGroupId, HttpContext.RequestAborted);
             if (group == null)
                 throw new NotFoundException($"Master group with ID {masterGroupId} not found.");
 
@@ -64,7 +64,7 @@ namespace CollegeManagement.API.Controllers
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
 
-            var created = await _masterGroupService.CreateAsync(request);
+            var created = await _masterGroupService.CreateAsync(request, HttpContext.RequestAborted);
 
             return CreatedAtAction(
                 nameof(GetMasterGroup),
@@ -91,7 +91,7 @@ namespace CollegeManagement.API.Controllers
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
 
-            var updated = await _masterGroupService.UpdateAsync(masterGroupId, request);
+            var updated = await _masterGroupService.UpdateAsync(masterGroupId, request, HttpContext.RequestAborted);
             if (updated == null)
                 throw new NotFoundException($"Master group with ID {masterGroupId} not found.");
 
@@ -107,6 +107,7 @@ namespace CollegeManagement.API.Controllers
         // =========================================================
 
         [HttpPatch("{masterGroupId:int}/activate")]
+        [HttpPatch("{masterGroupId:int}/status")]
         public async Task<IActionResult> ActivateMasterGroup(
             int masterGroupId,
             [FromQuery] bool isActive = true)
@@ -114,7 +115,7 @@ namespace CollegeManagement.API.Controllers
             if (masterGroupId <= 0)
                 throw new ValidationException("Valid MasterGroupId is required.");
 
-            var success = await _masterGroupService.ActivateAsync(masterGroupId, isActive);
+            var success = await _masterGroupService.ActivateAsync(masterGroupId, isActive, HttpContext.RequestAborted);
             if (!success)
                 throw new NotFoundException($"Master group with ID {masterGroupId} not found.");
 
@@ -137,7 +138,7 @@ namespace CollegeManagement.API.Controllers
             if (masterGroupId <= 0)
                 throw new ValidationException("Valid MasterGroupId is required.");
 
-            var deleted = await _masterGroupService.DeleteAsync(masterGroupId);
+            var deleted = await _masterGroupService.DeleteAsync(masterGroupId, HttpContext.RequestAborted);
             if (!deleted)
                 throw new NotFoundException($"Master group with ID {masterGroupId} not found.");
 
@@ -163,7 +164,7 @@ namespace CollegeManagement.API.Controllers
             if (string.IsNullOrWhiteSpace(groupCode))
                 throw new ValidationException("Group code is required.");
 
-            var exists = await _masterGroupService.CodeExistsAsync(boardId, groupCode, excludeMasterGroupId);
+            var exists = await _masterGroupService.CodeExistsAsync(boardId, groupCode, excludeMasterGroupId, HttpContext.RequestAborted);
 
             return Ok(new
             {
@@ -184,7 +185,7 @@ namespace CollegeManagement.API.Controllers
             if (masterGroupId <= 0)
                 throw new ValidationException("Valid MasterGroupId is required.");
 
-            var levels = await _masterGroupService.GetEligibleAcademicLevelsAsync(masterGroupId);
+            var levels = await _masterGroupService.GetEligibleAcademicLevelsAsync(masterGroupId, HttpContext.RequestAborted);
             return Ok(levels);
         }
 
@@ -198,7 +199,7 @@ namespace CollegeManagement.API.Controllers
             if (masterGroupId <= 0)
                 throw new ValidationException("Valid MasterGroupId is required.");
 
-            var programs = await _masterGroupService.GetProgramsAsync(masterGroupId);
+            var programs = await _masterGroupService.GetProgramsAsync(masterGroupId, HttpContext.RequestAborted);
             return Ok(programs);
         }
 
@@ -214,14 +215,14 @@ namespace CollegeManagement.API.Controllers
             if (masterGroupId <= 0)
                 throw new ValidationException("Valid MasterGroupId is required.");
 
-            var updated = await _masterGroupService.UpdateProgramsAsync(masterGroupId, programIds ?? new List<int>());
+            var updated = await _masterGroupService.UpdateProgramsAsync(masterGroupId, programIds ?? new List<int>(), HttpContext.RequestAborted);
             if (!updated)
                 throw new NotFoundException($"Master group with ID {masterGroupId} not found.");
 
             return Ok(new
             {
                 message = "Master group programs updated successfully",
-                data = await _masterGroupService.GetProgramsAsync(masterGroupId)
+                data = await _masterGroupService.GetProgramsAsync(masterGroupId, HttpContext.RequestAborted)
             });
         }
 
@@ -235,7 +236,7 @@ namespace CollegeManagement.API.Controllers
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
 
-            var resolved = await _masterGroupService.ResolveContextAsync(request);
+            var resolved = await _masterGroupService.ResolveContextAsync(request, HttpContext.RequestAborted);
 
             return Ok(new
             {

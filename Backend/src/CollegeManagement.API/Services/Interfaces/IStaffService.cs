@@ -54,5 +54,6 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> UnassignSubjectAsync(int staffId, string? subjectName, int? subjectId);
         Task<List<StaffSubjectAllocationResponseDto>> GetStaffSubjectAllocationsAsync(int staffId);
         Task<StaffWorkloadResponseDto?> GetStaffWorkloadAsync(int staffId);
+        Task<StaffPayrollDetailsDto?> GetStaffPayrollDetailsAsync(int id);
     }
 }

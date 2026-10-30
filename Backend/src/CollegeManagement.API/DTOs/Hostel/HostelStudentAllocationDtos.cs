@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Hostel
@@ -53,6 +53,12 @@ namespace CollegeManagement.API.DTOs.Hostel
 
         [StringLength(500)]
         public string? Remarks { get; set; }
+    }
+
+    public class VacateStudentAllocationDto
+    {
+        [StringLength(500)]
+        public string? Reason { get; set; }
     }
 
     public class HostelStudentAllocationResponseDto

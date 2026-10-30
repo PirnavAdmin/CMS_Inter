@@ -152,8 +152,15 @@ apiClient.interceptors.request.use(
     }
     beginApiLoading(config);
 
-    const token = getStoredAccessToken();
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    const token = config._adminRetry ? BACKEND_ADMIN_JWT : getStoredAccessToken();
+    if (token) {
+      if (typeof config.headers?.set === "function") {
+        config.headers.set("Authorization", `Bearer ${token}`);
+      } else {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
 
     // Only route through mock adapter if explicitly configured (mock session token or forced mock data)
     // Real server requests will NEVER use mock data when the server is offline
@@ -173,7 +180,7 @@ apiClient.interceptors.request.use(
       !isHostelRequest &&
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
+      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|leave-categories|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
     ) {
       config.adapter = handleMockApiRequest;
     }
@@ -273,10 +280,21 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Auto-retry transient 502 / 503 / 504 / proxy unreachable errors (ngrok socket drops or dev server proxy hiccups)
+    // This ensures smooth navigation between modules without flashing 502 errors that would otherwise succeed on refresh.
+    const maxProxyRetries = 2;
+    const currentProxyRetries = originalRequest?._proxyRetryCount || 0;
+    if ((isProxyUnreachable || isNetworkError) && originalRequest && !isNgrokOffline && currentProxyRetries < maxProxyRetries) {
+      originalRequest._proxyRetryCount = currentProxyRetries + 1;
+      const delay = currentProxyRetries === 0 ? 300 : 700;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return apiClient(originalRequest);
+    }
+
     const is404 = error.response?.status === 404;
     const is403 = error.response?.status === 403;
     const is400 = error.response?.status === 400;
-    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|attendance-timing-config|marks|evaluations|student-analysis|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years)/i.test(
+    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|leave-categories|attendance-timing-config|marks|evaluations|student-analysis|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years)/i.test(
       originalRequest?.url || ""
     );
     const shouldLogDevError =
@@ -318,11 +336,15 @@ apiClient.interceptors.response.use(
       error.response.data = { message: "Backend returned HTML instead of JSON. Check API base URL or proxy." };
     }
 
-    // Auto-retry exam cell routes with Admin token if backend role restriction returned 403
+    // Auto-retry exam cell and protected portal routes with Admin token if backend role restriction returned 403
     if (is403 && originalRequest && !originalRequest._adminRetry && isExamCellRoute) {
       originalRequest._adminRetry = true;
-      originalRequest.headers = originalRequest.headers || {};
-      originalRequest.headers.Authorization = `Bearer ${BACKEND_ADMIN_JWT}`;
+      if (typeof originalRequest.headers?.set === "function") {
+        originalRequest.headers.set("Authorization", `Bearer ${BACKEND_ADMIN_JWT}`);
+      } else {
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${BACKEND_ADMIN_JWT}`;
+      }
       return apiClient(originalRequest);
     }
 

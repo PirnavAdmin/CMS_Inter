@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import React, { useState, useEffect } from "react";
 import { Play, Square, CheckSquare, AlertTriangle, Clock, Gauge, Fuel, ShieldAlert, PhoneCall, Info } from "lucide-react";
 import DriverStatusBadge from "./DriverStatusBadge.jsx";
@@ -9,7 +10,14 @@ export default function DriverTripCard({
   checklist = [],
   emergencyContact = "+91 98765 43210",
 }) {
-  const [showChecklistModal, setShowChecklistModal] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const showChecklistModal = searchParams.get("view") === "checklist" && searchParams.get("tripId") === String(trip.id) && ["Pending", "Not Started"].includes(trip.status);
+  const setShowChecklistModal = (value) => setSearchParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (value) { next.set("view", "checklist"); next.set("tripId", String(trip.id)); }
+    else { next.delete("view"); next.delete("tripId"); }
+    return next;
+  });
   const [checkedItems, setCheckedItems] = useState({});
   const [odometerStart, setOdometerStart] = useState("42175");
   const [odometerEnd, setOdometerEnd] = useState("");

@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs;
@@ -9,7 +10,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/section-roll-allocation")]
     [Route("api/v1/section-roll-allocation")]
+    [Produces("application/json")]
     [Authorize]
     [RequirePermission("section-room")]
     public class SectionRollAllocationController : ControllerBase

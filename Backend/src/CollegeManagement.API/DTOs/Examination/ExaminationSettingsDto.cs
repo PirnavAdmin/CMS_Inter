@@ -21,6 +21,7 @@ namespace CollegeManagement.API.DTOs.Examination
         public bool EmailMarksheetCopy { get; set; } = true;
         public bool RestrictResultsForFeeDue { get; set; } = false;
         public bool AutoArchivePastExams { get; set; } = true;
-        public DateTime? UpdatedAt { get; set; }
+        public string? SettingsJson { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 }

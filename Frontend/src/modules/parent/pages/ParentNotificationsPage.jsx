@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Bell, CheckCheck, ChevronRight, Eye, Filter } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, getStoredNotifications, saveStoredNotifications } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { getStoredNotifications, saveStoredNotifications } from "../parentData.js";
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
@@ -10,8 +11,28 @@ export default function ParentNotificationsPage() {
   const { availableChildren } = useParentPortal();
   const navigate = useNavigate();
   const [notifs, setNotifs] = useState(getStoredNotifications());
-  const [activeTab, setActiveTab] = useState("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") || "all";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [selectedNotifModal, setSelectedNotifModal] = useState(null);
+
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab") || "all";
+    setActiveTab(tabFromUrl);
+  }, [searchParams]);
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tab === "all") {
+        next.delete("tab");
+      } else {
+        next.set("tab", tab);
+      }
+      return next;
+    });
+  };
 
   const childIds = new Set(availableChildren.map((c) => c.id));
   const parentNotifs = notifs.filter((n) => {
@@ -64,7 +85,7 @@ export default function ParentNotificationsPage() {
                 key={tab}
                 type="button"
                 className={`cms-btn cms-btn-sm ${activeTab === tab ? "cms-btn-primary" : "cms-btn-outline"}`}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabChange(tab)}
               >
                 {tab === "all" ? "All Alerts" : tab === "unread" ? `Unread (${unreadCount})` : tab}
               </button>

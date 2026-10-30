@@ -5,7 +5,7 @@ import { ConfirmDialog, Modal, SkeletonPage, Toast } from "@/shared/components/U
 import StudentCard from "../components/StudentCard.jsx";
 import StudentEmptyState from "../components/StudentEmptyState.jsx";
 import StudentPageHeader from "../components/StudentPageHeader.jsx";
-import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { useStudentProfile, useStudentNavigation, studentRouteValue } from "../context/StudentProfileContext.jsx";
 import {
   changeCurrentStudentPassword,
   updateCurrentStudentProfile,
@@ -99,13 +99,18 @@ const validateField = (name, rawValue) => {
 };
 
 export default function StudentProfile() {
+  const navigation = useStudentNavigation();
+  const navigationKey = navigation.params.toString();
+  const latestNavigation = useRef(navigationKey);
+  latestNavigation.current = navigationKey;
   const { profile, loading, error, refreshProfile, photoUrl, photoError, photoLoading, applyPhotoRemoval } = useStudentProfile();
   const [draft, setDraft] = useState({});
-  const [editingSection, setEditingSection] = useState(null);
+  const [editingSection, setEditingSection] = studentRouteValue(navigation, "edit", null, (value) => groups.some(([id, , , keys]) => id === value && keys.some((key) => editableFields.includes(key))));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "success" });
-  const [passwordOpen, setPasswordOpen] = useState(false);
+  const passwordOpen = navigation.params.get("action") === "password";
+  const setPasswordOpen = (open) => navigation.update({ action: open ? "password" : null });
   const [passwords, setPasswords] = useState({ oldPassword: "", newPassword: "", confirmPassword: "" });
   const [passwordSaving, setPasswordSaving] = useState(false);
   const passwordRequestLock = useRef(false);
@@ -134,11 +139,13 @@ export default function StudentProfile() {
   const photoRef = useRef(null);
   const videoRef = useRef(null);
   const cameraSessionRef = useRef(0);
-  const [photoMode, setPhotoMode] = useState(null);
+  const photoMode = navigation.params.get("action") === "photo" && ["menu", "view", "camera", "upload", "remove"].includes(navigation.params.get("photo")) ? navigation.params.get("photo") : null;
+  const setPhotoMode = (mode) => navigation.update({ action: mode ? "photo" : null, photo: mode });
   const [photoFile, setPhotoFile] = useState(null);
   const [photoCandidateUrl, setPhotoCandidateUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [removePhotoOpen, setRemovePhotoOpen] = useState(false);
+  const removePhotoOpen = photoMode === "remove";
+  const setRemovePhotoOpen = (open) => setPhotoMode(open ? "remove" : "menu");
   const [photoFlowError, setPhotoFlowError] = useState("");
   const [failedPhotoUrl, setFailedPhotoUrl] = useState("");
   const [cameraReady, setCameraReady] = useState(false);
@@ -177,7 +184,7 @@ export default function StudentProfile() {
   }, [photoFile]);
 
   useEffect(() => {
-    if (photoMode !== "camera" || photoFile) return;
+    if (loading || !profile || photoMode !== "camera" || photoFile) return;
     const session = ++cameraSessionRef.current;
     let stream;
     let cancelled = false;
@@ -195,15 +202,21 @@ export default function StudentProfile() {
     };
     start();
     return () => { cancelled = true; cameraSessionRef.current += 1; if (stream) stream.getTracks().forEach((track) => track.stop()); };
-  }, [photoMode, photoFile]);
+  }, [loading, profile, photoMode, photoFile]);
   const documentInputRef = useRef(null);
-  const [documentFilter, setDocumentFilter] = useState("All");
-  const [documentSearch, setDocumentSearch] = useState("");
-  const [documentView, setDocumentView] = useState("grid");
+  const [documentFilter, setDocumentFilter] = studentRouteValue(navigation, "documents", "All", (value) => ["All", "Academic", "Identity", "Financial", "Other"].includes(value));
+  const [documentSearch, setDocumentSearch] = studentRouteValue(navigation, "documentSearch", "");
+  const [documentView, setDocumentView] = studentRouteValue(navigation, "documentView", "grid", (value) => ["grid", "list"].includes(value));
   const [documentBusy, setDocumentBusy] = useState("");
   const [documentError, setDocumentError] = useState("");
   const [uploadType, setUploadType] = useState(documents[0][1]);
-  const [documentPreview, setDocumentPreview] = useState(null);
+  const [documentPreview, setDocumentPreviewState] = useState(null);
+  const setDocumentPreview = (value) => {
+    setDocumentPreviewState(value);
+    if (!value) navigation.update({ action: null, document: null });
+  };
+  const initializedEdit = useRef("");
+  const documentLoader = useRef(null);
   useEffect(() => () => { if (documentPreview?.url) URL.revokeObjectURL(documentPreview.url); }, [documentPreview]);
 
   const initials = useMemo(() => String(profile?.studentName || "Student").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase(), [profile]);
@@ -214,6 +227,15 @@ export default function StudentProfile() {
     setDraft(Object.fromEntries(editableFields.map((key) => [key, profile?.[key] ?? ""])));
     setErrors({}); setEditingSection(id);
   };
+  useEffect(() => {
+    if (!editingSection) { initializedEdit.current = ""; return; }
+    if (loading || !profile) return;
+    const key = String(profile.studentId || "self") + ":" + editingSection;
+    if (initializedEdit.current === key) return;
+    initializedEdit.current = key;
+    setDraft(Object.fromEntries(editableFields.map((field) => [field, profile[field] ?? ""])));
+    setErrors({});
+  }, [editingSection, loading, profile]);
   const cancelEdit = () => { if (!saving) { setDraft({}); setErrors({}); setEditingSection(null); } };
   const change = (key, value) => {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -303,8 +325,10 @@ export default function StudentProfile() {
     finally { setDocumentBusy(""); }
   };
   const chooseDocument = (type) => { setUploadType(type); setDocumentError(""); documentInputRef.current?.click(); };
-  const openDocument = async (label, type, path, download = false) => {
-    if (documentBusy) return;
+  const openDocument = async (label, type, path, download = false, restoring = false) => {
+    if (!download && !restoring) { navigation.update({ action: "document", document: type }); return; }
+    const requestKey = latestNavigation.current;
+    if (documentBusy && !restoring) return;
     setDocumentBusy(type); setDocumentError("");
     try {
       const blob = await getCurrentStudentDocumentFile(path);
@@ -312,10 +336,22 @@ export default function StudentProfile() {
       if (download) {
         const link = document.createElement("a"); link.href = url; link.download = documentFileName(getStudentDocumentUrl(path));
         document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } else setDocumentPreview({ label, url, image: /\.(png|jpe?g)(\?|$)/i.test(path) });
-    } catch (requestError) { const message = getApiErrorMessage(requestError); setDocumentError(message); notify(message, "error"); }
-    finally { setDocumentBusy(""); }
+      } else if (latestNavigation.current !== requestKey) URL.revokeObjectURL(url);
+      else setDocumentPreviewState({ label, type, url, image: /\.(png|jpe?g)(\?|$)/i.test(path) });
+    } catch (requestError) { if (!download && latestNavigation.current !== requestKey) return; const message = getApiErrorMessage(requestError); setDocumentError(message); notify(message, "error"); }
+    finally { if (download || latestNavigation.current === requestKey) setDocumentBusy(""); }
   };
+  documentLoader.current = openDocument;
+  const documentType = navigation.params.get("action") === "document" ? navigation.params.get("document") : null;
+  useEffect(() => {
+    setDocumentPreviewState(null);
+    if (!documentType) { setDocumentBusy(""); return; }
+    if (loading || !profile) return;
+    const entry = documents.find(([, type]) => type === documentType);
+    const path = entry ? profile[entry[2]] : null;
+    if (!entry || !path) { setDocumentError("This document is unavailable in your student profile."); return; }
+    documentLoader.current(entry[0], entry[1], path, false, true);
+  }, [documentType, loading, profile]);
   const changePassword = async (event) => {
     event.preventDefault();
     if (passwordRequestLock.current) return;
@@ -450,9 +486,10 @@ export default function StudentProfile() {
         </div>
       </form>
     </Modal> : null}
-    {documentPreview ? <Modal className="sp-doc-modal" title={documentPreview.label} onClose={() => setDocumentPreview(null)}>{documentPreview.image ? <img className="sp-doc-preview-image" src={documentPreview.url} alt={documentPreview.label}/> : <iframe className="sp-doc-preview-frame" title={documentPreview.label} src={documentPreview.url}/>}</Modal> : null}
+    {documentPreview && documentPreview.type === documentType ? <Modal className="sp-doc-modal" title={documentPreview.label} onClose={() => setDocumentPreview(null)}>{documentPreview.image ? <img className="sp-doc-preview-image" src={documentPreview.url} alt={documentPreview.label}/> : <iframe className="sp-doc-preview-frame" title={documentPreview.label} src={documentPreview.url}/>}</Modal> : null}
     {photoMode && !removePhotoOpen ? <Modal className={`sp-photo-modal ${photoMode === "view" ? "is-preview" : ""}`} title={photoFile ? "Crop Profile Photo" : photoMode === "camera" ? "Take Photo" : "Profile Photo"} onClose={closePhotoFlow} closeOnOverlay={!photoBusy} footer={photoMode === "camera" || photoMode === "upload" ? <><button className="cms-btn" disabled={photoBusy} onClick={() => { setPhotoFile(null); setPhotoFlowError(""); setPhotoMode("menu"); }}>Cancel</button>{photoMode === "camera" && photoFile ? <button className="cms-btn" disabled={photoBusy} onClick={() => { setPhotoFile(null); setCandidateFailed(false); setPhotoFlowError(""); }}>Retake</button> : null}{photoMode === "camera" && !photoFile ? <button className="cms-btn cms-btn-primary" disabled={!cameraReady || Boolean(photoFlowError)} onClick={capturePhoto}><Camera size={15}/> Capture</button> : <button className="cms-btn cms-btn-primary" disabled={photoBusy || !photoCandidateUrl || candidateFailed || !cropReady} onClick={uploadPhoto}>{photoBusy ? "Saving..." : "Save Photo"}</button>}</> : photoMode === "view" ? <><button className="cms-btn" onClick={() => photoRef.current?.click()}><FolderOpen size={15}/> Change Photo</button><button className="cms-btn" onClick={() => setPhotoMode("menu")}>Back</button></> : null}>
       {photoMode === "menu" ? <><div className="sp-photo-summary">{photoAvailable ? <img src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-photo-initials">{initials}</span>}<h3>{profile?.studentName || "Student"}</h3><p>Roll No: {display(profile?.rollNo, true)} • {display(profile?.sectionName, true)}</p></div><div className="sp-photo-menu"><button disabled={!photoAvailable || photoLoading || photoBusy} onClick={() => setPhotoMode("view")}><Eye size={20}/> View photo</button><button disabled={photoBusy} onClick={() => { setPhotoFlowError(""); setPhotoFile(null); setPhotoMode("camera"); }}><Camera size={20}/> Take photo</button><button disabled={photoBusy} onClick={() => { setPhotoFlowError(""); photoRef.current?.click(); }}><FolderOpen size={20}/> Upload photo</button><div className="sp-photo-menu-divider"/><button className="is-danger" disabled={!profile?.photo || photoBusy} onClick={() => setRemovePhotoOpen(true)}><Trash2 size={20}/> Remove photo</button></div></> : null}
+      {photoMode === "upload" && !photoFile ? <p className="sp-photo-message">The local photo is unavailable after refresh. Cancel and choose your photo again.</p> : null}
       {photoMode === "view" ? photoAvailable ? <img className="sp-photo-large-preview" src={photoUrl} alt={`${profile?.studentName || "Student"} profile photo`} onError={() => setFailedPhotoUrl(photoUrl)}/> : <p className="sp-photo-message">The current photo is unavailable.</p> : null}
       {photoMode === "camera" && !photoFile ? <div className="sp-photo-capture"><video ref={videoRef} autoPlay playsInline muted aria-label="Live camera preview" onLoadedData={() => setCameraReady(true)}/>{!cameraReady && !photoFlowError ? <p role="status">Starting camera...</p> : null}</div> : null}
       {(photoMode === "upload" || photoMode === "camera") && photoCandidateUrl ? <div className="sp-student-photo-crop">

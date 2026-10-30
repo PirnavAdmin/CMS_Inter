@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   BookOpen,
   BadgeCheck,
@@ -3036,13 +3037,54 @@ export default function AdmissionPage() {
     selectedAcademicYearId,
   } = useAcademicContext();
   const { campuses, selectedCampus, selectedCampusId } = useCampusContext();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [initialDraft] = useState(readAdmissionDraft);
-  const [viewMode, setViewMode] = useState("list");
-  const [step, setStep] = useState(initialDraft.step);
+  const requestedView = searchParams.get("view") || "list";
+  const requestedAdmissionId = searchParams.get("admissionId") || "";
+  const requestsOpen = requestedView === "requests";
+  const formRequested = ["new", "form", "fee", "preview"].includes(requestedView);
+  const step = requestedView === "preview" ? PREVIEW_STEP_INDEX
+    : requestedView === "fee" ? FEE_STEP_INDEX : 0;
+  const readyDraftStepRef = useRef(Object.keys(initialDraft.values).length ? initialDraft.step : 0);
+  const navigateAdmission = (view, { admissionId = requestedAdmissionId, replace = false } = {}) => {
+    setSearchParams((previous) => {
+      const params = new URLSearchParams(previous);
+      if (view === "list") params.delete("view");
+      else params.set("view", view);
+      if (admissionId && view !== "list") params.set("admissionId", String(admissionId));
+      else params.delete("admissionId");
+      params.delete("returnView");
+      if (view !== "requests") {
+        params.delete("requestTab");
+        params.delete("requestId");
+      }
+      return params;
+    }, { replace });
+  };
+  const stepView = (targetStep, admissionId) => targetStep === PREVIEW_STEP_INDEX ? "preview"
+    : targetStep === FEE_STEP_INDEX ? "fee" : admissionId ? "form" : "new";
+  const setStep = (targetStep) => {
+    readyDraftStepRef.current = Math.max(readyDraftStepRef.current, targetStep);
+    navigateAdmission(stepView(targetStep, requestedAdmissionId));
+  };
+  const setViewMode = (mode) => navigateAdmission(mode === "list" ? "list" : stepView(step, requestedAdmissionId));
+  const setRequestsOpen = (open) => {
+    if (!open) {
+      navigateAdmission(searchParams.get("returnView") || "list");
+      return;
+    }
+    setSearchParams((previous) => {
+      const params = new URLSearchParams(previous);
+      params.set("returnView", requestedView);
+      params.set("view", "requests");
+      return params;
+    });
+  };
+  // A direct load/refresh may restore a draft, but must not allocate a new number.
+  const allowAutomaticNumberAllocation = useRef(false);
   const [values, setValues] = useState(initialDraft.values);
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
-  const [requestsOpen, setRequestsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [admissions, setAdmissions] = useState([]);
   const [listLoading, setListLoading] = useState(false);
@@ -3078,6 +3120,9 @@ export default function AdmissionPage() {
   const [admittedByStaffError, setAdmittedByStaffError] = useState("");
   const [admittedByDropdownOpen, setAdmittedByDropdownOpen] = useState(false);
   const [editingAdmissionId, setEditingAdmissionId] = useState("");
+  const restoringRecord = formRequested && Boolean(requestedAdmissionId) && requestedAdmissionId !== editingAdmissionId;
+  const recoveringDraft = formRequested && !requestedAdmissionId && (Boolean(editingAdmissionId) || step > readyDraftStepRef.current);
+  const viewMode = formRequested && !restoringRecord && !recoveringDraft ? "form" : "list";
   const [readOnlyAdmission, setReadOnlyAdmission] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [pincodeLoading, setPincodeLoading] = useState(false);
@@ -4245,7 +4290,7 @@ export default function AdmissionPage() {
   }, [editingAdmissionId, selectedCampusValue, selectedContextBoardValue, selectedContextYearValue, viewMode]);
 
   useEffect(() => {
-    if (viewMode !== "form" || editingAdmissionId || !canRequestAdmissionNumber || committedAdmissionRef.current) {
+    if (viewMode !== "form" || editingAdmissionId || !canRequestAdmissionNumber || committedAdmissionRef.current || !allowAutomaticNumberAllocation.current) {
       setAdmissionNumberLoading(false);
       return undefined;
     }
@@ -5107,6 +5152,7 @@ export default function AdmissionPage() {
   };
 
   const clearAdmissionForm = () => {
+    allowAutomaticNumberAllocation.current = true;
     allocatedAdmissionNumbersRef.current.clear();
     setAdmissionNumberPreviewVersion((current) => current + 1);
     suppressPersistRef.current = true;
@@ -5125,7 +5171,8 @@ export default function AdmissionPage() {
     Object.values(fileInputRefs.current).forEach((input) => {
       if (input) input.value = "";
     });
-    setStep(0);
+    readyDraftStepRef.current = 0;
+    navigateAdmission("new", { admissionId: "" });
     setClearConfirmOpen(false);
     window.setTimeout(() => { suppressPersistRef.current = false; }, 0);
   };
@@ -5157,7 +5204,8 @@ export default function AdmissionPage() {
     setStep(nextStep);
   };
 
-  const openAdmissionForm = ({ formValues = {}, targetStep = 0, selection = [], admissionId = "", readOnly = false } = {}) => {
+  const openAdmissionForm = ({ formValues = {}, targetStep = 0, selection = [], admissionId = "", readOnly = false, restoring = false } = {}) => {
+    allowAutomaticNumberAllocation.current = !restoring;
     setAdmissionNumberPreviewVersion((current) => current + 1);
     suppressPersistRef.current = false;
     setAdmissionNumberError("");
@@ -5172,8 +5220,9 @@ export default function AdmissionPage() {
     setFeeSelection(hasPersistedSelection ? selection : []);
     feeSelectionInitializedRef.current = hasPersistedSelection;
     setErrors({});
-    setStep(safeStepIndex(targetStep));
-    setViewMode("form");
+    const restoredStep = safeStepIndex(targetStep);
+    readyDraftStepRef.current = restoredStep;
+    navigateAdmission(stepView(restoredStep, admissionId), { admissionId, replace: restoring });
   };
 
   const addNewAdmission = () => {
@@ -5187,7 +5236,7 @@ export default function AdmissionPage() {
     });
   };
 
-  const continueAdmission = async (record, targetStep = record.currentStep || 0) => {
+  const continueAdmission = async (record, targetStep = record.currentStep || 0, { restoring = false, isCurrent = () => true } = {}) => {
     const admissionId = record.admissionId || record.id;
     if (!admissionId) {
       setToast("Admission ID is required to load admission details.");
@@ -5256,19 +5305,58 @@ export default function AdmissionPage() {
       }
       const loadedStatus = normalizeAdmissionStatus(detailRow.status || record.status);
       const isLoadedApprovedAdmission = loadedStatus === "Approved";
+      if (!isCurrent()) return false;
       openAdmissionForm({
         formValues,
         targetStep: isLoadedApprovedAdmission ? PREVIEW_STEP_INDEX : targetStep,
         selection: persistedSelection.length ? persistedSelection : null,
         admissionId,
         readOnly: isLoadedApprovedAdmission,
+        restoring,
       });
+      return true;
     } catch (err) {
-      setToast(getApiErrorMessage(err));
+      if (isCurrent()) setToast(getApiErrorMessage(err));
+      return false;
     } finally {
-      setActionBusy("");
+      if (isCurrent()) setActionBusy("");
     }
   };
+
+  // Keep recovery tied to URL identity, rather than loader function identity.
+  const admissionRecoveryRef = useRef(null);
+  admissionRecoveryRef.current = { continueAdmission, openAdmissionForm, navigateAdmission };
+  useEffect(() => {
+    if (!formRequested) return;
+    let active = true;
+    const recovery = admissionRecoveryRef.current;
+    if (requestedAdmissionId && requestedAdmissionId !== editingAdmissionId) {
+      allowAutomaticNumberAllocation.current = false;
+      if (!numericId(requestedAdmissionId)) {
+        recovery.navigateAdmission("list", { replace: true });
+        setToast("Admission details could not be restored. Please select the admission again.");
+      } else {
+        recovery.continueAdmission({ id: requestedAdmissionId }, step, {
+          restoring: true,
+          isCurrent: () => active,
+        }).then((loaded) => {
+          if (active && !loaded) recovery.navigateAdmission("list", { replace: true });
+        });
+      }
+    } else if (!requestedAdmissionId && (editingAdmissionId || step > readyDraftStepRef.current)) {
+      const draft = readAdmissionDraft();
+      const recoverableStep = Object.keys(draft.values).length ? draft.step : 0;
+      const targetStep = Math.min(step, recoverableStep);
+      recovery.openAdmissionForm({
+        formValues: draft.values,
+        targetStep,
+        selection: draft.feeSelection,
+        restoring: true,
+      });
+      if (targetStep !== step) setToast("The saved draft cannot restore this step. Please continue from the admission form.");
+    }
+    return () => { active = false; };
+  }, [editingAdmissionId, formRequested, requestedAdmissionId, step]);
 
   const returnToAdmissions = () => {
     if (!editingAdmissionId) persistAdmissionDraft({ currentStep: step, formData: values, feeSelection });
@@ -5595,6 +5683,7 @@ export default function AdmissionPage() {
             admissionNo: submittedAdmissionNo,
           };
           setEditingAdmissionId(savedAdmissionId);
+          navigateAdmission(stepView(step, savedAdmissionId), { admissionId: savedAdmissionId, replace: true });
         }
         setToast(`Admission ${submittedAdmissionNo} was ${isUpdate ? "updated" : "created"}, but fee selections could not be saved: ${message}`);
         submitInFlightRef.current = false;
@@ -5652,6 +5741,8 @@ export default function AdmissionPage() {
   if (requestsOpen) {
     return <AdmissionRequests campusOptions={campusOptions} currentCampusId={selectedCampusValue} onClose={() => setRequestsOpen(false)} />;
   }
+
+  if (restoringRecord || recoveringDraft) return <AdmissionPageSkeleton variant="form" />;
 
   if (viewMode === "list") {
     return (

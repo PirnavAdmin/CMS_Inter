@@ -5,7 +5,7 @@ import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
-import { getModuleState, saveModuleState } from "../statePersistence.js";
+import { getModuleState, saveModuleState, useExamCellAction } from "../statePersistence.js";
 import holidayApi from "@/api/holidayApi.js";
 import "@/modules/admin/AdminAcademicCalendar/HolidayManagementPage.css";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
@@ -77,7 +77,19 @@ function HolidayStatus({ holiday }) {
 }
 
 function HolidayForm({ holiday, onClose, onSave, saving }) {
-  const [values, setValues] = useState(holiday || EMPTY_HOLIDAY);
+  const [values, setValues] = useState(() => {
+    if (holiday) return { ...EMPTY_HOLIDAY, ...holiday, description: holiday.description ?? "" };
+    const draft = getModuleState("holidays", {})?.draftHoliday;
+    if (draft && typeof draft === "object") return { ...EMPTY_HOLIDAY, ...draft, description: draft.description ?? "" };
+    return EMPTY_HOLIDAY;
+  });
+
+  useEffect(() => {
+    if (!holiday) {
+      saveModuleState("holidays", { draftHoliday: values });
+    }
+  }, [values, holiday]);
+
   const [errors, setErrors] = useState({});
   const setValue = (name, value) => {
     setValues((current) => ({ ...current, [name]: value, ...(name === "dateType" && value === "Single Day" ? { endDate: "" } : {}) }));
@@ -164,7 +176,7 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
         ) : null}
         <div className={`${fieldClass("description")} full`}>
           <label htmlFor="holiday-description">Description</label>
-          <textarea id="holiday-description" value={values.description} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
+          <textarea id="holiday-description" value={values.description ?? ""} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
         </div>
       </div>
     </Modal>
@@ -199,12 +211,37 @@ export default function HolidayManagementPage() {
       page,
     });
   }, [query, month, customRange, appliedRange, type, status, page]);
-  const [importModal, setImportModal] = useState(false);
+  const [action, setAction] = useExamCellAction({
+    moduleKey: "holidays",
+    paramKey: "action",
+    defaultAction: null,
+    aliases: {
+      "add": "add",
+      "add-holiday": "add",
+      "create": "add",
+      "import": "import",
+    },
+  });
+
+  const [importModal, setImportModalState] = useState(() => action === "import");
+  const setImportModal = useCallback((isOpen) => {
+    setImportModalState(isOpen);
+    setAction(isOpen ? "import" : null);
+  }, [setAction]);
+
   const [importFile, setImportFile] = useState(null);
   const [importValidation, setImportValidation] = useState(null);
   const [importBusy, setImportBusy] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
-  const [formHoliday, setFormHoliday] = useState(undefined);
+  const [formHoliday, setFormHolidayState] = useState(() => (action === "add" ? null : undefined));
+  const setFormHoliday = useCallback((item) => {
+    setFormHolidayState(item);
+    if (item === null) {
+      setAction("add");
+    } else if (item === undefined) {
+      setAction(null);
+    }
+  }, [setAction]);
   const [viewHoliday, setViewHoliday] = useState(null);
   const [deleteHoliday, setDeleteHoliday] = useState(null);
   const [toast, setToast] = useState({ message: "", type: "success" });
@@ -359,6 +396,7 @@ export default function HolidayManagementPage() {
         setToast({ message: "Holiday added successfully.", type: "success" });
       }
 
+      saveModuleState("holidays", { draftHoliday: null });
       setFormHoliday(undefined);
       await loadData();
     } catch (err) {
@@ -589,7 +627,15 @@ export default function HolidayManagementPage() {
       </div>
 
       {formHoliday !== undefined ? (
-        <HolidayForm holiday={formHoliday} saving={saving} onClose={() => setFormHoliday(undefined)} onSave={saveHoliday} />
+        <HolidayForm
+          holiday={formHoliday}
+          saving={saving}
+          onClose={() => {
+            saveModuleState("holidays", { draftHoliday: null });
+            setFormHoliday(undefined);
+          }}
+          onSave={saveHoliday}
+        />
       ) : null}
 
       {viewHoliday ? (

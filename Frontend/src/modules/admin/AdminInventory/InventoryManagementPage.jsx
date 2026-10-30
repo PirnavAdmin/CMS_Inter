@@ -1,5 +1,6 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, Navigate, useLocation } from "react-router-dom";
+import { NavLink, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -100,18 +101,115 @@ export default function InventoryManagementPage() {
   const [modal, setModal] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
   const location = useLocation();
-  const tab = location.pathname.slice(BASE.length).replace(/^\/+|\/+$/g, "");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromPath = location.pathname.slice(BASE.length).replace(/^\/+|\/+$/g, "");
+  const tabFromQuery = searchParams.get("tab") || "";
+  const tab = tabFromPath || tabFromQuery;
   const active = TABS.find(([slug]) => slug === tab);
   const user = getAuthUser();
   const userName = user?.fullName || user?.name || user?.username || "Store Administrator";
-  const closeModal = useCallback(() => setModal(null), []);
+
+  const getCardSlug = (kind, record) => {
+    if (kind === "items") return record ? "edit-item" : "add-item";
+    if (kind === "suppliers") return record ? "edit-supplier" : "add-supplier";
+    if (kind === "categories") return record ? "edit-category" : "add-category";
+    return kind;
+  };
+
+  const closeModal = useCallback(() => {
+    setModal(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("card");
+      next.delete("id");
+      next.delete("itemId");
+      return next;
+    });
+  }, [setSearchParams]);
+
   const closeConfirmation = useCallback(() => setConfirmation(null), []);
   const closeToast = useCallback(() => setNotice(null), []);
   const notify = (message, type = "success") => setNotice({ message, type });
+
   const open = (kind, record = null, itemId = null) => {
     const canonical = record && stateRef.current[kind]?.find((value) => value.id === record.id);
-    setModal({ kind, record: canonical || record, itemId });
+    const activeRecord = canonical || record;
+    setModal({ kind, record: activeRecord, itemId });
+
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const cardSlug = getCardSlug(kind, activeRecord);
+      next.set("card", cardSlug);
+      if (activeRecord?.id != null) {
+        next.set("id", String(activeRecord.id));
+      } else {
+        next.delete("id");
+      }
+      if (itemId != null) {
+        next.set("itemId", String(itemId));
+      } else {
+        next.delete("itemId");
+      }
+      return next;
+    });
   };
+
+  // Restore open card from searchParams on page load or refresh
+  useEffect(() => {
+    const cardParam = searchParams.get("card");
+    if (!cardParam) {
+      if (modal && !writing.current) {
+        setModal(null);
+      }
+      return;
+    }
+
+    const idParam = searchParams.get("id");
+    const itemIdParam = searchParams.get("itemId");
+
+    let kind = cardParam;
+    let isEdit = false;
+    if (cardParam === "add-item") kind = "items";
+    else if (cardParam === "edit-item") { kind = "items"; isEdit = true; }
+    else if (cardParam === "add-supplier") kind = "suppliers";
+    else if (cardParam === "edit-supplier") { kind = "suppliers"; isEdit = true; }
+    else if (cardParam === "add-category") kind = "categories";
+    else if (cardParam === "edit-category") { kind = "categories"; isEdit = true; }
+
+    const findRecord = () => {
+      if (!idParam) return null;
+      if (kind === "item-detail" || (kind === "items" && isEdit)) {
+        return state.items.find((i) => String(i.id) === String(idParam));
+      }
+      if (kind === "movement-detail" || kind === "stock-in" || kind === "stock-out") {
+        return state.movements.find((m) => String(m.id) === String(idParam));
+      }
+      if (kind === "supplier-detail" || (kind === "suppliers" && isEdit)) {
+        return state.suppliers.find((s) => String(s.id) === String(idParam));
+      }
+      if (kind === "category-detail" || (kind === "categories" && isEdit)) {
+        return state.categories.find((c) => String(c.id) === String(idParam));
+      }
+      return null;
+    };
+
+    const targetRecord = findRecord();
+    const itemId = itemIdParam ? (Number(itemIdParam) || itemIdParam) : null;
+
+    if (!idParam || targetRecord) {
+      setModal((curr) => {
+        if (
+          curr?.kind === kind &&
+          curr?.record?.id === targetRecord?.id &&
+          curr?.itemId === itemId
+        ) {
+          return curr;
+        }
+        return { kind, record: targetRecord, itemId };
+      });
+    }
+  }, [searchParams, state.items, state.movements, state.suppliers, state.categories]);
+
   const commit = async (operation, message) => {
     if (writing.current) return false;
     writing.current = true;
@@ -134,7 +232,6 @@ export default function InventoryManagementPage() {
     };
   }, [refresh]);
   useEffect(() => {
-    setModal(null);
     setConfirmation(null);
   }, [location.pathname]);
   const save = async (values) => {
@@ -252,7 +349,7 @@ export default function InventoryManagementPage() {
               key={slug || "dashboard"}
               to={`${BASE}${slug ? `/${slug}` : ""}`}
               end
-              className={({ isActive }) => `inventory-tab${isActive ? " active" : ""}`}
+              className={({ isActive }) => `inventory-tab${isActive || tab === slug ? " active" : ""}`}
             >
               <Icon size={17} />
               {label}
@@ -260,14 +357,14 @@ export default function InventoryManagementPage() {
           ))}
         </nav>
         {loading && (
-          <p role="status">Loading inventory from the server...</p>
+          <SkeletonPage variant="dashboard" columns={4} rows={4} />
         )}
         {loadError && (
           <div role="alert" className="cms-alert-error">
             Inventory could not be loaded. {loadError}
           </div>
         )}
-          <div key={tab} aria-busy={loading}>
+          <div key={tab} aria-busy={loading} hidden={loading}>
             {!tab && <InventoryDashboard {...shared} />}
             {tab === "items" && <InventoryItems {...shared} remove={remove} />}
             {(tab === "stock-in" || tab === "stock-out") && (

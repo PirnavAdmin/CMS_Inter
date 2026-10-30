@@ -309,6 +309,45 @@ BEGIN
     LIMIT 1;
 END;";
 
+            // 6b. sp_GenerateUniqueExamCode
+            string spGenerateUniqueExamCode = @"
+DROP PROCEDURE IF EXISTS `sp_GenerateUniqueExamCode`;
+CREATE PROCEDURE `sp_GenerateUniqueExamCode`(
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_GroupId INT,
+    IN p_ProgramId INT
+)
+BEGIN
+    DECLARE v_Year VARCHAR(50);
+    DECLARE v_Seq INT DEFAULT 1;
+
+    SELECT COALESCE(AcademicYearName, CAST(YEAR(UTC_TIMESTAMP()) AS CHAR)) INTO v_Year
+    FROM AcademicYears WHERE AcademicYearId = p_AcademicYearId LIMIT 1;
+
+    IF v_Year IS NULL OR v_Year = '' THEN
+        SET v_Year = CAST(YEAR(UTC_TIMESTAMP()) AS CHAR);
+    END IF;
+
+    SET v_Year = REGEXP_SUBSTR(v_Year, '[0-9]{4}');
+    IF v_Year IS NULL OR v_Year = '' THEN
+        SET v_Year = CAST(YEAR(UTC_TIMESTAMP()) AS CHAR);
+    END IF;
+
+    INSERT INTO `ExamCodeSequences` (`AcademicYear`, `LastSequence`, `UpdatedAt`)
+    VALUES (v_Year, 1, UTC_TIMESTAMP())
+    ON DUPLICATE KEY UPDATE 
+        `LastSequence` = `LastSequence` + 1,
+        `UpdatedAt` = UTC_TIMESTAMP();
+
+    SELECT `LastSequence` INTO v_Seq
+    FROM `ExamCodeSequences`
+    WHERE `AcademicYear` = v_Year
+    LIMIT 1;
+
+    SELECT CONCAT('EXAM-', v_Year, '-', LPAD(v_Seq, 4, '0')) AS ExamCode;
+END;";
+
             // 7. sp_GetFacultyExamDuties
             string spGetFacultyExamDuties = @"
 DROP PROCEDURE IF EXISTS `sp_GetFacultyExamDuties`;
@@ -652,6 +691,7 @@ END;";
                 ("sp_SaveExaminationSubjects", spSaveExaminationSubjects),
                 ("sp_AssignInvigilatorsBatch", spAssignInvigilatorsBatch),
                 ("sp_GetNextExamCodeSequence", spGetNextExamCodeSequence),
+                ("sp_GenerateUniqueExamCode", spGenerateUniqueExamCode),
                 ("sp_GetFacultyExamDuties", spGetFacultyExamDuties),
                 ("sp_GetAvailableHallsFiltered", spGetAvailableHallsFiltered),
                 ("sp_GetAvailableInvigilatorsFiltered", spGetAvailableInvigilatorsFiltered),

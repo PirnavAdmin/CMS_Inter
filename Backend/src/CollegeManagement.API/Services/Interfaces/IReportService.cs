@@ -23,4 +23,11 @@ public interface IReportService
     Task<IReadOnlyList<AuditLogDto>> AuditLogsAsync(ReportFilterDto filter, CancellationToken ct = default);
     Task<(byte[] Content, string ContentType, string FileName)> ExportAsync(string reportType, ReportFilterDto filter, bool pdf, CancellationToken ct = default);
     Task<object> CustomAsync(CustomReportRequestDto request, CancellationToken ct = default);
+
+    // Cascading filter dropdowns
+    Task<IReadOnlyList<ReportFilterBoardDto>> GetFilterBoardsAsync(int? campusId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReportFilterAcademicYearDto>> GetFilterAcademicYearsAsync(int? boardId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReportFilterAcademicLevelDto>> GetFilterAcademicLevelsAsync(int? boardId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReportFilterGroupDto>> GetFilterGroupsAsync(int? boardId, int? academicYearId, int? academicLevelId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReportFilterSectionDto>> GetFilterSectionsAsync(int? campusId, int? groupId, int? boardId, int? academicYearId, int? academicLevelId, CancellationToken ct = default);
 }

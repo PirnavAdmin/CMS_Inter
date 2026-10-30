@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Download, Eye, FileText, FileUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Modal, SkeletonRow, StatusBadge, Toast } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { fetchAdminGroups, fetchAdminLevels } from "@/api/studentApi.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -112,6 +113,19 @@ export default function StudentManagementPage() {
   const restoringFilters = useRef(Boolean(restoredState));
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const studentModal = searchParams.get("modal");
+  const uploadStudentId = searchParams.get("studentId") || "";
+  const uploadRequested = studentModal === "document" || studentModal === "photo";
+  const uploadScope = JSON.stringify([selectedCampusId, selectedBoardId, selectedAcademicYearId, uploadStudentId]);
+  const [uploadStudent, setUploadStudent] = useState(null);
+  const [uploadLoadError, setUploadLoadError] = useState("");
+  const navigateStudentModal = (modal, studentId) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (modal) params.set("modal", modal); else params.delete("modal");
+    if (studentId) params.set("studentId", String(studentId)); else params.delete("studentId");
+    return params;
+  });
   const [query, setQuery] = useState(restoredState?.query ?? "");
   const [filters, setFilters] = useState(restoredState?.filters ?? {
     level: "",
@@ -129,24 +143,48 @@ export default function StudentManagementPage() {
   const [exporting, setExporting] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const [importOpen, setImportOpen] = useState(false);
+  const importOpen = studentModal === "import";
+  const setImportOpen = (open) => navigateStudentModal(open ? "import" : null);
   const [importFile, setImportFile] = useState(null);
   const [validationResult, setValidationResult] = useState(null);
   const [importBusy, setImportBusy] = useState("");
   const [importSuccess, setImportSuccess] = useState(false);
-  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const credentialsOpen = studentModal === "credentials";
+  const setCredentialsOpen = (open) => navigateStudentModal(open ? "credentials" : null);
   const [credentialFilters, setCredentialFilters] = useState({ level: "", group: "", program: "", section: "", admissionNo: "" });
   const [credentialGroups, setCredentialGroups] = useState([]);
   const [credentialPrograms, setCredentialPrograms] = useState([]);
   const [credentialSections, setCredentialSections] = useState([]);
-  const [fileAction, setFileAction] = useState(null);
+  const fileAction = uploadRequested && uploadStudent?.scope === uploadScope ? { kind: studentModal, student: uploadStudent.student } : null;
+  const setFileAction = (action) => {
+    if (action) setUploadStudent({ scope: JSON.stringify([selectedCampusId, selectedBoardId, selectedAcademicYearId, String(action.student.id)]), student: action.student });
+    navigateStudentModal(action?.kind, action?.student?.id);
+  };
   const [uploadFile, setUploadFile] = useState(null);
   const [documentType, setDocumentType] = useState("");
   const [levelOptions, setLevelOptions] = useState([]);
   const [groupOptions, setGroupOptions] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState("");
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
   const [page, setPage] = useState(restoredState?.page ?? 1);
+
+  useEffect(() => {
+    setUploadFile(null);
+    setDocumentType("");
+    if (!uploadRequested || uploadStudent?.scope === uploadScope) return;
+    let active = true;
+    setUploadLoadError("");
+    if (!/^[1-9]\d*$/.test(uploadStudentId)) { setUploadLoadError("Invalid student ID."); return; }
+    apiClient.get(apiEndpoints.students.getById(uploadStudentId)).then(({ data }) => {
+      const record = data?.data ?? data?.Data ?? data;
+      if (!record || typeof record !== "object" || String(value(record, "studentId", "StudentId", "id", "Id")) !== uploadStudentId) throw new Error("Student record was not found.");
+      if (!matchesStudentContext(record, { campusId: selectedCampusId, boardId: selectedBoardId, academicYearId: selectedAcademicYearId })) throw new Error("Student is unavailable in the current context.");
+      if (active) setUploadStudent({ scope: uploadScope, student: { ...record, id: uploadStudentId, name: value(record, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Unnamed Student", admissionNo: value(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "—" } });
+    }).catch((error) => { if (active) setUploadLoadError(getApiErrorMessage(error)); });
+    return () => { active = false; };
+  }, [studentModal, uploadRequested, uploadStudentId, uploadScope, uploadStudent?.scope, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { restoringFilters.current = false; }, 0);
@@ -218,21 +256,31 @@ export default function StudentManagementPage() {
     setLevelOptions([]); setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
     if (!selectedBoardId) return undefined;
     let active = true;
-    apiClient.get(apiEndpoints.boards.academicLevels, { params: { boardId: selectedBoardId } })
-      .then((response) => active && setLevelOptions(selectOptions(response.data, ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"])))
+    fetchAdminLevels({ boardId: selectedBoardId, academicYearId: selectedAcademicYearId })
+      .then((levels) => active && setLevelOptions(selectOptions(levels, ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"])))
       .catch(() => active && setLevelOptions([]));
     return () => { active = false; };
   }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
-    if (!restoringFilters.current) setFilters((current) => ({ ...current, group: "", programme: "", section: "" }));
-    setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
-    if (!selectedBoardId || !filters.level) return undefined;
     let active = true;
-    apiClient.get(apiEndpoints.groups.getByBoard(selectedBoardId), { params: { academicYearId: selectedAcademicYearId, academicLevelId: filters.level, isActive: true } })
-      .then((response) => active && setGroupOptions(selectOptions(response.data, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"])))
-      .catch(() => active && setGroupOptions([]));
-    return () => { active = false; };
-  }, [filters.level, selectedBoardId, selectedAcademicYearId]);
+    const controller = new AbortController();
+    const enabled = Boolean(selectedBoardId && selectedAcademicYearId && filters.level);
+    setGroupOptions([]);
+    setGroupsLoading(enabled);
+    setGroupsError("");
+    if (!enabled) return () => controller.abort();
+    fetchAdminGroups({ boardId: selectedBoardId, academicYearId: selectedAcademicYearId, campusId: selectedCampusId }, { signal: controller.signal })
+      .then((groups) => {
+        if (!active) return;
+        const options = selectOptions(groups, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
+        setGroupOptions(options);
+        setFilters((current) => current.group && !options.some((option) => option.value === String(current.group))
+          ? { ...current, group: "", programme: "", section: "" } : current);
+        if (!options.length) setGroupsError("No active groups available for this board and academic year.");
+      }).catch((error) => { if (active) setGroupsError(getApiErrorMessage(error)); })
+      .finally(() => { if (active) setGroupsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [filters.level, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
     if (!restoringFilters.current) setFilters((current) => ({ ...current, programme: "", section: "" }));
     setProgrammeOptions([]); setSectionOptions([]);
@@ -244,12 +292,17 @@ export default function StudentManagementPage() {
     return () => { active = false; };
   }, [filters.group]);
   useEffect(() => {
-    if (!restoringFilters.current) setFilters((current) => ({ ...current, section: "" }));
     setSectionOptions([]);
     if (!filters.programme) return undefined;
     let active = true;
     apiClient.get(apiEndpoints.sections.list, { params: { boardId: selectedBoardId, academicYearId: selectedAcademicYearId, academicLevelId: filters.level, groupId: filters.group, programId: filters.programme, ProgramId: filters.programme, IsActive: true } })
-      .then((response) => active && setSectionOptions(selectOptions(response.data, ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"])))
+      .then((response) => {
+        if (!active) return;
+        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load sections.");
+        const options = selectOptions(response.data, ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]);
+        setSectionOptions(options);
+        setFilters((current) => current.section && !options.some((option) => option.value === String(current.section)) ? { ...current, section: "" } : current);
+      })
       .catch(() => active && setSectionOptions([]));
     return () => { active = false; };
   }, [filters.programme, filters.group, filters.level, selectedBoardId, selectedAcademicYearId]);
@@ -324,7 +377,7 @@ export default function StudentManagementPage() {
     setFilters((current) => ({
       ...current,
       [key]: selectedValue,
-      ...(key === "level" ? { group: "", programme: "", section: "" } : {}),
+      ...(key === "level" && !selectedValue ? { group: "", programme: "", section: "" } : {}),
       ...(key === "group" ? { programme: "", section: "" } : {}),
       ...(key === "programme" ? { section: "" } : {}),
     }));
@@ -469,7 +522,7 @@ export default function StudentManagementPage() {
           <div className="student-management-filters">
           {[
             ["Academic Level", "level", levelOptions, !selectedBoardId],
-            ["Group", "group", groupOptions, !filters.level],
+            ["Group", "group", groupOptions, !filters.level || groupsLoading],
             ["Programme", "programme", programmeOptions, !filters.group],
             ["Section", "section", sectionOptions, !filters.programme],
           ].map(([label, key, options, disabled]) => (
@@ -480,11 +533,12 @@ export default function StudentManagementPage() {
                 onChange={(event) => updateFilter(key, event.target.value)}
                 disabled={disabled}
               >
-                <option value="">All {label}s</option>
+                <option value="">{key === "group" && groupsLoading ? "Loading groups..." : key === "group" && groupsError ? "Groups unavailable" : `All ${label}s`}</option>
                 {options.map((item) => (
                   <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
               </select>
+              {key === "group" && groupsError && <small role="alert">{groupsError}</small>}
             </label>
           ))}
           </div>
@@ -641,6 +695,7 @@ export default function StudentManagementPage() {
           </div>
         </Modal>
       )}
+      {uploadRequested && !fileAction && <Modal title={studentModal === "photo" ? "Upload Student Photo" : "Upload Student Document"} size="sm" onClose={() => navigateStudentModal(null)} footer={<button className="cms-btn cms-btn-ghost" type="button" onClick={() => navigateStudentModal(null)}>Cancel</button>}><p role={uploadLoadError ? "alert" : "status"}>{uploadLoadError || "Loading student..."}</p></Modal>}
       {credentialsOpen && (
         <Modal
           title="Student Credentials"

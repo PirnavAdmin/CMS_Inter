@@ -96,7 +96,11 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> CreateStaffLeave([FromBody] CreateStaffLeaveRequest request)
         {
             var userId = GetCurrentUserId();
-            if (request.StaffId <= 0)
+            if (!IsCurrentUserAdmin())
+            {
+                request.StaffId = await ResolveStaffIdAsync();
+            }
+            else if (request.StaffId <= 0)
             {
                 try
                 {
@@ -112,7 +116,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Approves or rejects a staff leave request.
         /// </summary>
         [HttpPost("leave/{leaveRequestId}/action")]
-        [RequirePermission("staff-leave-management")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -137,16 +141,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? departmentId,
             [FromQuery] CollegeManagement.API.Enums.LeaveStatus? status)
         {
-            var callerStaffId = _jwtTokenHelper.GetStaffId(User);
-            bool hasAdminPerm = User.IsInRole("Admin") || User.IsInRole("Administrator") || User.IsInRole("SuperAdmin") ||
-                                User.Claims.Any(c => (c.Type == "permission" || c.Type == "Permission") && c.Value == "staff-leave-management");
-
-            if (!hasAdminPerm)
+            if (!IsCurrentUserAdmin() && !User.IsInRole("HOD"))
             {
-                if (!staffId.HasValue || (callerStaffId.HasValue && staffId.Value != callerStaffId.Value))
-                {
-                    return Forbid();
-                }
+                var callerStaffId = _jwtTokenHelper.GetStaffId(User) ?? await ResolveStaffIdAsync();
+                staffId = callerStaffId;
             }
 
             var effectiveCampusId = campusId ?? GetCurrentCampusId();
@@ -165,6 +163,20 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetStaffLeaveDetails(int leaveRequestId)
         {
             var result = await _service.GetStaffLeaveDetailsAsync(leaveRequestId);
+            if (result == null)
+            {
+                return NotFound(new { Status = false, Message = "Staff leave details not found." });
+            }
+
+            if (!IsCurrentUserAdmin() && !User.IsInRole("HOD"))
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                if (result.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view leave details for other staff members." });
+                }
+            }
+
             return Ok(new { Status = true, Message = "Staff leave details retrieved successfully.", Data = result });
         }
 
@@ -172,7 +184,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves leave history summary table for all staff for active academic year.
         /// </summary>
         [HttpGet("leave/history")]
-        [RequirePermission("staff-leave-management")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HOD")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffLeaveHistorySummary(
@@ -195,17 +207,19 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffLeaveHistory(int staffId)
         {
-            var callerStaffId = _jwtTokenHelper.GetStaffId(User);
-            bool hasAdminPerm = User.IsInRole("Admin") || User.IsInRole("Administrator") || User.IsInRole("SuperAdmin") ||
-                                User.Claims.Any(c => (c.Type == "permission" || c.Type == "Permission") && c.Value == "staff-leave-management");
-
-            if (!hasAdminPerm && (!callerStaffId.HasValue || callerStaffId.Value != staffId))
+            if (!IsCurrentUserAdmin() && !User.IsInRole("HOD"))
             {
-                return Forbid();
+                var callerStaffId = _jwtTokenHelper.GetStaffId(User) ?? await ResolveStaffIdAsync();
+                if (staffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view leave history for other staff members." });
+                }
             }
 
             var result = await _service.GetStaffLeaveHistoryAsync(staffId);
             return Ok(new { Status = true, Message = "Staff leave history retrieved successfully.", Data = result });
         }
+
+        private bool IsCurrentUserAdmin() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal");
     }
 }

@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using AutoMapper;
 using CollegeManagement.API.Data;
-using CollegeManagement.API.DTOs.Examination;
 using CollegeManagement.API.DTOs.Examination.Requests;
 using CollegeManagement.API.DTOs.Examination.Responses;
 using CollegeManagement.API.Exceptions;
@@ -23,7 +22,6 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IExaminationRepository _examinationRepository;
         private readonly IMapper _mapper;
         private readonly IMemoryCache _memoryCache;
-        private readonly AppDbContext _context;
         private readonly ILogger<ExaminationService> _logger;
         private readonly INumberSeriesService _numberSeriesService;
 
@@ -31,14 +29,12 @@ namespace CollegeManagement.API.Services.Implementations
             IExaminationRepository examinationRepository,
             IMapper mapper,
             IMemoryCache memoryCache,
-            AppDbContext context,
             ILogger<ExaminationService> logger,
             INumberSeriesService numberSeriesService)
         {
             _examinationRepository = examinationRepository;
             _mapper = mapper;
             _memoryCache = memoryCache;
-            _context = context;
             _logger = logger;
             _numberSeriesService = numberSeriesService;
         }
@@ -330,7 +326,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (response.Schedules != null && response.Schedules.Any())
             {
                 response.Schedules = response.Schedules
-                    .GroupBy(s => s.SubjectId)
+                    .GroupBy(s => s.SubjectId > 0 ? s.SubjectId : s.ExamScheduleId)
                     .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
                     .ToList();
             }
@@ -386,8 +382,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (!string.Equals(exam.Status, authoritativeStatus, StringComparison.OrdinalIgnoreCase))
             {
                 exam.Status = authoritativeStatus;
-                exam.UpdatedAt = DateTime.UtcNow;
-                await _examinationRepository.UpdateExaminationAsync(exam);
+                response.Status = authoritativeStatus;
             }
             response.Status = authoritativeStatus;
 
@@ -430,7 +425,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if (r.Schedules != null && r.Schedules.Any())
                 {
                     r.Schedules = r.Schedules
-                        .GroupBy(s => s.SubjectId)
+                        .GroupBy(s => s.SubjectId > 0 ? s.SubjectId : s.ExamScheduleId)
                         .Select(g => g.OrderByDescending(s => s.ExamScheduleId).First())
                         .ToList();
                     r.ScheduledSubjectsCount = r.Schedules.Count;
@@ -460,17 +455,29 @@ namespace CollegeManagement.API.Services.Implementations
                     r.AcademicLevelIds = new List<int> { r.AcademicLevelId };
                 }
 
-                r.ExamCategory = (!string.IsNullOrWhiteSpace(r.ExamPattern) && (r.ExamPattern.ToLower().Contains("objective") || r.ExamPattern.ToLower().Contains("jee") || r.ExamPattern.ToLower().Contains("neet"))) ||
-                                 (r.Schedules != null && r.Schedules.Any(s => s.ScheduleMode == "PATTERN_WISE" || string.Equals(s.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase)))
-                    ? "Objective"
-                    : "Regular";
+                string existingCat = r.ExamCategory ?? r.Category ?? string.Empty;
+                if (!string.Equals(existingCat, "Regular", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool isObjPattern = (!string.IsNullOrWhiteSpace(r.ExamPattern) && 
+                        (r.ExamPattern.Contains("objective", StringComparison.OrdinalIgnoreCase) || 
+                         r.ExamPattern.Contains("jee", StringComparison.OrdinalIgnoreCase) || 
+                         r.ExamPattern.Contains("neet", StringComparison.OrdinalIgnoreCase)));
+                    
+                    r.ExamCategory = isObjPattern || string.Equals(existingCat, "Objective", StringComparison.OrdinalIgnoreCase)
+                        ? "Objective"
+                        : "Regular";
+                }
+                else
+                {
+                    r.ExamCategory = "Regular";
+                }
+                r.Category = r.ExamCategory;
 
                 if (r.SelectedSubjectIds == null || !r.SelectedSubjectIds.Any())
                 {
-                    var persistedSubs = await _examinationRepository.GetExaminationSubjectIdsAsync(r.ExaminationId);
-                    if (persistedSubs.Any())
+                    if (r.AllocatedSubjectIds != null && r.AllocatedSubjectIds.Any())
                     {
-                        r.SelectedSubjectIds = persistedSubs;
+                        r.SelectedSubjectIds = r.AllocatedSubjectIds;
                     }
                 }
             }
@@ -662,6 +669,11 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
+                public async Task<DTOs.Examination.ExaminationSettingsDto> SaveExaminationSettingsAsync(int campusId, DTOs.Examination.ExaminationSettingsDto settings)
+        {
+            return await UpdateExaminationSettingsAsync(campusId, settings);
+        }
+
         #endregion
 
         #region Exam Schedule Implementations
@@ -775,11 +787,12 @@ namespace CollegeManagement.API.Services.Implementations
                 request.GroupId = exam.GroupId;
             }
 
-            var subject = await _context.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.SubjectId == request.SubjectId);
+            var eligibleSubjects = (await _examinationRepository.GetEligibleSubjectsForExamAsync(request.ExaminationId)).ToList();
+            var subject = eligibleSubjects.FirstOrDefault(s => s.SubjectId == request.SubjectId);
             if (subject == null)
             {
-                _logger.LogWarning("Subject validation failed: Subject ID {SubjectId} does not exist in database.", request.SubjectId);
-                throw new ValidationException($"Subject with ID {request.SubjectId} does not exist.");
+                _logger.LogWarning("Subject validation failed: Subject ID {SubjectId} is not eligible or not found for Exam {ExamId}.", request.SubjectId, request.ExaminationId);
+                throw new ValidationException($"Subject with ID {request.SubjectId} is not eligible for this examination.");
             }
 
             if (!subject.IsActive)
@@ -844,29 +857,21 @@ namespace CollegeManagement.API.Services.Implementations
             // 7. Room / Hall Validation & Capacity Checks
             if (request.RoomId.HasValue && request.RoomId.Value > 0)
             {
-                var room = await _context.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == request.RoomId.Value);
-                if (room == null)
+                var availableRooms = await _examinationRepository.GetAvailableHallsAsync(request.ExamDate, request.StartTime, request.EndTime);
+                var room = availableRooms.FirstOrDefault(r => r.RoomId == request.RoomId.Value);
+                if (room != null)
                 {
-                    _logger.LogWarning("Room validation failed: Room ID {RoomId} does not exist.", request.RoomId.Value);
-                    throw new ValidationException($"Room with ID {request.RoomId.Value} does not exist.");
-                }
+                    if (string.IsNullOrWhiteSpace(request.Hall))
+                    {
+                        request.Hall = !string.IsNullOrWhiteSpace(room.RoomNumber) ? room.RoomNumber : room.RoomName;
+                    }
 
-                if (!room.IsActive)
-                {
-                    _logger.LogWarning("Room validation failed: Room ID {RoomId} ('{RoomName}') is inactive.", room.RoomId, room.RoomName);
-                    throw new ValidationException($"Room '{room.RoomName ?? room.RoomNumber}' (ID {request.RoomId.Value}) is inactive.");
-                }
-
-                if (string.IsNullOrWhiteSpace(request.Hall))
-                {
-                    request.Hall = !string.IsNullOrWhiteSpace(room.RoomNumber) ? room.RoomNumber : room.RoomName;
-                }
-
-                if (request.CandidateCount.HasValue && request.CandidateCount.Value > 0 && room.Capacity > 0 && request.CandidateCount.Value > room.Capacity)
-                {
-                    _logger.LogWarning("Room capacity exceeded: Room '{RoomName}' capacity {Capacity} < requested candidates {Count}",
-                        room.RoomName ?? room.RoomNumber, room.Capacity, request.CandidateCount.Value);
-                    throw new ValidationException($"Room '{room.RoomName ?? room.RoomNumber}' capacity ({room.Capacity}) is less than required candidate count ({request.CandidateCount.Value}).");
+                    if (request.CandidateCount.HasValue && request.CandidateCount.Value > 0 && room.Capacity > 0 && request.CandidateCount.Value > room.Capacity)
+                    {
+                        _logger.LogWarning("Room capacity exceeded: Room '{RoomName}' capacity {Capacity} < requested candidates {Count}",
+                            room.RoomName ?? room.RoomNumber, room.Capacity, request.CandidateCount.Value);
+                        throw new ValidationException($"Room '{room.RoomName ?? room.RoomNumber}' capacity ({room.Capacity}) is less than required candidate count ({request.CandidateCount.Value}).");
+                    }
                 }
             }
 
@@ -898,51 +903,19 @@ namespace CollegeManagement.API.Services.Implementations
                 bool invIsDeleted = false;
                 bool found = false;
 
-                // 1. Query Staff table first (primary modern storage for teaching/non-teaching staff)
-                try
+                var invs = await _examinationRepository.GetAvailableInvigilatorsAsync(request.ExamDate, request.StartTime, request.EndTime);
+                var staff = invs.FirstOrDefault(s => s.Id == invId);
+                if (staff != null)
                 {
-                    var staff = await _context.Staffs.AsNoTracking()
-                        .Where(s => s.Id == invId)
-                        .Select(s => new { s.Id, s.FirstName, s.LastName, s.Status, s.IsDeleted })
-                        .FirstOrDefaultAsync();
-
-                    if (staff != null)
-                    {
-                        found = true;
-                        invFirstName = staff.FirstName;
-                        invLastName = staff.LastName;
-                        invStatus = staff.Status;
-                        invIsDeleted = staff.IsDeleted;
-                    }
+                    found = true;
+                    invFirstName = staff.FirstName;
+                    invLastName = staff.LastName;
+                    invStatus = "Active";
+                    invIsDeleted = false;
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogWarning(ex, "Staff table lookup failed for Invigilator ID {InvId}", invId);
-                }
-
-                // 2. Fallback to Faculties table (legacy)
-                if (!found)
-                {
-                    try
-                    {
-                        var fac = await _context.Faculties.AsNoTracking()
-                            .Where(f => f.Id == invId)
-                            .Select(f => new { f.Id, f.FirstName, f.LastName, f.Status, f.IsDeleted })
-                            .FirstOrDefaultAsync();
-
-                        if (fac != null)
-                        {
-                            found = true;
-                            invFirstName = fac.FirstName;
-                            invLastName = fac.LastName;
-                            invStatus = fac.Status;
-                            invIsDeleted = fac.IsDeleted;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Faculties table lookup failed for Invigilator ID {InvId}", invId);
-                    }
+                    found = true;
                 }
 
                 if (!found)
@@ -987,11 +960,13 @@ namespace CollegeManagement.API.Services.Implementations
             var schedule = _mapper.Map<ExamSchedule>(request);
             schedule.CampusId = resolvedCampusId;
 
-            bool isObj = string.Equals(schedule.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
+            bool isExamRegular = string.Equals(exam.ExamCategory, "Regular", StringComparison.OrdinalIgnoreCase);
+            bool isObj = !isExamRegular && (
+                         string.Equals(schedule.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(schedule.ScheduleMode, "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(schedule.ScheduleMode, "COMBINED", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(schedule.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase);
+                         string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase));
 
             if (isObj)
             {
@@ -1025,10 +1000,8 @@ namespace CollegeManagement.API.Services.Implementations
                         }
                         else if (exam.GroupId > 0)
                         {
-                            var coreSubs = await _context.Subjects
-                                .Where(s => s.IsActive && s.GroupId == exam.GroupId && (s.SubjectType == "Core" || !s.Practical))
-                                .Select(s => s.SubjectId)
-                                .ToListAsync();
+                            var eligible = await _examinationRepository.GetEligibleSubjectsForExamAsync(exam.ExaminationId);
+                            var coreSubs = eligible.Select(s => s.SubjectId).ToList();
                             if (coreSubs.Any())
                             {
                                 schedule.IncludedSubjectIds = string.Join(",", coreSubs.Distinct());
@@ -1040,6 +1013,20 @@ namespace CollegeManagement.API.Services.Implementations
                 if (schedule.IncludedSubjectIdList.Any())
                 {
                     await _examinationRepository.SaveExaminationSubjectsAsync(exam.ExaminationId, schedule.IncludedSubjectIdList);
+                }
+            }
+            else
+            {
+                schedule.ScheduleMode = "SUBJECT_WISE";
+                if (string.Equals(schedule.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(schedule.ExamMode))
+                {
+                    schedule.ExamMode = "Written";
+                }
+                schedule.PatternName = null;
+                schedule.IncludedSubjectIds = schedule.SubjectId > 0 ? schedule.SubjectId.ToString() : null;
+                if (!schedule.GroupId.HasValue || schedule.GroupId.Value <= 0)
+                {
+                    schedule.GroupId = request.GroupId ?? exam.GroupId;
                 }
             }
 
@@ -1083,11 +1070,13 @@ namespace CollegeManagement.API.Services.Implementations
             var response = _mapper.Map<ExamScheduleResponse>(schedule);
 
             var exam = schedule.Examination ?? await _examinationRepository.GetExaminationByIdAsync(schedule.ExaminationId);
-            bool isObj = string.Equals(response.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
+            bool isExamRegular = exam != null && string.Equals(exam.ExamCategory, "Regular", StringComparison.OrdinalIgnoreCase);
+            bool isObj = !isExamRegular && (
+                         string.Equals(response.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(response.ScheduleMode, "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(response.ScheduleMode, "COMBINED", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(response.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) ||
-                         (exam != null && string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase));
+                         (exam != null && string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase)));
 
             if (isObj)
             {
@@ -1106,16 +1095,24 @@ namespace CollegeManagement.API.Services.Implementations
                     }
                     else if (exam != null && exam.GroupId > 0)
                     {
-                        var coreSubs = await _context.Subjects
-                            .Where(sub => sub.IsActive && sub.GroupId == exam.GroupId && (sub.SubjectType == "Core" || !sub.Practical))
-                            .Select(sub => sub.SubjectId)
-                            .ToListAsync();
+                        var eligible = await _examinationRepository.GetEligibleSubjectsForExamAsync(exam.ExaminationId);
+                        var coreSubs = eligible.Select(s => s.SubjectId).ToList();
                         if (coreSubs.Any())
                         {
                             response.IncludedSubjectIds = coreSubs;
                         }
                     }
                 }
+            }
+            else
+            {
+                response.ScheduleMode = "SUBJECT_WISE";
+                if (string.Equals(response.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(response.ExamMode))
+                {
+                    response.ExamMode = "Written";
+                }
+                response.PatternName = null;
+                response.IncludedSubjectIds = response.SubjectId > 0 ? new List<int> { response.SubjectId } : null;
             }
 
             return response;
@@ -1134,42 +1131,11 @@ namespace CollegeManagement.API.Services.Implementations
                 var schedules = (await _examinationRepository.GetExamSchedulesAsync(examinationId)).ToList();
                 var mapped = _mapper.Map<IEnumerable<ExamScheduleResponse>>(schedules).ToList();
 
-                var exam = await _context.Examinations.AsNoTracking().FirstOrDefaultAsync(e => e.ExaminationId == examinationId.Value);
+                var exam = await _examinationRepository.GetExaminationByIdAsync(examinationId.Value);
                 if (exam != null && mapped.Any())
                 {
-                    var scheduleIds = mapped.Select(s => s.ExamScheduleId).ToList();
-                    var allInvAssignments = await _context.InvigilatorAssignments
-                        .Include(ia => ia.InvigilatorStaff)
-                        .Where(ia => scheduleIds.Contains(ia.ExamScheduleId))
-                        .ToListAsync();
-
-                    // Calculate genuine candidate count according to exam's group, academic level, and program
-                    var studentQuery = _context.Students
-                        .Where(st => st.IsActive && st.Status == "Active");
-
-                    if (exam.CampusId.HasValue && exam.CampusId.Value > 0)
-                        studentQuery = studentQuery.Where(st => st.CampusId == exam.CampusId.Value || st.CampusId == null || st.CampusId == 0);
-
-                    if (exam.GroupId > 0)
-                        studentQuery = studentQuery.Where(st => st.GroupId == exam.GroupId);
-
-                    if (exam.AcademicLevelId > 0)
-                        studentQuery = studentQuery.Where(st => st.AcademicLevelId == exam.AcademicLevelId);
-
-                    if (exam.ProgramId.HasValue && exam.ProgramId.Value > 0)
-                        studentQuery = studentQuery.Where(st => st.ProgramId == exam.ProgramId.Value);
-
-                    int candidateCount = await studentQuery.CountAsync();
-                    if (candidateCount <= 0 && exam.GroupId > 0)
-                    {
-                        var fallbackQuery = _context.Students
-                            .Where(st => st.IsActive && st.Status == "Active" && st.GroupId == exam.GroupId);
-                        if (exam.CampusId.HasValue && exam.CampusId.Value > 0)
-                            fallbackQuery = fallbackQuery.Where(st => st.CampusId == exam.CampusId.Value || st.CampusId == null || st.CampusId == 0);
-                        if (exam.AcademicLevelId > 0)
-                            fallbackQuery = fallbackQuery.Where(st => st.AcademicLevelId == exam.AcademicLevelId);
-                        candidateCount = await fallbackQuery.CountAsync();
-                    }
+                    var schedContext = await _examinationRepository.GetSchedulingContextAsync(examinationId.Value);
+                    int candidateCount = schedContext.TotalEligibleStudents > 0 ? schedContext.TotalEligibleStudents : 30;
 
                     foreach (var s in mapped)
                     {
@@ -1177,11 +1143,13 @@ namespace CollegeManagement.API.Services.Implementations
                         if (s.GroupId == null || s.GroupId <= 0) s.GroupId = exam.GroupId;
                         if (s.AcademicLevelId == null || s.AcademicLevelId <= 0) s.AcademicLevelId = exam.AcademicLevelId;
 
-                        bool isObjSchedule = string.Equals(s.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
+                        bool isExamRegular = exam != null && string.Equals(exam.ExamCategory, "Regular", StringComparison.OrdinalIgnoreCase);
+                        bool isObjSchedule = !isExamRegular && (
+                                              string.Equals(s.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
                                               string.Equals(s.ScheduleMode, "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
                                               string.Equals(s.ScheduleMode, "COMBINED", StringComparison.OrdinalIgnoreCase) ||
                                               string.Equals(s.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) ||
-                                              string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase);
+                                              string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase));
 
                         if (isObjSchedule)
                         {
@@ -1200,10 +1168,8 @@ namespace CollegeManagement.API.Services.Implementations
                                 }
                                 else if (exam.GroupId > 0)
                                 {
-                                    var coreSubs = await _context.Subjects
-                                        .Where(sub => sub.IsActive && sub.GroupId == exam.GroupId && (sub.SubjectType == "Core" || !sub.Practical))
-                                        .Select(sub => sub.SubjectId)
-                                        .ToListAsync();
+                                    var eligible = await _examinationRepository.GetEligibleSubjectsForExamAsync(exam.ExaminationId);
+                                    var coreSubs = eligible.Select(sub => sub.SubjectId).ToList();
                                     if (coreSubs.Any())
                                     {
                                         s.IncludedSubjectIds = coreSubs;
@@ -1212,8 +1178,18 @@ namespace CollegeManagement.API.Services.Implementations
                                 }
                             }
                         }
+                        else
+                        {
+                            s.ScheduleMode = "SUBJECT_WISE";
+                            if (string.Equals(s.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(s.ExamMode))
+                            {
+                                s.ExamMode = "Written";
+                            }
+                            s.PatternName = null;
+                            s.IncludedSubjectIds = s.SubjectId > 0 ? new List<int> { s.SubjectId } : null;
+                        }
 
-                        var sInvs = allInvAssignments.Where(ia => ia.ExamScheduleId == s.ExamScheduleId).ToList();
+                        var sInvs = (await _examinationRepository.GetInvigilatorsByScheduleIdAsync(s.ExamScheduleId)).ToList();
                         s.InvigilatorAssignments = sInvs.Select(ia => new InvigilatorAssignmentResponse
                         {
                             InvigilatorAssignmentId = ia.InvigilatorAssignmentId,
@@ -1221,11 +1197,10 @@ namespace CollegeManagement.API.Services.Implementations
                             InvigilatorId = ia.InvigilatorId,
                             FacultyId = ia.InvigilatorId,
                             StaffId = ia.InvigilatorId,
-                            InvigilatorName = ia.InvigilatorStaff != null ? $"{ia.InvigilatorStaff.FirstName} {ia.InvigilatorStaff.LastName}".Trim() : string.Empty,
+                            InvigilatorName = ia.InvigilatorName,
                             HallNumber = ia.HallNumber,
                             AssignedAt = ia.AssignedAt
                         }).ToList();
-
                         if (s.HallAssignments == null || !s.HallAssignments.Any())
                         {
                             string hallName = !string.IsNullOrWhiteSpace(s.Hall) ? s.Hall : (!string.IsNullOrWhiteSpace(s.RoomNumber) ? s.RoomNumber : "Exam Hall");
@@ -1352,11 +1327,13 @@ namespace CollegeManagement.API.Services.Implementations
             if (request.PassingMarks.HasValue) schedule.PassingMarks = request.PassingMarks.Value;
             schedule.CampusId = request.CampusId.HasValue && request.CampusId.Value > 0 ? request.CampusId.Value : (parentExam?.CampusId ?? schedule.CampusId);
 
-            bool isObj = string.Equals(schedule.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
+            bool isParentRegular = parentExam != null && string.Equals(parentExam.ExamCategory, "Regular", StringComparison.OrdinalIgnoreCase);
+            bool isObj = !isParentRegular && (
+                         string.Equals(schedule.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(schedule.ScheduleMode, "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(schedule.ScheduleMode, "COMBINED", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(schedule.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) ||
-                         (parentExam != null && string.Equals(parentExam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase));
+                         (parentExam != null && string.Equals(parentExam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase)));
 
             if (isObj)
             {
@@ -1374,6 +1351,16 @@ namespace CollegeManagement.API.Services.Implementations
                         schedule.IncludedSubjectIds = string.Join(",", examSubs.Distinct());
                     }
                 }
+            }
+            else
+            {
+                schedule.ScheduleMode = "SUBJECT_WISE";
+                if (string.Equals(schedule.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(schedule.ExamMode))
+                {
+                    schedule.ExamMode = "Written";
+                }
+                schedule.PatternName = null;
+                schedule.IncludedSubjectIds = schedule.SubjectId > 0 ? schedule.SubjectId.ToString() : null;
             }
 
             await _examinationRepository.UpdateExamScheduleAsync(schedule);
@@ -1623,11 +1610,13 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            bool isPatternBatch = string.Equals(request.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
+            bool isExamRegular = string.Equals(exam.ExamCategory, "Regular", StringComparison.OrdinalIgnoreCase);
+            bool isPatternBatch = !isExamRegular && (
+                                  string.Equals(request.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
                                   string.Equals(request.ScheduleMode, "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
                                   string.Equals(request.ScheduleMode, "COMBINED", StringComparison.OrdinalIgnoreCase) ||
                                   string.Equals(request.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) ||
-                                  string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase);
+                                  string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase));
 
             var createdSchedules = new List<ExamScheduleResponse>();
 
@@ -1717,14 +1706,7 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<IEnumerable<ExamScheduleResponse>> AutoScheduleExaminationAsync(int examinationId, AutoScheduleExaminationRequest request)
         {
-            // 1. Examination Existence & Status Validation
-            var exam = await _context.Examinations
-                .Include(e => e.Board)
-                .Include(e => e.AcademicYear)
-                .Include(e => e.AcademicLevel)
-                .Include(e => e.Group)
-                .FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
-
+            var exam = await _examinationRepository.GetExaminationByIdAsync(examinationId);
             if (exam == null)
             {
                 throw new KeyNotFoundException($"Examination with ID {examinationId} was not found.");
@@ -1745,7 +1727,6 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException($"Cannot schedule examination '{exam.ExamName}' because it has already been completed.");
             }
 
-            // 2. Resolve CampusId, GroupId, AcademicLevelId
             int resolvedCampusId = request.CampusId.HasValue && request.CampusId.Value > 0
                 ? request.CampusId.Value
                 : (exam.CampusId.HasValue && exam.CampusId.Value > 0 ? exam.CampusId.Value : 1);
@@ -1763,10 +1744,8 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException("A valid Group ID is required for automatic scheduling.");
             }
 
-            var group = await _context.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.GroupId == targetGroupId);
-            string groupCode = group?.GroupCode ?? group?.GroupName ?? $"Group {targetGroupId}";
+            string groupCode = exam.Group?.GroupName ?? $"Group {targetGroupId}";
 
-            // 3. Timings & Schedule Mode
             var startTime = request.DefaultStartTime ?? new TimeOnly(9, 0);
             if (startTime.Hour >= 1 && startTime.Hour <= 6)
             {
@@ -1785,97 +1764,41 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (endTime <= startTime)
             {
-                throw new ValidationException($"End Time ({endTime:HH\\:mm}) must be later than Start Time ({startTime:HH\\:mm}).");
+                throw new ValidationException($"End Time ({endTime:HH:mm}) must be later than Start Time ({startTime:HH:mm}).");
             }
 
-            bool isPatternWise = string.Equals(request.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
-                                 string.Equals(exam.ExamPattern, "OBJECTIVE", StringComparison.OrdinalIgnoreCase);
+            bool isExamRegular = string.Equals(exam.ExamCategory, "Regular", StringComparison.OrdinalIgnoreCase);
+            bool isPatternWise = !isExamRegular && (
+                                 string.Equals(request.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(exam.ExamPattern, "OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase));
 
-            // 4. Check & Handle Existing Schedules for this exam
-            var existingGroupSchedules = await _context.ExamSchedules
-                .Where(s => s.IsActive && s.ExaminationId == examinationId)
-                .ToListAsync();
-
+            var existingGroupSchedules = (await _examinationRepository.GetExamSchedulesAsync(examinationId)).ToList();
             if (existingGroupSchedules.Any() && !request.ReplaceExisting)
             {
                 throw new ValidationException($"This Examination already has {existingGroupSchedules.Count} saved schedule(s). Select 'Replace Existing' or edit/remove those entries before automatic scheduling.");
             }
 
-            // 5. Query Active Subjects to Schedule
+            var eligibleSubjects = (await _examinationRepository.GetEligibleSubjectsForExamAsync(examinationId)).ToList();
             List<Subject> subjectsToSchedule;
             if (request.SubjectIds != null && request.SubjectIds.Any())
             {
-                subjectsToSchedule = await _context.Subjects
-                    .Where(s => s.IsActive && request.SubjectIds.Contains(s.SubjectId))
-                    .OrderBy(s => s.SubjectId)
-                    .ToListAsync();
+                subjectsToSchedule = eligibleSubjects.Where(s => request.SubjectIds.Contains(s.SubjectId)).ToList();
+                if (!subjectsToSchedule.Any()) subjectsToSchedule = eligibleSubjects;
             }
             else
             {
-                var subQuery = _context.Subjects
-                    .Where(s => s.IsActive && s.GroupId == targetGroupId);
-                if (targetLevelId > 0)
-                {
-                    subQuery = subQuery.Where(s => s.AcademicLevelId == targetLevelId);
-                }
-                if (exam.BoardId > 0)
-                {
-                    subQuery = subQuery.Where(s => s.BoardId == exam.BoardId || s.BoardId == 0);
-                }
-                subjectsToSchedule = await subQuery.OrderBy(s => s.SubjectId).ToListAsync();
-
-                if (!subjectsToSchedule.Any() && targetLevelId > 0)
-                {
-                    subjectsToSchedule = await _context.Subjects
-                        .Where(s => s.IsActive && s.GroupId == targetGroupId && (exam.BoardId == 0 || s.BoardId == exam.BoardId || s.BoardId == 0))
-                        .OrderBy(s => s.SubjectId)
-                        .ToListAsync();
-                }
+                subjectsToSchedule = eligibleSubjects;
             }
 
             if (!subjectsToSchedule.Any())
             {
-                throw new ValidationException($"No active subjects found for Group '{groupCode}' (ID {targetGroupId}) to auto-schedule.");
+                throw new ValidationException($"No eligible active subjects found for Group '{groupCode}' in this examination.");
             }
 
-            // 6. Calculate Candidate Strength scoped to Campus, Group, Academic Level, and Program
-            int? targetProgramId = request.ProgramId.HasValue && request.ProgramId.Value > 0
-                ? request.ProgramId.Value
-                : (exam.ProgramId.HasValue && exam.ProgramId.Value > 0 ? exam.ProgramId.Value : null);
+            var schedContext = await _examinationRepository.GetSchedulingContextAsync(examinationId);
+            int candidateStrength = schedContext.TotalEligibleStudents > 0 ? schedContext.TotalEligibleStudents : 30;
 
-            var studentBaseQuery = _context.Students
-                .Where(st => st.IsActive && st.Status == "Active" && (st.CampusId == resolvedCampusId || st.CampusId == null || st.CampusId == 0));
-
-            if (targetGroupId > 0)
-            {
-                studentBaseQuery = studentBaseQuery.Where(st => st.GroupId == targetGroupId);
-            }
-            if (targetLevelId > 0)
-            {
-                studentBaseQuery = studentBaseQuery.Where(st => st.AcademicLevelId == targetLevelId);
-            }
-            if (targetProgramId.HasValue && targetProgramId.Value > 0)
-            {
-                studentBaseQuery = studentBaseQuery.Where(st => st.ProgramId == targetProgramId.Value);
-            }
-
-            int candidateStrength = await studentBaseQuery.CountAsync();
-
-            // If zero with program filter, fallback to group + level
-            if (candidateStrength <= 0 && targetProgramId.HasValue)
-            {
-                var groupLevelQuery = _context.Students
-                    .Where(st => st.IsActive && st.Status == "Active" && (st.CampusId == resolvedCampusId || st.CampusId == null || st.CampusId == 0) && st.GroupId == targetGroupId);
-                if (targetLevelId > 0) groupLevelQuery = groupLevelQuery.Where(st => st.AcademicLevelId == targetLevelId);
-                candidateStrength = await groupLevelQuery.CountAsync();
-            }
-
-            if (candidateStrength <= 0)
-            {
-                candidateStrength = 30; // Fallback default candidate count
-            }
-
-            // 7. Generate Sequential Exam Dates (Skipping Sundays if requested)
             var dates = new List<DateOnly>();
             var currDate = exam.StartDate == default ? DateOnly.FromDateTime(DateTime.Today) : exam.StartDate;
 
@@ -1899,80 +1822,44 @@ namespace CollegeManagement.API.Services.Implementations
             if (exam.EndDate != default && lastScheduledDate > exam.EndDate)
             {
                 exam.EndDate = lastScheduledDate;
-                await _context.SaveChangesAsync();
+                await _examinationRepository.UpdateExaminationAsync(exam);
             }
 
-            // 8. Available Rooms for Campus
-            var rooms = await _context.Rooms
-                .Where(r => r.IsActive && (r.CampusId == resolvedCampusId || r.CampusId == 0))
-                .OrderByDescending(r => r.Capacity)
-                .ToListAsync();
-
-            if (!rooms.Any())
+            var availableRooms = (await _examinationRepository.GetAvailableHallsAsync(dates.First(), startTime, endTime)).ToList();
+            if (!availableRooms.Any())
             {
-                rooms = await _context.Rooms
-                    .Where(r => r.IsActive)
-                    .OrderByDescending(r => r.Capacity)
-                    .ToListAsync();
+                availableRooms = (await _examinationRepository.GetAvailableHallsAsync(dates.First(), startTime, endTime, 0)).ToList();
             }
-
-            if (!rooms.Any())
+            if (!availableRooms.Any())
             {
                 throw new ValidationException("No active rooms/examination halls found in the institution.");
             }
 
-            // 9. Available Staff / Invigilators for Campus (Prioritize Teaching staff)
-            var staffList = await _context.Staffs
-                .Where(s => !s.IsDeleted && s.Status == "Active" && s.StaffType == "Teaching" && (s.CampusId == resolvedCampusId || s.CampusId == null))
-                .ToListAsync();
+            var rooms = availableRooms;
 
-            if (!staffList.Any())
-            {
-                staffList = await _context.Staffs
-                    .Where(s => !s.IsDeleted && s.Status == "Active" && s.StaffType == "Teaching")
-                    .ToListAsync();
-            }
-
-            if (!staffList.Any())
-            {
-                staffList = await _context.Staffs
-                    .Where(s => !s.IsDeleted && s.Status == "Active" && (s.CampusId == resolvedCampusId || s.CampusId == null))
-                    .ToListAsync();
-            }
-
-            if (!staffList.Any())
+            var availableStaff = (await _examinationRepository.GetAvailableInvigilatorsAsync(dates.First(), startTime, endTime)).ToList();
+            if (!availableStaff.Any())
             {
                 throw new ValidationException("No active teaching faculty/staff found for invigilation duties.");
             }
 
-            // Subject teacher exclusions
-            var allAllocations = await _context.StaffSubjectAllocations.AsNoTracking().ToListAsync();
-            var subjectTeachersMap = allAllocations
-                .GroupBy(a => a.SubjectId)
-                .ToDictionary(g => g.Key, g => g.Select(a => a.StaffId).ToHashSet());
+            var staffList = availableStaff.Select(f => new Models.Staff.Staff
+            {
+                Id = f.Id,
+                FirstName = f.FirstName,
+                LastName = f.LastName,
+                Status = "Active",
+                StaffType = "Teaching",
+                Email = f.Email
+            }).ToList();
 
-            // Existing bookings within date range across all exams
-            var minDate = dates.First();
-            var maxDate = dates.Last();
-            var bookedSchedules = await _context.ExamSchedules
-                .Where(s => s.IsActive && s.ExamDate >= minDate && s.ExamDate <= maxDate)
-                .ToListAsync();
+            var subjectTeachersMap = new Dictionary<int, HashSet<int>>();
+            var bookedSchedules = (await _examinationRepository.GetExamSchedulesAsync(null)).ToList();
+            var bookedInvigilators = new List<InvigilatorAssignment>();
 
-            var bookedScheduleIds = bookedSchedules.Select(s => s.ExamScheduleId).ToList();
-            var bookedInvigilators = await _context.InvigilatorAssignments
-                .Where(ia => bookedScheduleIds.Contains(ia.ExamScheduleId))
-                .ToListAsync();
-
-            // Duty counts for fair load balancing
             var staffDutyCounts = new Dictionary<int, int>();
             foreach (var st in staffList) staffDutyCounts[st.Id] = 0;
-            foreach (var ia in bookedInvigilators)
-            {
-                if (staffDutyCounts.ContainsKey(ia.InvigilatorId))
-                    staffDutyCounts[ia.InvigilatorId]++;
-            }
 
-            // In-memory slot trackers for this batch to prevent intra-batch conflicts
             var batchAllocatedRooms = new List<(DateOnly date, TimeOnly start, TimeOnly end, int roomId, string hall)>();
             var batchAllocatedStaff = new List<(DateOnly date, TimeOnly start, TimeOnly end, int staffId)>();
 
@@ -2008,202 +1895,146 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // 10. Persist All Atomically with Database Transaction within Resilient Execution Strategy
-            var strategy = _context.Database.CreateExecutionStrategy();
             var createdResponses = new List<ExamScheduleResponse>();
 
-            await strategy.ExecuteAsync(async () =>
+            if (request.ReplaceExisting)
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
+                await _examinationRepository.DeleteExamSchedulesByExamIdAsync(examinationId);
+            }
 
-                try
+            decimal defaultTotalMarks = request.TotalMarks.HasValue && request.TotalMarks.Value > 0
+                ? request.TotalMarks.Value
+                : (exam.TotalMarks.HasValue && exam.TotalMarks.Value > 0
+                    ? exam.TotalMarks.Value
+                    : (isPatternWise ? 300.00m : 100.00m));
+
+            decimal defaultPassingMarks = request.PassingMarks.HasValue && request.PassingMarks.Value > 0
+                ? request.PassingMarks.Value
+                : (exam.PassPercentage.HasValue && exam.PassPercentage.Value > 0
+                    ? Math.Round(defaultTotalMarks * exam.PassPercentage.Value / 100.0m, 2)
+                    : (isPatternWise ? 120.00m : 35.00m));
+
+            foreach (var (sub, examDate, roomAllocs) in plannedSessions)
+            {
+                var primaryAlloc = roomAllocs[0];
+                var primaryRoom = primaryAlloc.room;
+                var primaryInv = primaryAlloc.invigilators.FirstOrDefault();
+
+                string hallName = !string.IsNullOrWhiteSpace(primaryRoom.RoomNumber)
+                    ? primaryRoom.RoomNumber
+                    : (!string.IsNullOrWhiteSpace(primaryRoom.RoomName) ? primaryRoom.RoomName : $"Room {primaryRoom.RoomId}");
+
+                string invName = primaryInv != null
+                    ? $"{primaryInv.FirstName} {primaryInv.LastName}".Trim()
+                    : string.Empty;
+
+                var newSchedule = new ExamSchedule
                 {
-                    createdResponses.Clear();
+                    ExaminationId = examinationId,
+                    SubjectId = sub?.SubjectId ?? subjectsToSchedule[0].SubjectId,
+                    GroupId = targetGroupId,
+                    CampusId = resolvedCampusId,
+                    ExamDate = examDate,
+                    StartTime = startTime,
+                    EndTime = endTime,
+                    ScheduleMode = isPatternWise ? "PATTERN_WISE" : "SUBJECT_WISE",
+                    SessionId = isPatternWise ? (request.PatternName ?? "Core Session") : null,
+                    PatternName = isPatternWise ? (request.PatternName ?? "Core Session") : null,
+                    RoomId = primaryRoom.RoomId,
+                    Hall = hallName,
+                    InvigilatorId = primaryInv?.Id,
+                    Invigilator = invName,
+                    ExamMode = isPatternWise ? "Objective" : "Written",
+                    IncludedSubjectIds = isPatternWise ? string.Join(",", subjectsToSchedule.Select(s => s.SubjectId)) : null,
+                    MaxMarks = defaultTotalMarks,
+                    PassingMarks = defaultPassingMarks,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
 
-                    // If replaceExisting or cleaning up prior schedules for this exam & subjects
-                    var targetSubjectIds = plannedSessions.Select(p => p.subject?.SubjectId ?? 0).Where(id => id > 0).ToHashSet();
-                    var priorSchedules = await _context.ExamSchedules
-                        .Where(s => s.IsActive && s.ExaminationId == examinationId && (targetSubjectIds.Contains(s.SubjectId) || request.ReplaceExisting))
-                        .ToListAsync();
+                var created = await _examinationRepository.CreateExamScheduleAsync(newSchedule);
 
-                    if (priorSchedules.Any())
+                var invAssignmentsList = new List<InvigilatorAssignmentResponse>();
+                var hallAssignmentsList = new List<HallAssignmentDto>();
+                var invTuples = new List<(int invigilatorId, string hallNumber)>();
+
+                foreach (var (r, allocCount, rInvs) in roomAllocs)
+                {
+                    string rHall = !string.IsNullOrWhiteSpace(r.RoomNumber)
+                        ? r.RoomNumber
+                        : (!string.IsNullOrWhiteSpace(r.RoomName) ? r.RoomName : $"Room {r.RoomId}");
+
+                    string rHallInvNames = string.Join(", ", rInvs.Select(inv => $"{inv.FirstName} {inv.LastName}".Trim()).Where(n => !string.IsNullOrEmpty(n)));
+
+                    hallAssignmentsList.Add(new HallAssignmentDto
                     {
-                        var priorSchedIds = priorSchedules.Select(s => s.ExamScheduleId).ToList();
-                        var priorAssignments = await _context.InvigilatorAssignments
-                            .Where(ia => priorSchedIds.Contains(ia.ExamScheduleId))
-                            .ToListAsync();
-                        if (priorAssignments.Any()) _context.InvigilatorAssignments.RemoveRange(priorAssignments);
-                        _context.ExamSchedules.RemoveRange(priorSchedules);
-                        await _context.SaveChangesAsync();
-                    }
+                        HallId = r.RoomId,
+                        HallName = rHall,
+                        RoomNumber = rHall,
+                        CandidateCount = allocCount,
+                        InvigilatorIds = rInvs.Select(inv => inv.Id).ToList(),
+                        InvigilatorName = rHallInvNames,
+                        Invigilator = rHallInvNames
+                    });
 
-                    decimal defaultTotalMarks = request.TotalMarks.HasValue && request.TotalMarks.Value > 0
-                        ? request.TotalMarks.Value
-                        : (exam.TotalMarks.HasValue && exam.TotalMarks.Value > 0
-                            ? exam.TotalMarks.Value
-                            : (isPatternWise ? 300.00m : 100.00m));
-
-                    decimal defaultPassingMarks = request.PassingMarks.HasValue && request.PassingMarks.Value > 0
-                        ? request.PassingMarks.Value
-                        : (exam.PassPercentage.HasValue && exam.PassPercentage.Value > 0
-                            ? Math.Round(defaultTotalMarks * exam.PassPercentage.Value / 100.0m, 2)
-                            : (isPatternWise ? 120.00m : 35.00m));
-
-                    // Step 1: Add all ExamSchedules in batch
-                    var plannedEntities = new List<(ExamSchedule schedule, Subject? sub, List<(Models.Timetable.Room room, int count, List<Models.Staff.Staff> invigilators)> roomAllocs)>();
-
-                    foreach (var (sub, examDate, roomAllocs) in plannedSessions)
+                    foreach (var inv in rInvs)
                     {
-                        var primaryAlloc = roomAllocs[0];
-                        var primaryRoom = primaryAlloc.room;
-                        var primaryInv = primaryAlloc.invigilators.FirstOrDefault();
-
-                        string hallName = !string.IsNullOrWhiteSpace(primaryRoom.RoomNumber)
-                            ? primaryRoom.RoomNumber
-                            : (!string.IsNullOrWhiteSpace(primaryRoom.RoomName) ? primaryRoom.RoomName : $"Room {primaryRoom.RoomId}");
-
-                        string invName = primaryInv != null
-                            ? $"{primaryInv.FirstName} {primaryInv.LastName}".Trim()
-                            : string.Empty;
-
-                        var newSchedule = new ExamSchedule
+                        invTuples.Add((inv.Id, rHall));
+                        invAssignmentsList.Add(new InvigilatorAssignmentResponse
                         {
-                            ExaminationId = examinationId,
-                            SubjectId = sub?.SubjectId ?? subjectsToSchedule[0].SubjectId,
-                            ExamDate = examDate,
-                            StartTime = startTime,
-                            EndTime = endTime,
-                            ScheduleMode = isPatternWise ? "PATTERN_WISE" : "SUBJECT_WISE",
-                            SessionId = isPatternWise ? (request.PatternName ?? "Core Session") : null,
-                            RoomId = primaryRoom.RoomId,
-                            Hall = hallName,
-                            InvigilatorId = primaryInv?.Id,
-                            Invigilator = invName,
-                            ExamMode = isPatternWise ? "Objective" : "Written",
-                            MaxMarks = defaultTotalMarks,
-                            PassingMarks = defaultPassingMarks,
-                            IsActive = true,
-                            CreatedAt = DateTime.UtcNow
-                        };
-
-                        var createdSchedule = await _examinationRepository.CreateExamScheduleAsync(newSchedule);
-                        plannedEntities.Add((createdSchedule, sub, roomAllocs));
-                    }
-
-                    // Step 2: Add all InvigilatorAssignments in batch
-                    var allNewAssignments = new List<InvigilatorAssignment>();
-
-                    foreach (var (newSchedule, sub, roomAllocs) in plannedEntities)
-                    {
-                        var invAssignmentsList = new List<InvigilatorAssignmentResponse>();
-                        var hallAssignmentsList = new List<HallAssignmentDto>();
-
-                        foreach (var (r, allocCount, rInvs) in roomAllocs)
-                        {
-                            string rHall = !string.IsNullOrWhiteSpace(r.RoomNumber)
-                                ? r.RoomNumber
-                                : (!string.IsNullOrWhiteSpace(r.RoomName) ? r.RoomName : $"Room {r.RoomId}");
-
-                            string rHallInvNames = string.Join(", ", rInvs.Select(inv => $"{inv.FirstName} {inv.LastName}".Trim()).Where(n => !string.IsNullOrEmpty(n)));
-
-                            var hallDto = new HallAssignmentDto
-                            {
-                                HallId = r.RoomId,
-                                HallName = rHall,
-                                RoomNumber = rHall,
-                                CandidateCount = allocCount,
-                                InvigilatorIds = rInvs.Select(inv => inv.Id).ToList(),
-                                InvigilatorName = rHallInvNames,
-                                Invigilator = rHallInvNames
-                            };
-                            hallAssignmentsList.Add(hallDto);
-
-                            foreach (var inv in rInvs)
-                            {
-                                var assignment = new InvigilatorAssignment
-                                {
-                                    ExamScheduleId = newSchedule.ExamScheduleId,
-                                    InvigilatorId = inv.Id,
-                                    HallNumber = rHall,
-                                    AssignedAt = DateTime.UtcNow
-                                };
-                                allNewAssignments.Add(assignment);
-
-                                invAssignmentsList.Add(new InvigilatorAssignmentResponse
-                                {
-                                    InvigilatorAssignmentId = assignment.InvigilatorAssignmentId,
-                                    ExamScheduleId = newSchedule.ExamScheduleId,
-                                    InvigilatorId = inv.Id,
-                                    FacultyId = inv.Id,
-                                    StaffId = inv.Id,
-                                    InvigilatorName = $"{inv.FirstName} {inv.LastName}".Trim(),
-                                    HallNumber = rHall,
-                                    AssignedAt = assignment.AssignedAt
-                                });
-                            }
-                        }
-
-                        createdResponses.Add(new ExamScheduleResponse
-                        {
-                            ExamScheduleId = newSchedule.ExamScheduleId,
-                            ExaminationId = examinationId,
-                            SubjectId = newSchedule.SubjectId,
-                            SubjectName = sub?.SubjectName ?? string.Empty,
-                            SubjectCode = sub?.SubjectCode ?? string.Empty,
-                            GroupId = targetGroupId,
-                            AcademicLevelId = targetLevelId,
-                            ExamDate = newSchedule.ExamDate,
-                            StartTime = newSchedule.StartTime,
-                            EndTime = newSchedule.EndTime,
-                            SessionId = newSchedule.SessionId,
-                            ScheduleMode = newSchedule.ScheduleMode,
-                            PatternName = isPatternWise ? (request.PatternName ?? "Core Session") : null,
-                            RoomId = newSchedule.RoomId,
-                            InvigilatorId = newSchedule.InvigilatorId,
-                            Hall = newSchedule.Hall,
-                            RoomNumber = newSchedule.Hall,
-                            Invigilator = newSchedule.Invigilator,
-                            InvigilatorName = newSchedule.Invigilator,
-                            ExamMode = newSchedule.ExamMode,
-                            MaxMarks = newSchedule.MaxMarks,
-                            PassingMarks = newSchedule.PassingMarks,
-                            CandidateCount = candidateStrength,
-                            Status = "Scheduled",
-                            IncludedSubjectIds = isPatternWise ? subjectsToSchedule.Select(s => s.SubjectId).ToList() : null,
-                            HallAssignments = hallAssignmentsList,
-                            InvigilatorAssignments = invAssignmentsList
+                            InvigilatorAssignmentId = 0,
+                            ExamScheduleId = created.ExamScheduleId,
+                            InvigilatorId = inv.Id,
+                            FacultyId = inv.Id,
+                            StaffId = inv.Id,
+                            InvigilatorName = $"{inv.FirstName} {inv.LastName}".Trim(),
+                            HallNumber = rHall,
+                            AssignedAt = DateTime.UtcNow
                         });
                     }
-
-                    foreach (var (newSchedule, sub, roomAllocs) in plannedEntities)
-                    {
-                        var assignments = roomAllocs
-                            .SelectMany(ra => {
-                                string rHall = !string.IsNullOrWhiteSpace(ra.room.RoomNumber) ? ra.room.RoomNumber : (ra.room.RoomName ?? string.Empty);
-                                return ra.invigilators.Select(inv => (inv.Id, rHall));
-                            })
-                            .ToList();
-                        if (assignments.Any())
-                        {
-                            await _examinationRepository.AssignInvigilatorHallsAsync(newSchedule.ExamScheduleId, assignments);
-                        }
-                    }
-
-                    if (request.FinalizeSchedule)
-                    {
-                        exam.Status = "SCHEDULED";
-                        exam.UpdatedAt = DateTime.UtcNow;
-                        await _examinationRepository.UpdateExaminationAsync(exam);
-                    }
-
-                    await transaction.CommitAsync();
                 }
-                catch (Exception)
+
+                if (invTuples.Any())
                 {
-                    await transaction.RollbackAsync();
-                    throw;
+                    await _examinationRepository.AssignInvigilatorHallsAsync(created.ExamScheduleId, invTuples);
                 }
-            });
+
+                createdResponses.Add(new ExamScheduleResponse
+                {
+                    ExamScheduleId = created.ExamScheduleId,
+                    ExaminationId = examinationId,
+                    SubjectId = created.SubjectId,
+                    SubjectName = sub?.SubjectName ?? string.Empty,
+                    SubjectCode = sub?.SubjectCode ?? string.Empty,
+                    GroupId = targetGroupId,
+                    AcademicLevelId = targetLevelId,
+                    ExamDate = created.ExamDate,
+                    StartTime = created.StartTime,
+                    EndTime = created.EndTime,
+                    SessionId = created.SessionId,
+                    ScheduleMode = created.ScheduleMode,
+                    PatternName = isPatternWise ? (request.PatternName ?? "Core Session") : null,
+                    RoomId = created.RoomId,
+                    InvigilatorId = created.InvigilatorId,
+                    Hall = created.Hall,
+                    RoomNumber = created.Hall,
+                    Invigilator = created.Invigilator,
+                    InvigilatorName = created.Invigilator,
+                    ExamMode = created.ExamMode,
+                    MaxMarks = created.MaxMarks,
+                    PassingMarks = created.PassingMarks,
+                    CandidateCount = candidateStrength,
+                    Status = "Scheduled",
+                    IncludedSubjectIds = isPatternWise ? subjectsToSchedule.Select(s => s.SubjectId).ToList() : null,
+                    HallAssignments = hallAssignmentsList,
+                    InvigilatorAssignments = invAssignmentsList
+                });
+            }
+
+            if (request.FinalizeSchedule)
+            {
+                await _examinationRepository.UpdateExaminationStatusAsync(examinationId, "SCHEDULED");
+            }
 
             EvictExamCache(examinationId);
 
@@ -2427,15 +2258,22 @@ namespace CollegeManagement.API.Services.Implementations
             return await _examinationRepository.GetFacultyExamDutiesAsync(staffId, status, campusId, academicYearId, boardId);
         }
 
-        public async Task<ExaminationSettingsDto> GetExaminationSettingsAsync(int campusId)
+        public async Task<bool> ReassignInvigilatorDutyAsync(int dutyId, DTOs.Examination.Requests.ReassignInvigilatorDutyRequest request)
+        {
+            if (dutyId <= 0) throw new ValidationException("A valid duty ID is required.");
+            if (request == null || request.NewStaffId <= 0) throw new ValidationException("A valid target staff ID is required.");
+            return await _examinationRepository.ReassignInvigilatorDutyAsync(dutyId, request.NewStaffId, request.HallNumber, request.Reason);
+        }
+
+        public async Task<DTOs.Examination.ExaminationSettingsDto?> GetExaminationSettingsAsync(int campusId)
         {
             return await _examinationRepository.GetExaminationSettingsAsync(campusId);
         }
 
-        public async Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(int campusId, ExaminationSettingsDto settings)
+        public async Task<DTOs.Examination.ExaminationSettingsDto> UpdateExaminationSettingsAsync(int campusId, DTOs.Examination.ExaminationSettingsDto settings)
         {
-            settings.CampusId = campusId > 0 ? campusId : 1;
-            return await _examinationRepository.SaveExaminationSettingsAsync(settings);
+            if (settings == null) throw new ValidationException("Settings payload is required.");
+            return await _examinationRepository.SaveExaminationSettingsAsync(campusId, settings);
         }
 
         #endregion

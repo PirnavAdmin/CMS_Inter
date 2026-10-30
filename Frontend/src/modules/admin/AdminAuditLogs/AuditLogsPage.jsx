@@ -1,3 +1,4 @@
+import { SkeletonRow, SkeletonText, Skeleton } from "@/shared/components/Skeleton.jsx";
 import { useState, useEffect } from "react";
 import {
   Activity,
@@ -501,7 +502,7 @@ export default function AuditLogsPage() {
               <h2>Activity trail</h2>
               <p>{dateDescription}</p>
             </div>
-            <span>{loading ? "Loading..." : `${total} event${total === 1 ? "" : "s"}`}</span>
+            <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : `${total} event${total === 1 ? "" : "s"}`}</span>
           </div>
 
           <div className="audit-filters">
@@ -808,9 +809,7 @@ export default function AuditLogsPage() {
                   </tr>
                 )}
                 {loading && (
-                  <tr>
-                    <td className="audit-empty" colSpan="7">Loading audit trail...</td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                 )}
               </tbody>
             </table>
@@ -1111,7 +1110,7 @@ export default function AuditLogsPage() {
                     <h3>Correlated Operations in Same Request ({relatedLogs.length})</h3>
                   </div>
                   {loadingRelated ? (
-                    <small>Loading correlated events...</small>
+                    <SkeletonText lines={2} />
                   ) : relatedLogs.length > 0 ? (
                     <div className="audit-related-list">
                       {relatedLogs.map((rel) => (

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { User, Phone, Mail, MapPin, Edit3, Shield, Users, CheckCircle2 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { useParentPortal, getStoredParentProfile, saveStoredParentProfile } from "../parentData.js";
+import { useParentPortal } from "../context/ParentPortalContext.jsx";
+import { getStoredParentProfile, saveStoredParentProfile } from "../parentData.js";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 

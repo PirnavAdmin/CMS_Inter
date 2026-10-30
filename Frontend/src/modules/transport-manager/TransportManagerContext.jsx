@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -654,3 +655,86 @@ export function useTransportManager() {
 export function useTransportManagerSafe() {
   return useContext(TransportManagerContext);
 }
+
+// Persistent navigation only: records and form drafts stay in the existing APIs/state.
+export function useTransportNavigation() {
+  const [params, setParams] = useSearchParams();
+  const current = useRef({ params, setParams });
+  current.current = { params, setParams };
+  const pending = useRef(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const update = useCallback((changes, { replace = false } = {}) => {
+    if (!mounted.current) return;
+    const previous = pending.current;
+    const next = previous?.params || new URLSearchParams(current.current.params);
+    Object.entries(changes).forEach(([key, value]) => {
+      if (value == null || value === "") next.delete(key);
+      else next.set(key, String(value));
+    });
+    pending.current = { params: next, replace: previous ? previous.replace && replace : replace };
+    if (!previous) queueMicrotask(() => {
+      const target = pending.current;
+      pending.current = null;
+      if (mounted.current && target && target.params.toString() !== current.current.params.toString()) {
+        current.current.setParams(target.params, { replace: target.replace });
+      }
+    });
+  }, []);
+  return { params, update };
+}
+
+export function useTransportRouteValue(navigation, key, fallback, validate = () => true) {
+  const { update } = navigation;
+  const raw = navigation.params.get(key);
+  const fallbackText = JSON.stringify(fallback);
+  const value = useMemo(() => {
+    try {
+      let candidate = raw == null || raw === "" ? JSON.parse(fallbackText)
+        : typeof fallback === "number" ? Number(raw)
+        : typeof fallback === "boolean" ? raw === "true"
+        : typeof fallback === "object" ? JSON.parse(raw) : raw;
+      if (fallback && typeof fallback === "object" && (!candidate || typeof candidate !== "object" || Array.isArray(candidate))) return JSON.parse(fallbackText);
+      if (candidate && typeof candidate === "object" && fallback) {
+        candidate = Object.fromEntries(Object.entries(fallback).map(([field, defaultValue]) =>
+          [field, typeof candidate[field] === typeof defaultValue ? candidate[field] : defaultValue]));
+      }
+      return validate(candidate) ? candidate : JSON.parse(fallbackText);
+    } catch { return JSON.parse(fallbackText); }
+    // The serialized default and URL fully describe the navigation value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raw, fallbackText]);
+  const current = useRef(value);
+  current.current = value;
+  const setValue = useCallback((next) => {
+    const resolved = typeof next === "function" ? next(current.current) : next;
+    current.current = resolved;
+    update({ [key]: resolved == null || resolved === false ? null : typeof resolved === "object" ? JSON.stringify(resolved) : resolved });
+  }, [update, key]);
+  return [value, setValue];
+}
+
+export function useTransportRecord(navigation, key, records, getId = (record) => record.id, ready = false) {
+  const { update } = navigation;
+  const id = navigation.params.get(key);
+  const record = id ? records.find((item) => getId(item) != null && String(getId(item)) === id) || null : null;
+  const context = useTransportManagerSafe();
+  const notify = useRef(context?.showToast);
+  notify.current = context?.showToast;
+  const reported = useRef(null);
+  useEffect(() => {
+    if (!id || record || !ready) { reported.current = null; return; }
+    if (reported.current === id) return;
+    reported.current = id;
+    notify.current?.("The requested record could not be loaded or is no longer available in this view.", "error");
+  }, [id, record, ready]);
+  const identify = useRef(getId);
+  identify.current = getId;
+  const setRecord = useCallback((next) => {
+    update({ [key]: next ? identify.current(next) : null });
+  }, [update, key]);
+  return [record, setRecord];
+}
+
+export const validTransportPage = (value) => Number.isSafeInteger(value) && value > 0 && value <= 100000;
+export const validTransportDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
