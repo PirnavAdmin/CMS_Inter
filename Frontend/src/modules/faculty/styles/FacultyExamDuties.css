@@ -47,7 +47,7 @@
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary)  0.25);
   flex-shrink: 0;
 }
 
@@ -144,7 +144,7 @@
 }
 
 .fed-kpi-icon.total {
-  background: rgba(111, 132, 0, 0.12);
+  background: color-mix(in srgb, var(--cms-primary)  0.12);
   color: var(--cms-primary, #6F8400);
 }
 
@@ -211,7 +211,7 @@
   background: var(--cms-primary, #6F8400);
   color: #ffffff;
   border-color: var(--cms-primary, #6F8400);
-  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--cms-primary)  0.25);
 }
 
 .fed-search-filters {
@@ -250,7 +250,7 @@
 
 .fed-search-box input:focus {
   border-color: var(--cms-primary, #6F8400);
-  box-shadow: 0 0 0 3px rgba(111, 132, 0, 0.15);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary)  0.15);
 }
 
 .fed-search-clear {
@@ -399,7 +399,7 @@
 }
 
 .fed-type-pill.internal {
-  background: rgba(111, 132, 0, 0.12);
+  background: color-mix(in srgb, var(--cms-primary)  0.12);
   color: var(--cms-primary, #6F8400);
 }
 
@@ -625,7 +625,7 @@
 }
 
 .fed-action-btn.outline:hover {
-  background: rgba(111, 132, 0, 0.08);
+  background: color-mix(in srgb, var(--cms-primary)  0.08);
 }
 
 /* ---------------- Empty State ---------------- */

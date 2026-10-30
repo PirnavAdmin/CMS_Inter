@@ -22,13 +22,15 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 160px;
+  min-height: 180px;
+  height: 100%;
   padding: 18px 20px;
-  border: 1px solid var(--cms-border, rgba(0, 0, 0, 0.08));
+  border: 1px solid var(--cms-primary-border, rgba(0, 0, 0, 0.08));
   border-radius: 12px;
   background: var(--cms-surface, #ffffff);
   box-shadow: 0 2px 10px rgba(43, 55, 26, 0.04);
   transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  box-sizing: border-box;
 }
 
 .faculty-settings-card:hover {
@@ -134,8 +136,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid var(--cms-border, #d7ddc6);
-  background: var(--cms-soft, #f3f6e8);
+  border-bottom: 1px solid var(--cms-border, #e4e8f0);
+  background: var(--cms-surface, #ffffff);
 }
 
 .faculty-settings-modal-head h2 {
@@ -174,8 +176,8 @@
 
 .faculty-settings-tabs {
   display: flex;
-  background: var(--cms-soft, #f3f6e8);
-  border-bottom: 1px solid var(--cms-border, #d7ddc6);
+  background: var(--cms-subtle, var(--cms-primary-soft, #f4f6fb));
+  border-bottom: 1px solid var(--cms-border, #e4e8f0);
   padding: 0;
   margin: 0;
 }
@@ -211,7 +213,7 @@
 
 .faculty-settings-modal-body {
   padding: 24px;
-  background: var(--cms-soft, #f3f6e8);
+  background: var(--cms-surface, #ffffff);
   overflow-y: auto;
   flex: 1;
 }
@@ -441,8 +443,8 @@ input[type="password"]::-ms-clear {
   justify-content: flex-end;
   gap: 10px;
   padding: 12px 18px;
-  border-top: 1px solid var(--cms-border, #d7ddc6);
-  background: var(--cms-soft, #f3f6e8);
+  border-top: 1px solid var(--cms-border, #e4e8f0);
+  background: var(--cms-subtle, var(--cms-primary-soft, #f4f6fb));
 }
 
 .faculty-settings-modal-foot .cms-btn-ghost {
@@ -479,7 +481,7 @@ input[type="password"]::-ms-clear {
   padding: 7px 16px;
   border: 1px solid var(--cms-primary, #6f8700);
   border-radius: 9px;
-  background: linear-gradient(90deg, var(--cms-primary, #6f8700), var(--cms-primary-hover, #819b08));
+  background: var(--cms-primary, #6f8700);
   color: #ffffff;
   font: inherit;
   font-size: 12px;
@@ -490,8 +492,8 @@ input[type="password"]::-ms-clear {
 }
 
 .faculty-settings-modal-foot .cms-btn-primary:hover:not(:disabled) {
-  background: var(--cms-primary-dark, #536600);
-  border-color: var(--cms-primary-dark, #536600);
+  background: var(--cms-primary-hover, var(--cms-primary-dark, #536600));
+  border-color: var(--cms-primary-hover, var(--cms-primary-dark, #536600));
   color: #ffffff;
 }
 
@@ -709,5 +711,89 @@ input[type="password"]::-ms-clear {
 [data-theme="dark"] .faculty-settings-modal-foot .cms-btn-ghost:hover:not(:disabled),
 .dark-theme .faculty-settings-modal-foot .cms-btn-ghost:hover:not(:disabled) {
   background: #29351f !important;
-  border-color: #879d19 !important;
+  border-color: var(--cms-primary) !important;
+}
+
+
+/* Theme Swatches in Settings Card */
+.settings-theme-swatches-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 10px 0 14px 0;
+  max-height: 195px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.settings-theme-swatch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  background: var(--cms-surface);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  text-align: left;
+  min-width: 0;
+}
+
+.settings-theme-swatch-item:hover {
+  border-color: var(--cms-primary);
+  background: var(--cms-subtle);
+}
+
+.settings-theme-swatch-item.is-selected {
+  border-color: var(--cms-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary) 25%, transparent);
+  background: var(--cms-subtle);
+}
+
+.settings-theme-swatch-bars {
+  display: flex;
+  width: 26px;
+  height: 15px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--cms-border);
+  flex-shrink: 0;
+}
+
+.settings-theme-swatch-bars i {
+  flex: 1;
+}
+
+.settings-theme-swatch-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cms-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.settings-theme-swatch-check {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--cms-primary);
+  flex-shrink: 0;
+}
+
+
+.faculty-settings-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.faculty-settings-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
 }

@@ -49,7 +49,7 @@ import results3d from "@/assets/reports-3d/results.png";
 import promotion3d from "@/assets/sidebar-3d/promotion.png";
 import boardAcademicYear3d from "@/assets/settings-3d/board-academic-year.png";
 
-const COLORS = ["#6F8400", "#108E50", "#B7791F", "#6D28D9", "#D93636", "#2563EB"];
+const COLORS = ["var(--cms-primary)", "#108E50", "#B7791F", "#6D28D9", "#D93636", "#2563EB"];
 
 const getPayrollField = (record, ...keys) => {
   if (!record || typeof record !== "object") return undefined;
@@ -1261,7 +1261,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
             render: (r) => `${r.department || "—"} — ${r.designation || "—"}`,
           },
           { key: "basicPay", label: "Basic Pay", render: (r) => formatINR(r.basicPay) },
-          { key: "grossSalary", label: "Gross Salary", render: (r) => <strong style={{ color: "#6F8400" }}>{formatINR(r.grossSalary)}</strong> },
+          { key: "grossSalary", label: "Gross Salary", render: (r) => <strong style={{ color: "var(--cms-primary)" }}>{formatINR(r.grossSalary)}</strong> },
           { key: "totalDeductions", label: "Deductions", render: (r) => formatINR(r.totalDeductions) },
           { key: "netSalary", label: "Net Salary", render: (r) => <strong style={{ color: "#108E50" }}>{formatINR(r.netSalary)}</strong> },
           { key: "assignedCount", label: "Assigned Staff", render: (r) => `${r.assignedCount || 0} Staff` },
@@ -2647,7 +2647,7 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
               <div className="breakup-row"><span>HRA</span><span>{amountDisplay(formData.hra)}</span></div>
               <div className="breakup-row"><span>DA</span><span>{amountDisplay(formData.da)}</span></div>
               <div className="breakup-row"><span>Allowances</span><span>{[formData.specialAllowance, formData.transportAllowance, formData.academicAllowance].some((value) => value !== "" && value != null) ? formatINR(Number(formData.specialAllowance || 0) + Number(formData.transportAllowance || 0) + Number(formData.academicAllowance || 0)) : "—"}</span></div>
-              <div className="breakup-row total"><span>Gross Earnings</span><strong style={{ color: "#6F8400" }}>{hasEnteredEarnings ? formatINR(grossSalary) : "—"}</strong></div>
+              <div className="breakup-row total"><span>Gross Earnings</span><strong style={{ color: "var(--cms-primary)" }}>{hasEnteredEarnings ? formatINR(grossSalary) : "—"}</strong></div>
 
               <div style={{ margin: "16px 0 8px", fontSize: "12px", fontWeight: 700, color: "var(--cms-muted)" }}>EMPLOYEE DEDUCTIONS</div>
               <div className="breakup-row"><span>Employee PF (12%)</span><span>{amountDisplay(formData.pf)}</span></div>
@@ -2733,7 +2733,7 @@ function SalaryStructureDetailsScreen({ id, store, navigate, setModal, setToast 
             <div className="breakup-row"><span>Other Allowances</span><span>{formatINR(struct.otherAllowances)}</span></div>
             <div className="breakup-row"><span>Transport Allowance</span><span>{formatINR(struct.transportAllowance)}</span></div>
             <div className="breakup-row"><span>Medical Allowance</span><span>{formatINR(struct.medicalAllowance)}</span></div>
-            <div className="breakup-row total"><span>Total Gross Earnings</span><strong style={{ color: "#6F8400" }}>{formatINR(struct.grossSalary)}</strong></div>
+            <div className="breakup-row total"><span>Total Gross Earnings</span><strong style={{ color: "var(--cms-primary)" }}>{formatINR(struct.grossSalary)}</strong></div>
 
             <div className="salary-form-section-title" style={{ marginTop: "20px" }}>Deductions Breakdown</div>
             <div className="breakup-row"><span>Provident Fund (PF)</span><span>{formatINR(struct.pf)}</span></div>
@@ -3121,7 +3121,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
                   <div className="breakup-row"><span>Basic Pay</span><span>{formatINR(chosenStruct.basicPay)}</span></div>
                   <div className="breakup-row"><span>HRA</span><span>{formatINR(chosenStruct.hra)}</span></div>
                   <div className="breakup-row"><span>DA</span><span>{formatINR(chosenStruct.da)}</span></div>
-                  <div className="breakup-row total"><span>Gross Salary</span><strong style={{ color: "#6F8400" }}>{formatINR(chosenStruct.grossSalary)}</strong></div>
+                  <div className="breakup-row total"><span>Gross Salary</span><strong style={{ color: "var(--cms-primary)" }}>{formatINR(chosenStruct.grossSalary)}</strong></div>
                   <div className="breakup-row"><span>Total Deductions</span><span>-{formatINR(chosenStruct.totalDeductions)}</span></div>
                   <div className="breakup-row net">
                     <span>Net Monthly Take-Home</span>
@@ -3204,7 +3204,7 @@ function SalaryAssignmentDetailsScreen({ id, store, navigate }) {
           <div className="salary-preview-sticky">
             <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 700 }}>Assigned Salary Breakdown</h4>
             <div className="breakup-row"><span>Assigned Structure</span><strong>{asgn.structureName}</strong></div>
-            <div className="breakup-row total"><span>Gross Salary</span><strong style={{ color: "#6F8400" }}>{formatINR(asgn.grossSalary)}</strong></div>
+            <div className="breakup-row total"><span>Gross Salary</span><strong style={{ color: "var(--cms-primary)" }}>{formatINR(asgn.grossSalary)}</strong></div>
             <div className="breakup-row"><span>Total Deductions</span><span>-{formatINR(asgn.totalDeductions)}</span></div>
             <div className="breakup-row net">
               <span>Net Monthly Take-Home</span>

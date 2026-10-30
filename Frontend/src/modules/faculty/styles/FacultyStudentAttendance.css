@@ -47,7 +47,7 @@
   background: var(--cms-primary, #6F8400) !important;
   color: #ffffff !important;
   font-weight: 700;
-  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--cms-primary)  0.25);
 }
 
 /* Valuable Prompt / Empty State Card Before Fetching Records */
@@ -79,7 +79,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.15);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary)  0.15);
 }
 
 .sp-att-notice-text h3 {
@@ -1699,8 +1699,8 @@
 
 .att-btn-outline:hover {
   background: #f7f9f2;
-  border-color: #6F8400;
-  color: #6F8400;
+  border-color: var(--cms-primary);
+  color: var(--cms-primary);
 }
 
 /* Dropzone (Ref 1 Style) */
@@ -1721,7 +1721,7 @@
 
 .att-import-dropzone:hover,
 .att-import-dropzone.dragging {
-  border-color: #6F8400;
+  border-color: var(--cms-primary);
   background: #f3f7e6;
 }
 
@@ -1730,7 +1730,7 @@
   height: 48px;
   border-radius: 50%;
   background: #eef3d9;
-  color: #6F8400;
+  color: var(--cms-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1776,7 +1776,7 @@
   height: 38px;
   border-radius: 8px;
   background: #eef3d9;
-  color: #6F8400;
+  color: var(--cms-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1828,8 +1828,8 @@
 
 .att-change-file-btn:hover {
   background: #ffffff;
-  border-color: #6F8400;
-  color: #6F8400;
+  border-color: var(--cms-primary);
+  color: var(--cms-primary);
 }
 
 /* Validate Button */
@@ -1851,7 +1851,7 @@
 
 .att-btn-validate:hover:not(:disabled) {
   background: #8fa655;
-  box-shadow: 0 3px 8px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--cms-primary)  0.25);
 }
 
 .att-btn-validate:disabled {
@@ -1969,7 +1969,7 @@
 
 .att-structure-arrow {
   font-size: 11px;
-  color: #6F8400;
+  color: var(--cms-primary);
 }
 
 .att-structure-content {
@@ -2054,8 +2054,8 @@
 
 .att-btn-cancel:hover {
   background: #eff3e7;
-  border-color: #6F8400;
-  color: #6F8400;
+  border-color: var(--cms-primary);
+  color: var(--cms-primary);
 }
 
 .att-btn-import {
@@ -2071,12 +2071,12 @@
   align-items: center;
   gap: 7px;
   transition: all 0.15s ease;
-  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.2);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--cms-primary)  0.2);
 }
 
 .att-btn-import:hover:not(:disabled) {
   background: #8fa655;
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary)  0.3);
 }
 
 .att-btn-import:disabled {

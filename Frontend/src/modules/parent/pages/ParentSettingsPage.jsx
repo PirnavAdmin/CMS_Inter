@@ -1,3 +1,4 @@
+import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
 import { useState, useEffect } from "react";
 import { Settings, Bell, Lock, Globe, Shield, CheckCircle2, Save } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -101,6 +102,9 @@ export default function ParentSettingsPage() {
     >
       <div className="parent-dashboard-wrapper">
         <Toast message={toastMessage} onClose={() => setToastMessage("")} />
+        <div style={{ marginBottom: "20px" }}>
+          <ThemeSettingsCard />
+        </div>
 
         {/* Notification Preferences */}
         <div className="parent-card">

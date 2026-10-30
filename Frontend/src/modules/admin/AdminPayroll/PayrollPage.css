@@ -53,7 +53,7 @@
 
 .salary-kpi-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(111, 132, 0, 0.12);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--cms-primary)  0.12);
   border-color: var(--cms-primary);
 }
 
@@ -512,7 +512,7 @@
   background: var(--cms-primary, #6F8400);
   color: #ffffff;
   border-color: var(--cms-primary, #6F8400);
-  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--cms-primary)  0.25);
 }
 
 .payroll-tab-badge {

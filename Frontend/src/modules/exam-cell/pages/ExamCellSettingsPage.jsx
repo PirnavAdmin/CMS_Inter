@@ -1,3 +1,4 @@
+import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -226,6 +227,9 @@ export default function ExamCellSettingsPage() {
       )}
 
       {/* QUICK SYSTEM MODULES CARDS */}
+      <div style={{ marginBottom: "20px" }}>
+        <ThemeSettingsCard />
+      </div>
       <section className="ec-settings-quick-grid">
         {quickLinks.map((item) => (
           <article key={item.title} className="ec-settings-quick-card">

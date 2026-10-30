@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   Info,
 } from "lucide-react";
+import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
+import { Palette } from "lucide-react";
 import { useDriverData } from "../DriverDataContext.jsx";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
 import { isPayslipNotification } from "../data/driverPayslipNotifications.js";
@@ -26,6 +28,7 @@ export default function DriverTopbar({
 }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
   const [campusOpen, setCampusOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
@@ -281,6 +284,19 @@ export default function DriverTopbar({
 
               <button
                 type="button"
+                className="dp-dropdown-action"
+                onClick={() => {
+                  setProfileOpen(false);
+                  setThemePaletteOpen(true);
+                }}
+              >
+                <Palette size={15} /> Theme Appearance
+              </button>
+
+              <div className="dp-dropdown-divider" />
+
+              <button
+                type="button"
                 className="dp-dropdown-action dp-action-danger"
                 onClick={() => {
                   setProfileOpen(false);
@@ -293,6 +309,7 @@ export default function DriverTopbar({
           )}
         </div>
       </div>
+      <ThemePalettePicker open={themePaletteOpen} onOpenChange={setThemePaletteOpen} hideTrigger={true} />
     </header>
   );
 }

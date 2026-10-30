@@ -124,10 +124,10 @@
 
 .cms-landing .landing-login-btn,
 .cms-landing .landing-start-btn:not(.landing-explore-btn) {
-  border: 1px solid #6f8400 !important;
-  background: #6f8400 !important;
+  border: 1px solid var(--cms-primary) !important;
+  background: var(--cms-primary) !important;
   color: #fff !important;
-  box-shadow: 0 12px 26px rgba(79, 97, 0, 0.2);
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--cms-primary) 25%, transparent);
 }
 
 .cms-landing .landing-header-actions .landing-login-btn {
@@ -225,7 +225,7 @@
   width: 68px;
   height: 2px;
   margin-top: 22px;
-  background: #6f8400;
+  background: var(--cms-primary);
 }
 
 .landing-hero-content p {
@@ -253,7 +253,7 @@
 }
 
 .landing-trust-points svg {
-  color: #6f8400;
+  color: var(--cms-primary);
 }
 
 .cms-hero-actions {
@@ -404,12 +404,12 @@
 }
 
 [data-theme="dark"] .landing-hero-banner {
-  border-bottom-color: #879d19;
-  background: radial-gradient(circle at 27% 68%, rgba(135, 157, 25, 0.12), transparent 28%), linear-gradient(135deg, #1b2119 0%, #141814 100%);
+  border-bottom-color: var(--cms-primary);
+  background: radial-gradient(circle at 27% 68%, color-mix(in srgb, var(--cms-primary) 15%, transparent), transparent 28%), linear-gradient(135deg, #1b2119 0%, #141814 100%);
 }
 
 [data-theme="dark"] .landing-hero-banner::before {
-  border-color: rgba(135, 157, 25, 0.13);
+  border-color: color-mix(in srgb, var(--cms-primary) 18%, transparent);
 }
 
 [data-theme="dark"] .landing-hero-content .cms-eyebrow {
