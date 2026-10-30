@@ -1,11 +1,19 @@
-﻿using CollegeManagement.API.DTOs;
+using Asp.Versioning;
+using CollegeManagement.API.DTOs;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/section-roll-allocation")]
     [Route("api/v1/section-roll-allocation")]
+    [Produces("application/json")]
+    [Authorize]
+    [RequirePermission("section-room")]
     public class SectionRollAllocationController : ControllerBase
     {
         private readonly ISectionRollAllocationService _service;

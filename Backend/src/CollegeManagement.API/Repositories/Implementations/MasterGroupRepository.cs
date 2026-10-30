@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.MasterGroups;
 using CollegeManagement.API.DTOs.Program;
 using CollegeManagement.API.Exceptions;
-using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -22,6 +24,21 @@ namespace CollegeManagement.API.Repositories.Implementations
             _context = context;
         }
 
+        private async Task<DbConnection> GetOpenConnectionAsync(CancellationToken cancellationToken = default)
+        {
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State == ConnectionState.Broken || conn.State == ConnectionState.Closed)
+            {
+                try { await conn.CloseAsync(); } catch { }
+                await _context.Database.OpenConnectionAsync(cancellationToken);
+            }
+            else if (conn.State != ConnectionState.Open)
+            {
+                await _context.Database.OpenConnectionAsync(cancellationToken);
+            }
+            return conn;
+        }
+
         // =========================================================
         // GET ALL MASTER GROUPS
         // =========================================================
@@ -29,286 +46,246 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<List<MasterGroupListItemDto>> GetAllAsync(
             int? boardId = null,
             string? search = null,
-            bool? isActive = null)
+            bool? isActive = null,
+            CancellationToken cancellationToken = default)
         {
-            var query = _context.MasterGroups
-                .AsNoTracking()
-                .Include(mg => mg.BoardNavigation)
-                .AsQueryable();
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            if (boardId.HasValue && boardId.Value > 0)
-            {
-                query = query.Where(mg => mg.BoardId == boardId.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var term = search.Trim();
-                query = query.Where(mg =>
-                    mg.GroupName.Contains(term) ||
-                    mg.GroupCode.Contains(term));
-            }
-
-            if (isActive.HasValue)
-            {
-                query = query.Where(mg => mg.IsActive == isActive.Value);
-            }
-
-            var entities = await query
-                .OrderBy(mg => mg.BoardId)
-                .ThenBy(mg => mg.GroupName)
-                .ToListAsync();
-
-            if (entities.Count == 0)
-                return new List<MasterGroupListItemDto>();
-
-            var masterGroupIds = entities.Select(e => e.MasterGroupId).ToList();
-            var boardIds = entities.Select(e => e.BoardId).Distinct().ToList();
-
-            // Load default programs
-            var programMappings = await _context.MasterGroupPrograms
-                .AsNoTracking()
-                .Where(mgp => masterGroupIds.Contains(mgp.MasterGroupId) && mgp.IsActive)
-                .Include(mgp => mgp.AcademicProgram)
-                .Where(mgp => mgp.AcademicProgram != null && mgp.AcademicProgram.IsActive)
-                .Select(mgp => new
+            var cmd = new CommandDefinition(
+                "sp_GetMasterGroups",
+                new
                 {
-                    mgp.MasterGroupId,
-                    Program = new MasterGroupProgramDto
-                    {
-                        ProgramId = mgp.ProgramId,
-                        ProgramName = mgp.AcademicProgram.ProgramName,
-                        IsActive = mgp.AcademicProgram.IsActive
-                    }
-                })
-                .ToListAsync();
+                    p_BoardId = boardId,
+                    p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+                    p_IsActive = isActive
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            var programsLookup = programMappings
-                .GroupBy(x => x.MasterGroupId)
-                .ToDictionary(g => g.Key, g => g.Select(x => x.Program).ToList());
+            var list = (await connection.QueryAsync<MasterGroupListItemDto>(cmd)).ToList();
 
-            // Load eligible academic levels for each board
-            var boardLevelMappings = await _context.BoardAcademicLevels
-                .AsNoTracking()
-                .Where(bal => boardIds.Contains(bal.BoardId) && bal.IsActive)
-                .Include(bal => bal.AcademicLevel)
-                .Where(bal => bal.AcademicLevel != null && bal.AcademicLevel.IsActive)
-                .OrderBy(bal => bal.AcademicLevel.DisplayOrder)
-                .Select(bal => new
-                {
-                    bal.BoardId,
-                    Level = new EligibleAcademicLevelDto
-                    {
-                        AcademicLevelId = bal.AcademicLevelId,
-                        LevelName = bal.AcademicLevel.LevelName,
-                        LevelCode = bal.AcademicLevel.LevelCode,
-                        DisplayOrder = bal.AcademicLevel.DisplayOrder,
-                        IsActive = bal.AcademicLevel.IsActive
-                    }
-                })
-                .ToListAsync();
-
-            var boardLevelsLookup = boardLevelMappings
-                .GroupBy(x => x.BoardId)
-                .ToDictionary(g => g.Key, g => g.Select(x => x.Level).ToList());
-
-            // Load count of resolved contextual groups
-            var contextCounts = await _context.Groups
-                .AsNoTracking()
-                .Where(g => g.MasterGroupId.HasValue && masterGroupIds.Contains(g.MasterGroupId.Value))
-                .GroupBy(g => g.MasterGroupId!.Value)
-                .Select(g => new { MasterGroupId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.MasterGroupId, x => x.Count);
-
-            return entities.Select(e => new MasterGroupListItemDto
+            if (list.Count > 0)
             {
-                MasterGroupId = e.MasterGroupId,
-                BoardId = e.BoardId,
-                BoardName = e.BoardNavigation != null ? e.BoardNavigation.BoardName : string.Empty,
-                GroupName = e.GroupName,
-                GroupCode = e.GroupCode,
-                Description = e.Description,
-                IsActive = e.IsActive,
-                Status = e.IsActive ? "Active" : "Inactive",
-                CreatedAt = e.CreatedAt,
-                UpdatedAt = e.UpdatedAt,
-                Programs = programsLookup.TryGetValue(e.MasterGroupId, out var progs) ? progs : new List<MasterGroupProgramDto>(),
-                EligibleLevels = boardLevelsLookup.TryGetValue(e.BoardId, out var levels) ? levels : new List<EligibleAcademicLevelDto>(),
-                ResolvedContextCount = contextCounts.TryGetValue(e.MasterGroupId, out var cnt) ? cnt : 0
-            }).ToList();
+                // Batch load programs
+                var cmdProg = new CommandDefinition(
+                    "sp_GetMasterGroupProgramsBatch",
+                    new { p_BoardId = boardId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken
+                );
+                var allPrograms = await connection.QueryAsync<dynamic>(cmdProg);
+                var progLookup = allPrograms
+                    .GroupBy(p => (int)p.MasterGroupId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(p => new MasterGroupProgramDto
+                        {
+                            ProgramId = (int)p.ProgramId,
+                            ProgramName = (string)p.ProgramName,
+                            IsActive = (bool)p.IsActive
+                        })
+                        .OrderBy(p => p.ProgramName)
+                        .ToList()
+                    );
+
+                // Batch load eligible academic levels
+                var cmdLevels = new CommandDefinition(
+                    "sp_GetBoardAcademicLevelsBatch",
+                    new { p_BoardId = boardId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken
+                );
+                var allLevels = await connection.QueryAsync<dynamic>(cmdLevels);
+                var levelLookup = allLevels
+                    .GroupBy(l => (int)l.BoardId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(l => new EligibleAcademicLevelDto
+                        {
+                            AcademicLevelId = (int)l.AcademicLevelId,
+                            LevelName = (string)l.LevelName,
+                            LevelCode = (string)l.LevelCode,
+                            DisplayOrder = (int)l.DisplayOrder,
+                            IsActive = (bool)l.IsActive
+                        })
+                        .OrderBy(l => l.DisplayOrder)
+                        .ToList()
+                    );
+
+                foreach (var item in list)
+                {
+                    item.Programs = progLookup.TryGetValue(item.MasterGroupId, out var progs)
+                        ? progs
+                        : new List<MasterGroupProgramDto>();
+                    item.ProgramIds = item.Programs.Select(p => p.ProgramId).ToList();
+                    item.EligibleLevels = levelLookup.TryGetValue(item.BoardId, out var levels)
+                        ? levels
+                        : new List<EligibleAcademicLevelDto>();
+                }
+            }
+
+            return list;
         }
 
         // =========================================================
         // GET MASTER GROUP BY ID
         // =========================================================
 
-        public async Task<MasterGroupResponseDto?> GetByIdAsync(int masterGroupId)
+        public async Task<MasterGroupResponseDto?> GetByIdAsync(
+            int masterGroupId,
+            CancellationToken cancellationToken = default)
         {
-            var entity = await _context.MasterGroups
-                .AsNoTracking()
-                .Include(mg => mg.BoardNavigation)
-                .FirstOrDefaultAsync(mg => mg.MasterGroupId == masterGroupId);
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            if (entity == null)
+            var cmd = new CommandDefinition(
+                "sp_GetMasterGroupById",
+                new { p_MasterGroupId = masterGroupId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            using var multi = await connection.QueryMultipleAsync(cmd);
+            var group = await multi.ReadFirstOrDefaultAsync<MasterGroupResponseDto>();
+            if (group == null)
                 return null;
 
-            var programs = await GetProgramsAsync(masterGroupId);
-            var eligibleLevels = await GetEligibleAcademicLevelsAsync(masterGroupId);
-            var contextCount = await _context.Groups
-                .AsNoTracking()
-                .CountAsync(g => g.MasterGroupId == masterGroupId);
+            var programs = (await multi.ReadAsync<MasterGroupProgramDto>()).ToList();
+            var eligibleLevels = (await multi.ReadAsync<EligibleAcademicLevelDto>()).ToList();
 
-            return new MasterGroupResponseDto
-            {
-                MasterGroupId = entity.MasterGroupId,
-                BoardId = entity.BoardId,
-                BoardName = entity.BoardNavigation != null ? entity.BoardNavigation.BoardName : string.Empty,
-                GroupName = entity.GroupName,
-                GroupCode = entity.GroupCode,
-                Description = entity.Description,
-                IsActive = entity.IsActive,
-                Status = entity.IsActive ? "Active" : "Inactive",
-                CreatedAt = entity.CreatedAt,
-                UpdatedAt = entity.UpdatedAt,
-                ProgramIds = programs.Select(p => p.ProgramId).ToList(),
-                Programs = programs,
-                EligibleLevels = eligibleLevels,
-                ResolvedContextCount = contextCount
-            };
+            group.Programs = programs;
+            group.ProgramIds = programs.Select(p => p.ProgramId).ToList();
+            group.EligibleLevels = eligibleLevels;
+
+            return group;
         }
 
         // =========================================================
         // CREATE MASTER GROUP
         // =========================================================
 
-        public async Task<MasterGroupResponseDto> CreateAsync(CreateMasterGroupRequestDto request)
+        public async Task<MasterGroupResponseDto> CreateAsync(
+            CreateMasterGroupRequestDto request,
+            CancellationToken cancellationToken = default)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
-            // 1. Verify board exists
-            var board = await _context.Boards.FindAsync(request.BoardId);
-            if (board == null)
-                throw new ValidationException($"Board with ID {request.BoardId} does not exist.");
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            // 2. Check group code uniqueness within board
-            var codeExists = await CodeExistsAsync(request.BoardId, request.GroupCode);
-            if (codeExists)
-                throw new ConflictException($"A master group with code '{request.GroupCode}' already exists for board '{board.BoardName}'.");
+            var cmd = new CommandDefinition(
+                "sp_CreateMasterGroup",
+                new
+                {
+                    p_BoardId = request.BoardId,
+                    p_GroupName = request.GroupName.Trim(),
+                    p_GroupCode = request.GroupCode.Trim().ToUpperInvariant(),
+                    p_Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                    p_IsActive = request.IsActive
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            // 3. Check group name uniqueness within board
-            var nameExists = await _context.MasterGroups
-                .AnyAsync(mg => mg.BoardId == request.BoardId && mg.GroupName.ToLower() == request.GroupName.Trim().ToLower());
-            if (nameExists)
-                throw new ConflictException($"A master group with name '{request.GroupName}' already exists for board '{board.BoardName}'.");
+            var created = await connection.QueryFirstOrDefaultAsync<MasterGroupResponseDto>(cmd);
+            if (created == null)
+                throw new InvalidOperationException("Failed to create master group record.");
 
-            // 4. Create master group entity
-            var entity = new MasterGroup
-            {
-                BoardId = request.BoardId,
-                GroupName = request.GroupName.Trim(),
-                GroupCode = request.GroupCode.Trim().ToUpperInvariant(),
-                Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-                IsActive = request.IsActive,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.MasterGroups.Add(entity);
-            await _context.SaveChangesAsync();
-
-            // 5. Add default program mappings
             var programIds = request.GetResolvedProgramIds();
             if (programIds.Count > 0)
             {
-                await SyncMasterGroupProgramsAsync(entity.MasterGroupId, programIds);
+                await SyncMasterGroupProgramsAsync(created.MasterGroupId, programIds, cancellationToken);
             }
 
-            return (await GetByIdAsync(entity.MasterGroupId))!;
+            return (await GetByIdAsync(created.MasterGroupId, cancellationToken))!;
         }
 
         // =========================================================
         // UPDATE MASTER GROUP
         // =========================================================
 
-        public async Task<MasterGroupResponseDto?> UpdateAsync(int masterGroupId, UpdateMasterGroupRequestDto request)
+        public async Task<MasterGroupResponseDto?> UpdateAsync(
+            int masterGroupId,
+            UpdateMasterGroupRequestDto request,
+            CancellationToken cancellationToken = default)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
-            var entity = await _context.MasterGroups.FindAsync(masterGroupId);
-            if (entity == null)
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_UpdateMasterGroup",
+                new
+                {
+                    p_MasterGroupId = masterGroupId,
+                    p_GroupName = request.GroupName.Trim(),
+                    p_GroupCode = request.GroupCode.Trim().ToUpperInvariant(),
+                    p_Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+                    p_IsActive = request.IsActive
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            var updated = await connection.QueryFirstOrDefaultAsync<MasterGroupResponseDto>(cmd);
+            if (updated == null)
                 return null;
 
-            // 1. Check code uniqueness excluding this record
-            var codeExists = await CodeExistsAsync(entity.BoardId, request.GroupCode, masterGroupId);
-            if (codeExists)
-                throw new ConflictException($"A master group with code '{request.GroupCode}' already exists for this board.");
-
-            // 2. Check name uniqueness excluding this record
-            var nameExists = await _context.MasterGroups
-                .AnyAsync(mg => mg.MasterGroupId != masterGroupId &&
-                                mg.BoardId == entity.BoardId &&
-                                mg.GroupName.ToLower() == request.GroupName.Trim().ToLower());
-            if (nameExists)
-                throw new ConflictException($"A master group with name '{request.GroupName}' already exists for this board.");
-
-            entity.GroupName = request.GroupName.Trim();
-            entity.GroupCode = request.GroupCode.Trim().ToUpperInvariant();
-            entity.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
-            entity.IsActive = request.IsActive;
-            entity.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            // 3. Update program mappings if provided
-            var programIds = request.GetResolvedProgramIds();
-            await SyncMasterGroupProgramsAsync(masterGroupId, programIds);
-
-            return await GetByIdAsync(masterGroupId);
+            await SyncMasterGroupProgramsAsync(masterGroupId, request.GetResolvedProgramIds(), cancellationToken);
+            return await GetByIdAsync(masterGroupId, cancellationToken);
         }
 
         // =========================================================
         // ACTIVATE / DEACTIVATE MASTER GROUP
         // =========================================================
 
-        public async Task<bool> ActivateAsync(int masterGroupId, bool isActive)
+        public async Task<bool> ActivateAsync(
+            int masterGroupId,
+            bool isActive,
+            CancellationToken cancellationToken = default)
         {
-            var entity = await _context.MasterGroups.FindAsync(masterGroupId);
-            if (entity == null)
-                return false;
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            entity.IsActive = isActive;
-            entity.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
+            var cmd = new CommandDefinition(
+                "sp_ActivateMasterGroup",
+                new { p_MasterGroupId = masterGroupId, p_IsActive = isActive },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            return true;
+            var affected = await connection.ExecuteScalarAsync<int>(cmd);
+            return affected > 0;
         }
 
         // =========================================================
         // DELETE MASTER GROUP
         // =========================================================
 
-        public async Task<bool> DeleteAsync(int masterGroupId)
+        public async Task<bool> DeleteAsync(
+            int masterGroupId,
+            CancellationToken cancellationToken = default)
         {
-            var entity = await _context.MasterGroups.FindAsync(masterGroupId);
-            if (entity == null)
-                return false;
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            // Check if any contextual groups associated with this master group have active dependent data
-            var contextualGroupIds = await _context.Groups
-                .Where(g => g.MasterGroupId == masterGroupId)
-                .Select(g => g.GroupId)
-                .ToListAsync();
+            // 1. Dependency checks via sp_CheckMasterGroupDependencies
+            var cmdDep = new CommandDefinition(
+                "sp_CheckMasterGroupDependencies",
+                new { p_MasterGroupId = masterGroupId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            if (contextualGroupIds.Count > 0)
+            var deps = await connection.QueryFirstOrDefaultAsync<dynamic>(cmdDep);
+            if (deps != null)
             {
-                var studentCount = await _context.Students.CountAsync(s => s.GroupId.HasValue && contextualGroupIds.Contains(s.GroupId.Value));
-                var admissionCount = await _context.StudentAdmissions.CountAsync(sa => contextualGroupIds.Contains(sa.GroupId));
-                var feeCount = await _context.FeeStructures.CountAsync(f => contextualGroupIds.Contains(f.GroupId));
-                var subjectCount = await _context.Subjects.CountAsync(sub => contextualGroupIds.Contains(sub.GroupId));
-                var attendanceCount = await _context.Attendances.CountAsync(att => att.GroupId.HasValue && contextualGroupIds.Contains(att.GroupId.Value));
-                var examCount = await _context.Examinations.CountAsync(ex => contextualGroupIds.Contains(ex.GroupId));
-                var timetableCount = await _context.Timetables.CountAsync(tt => contextualGroupIds.Contains(tt.GroupId));
+                int studentCount = (int)(deps.StudentCount ?? 0);
+                int admissionCount = (int)(deps.AdmissionCount ?? 0);
+                int feeCount = (int)(deps.FeeCount ?? 0);
+                int subjectCount = (int)(deps.SubjectCount ?? 0);
+                int attendanceCount = (int)(deps.AttendanceCount ?? 0);
+                int examCount = (int)(deps.ExamCount ?? 0);
+                int timetableCount = (int)(deps.TimetableCount ?? 0);
 
                 var blocking = new List<string>();
                 if (studentCount > 0) blocking.Add($"{studentCount} student(s)");
@@ -322,110 +299,87 @@ namespace CollegeManagement.API.Repositories.Implementations
                 if (blocking.Count > 0)
                 {
                     throw new ValidationException(
-                        $"Cannot delete master group '{entity.GroupName}' because associated academic contexts are currently in use by: {string.Join(", ", blocking)}. Please deactivate the master group instead.");
+                        $"Cannot delete master group because active student/academic records depend on its contextual groups: {string.Join(", ", blocking)}. Please deactivate the master group instead.");
                 }
             }
 
-            // Remove master group programs
-            var mgPrograms = await _context.MasterGroupPrograms.Where(p => p.MasterGroupId == masterGroupId).ToListAsync();
-            if (mgPrograms.Count > 0)
-            {
-                _context.MasterGroupPrograms.RemoveRange(mgPrograms);
-            }
+            // 2. Delete via stored procedure
+            var cmdDel = new CommandDefinition(
+                "sp_DeleteMasterGroup",
+                new { p_MasterGroupId = masterGroupId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            // Unlink contextual groups rather than deleting historical records
-            var contextualGroups = await _context.Groups.Where(g => g.MasterGroupId == masterGroupId).ToListAsync();
-            foreach (var cg in contextualGroups)
-            {
-                cg.MasterGroupId = null;
-            }
-
-            _context.MasterGroups.Remove(entity);
-            await _context.SaveChangesAsync();
-
-            return true;
+            var affected = await connection.ExecuteScalarAsync<int>(cmdDel);
+            return affected > 0;
         }
 
         // =========================================================
-        // CODE EXISTS CHECK
+        // MASTER GROUP CODE VALIDATION
         // =========================================================
 
-        public async Task<bool> CodeExistsAsync(int boardId, string groupCode, int? excludeMasterGroupId = null)
+        public async Task<bool> CodeExistsAsync(
+            int boardId,
+            string groupCode,
+            int? excludeMasterGroupId = null,
+            CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(groupCode))
-                return false;
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            var code = groupCode.Trim().ToUpperInvariant();
-            var query = _context.MasterGroups
-                .Where(mg => mg.BoardId == boardId && mg.GroupCode == code);
+            var cmd = new CommandDefinition(
+                "sp_ValidateMasterGroupCode",
+                new
+                {
+                    p_BoardId = boardId,
+                    p_GroupCode = groupCode.Trim().ToUpperInvariant(),
+                    p_ExcludeMasterGroupId = excludeMasterGroupId
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            if (excludeMasterGroupId.HasValue && excludeMasterGroupId.Value > 0)
-            {
-                query = query.Where(mg => mg.MasterGroupId != excludeMasterGroupId.Value);
-            }
-
-            return await query.AnyAsync();
+            return await connection.ExecuteScalarAsync<bool>(cmd);
         }
 
         // =========================================================
         // GET ELIGIBLE ACADEMIC LEVELS FOR MASTER GROUP
         // =========================================================
 
-        public async Task<List<EligibleAcademicLevelDto>> GetEligibleAcademicLevelsAsync(int masterGroupId)
+        public async Task<List<EligibleAcademicLevelDto>> GetEligibleAcademicLevelsAsync(
+            int masterGroupId,
+            CancellationToken cancellationToken = default)
         {
-            var mg = await _context.MasterGroups.FindAsync(masterGroupId);
-            if (mg == null)
-                return new List<EligibleAcademicLevelDto>();
-
-            return await _context.BoardAcademicLevels
-                .AsNoTracking()
-                .Where(bal => bal.BoardId == mg.BoardId && bal.IsActive)
-                .Include(bal => bal.AcademicLevel)
-                .Where(bal => bal.AcademicLevel != null && bal.AcademicLevel.IsActive)
-                .OrderBy(bal => bal.AcademicLevel.DisplayOrder)
-                .Select(bal => new EligibleAcademicLevelDto
-                {
-                    AcademicLevelId = bal.AcademicLevelId,
-                    LevelName = bal.AcademicLevel.LevelName,
-                    LevelCode = bal.AcademicLevel.LevelCode,
-                    DisplayOrder = bal.AcademicLevel.DisplayOrder,
-                    IsActive = bal.AcademicLevel.IsActive
-                })
-                .ToListAsync();
+            var group = await GetByIdAsync(masterGroupId, cancellationToken);
+            return group?.EligibleLevels ?? new List<EligibleAcademicLevelDto>();
         }
 
         // =========================================================
         // GET DEFAULT PROGRAMS
         // =========================================================
 
-        public async Task<List<MasterGroupProgramDto>> GetProgramsAsync(int masterGroupId)
+        public async Task<List<MasterGroupProgramDto>> GetProgramsAsync(
+            int masterGroupId,
+            CancellationToken cancellationToken = default)
         {
-            return await _context.MasterGroupPrograms
-                .AsNoTracking()
-                .Where(mgp => mgp.MasterGroupId == masterGroupId && mgp.IsActive)
-                .Include(mgp => mgp.AcademicProgram)
-                .Where(mgp => mgp.AcademicProgram != null && mgp.AcademicProgram.IsActive)
-                .OrderBy(mgp => mgp.AcademicProgram.ProgramName)
-                .Select(mgp => new MasterGroupProgramDto
-                {
-                    ProgramId = mgp.ProgramId,
-                    ProgramName = mgp.AcademicProgram.ProgramName,
-                    IsActive = mgp.AcademicProgram.IsActive
-                })
-                .ToListAsync();
+            var group = await GetByIdAsync(masterGroupId, cancellationToken);
+            return group?.Programs ?? new List<MasterGroupProgramDto>();
         }
 
         // =========================================================
         // UPDATE DEFAULT PROGRAMS
         // =========================================================
 
-        public async Task<bool> UpdateProgramsAsync(int masterGroupId, List<int> programIds)
+        public async Task<bool> UpdateProgramsAsync(
+            int masterGroupId,
+            List<int> programIds,
+            CancellationToken cancellationToken = default)
         {
-            var exists = await _context.MasterGroups.AnyAsync(mg => mg.MasterGroupId == masterGroupId);
-            if (!exists)
+            var exists = await GetByIdAsync(masterGroupId, cancellationToken);
+            if (exists == null)
                 return false;
 
-            await SyncMasterGroupProgramsAsync(masterGroupId, programIds);
+            await SyncMasterGroupProgramsAsync(masterGroupId, programIds, cancellationToken);
             return true;
         }
 
@@ -433,287 +387,90 @@ namespace CollegeManagement.API.Repositories.Implementations
         // CONTEXT RESOLUTION (Option B Core Engine)
         // =========================================================
 
-        public async Task<ResolveGroupContextResponseDto> ResolveContextAsync(ResolveGroupContextRequestDto request)
+        public async Task<ResolveGroupContextResponseDto> ResolveContextAsync(
+            ResolveGroupContextRequestDto request,
+            CancellationToken cancellationToken = default)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
-            // 1. Verify Master Group exists and is active
-            var masterGroup = await _context.MasterGroups
-                .Include(mg => mg.BoardNavigation)
-                .FirstOrDefaultAsync(mg => mg.MasterGroupId == request.MasterGroupId);
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            if (masterGroup == null)
-                throw new NotFoundException($"Master group with ID {request.MasterGroupId} was not found.");
-
-            if (!masterGroup.IsActive)
-                throw new ValidationException($"Master group '{masterGroup.GroupName}' is inactive and cannot be resolved into an academic context.");
-
-            // 2. Validate Board eligibility
-            if (masterGroup.BoardId != request.BoardId)
-                throw new ValidationException($"Master group '{masterGroup.GroupName}' belongs to Board ID {masterGroup.BoardId}, not Board ID {request.BoardId}.");
-
-            // 3. Validate Academic Level eligibility for this board
-            var isLevelEligible = await _context.BoardAcademicLevels
-                .AnyAsync(bal => bal.BoardId == request.BoardId && bal.AcademicLevelId == request.AcademicLevelId && bal.IsActive);
-
-            if (!isLevelEligible)
-            {
-                var level = await _context.AcademicLevels.FindAsync(request.AcademicLevelId);
-                var levelDesc = level != null ? level.LevelName : $"ID {request.AcademicLevelId}";
-                throw new ValidationException($"Academic Level '{levelDesc}' is not configured or active for Board ID {request.BoardId}.");
-            }
-
-            // 4. Validate Academic Year eligibility
-            var academicYear = await _context.AcademicYears.FindAsync(request.AcademicYearId);
-            if (academicYear == null || !academicYear.IsActive)
-                throw new ValidationException($"Academic Year with ID {request.AcademicYearId} is not valid or active.");
-
-            if (academicYear.BoardId.HasValue && academicYear.BoardId.Value > 0 && academicYear.BoardId.Value != request.BoardId)
-                throw new ValidationException($"Academic Year '{academicYear.AcademicYearName}' belongs to Board ID {academicYear.BoardId.Value}, not Board ID {request.BoardId}.");
-
-            // 5. Check if an active contextual group already exists
-            var existingContextGroup = await _context.Groups
-                .AsNoTracking()
-                .Include(g => g.BoardNavigation)
-                .Include(g => g.AcademicYear)
-                .Include(g => g.AcademicLevelNavigation)
-                .FirstOrDefaultAsync(g =>
-                    g.MasterGroupId == request.MasterGroupId &&
-                    g.BoardId == request.BoardId &&
-                    g.AcademicYearId == request.AcademicYearId &&
-                    g.AcademicLevelId == request.AcademicLevelId &&
-                    g.IsActive);
-
-            if (existingContextGroup != null)
-            {
-                var existingPrograms = await GetGroupProgramsAsync(existingContextGroup.GroupId);
-                return new ResolveGroupContextResponseDto
+            var cmd = new CommandDefinition(
+                "sp_ResolveGroupContext",
+                new
                 {
-                    GroupId = existingContextGroup.GroupId,
-                    MasterGroupId = masterGroup.MasterGroupId,
-                    BoardId = existingContextGroup.BoardId,
-                    BoardName = existingContextGroup.BoardNavigation?.BoardName ?? masterGroup.BoardNavigation?.BoardName,
-                    AcademicYearId = existingContextGroup.AcademicYearId,
-                    AcademicYearName = existingContextGroup.AcademicYear?.AcademicYearName ?? academicYear.AcademicYearName,
-                    AcademicLevelId = existingContextGroup.AcademicLevelId,
-                    AcademicLevelName = existingContextGroup.AcademicLevelNavigation?.LevelName,
-                    GroupName = existingContextGroup.GroupName,
-                    GroupCode = existingContextGroup.GroupCode,
-                    Description = existingContextGroup.Description,
-                    IsActive = existingContextGroup.IsActive,
-                    Status = existingContextGroup.IsActive ? "Active" : "Inactive",
-                    IsNewlyCreated = false,
-                    Programs = existingPrograms
-                };
-            }
+                    p_MasterGroupId = request.MasterGroupId,
+                    p_BoardId = request.BoardId,
+                    p_AcademicYearId = request.AcademicYearId,
+                    p_AcademicLevelId = request.AcademicLevelId
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            // 6. Concurrency-safe creation inside execution strategy
-            var academicLevel = await _context.AcademicLevels.FindAsync(request.AcademicLevelId);
+            using var multi = await connection.QueryMultipleAsync(cmd);
+            var resolved = await multi.ReadFirstOrDefaultAsync<ResolveGroupContextResponseDto>();
+            if (resolved == null)
+                throw new InvalidOperationException("Failed to resolve group context.");
 
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            var programs = (await multi.ReadAsync<GroupProgramDto>()).ToList();
+            resolved.Programs = programs;
+
+            return resolved;
+        }
+
+        // =========================================================
+        // PROGRAM SYNCHRONIZATION (Stored Procedures Only)
+        // =========================================================
+
+        private async Task SyncMasterGroupProgramsAsync(
+            int masterGroupId,
+            List<int>? programIds,
+            CancellationToken cancellationToken = default)
+        {
+            programIds ??= new List<int>();
+
+            var distinctProgramIds = programIds
+                .Where(x => x > 0)
+                .Distinct()
+                .ToList();
+
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+            using var transaction = connection.BeginTransaction();
             try
             {
-                // Double check inside transaction
-                var doubleCheck = await _context.Groups
-                    .FirstOrDefaultAsync(g =>
-                        g.MasterGroupId == request.MasterGroupId &&
-                        g.BoardId == request.BoardId &&
-                        g.AcademicYearId == request.AcademicYearId &&
-                        g.AcademicLevelId == request.AcademicLevelId &&
-                        g.IsActive);
+                var cmdClear = new CommandDefinition(
+                    "sp_ClearMasterGroupPrograms",
+                    new { p_MasterGroupId = masterGroupId },
+                    transaction,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken
+                );
+                await connection.ExecuteAsync(cmdClear);
 
-                if (doubleCheck != null)
+                if (distinctProgramIds.Count > 0)
                 {
-                    await transaction.CommitAsync();
-                    var progs = await GetGroupProgramsAsync(doubleCheck.GroupId);
-                    return new ResolveGroupContextResponseDto
+                    foreach (var pid in distinctProgramIds)
                     {
-                        GroupId = doubleCheck.GroupId,
-                        MasterGroupId = masterGroup.MasterGroupId,
-                        BoardId = doubleCheck.BoardId,
-                        BoardName = masterGroup.BoardNavigation?.BoardName,
-                        AcademicYearId = doubleCheck.AcademicYearId,
-                        AcademicYearName = academicYear.AcademicYearName,
-                        AcademicLevelId = doubleCheck.AcademicLevelId,
-                        AcademicLevelName = academicLevel?.LevelName,
-                        GroupName = doubleCheck.GroupName,
-                        GroupCode = doubleCheck.GroupCode,
-                        Description = doubleCheck.Description,
-                        IsActive = doubleCheck.IsActive,
-                        Status = "Active",
-                        IsNewlyCreated = false,
-                        Programs = progs
-                    };
-                }
-
-                // 7. Generate a deterministic, globally unique contextual GroupCode
-                // Constraint: GroupCode is varchar(30) with unique index IX_Groups_GroupCode
-                var generatedGroupCode = await GenerateContextualGroupCodeAsync(masterGroup.GroupCode, academicLevel, academicYear);
-
-                var newGroup = new Group
-                {
-                    MasterGroupId = masterGroup.MasterGroupId,
-                    BoardId = request.BoardId,
-                    AcademicYearId = request.AcademicYearId,
-                    AcademicLevelId = request.AcademicLevelId,
-                    GroupName = masterGroup.GroupName,
-                    GroupCode = generatedGroupCode,
-                    Description = masterGroup.Description,
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _context.Groups.Add(newGroup);
-                await _context.SaveChangesAsync();
-
-                // 8. Inherit default programs from Master Group to GroupPrograms
-                var defaultPrograms = await _context.MasterGroupPrograms
-                    .Where(mgp => mgp.MasterGroupId == masterGroup.MasterGroupId && mgp.IsActive)
-                    .Select(mgp => mgp.ProgramId)
-                    .ToListAsync();
-
-                if (defaultPrograms.Count > 0)
-                {
-                    foreach (var programId in defaultPrograms.Distinct())
-                    {
-                        _context.GroupPrograms.Add(new GroupProgram
-                        {
-                            GroupId = newGroup.GroupId,
-                            ProgramId = programId,
-                            IsActive = true,
-                            CreatedAt = DateTime.UtcNow
-                        });
+                        var cmdAdd = new CommandDefinition(
+                            "sp_AddMasterGroupProgram",
+                            new { p_MasterGroupId = masterGroupId, p_ProgramId = pid },
+                            transaction,
+                            commandType: CommandType.StoredProcedure,
+                            cancellationToken: cancellationToken
+                        );
+                        await connection.ExecuteAsync(cmdAdd);
                     }
-                    await _context.SaveChangesAsync();
                 }
 
-                await transaction.CommitAsync();
-
-                var createdPrograms = await GetGroupProgramsAsync(newGroup.GroupId);
-
-                return new ResolveGroupContextResponseDto
-                {
-                    GroupId = newGroup.GroupId,
-                    MasterGroupId = masterGroup.MasterGroupId,
-                    BoardId = newGroup.BoardId,
-                    BoardName = masterGroup.BoardNavigation?.BoardName,
-                    AcademicYearId = newGroup.AcademicYearId,
-                    AcademicYearName = academicYear.AcademicYearName,
-                    AcademicLevelId = newGroup.AcademicLevelId,
-                    AcademicLevelName = academicLevel?.LevelName,
-                    GroupName = newGroup.GroupName,
-                    GroupCode = newGroup.GroupCode,
-                    Description = newGroup.Description,
-                    IsActive = newGroup.IsActive,
-                    Status = "Active",
-                    IsNewlyCreated = true,
-                    Programs = createdPrograms
-                };
+                transaction.Commit();
             }
             catch
             {
-                await transaction.RollbackAsync();
+                transaction.Rollback();
                 throw;
             }
-        }
-
-        // =========================================================
-        // PRIVATE HELPERS
-        // =========================================================
-
-        private async Task SyncMasterGroupProgramsAsync(int masterGroupId, List<int> programIds)
-        {
-            var distinctIds = programIds.Where(id => id > 0).Distinct().ToList();
-
-            var existingMappings = await _context.MasterGroupPrograms
-                .Where(mgp => mgp.MasterGroupId == masterGroupId)
-                .ToListAsync();
-
-            // Deactivate or remove mappings no longer selected
-            foreach (var existing in existingMappings)
-            {
-                if (!distinctIds.Contains(existing.ProgramId))
-                {
-                    _context.MasterGroupPrograms.Remove(existing);
-                }
-            }
-
-            // Add new mappings
-            var existingProgramIds = existingMappings.Select(m => m.ProgramId).ToHashSet();
-            foreach (var pid in distinctIds)
-            {
-                if (!existingProgramIds.Contains(pid))
-                {
-                    _context.MasterGroupPrograms.Add(new MasterGroupProgram
-                    {
-                        MasterGroupId = masterGroupId,
-                        ProgramId = pid,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    });
-                }
-            }
-
-            await _context.SaveChangesAsync();
-        }
-
-        private async Task<List<GroupProgramDto>> GetGroupProgramsAsync(int groupId)
-        {
-            return await _context.GroupPrograms
-                .AsNoTracking()
-                .Where(gp => gp.GroupId == groupId && gp.IsActive)
-                .Include(gp => gp.AcademicProgram)
-                .Where(gp => gp.AcademicProgram != null && gp.AcademicProgram.IsActive)
-                .OrderBy(gp => gp.AcademicProgram.ProgramName)
-                .Select(gp => new GroupProgramDto
-                {
-                    ProgramId = gp.ProgramId,
-                    ProgramName = gp.AcademicProgram.ProgramName,
-                    IsActive = gp.AcademicProgram.IsActive
-                })
-                .ToListAsync();
-        }
-
-        private async Task<string> GenerateContextualGroupCodeAsync(
-            string masterCode,
-            AcademicLevel? academicLevel,
-            AcademicYear? academicYear)
-        {
-            // Level shorthand: e.g. "INT-1" -> "L1", "INT-2" -> "L2"
-            var levelShort = academicLevel != null
-                ? (!string.IsNullOrWhiteSpace(academicLevel.LevelCode) ? academicLevel.LevelCode.Replace("-", "").ToUpperInvariant() : $"L{academicLevel.AcademicLevelId}")
-                : "LX";
-
-            // Year shorthand: e.g. "2026-2027" -> "2627"
-            string yearShort = "Y";
-            if (academicYear != null && !string.IsNullOrWhiteSpace(academicYear.AcademicYearName))
-            {
-                var digits = new string(academicYear.AcademicYearName.Where(char.IsDigit).ToArray());
-                yearShort = digits.Length >= 4 ? digits.Substring(digits.Length - 4) : digits;
-            }
-
-            // Target pattern: e.g. "MPC-INT1-2627"
-            var baseCode = $"{masterCode}-{levelShort}-{yearShort}";
-            if (baseCode.Length > 25)
-            {
-                baseCode = baseCode.Substring(0, 25);
-            }
-
-            var candidate = baseCode;
-            int counter = 1;
-
-            while (await _context.Groups.AnyAsync(g => g.GroupCode == candidate))
-            {
-                candidate = $"{baseCode}-{counter}";
-                if (candidate.Length > 30)
-                {
-                    candidate = $"{baseCode.Substring(0, 30 - counter.ToString().Length - 1)}-{counter}";
-                }
-                counter++;
-            }
-
-            return candidate;
         }
     }
 }

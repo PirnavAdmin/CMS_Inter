@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Groups;
 using CollegeManagement.API.Repositories;
@@ -27,7 +28,8 @@ namespace CollegeManagement.API.Services
             int? academicYearId = null,
             int? academicLevelId = null,
             bool? isActive = null,
-            int? masterGroupId = null)
+            int? masterGroupId = null,
+            CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(search) && !masterGroupId.HasValue)
             {
@@ -38,7 +40,8 @@ namespace CollegeManagement.API.Services
                     academicYearId,
                     academicLevelId,
                     isActive,
-                    masterGroupId));
+                    masterGroupId,
+                    cancellationToken));
             }
 
             return _groupRepository.GetAllAsync(
@@ -47,7 +50,8 @@ namespace CollegeManagement.API.Services
                 academicYearId,
                 academicLevelId,
                 isActive,
-                masterGroupId);
+                masterGroupId,
+                cancellationToken);
         }
 
         // =========================================================
@@ -55,9 +59,10 @@ namespace CollegeManagement.API.Services
         // =========================================================
 
         public Task<GroupResponse?> GetByIdAsync(
-            int groupId)
+            int groupId,
+            CancellationToken cancellationToken = default)
         {
-            return _groupRepository.GetByIdAsync(groupId);
+            return _groupRepository.GetByIdAsync(groupId, cancellationToken);
         }
 
         // =========================================================
@@ -67,14 +72,15 @@ namespace CollegeManagement.API.Services
         public Task<List<GroupListItemDto>> GetByBoardAsync(
             int boardId,
             int? academicYearId = null,
-            int? academicLevelId = null)
+            int? academicLevelId = null,
+            CancellationToken cancellationToken = default)
         {
             if (!academicYearId.HasValue && !academicLevelId.HasValue)
             {
-                return _cache.GetOrCreateAsync($"lookup:groups:board:{boardId}", () => _groupRepository.GetByBoardAsync(boardId, null, null));
+                return _cache.GetOrCreateAsync($"lookup:groups:board:{boardId}", () => _groupRepository.GetByBoardAsync(boardId, null, null, cancellationToken));
             }
 
-            return _groupRepository.GetByBoardAsync(boardId, academicYearId, academicLevelId);
+            return _groupRepository.GetByBoardAsync(boardId, academicYearId, academicLevelId, cancellationToken);
         }
 
         // =========================================================
@@ -82,9 +88,10 @@ namespace CollegeManagement.API.Services
         // =========================================================
 
         public async Task<GroupResponse> CreateAsync(
-            CreateGroupRequest request)
+            CreateGroupRequest request,
+            CancellationToken cancellationToken = default)
         {
-            var res = await _groupRepository.CreateAsync(request);
+            var res = await _groupRepository.CreateAsync(request, cancellationToken);
             _cache.RemoveByPrefix("lookup:groups");
             return res;
         }
@@ -95,9 +102,10 @@ namespace CollegeManagement.API.Services
 
         public async Task<GroupResponse?> UpdateAsync(
             int groupId,
-            UpdateGroupRequest request)
+            UpdateGroupRequest request,
+            CancellationToken cancellationToken = default)
         {
-            var res = await _groupRepository.UpdateAsync(groupId, request);
+            var res = await _groupRepository.UpdateAsync(groupId, request, cancellationToken);
             _cache.RemoveByPrefix("lookup:groups");
             return res;
         }
@@ -107,9 +115,10 @@ namespace CollegeManagement.API.Services
         // =========================================================
 
         public async Task<bool> DeleteAsync(
-            int groupId)
+            int groupId,
+            CancellationToken cancellationToken = default)
         {
-            var res = await _groupRepository.DeleteAsync(groupId);
+            var res = await _groupRepository.DeleteAsync(groupId, cancellationToken);
             if (res) _cache.RemoveByPrefix("lookup:groups");
             return res;
         }
@@ -120,11 +129,13 @@ namespace CollegeManagement.API.Services
 
         public async Task<bool> ActivateAsync(
             int groupId,
-            bool isActive = true)
+            bool isActive = true,
+            CancellationToken cancellationToken = default)
         {
             var res = await _groupRepository.ActivateAsync(
                 groupId,
-                isActive);
+                isActive,
+                cancellationToken);
             if (res) _cache.RemoveByPrefix("lookup:groups");
             return res;
         }
@@ -135,11 +146,13 @@ namespace CollegeManagement.API.Services
 
         public Task<bool> GroupCodeExistsAsync(
             string groupCode,
-            int? excludeGroupId = null)
+            int? excludeGroupId = null,
+            CancellationToken cancellationToken = default)
         {
             return _groupRepository.GroupCodeExistsAsync(
                 groupCode,
-                excludeGroupId);
+                excludeGroupId,
+                cancellationToken);
         }
 
         // =========================================================
@@ -148,10 +161,12 @@ namespace CollegeManagement.API.Services
 
         public Task<List<CollegeManagement.API.DTOs.Students.StudentListItemDto>>
             GetStudentsAsync(
-                int groupId)
+                int groupId,
+                CancellationToken cancellationToken = default)
         {
             return _groupRepository.GetStudentsAsync(
-                groupId);
+                groupId,
+                cancellationToken);
         }
 
         // =========================================================
@@ -160,10 +175,12 @@ namespace CollegeManagement.API.Services
 
         public Task<List<CollegeManagement.API.Models.Subject>>
             GetSubjectsAsync(
-                int groupId)
+                int groupId,
+                CancellationToken cancellationToken = default)
         {
             return _groupRepository.GetSubjectsAsync(
-                groupId);
+                groupId,
+                cancellationToken);
         }
 
         // =========================================================
@@ -172,10 +189,12 @@ namespace CollegeManagement.API.Services
 
         public Task<GroupSummaryDto?>
             GetSummaryAsync(
-                int groupId)
+                int groupId,
+                CancellationToken cancellationToken = default)
         {
             return _groupRepository.GetSummaryAsync(
-                groupId);
+                groupId,
+                cancellationToken);
         }
 
         // =========================================================
@@ -186,9 +205,10 @@ namespace CollegeManagement.API.Services
             GetDropdownAsync(
                 int? boardId = null,
                 int? academicYearId = null,
-                int? academicLevelId = null)
+                int? academicLevelId = null,
+                CancellationToken cancellationToken = default)
         {
-            return _groupRepository.GetDropdownAsync(boardId, academicYearId, academicLevelId);
+            return _groupRepository.GetDropdownAsync(boardId, academicYearId, academicLevelId, cancellationToken);
         }
 
         // =========================================================
@@ -197,10 +217,12 @@ namespace CollegeManagement.API.Services
 
         public Task<List<CollegeManagement.API.DTOs.Program.GroupProgramDto>>
             GetProgramsAsync(
-                int groupId)
+                int groupId,
+                CancellationToken cancellationToken = default)
         {
             return _groupRepository.GetProgramsAsync(
-                groupId);
+                groupId,
+                cancellationToken);
         }
     }
 }

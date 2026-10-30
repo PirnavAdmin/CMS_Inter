@@ -1,9 +1,12 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Groups;
+using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Filters;
-using CollegeManagement.API.Repositories;
+using CollegeManagement.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using CollegeManagement.API.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using MySqlConnector;
 
@@ -15,11 +18,11 @@ namespace CollegeManagement.API.Controllers
     [RequirePermission("group-management")]
     public class GroupsController : ControllerBase
     {
-        private readonly IGroupRepository _groupRepository;
+        private readonly IGroupService _groupService;
 
-        public GroupsController(IGroupRepository groupRepository)
+        public GroupsController(IGroupService groupService)
         {
-            _groupRepository = groupRepository;
+            _groupService = groupService;
         }
 
         // =========================================================
@@ -36,13 +39,14 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? masterGroupId = null)
         {
             return Ok(
-                await _groupRepository.GetAllAsync(
+                await _groupService.GetAllAsync(
                     search,
                     boardId,
                     academicYearId,
                     academicLevelId,
                     isActive,
-                    masterGroupId));
+                    masterGroupId,
+                    HttpContext.RequestAborted));
         }
 
         // =========================================================
@@ -57,10 +61,11 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? academicLevelId = null)
         {
             return Ok(
-                await _groupRepository.GetDropdownAsync(
+                await _groupService.GetDropdownAsync(
                     boardId,
                     academicYearId,
-                    academicLevelId));
+                    academicLevelId,
+                    HttpContext.RequestAborted));
         }
 
         // =========================================================
@@ -72,12 +77,12 @@ namespace CollegeManagement.API.Controllers
             int groupId)
         {
             if (groupId <= 0)
-                throw new ValidationException(
-                    "Valid GroupId is required");
+                throw new ValidationException("Valid GroupId is required");
 
             return Ok(
-                await _groupRepository.GetStudentsAsync(
-                    groupId));
+                await _groupService.GetStudentsAsync(
+                    groupId,
+                    HttpContext.RequestAborted));
         }
 
         // =========================================================
@@ -89,37 +94,16 @@ namespace CollegeManagement.API.Controllers
             int groupId)
         {
             if (groupId <= 0)
-                throw new ValidationException(
-                    "Valid GroupId is required");
+                throw new ValidationException("Valid GroupId is required");
 
             return Ok(
-                await _groupRepository.GetSubjectsAsync(
-                    groupId));
+                await _groupService.GetSubjectsAsync(
+                    groupId,
+                    HttpContext.RequestAborted));
         }
 
         // =========================================================
         // GET PROGRAMS BY GROUP
-        // =========================================================
-        //
-        // Example:
-        //
-        // GET /api/v1/groups/10/programs
-        //
-        // Response:
-        //
-        // [
-        //   {
-        //     "programId": 1,
-        //     "programName": "Regular",
-        //     "isActive": true
-        //   },
-        //   {
-        //     "programId": 2,
-        //     "programName": "JEE",
-        //     "isActive": true
-        //   }
-        // ]
-        //
         // =========================================================
 
         [HttpGet("{groupId:int}/programs")]
@@ -127,12 +111,12 @@ namespace CollegeManagement.API.Controllers
             int groupId)
         {
             if (groupId <= 0)
-                throw new ValidationException(
-                    "Valid GroupId is required");
+                throw new ValidationException("Valid GroupId is required");
 
             var programs =
-                await _groupRepository.GetProgramsAsync(
-                    groupId);
+                await _groupService.GetProgramsAsync(
+                    groupId,
+                    HttpContext.RequestAborted);
 
             return Ok(programs);
         }
@@ -146,18 +130,15 @@ namespace CollegeManagement.API.Controllers
             int groupId)
         {
             if (groupId <= 0)
-                throw new ValidationException(
-                    "Valid GroupId is required");
+                throw new ValidationException("Valid GroupId is required");
 
             var result =
-                await _groupRepository.GetSummaryAsync(
-                    groupId);
+                await _groupService.GetSummaryAsync(
+                    groupId,
+                    HttpContext.RequestAborted);
 
             return result == null
-                ? NotFound(new
-                {
-                    message = "Group not found"
-                })
+                ? NotFound(new { message = "Group not found" })
                 : Ok(result);
         }
 
@@ -170,16 +151,15 @@ namespace CollegeManagement.API.Controllers
             int groupId)
         {
             if (groupId <= 0)
-                throw new ValidationException(
-                    "Valid GroupId is required");
+                throw new ValidationException("Valid GroupId is required");
 
             var group =
-                await _groupRepository.GetByIdAsync(
-                    groupId);
+                await _groupService.GetByIdAsync(
+                    groupId,
+                    HttpContext.RequestAborted);
 
             if (group == null)
-                throw new NotFoundException(
-                    "Group not found");
+                throw new NotFoundException("Group not found");
 
             return Ok(group);
         }
@@ -195,30 +175,18 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? academicLevelId = null)
         {
             if (boardId <= 0)
-                throw new ValidationException(
-                    "Valid BoardId is required");
+                throw new ValidationException("Valid BoardId is required");
 
             return Ok(
-                await _groupRepository.GetByBoardAsync(
+                await _groupService.GetByBoardAsync(
                     boardId,
                     academicYearId,
-                    academicLevelId));
+                    academicLevelId,
+                    HttpContext.RequestAborted));
         }
 
         // =========================================================
         // CREATE GROUP
-        // =========================================================
-        //
-        // ProgramIds are now received through CreateGroupRequest.
-        //
-        // Example:
-        //
-        // {
-        //   "groupName": "MPC",
-        //   "groupCode": "MPC",
-        //   "programIds": [1, 2, 4]
-        // }
-        //
         // =========================================================
 
         [HttpPost]
@@ -231,20 +199,16 @@ namespace CollegeManagement.API.Controllers
             try
             {
                 var group =
-                    await _groupRepository.CreateAsync(
-                        request);
+                    await _groupService.CreateAsync(
+                        request,
+                        HttpContext.RequestAborted);
 
                 return CreatedAtAction(
                     nameof(GetGroup),
+                    new { groupId = group.GroupId },
                     new
                     {
-                        groupId = group.GroupId
-                    },
-                    new
-                    {
-                        message =
-                            "Group created successfully",
-
+                        message = "Group created successfully",
                         data = group
                     });
             }
@@ -258,18 +222,6 @@ namespace CollegeManagement.API.Controllers
         // =========================================================
         // UPDATE GROUP
         // =========================================================
-        //
-        // ProgramIds are now received through UpdateGroupRequest.
-        //
-        // Example:
-        //
-        // {
-        //   "groupName": "MPC",
-        //   "groupCode": "MPC",
-        //   "programIds": [1, 2, 4]
-        // }
-        //
-        // =========================================================
 
         [HttpPut("{groupId:int}")]
         public async Task<IActionResult> UpdateGroup(
@@ -277,8 +229,7 @@ namespace CollegeManagement.API.Controllers
             [FromBody] UpdateGroupRequest request)
         {
             if (groupId <= 0)
-                throw new ValidationException(
-                    "Valid GroupId is required");
+                throw new ValidationException("Valid GroupId is required");
 
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
@@ -286,19 +237,17 @@ namespace CollegeManagement.API.Controllers
             try
             {
                 var group =
-                    await _groupRepository.UpdateAsync(
+                    await _groupService.UpdateAsync(
                         groupId,
-                        request);
+                        request,
+                        HttpContext.RequestAborted);
 
                 if (group == null)
-                    throw new NotFoundException(
-                        "Group not found");
+                    throw new NotFoundException("Group not found");
 
                 return Ok(new
                 {
-                    message =
-                        "Group updated successfully",
-
+                    message = "Group updated successfully",
                     data = group
                 });
             }
@@ -318,37 +267,26 @@ namespace CollegeManagement.API.Controllers
             int groupId)
         {
             if (groupId <= 0)
-                throw new ValidationException(
-                    "Valid GroupId is required");
+                throw new ValidationException("Valid GroupId is required");
 
             try
             {
                 var deleted =
-                    await _groupRepository.DeleteAsync(
-                        groupId);
+                    await _groupService.DeleteAsync(
+                        groupId,
+                        HttpContext.RequestAborted);
 
                 if (!deleted)
-                    throw new NotFoundException(
-                        "Group not found");
+                    throw new NotFoundException("Group not found");
 
                 return Ok(new
                 {
-                    message =
-                        "Group deleted successfully"
+                    message = "Group deleted successfully"
                 });
             }
-            catch (ValidationException)
-            {
-                throw;
-            }
-            catch (NotFoundException)
-            {
-                throw;
-            }
-            catch (ConflictException)
-            {
-                throw;
-            }
+            catch (ValidationException) { throw; }
+            catch (NotFoundException) { throw; }
+            catch (ConflictException) { throw; }
             catch (DbUpdateException ex)
             {
                 HandleDbUpdateException(ex);
@@ -366,29 +304,28 @@ namespace CollegeManagement.API.Controllers
         // =========================================================
 
         [HttpPatch("{groupId:int}/activate")]
+        [HttpPatch("{groupId:int}/status")]
         public async Task<IActionResult> ActivateGroup(
             int groupId,
             [FromQuery] bool isActive = true)
         {
             if (groupId <= 0)
-                throw new ValidationException(
-                    "Valid GroupId is required");
+                throw new ValidationException("Valid GroupId is required");
 
             var success =
-                await _groupRepository.ActivateAsync(
+                await _groupService.ActivateAsync(
                     groupId,
-                    isActive);
+                    isActive,
+                    HttpContext.RequestAborted);
 
             if (!success)
-                throw new NotFoundException(
-                    "Group not found");
+                throw new NotFoundException("Group not found");
 
             return Ok(new
             {
                 message = isActive
                     ? "Group activated successfully"
                     : "Group deactivated successfully",
-
                 data = new
                 {
                     groupId,
@@ -407,13 +344,13 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? excludeGroupId = null)
         {
             if (string.IsNullOrWhiteSpace(groupCode))
-                throw new ValidationException(
-                    "Group code is required");
+                throw new ValidationException("Group code is required");
 
             var exists =
-                await _groupRepository.GroupCodeExistsAsync(
+                await _groupService.GroupCodeExistsAsync(
                     groupCode,
-                    excludeGroupId);
+                    excludeGroupId,
+                    HttpContext.RequestAborted);
 
             return Ok(new
             {
@@ -427,8 +364,7 @@ namespace CollegeManagement.API.Controllers
         // EXCEPTION HANDLER
         // =========================================================
 
-        private static void HandleDbUpdateException(
-            DbUpdateException exception)
+        private static void HandleDbUpdateException(DbUpdateException exception)
         {
             var inner = exception.InnerException;
             if (inner is MySqlException mySqlEx)
@@ -447,8 +383,7 @@ namespace CollegeManagement.API.Controllers
             throw new ValidationException(msg);
         }
 
-        private static void HandleException(
-            MySqlException exception)
+        private static void HandleException(MySqlException exception)
         {
             var message = exception.Message;
 
@@ -460,16 +395,12 @@ namespace CollegeManagement.API.Controllers
                     "Cannot delete this group because it is currently referenced by other records (such as sections or students). Please reassign or delete the associated records first.");
             }
 
-            if (message.Contains(
-                    "already exists",
-                    StringComparison.OrdinalIgnoreCase))
+            if (message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
             {
                 throw new ConflictException(message);
             }
 
-            if (message.Contains(
-                    "not found",
-                    StringComparison.OrdinalIgnoreCase))
+            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase))
             {
                 throw new NotFoundException(message);
             }

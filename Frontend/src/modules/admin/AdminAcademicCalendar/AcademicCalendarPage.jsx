@@ -183,31 +183,39 @@ export function createAcademicCalendarService() {
   const endpoints = apiEndpoints.academicCalendar;
   return {
     async getCalendarEvents(params = {}, signal) {
-      const events = []; let previous = '';
-      for (let page = 1; page <= 1000; page++) {
-        const response = await apiClient.get(endpoints.list, { params: { ...params, Page: page, PageSize: 100 }, signal });
-        const data = response.data; const batch = rowsOf(data);
-        const fingerprint = JSON.stringify(batch);
-        if (batch.length && fingerprint === previous) throw new Error('The calendar server repeated a page.');
+      const events = [];
+      let previousLastId = null;
+      const maxPages = params.Page ? 1 : 20;
+      for (let page = params.Page || 1; page <= maxPages; page++) {
+        const response = await apiClient.get(endpoints.list, { params: { ...params, Page: page, PageSize: params.PageSize || 100 }, signal });
+        const data = response.data;
+        const batch = rowsOf(data);
+        if (!batch.length) break;
+        const lastId = batch[batch.length - 1]?.eventId ?? batch[batch.length - 1]?.id;
+        if (lastId && lastId === previousLastId) break;
+        previousLastId = lastId;
         events.push(...batch.map(normalizeCalendarEvent));
         const totalPages = Number(data.totalPages ?? data.data?.totalPages);
-        if (!batch.length || (totalPages > 0 ? page >= totalPages : batch.length < 100)) return uniqueEvents(events);
-        previous = fingerprint;
+        if (totalPages > 0 ? page >= totalPages : batch.length < (params.PageSize || 100)) break;
+        if (params.Page) break;
       }
-      throw new Error('Calendar history exceeds the supported page limit.');
+      return uniqueEvents(events);
     },
     async getHolidays(params, signal) {
-      const records = []; let previous = '';
-      for (let page = 1; page <= 1000; page++) {
+      const records = [];
+      let previousLastId = null;
+      for (let page = 1; page <= 20; page++) {
         const { data } = await apiClient.get(apiEndpoints.holidays.list, { params: { ...params, Page: page, PageSize: 100 }, signal });
-        const batch = rowsOf(data), fingerprint = JSON.stringify(batch);
-        if (batch.length && fingerprint === previous) throw new Error('The holiday server repeated a page.');
+        const batch = rowsOf(data);
+        if (!batch.length) break;
+        const lastId = batch[batch.length - 1]?.holidayId ?? batch[batch.length - 1]?.id;
+        if (lastId && lastId === previousLastId) break;
+        previousLastId = lastId;
         records.push(...batch);
         const pages = Number(data.totalPages);
-        if (!batch.length || (pages > 0 ? page >= pages : batch.length < 100)) return holidayEvents(records);
-        previous = fingerprint;
+        if (pages > 0 ? page >= pages : batch.length < 100) break;
       }
-      throw new Error('Holiday history exceeds the supported page limit.');
+      return holidayEvents(records);
     },
     async getExaminations(params, signal) {
       const exams = [...new Map(rowsOf((await apiClient.get(apiEndpoints.examinations.list, { params, signal })).data)

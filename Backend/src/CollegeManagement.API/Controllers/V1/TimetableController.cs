@@ -169,24 +169,8 @@ namespace CollegeManagement.API.Controllers.V1
         [BypassPermission]
         public async Task<IActionResult> GetByStudent([FromRoute] int studentId)
         {
-            try
-            {
-                var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
-                var connection = dbContext.Database.GetDbConnection();
-                if (connection.State != System.Data.ConnectionState.Open) await connection.OpenAsync();
-                
-                var result = await Dapper.SqlMapper.QueryAsync<TimetableResponseDto>(
-                    connection,
-                    "CALL sp_GetStudentTimetable(@StudentId);",
-                    new { StudentId = studentId },
-                    commandType: System.Data.CommandType.Text);
-
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "An error occurred while retrieving student timetable.", details = ex.Message });
-            }
+            var result = await _timetableService.GetStudentTimetableAsync(studentId);
+            return Ok(result);
         }
 
         /// <summary>
