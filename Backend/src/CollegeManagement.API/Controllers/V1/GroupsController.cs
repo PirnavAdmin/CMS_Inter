@@ -30,6 +30,7 @@ namespace CollegeManagement.API.Controllers
         // =========================================================
 
         [HttpGet]
+        [BypassPermission]
         public async Task<IActionResult> GetGroups(
             [FromQuery] string? search = null,
             [FromQuery] int? boardId = null,

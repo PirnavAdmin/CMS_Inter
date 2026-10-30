@@ -379,8 +379,10 @@ export async function submitClaim(claimPayload) {
     PaymentMethod: targetPaymentMethod,
     preferredPaymentMethod: targetPaymentMethod,
     PreferredPaymentMethod: targetPaymentMethod,
-    notes: (claimPayload.notes || claimPayload.Notes || "").trim(),
-    Notes: (claimPayload.notes || claimPayload.Notes || "").trim(),
+    notes: (claimPayload.notes || claimPayload.additionalNotes || claimPayload.Notes || claimPayload.AdditionalNotes || "").trim(),
+    Notes: (claimPayload.notes || claimPayload.additionalNotes || claimPayload.Notes || claimPayload.AdditionalNotes || "").trim(),
+    additionalNotes: (claimPayload.additionalNotes || claimPayload.notes || claimPayload.Notes || claimPayload.AdditionalNotes || "").trim(),
+    AdditionalNotes: (claimPayload.additionalNotes || claimPayload.notes || claimPayload.Notes || claimPayload.AdditionalNotes || "").trim(),
     declaration: Boolean(claimPayload.declaration ?? claimPayload.Declaration),
     Declaration: Boolean(claimPayload.declaration ?? claimPayload.Declaration),
   };
@@ -432,8 +434,10 @@ function broadcastReimbursementEvent(type = "REIMBURSEMENT_STATUS_UPDATED") {
 export async function approveClaim(claimId, payload = {}) {
   const body = {
     approvedAmount: Number(payload.approvedAmount) || undefined,
-    remarks: payload.remarks || payload.approvalRemarks || "Approved",
-    adminNotes: payload.remarks || payload.adminNotes || "Approved",
+    reviewNotes: payload.reviewNotes || payload.remarks || payload.approvalRemarks || payload.adminNotes || "Approved",
+    ReviewNotes: payload.reviewNotes || payload.remarks || payload.approvalRemarks || payload.adminNotes || "Approved",
+    remarks: payload.remarks || payload.reviewNotes || payload.approvalRemarks || payload.adminNotes || "Approved",
+    adminNotes: payload.adminNotes || payload.remarks || payload.reviewNotes || payload.approvalRemarks || "Approved",
     approvedBy: payload.approvedBy || "Finance Admin",
   };
   const res = await reimbursementApi.verifyReimbursement(claimId, body);

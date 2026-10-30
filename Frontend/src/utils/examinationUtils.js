@@ -58,6 +58,29 @@ export const d = (value) =>
     : "—";
 
 export const normalizeId = (value) => String(value ?? "");
+
+export const getExamGroupIds = (exam) => {
+  if (!exam) return [];
+  if (Array.isArray(exam.groupIds) && exam.groupIds.length > 0) {
+    return exam.groupIds.filter(Boolean).map(normalizeId);
+  }
+  if (Array.isArray(exam.courseGroupIds) && exam.courseGroupIds.length > 0) {
+    return exam.courseGroupIds.filter(Boolean).map(normalizeId);
+  }
+  if (Array.isArray(exam.groups) && exam.groups.length > 0) {
+    return exam.groups.map((g) => normalizeId(g.id || g.groupId)).filter(Boolean);
+  }
+  if (Array.isArray(exam.groupProgramSelections) && exam.groupProgramSelections.length > 0) {
+    return exam.groupProgramSelections.map((g) => normalizeId(g.groupId || g.id)).filter(Boolean);
+  }
+  if (exam.groupId) {
+    return [normalizeId(exam.groupId)];
+  }
+  if (exam.courseGroupId) {
+    return [normalizeId(exam.courseGroupId)];
+  }
+  return [];
+};
 export const normalizeStatus = (value) => String(value || "").trim().toUpperCase();
 export const normalizeCodePart = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 export const canonicalDate = (value) => {
@@ -159,6 +182,8 @@ export const requiredInvigilatorCount = (candidateCount) =>
  */
 export const isCombinedExamination = (examOrForm) => {
   if (!examOrForm) return false;
+  const catTrimEarly = String(examOrForm.examCategory || examOrForm.category || "").trim().toLowerCase();
+  if (catTrimEarly === "regular") return false;
   const mode = normalizeStatus(examOrForm.scheduleMode);
   if (mode === "PATTERN_WISE" || mode === "COMBINED_OBJECTIVE") return true;
   if (mode === "SUBJECT_WISE" || mode === "REGULAR") return false;

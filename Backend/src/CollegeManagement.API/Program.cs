@@ -209,6 +209,7 @@ builder.Services.AddScoped<IAssignmentRepository, AssignmentRepository>();
 builder.Services.AddScoped<IAssignmentSubmissionRepository, AssignmentSubmissionRepository>();
 builder.Services.AddScoped<IExaminationRepository, ExaminationRepository>();
 builder.Services.AddScoped<IMarksRepository, MarksRepository>();
+builder.Services.AddScoped<IEvaluationRepository, EvaluationRepository>();
 builder.Services.AddScoped<IResultRepository, ResultRepository>();
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<ITimetableRepository, TimetableRepository>();
@@ -228,6 +229,7 @@ builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
 builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
 builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
+builder.Services.AddScoped<ILeaveCategoryRepository, LeaveCategoryRepository>();
 
 // Academic Calendar & Notifications Repositories
 builder.Services.AddScoped<IAcademicCalendarRepository, AcademicCalendarRepository>();
@@ -266,6 +268,7 @@ builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 // Inventory Repository
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
+builder.Services.AddScoped<INonTeachingRepository, NonTeachingRepository>();
 #endregion
 
 #region Services
@@ -277,6 +280,7 @@ builder.Services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<ICampusAuthorizationService, CampusAuthorizationService>();
 builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
 builder.Services.AddScoped<ITemplateService, TemplateService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
@@ -329,6 +333,7 @@ builder.Services.AddScoped<IRoomService, RoomService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IStudyMaterialService, StudyMaterialService>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
+builder.Services.AddScoped<ICertificateExportService, CertificateExportService>();
 
 // Hostel Services
 builder.Services.AddScoped<IHostelBlockService, HostelBlockService>();
@@ -533,6 +538,17 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseStaticFiles();
+
+var uploadsDir = Path.Combine(app.Environment.ContentRootPath, "Uploads");
+if (!Directory.Exists(uploadsDir))
+{
+    Directory.CreateDirectory(uploadsDir);
+}
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
+    RequestPath = "/Uploads"
+});
 app.UseSession();
 app.UseAuthentication();
 
@@ -725,6 +741,65 @@ try
             {
                 await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeePaymentPlans` ADD COLUMN `UpdatedAt` datetime(6) NULL;");
             }
+            // Align Examination Module tables & columns
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE IF NOT EXISTS `ExaminationSubjects` (
+                    `Id` INT NOT NULL AUTO_INCREMENT,
+                    `ExaminationId` INT NOT NULL,
+                    `SubjectId` INT NOT NULL,
+                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`Id`),
+                    UNIQUE KEY `UQ_Exam_Subject` (`ExaminationId`, `SubjectId`),
+                    KEY `IX_ExaminationSubjects_ExamId` (`ExaminationId`),
+                    KEY `IX_ExaminationSubjects_SubjectId` (`SubjectId`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE IF NOT EXISTS `ExaminationSettings` (
+                    `SettingId` INT NOT NULL AUTO_INCREMENT,
+                    `CampusId` INT NOT NULL DEFAULT 1,
+                    `MinimumPassingPercentage` DECIMAL(5,2) NOT NULL DEFAULT 35.00,
+                    `MaximumGraceMarksLimit` INT NOT NULL DEFAULT 5,
+                    `GradeScaleStandard` VARCHAR(100) NOT NULL DEFAULT '10-Point CGPA (UGC / AICTE Standard)',
+                    `ReEvaluationWindowDays` INT NOT NULL DEFAULT 15,
+                    `EnableDoubleEvaluation` TINYINT(1) NOT NULL DEFAULT 0,
+                    `AllowNegativeMarking` TINYINT(1) NOT NULL DEFAULT 0,
+                    `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`SettingId`),
+                    UNIQUE KEY `UQ_ExamSettings_Campus` (`CampusId`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
+
+            try
+            {
+                var patExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+                    WHERE table_schema = DATABASE() AND table_name = 'ExamSchedules' AND column_name = 'PatternName'").FirstOrDefaultAsync();
+                if (patExists == 0)
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `ExamSchedules` ADD COLUMN `PatternName` VARCHAR(100) NULL;");
+                }
+                var grpExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+                    WHERE table_schema = DATABASE() AND table_name = 'ExamSchedules' AND column_name = 'GroupId'").FirstOrDefaultAsync();
+                if (grpExists == 0)
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `ExamSchedules` ADD COLUMN `GroupId` INT NULL;");
+                }
+                var incExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+                    WHERE table_schema = DATABASE() AND table_name = 'ExamSchedules' AND column_name = 'IncludedSubjectIds'").FirstOrDefaultAsync();
+                if (incExists == 0)
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `ExamSchedules` ADD COLUMN `IncludedSubjectIds` TEXT NULL;");
+                }
+            }
+            catch (Exception exExamCols)
+            {
+                app.Logger.LogWarning(exExamCols, "Failed to verify or add ExamSchedules pattern columns.");
+            }
+
             await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE TABLE IF NOT EXISTS `facility_transition_histories` (
                     `TransitionId` INT NOT NULL AUTO_INCREMENT,
@@ -753,6 +828,203 @@ try
         catch (Exception fpEx)
         {
             app.Logger.LogWarning(fpEx, "Failed to align FeePaymentPlans schema or facility_transition_histories table.");
+        }
+
+        try
+        {
+            var campExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+                WHERE table_schema = DATABASE() AND table_name = 'Marks' AND column_name = 'CampusId'").FirstOrDefaultAsync();
+            if (campExists == 0)
+            {
+                await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Marks` ADD COLUMN `CampusId` INT NOT NULL DEFAULT 1;");
+            }
+
+            var subExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+                WHERE table_schema = DATABASE() AND table_name = 'Marks' AND column_name = 'SubmittedAt'").FirstOrDefaultAsync();
+            if (subExists == 0)
+            {
+                await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Marks` ADD COLUMN `SubmittedAt` DATETIME(6) NULL;");
+            }
+
+            var resubExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+                WHERE table_schema = DATABASE() AND table_name = 'Marks' AND column_name = 'ResubmissionCount'").FirstOrDefaultAsync();
+            if (resubExists == 0)
+            {
+                await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Marks` ADD COLUMN `ResubmissionCount` INT NOT NULL DEFAULT 0;");
+            }
+
+            var uqExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                SELECT COUNT(*) AS `Value` FROM information_schema.statistics 
+                WHERE table_schema = DATABASE() AND table_name = 'Marks' AND index_name = 'UQ_Marks_Exam_Subject_Student'").FirstOrDefaultAsync();
+            if (uqExists == 0)
+            {
+                try
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Marks` ADD UNIQUE KEY `UQ_Marks_Exam_Subject_Student` (`ExaminationId`, `SubjectId`, `StudentId`);");
+                }
+                catch { }
+            }
+
+            var ixExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                SELECT COUNT(*) AS `Value` FROM information_schema.statistics 
+                WHERE table_schema = DATABASE() AND table_name = 'Marks' AND index_name = 'IX_Marks_Exam_Subject_Section_Status'").FirstOrDefaultAsync();
+            if (ixExists == 0)
+            {
+                try
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Marks` ADD KEY `IX_Marks_Exam_Subject_Section_Status` (`ExaminationId`, `SubjectId`, `SectionId`, `Status`, `IsActive`);");
+                }
+                catch { }
+            }
+
+                        var marksScriptPath = Path.Combine(app.Environment.ContentRootPath, "Database", "Scripts", "StoredProcedures", "MarksModule", "02_Marks_And_Evaluation_Optimization_Alignments.sql");
+            if (File.Exists(marksScriptPath))
+            {
+                var marksSql = await File.ReadAllTextAsync(marksScriptPath);
+                var spRegex = new System.Text.RegularExpressions.Regex(@"(CREATE\s+PROCEDURE\s+`?([a-zA-Z0-9_]+)`?[\s\S]*?\bEND)\s*//", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var matches = spRegex.Matches(marksSql);
+                foreach (System.Text.RegularExpressions.Match match in matches)
+                {
+                    string createBody = match.Groups[1].Value.Trim();
+                    string spName = match.Groups[2].Value;
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync(string.Concat("DROP PROCEDURE IF EXISTS `", spName, "`;"));
+                        await dbContext.Database.ExecuteSqlRawAsync(createBody);
+                    }
+                    catch (Exception batchEx)
+                    {
+                        app.Logger.LogDebug(batchEx, "Notice executing Marks SP {SpName}.", spName);
+                    }
+                }
+            }
+
+            // Align Results table indexes and unified Stored Procedures
+            try
+            {
+                var rIdxExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS Value FROM information_schema.statistics 
+                    WHERE table_schema = DATABASE() AND table_name = 'Results' AND index_name = 'IX_Results_Exam_Student_Subject'").FirstOrDefaultAsync();
+                if (rIdxExists == 0)
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Results` ADD KEY `IX_Results_Exam_Student_Subject` (`ExamId`, `StudentId`, `SubjectId`);");
+                    }
+                    catch { }
+                }
+
+                var rGrpIdxExists = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS Value FROM information_schema.statistics 
+                    WHERE table_schema = DATABASE() AND table_name = 'Results' AND index_name = 'IX_Results_Exam_Group_Published'").FirstOrDefaultAsync();
+                if (rGrpIdxExists == 0)
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Results` ADD KEY `IX_Results_Exam_Group_Published` (`ExamId`, `GroupId`, `IsPublished`);");
+                    }
+                    catch { }
+                }
+
+                var resultScriptPath = Path.Combine(app.Environment.ContentRootPath, "Database", "Scripts", "StoredProcedures", "ResultModule", "01_Unified_Result_Stored_Procedures.sql");
+                if (File.Exists(resultScriptPath))
+                {
+                    var resultSql = await File.ReadAllTextAsync(resultScriptPath);
+                    var spRegex = new System.Text.RegularExpressions.Regex(@"(CREATE\s+PROCEDURE\s+`?([a-zA-Z0-9_]+)`?[\s\S]*?\bEND)\s*//", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    var matches = spRegex.Matches(resultSql);
+                    foreach (System.Text.RegularExpressions.Match match in matches)
+                    {
+                        string createBody = match.Groups[1].Value.Trim();
+                        string spName = match.Groups[2].Value;
+                        try
+                        {
+                            await dbContext.Database.ExecuteSqlRawAsync(string.Concat("DROP PROCEDURE IF EXISTS `", spName, "`;"));
+                            await dbContext.Database.ExecuteSqlRawAsync(createBody);
+                        }
+                        catch (Exception batchEx)
+                        {
+                            app.Logger.LogDebug(batchEx, "Notice executing Results SP {SpName}.", spName);
+                        }
+                    }
+                }
+            }
+            catch (Exception resEx)
+            {
+                app.Logger.LogWarning(resEx, "Failed to align Results table indexes or stored procedures.");
+            }
+
+            // Align Certificates table schema and unified Stored Procedures
+            try
+            {
+                var certCampusCol = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS Value FROM information_schema.columns 
+                    WHERE table_schema = DATABASE() AND table_name = 'certificates' AND column_name = 'CampusId'").FirstOrDefaultAsync();
+                if (certCampusCol == 0)
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `certificates` ADD COLUMN `CampusId` INT NULL;");
+                    }
+                    catch { }
+                }
+
+                var certCampusIdx = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS Value FROM information_schema.statistics 
+                    WHERE table_schema = DATABASE() AND table_name = 'certificates' AND index_name = 'IX_certificates_CampusId_Status'").FirstOrDefaultAsync();
+                if (certCampusIdx == 0)
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `certificates` ADD KEY `IX_certificates_CampusId_Status` (`CampusId`, `Status`);");
+                    }
+                    catch { }
+                }
+
+                var certAdmIdx = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS Value FROM information_schema.statistics 
+                    WHERE table_schema = DATABASE() AND table_name = 'certificates' AND index_name = 'IX_certificates_AdmissionNo'").FirstOrDefaultAsync();
+                if (certAdmIdx == 0)
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `certificates` ADD KEY `IX_certificates_AdmissionNo` (`AdmissionNo`);");
+                    }
+                    catch { }
+                }
+
+                var certScriptPath = Path.Combine(app.Environment.ContentRootPath, "Database", "Scripts", "StoredProcedures", "CertificateModule", "01_Unified_Certificate_Stored_Procedures.sql");
+                if (File.Exists(certScriptPath))
+                {
+                    var certSql = await File.ReadAllTextAsync(certScriptPath);
+                    var spRegex = new System.Text.RegularExpressions.Regex(@"(CREATE\s+PROCEDURE\s+`?([a-zA-Z0-9_]+)`?[\s\S]*?\bEND)\s*//", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    var matches = spRegex.Matches(certSql);
+                    foreach (System.Text.RegularExpressions.Match match in matches)
+                    {
+                        string createBody = match.Groups[1].Value.Trim();
+                        string spName = match.Groups[2].Value;
+                        try
+                        {
+                            await dbContext.Database.ExecuteSqlRawAsync(string.Concat("DROP PROCEDURE IF EXISTS `", spName, "`;"));
+                            await dbContext.Database.ExecuteSqlRawAsync(createBody);
+                        }
+                        catch (Exception batchEx)
+                        {
+                            app.Logger.LogDebug(batchEx, "Notice executing Certificate SP {SpName}.", spName);
+                        }
+                    }
+                }
+            }
+            catch (Exception certEx)
+            {
+                app.Logger.LogWarning(certEx, "Failed to align Certificates table schema or stored procedures.");
+            }
+        }
+        catch (Exception marksEx)
+        {
+            app.Logger.LogWarning(marksEx, "Failed to align Marks/Results table schema or stored procedures.");
         }
     }
     catch (Exception spEx)

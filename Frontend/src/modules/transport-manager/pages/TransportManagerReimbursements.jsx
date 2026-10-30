@@ -62,14 +62,17 @@ export default function TransportManagerReimbursements() {
     profile.id ||
     authUser.employeeId ||
     authUser.staffId ||
-    "MNT0044";
+    authUser.userId ||
+    authUser.id ||
+    "";
 
   const defaultStaffName =
     profile.name ||
     profile.fullName ||
     authUser.fullName ||
     authUser.name ||
-    "muzan kibutsuzi";
+    authUser.username ||
+    "";
 
   const defaultDepartment =
     profile.department ||
@@ -86,7 +89,7 @@ export default function TransportManagerReimbursements() {
   const defaultEmail =
     profile.email ||
     authUser.email ||
-    "pondara.venkatesh@pirnav.com";
+    "";
 
   // Navigation tab: 'claims' (submission) or 'my-claims' (history)
   const [activeTab, setActiveTab] = useTransportRouteValue(navigation, "tab", "claims", value => ["claims", "my-claims"].includes(value));

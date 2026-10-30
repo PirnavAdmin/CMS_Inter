@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace CollegeManagement.API.DTOs.Reimbursement
 {
@@ -64,15 +65,47 @@ namespace CollegeManagement.API.DTOs.Reimbursement
     public class CreateReimbursementClaimRequest
     {
         public int StaffId { get; set; }
+
+        [JsonPropertyName("facultyId")]
+        public string? FacultyIdSetter
+        {
+            set
+            {
+                if (int.TryParse(value, out int fid) && fid > 0)
+                {
+                    StaffId = fid;
+                }
+            }
+        }
+
         public int CampusId { get; set; } = 1;
         public string? AcademicYear { get; set; }
         public string ExpenseCategory { get; set; } = string.Empty;
+
+        [JsonPropertyName("category")]
+        public string? CategoryProp { get => ExpenseCategory; set { if (!string.IsNullOrWhiteSpace(value)) ExpenseCategory = value; } }
+
         public DateTime ExpenseDate { get; set; }
         public decimal Amount { get; set; }
         public string PreferredPaymentMethod { get; set; } = "Bank Transfer";
+
+        [JsonPropertyName("paymentMethod")]
+        public string? PaymentMethodProp { get => PreferredPaymentMethod; set { if (!string.IsNullOrWhiteSpace(value)) PreferredPaymentMethod = value; } }
+
         public string Purpose { get; set; } = string.Empty;
+
+        [JsonPropertyName("description")]
+        public string? DescriptionProp { get => Purpose; set { if (!string.IsNullOrWhiteSpace(value)) Purpose = value; } }
+
         public string? AdditionalNotes { get; set; }
+
+        [JsonPropertyName("notes")]
+        public string? Notes { get => AdditionalNotes; set => AdditionalNotes = value; }
+
         public string? ReceiptUrl { get; set; }
+
+        [JsonPropertyName("proofUrl")]
+        public string? ProofUrlProp { get => ReceiptUrl; set => ReceiptUrl = value; }
     }
 
     public class CreateClaimResponseDto
@@ -85,6 +118,13 @@ namespace CollegeManagement.API.DTOs.Reimbursement
     {
         public decimal? ApprovedAmount { get; set; }
         public string? ReviewNotes { get; set; }
+
+        [JsonPropertyName("remarks")]
+        public string? Remarks { get => ReviewNotes; set => ReviewNotes = value; }
+
+        [JsonPropertyName("adminNotes")]
+        public string? AdminNotes { get => ReviewNotes; set => ReviewNotes = value; }
+
         public string? Status { get; set; }
         public string? Notes { get; set; }
     }
@@ -92,19 +132,33 @@ namespace CollegeManagement.API.DTOs.Reimbursement
     public class RequestClarificationRequest
     {
         public string? ClarificationNotes { get; set; }
+
+        [JsonPropertyName("clarificationNote")]
+        public string? ClarificationNote { get => ClarificationNotes; set => ClarificationNotes = value; }
+
         public string? Notes { get; set; }
     }
 
     public class RejectClaimRequest
     {
         public string? RejectNotes { get; set; }
+
+        [JsonPropertyName("rejectionReason")]
+        public string? RejectionReason { get => RejectNotes; set => RejectNotes = value; }
+
+        [JsonPropertyName("reason")]
+        public string? Reason { get => RejectNotes; set => RejectNotes = value; }
+
         public string? Notes { get; set; }
     }
 
     public class MarkPaidClaimRequest
     {
         public string? PaymentReference { get; set; }
-        public string? PaymentRef { get; set; }
+
+        [JsonPropertyName("paymentRef")]
+        public string? PaymentRef { get => PaymentReference; set => PaymentReference = value; }
+
         public string? Remarks { get; set; }
     }
 

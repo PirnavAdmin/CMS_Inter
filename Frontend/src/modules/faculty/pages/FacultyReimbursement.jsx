@@ -93,28 +93,31 @@ export default function FacultyReimbursement() {
     profileData.id ||
     authUser.employeeId ||
     authUser.staffId ||
+    authUser.userId ||
     authUser.id ||
-    "EMP-1042";
+    "";
 
   const defaultFacultyName =
     profileData.fullName ||
     (profileData.firstName ? `${profileData.firstName} ${profileData.lastName || ""}`.trim() : "") ||
     authUser.fullName ||
     authUser.name ||
-    "tangiro kamado";
+    authUser.username ||
+    "";
 
   const defaultDepartment =
     profileData.department ||
     authUser.department ||
     authUser.departmentName ||
-    "Languages";
+    "";
 
   const defaultDesignation =
     profileData.designation ||
     profileData.role ||
     authUser.designation ||
     authUser.designationName ||
-    "Assistant Professor";
+    authUser.role ||
+    "";
 
   const defaultEmail =
     profileData.email ||

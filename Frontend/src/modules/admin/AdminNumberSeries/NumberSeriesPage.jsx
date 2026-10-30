@@ -588,12 +588,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                               try {
                                 const code = series.seriesCode || series.slug || series.id;
                                 await numberSeriesApi.deleteNumberSeries(code, selectedCampusId);
-                                const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
-                                const existingRaw = localStorage.getItem('NumberSeries_Deleted');
-                                let arr = [];
-                                if (existingRaw) arr = JSON.parse(existingRaw);
-                                arr.push(key);
-                                localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+                                // Deleted via backend API
                                 setToast({ message: "Series deleted successfully.", type: "success" });
                                 if (forceSyncLocal) forceSyncLocal();
                                 else onRefresh();
@@ -1386,12 +1381,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                         try {
                           const code = series.seriesCode || series.slug || series.id;
                           await numberSeriesApi.deleteNumberSeries(code, selectedCampusId);
-                          const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
-                          const existingRaw = localStorage.getItem('NumberSeries_Deleted');
-                          let arr = [];
-                          if (existingRaw) arr = JSON.parse(existingRaw);
-                          arr.push(key);
-                          localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+                          // Deleted via backend API
                           setToast({ message: "Series deleted successfully.", type: "success" });
                           if (forceSyncLocal) forceSyncLocal();
                           setTimeout(() => navigate("/dashboard/settings/number-series"), 200);

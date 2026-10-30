@@ -1,13 +1,20 @@
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Security.Claims;
+using System.Text.Json;
+using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
+using Dapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
-using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -46,11 +53,11 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = _jwtTokenHelper.GetUserId(User);
             if (userId.HasValue && userId.Value > 0)
             {
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId.Value);
-                if (user?.StaffId != null && user.StaffId.Value > 0)
-                {
-                    return user.StaffId.Value;
-                }
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
+                var sId = await conn.QueryFirstOrDefaultAsync<int?>(
+                    "SELECT StaffId FROM Users WHERE UserId = @UserId", new { UserId = userId.Value });
+                if (sId.HasValue && sId.Value > 0) return sId.Value;
             }
 
             return null;
@@ -66,11 +73,10 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (staffId.HasValue && staffId.Value > 0)
             {
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.StaffId == staffId.Value);
-                if (user != null)
-                {
-                    return user.UserId;
-                }
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
+                return await conn.QueryFirstOrDefaultAsync<int?>(
+                    "SELECT UserId FROM Users WHERE StaffId = @StaffId", new { StaffId = staffId.Value });
             }
 
             return null;
@@ -87,22 +93,26 @@ namespace CollegeManagement.API.Controllers.V1
                     return Unauthorized(new { success = false, message = "Staff identity could not be verified from token." });
                 }
 
-                var staff = await _context.Staffs
-                    .Include(s => s.DepartmentRef)
-                    .Include(s => s.DesignationRef)
-                    .FirstOrDefaultAsync(s => s.Id == staffId.Value);
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
 
-                if (staff == null)
+                var staffRow = await conn.QueryFirstOrDefaultAsync<dynamic>(
+                    "sp_GetStaffSettingsProfile",
+                    new { p_StaffId = staffId.Value },
+                    commandType: CommandType.StoredProcedure);
+
+                if (staffRow == null)
                 {
                     return NotFound(new { success = false, message = "Staff record not found." });
                 }
 
                 StaffPreferencesDto preferences = new();
-                if (!string.IsNullOrWhiteSpace(staff.CustomFieldsJson))
+                string? customFieldsJson = (string?)staffRow.CustomFieldsJson;
+                if (!string.IsNullOrWhiteSpace(customFieldsJson))
                 {
                     try
                     {
-                        using var doc = JsonDocument.Parse(staff.CustomFieldsJson);
+                        using var doc = JsonDocument.Parse(customFieldsJson);
                         if (doc.RootElement.TryGetProperty("preferences", out var prefEl))
                         {
                             var parsed = JsonSerializer.Deserialize<StaffPreferencesDto>(prefEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -110,7 +120,7 @@ namespace CollegeManagement.API.Controllers.V1
                         }
                         else
                         {
-                            var parsed = JsonSerializer.Deserialize<StaffPreferencesDto>(staff.CustomFieldsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            var parsed = JsonSerializer.Deserialize<StaffPreferencesDto>(customFieldsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                             if (parsed != null) preferences = parsed;
                         }
                     }
@@ -120,25 +130,24 @@ namespace CollegeManagement.API.Controllers.V1
                     }
                 }
 
-                var fullName = $"{staff.FirstName} {staff.LastName}".Trim();
-                if (string.IsNullOrWhiteSpace(fullName))
-                {
-                    fullName = staff.FirstName ?? string.Empty;
-                }
+                string firstName = (string?)staffRow.FirstName ?? string.Empty;
+                string lastName = (string?)staffRow.LastName ?? string.Empty;
+                var fullName = $"{firstName} {lastName}".Trim();
+                if (string.IsNullOrWhiteSpace(fullName)) fullName = firstName;
 
                 var response = new StaffSettingsResponseDto
                 {
                     Profile = new StaffProfileSettingsDto
                     {
-                        Id = staff.Id,
+                        Id = (int)staffRow.Id,
                         FullName = fullName,
-                        EmployeeId = staff.EmployeeId,
-                        Department = staff.DepartmentRef?.DepartmentName ?? (string.IsNullOrWhiteSpace(staff.Department) ? "Not Assigned" : staff.Department),
-                        Designation = staff.DesignationRef?.DesignationName ?? (string.IsNullOrWhiteSpace(staff.Designation) ? "Faculty" : staff.Designation),
-                        Mobile = staff.Mobile ?? string.Empty,
-                        PersonalEmail = staff.Email ?? string.Empty,
-                        Address = staff.CurrentAddress ?? string.Empty,
-                        EmergencyContact = staff.AlternateMobile ?? string.Empty
+                        EmployeeId = (string?)staffRow.EmployeeId,
+                        Department = (string?)staffRow.Department ?? "Not Assigned",
+                        Designation = (string?)staffRow.Designation ?? "Faculty",
+                        Mobile = (string?)staffRow.Mobile ?? string.Empty,
+                        PersonalEmail = (string?)staffRow.Email ?? string.Empty,
+                        Address = (string?)staffRow.CurrentAddress ?? string.Empty,
+                        EmergencyContact = (string?)staffRow.AlternateMobile ?? string.Empty
                     },
                     Preferences = preferences
                 };
@@ -168,12 +177,6 @@ namespace CollegeManagement.API.Controllers.V1
                     return Unauthorized(new { success = false, message = "Staff identity could not be verified." });
                 }
 
-                var staff = await _context.Staffs.FirstOrDefaultAsync(s => s.Id == staffId.Value);
-                if (staff == null)
-                {
-                    return NotFound(new { success = false, message = "Staff record not found." });
-                }
-
                 var trimmedName = request.FullName.Trim();
                 var cleanedMobile = System.Text.RegularExpressions.Regex.Replace(request.Mobile.Trim(), @"[^\d]", "");
                 if (cleanedMobile.Length != 10)
@@ -182,7 +185,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var newEmail = request.PersonalEmail.Trim();
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.StaffId == staffId.Value);
                 if (user != null && !string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
                 {
                     var emailExists = await _context.Users.AnyAsync(u => u.Email == newEmail && u.UserId != user.UserId);
@@ -193,23 +196,25 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var nameParts = trimmedName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-                staff.FirstName = nameParts.Length > 0 ? nameParts[0] : trimmedName;
-                staff.LastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
-                staff.Mobile = cleanedMobile;
-                staff.Email = newEmail;
-                staff.CurrentAddress = request.Address?.Trim();
-                staff.AlternateMobile = request.EmergencyContact?.Trim();
-                staff.UpdatedAt = DateTime.UtcNow;
+                var firstName = nameParts.Length > 0 ? nameParts[0] : trimmedName;
+                var lastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
 
-                if (user != null)
-                {
-                    user.FullName = trimmedName;
-                    user.PhoneNumber = staff.Mobile;
-                    user.Email = staff.Email;
-                    user.UpdatedAt = DateTime.UtcNow;
-                }
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
 
-                await _context.SaveChangesAsync();
+                var affected = await conn.ExecuteAsync(
+                    "sp_UpdateStaffSettingsProfile",
+                    new
+                    {
+                        p_StaffId = staffId.Value,
+                        p_FirstName = firstName,
+                        p_LastName = lastName,
+                        p_Mobile = request.Mobile.Trim(),
+                        p_Email = request.PersonalEmail.Trim(),
+                        p_Address = request.Address?.Trim(),
+                        p_EmergencyContact = request.EmergencyContact?.Trim()
+                    },
+                    commandType: CommandType.StoredProcedure);
 
                 return Ok(new { success = true, message = "Profile settings updated successfully." });
             }
@@ -236,28 +241,42 @@ namespace CollegeManagement.API.Controllers.V1
                     return Unauthorized(new { success = false, message = "Staff identity could not be verified." });
                 }
 
-                var staff = await _context.Staffs.FirstOrDefaultAsync(s => s.Id == staffId.Value);
-                if (staff == null)
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
+
+                var staffRow = await conn.QueryFirstOrDefaultAsync<dynamic>(
+                    "sp_GetStaffSettingsProfile",
+                    new { p_StaffId = staffId.Value },
+                    commandType: CommandType.StoredProcedure);
+
+                if (staffRow == null)
                 {
                     return NotFound(new { success = false, message = "Staff record not found." });
                 }
 
                 Dictionary<string, object> customData = new();
-                if (!string.IsNullOrWhiteSpace(staff.CustomFieldsJson))
+                string? existingJson = (string?)staffRow.CustomFieldsJson;
+                if (!string.IsNullOrWhiteSpace(existingJson))
                 {
                     try
                     {
-                        var parsed = JsonSerializer.Deserialize<Dictionary<string, object>>(staff.CustomFieldsJson);
+                        var parsed = JsonSerializer.Deserialize<Dictionary<string, object>>(existingJson);
                         if (parsed != null) customData = parsed;
                     }
                     catch { }
                 }
 
                 customData["preferences"] = request;
-                staff.CustomFieldsJson = JsonSerializer.Serialize(customData);
-                staff.UpdatedAt = DateTime.UtcNow;
+                var updatedJson = JsonSerializer.Serialize(customData);
 
-                await _context.SaveChangesAsync();
+                await conn.ExecuteAsync(
+                    "sp_UpdateStaffSettingsPreferences",
+                    new
+                    {
+                        p_StaffId = staffId.Value,
+                        p_PreferencesJson = updatedJson
+                    },
+                    commandType: CommandType.StoredProcedure);
 
                 return Ok(new { success = true, message = "General preferences updated successfully." });
             }
