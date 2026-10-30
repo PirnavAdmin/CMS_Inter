@@ -502,5 +502,10 @@ namespace CollegeManagement.API.Services
 
             return await _repository.UpdateSelfProfileAsync(studentId, request);
         }
+
+        public async Task<IEnumerable<ParentChildDto>> GetParentChildrenAsync(int parentUserId)
+        {
+            return await _repository.GetParentChildrenAsync(parentUserId);
+        }
     }
 }

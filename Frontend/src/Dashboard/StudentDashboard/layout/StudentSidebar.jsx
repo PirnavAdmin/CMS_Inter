@@ -1,0 +1,78 @@
+import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
+import { NavLink } from "react-router-dom";
+import logo from "@/assets/pirnav-colleges-logo.png";
+import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
+import profileIcon from "@/assets/dashboard-3d/total-students.png";
+import timetableIcon from "@/assets/sidebar-3d/timetable.png";
+import attendanceIcon from "@/assets/dashboard-3d/mark-attendance.png";
+import examinationIcon from "@/assets/dashboard-3d/create-exam.png";
+import resultsIcon from "@/assets/sidebar-3d/results.png";
+import feeIcon from "@/assets/sidebar-3d/fee-management.png";
+import certificateIcon from "@/assets/sidebar-3d/certificates.png";
+import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
+import transportIcon from "../assets/transport-3d.svg";
+import hostelIcon from "../assets/hostel-3d.svg";
+import { usePermissions } from "@/features/rolesPermissions/permissionUtils.jsx";
+
+// Shared by the Student sidebar and its navbar search.
+export const studentMenuGroups = [
+  ["OVERVIEW", [["Dashboard", "", dashboardIcon, "dashboard"]]],
+  ["ACADEMICS", [
+    ["My Profile", "profile", profileIcon, "profile"],
+    ["My Timetable", "timetable", timetableIcon, "timetable"],
+    ["My Attendance", "attendance", attendanceIcon, "attendance"],
+    ["Examinations", "examinations", examinationIcon, "examinations"],
+    ["Results", "results", resultsIcon, "results"],
+  ]],
+  ["FINANCE", [["Fees", "fees", feeIcon, "fee-management"]]],
+  ["STUDENT SERVICES", [
+    ["Transport", "transport", transportIcon, "transport"],
+    ["Hostel", "hostel", hostelIcon, "hostel-management"],
+    ["Certificates", "certificates", certificateIcon, "certificates"],
+  ]],
+  ["INFORMATION", [
+    ["Holidays", "holidays", holidayIcon, "holiday-management"],
+  ]],
+];
+
+export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
+  const { canView } = usePermissions();
+
+  return (
+    <aside id="sp-student-sidebar" className={`sp-sidebar ${open ? "is-open" : ""}`} inert={mobile && !open ? true : undefined}>
+      <div className="sp-brand">
+        <CampusBrandImage src={logo} alt="Pirnav Colleges"  />
+      </div>
+      <nav aria-label="Student Portal pages">
+        {studentMenuGroups.map(([heading, links]) => {
+          const visibleLinks = links.filter(([label, path, icon, moduleKey]) => {
+            if (!moduleKey || moduleKey === "dashboard" || moduleKey === "profile") return true;
+            return canView(moduleKey);
+          });
+
+          if (!visibleLinks.length) return null;
+
+          return (
+            <section key={heading}>
+              <h2>{heading}</h2>
+              {visibleLinks.map(([label, path, icon]) => (
+                <NavLink
+                  key={label}
+                  end={!path}
+                  to={`/student-dashboard${path ? `/${path}` : ""}`}
+                  onClick={onClose}
+                  aria-label={label}
+                  title={collapsed && !mobile ? label : undefined}
+                  className={({ isActive }) => isActive ? "is-active" : ""}
+                >
+                  <img className="sp-nav-3d-icon" src={icon} alt="" aria-hidden="true" />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </section>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}

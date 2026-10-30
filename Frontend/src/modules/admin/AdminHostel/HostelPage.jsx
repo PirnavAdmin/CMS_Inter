@@ -2932,7 +2932,12 @@ export default function HostelPage() {
         )
       );
 
-      await hostelApi.deleteStudentAllocation(alloc.id, { skipErrorLog: true });
+            const allocId = alloc.id || alloc.allocationId;
+      try {
+        await hostelApi.vacateStudentAllocation(allocId, { reason: reason || "Vacated bed" }, { skipErrorLog: true });
+      } catch (_) {
+        await hostelApi.deleteStudentAllocation(allocId, { skipErrorLog: true });
+      }
       closeModal();
       showToast(`Bed vacated for ${alloc.studentName}.`);
       (async () => {
@@ -3350,6 +3355,39 @@ export default function HostelPage() {
       }
       const sessionLabel = attendanceShift === "morning" ? "Morning" : "Night";
       const attDate = attendanceDate ? new Date(`${attendanceDate}T00:00:00Z`).toISOString() : new Date().toISOString();
+
+            // Try atomic bulk save first for maximum performance
+      const bulkItems = markedIds.map((stId) => {
+        const record = currentMap[stId];
+        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId || String(s.studentId) === String(stId));
+        const alloc = allocations.find((a) => String(a.studentId) === String(student?.studentId) || a.admissionNo === student?.admissionNo || a.admissionNo === stId || String(a.id) === String(stId));
+        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode || String(b.id) === String(alloc?.hostelId));
+
+        return {
+          studentId: Number(alloc?.studentId || student?.studentId || 1),
+          hostelId: Number(alloc?.hostelId || blk?.id || 1),
+          roomId: Number(alloc?.roomId || student?.roomId || 1),
+          bedId: Number(alloc?.bedId || student?.bedId || 1),
+          wardenAssignmentId: alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null,
+          attendanceStatus: record.status || "Present",
+          remarks: record.remarks || `Recorded during ${sessionLabel} session`,
+        };
+      });
+
+      try {
+        const bulkRes = await hostelApi.bulkSaveAttendance({
+          hostelId: Number(filterHostelAttendance || bulkItems[0]?.hostelId || 1),
+          attendanceDate: attDate,
+          session: sessionLabel,
+          records: bulkItems,
+        }, { skipErrorLog: true });
+        const count = bulkRes?.data?.savedCount || bulkItems.length;
+        showToast(`Attendance log saved successfully! (${count} records)`, "success");
+        await refreshAttendance();
+        return;
+      } catch (_) {
+        // Fallback to sequential save if bulk endpoint unavailable
+      }
 
       let savedCount = 0;
       let lastError = null;
@@ -16517,3 +16555,4 @@ function TransferModal({
       </Modal>
     );
   }
+

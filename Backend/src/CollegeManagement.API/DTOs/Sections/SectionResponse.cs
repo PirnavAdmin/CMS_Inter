@@ -73,6 +73,8 @@ namespace CollegeManagement.API.DTOs.Sections
         public int MaximumStrength { get; set; }
         public int Capacity => MaximumStrength;
         public int Strength => MaximumStrength;
+        public int EnrolledCount { get; set; }
+        public int CurrentStrength => EnrolledCount;
 
         public bool IsActive { get; set; }
         public string Status => IsActive ? "Active" : "Inactive";

@@ -9,7 +9,8 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
 import { getPrincipalDashboardData } from "./services/principalDashboardApi.js";
-import { announcementService, TARGET_AUDIENCES, ANNOUNCEMENT_CATEGORIES, ANNOUNCEMENT_PRIORITIES } from "@/services/announcementService.js";
+import { announcementService } from "@/services/announcementService.js";
+import PrincipalNoticeModal from "./components/PrincipalNoticeModal.jsx";
 import "./PrincipalDashboard.css";
 
 const ICONS = { users: Users, staff: UserCheck, attendance: ClipboardCheck, staffAttendance: UserCheck, classes: GraduationCap, fees: WalletCards, exams: CalendarDays, admissions: UserPlus, student: UserPlus, exam: CalendarDays, result: Award, report: FileBarChart, performance: Activity };
@@ -72,61 +73,28 @@ export default function PrincipalDashboard() {
     setTimeout(() => setToast(""), 3000);
   };
   const [notices, setNotices] = useState(() => announcementService.getAllAnnouncements());
-  const showNoticeModal = searchParams.get("action") === "post-notice";
-  const setShowNoticeModal = (open) => updateNavigation("action", open ? "post-notice" : null);
-  const [noticeForm, setNoticeForm] = useState({
-    title: "",
-    targetAudience: "Non-Teaching Staff",
-    category: "Administrative",
-    priority: "Normal",
-    publisher: "Principal Office",
-    content: "",
-  });
-  const [noticeError, setNoticeError] = useState("");
+  const [showNoticeModal, setShowNoticeModal] = useState(false);
 
   useEffect(() => {
+    if (assignedCampusId) {
+      announcementService.fetchAnnouncements(null, assignedCampusId);
+    }
     const unsub = announcementService.subscribeAnnouncements(() => {
       setNotices(announcementService.getAllAnnouncements());
     });
     return unsub;
-  }, []);
+  }, [assignedCampusId]);
 
   const handleOpenNoticeModal = () => {
-    setNoticeForm({
-      title: "",
-      targetAudience: "Non-Teaching Staff",
-      category: "Administrative",
-      priority: "Normal",
-      publisher: "Principal Office",
-      content: "",
-    });
-    setNoticeError("");
     setShowNoticeModal(true);
   };
 
-  const handleCreateNotice = (e) => {
-    e.preventDefault();
-    if (!noticeForm.title.trim()) {
-      setNoticeError("Please enter a notice title.");
-      return;
-    }
-    if (!noticeForm.content.trim()) {
-      setNoticeError("Please enter notice content.");
-      return;
-    }
-
-    announcementService.createAnnouncement({
-      title: noticeForm.title,
-      content: noticeForm.content,
-      category: noticeForm.category,
-      priority: noticeForm.priority,
-      targetAudience: noticeForm.targetAudience,
-      publisher: noticeForm.publisher || "Principal Office",
-      publisherRole: "Principal",
+  const handleCreateNotice = async (noticePayload) => {
+    await announcementService.createAnnouncement({
+      ...noticePayload,
+      campusId: assignedCampusId,
     });
-
-    setShowNoticeModal(false);
-    notify(`Notice published for ${noticeForm.targetAudience}!`);
+    notify(`Notice published for ${noticePayload.targetAudience}!`);
   };
   const [data, setData] = useState(EMPTY_DASHBOARD);
   const [loading, setLoading] = useState(true);
@@ -180,55 +148,10 @@ export default function PrincipalDashboard() {
     <section className="principal-lower-grid">{loading ? Array.from({ length: 3 }, (_, index) => <SkeletonCard key={index} className="principal-card" lines={6} />) : <><article className="principal-card principal-activity-card"><SectionHeader title="Recent College Activities" subtitle="Latest activity from live records" action={<Link to="/dashboard/reports" className="principal-card-link">View reports <ChevronRight size={14} /></Link>} /><div className="principal-activity-list">{data.activities.length ? data.activities.map((item) => <Link to={item.to} key={item.id} className="principal-activity-row"><span className={`principal-activity-icon tone-${item.tone}`}><Icon name={item.icon} size={16} /></span><span><strong>{item.title}</strong><small>{item.description}</small></span><time>{item.time}</time></Link>) : <Empty>No recent activity is available.</Empty>}</div></article><article className="principal-card principal-notices-card"><SectionHeader title="Notices & Announcements" subtitle="Campus notices" action={<button type="button" className="principal-soft-button" onClick={handleOpenNoticeModal} style={{ cursor: "pointer", border: "1px solid #c2e0cf", background: "#e8f7ee", color: "#168a52", fontWeight: 700 }}><Plus size={13} /> Post Notice</button>} /><div className="principal-notice-list">{notices.length ? notices.slice(0, 4).map((item) => <div key={item.id} className="principal-notice-row"><span className={`principal-notice-mark tone-${item.priority === "High" || item.priority === "Urgent" ? "rose" : item.priority === "Medium" ? "amber" : "green"}`}><Megaphone size={14} /></span><span><strong>{item.title}</strong><small>Audience: <b>{item.targetAudience || "All Staff"}</b> • {item.publisher || "Principal Office"}</small></span><time>{item.date}</time></div>) : data.notices && data.notices.length ? data.notices.map((notice, idx) => { const tone = notice.type === "Holiday" ? "green" : notice.type === "Exam" ? "rose" : notice.type === "Fee" ? "amber" : "green"; const icon = notice.type === "Holiday" ? "attendance" : notice.type === "Exam" ? "exam" : notice.type === "Fee" ? "fees" : "report"; return <div key={`${notice.id || notice.title}-${idx}`} className="principal-notice-row"><span className={`principal-notice-mark tone-${tone}`}><Icon name={icon} size={16} /></span><span><strong>{notice.title}</strong><small>{notice.description}</small></span>{notice.date ? <time>{notice.date}</time> : null}<em className={`priority-${notice.priority || "normal"}`}>{(notice.priority || "Normal").toUpperCase()}</em></div>; }) : <Empty>No active notices or announcements for this campus.</Empty>}</div></article><article className="principal-card principal-fee-card"><SectionHeader title="Fee Collection" subtitle="Available collection data" action={<Link to="/dashboard/fee-structure" className="principal-card-link">Details <ChevronRight size={14} /></Link>} /><div className="principal-fee-total"><strong>{money(data.fees.collected)}</strong><span>{data.fees.collected === undefined ? "No collection total available" : "Collected amount"}</span></div>{data.fees.chart.length ? <div className="principal-chart principal-fee-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={data.fees.chart} margin={{ top: 8, right: 0, left: -27, bottom: 0 }}><XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#789083" }} /><YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#789083" }} /><Tooltip formatter={(value) => [money(value), "Collected"]} /><Bar dataKey="value" fill="#54b679" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div> : <Empty>No fee collection records are available.</Empty>}<div className="principal-fee-footer"><span>Pending <strong>{money(data.fees.pending)}</strong></span><span>Collection rate <strong>{percent(data.fees.collectionRate)}</strong></span></div></article></>}</section>
     <section className="principal-bottom-grid"><article className="principal-card principal-actions-card"><SectionHeader title="Quick Actions" subtitle="Common principal workflows" /><div className="principal-actions-list">{QUICK_ACTIONS.map((item) => <Link to={item.to} className={`principal-action tone-${item.tone}`} key={item.label}><span><Icon name={item.icon} size={18} /></span><strong>{item.label}</strong><ChevronRight size={14} /></Link>)}</div></article><article className="principal-card principal-reports-card"><SectionHeader title="Reports Overview" subtitle="Access the information behind your decisions" /><div className="principal-reports-list">{REPORTS.map((item) => <Link to={item.to} className="principal-report-row" key={item.label}><span className={`principal-report-icon tone-${item.tone}`}><Icon name={item.icon} size={16} /></span><span><strong>{item.label}</strong><small>{item.meta}</small></span><ArrowUpRight size={15} /></Link>)}</div></article></section>
     <footer className="principal-footer"><span>Copyright {new Date().getFullYear()} College Management System</span><span>Principal workspace <span className="principal-footer-dot" /> Live data view</span></footer>{toast ? <div className="principal-toast"><CheckCircle2 size={16} />{toast}</div> : null}
-    {showNoticeModal && (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "grid", placeItems: "center", zIndex: 1000, padding: 16 }} onClick={() => setShowNoticeModal(false)}>
-        <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 12, width: "100%", maxWidth: 540, boxShadow: "0 20px 40px rgba(0, 0, 0, 0.2)", display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #edf2f7", background: "#f8fafc" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Megaphone size={18} style={{ color: "#168a52" }} /><h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "#1e293b" }}>Post Campus Notice / Circular</h3></div>
-            <button type="button" onClick={() => setShowNoticeModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}><X size={18} /></button>
-          </div>
-          <form onSubmit={handleCreateNotice}>
-            <div style={{ padding: "18px", display: "flex", flexDirection: "column", gap: 14 }}>
-              {noticeError && <div style={{ padding: "8px 12px", background: "#fee2e2", border: "1px solid #fca5a5", color: "#b91c1c", borderRadius: 8, fontSize: 12.5 }}>{noticeError}</div>}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>Target Audience <span style={{ color: "#ef4444" }}>*</span></label>
-                <select value={noticeForm.targetAudience} onChange={(e) => setNoticeForm({ ...noticeForm, targetAudience: e.target.value })} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}>
-                  {TARGET_AUDIENCES.map((aud) => <option key={aud.value} value={aud.value}>{aud.label}</option>)}
-                </select>
-                <span style={{ fontSize: 11, color: "#64748b" }}>
-                  {noticeForm.targetAudience === "Non-Teaching Staff" || noticeForm.targetAudience === "All Staff" || noticeForm.targetAudience === "General / Campus-wide" ? <span style={{ color: "#16a34a", fontWeight: 600 }}>✓ This notice will appear on the Non-Teaching Staff Dashboard announcements page.</span> : <span style={{ color: "#d97706", fontWeight: 600 }}>ⓘ This notice targets {noticeForm.targetAudience} and will not be displayed to Non-Teaching Staff.</span>}
-                </span>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>Notice Title <span style={{ color: "#ef4444" }}>*</span></label>
-                <input type="text" value={noticeForm.title} onChange={(e) => setNoticeForm({ ...noticeForm, title: e.target.value })} placeholder="e.g. Annual Campus Maintenance & Duty Instructions" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }} required />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>Category</label>
-                  <select value={noticeForm.category} onChange={(e) => setNoticeForm({ ...noticeForm, category: e.target.value })} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}>
-                    {ANNOUNCEMENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>Priority</label>
-                  <select value={noticeForm.priority} onChange={(e) => setNoticeForm({ ...noticeForm, priority: e.target.value })} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }}>
-                    {ANNOUNCEMENT_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>Notice Body / Content <span style={{ color: "#ef4444" }}>*</span></label>
-                <textarea rows={4} value={noticeForm.content} onChange={(e) => setNoticeForm({ ...noticeForm, content: e.target.value })} placeholder="Write circular details, directions, or notices for staff..." style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13 }} required />
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, padding: "12px 18px", borderTop: "1px solid #edf2f7", background: "#f8fafc" }}>
-              <button type="button" onClick={() => setShowNoticeModal(false)} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", fontWeight: 600, fontSize: 12.5 }}>Cancel</button>
-              <button type="submit" style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "#168a52", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: 12.5, display: "flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} /> Publish Notice</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    )}
+    <PrincipalNoticeModal
+      isOpen={showNoticeModal}
+      onClose={() => setShowNoticeModal(false)}
+      onSubmit={handleCreateNotice}
+    />
   </main></DashboardLayout>;
 }

@@ -91,4 +91,22 @@ namespace CollegeManagement.API.DTOs.Settings
         public Dictionary<string, string> AppliedPlaceholders { get; set; } = new();
         public int Version { get; set; }
     }
+
+    public class StudentTemplateLookupDto
+    {
+        public int StudentId { get; set; }
+        public string StudentName { get; set; } = string.Empty;
+        public string? FatherName { get; set; }
+        public string? MotherName { get; set; }
+        public string? AdmissionNo { get; set; }
+        public string? RollNo { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? BloodGroup { get; set; }
+        public string? MobileNumber { get; set; }
+        public string? GroupName { get; set; }
+        public string? AcademicLevel { get; set; }
+        public string? SectionName { get; set; }
+        public string? AcademicYearName { get; set; }
+        public string? BoardName { get; set; }
+    }
 }

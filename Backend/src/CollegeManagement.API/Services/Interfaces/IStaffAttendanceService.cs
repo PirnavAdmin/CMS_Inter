@@ -23,9 +23,9 @@ namespace CollegeManagement.API.Services.Interfaces
 
         Task<byte[]> ExportStaffMonthlyReportToExcelAsync(StaffMonthlyReportRequest request);
 
-        Task<CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse> GetStaffYearlyOverviewAsync(int staffId, int academicYearId);
+        Task<CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse> GetStaffYearlyOverviewAsync(int staffId, int academicYearId, int? campusId = null);
         Task<byte[]> GenerateImportTemplateAsync();
-        Task<object> ImportStaffAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId);
+        Task<object> ImportStaffAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId, int? campusId = null);
 
         // Self-Service Attendance & Regularization
         Task<MyAttendanceTodayResponse> GetMyTodayStatusAsync(int facultyId, DateTime date);
@@ -35,5 +35,8 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId);
         Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId);
         Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId);
+
+        // Helper resolution
+        Task<int> ResolveStaffIdByUserIdAsync(int userId);
     }
 }

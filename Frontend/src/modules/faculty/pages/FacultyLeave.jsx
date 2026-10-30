@@ -32,9 +32,18 @@ export default function FacultyLeave() {
   const [error, setError] = useState(null);
   const [routeParams, setRouteParams] = useSearchParams();
   const cardParam = routeParams.get("card");
-  const showLeaveModal = cardParam === "apply" || cardParam === "apply-leave";
+  const [showLeaveModal, setShowLeaveModal] = useState(() => cardParam === "apply" || cardParam === "apply-leave");
+
+  useEffect(() => {
+    const card = routeParams.get("card");
+    const shouldOpen = card === "apply" || card === "apply-leave";
+    if (shouldOpen !== showLeaveModal) {
+      setShowLeaveModal(shouldOpen);
+    }
+  }, [routeParams]);
 
   const handleCloseModal = () => {
+    setShowLeaveModal(false);
     setRouteParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("card");
@@ -275,6 +284,7 @@ export default function FacultyLeave() {
 
   // Handle opening the Apply Leave modal
   const handleOpenModal = () => {
+    setShowLeaveModal(true);
     setLeaveForm({
       categoryId: categories.length > 0 ? categories[0].leaveCategoryId : "OTHERS",
       customLeaveType: "",

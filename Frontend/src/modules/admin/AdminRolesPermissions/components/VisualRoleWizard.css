@@ -78,7 +78,7 @@
 .wizard-step-node.active {
   background: linear-gradient(135deg, var(--cms-primary, #6F8400) 0%, var(--cms-primary-dark, #566900) 100%);
   color: #ffffff;
-  box-shadow: 0 2px 8px rgba(111, 132, 0, 0.35);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cms-primary)  0.35);
 }
 
 .wizard-step-node.completed {
@@ -194,7 +194,7 @@
   background: linear-gradient(135deg, var(--cms-primary, #6F8400) 0%, var(--cms-primary-dark, #566900) 100%);
   color: #ffffff;
   border-color: var(--cms-primary, #6F8400);
-  box-shadow: 0 2px 8px rgba(111, 132, 0, 0.3);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cms-primary)  0.3);
 }
 
 .existing-roles-grid {
@@ -220,14 +220,14 @@
 .role-select-card:hover {
   border-color: var(--cms-primary, #6F8400);
   transform: translateY(-2px);
-  box-shadow: 0 4px 14px rgba(111, 132, 0, 0.12);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--cms-primary)  0.12);
   background: var(--cms-primary-soft, #F1F4E2);
 }
 
 .role-select-card.selected {
   border-color: var(--cms-primary, #6F8400);
   background: #ffffff;
-  box-shadow: 0 0 0 1px var(--cms-primary, #6F8400), 0 6px 16px rgba(111, 132, 0, 0.16);
+  box-shadow: 0 0 0 1px var(--cms-primary, #6F8400), 0 6px 16px color-mix(in srgb, var(--cms-primary)  0.16);
 }
 
 /* ==========================================================================
@@ -336,7 +336,7 @@
   background: var(--cms-primary, #6F8400);
   color: #ffffff;
   border-color: var(--cms-primary, #6F8400);
-  box-shadow: 0 1px 4px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--cms-primary)  0.25);
 }
 
 .gallery-cards-grid {

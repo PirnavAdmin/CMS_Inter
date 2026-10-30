@@ -8,6 +8,7 @@ import {
   User,
   Settings,
   ShieldCheck,
+  Palette,
 } from "lucide-react";
 import navbarMenuIcon from "@/assets/navbar-3d/menu.png";
 import navbarSearchIcon from "@/assets/navbar-3d/search.png";
@@ -48,7 +49,7 @@ const NAV_SEARCH_ITEMS = [
   { label: "My Profile", path: "/transport-manager/profile" },
 ];
 
-export default function TransportManagerNavbar() {
+export default function TransportManagerNavbar({ onOpenThemePalette }) {
   const navigate = useNavigate();
   const context = useTransportManagerSafe();
 
@@ -451,6 +452,19 @@ export default function TransportManagerNavbar() {
                 >
                   <User size={15} />
                   <span>My Profile</span>
+                </button>
+                <button
+                  type="button"
+                  className="cms-dropdown-item"
+                  onClick={() => {
+                    setProfileDropOpen(false);
+                    if (onOpenThemePalette) {
+                      onOpenThemePalette();
+                    }
+                  }}
+                >
+                  <Palette size={15} />
+                  <span>Theme Appearance</span>
                 </button>
                 <button
                   type="button"

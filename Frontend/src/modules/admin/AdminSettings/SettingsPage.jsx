@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock, Building2 } from "lucide-react";
+import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock, Building2, Palette, Pipette } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import { useTheme } from "@/hooks/useTheme.js";
+import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
+import themeLightImage from "@/assets/navbar-3d/theme-light.png";
 import campusConfigImage from "@/assets/settings-3d/campus-configuration.png";
 import boardAcademicYearImage from "@/assets/settings-3d/board-academic-year.png";
 import numberSeriesImage from "@/assets/settings-3d/number-series.png";
@@ -14,6 +17,12 @@ import "./SettingsPage.css";
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { palette, customColor } = useTheme();
+  const [themeModalOpen, setThemeModalOpen] = useState(false);
+
+  const currentTheme = THEME_OPTIONS.find((t) => t.id === palette);
+  const currentThemeName = palette === "custom" ? "Custom Color" : currentTheme ? currentTheme.name : "Olive";
+  const currentThemeColor = palette === "custom" ? (customColor || "#00b4d8") : currentTheme ? currentTheme.swatches[0] : "var(--cms-primary)";
 
   const settingsCards = [
     {
@@ -117,6 +126,16 @@ export default function SettingsPage() {
       primary: true,
     },
     {
+      id: "theme-configuration",
+      title: "Theme & Appearance",
+      description: "Select the primary color theme to style your sidebar, navbar and dashboard.",
+      icon: Palette,
+      image: themeLightImage,
+      buttonText: "Change Theme",
+      primary: true,
+      isThemeCard: true,
+    },
+    {
       id: "audit",
       title: "Audit Logs",
       description: "View system audit trail, security events and administrator activity logs.",
@@ -124,7 +143,7 @@ export default function SettingsPage() {
       image: auditLogsImage,
       to: "/dashboard/settings/audit-logs",
       buttonText: "View Audit Logs",
-      primary: false,
+      primary: true,
     },
   ];
 
@@ -140,27 +159,46 @@ export default function SettingsPage() {
             const Icon = card.icon;
             return (
               <article key={card.id} className={`settings-card ${card.primary ? "is-featured" : ""}`}>
-                <div className="settings-card-header">
-                  <div className="settings-card-icon">
-                    {card.image ? <img className="settings-card-image" src={card.image} alt="" aria-hidden="true" /> : <Icon size={20} />}
+                <div className="settings-card-body">
+                  <div className="settings-card-header">
+                    <div className="settings-card-icon">
+                      {card.image ? <img className="settings-card-image" src={card.image} alt="" aria-hidden="true" /> : <Icon size={20} />}
+                    </div>
+                    <h3>{card.title}</h3>
                   </div>
-                  <h3>{card.title}</h3>
+                  <p>{card.description}</p>
                 </div>
-                <p>{card.description}</p>
                 <div className="settings-card-footer">
                   <button
                     type="button"
-                    className={`cms-btn ${card.primary ? "cms-btn-primary" : "cms-btn-ghost"}`}
-                    onClick={() => navigate(card.to)}
+                    className="cms-btn cms-btn-primary"
+                    onClick={() => {
+                      if (card.isThemeCard) {
+                        setThemeModalOpen(true);
+                      } else {
+                        navigate(card.to);
+                      }
+                    }}
                   >
                     {card.buttonText} <ArrowRight size={14} />
                   </button>
+                  {card.isThemeCard ? (
+                    <span className="settings-selected-theme-pill" title={`Active: ${currentThemeName}`}>
+                      <span className="settings-selected-theme-dot" style={{ backgroundColor: currentThemeColor }} />
+                      <span className="settings-selected-theme-name">{currentThemeName}</span>
+                    </span>
+                  ) : null}
                 </div>
               </article>
             );
           })}
         </section>
       </main>
+      <ThemePalettePicker
+        open={themeModalOpen}
+        onOpenChange={setThemeModalOpen}
+        hideTrigger={true}
+      />
     </DashboardLayout>
   );
 }

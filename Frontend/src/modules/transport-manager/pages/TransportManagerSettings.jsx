@@ -1,3 +1,4 @@
+import ThemeSettingsCard from '@/shared/components/ThemeSettingsCard.jsx';
 import { useTransportNavigation, useTransportRouteValue } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect } from "react";
 import {
@@ -12,6 +13,9 @@ import {
   EyeOff,
 } from "lucide-react";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
+import themeLightImage from "@/assets/navbar-3d/theme-light.png";
+import { useTheme } from "@/hooks/useTheme.js";
+import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
 import { useTransportManager } from "../TransportManagerContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -251,7 +255,7 @@ export default function TransportManagerSettings() {
       {/* Settings Grid with Single "General Settings" Card matching Reference 2 */}
       <div className="faculty-settings-grid">
         <article className="faculty-settings-card is-featured">
-          <div>
+          <div className="faculty-settings-card-body">
             <div className="faculty-settings-card-header">
               <div className="faculty-settings-card-icon">
                 <img
@@ -277,6 +281,7 @@ export default function TransportManagerSettings() {
             </button>
           </div>
         </article>
+        <ThemeSettingsCard />
       </div>
 
       {/* Interactive Management Modal matching Reference 3 */}

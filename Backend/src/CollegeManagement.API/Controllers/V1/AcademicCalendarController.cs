@@ -2,10 +2,12 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.AcademicCalendar;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -14,13 +16,18 @@ namespace CollegeManagement.API.Controllers.V1
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("academic-calendar")]
     public class AcademicCalendarController : ControllerBase
     {
         private readonly IAcademicCalendarService _calendarService;
+        private readonly ILogger<AcademicCalendarController> _logger;
 
-        public AcademicCalendarController(IAcademicCalendarService calendarService)
+        public AcademicCalendarController(
+            IAcademicCalendarService calendarService,
+            ILogger<AcademicCalendarController> logger)
         {
             _calendarService = calendarService;
+            _logger = logger;
         }
 
         private int? GetCurrentUserId()
@@ -54,11 +61,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to retrieve academic calendar events with filter: {@Filter}", filter);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while retrieving academic calendar events.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while retrieving academic calendar events."
                 });
             }
         }
@@ -88,11 +95,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to retrieve academic calendar range events. Start: {Start}, End: {End}", start, end);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while retrieving range events.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while retrieving range events."
                 });
             }
         }
@@ -118,11 +125,12 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to retrieve academic calendar metrics. AcademicYearId: {AY}, BoardId: {Board}, CampusId: {Campus}",
+                    academicYearId, boardId, campusId);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while retrieving metrics.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while retrieving metrics."
                 });
             }
         }
@@ -149,11 +157,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to retrieve upcoming academic calendar events. Count: {Count}", count);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while retrieving upcoming events.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while retrieving upcoming events."
                 });
             }
         }
@@ -185,11 +193,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to retrieve academic calendar event #{EventId}", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while retrieving event.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while retrieving event."
                 });
             }
         }
@@ -227,11 +235,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to create academic calendar event with title: {Title}", dto.Title);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while creating event.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while creating event."
                 });
             }
         }
@@ -275,11 +283,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to update academic calendar event #{EventId}", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while updating event.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while updating event."
                 });
             }
         }
@@ -313,11 +321,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to publish academic calendar event #{EventId}", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while publishing event.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while publishing event."
                 });
             }
         }
@@ -350,11 +358,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to delete academic calendar event #{EventId}", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while deleting event.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while deleting event."
                 });
             }
         }
@@ -373,11 +381,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to export academic calendar events to CSV");
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while exporting events.",
-                    details = ex.Message
+                    message = "An unexpected error occurred while exporting events."
                 });
             }
         }

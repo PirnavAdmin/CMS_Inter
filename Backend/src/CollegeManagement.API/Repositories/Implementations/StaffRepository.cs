@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
+using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
@@ -25,6 +26,29 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<Staff?> GetByIdAsync(int id)
         {
+            try
+            {
+                using var multi = await Connection.QueryMultipleAsync(
+                    "sp_GetStaffById",
+                    new { p_Id = id },
+                    commandType: CommandType.StoredProcedure);
+
+                var staff = await multi.ReadFirstOrDefaultAsync<Staff>();
+                if (staff != null)
+                {
+                    if (!multi.IsConsumed)
+                    {
+                        var allocations = (await multi.ReadAsync<StaffSubjectAllocation>()).ToList();
+                        staff.StaffSubjectAllocations = allocations;
+                    }
+                    return staff;
+                }
+            }
+            catch
+            {
+                // Fallback to EF Core if SP is not available
+            }
+
             return await _context.Staffs
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
@@ -41,6 +65,21 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<Staff?> GetByEmployeeIdAsync(string employeeId)
         {
             if (string.IsNullOrWhiteSpace(employeeId)) return null;
+            var cleanEmpId = employeeId.Trim();
+
+            try
+            {
+                var staff = await Connection.QueryFirstOrDefaultAsync<Staff>(
+                    "sp_GetStaffByEmployeeId",
+                    new { p_EmployeeId = cleanEmpId },
+                    commandType: CommandType.StoredProcedure);
+
+                if (staff != null) return staff;
+            }
+            catch
+            {
+            }
+
             return await _context.Staffs
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
@@ -51,55 +90,115 @@ namespace CollegeManagement.API.Repositories.Implementations
                     .ThenInclude(sca => sca.Campus)
                 .Include(s => s.StaffBoardAssignments)
                     .ThenInclude(sba => sba.Board)
-                .FirstOrDefaultAsync(s => s.EmployeeId == employeeId.Trim() && !s.IsDeleted);
+                .FirstOrDefaultAsync(s => s.EmployeeId == cleanEmpId && !s.IsDeleted);
         }
 
         public async Task<Staff?> GetByEmailAsync(string email)
         {
             if (string.IsNullOrWhiteSpace(email)) return null;
+            var cleanEmail = email.Trim();
+
+            try
+            {
+                var staff = await Connection.QueryFirstOrDefaultAsync<Staff>(
+                    "sp_GetStaffByEmail",
+                    new { p_Email = cleanEmail },
+                    commandType: CommandType.StoredProcedure);
+
+                if (staff != null) return staff;
+            }
+            catch
+            {
+            }
+
             return await _context.Staffs
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .FirstOrDefaultAsync(s => s.Email == email.Trim() && !s.IsDeleted);
+                .FirstOrDefaultAsync(s => s.Email == cleanEmail && !s.IsDeleted);
         }
 
         public async Task<Staff?> GetByMobileAsync(string mobile)
         {
             if (string.IsNullOrWhiteSpace(mobile)) return null;
+            var cleanMobile = mobile.Trim();
+
+            try
+            {
+                var staff = await Connection.QueryFirstOrDefaultAsync<Staff>(
+                    "sp_GetStaffByMobile",
+                    new { p_Mobile = cleanMobile },
+                    commandType: CommandType.StoredProcedure);
+
+                if (staff != null) return staff;
+            }
+            catch
+            {
+            }
+
             return await _context.Staffs
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .FirstOrDefaultAsync(s => s.Mobile == mobile.Trim() && !s.IsDeleted);
+                .FirstOrDefaultAsync(s => s.Mobile == cleanMobile && !s.IsDeleted);
         }
 
         public async Task<Staff?> GetByAadhaarAsync(string aadhaar)
         {
             if (string.IsNullOrWhiteSpace(aadhaar)) return null;
+            var cleanAadhaar = aadhaar.Trim();
+
+            try
+            {
+                var staff = await Connection.QueryFirstOrDefaultAsync<Staff>(
+                    "sp_GetStaffByAadhaar",
+                    new { p_Aadhaar = cleanAadhaar },
+                    commandType: CommandType.StoredProcedure);
+
+                if (staff != null) return staff;
+            }
+            catch
+            {
+            }
+
             return await _context.Staffs
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .FirstOrDefaultAsync(s => s.Aadhaar == aadhaar.Trim() && !s.IsDeleted);
+                .FirstOrDefaultAsync(s => s.Aadhaar == cleanAadhaar && !s.IsDeleted);
         }
 
         public async Task<Staff?> GetByTokenAsync(string token)
         {
             if (string.IsNullOrWhiteSpace(token)) return null;
+            var cleanToken = token.Trim();
+
+            try
+            {
+                var staff = await Connection.QueryFirstOrDefaultAsync<Staff>(
+                    "sp_GetStaffByToken",
+                    new { p_Token = cleanToken },
+                    commandType: CommandType.StoredProcedure);
+
+                if (staff != null) return staff;
+            }
+            catch
+            {
+            }
+
             return await _context.Staffs
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
-                .FirstOrDefaultAsync(s => s.ProfileLinkToken == token.Trim() && 
+                .FirstOrDefaultAsync(s => s.ProfileLinkToken == cleanToken && 
                                           !s.IsDeleted && 
                                           (!s.ProfileLinkExpiresAt.HasValue || s.ProfileLinkExpiresAt.Value > DateTime.UtcNow) && 
                                           s.ProfileStatus != "Completed");
@@ -107,6 +206,19 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<string?> GetPhotoPathAsync(int id)
         {
+            try
+            {
+                var path = await Connection.ExecuteScalarAsync<string>(
+                    "sp_GetStaffPhotoPath",
+                    new { p_Id = id },
+                    commandType: CommandType.StoredProcedure);
+
+                if (!string.IsNullOrWhiteSpace(path)) return path;
+            }
+            catch
+            {
+            }
+
             return await _context.Staffs
                 .Where(s => s.Id == id && !s.IsDeleted)
                 .Select(s => s.PhotoPath)
@@ -115,47 +227,131 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<bool> IsEmployeeIdUniqueAsync(string employeeId, int? excludeId = null)
         {
-            var query = _context.Staffs.Where(s => s.EmployeeId == employeeId.Trim() && !s.IsDeleted);
-            if (excludeId.HasValue)
+            try
             {
-                query = query.Where(s => s.Id != excludeId.Value);
+                var count = await Connection.ExecuteScalarAsync<int>(
+                    "sp_CheckStaffEmployeeIdUnique",
+                    new { p_EmployeeId = employeeId.Trim(), p_ExcludeId = excludeId },
+                    commandType: CommandType.StoredProcedure);
+
+                return count == 0;
             }
-            return !await query.AnyAsync();
+            catch
+            {
+                var query = _context.Staffs.Where(s => s.EmployeeId == employeeId.Trim() && !s.IsDeleted);
+                if (excludeId.HasValue)
+                {
+                    query = query.Where(s => s.Id != excludeId.Value);
+                }
+                return !await query.AnyAsync();
+            }
         }
 
         public async Task<bool> IsEmailUniqueAsync(string email, int? excludeId = null)
         {
-            var query = _context.Staffs.Where(s => s.Email == email.Trim() && !s.IsDeleted);
-            if (excludeId.HasValue)
+            try
             {
-                query = query.Where(s => s.Id != excludeId.Value);
+                var count = await Connection.ExecuteScalarAsync<int>(
+                    "sp_CheckStaffEmailUnique",
+                    new { p_Email = email.Trim(), p_ExcludeId = excludeId },
+                    commandType: CommandType.StoredProcedure);
+
+                return count == 0;
             }
-            return !await query.AnyAsync();
+            catch
+            {
+                var query = _context.Staffs.Where(s => s.Email == email.Trim() && !s.IsDeleted);
+                if (excludeId.HasValue)
+                {
+                    query = query.Where(s => s.Id != excludeId.Value);
+                }
+                return !await query.AnyAsync();
+            }
         }
 
         public async Task<bool> IsMobileUniqueAsync(string mobile, int? excludeId = null)
         {
-            var query = _context.Staffs.Where(s => s.Mobile == mobile.Trim() && !s.IsDeleted);
-            if (excludeId.HasValue)
+            try
             {
-                query = query.Where(s => s.Id != excludeId.Value);
+                var count = await Connection.ExecuteScalarAsync<int>(
+                    "sp_CheckStaffMobileUnique",
+                    new { p_Mobile = mobile.Trim(), p_ExcludeId = excludeId },
+                    commandType: CommandType.StoredProcedure);
+
+                return count == 0;
             }
-            return !await query.AnyAsync();
+            catch
+            {
+                var query = _context.Staffs.Where(s => s.Mobile == mobile.Trim() && !s.IsDeleted);
+                if (excludeId.HasValue)
+                {
+                    query = query.Where(s => s.Id != excludeId.Value);
+                }
+                return !await query.AnyAsync();
+            }
         }
 
         public async Task<bool> IsAadhaarUniqueAsync(string aadhaar, int? excludeId = null)
         {
             if (string.IsNullOrWhiteSpace(aadhaar)) return true;
-            var query = _context.Staffs.Where(s => s.Aadhaar == aadhaar.Trim() && !s.IsDeleted);
-            if (excludeId.HasValue)
+
+            try
             {
-                query = query.Where(s => s.Id != excludeId.Value);
+                var count = await Connection.ExecuteScalarAsync<int>(
+                    "sp_CheckStaffAadhaarUnique",
+                    new { p_Aadhaar = aadhaar.Trim(), p_ExcludeId = excludeId },
+                    commandType: CommandType.StoredProcedure);
+
+                return count == 0;
             }
-            return !await query.AnyAsync();
+            catch
+            {
+                var query = _context.Staffs.Where(s => s.Aadhaar == aadhaar.Trim() && !s.IsDeleted);
+                if (excludeId.HasValue)
+                {
+                    query = query.Where(s => s.Id != excludeId.Value);
+                }
+                return !await query.AnyAsync();
+            }
         }
 
         public async Task<(List<Staff> Items, int TotalCount)> GetPagedStaffAsync(StaffQueryParams queryParams)
         {
+            int pageNumber = queryParams.PageNumber < 1 ? 1 : queryParams.PageNumber;
+            int pageSize = queryParams.PageSize < 1 ? 5 : queryParams.PageSize;
+
+            try
+            {
+                var p = new DynamicParameters();
+                p.Add("p_PageNumber", pageNumber);
+                p.Add("p_PageSize", pageSize);
+                p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(queryParams.SearchTerm) ? null : queryParams.SearchTerm.Trim());
+                p.Add("p_Department", string.IsNullOrWhiteSpace(queryParams.Department) ? null : queryParams.Department.Trim());
+                p.Add("p_DepartmentId", queryParams.DepartmentId ?? 0);
+                p.Add("p_Designation", string.IsNullOrWhiteSpace(queryParams.Designation) ? null : queryParams.Designation.Trim());
+                p.Add("p_DesignationId", queryParams.DesignationId ?? 0);
+                p.Add("p_StaffType", string.IsNullOrWhiteSpace(queryParams.StaffType) ? null : queryParams.StaffType.Trim());
+                p.Add("p_Status", string.IsNullOrWhiteSpace(queryParams.Status) ? null : queryParams.Status.Trim());
+                p.Add("p_ProfileStatus", string.IsNullOrWhiteSpace(queryParams.ProfileStatus) ? null : queryParams.ProfileStatus.Trim());
+                p.Add("p_BoardId", queryParams.BoardId ?? 0);
+                p.Add("p_BoardName", string.IsNullOrWhiteSpace(queryParams.BoardName) ? null : queryParams.BoardName.Trim());
+                p.Add("p_SortBy", string.IsNullOrWhiteSpace(queryParams.SortBy) ? "id" : queryParams.SortBy.Trim());
+                p.Add("p_SortOrder", string.IsNullOrWhiteSpace(queryParams.SortOrder) ? "DESC" : queryParams.SortOrder.Trim());
+
+                using var multi = await Connection.QueryMultipleAsync("sp_GetPagedStaff", p, commandType: CommandType.StoredProcedure);
+                if (!multi.IsConsumed)
+                {
+                    var meta = await multi.ReadFirstOrDefaultAsync<dynamic>();
+                    var staffList = (await multi.ReadAsync<Staff>()).ToList();
+                    int total = meta != null && meta.TotalCount != null ? (int)meta.TotalCount : staffList.Count;
+                    return (staffList, total);
+                }
+            }
+            catch
+            {
+                // Fallback to EF Core LINQ query if SP is missing or fails
+            }
+
             var query = _context.Staffs
                 .AsNoTracking()
                 .Include(s => s.DepartmentRef)
@@ -165,7 +361,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     .ThenInclude(ssa => ssa.Subject)
                 .Where(s => !s.IsDeleted);
 
-            // 1. Search Term (EmployeeId, Name, Email, Mobile, Department, Designation, Board)
+            // 1. Search Term
             if (!string.IsNullOrWhiteSpace(queryParams.SearchTerm))
             {
                 var term = queryParams.SearchTerm.Trim();
@@ -182,7 +378,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     (s.BoardRef != null && (s.BoardRef.BoardName.Contains(term) || s.BoardRef.BoardCode.Contains(term))));
             }
 
-            // 2. Department filter (ID or Name)
+            // 2. Department filter
             if (queryParams.DepartmentId.HasValue && queryParams.DepartmentId.Value > 0)
             {
                 query = query.Where(s => s.DepartmentId == queryParams.DepartmentId.Value);
@@ -196,7 +392,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.DepartmentRef != null && (s.DepartmentRef.DepartmentName == dept || s.DepartmentRef.DepartmentCode == dept));
             }
 
-            // 3. Designation filter (ID or Name)
+            // 3. Designation filter
             if (queryParams.DesignationId.HasValue && queryParams.DesignationId.Value > 0)
             {
                 query = query.Where(s => s.DesignationId == queryParams.DesignationId.Value);
@@ -231,7 +427,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 query = query.Where(s => s.CampusId == queryParams.CampusId.Value);
             }
 
-            // 5. Staff Type filter with String/Enum Normalization (Teaching / Non-Teaching / NonTeaching)
+            // 5. Staff Type filter
             if (!string.IsNullOrWhiteSpace(queryParams.StaffType) &&
                 !queryParams.StaffType.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
@@ -252,7 +448,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
             }
 
-            // 6. Employment Status filter (Active / Inactive)
+            // 6. Status filter
             if (!string.IsNullOrWhiteSpace(queryParams.Status) &&
                 !queryParams.Status.Equals("All", StringComparison.OrdinalIgnoreCase) &&
                 !queryParams.Status.Equals("All Status", StringComparison.OrdinalIgnoreCase))
@@ -260,7 +456,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 query = query.Where(s => s.Status == queryParams.Status.Trim());
             }
 
-            // 7. Profile Status filter (Completed, Pending, LinkSent, InProgress, NeedsCorrection, Submitted)
+            // 7. Profile Status filter
             if (!string.IsNullOrWhiteSpace(queryParams.ProfileStatus) &&
                 !queryParams.ProfileStatus.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
@@ -279,7 +475,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
             }
 
-            // 8. Pending Sub-tab filter (LinkSent, InProgress, NeedsCorrection, Submitted)
+            // 8. Pending Sub-tab filter
             if (!string.IsNullOrWhiteSpace(queryParams.PendingSubTab))
             {
                 var subTab = queryParams.PendingSubTab.Trim();
@@ -301,10 +497,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
             }
 
-            // 9. Mandatory TotalCount calculation BEFORE Pagination .Skip() and .Take()
             var totalCount = await query.CountAsync();
 
-            // 10. Explicit, Deterministic Ordering
             query = (queryParams.SortBy?.ToLowerInvariant(), queryParams.SortOrder?.ToUpperInvariant()) switch
             {
                 ("firstname", "ASC") => query.OrderBy(s => s.FirstName).ThenByDescending(s => s.Id),
@@ -319,16 +513,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 _ => query.OrderByDescending(s => s.Id)
             };
 
-            // 11. Pagination Offset Calculation: (PageNumber - 1) * PageSize
-            int pageNumber = queryParams.PageNumber < 1 ? 1 : queryParams.PageNumber;
-            int pageSize = queryParams.PageSize < 1 ? 5 : queryParams.PageSize;
-
             var items = await query
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
-            // 12. Populate Navigation & Display Names
             foreach (var item in items)
             {
                 if (item.DepartmentRef != null) item.Department = item.DepartmentRef.DepartmentName;
@@ -341,6 +530,22 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null)
         {
+            try
+            {
+                var list = await Connection.QueryAsync<StaffDropdownDto>(
+                    "sp_GetStaffDropdown",
+                    new { p_StaffType = staffType },
+                    commandType: CommandType.StoredProcedure);
+
+                if (list != null && list.Any())
+                {
+                    return list;
+                }
+            }
+            catch
+            {
+            }
+
             var query = _context.Staffs.AsNoTracking().Where(s => !s.IsDeleted && s.Status == "Active");
             if (campusId.HasValue && campusId.Value > 0)
             {
@@ -388,17 +593,16 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
                 using var conn = _context.Database.GetDbConnection();
                 var parameters = new DynamicParameters();
-                parameters.Add("p_SeriesCode", seriesCode, System.Data.DbType.String);
-                parameters.Add("p_CampusId", campusId, System.Data.DbType.Int32);
+                parameters.Add("p_SeriesCode", seriesCode, DbType.String);
+                parameters.Add("p_CampusId", campusId, DbType.Int32);
 
                 nextId = await conn.QueryFirstOrDefaultAsync<string>(
                     "sp_GenerateNextNumberSeries",
                     parameters,
-                    commandType: System.Data.CommandType.StoredProcedure);
+                    commandType: CommandType.StoredProcedure);
             }
             catch
             {
-                // Stored procedure call failed or procedure unavailable; proceed to fallback
             }
 
             if (string.IsNullOrWhiteSpace(nextId))
@@ -446,53 +650,141 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)
         {
-            var query = _context.Staffs
-                .AsNoTracking()
-                .Where(s => !s.IsDeleted);
-
-            if (boardId.HasValue && boardId.Value > 0)
+            try
             {
-                query = query.Where(s => s.BoardId == boardId.Value || s.BoardId == null);
+                var stats = await Connection.QueryFirstOrDefaultAsync<StaffDashboardStatsDto>(
+                    "sp_GetStaffDashboardStats",
+                    new { p_BoardId = boardId },
+                    commandType: CommandType.StoredProcedure);
+
+                if (stats != null)
+                {
+                    if (stats.TotalCount == 0 && stats.TotalStaff > 0) stats.TotalCount = stats.TotalStaff;
+                    return stats;
+                }
+            }
+            catch
+            {
+                // Fallback to single SQL aggregation query if stored procedure signature differs
+                try
+                {
+                    var sql = @"
+                        SELECT 
+                            COUNT(*) AS TotalStaff,
+                            COUNT(*) AS TotalCount,
+                            SUM(CASE WHEN s.StaffType = 'Teaching' OR s.StaffType IS NULL OR s.StaffType = '' THEN 1 ELSE 0 END) AS TeachingStaff,
+                            SUM(CASE WHEN s.StaffType IN ('Non-Teaching', 'NonTeaching', 'Non Teaching') THEN 1 ELSE 0 END) AS NonTeachingStaff,
+                            SUM(CASE WHEN s.ProfileStatus IN ('Completed', 'Approved') OR s.ProfileCompletionPercentage = 100 THEN 1 ELSE 0 END) AS CompletedProfiles,
+                            SUM(CASE WHEN s.ProfileStatus IN ('Completed', 'Approved') OR s.ProfileCompletionPercentage = 100 THEN 1 ELSE 0 END) AS Completed,
+                            SUM(CASE WHEN s.ProfileStatus != 'Completed' AND (s.ProfileCompletionPercentage < 100 OR s.ProfileCompletionPercentage IS NULL) THEN 1 ELSE 0 END) AS PendingProfileCompletion,
+                            SUM(CASE WHEN s.ProfileStatus IN ('LinkSent', 'PendingLink') OR s.ProfileStatus IS NULL THEN 1 ELSE 0 END) AS Pending,
+                            SUM(CASE WHEN s.ProfileStatus = 'InProgress' THEN 1 ELSE 0 END) AS InProgress,
+                            SUM(CASE WHEN s.ProfileStatus = 'NeedsCorrection' THEN 1 ELSE 0 END) AS NeedsCorrection,
+                            SUM(CASE WHEN s.ProfileStatus = 'Submitted' THEN 1 ELSE 0 END) AS Submitted
+                        FROM `Staff` s
+                        WHERE s.IsDeleted = 0
+                          AND (@boardId IS NULL OR @boardId <= 0 OR s.BoardId = @boardId)
+                          AND (@campusId IS NULL OR @campusId <= 0 OR s.CampusId = @campusId);";
+
+                    var stats = await Connection.QueryFirstOrDefaultAsync<StaffDashboardStatsDto>(sql, new { boardId, campusId });
+                    if (stats != null) return stats;
+                }
+                catch { }
             }
 
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                query = query.Where(s => s.CampusId == campusId.Value);
-            }
-
-            var activeStaff = await query.ToListAsync();
-
-            var totalStaff = activeStaff.Count;
-            var teachingStaff = activeStaff.Count(s => !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));
-            var nonTeachingStaff = activeStaff.Count(s => string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));
-            
-            var completedCount = activeStaff.Count(s => string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase));
-            var pendingCount = totalStaff - completedCount;
-
-            var inProgressCount = activeStaff.Count(s => string.Equals(s.ProfileStatus, "InProgress", StringComparison.OrdinalIgnoreCase));
-            var needsCorrectionCount = activeStaff.Count(s => string.Equals(s.ProfileStatus, "NeedsCorrection", StringComparison.OrdinalIgnoreCase));
-            var submittedCount = activeStaff.Count(s => string.Equals(s.ProfileStatus, "Submitted", StringComparison.OrdinalIgnoreCase));
-            var linkSentCount = activeStaff.Count(s => string.Equals(s.ProfileStatus, "LinkSent", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "PendingLink", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(s.ProfileStatus));
-
-            return new StaffDashboardStatsDto
-            {
-                TotalStaff = totalStaff,
-                TotalCount = totalStaff,
-                TeachingStaff = teachingStaff,
-                NonTeachingStaff = nonTeachingStaff,
-                PendingProfileCompletion = pendingCount,
-                CompletedProfiles = completedCount,
-                
-                Completed = completedCount,
-                Pending = linkSentCount,
-                InProgress = inProgressCount,
-                NeedsCorrection = needsCorrectionCount,
-                Submitted = submittedCount
-            };
+            return new StaffDashboardStatsDto();
         }
 
         public async Task<Staff> AddAsync(Staff staff)
         {
+            try
+            {
+                var p = new DynamicParameters();
+                p.Add("p_EmployeeId", staff.EmployeeId);
+                p.Add("p_FirstName", staff.FirstName);
+                p.Add("p_MiddleName", staff.MiddleName);
+                p.Add("p_LastName", staff.LastName);
+                p.Add("p_FatherOrHusbandName", staff.FatherOrHusbandName);
+                p.Add("p_Gender", staff.Gender);
+                p.Add("p_DateOfBirth", staff.DateOfBirth);
+                p.Add("p_MaritalStatus", staff.MaritalStatus);
+                p.Add("p_Nationality", staff.Nationality ?? "Indian");
+                p.Add("p_Aadhaar", staff.Aadhaar);
+                p.Add("p_PanNumber", staff.PanNumber);
+                p.Add("p_Mobile", staff.Mobile);
+                p.Add("p_AlternateMobile", staff.AlternateMobile);
+                p.Add("p_Email", staff.Email);
+                p.Add("p_BloodGroup", staff.BloodGroup);
+                p.Add("p_CurrentAddress", staff.CurrentAddress);
+                p.Add("p_PermanentAddress", staff.PermanentAddress);
+                p.Add("p_City", staff.City);
+                p.Add("p_District", staff.District);
+                p.Add("p_State", staff.State);
+                p.Add("p_Pincode", staff.Pincode);
+                p.Add("p_Country", staff.Country ?? "India");
+                p.Add("p_Qualification", staff.Qualification);
+                p.Add("p_Designation", staff.Designation);
+                p.Add("p_DesignationId", staff.DesignationId);
+                p.Add("p_StaffType", staff.StaffType);
+                p.Add("p_DepartmentId", staff.DepartmentId);
+                p.Add("p_BoardId", staff.BoardId);
+                p.Add("p_JoiningDate", staff.JoiningDate);
+                p.Add("p_Experience", staff.Experience);
+                p.Add("p_EmploymentType", staff.EmploymentType ?? "Full Time");
+                p.Add("p_Status", staff.Status ?? "Active");
+                p.Add("p_PhotoPath", staff.PhotoPath);
+                p.Add("p_ProfileStatus", staff.ProfileStatus ?? "PendingLink");
+                p.Add("p_ProfileCompletionPercentage", staff.ProfileCompletionPercentage);
+                p.Add("p_EducationJson", staff.EducationJson);
+                p.Add("p_ExperienceJson", staff.ExperienceJson);
+                p.Add("p_DocumentsJson", staff.DocumentsJson);
+                p.Add("p_BankDetailsJson", staff.BankDetailsJson);
+                p.Add("p_EmergencyContactJson", staff.EmergencyContactJson);
+                p.Add("p_Id", dbType: DbType.Int32, direction: ParameterDirection.Output);
+
+                await Connection.ExecuteAsync("sp_CreateStaff", p, commandType: CommandType.StoredProcedure);
+                int generatedId = p.Get<int>("p_Id");
+                if (generatedId > 0)
+                {
+                    staff.Id = generatedId;
+                    return staff;
+                }
+            }
+            catch
+            {
+                try
+                {
+                    var id = await Connection.ExecuteScalarAsync<int>("sp_CreateStaff", new
+                    {
+                        p_EmployeeId = staff.EmployeeId,
+                        p_FirstName = staff.FirstName,
+                        p_LastName = staff.LastName,
+                        p_Gender = staff.Gender,
+                        p_DateOfBirth = staff.DateOfBirth,
+                        p_Aadhaar = staff.Aadhaar,
+                        p_Mobile = staff.Mobile,
+                        p_Email = staff.Email,
+                        p_BloodGroup = staff.BloodGroup,
+                        p_Qualification = staff.Qualification,
+                        p_Designation = staff.Designation,
+                        p_DesignationId = staff.DesignationId,
+                        p_StaffType = staff.StaffType,
+                        p_DepartmentId = staff.DepartmentId,
+                        p_JoiningDate = staff.JoiningDate,
+                        p_Experience = staff.Experience,
+                        p_Status = staff.Status,
+                        p_PhotoPath = staff.PhotoPath
+                    }, commandType: CommandType.StoredProcedure);
+
+                    if (id > 0)
+                    {
+                        staff.Id = id;
+                        return staff;
+                    }
+                }
+                catch { }
+            }
+
             _context.Staffs.Add(staff);
             await _context.SaveChangesAsync();
             return staff;
@@ -507,6 +799,86 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task UpdateAsync(Staff staff)
         {
             staff.UpdatedAt = DateTime.UtcNow;
+
+            try
+            {
+                var p = new DynamicParameters();
+                p.Add("p_Id", staff.Id);
+                p.Add("p_EmployeeId", staff.EmployeeId);
+                p.Add("p_FirstName", staff.FirstName);
+                p.Add("p_MiddleName", staff.MiddleName);
+                p.Add("p_LastName", staff.LastName);
+                p.Add("p_FatherOrHusbandName", staff.FatherOrHusbandName);
+                p.Add("p_Gender", staff.Gender);
+                p.Add("p_DateOfBirth", staff.DateOfBirth);
+                p.Add("p_MaritalStatus", staff.MaritalStatus);
+                p.Add("p_Nationality", staff.Nationality ?? "Indian");
+                p.Add("p_Aadhaar", staff.Aadhaar);
+                p.Add("p_PanNumber", staff.PanNumber);
+                p.Add("p_Mobile", staff.Mobile);
+                p.Add("p_AlternateMobile", staff.AlternateMobile);
+                p.Add("p_Email", staff.Email);
+                p.Add("p_BloodGroup", staff.BloodGroup);
+                p.Add("p_CurrentAddress", staff.CurrentAddress);
+                p.Add("p_PermanentAddress", staff.PermanentAddress);
+                p.Add("p_City", staff.City);
+                p.Add("p_District", staff.District);
+                p.Add("p_State", staff.State);
+                p.Add("p_Pincode", staff.Pincode);
+                p.Add("p_Country", staff.Country ?? "India");
+                p.Add("p_Qualification", staff.Qualification);
+                p.Add("p_Designation", staff.Designation);
+                p.Add("p_DesignationId", staff.DesignationId);
+                p.Add("p_StaffType", staff.StaffType);
+                p.Add("p_DepartmentId", staff.DepartmentId);
+                p.Add("p_BoardId", staff.BoardId);
+                p.Add("p_JoiningDate", staff.JoiningDate);
+                p.Add("p_Experience", staff.Experience);
+                p.Add("p_EmploymentType", staff.EmploymentType ?? "Full Time");
+                p.Add("p_Status", staff.Status ?? "Active");
+                p.Add("p_PhotoPath", staff.PhotoPath);
+                p.Add("p_ProfileStatus", staff.ProfileStatus ?? "PendingLink");
+                p.Add("p_ProfileCompletionPercentage", staff.ProfileCompletionPercentage);
+                p.Add("p_EducationJson", staff.EducationJson);
+                p.Add("p_ExperienceJson", staff.ExperienceJson);
+                p.Add("p_DocumentsJson", staff.DocumentsJson);
+                p.Add("p_BankDetailsJson", staff.BankDetailsJson);
+                p.Add("p_EmergencyContactJson", staff.EmergencyContactJson);
+
+                await Connection.ExecuteAsync("sp_UpdateStaff", p, commandType: CommandType.StoredProcedure);
+                return;
+            }
+            catch
+            {
+                try
+                {
+                    await Connection.ExecuteAsync("sp_UpdateStaff", new
+                    {
+                        p_Id = staff.Id,
+                        p_EmployeeId = staff.EmployeeId,
+                        p_FirstName = staff.FirstName,
+                        p_LastName = staff.LastName,
+                        p_Gender = staff.Gender,
+                        p_DateOfBirth = staff.DateOfBirth,
+                        p_Aadhaar = staff.Aadhaar,
+                        p_Mobile = staff.Mobile,
+                        p_Email = staff.Email,
+                        p_BloodGroup = staff.BloodGroup,
+                        p_Qualification = staff.Qualification,
+                        p_Designation = staff.Designation,
+                        p_DesignationId = staff.DesignationId,
+                        p_StaffType = staff.StaffType,
+                        p_DepartmentId = staff.DepartmentId,
+                        p_JoiningDate = staff.JoiningDate,
+                        p_Experience = staff.Experience,
+                        p_Status = staff.Status,
+                        p_PhotoPath = staff.PhotoPath
+                    }, commandType: CommandType.StoredProcedure);
+                    return;
+                }
+                catch { }
+            }
+
             _context.Staffs.Update(staff);
             await _context.SaveChangesAsync();
         }
@@ -516,15 +888,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             var cleanPath = photoPath?.Trim() ?? string.Empty;
             try
             {
-                using var connection = _context.Database.GetDbConnection();
-                await connection.ExecuteAsync(
+                await Connection.ExecuteAsync(
                     "sp_UpdateStaffPhotoPath", 
                     new { p_Id = id, p_PhotoPath = cleanPath }, 
                     commandType: CommandType.StoredProcedure);
+                return;
             }
             catch
             {
-                // Stored procedure fallback to direct EF Core update below
             }
 
             var staff = await _context.Staffs.FindAsync(id);
@@ -536,9 +907,29 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-
         public async Task SoftDeleteAsync(Staff staff)
         {
+            try
+            {
+                await Connection.ExecuteAsync(
+                    "sp_DeleteStaff", 
+                    new { p_Id = staff.Id }, 
+                    commandType: CommandType.StoredProcedure);
+                return;
+            }
+            catch
+            {
+                try
+                {
+                    await Connection.ExecuteAsync(
+                        "sp_SoftDeleteStaff", 
+                        new { p_Id = staff.Id }, 
+                        commandType: CommandType.StoredProcedure);
+                    return;
+                }
+                catch { }
+            }
+
             staff.IsDeleted = true;
             staff.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -546,6 +937,25 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task BulkUpdateLinkSentAsync(List<int> staffIds, DateTime sentAt, DateTime expiresAt)
         {
+            if (staffIds == null || !staffIds.Any()) return;
+
+            try
+            {
+                await Connection.ExecuteAsync(
+                    "sp_BulkSendStaffProfileLink",
+                    new
+                    {
+                        p_StaffIds = string.Join(",", staffIds),
+                        p_SentAt = sentAt,
+                        p_ExpiresAt = expiresAt
+                    },
+                    commandType: CommandType.StoredProcedure);
+                return;
+            }
+            catch
+            {
+            }
+
             var staffs = await _context.Staffs.Where(s => staffIds.Contains(s.Id) && !s.IsDeleted).ToListAsync();
             foreach (var staff in staffs)
             {
@@ -566,6 +976,24 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task UpdateProfileStatusAsync(int staffId, string profileStatus, int completionPercentage, string? correctionNotes = null)
         {
+            try
+            {
+                await Connection.ExecuteAsync(
+                    "sp_UpdateStaffProfileStatus",
+                    new
+                    {
+                        p_StaffId = staffId,
+                        p_ProfileStatus = profileStatus,
+                        p_ProfileCompletionPercentage = completionPercentage,
+                        p_CorrectionNotes = correctionNotes
+                    },
+                    commandType: CommandType.StoredProcedure);
+                return;
+            }
+            catch
+            {
+            }
+
             var staff = await _context.Staffs.FindAsync(staffId);
             if (staff != null)
             {

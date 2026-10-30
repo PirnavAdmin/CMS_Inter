@@ -1,8 +1,10 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ImagePlus, Save, Settings, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
+import { ArrowLeft, ImagePlus, Save, Settings, AlignLeft, AlignCenter, AlignRight, Palette, Check, Pipette } from "lucide-react";
 import { Modal } from "../../../shared/components/Ui.jsx";
+import { createPortal } from "react-dom";
+import { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
 import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
 import {
@@ -16,6 +18,7 @@ import {
 import defaultLogo from "../../../assets/pirnav-colleges-logo.png";
 import defaultHeaderLogo from "../../../assets/pirnav-college-crest.png";
 import { HeaderBrand } from "../../../shared/components/CampusBrandImage.jsx";
+import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import { campusContentDefaults, campusTextFields } from "./campusContent.js";
 import "./CampusImagesConfigurationPage.css";
 
@@ -43,6 +46,9 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
   const [uploading, setUploading] = useState(0);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [loginTheme, setLoginTheme] = useState(() => localStorage.getItem("pirnav-login-palette") || "olive");
+  const [loginCustomColor, setLoginCustomColor] = useState(() => localStorage.getItem("pirnav-login-custom-color") || "#00b4d8");
+  const [loginThemeModalOpen, setLoginThemeModalOpen] = useState(false);
   const pageScope = `${selectedCampusId}:${page}`;
   const scope = useRef(pageScope);
   scope.current = pageScope;
@@ -62,6 +68,14 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
         if (active) {
           setImages(value);
           setText({ ...campusContentDefaults, ...value, ...getHeaderBrand(value) });
+          if (value?.loginThemePalette) {
+            setLoginTheme(value.loginThemePalette);
+            localStorage.setItem("pirnav-login-palette", value.loginThemePalette);
+          }
+          if (value?.loginCustomColor) {
+            setLoginCustomColor(value.loginCustomColor);
+            localStorage.setItem("pirnav-login-custom-color", value.loginCustomColor);
+          }
         }
       })
       .catch((failure) => {
@@ -120,6 +134,12 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
         next[key] = text[key].trim();
       });
       if (page === "landing") Object.assign(next, getHeaderBrand({ ...text, dashboardTitle: text.dashboardTitle.trim() }));
+      if (page === "login") {
+        next.loginThemePalette = loginTheme;
+        next.loginCustomColor = loginCustomColor;
+        localStorage.setItem("pirnav-login-palette", loginTheme);
+        if (loginCustomColor) localStorage.setItem("pirnav-login-custom-color", loginCustomColor);
+      }
       await saveCampusImages(campus, next);
       if (scope.current === activeScope)
         setMessage(`${title} saved in this browser. Open the page to see your changes.`);
@@ -195,9 +215,9 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
                   <p>{slot === "dashboardLogo" ? "Logo shown at the top left of the application. Upload the logo only; configure the name separately." : description}</p>
                   <div className={`campus-images-preview ${kind}`}>
                     {images[slot] ? (
-                      <img src={images[slot]} alt={`${title} preview`} style={slot === "dashboardLogo" ? { width: Number(text.dashboardLogoSize), height: Number(text.dashboardLogoSize), padding: 0 } : undefined} />
+                      slot !== "dashboardLogo" && kind === "logo" ? <CampusBrandImage slot={slot} src={images[slot]} alt={`${title} preview`} /> : <img src={images[slot]} alt={`${title} preview`} style={slot === "dashboardLogo" ? { width: Number(text.dashboardLogoSize), height: Number(text.dashboardLogoSize), padding: 0 } : undefined} />
                     ) : kind === "logo" ? (
-                      <img src={slot === "dashboardLogo" ? defaultHeaderLogo : defaultLogo} alt="Default college logo" style={slot === "dashboardLogo" ? { width: Number(text.dashboardLogoSize), height: Number(text.dashboardLogoSize), padding: 0 } : undefined} />
+                      slot !== "dashboardLogo" ? <CampusBrandImage slot={slot} src={defaultLogo} alt="Default college logo" /> : <img src={defaultHeaderLogo} alt="Default college logo" style={{ width: Number(text.dashboardLogoSize), height: Number(text.dashboardLogoSize), padding: 0 }} />
                     ) : (
                       <span>Existing image slider will be used</span>
                     )}
@@ -366,6 +386,56 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
                   <button ref={configureButton} type="button" className="cms-btn cms-btn-primary" disabled={busy || !selectedCampusId} onClick={() => { setHeaderSnapshot({ brand: getHeaderBrand(text), logo: images.dashboardLogo }); setError(""); }}><Settings size={16} /> Configure</button>
                 </div>
               </section>}
+
+              {page === "login" && (
+                <section className="campus-images-card campus-images-theme-card">
+                  <h2>Login Page Theme</h2>
+                  <p>Independent color theme for the login screen.</p>
+                  <div className="campus-images-preview" style={{ background: "var(--cms-surface)", display: "flex", alignItems: "center", justifyContent: "center", padding: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span
+                        className="cms-theme-circle-swatch"
+                        style={{
+                          width: 44,
+                          height: 44,
+                          position: "relative",
+                          borderRadius: "50%",
+                          overflow: "hidden",
+                          display: "inline-block",
+                          flexShrink: 0,
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                          backgroundColor: loginTheme === "custom" ? loginCustomColor : undefined
+                        }}
+                      >
+                        {loginTheme !== "custom" && (() => {
+                          const opt = THEME_OPTIONS.find((t) => t.id === loginTheme) || THEME_OPTIONS[0];
+                          return (
+                            <>
+                              <span className="swatch-top" style={{ position: "absolute", top: 0, left: 0, right: 0, height: "50%", backgroundColor: opt.swatches[2] }} />
+                              <span className="swatch-bottom-left" style={{ position: "absolute", bottom: 0, left: 0, width: "50%", height: "50%", backgroundColor: opt.swatches[0] }} />
+                              <span className="swatch-bottom-right" style={{ position: "absolute", bottom: 0, right: 0, width: "50%", height: "50%", backgroundColor: opt.swatches[1] }} />
+                            </>
+                          );
+                        })()}
+                      </span>
+                      <div style={{ textAlign: "left" }}>
+                        <strong style={{ fontSize: "13px", display: "block", color: "var(--cms-text)" }}>
+                          {loginTheme === "custom" ? "Custom Color" : (THEME_OPTIONS.find((t) => t.id === loginTheme)?.name || "Current Olive")}
+                        </strong>
+                        <small style={{ color: "var(--cms-muted)", fontSize: "11px" }}>Independent theme</small>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-primary"
+                    style={{ marginTop: "auto" }}
+                    onClick={() => setLoginThemeModalOpen(true)}
+                  >
+                    <Palette size={14} /> Change Login Theme
+                  </button>
+                </section>
+              )}
               {renderImageCards(imageFields.filter(([slot]) => slot !== "dashboardLogo"))}
             </div>
           )}
@@ -388,6 +458,77 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
           <div className="campus-images-page campus-header-dialog-content"><div className="campus-images-grid campus-images-grid-with-brand">{renderImageCards(imageFields.filter(([slot]) => slot === "dashboardLogo"))}</div></div>
         </Modal>}
       </main>
+    {loginThemeModalOpen && typeof document !== "undefined" && createPortal(
+        <div
+          className="cms-dashboard-theme-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setLoginThemeModalOpen(false);
+          }}
+        >
+          <section
+            className="cms-dashboard-theme-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="login-theme-modal-title"
+          >
+            <div className="cms-dashboard-theme-heading">
+              <div>
+                <h2 id="login-theme-modal-title">Select Login Page Theme</h2>
+                <p>Choose an independent color palette specifically for the login screen.</p>
+              </div>
+              <button
+                type="button"
+                className="cms-dashboard-theme-close"
+                onClick={() => setLoginThemeModalOpen(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="cms-dashboard-theme-grid">
+              {THEME_OPTIONS.map((theme) => {
+                const isSelected = loginTheme === theme.id;
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    className={`cms-theme-card ${isSelected ? "is-selected" : ""}`}
+                    onClick={() => {
+                      setLoginTheme(theme.id);
+                      setLoginThemeModalOpen(false);
+                    }}
+                  >
+                    <span className="cms-theme-circle-swatch" aria-hidden="true">
+                      <span className="swatch-top" style={{ backgroundColor: theme.swatches[2] }} />
+                      <span className="swatch-bottom-left" style={{ backgroundColor: theme.swatches[0] }} />
+                      <span className="swatch-bottom-right" style={{ backgroundColor: theme.swatches[1] }} />
+                    </span>
+                    <span className="cms-theme-card-name">{theme.name}</span>
+                    {isSelected && (
+                      <span className="cms-theme-card-check" aria-hidden="true">
+                        <Check size={11} strokeWidth={3} />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="cms-dashboard-theme-footer">
+              <span>This theme will only apply to the login page.</span>
+              <button
+                type="button"
+                className="cms-dashboard-theme-done"
+                onClick={() => setLoginThemeModalOpen(false)}
+              >
+                Done
+              </button>
+            </div>
+          </section>
+        </div>,
+        document.body
+      )}
     </DashboardLayout>
   );
 }

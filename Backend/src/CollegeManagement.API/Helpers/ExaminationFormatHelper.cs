@@ -1,6 +1,9 @@
 using System;
+using System.Data;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Dapper;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Models;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +72,53 @@ namespace CollegeManagement.API.Helpers
             }
 
             return IsObjectiveExam(exam, relevantSchedule);
+        }
+
+        /// <summary>
+        /// Asynchronously resolves format and limits using Dapper Stored Procedure without EF Core context.
+        /// </summary>
+        public static async Task<(bool IsObjective, decimal MaxMarks, decimal PassingMarks)> GetFormatAndLimitsAsync(
+            IDbConnection connection, int examinationId, int subjectId, CancellationToken ct = default)
+        {
+            try
+            {
+                var row = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                    new CommandDefinition("sp_GetExamFormatAndLimits",
+                        new { p_ExaminationId = examinationId, p_SubjectId = subjectId },
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: ct));
+
+                if (row != null)
+                {
+                    var dict = (IDictionary<string, object>)row;
+                    string pattern = dict.ContainsKey("ExamPattern") && dict["ExamPattern"] != null ? dict["ExamPattern"].ToString() : string.Empty;
+                    string category = dict.ContainsKey("ExamCategory") && dict["ExamCategory"] != null ? dict["ExamCategory"].ToString() : string.Empty;
+                    string assessType = dict.ContainsKey("AssessmentTypeName") && dict["AssessmentTypeName"] != null ? dict["AssessmentTypeName"].ToString() : string.Empty;
+                    string scheduleMode = dict.ContainsKey("ScheduleMode") && dict["ScheduleMode"] != null ? dict["ScheduleMode"].ToString() : string.Empty;
+                    string examMode = dict.ContainsKey("ScheduleExamMode") && dict["ScheduleExamMode"] != null ? dict["ScheduleExamMode"].ToString() : string.Empty;
+                    string patternName = dict.ContainsKey("PatternName") && dict["PatternName"] != null ? dict["PatternName"].ToString() : string.Empty;
+
+                    bool isObjective = pattern.Contains("OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                                       pattern.Contains("JEE", StringComparison.OrdinalIgnoreCase) ||
+                                       pattern.Contains("NEET", StringComparison.OrdinalIgnoreCase) ||
+                                       category.Contains("OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                                       assessType.Contains("OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                                       scheduleMode.Contains("PATTERN", StringComparison.OrdinalIgnoreCase) ||
+                                       examMode.Contains("OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                                       !string.IsNullOrWhiteSpace(patternName);
+
+                    decimal maxMarks = dict.ContainsKey("MaxMarks") && dict["MaxMarks"] != null ? Convert.ToDecimal(dict["MaxMarks"]) : 100m;
+                    decimal passMarks = dict.ContainsKey("PassingMarks") && dict["PassingMarks"] != null ? Convert.ToDecimal(dict["PassingMarks"]) : 35m;
+
+                    return (isObjective, maxMarks, passMarks);
+                }
+            }
+            catch
+            {
+                // Fallback default
+            }
+
+            return (false, 100m, 35m);
         }
 
         /// <summary>

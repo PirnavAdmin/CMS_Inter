@@ -5,9 +5,7 @@
 --              Timetable, Periods, PeriodStructures, Rooms, and TimetableBackups
 --              with full CampusId filtering, propagation, and validation.
 -- =============================================================================
-
-USE `u819242402_CLM_System`;
-
+-- USE statement removed for environment portability; connection establishes database context.
 DELIMITER //
 
 -- =============================================================================
@@ -903,20 +901,27 @@ CREATE PROCEDURE `sp_CreateTimetable`(
     IN p_AcademicLevelId INT,
     IN p_AcademicYearId INT,
     IN p_GroupId INT,
+    IN p_ProgramId INT,
     IN p_SectionId INT,
     IN p_DayOfWeek INT,
     IN p_PeriodId INT,
     IN p_SubjectId INT,
     IN p_FacultyId INT,
+    IN p_StaffId INT,
     IN p_RoomId INT,
     IN p_IsPublished TINYINT(1),
-    IN p_Remarks VARCHAR(500)
+    IN p_ApprovalStatus INT,
+    IN p_Remarks VARCHAR(500),
+    IN p_SlotType VARCHAR(50)
 )
 BEGIN
+    DECLARE v_StaffId INT;
+    SET v_StaffId = COALESCE(p_StaffId, p_FacultyId);
+
     INSERT INTO `Timetables` (
-        CampusId, BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, StaffId, RoomId, IsPublished, Remarks, CreatedAt
+        CampusId, BoardId, AcademicLevelId, AcademicYearId, GroupId, ProgramId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, StaffId, RoomId, IsPublished, ApprovalStatus, Remarks, SlotType, CreatedAt
     ) VALUES (
-        p_CampusId, p_BoardId, p_AcademicLevelId, p_AcademicYearId, p_GroupId, p_SectionId, p_DayOfWeek, p_PeriodId, p_SubjectId, p_FacultyId, p_FacultyId, p_RoomId, IFNULL(p_IsPublished, 0), p_Remarks, UTC_TIMESTAMP()
+        p_CampusId, p_BoardId, p_AcademicLevelId, p_AcademicYearId, p_GroupId, p_ProgramId, p_SectionId, p_DayOfWeek, p_PeriodId, p_SubjectId, v_StaffId, v_StaffId, p_RoomId, IFNULL(p_IsPublished, 0), IFNULL(p_ApprovalStatus, 0), p_Remarks, IFNULL(p_SlotType, 'Teaching'), UTC_TIMESTAMP()
     );
 
     SELECT LAST_INSERT_ID() AS Id;
@@ -930,16 +935,23 @@ CREATE PROCEDURE `sp_UpdateTimetable`(
     IN p_AcademicLevelId INT,
     IN p_AcademicYearId INT,
     IN p_GroupId INT,
+    IN p_ProgramId INT,
     IN p_SectionId INT,
     IN p_DayOfWeek INT,
     IN p_PeriodId INT,
     IN p_SubjectId INT,
     IN p_FacultyId INT,
+    IN p_StaffId INT,
     IN p_RoomId INT,
     IN p_IsPublished TINYINT(1),
-    IN p_Remarks VARCHAR(500)
+    IN p_ApprovalStatus INT,
+    IN p_Remarks VARCHAR(500),
+    IN p_SlotType VARCHAR(50)
 )
 BEGIN
+    DECLARE v_StaffId INT;
+    SET v_StaffId = COALESCE(p_StaffId, p_FacultyId);
+
     UPDATE `Timetables`
     SET 
         CampusId = p_CampusId,
@@ -947,17 +959,210 @@ BEGIN
         AcademicLevelId = p_AcademicLevelId,
         AcademicYearId = p_AcademicYearId,
         GroupId = p_GroupId,
+        ProgramId = p_ProgramId,
         SectionId = p_SectionId,
         DayOfWeek = p_DayOfWeek,
         PeriodId = p_PeriodId,
         SubjectId = p_SubjectId,
-        FacultyId = p_FacultyId,
-        StaffId = p_FacultyId,
+        FacultyId = v_StaffId,
+        StaffId = v_StaffId,
         RoomId = p_RoomId,
-        IsPublished = p_IsPublished,
+        IsPublished = IFNULL(p_IsPublished, IsPublished),
+        ApprovalStatus = IFNULL(p_ApprovalStatus, ApprovalStatus),
         Remarks = p_Remarks,
+        SlotType = IFNULL(p_SlotType, SlotType),
         UpdatedAt = UTC_TIMESTAMP()
     WHERE Id = p_Id;
+END //
+
+DROP PROCEDURE IF EXISTS `sp_DeleteTimetable` //
+CREATE PROCEDURE `sp_DeleteTimetable`(
+    IN p_Id INT
+)
+BEGIN
+    DELETE FROM `Timetables` WHERE Id = p_Id;
+END //
+
+DROP PROCEDURE IF EXISTS `sp_TogglePublishSlot` //
+CREATE PROCEDURE `sp_TogglePublishSlot`(
+    IN p_Id INT,
+    IN p_IsPublished TINYINT(1)
+)
+BEGIN
+    UPDATE `Timetables`
+    SET IsPublished = p_IsPublished,
+        ApprovalStatus = CASE WHEN p_IsPublished = 1 THEN 1 ELSE ApprovalStatus END,
+        UpdatedAt = UTC_TIMESTAMP()
+    WHERE Id = p_Id;
+END //
+
+DROP PROCEDURE IF EXISTS `sp_ApproveSectionTimetable` //
+CREATE PROCEDURE `sp_ApproveSectionTimetable`(
+    IN p_SectionId INT,
+    IN p_AcademicYearId INT
+)
+BEGIN
+    UPDATE `Timetables`
+    SET ApprovalStatus = 1,
+        UpdatedAt = UTC_TIMESTAMP()
+    WHERE SectionId = p_SectionId
+      AND AcademicYearId = p_AcademicYearId;
+    
+    SELECT ROW_COUNT() AS RowsUpdated;
+END //
+
+DROP PROCEDURE IF EXISTS `sp_GetAllocatedFaculties` //
+CREATE PROCEDURE `sp_GetAllocatedFaculties`(
+    IN p_SubjectId INT,
+    IN p_CampusId INT
+)
+BEGIN
+    SELECT 
+        st.`Id` AS StaffId,
+        st.`EmployeeId` AS StaffEmployeeId,
+        CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, '')) AS StaffName,
+        COALESCE(st.`Email`, '') AS Email,
+        COALESCE(st.`Mobile`, '') AS Mobile,
+        COALESCE(st.`Designation`, '') AS Designation
+    FROM `StaffSubjectAllocations` ssa
+    STRAIGHT_JOIN `Staff` st ON st.`Id` = ssa.`StaffId`
+    WHERE st.`IsDeleted` = 0 
+      AND st.`Status` = 'Active'
+      AND (p_SubjectId IS NULL OR p_SubjectId <= 0 OR ssa.`SubjectId` = p_SubjectId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR st.`CampusId` = p_CampusId)
+    GROUP BY st.`Id`;
+END //
+
+DROP PROCEDURE IF EXISTS `sp_GetTimetablesPaged` //
+CREATE PROCEDURE `sp_GetTimetablesPaged`(
+    IN p_BoardId INT,
+    IN p_AcademicLevelId INT,
+    IN p_AcademicYearId INT,
+    IN p_GroupId INT,
+    IN p_ProgramId INT,
+    IN p_SectionId INT,
+    IN p_DayOfWeek INT,
+    IN p_StaffId INT,
+    IN p_RoomId INT,
+    IN p_IsPublished TINYINT(1),
+    IN p_ApprovalStatus INT,
+    IN p_CampusId INT,
+    IN p_PageNumber INT,
+    IN p_PageSize INT
+)
+BEGIN
+    DECLARE v_Offset INT DEFAULT 0;
+    DECLARE v_Limit INT DEFAULT 20;
+
+    IF p_PageSize IS NOT NULL AND p_PageSize > 0 THEN
+        SET v_Limit = p_PageSize;
+    END IF;
+    IF p_PageNumber IS NOT NULL AND p_PageNumber > 1 THEN
+        SET v_Offset = (p_PageNumber - 1) * v_Limit;
+    END IF;
+
+    -- Total Count
+    SELECT COUNT(1) AS TotalCount
+    FROM `Timetables` t
+    LEFT JOIN `Sections` s ON t.SectionId = s.SectionId
+    WHERE (p_BoardId IS NULL OR t.BoardId = p_BoardId)
+      AND (p_AcademicLevelId IS NULL OR t.AcademicLevelId = p_AcademicLevelId)
+      AND (p_AcademicYearId IS NULL OR t.AcademicYearId = p_AcademicYearId)
+      AND (p_GroupId IS NULL OR t.GroupId = p_GroupId)
+      AND (p_ProgramId IS NULL OR t.ProgramId = p_ProgramId)
+      AND (p_SectionId IS NULL OR t.SectionId = p_SectionId)
+      AND (p_DayOfWeek IS NULL OR t.DayOfWeek = p_DayOfWeek)
+      AND (p_StaffId IS NULL OR t.StaffId = p_StaffId)
+      AND (p_RoomId IS NULL OR t.RoomId = p_RoomId)
+      AND (p_IsPublished IS NULL OR t.IsPublished = p_IsPublished)
+      AND (p_ApprovalStatus IS NULL OR t.ApprovalStatus = p_ApprovalStatus)
+      AND (p_CampusId IS NULL OR t.CampusId = p_CampusId OR (t.CampusId IS NULL AND s.CampusId = p_CampusId));
+
+    -- Paged Items
+    SELECT 
+        t.Id,
+        t.Id AS TimetableId,
+        t.CampusId,
+        COALESCE(c.CampusName, '') AS CampusName,
+        t.BoardId,
+        COALESCE(b.BoardName, '') AS BoardName,
+        t.AcademicLevelId,
+        COALESCE(al.LevelName, '') AS AcademicLevelName,
+        COALESCE(al.LevelName, '') AS LevelName,
+        t.AcademicYearId,
+        COALESCE(ay.AcademicYearName, '') AS AcademicYearName,
+        t.GroupId,
+        COALESCE(g.GroupName, '') AS GroupName,
+        t.ProgramId,
+        COALESCE(p.ProgramName, '') AS ProgramName,
+        t.SectionId,
+        COALESCE(s.SectionName, '') AS SectionName,
+        t.DayOfWeek,
+        CASE t.DayOfWeek
+            WHEN 1 THEN 'Monday'
+            WHEN 2 THEN 'Tuesday'
+            WHEN 3 THEN 'Wednesday'
+            WHEN 4 THEN 'Thursday'
+            WHEN 5 THEN 'Friday'
+            WHEN 6 THEN 'Saturday'
+            WHEN 7 THEN 'Sunday'
+            ELSE ''
+        END AS DayName,
+        t.PeriodId,
+        COALESCE(per.PeriodName, '') AS PeriodName,
+        COALESCE(per.DisplayOrder, per.PeriodId) AS PeriodNumber,
+        per.StartTime,
+        per.EndTime,
+        per.IsBreak,
+        t.SubjectId,
+        COALESCE(sub.SubjectName, '') AS SubjectName,
+        COALESCE(sub.SubjectCode, '') AS SubjectCode,
+        t.StaffId,
+        t.StaffId AS FacultyId,
+        COALESCE(st.EmployeeId, '') AS StaffEmployeeId,
+        COALESCE(st.EmployeeId, '') AS FacultyEmployeeId,
+        CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, '')) AS StaffName,
+        CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, '')) AS FacultyName,
+        t.RoomId,
+        COALESCE(r.RoomCode, '') AS RoomCode,
+        COALESCE(r.RoomName, '') AS RoomName,
+        t.IsPublished,
+        t.ApprovalStatus,
+        CASE t.ApprovalStatus
+            WHEN 0 THEN 'Draft'
+            WHEN 1 THEN 'Approved'
+            WHEN 2 THEN 'Published'
+            ELSE 'Draft'
+        END AS ApprovalStatusName,
+        t.Remarks,
+        t.CreatedAt,
+        t.UpdatedAt
+    FROM `Timetables` t
+    LEFT JOIN `Campuses` c ON t.CampusId = c.CampusId
+    LEFT JOIN `Boards` b ON t.BoardId = b.BoardId
+    LEFT JOIN `AcademicLevels` al ON t.AcademicLevelId = al.AcademicLevelId
+    LEFT JOIN `AcademicYears` ay ON t.AcademicYearId = ay.AcademicYearId
+    LEFT JOIN `Groups` g ON t.GroupId = g.GroupId
+    LEFT JOIN `Programs` p ON t.ProgramId = p.ProgramId
+    LEFT JOIN `Sections` s ON t.SectionId = s.SectionId
+    LEFT JOIN `Periods` per ON t.PeriodId = per.PeriodId
+    LEFT JOIN `Subjects` sub ON t.SubjectId = sub.SubjectId
+    LEFT JOIN `Staff` st ON t.StaffId = st.Id
+    LEFT JOIN `Rooms` r ON t.RoomId = r.RoomId
+    WHERE (p_BoardId IS NULL OR t.BoardId = p_BoardId)
+      AND (p_AcademicLevelId IS NULL OR t.AcademicLevelId = p_AcademicLevelId)
+      AND (p_AcademicYearId IS NULL OR t.AcademicYearId = p_AcademicYearId)
+      AND (p_GroupId IS NULL OR t.GroupId = p_GroupId)
+      AND (p_ProgramId IS NULL OR t.ProgramId = p_ProgramId)
+      AND (p_SectionId IS NULL OR t.SectionId = p_SectionId)
+      AND (p_DayOfWeek IS NULL OR t.DayOfWeek = p_DayOfWeek)
+      AND (p_StaffId IS NULL OR t.StaffId = p_StaffId)
+      AND (p_RoomId IS NULL OR t.RoomId = p_RoomId)
+      AND (p_IsPublished IS NULL OR t.IsPublished = p_IsPublished)
+      AND (p_ApprovalStatus IS NULL OR t.ApprovalStatus = p_ApprovalStatus)
+      AND (p_CampusId IS NULL OR t.CampusId = p_CampusId OR (t.CampusId IS NULL AND s.CampusId = p_CampusId))
+    ORDER BY t.DayOfWeek ASC, per.StartTime ASC
+    LIMIT v_Limit OFFSET v_Offset;
 END //
 
 DROP PROCEDURE IF EXISTS `sp_CopyTimetable` //
@@ -971,8 +1176,10 @@ BEGIN
     DECLARE v_TargetCampusId INT;
     SELECT CampusId INTO v_TargetCampusId FROM `Sections` WHERE SectionId = p_TargetSectionId;
 
+    DELETE FROM `Timetables` WHERE `SectionId` = p_TargetSectionId AND `AcademicYearId` = p_TargetAcademicYearId;
+
     INSERT INTO `Timetables` (
-        CampusId, BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, StaffId, RoomId, IsPublished, Remarks, CreatedAt
+        CampusId, BoardId, AcademicLevelId, AcademicYearId, GroupId, ProgramId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, StaffId, RoomId, IsPublished, ApprovalStatus, Remarks, CreatedAt
     )
     SELECT 
         IFNULL(v_TargetCampusId, CampusId),
@@ -980,6 +1187,7 @@ BEGIN
         AcademicLevelId,
         p_TargetAcademicYearId,
         GroupId,
+        ProgramId,
         p_TargetSectionId,
         DayOfWeek,
         PeriodId,
@@ -988,7 +1196,8 @@ BEGIN
         StaffId,
         RoomId,
         0,
-        Remarks,
+        0,
+        CONCAT('Copied from Section ', p_SourceSectionId),
         UTC_TIMESTAMP()
     FROM `Timetables`
     WHERE AcademicYearId = p_SourceAcademicYearId AND SectionId = p_SourceSectionId;
@@ -1239,6 +1448,65 @@ BEGIN
     DELETE FROM `TimetableBackups`
     WHERE SectionId = p_SectionId
       AND (p_AcademicYearId <= 0 OR AcademicYearId = p_AcademicYearId);
+END //
+
+DROP PROCEDURE IF EXISTS `sp_GetExternalTimetableSlots` //
+CREATE PROCEDURE `sp_GetExternalTimetableSlots`(
+    IN p_AcademicYearId INT,
+    IN p_ExcludeSectionId INT
+)
+BEGIN
+    SELECT 
+        t.Id, t.StaffId, t.RoomId, t.DayOfWeek, t.PeriodId, t.SectionId,
+        p.StartTime, p.EndTime
+    FROM `Timetables` t
+    JOIN `Periods` p ON p.PeriodId = t.PeriodId
+    WHERE t.AcademicYearId = p_AcademicYearId
+      AND (p_ExcludeSectionId IS NULL OR t.SectionId <> p_ExcludeSectionId);
+END //
+
+DROP PROCEDURE IF EXISTS `sp_GetTimetableGenerationContext` //
+CREATE PROCEDURE `sp_GetTimetableGenerationContext`(
+    IN p_BoardId INT,
+    IN p_AcademicLevelId INT,
+    IN p_AcademicYearId INT,
+    IN p_GroupId INT,
+    IN p_SectionIds VARCHAR(2000)
+)
+BEGIN
+    SELECT * FROM `Boards` WHERE `BoardId` = p_BoardId AND `IsActive` = 1 LIMIT 1;
+    SELECT * FROM `AcademicLevels` WHERE `AcademicLevelId` = p_AcademicLevelId AND `IsActive` = 1 LIMIT 1;
+    SELECT * FROM `AcademicYears` WHERE `AcademicYearId` = p_AcademicYearId AND `IsActive` = 1 LIMIT 1;
+    SELECT * FROM `Groups` WHERE `GroupId` = p_GroupId AND `IsActive` = 1 LIMIT 1;
+    SELECT * FROM `Sections` WHERE FIND_IN_SET(`SectionId`, p_SectionIds) > 0 AND `IsActive` = 1;
+    SELECT * FROM `Subjects` WHERE `GroupId` = p_GroupId AND `AcademicLevelId` = p_AcademicLevelId AND (`BoardId` = 0 OR `BoardId` = p_BoardId) AND `IsActive` = 1 ORDER BY `SubjectId`;
+    SELECT ssa.`SubjectId`, ssa.`StaffId`, st.`Id`, st.`FirstName`, st.`LastName`, st.`Status`, st.`StaffType`, st.`IsDeleted`, st.`CampusId`
+    FROM `StaffSubjectAllocations` ssa
+    JOIN `Staff` st ON st.`Id` = ssa.`StaffId`
+    WHERE st.`Status` = 'Active' AND st.`StaffType` = 'Teaching' AND st.`IsDeleted` = 0;
+    SELECT t.`Id`, t.`StaffId`, t.`RoomId`, t.`SectionId`, t.`AcademicYearId`, t.`DayOfWeek`, t.`PeriodId`, p.`StartTime`, p.`EndTime`
+    FROM `Timetables` t
+    JOIN `Periods` p ON p.`PeriodId` = t.`PeriodId`
+    WHERE t.`AcademicYearId` = p_AcademicYearId AND FIND_IN_SET(t.`SectionId`, p_SectionIds) = 0;
+    SELECT * FROM `Rooms` WHERE `IsActive` = 1;
+    SELECT psa.`Id`, psa.`CampusId`, psa.`PeriodStructureId`, psa.`BoardId`, psa.`AcademicLevelId`, psa.`AcademicYearId`, psa.`GroupId`, psa.`IsActive`
+    FROM `PeriodStructureAssignments` psa
+    WHERE psa.`BoardId` = p_BoardId AND psa.`AcademicLevelId` = p_AcademicLevelId AND psa.`AcademicYearId` = p_AcademicYearId AND psa.`IsActive` = 1;
+    SELECT `Id`, `SectionId`, `ApprovalStatus`, `IsPublished`
+    FROM `Timetables`
+    WHERE `AcademicYearId` = p_AcademicYearId AND FIND_IN_SET(`SectionId`, p_SectionIds) > 0;
+END //
+
+DROP PROCEDURE IF EXISTS `sp_DeleteDraftTimetableSlots` //
+CREATE PROCEDURE `sp_DeleteDraftTimetableSlots`(
+    IN p_AcademicYearId INT,
+    IN p_SectionIds VARCHAR(2000)
+)
+BEGIN
+    DELETE FROM `Timetables`
+    WHERE `AcademicYearId` = p_AcademicYearId
+      AND FIND_IN_SET(`SectionId`, p_SectionIds) > 0
+      AND `ApprovalStatus` = 0;
 END //
 
 DELIMITER ;

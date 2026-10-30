@@ -9,7 +9,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [Route("api/v{version:apiVersion}/audit-logs")]
     [Route("api/v{version:apiVersion}/settings/audit-logs")]
-    [Authorize]
+    [Authorize(Roles = "Super Admin,Admin,Principal")]
     public class AuditLogsController : ControllerBase
     {
         private readonly IAuditLogRepository _auditLogRepository;

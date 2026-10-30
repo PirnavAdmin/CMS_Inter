@@ -1,0 +1,56 @@
+/* Transport Manager Vehicles Page Styles */
+
+.tm-vehicles-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Vehicle Details Drawer */
+.tm-vehicle-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tm-vehicle-detail__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.tm-vehicle-detail__icon-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tm-vehicle-detail__number {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--cms-text-primary, #0f172a);
+  margin: 0;
+}
+
+.tm-vehicle-detail__reg {
+  font-size: 0.825rem;
+  color: var(--cms-text-secondary, #64748b);
+  margin: 0.15rem 0 0 0;
+}
+
+.tm-document-card {
+  background: var(--cms-surface-subtle, #f8fafc);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 8px;
+  padding: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

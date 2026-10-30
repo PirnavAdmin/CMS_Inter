@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Groups;
 
@@ -6,114 +7,72 @@ namespace CollegeManagement.API.Repositories
 {
     public interface IGroupRepository
     {
-        // =========================================================
-        // GROUP LIST
-        // =========================================================
-
         Task<List<GroupListItemDto>> GetAllAsync(
             string? search = null,
             int? boardId = null,
             int? academicYearId = null,
             int? academicLevelId = null,
             bool? isActive = null,
-            int? masterGroupId = null);
-
-        // =========================================================
-        // GROUP DETAILS
-        // Includes Programs assigned to the Group
-        // =========================================================
+            int? masterGroupId = null,
+            CancellationToken cancellationToken = default);
 
         Task<GroupResponse?> GetByIdAsync(
-            int groupId);
-
-        // =========================================================
-        // GROUPS BY BOARD
-        // =========================================================
+            int groupId,
+            CancellationToken cancellationToken = default);
 
         Task<List<GroupListItemDto>> GetByBoardAsync(
             int boardId,
             int? academicYearId = null,
-            int? academicLevelId = null);
-
-        // =========================================================
-        // CREATE GROUP
-        // ProgramIds from CreateGroupRequest are handled here
-        // =========================================================
+            int? academicLevelId = null,
+            CancellationToken cancellationToken = default);
 
         Task<GroupResponse> CreateAsync(
-            CreateGroupRequest request);
-
-        // =========================================================
-        // UPDATE GROUP
-        // ProgramIds from UpdateGroupRequest are handled here
-        // =========================================================
+            CreateGroupRequest request,
+            CancellationToken cancellationToken = default);
 
         Task<GroupResponse?> UpdateAsync(
             int groupId,
-            UpdateGroupRequest request);
-
-        // =========================================================
-        // DELETE GROUP
-        // =========================================================
+            UpdateGroupRequest request,
+            CancellationToken cancellationToken = default);
 
         Task<bool> DeleteAsync(
-            int groupId);
-
-        // =========================================================
-        // ACTIVATE / DEACTIVATE GROUP
-        // =========================================================
+            int groupId,
+            CancellationToken cancellationToken = default);
 
         Task<bool> ActivateAsync(
             int groupId,
-            bool isActive = true);
-
-        // =========================================================
-        // GROUP CODE VALIDATION
-        // =========================================================
+            bool isActive = true,
+            CancellationToken cancellationToken = default);
 
         Task<bool> GroupCodeExistsAsync(
             string groupCode,
-            int? excludeGroupId = null);
-
-        // =========================================================
-        // STUDENTS OF GROUP
-        // =========================================================
+            int? excludeGroupId = null,
+            CancellationToken cancellationToken = default);
 
         Task<List<CollegeManagement.API.DTOs.Students.StudentListItemDto>>
             GetStudentsAsync(
-                int groupId);
-
-        // =========================================================
-        // SUBJECTS OF GROUP
-        // =========================================================
+                int groupId,
+                CancellationToken cancellationToken = default);
 
         Task<List<CollegeManagement.API.Models.Subject>>
             GetSubjectsAsync(
-                int groupId);
-
-        // =========================================================
-        // GROUP SUMMARY
-        // =========================================================
+                int groupId,
+                CancellationToken cancellationToken = default);
 
         Task<GroupSummaryDto?> GetSummaryAsync(
-            int groupId);
-
-        // =========================================================
-        // GROUP DROPDOWN
-        // =========================================================
+            int groupId,
+            CancellationToken cancellationToken = default);
 
         Task<List<GroupDropdownDto>>
             GetDropdownAsync(
                 int? boardId = null,
                 int? academicYearId = null,
-                int? academicLevelId = null);
-
-        // =========================================================
-        // PROGRAMS ASSIGNED TO GROUP
-        // =========================================================
+                int? academicLevelId = null,
+                CancellationToken cancellationToken = default);
 
         Task<List<CollegeManagement.API.DTOs.Program.GroupProgramDto>>
             GetProgramsAsync(
-                int groupId);
+                int groupId,
+                CancellationToken cancellationToken = default);
     }
 }
