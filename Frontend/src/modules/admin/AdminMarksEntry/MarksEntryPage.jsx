@@ -64,9 +64,6 @@ const buildMarksPayload = (workspace, evalId, campusId = null) => {
     rowVersion: Number(workspace?.rowVersion || 0),
     remarks: "Marks Entry",
     students: formattedMarks,
-    marks: formattedMarks,
-    marksList: formattedMarks,
-    studentMarks: formattedMarks,
   };
 };
 

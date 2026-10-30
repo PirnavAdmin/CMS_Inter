@@ -34,50 +34,6 @@ namespace CollegeManagement.API.Repositories
             bool? isActive = null,
             int? masterGroupId = null)
         {
-            if (masterGroupId.HasValue && masterGroupId.Value > 0)
-            {
-                var query = _context.Groups
-                    .AsNoTracking()
-                    .Include(g => g.BoardNavigation)
-                    .Include(g => g.AcademicYear)
-                    .Include(g => g.AcademicLevelNavigation)
-                    .Where(g => g.MasterGroupId == masterGroupId.Value);
-
-                if (boardId.HasValue && boardId.Value > 0) query = query.Where(g => g.BoardId == boardId.Value);
-                if (academicYearId.HasValue && academicYearId.Value > 0) query = query.Where(g => g.AcademicYearId == academicYearId.Value);
-                if (academicLevelId.HasValue && academicLevelId.Value > 0) query = query.Where(g => g.AcademicLevelId == academicLevelId.Value);
-                if (isActive.HasValue) query = query.Where(g => g.IsActive == isActive.Value);
-                if (!string.IsNullOrWhiteSpace(search))
-                {
-                    var term = search.Trim();
-                    query = query.Where(g => g.GroupName.Contains(term) || g.GroupCode.Contains(term));
-                }
-
-                var entities = await query.OrderByDescending(g => g.GroupId).ToListAsync();
-                var items = entities.Select(g => new GroupListItemDto
-                {
-                    GroupId = g.GroupId,
-                    MasterGroupId = g.MasterGroupId,
-                    BoardId = g.BoardId,
-                    BoardName = g.BoardNavigation != null ? g.BoardNavigation.BoardName : string.Empty,
-                    AcademicYearId = g.AcademicYearId,
-                    AcademicYearName = g.AcademicYear != null ? g.AcademicYear.AcademicYearName : string.Empty,
-                    AcademicLevelId = g.AcademicLevelId,
-                    AcademicLevelName = g.AcademicLevelNavigation != null ? g.AcademicLevelNavigation.LevelName : string.Empty,
-                    GroupName = g.GroupName,
-                    GroupCode = g.GroupCode,
-                    Description = g.Description,
-                    IsActive = g.IsActive,
-                    Status = g.IsActive ? "Active" : "Inactive",
-                    CreatedAt = g.CreatedAt,
-                    UpdatedAt = g.UpdatedAt,
-                    Programs = new List<GroupProgramDto>()
-                }).ToList();
-
-                await LoadProgramsForGroupsAsync(items);
-                return items;
-            }
-
             var connection = _context.Database.GetDbConnection();
 
             if (connection.State != ConnectionState.Open)
@@ -97,7 +53,9 @@ namespace CollegeManagement.API.Repositories
 
                     p_AcademicLevelId = academicLevelId,
 
-                    p_IsActive = isActive
+                    p_IsActive = isActive,
+
+                    p_MasterGroupId = masterGroupId
                 },
                 commandType: CommandType.StoredProcedure
             );

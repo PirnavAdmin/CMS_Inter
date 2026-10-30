@@ -6,6 +6,8 @@
  * portal views (like Non-Teaching Staff) receive only announcements designated for them.
  */
 
+import sharedApiClient from "@/api/axios.js";
+
 const STORAGE_KEY = "cms_campus_announcements_v1";
 export const ANNOUNCEMENTS_EVENT = "cms_announcements_updated";
 
@@ -128,9 +130,45 @@ export const announcementService = {
   },
 
   /**
-   * Publishes a new announcement with audience tagging.
+   * Fetches latest notices from backend database with local cache fallback.
    */
-  createAnnouncement: ({
+  fetchAnnouncements: async (audience = null, campusId = null) => {
+    try {
+      const params = {};
+      if (audience) params.audience = audience;
+      if (campusId) params.campusId = campusId;
+      const res = await sharedApiClient.get("/api/v1/dashboard/notices", { params });
+      const raw = res.data?.data || res.data;
+      if (Array.isArray(raw)) {
+        const formatted = raw.map((item, idx) => ({
+          id: item.id || `notice-${idx}`,
+          title: item.title || "Campus Notice",
+          content: item.description || item.content || "",
+          category: item.category || "Administrative",
+          priority: item.priority || "Normal",
+          targetAudience: item.targetAudience || "General / Campus-wide",
+          publisher: item.publisher || "Principal Office",
+          publisherRole: item.publisherRole || "Principal",
+          referenceNo: item.referenceNo || `CIR-${item.id}`,
+          date: item.date || formatDateNow(),
+          createdAt: item.createdAt || new Date().toISOString(),
+        }));
+        if (formatted.length > 0) {
+          saveStoredAnnouncements(formatted);
+          emitUpdateEvent(formatted);
+          return formatted;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch remote notices, falling back to local cache:", err);
+    }
+    return getStoredAnnouncements();
+  },
+
+  /**
+   * Publishes a new announcement with audience tagging and database persistence.
+   */
+  createAnnouncement: async ({
     title,
     content,
     category = "Administrative",
@@ -139,6 +177,7 @@ export const announcementService = {
     publisher = "Admin Office",
     publisherRole = "Admin",
     referenceNo = null,
+    campusId = null,
   }) => {
     const all = getStoredAnnouncements();
     const id = `ANN-${Date.now()}`;
@@ -162,6 +201,21 @@ export const announcementService = {
     const updated = [newAnnouncement, ...all];
     saveStoredAnnouncements(updated);
     emitUpdateEvent(newAnnouncement);
+
+    // Persist notice to database via sp_Notice_Create
+    try {
+      await sharedApiClient.post("/api/v1/dashboard/notices", {
+        title: newAnnouncement.title,
+        content: newAnnouncement.content,
+        category: newAnnouncement.category,
+        priority: newAnnouncement.priority,
+        targetAudience: newAnnouncement.targetAudience,
+        publisher: newAnnouncement.publisher,
+        campusId: campusId || undefined,
+      });
+    } catch (err) {
+      console.warn("Backend notice persistence notice:", err?.message || err);
+    }
 
     return newAnnouncement;
   },

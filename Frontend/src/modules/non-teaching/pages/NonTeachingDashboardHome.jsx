@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Calendar,
@@ -21,6 +21,21 @@ import { nonTeachingService } from "../services/nonTeachingService.js";
 import { attendanceService } from "@/api/attendanceService.js";
 import { announcementService } from "@/services/announcementService.js";
 
+function LiveClockDisplay() {
+  const [time, setTime] = useState(() =>
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }));
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return <div className="nts-clock-time">{time}</div>;
+}
+
 export default function NonTeachingDashboardHome() {
   const [profile, setProfile] = useState(() => nonTeachingService.getProfile());
   const [tasks, setTasks] = useState(() => nonTeachingService.getTasks());
@@ -29,11 +44,13 @@ export default function NonTeachingDashboardHome() {
   const [announcements, setAnnouncements] = useState(() => nonTeachingService.getAnnouncements());
   const [attendanceSummary, setAttendanceSummary] = useState(() => nonTeachingService.getAttendanceSummary());
   const [punchState, setPunchState] = useState({ status: "not_punched", inTime: null, outTime: null });
-  const [liveClock, setLiveClock] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
-  );
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+
+  const currentMonthName = useMemo(
+    () => new Date().toLocaleString("default", { month: "short" }),
+    []
+  );
 
   useEffect(() => {
     let active = true;
@@ -54,15 +71,6 @@ export default function NonTeachingDashboardHome() {
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setLiveClock(
-        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })
-      );
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
     const unsub = announcementService.subscribeAnnouncements(() => {
       setAnnouncements(nonTeachingService.getAnnouncements());
     });
@@ -71,28 +79,22 @@ export default function NonTeachingDashboardHome() {
 
   useEffect(() => {
     let active = true;
-    nonTeachingService.fetchProfile().then((p) => {
-      if (active && p) setProfile(p);
-    }).catch(() => {});
 
-    nonTeachingService.fetchTasks().then((t) => {
-      if (active && Array.isArray(t)) setTasks(t);
-    }).catch(() => {});
-
-    if (typeof nonTeachingService.fetchLeaveData === "function") {
-      nonTeachingService.fetchLeaveData().then((ld) => {
-        if (active && ld) {
-          if (ld.balances) setLeaveBalances(ld.balances);
-          if (ld.history) setLeaveHistory(ld.history);
-        }
-      }).catch(() => {});
-    }
-
-    if (typeof nonTeachingService.fetchAttendanceSummary === "function") {
-      nonTeachingService.fetchAttendanceSummary().then((s) => {
-        if (active && s) setAttendanceSummary(s);
-      }).catch(() => {});
-    }
+    Promise.allSettled([
+      nonTeachingService.fetchProfile(),
+      nonTeachingService.fetchTasks(),
+      typeof nonTeachingService.fetchLeaveData === "function" ? nonTeachingService.fetchLeaveData() : Promise.resolve(null),
+      typeof nonTeachingService.fetchAttendanceSummary === "function" ? nonTeachingService.fetchAttendanceSummary() : Promise.resolve(null),
+    ]).then(([pRes, tRes, ldRes, attRes]) => {
+      if (!active) return;
+      if (pRes.status === "fulfilled" && pRes.value) setProfile(pRes.value);
+      if (tRes.status === "fulfilled" && Array.isArray(tRes.value)) setTasks(tRes.value);
+      if (ldRes.status === "fulfilled" && ldRes.value) {
+        if (ldRes.value.balances) setLeaveBalances(ldRes.value.balances);
+        if (ldRes.value.history) setLeaveHistory(ldRes.value.history);
+      }
+      if (attRes.status === "fulfilled" && attRes.value) setAttendanceSummary(attRes.value);
+    });
 
     return () => {
       active = false;
@@ -102,21 +104,19 @@ export default function NonTeachingDashboardHome() {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const p = await nonTeachingService.fetchProfile();
-      if (p) setProfile(p);
-      const t = await nonTeachingService.fetchTasks();
-      if (Array.isArray(t)) setTasks(t);
-      if (typeof nonTeachingService.fetchLeaveData === "function") {
-        const ld = await nonTeachingService.fetchLeaveData();
-        if (ld) {
-          if (ld.balances) setLeaveBalances(ld.balances);
-          if (ld.history) setLeaveHistory(ld.history);
-        }
+      const [pRes, tRes, ldRes, attRes] = await Promise.allSettled([
+        nonTeachingService.fetchProfile(),
+        nonTeachingService.fetchTasks(),
+        typeof nonTeachingService.fetchLeaveData === "function" ? nonTeachingService.fetchLeaveData() : Promise.resolve(null),
+        typeof nonTeachingService.fetchAttendanceSummary === "function" ? nonTeachingService.fetchAttendanceSummary() : Promise.resolve(null),
+      ]);
+      if (pRes.status === "fulfilled" && pRes.value) setProfile(pRes.value);
+      if (tRes.status === "fulfilled" && Array.isArray(tRes.value)) setTasks(tRes.value);
+      if (ldRes.status === "fulfilled" && ldRes.value) {
+        if (ldRes.value.balances) setLeaveBalances(ldRes.value.balances);
+        if (ldRes.value.history) setLeaveHistory(ldRes.value.history);
       }
-      if (typeof nonTeachingService.fetchAttendanceSummary === "function") {
-        const s = await nonTeachingService.fetchAttendanceSummary();
-        if (s) setAttendanceSummary(s);
-      }
+      if (attRes.status === "fulfilled" && attRes.value) setAttendanceSummary(attRes.value);
     } catch {}
     setRefreshing(false);
     showToast("Dashboard synchronized with server.");
@@ -157,9 +157,10 @@ export default function NonTeachingDashboardHome() {
 
   const handleToggleTaskStatus = (taskId, currentStatus) => {
     const nextStatus = currentStatus === "Completed" ? "In Progress" : currentStatus === "Pending" ? "In Progress" : "Completed";
-    const updated = nonTeachingService.updateTaskStatus(taskId, nextStatus);
-    setTasks(updated);
-    showToast(`Task marked as ${nextStatus}`);
+    nonTeachingService.updateTaskStatus(taskId, nextStatus).then((updated) => {
+      setTasks(updated);
+      showToast(`Task marked as ${nextStatus}`);
+    });
   };
 
   // Time-aware greeting
@@ -178,7 +179,7 @@ export default function NonTeachingDashboardHome() {
   const activeTasksCount = tasks.filter((t) => t.status !== "Completed").length;
   const completedTasksCount = tasks.filter((t) => t.status === "Completed").length;
   const pendingTasksCount = tasks.filter((t) => t.status === "Pending").length;
-  const totalLeaveDaysRemaining = leaveBalances.reduce((sum, b) => sum + Number(b.remaining || b.available || b.total || 0), 0);
+  const totalLeaveDaysRemaining = leaveBalances.reduce((sum, b) => sum + Number(b.remaining ?? b.available ?? b.total ?? 0), 0);
 
   return (
     <>
@@ -239,7 +240,7 @@ export default function NonTeachingDashboardHome() {
               <span className="nts-kpi-val">{attendanceSummary.attendanceRate}%</span>
             </div>
           </div>
-          <span className="nts-kpi-sub">{attendanceSummary.presentDays} Days Present (Oct)</span>
+          <span className="nts-kpi-sub">{attendanceSummary.presentDays} Days Present ({currentMonthName})</span>
         </div>
 
         {/* 2. Leave Balance */}
@@ -317,8 +318,6 @@ export default function NonTeachingDashboardHome() {
         </div>
       </section>
 
-
-
       {/* Two-Column Overview Content */}
       <div className="nts-two-col">
         {/* Left Column: Today's Punch & Active Tasks */}
@@ -336,7 +335,7 @@ export default function NonTeachingDashboardHome() {
             <div className="nts-card-body">
               <div className="nts-punch-card">
                 <div>
-                  <div className="nts-clock-time">{liveClock}</div>
+                  <LiveClockDisplay />
                   <div className="nts-clock-sub">
                     <span className="nts-status-badge present">
                       <CheckCircle2 size={12} /> {punchState.status === "punched_in" ? `Punched In at ${punchState.inTime}` : punchState.status === "punched_out" ? `Punched Out at ${punchState.outTime}` : "Not Punched"}
@@ -387,11 +386,11 @@ export default function NonTeachingDashboardHome() {
                       <div className="nts-task-title">{task.title}</div>
                       <div className="nts-task-desc">{task.description}</div>
                       <div className="nts-task-meta">
-                        <span className={`nts-pill-priority ${task.priority.toLowerCase()}`}>
-                          {task.priority}
+                        <span className={`nts-pill-priority ${(task.priority || "medium").toLowerCase()}`}>
+                          {task.priority || "Medium"}
                         </span>
-                        <span>Category: <strong>{task.category}</strong></span>
-                        <span>Due: <strong>{task.dueDate}</strong></span>
+                        <span>Category: <strong>{task.category || "General"}</strong></span>
+                        <span>Due: <strong>{task.dueDate || "N/A"}</strong></span>
                       </div>
                     </div>
 
@@ -459,7 +458,7 @@ export default function NonTeachingDashboardHome() {
               {leaveHistory.length > 0 ? (
                 <div style={{ marginTop: 4, padding: "8px 12px", background: "var(--nts-subtle)", borderRadius: 8, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span>Latest Request: <strong>{leaveHistory[0]?.type}</strong></span>
-                  <span className={`nts-status-badge ${leaveHistory[0]?.status.toLowerCase()}`}>
+                  <span className={`nts-status-badge ${(leaveHistory[0]?.status || "pending").toLowerCase()}`}>
                     {leaveHistory[0]?.status}
                   </span>
                 </div>

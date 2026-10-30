@@ -38,6 +38,27 @@ import {
   Legend,
 } from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import {
+  getReportBoards,
+  getReportAcademicYears,
+  getReportAcademicLevels,
+  getReportGroups,
+  getReportSections,
+  getReportsDashboard,
+  getAdmissionsDetails,
+  getAttendanceDetails,
+  getFeeCollectionDetails,
+  getDueFeesDetails,
+  getExaminationsDetails,
+  getResultsDetails,
+  getStaffWorkloadDetails,
+  getStudentStrengthDetails,
+  getPassPercentageDetails,
+  getToppersDetails,
+  getAuditLogs,
+  exportReportPdf,
+  exportReportExcel,
+} from "@/api/reportApi.js";
 import { uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -59,30 +80,17 @@ const REPORTS_API_VERSION = "1.0";
 const OVERVIEW_REPORT_TYPE = "dashboard";
 const FILTER_CACHE_TTL_MS = 5 * 60 * 1000;
 
-const REPORTS_API = {
-  filters: {
-    boards: "/api/v1/reports/filters/boards",
-    academicYears: "/api/v1/reports/filters/academic-years",
-    academicLevels: "/api/v1/reports/filters/academic-levels",
-    groups: "/api/v1/reports/filters/groups",
-    sections: "/api/v1/reports/filters/sections",
-  },
-  dashboard: "/api/v1/reports/dashboard",
-  exportPdf: "/api/v1/reports/export/pdf",
-  exportExcel: "/api/v1/reports/export/excel",
-  details: {
-    admissions: "/api/v1/reports/details/admissions",
-    attendance: "/api/v1/reports/details/attendance",
-    feeCollection: "/api/v1/reports/details/fee-collection",
-    dueFees: "/api/v1/reports/details/due-fees",
-    examinations: "/api/v1/reports/details/examinations",
-    results: "/api/v1/reports/details/results",
-    facultyWorkload: "/api/v1/reports/details/staff-workload",
-    studentStrength: "/api/v1/reports/details/student-strength",
-    passPercentage: "/api/v1/reports/details/pass-percentage",
-    toppers: "/api/v1/reports/details/toppers",
-    auditLogs: "/api/v1/reports/details/audit-logs",
-  },
+const DETAIL_API_MAP = {
+  admissions: getAdmissionsDetails,
+  attendance: getAttendanceDetails,
+  feeCollection: getFeeCollectionDetails,
+  dueFees: getDueFeesDetails,
+  examinations: getExaminationsDetails,
+  results: getResultsDetails,
+  facultyWorkload: getStaffWorkloadDetails,
+  studentStrength: getStudentStrengthDetails,
+  passPercentage: getPassPercentageDetails,
+  toppers: getToppersDetails,
 };
 
 // 10 Summary Cards Configuration
@@ -819,11 +827,11 @@ export default function ReportsPage() {
     setYearsLoading(true);
     try {
       const [boardsRes, yearsRes, levelsRes, groupsRes, sectionsRes] = await Promise.allSettled([
-        apiClient.get(REPORTS_API.filters.boards, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.academicYears, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.academicLevels, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.groups, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.sections, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportBoards({}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportAcademicYears({}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportAcademicLevels({}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportGroups({}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportSections({}, { signal: controller.signal, skipGlobalLoader: true }),
       ]);
       if (!mountedRef.current || controller.signal.aborted) return;
       
@@ -875,8 +883,7 @@ export default function ReportsPage() {
     const controller = beginRequest("academicYears");
     setYearsLoading(true);
     const params = boardId ? { boardId } : {};
-    apiClient.get(REPORTS_API.filters.academicYears, {
-      params,
+    getReportAcademicYears(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
@@ -915,8 +922,7 @@ export default function ReportsPage() {
     const controller = beginRequest("academicLevels");
     setLevelLoading(true);
     const params = boardId ? { boardId } : {};
-    apiClient.get(REPORTS_API.filters.academicLevels, {
-      params,
+    getReportAcademicLevels(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
@@ -950,8 +956,7 @@ export default function ReportsPage() {
     if (boardId) params.boardId = boardId;
     if (academicYearId) params.academicYearId = academicYearId;
     if (academicLevelId) params.academicLevelId = academicLevelId;
-    apiClient.get(REPORTS_API.filters.groups, {
-      params,
+    getReportGroups(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
@@ -987,8 +992,7 @@ export default function ReportsPage() {
     if (boardId) params.boardId = boardId;
     if (academicYearId) params.academicYearId = academicYearId;
     if (academicLevelId) params.academicLevelId = academicLevelId;
-    apiClient.get(REPORTS_API.filters.sections, {
-      params,
+    getReportSections(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
@@ -1181,8 +1185,7 @@ export default function ReportsPage() {
   const loadDetailData = useCallback(async (cardKey, activeFilters = null) => {
     const card = summaryCardConfig.find((c) => c.key === cardKey);
     if (!card) return;
-    const endpoint = REPORTS_API.details[card.key] || REPORTS_API.details[card.reportType];
-    if (!endpoint) return;
+    const apiFn = DETAIL_API_MAP[card.key] || DETAIL_API_MAP[card.reportType];
 
     setSelectedCardKey(cardKey);
     setDetailLoading(true);
@@ -1191,7 +1194,7 @@ export default function ReportsPage() {
     setDetailSearch("");
     try {
       const params = buildReportQuery(activeFilters || filters);
-      const res = await apiClient.get(endpoint, { params });
+      const res = apiFn ? await apiFn(params) : await apiClient.get(`/api/v1/reports/details/${card.reportType}`, { params });
       const rawList = res.data?.details || res.data?.results || res.data?.toppers || res.data?.items || (Array.isArray(res.data) ? res.data : []);
       setDetailData(rawList);
     } catch (err) {
@@ -1208,7 +1211,7 @@ export default function ReportsPage() {
     setAuditLogPage(1);
     try {
       const params = buildReportQuery(customFilters || filters);
-      const res = await apiClient.get(REPORTS_API.details.auditLogs, { params });
+      const res = await getAuditLogs(params);
       const list = res.data?.records || res.data?.details || (Array.isArray(res.data) ? res.data : []);
       setAuditLogData(list);
     } catch (err) {
@@ -1255,7 +1258,7 @@ export default function ReportsPage() {
     setPreviewFile(null);
     try {
       const params = buildReportQuery(activeFilters);
-      const res = await apiClient.get(REPORTS_API.dashboard, { params });
+      const res = await getReportsDashboard(params);
       setDashboardData(res.data);
       setReportGenerated(true);
       loadDetailData(selectedCardKey || "dueFees", activeFilters);
@@ -1321,11 +1324,9 @@ export default function ReportsPage() {
         exportCsv(rows, ["Metric", "Value"], `Reports-Overview-${new Date().toISOString().slice(0, 10)}.csv`);
         setToast("Overview CSV exported successfully.");
       } else {
-        const endpoint = format === "pdf" ? REPORTS_API.exportPdf : REPORTS_API.exportExcel;
-        const res = await apiClient.get(endpoint, {
-          params: { ...buildReportQuery(filters), reportType: OVERVIEW_REPORT_TYPE },
-          responseType: "blob",
-        });
+        const res = format === "pdf"
+          ? await exportReportPdf(OVERVIEW_REPORT_TYPE, buildReportQuery(filters))
+          : await exportReportExcel(OVERVIEW_REPORT_TYPE, buildReportQuery(filters));
         const blob = responseBlob(res);
         const filename = responseFilename(res, `Reports-Overview-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
         downloadBlob(blob, filename);
@@ -1342,11 +1343,9 @@ export default function ReportsPage() {
     setPreviewing(format);
     setPdfPreviewLoaded(false);
     try {
-      const endpoint = format === "pdf" ? REPORTS_API.exportPdf : REPORTS_API.exportExcel;
-      const res = await apiClient.get(endpoint, {
-        params: { ...buildReportQuery(filters), reportType: OVERVIEW_REPORT_TYPE },
-        responseType: "blob",
-      });
+      const res = format === "pdf"
+        ? await exportReportPdf(OVERVIEW_REPORT_TYPE, buildReportQuery(filters))
+        : await exportReportExcel(OVERVIEW_REPORT_TYPE, buildReportQuery(filters));
       const blob = responseBlob(res);
       const filename = responseFilename(res, `Reports-Overview-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
       const file = { blob, filename, format, title: "Reports Overview" };
@@ -1362,10 +1361,7 @@ export default function ReportsPage() {
   const printBackendReport = async () => {
     try {
       setToast("Preparing document for printing...");
-      const res = await apiClient.get(REPORTS_API.exportPdf, {
-        params: { ...buildReportQuery(filters), reportType: OVERVIEW_REPORT_TYPE },
-        responseType: "blob",
-      });
+      const res = await exportReportPdf(OVERVIEW_REPORT_TYPE, buildReportQuery(filters));
       const blob = responseBlob(res);
       const url = URL.createObjectURL(blob);
       const iframe = document.createElement("iframe");
@@ -1404,11 +1400,9 @@ export default function ReportsPage() {
     if (exportingCards[reqKey]) return;
     setExportingCards((prev) => ({ ...prev, [reqKey]: true }));
     try {
-      const endpoint = format === "pdf" ? REPORTS_API.exportPdf : REPORTS_API.exportExcel;
-      const res = await apiClient.get(endpoint, {
-        params: { ...buildReportQuery(filters), reportType: card.reportType },
-        responseType: "blob",
-      });
+      const res = format === "pdf"
+        ? await exportReportPdf(card.reportType, buildReportQuery(filters))
+        : await exportReportExcel(card.reportType, buildReportQuery(filters));
       const blob = responseBlob(res);
       const filename = responseFilename(res, `${card.reportType}-report-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
       downloadBlob(blob, filename);

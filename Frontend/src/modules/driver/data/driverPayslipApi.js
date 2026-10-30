@@ -17,14 +17,10 @@ export function normalizePayslip(record) {
   ].map((key) => [key, get(key)]));
 }
 export async function getDriverPayslips(employeeId, signal) {
-  const staffId = getDriverStaffId();
-  if (!employeeId || employeeId === "Not available") throw new Error("Your employee code is not available yet. Refresh your driver profile and try again.");
-  const data = unwrap(await apiClient.get(base, {
-    params: { search: employeeId }, signal,
-  }));
+  const data = unwrap(await apiClient.get("/api/v1/Payroll/my-payslips", { signal }));
   const list = Array.isArray(data) ? data : data?.items ?? data?.Items ?? data?.payslips ?? data?.$values;
   if (!Array.isArray(list)) throw new Error("The payslip list response is invalid.");
-  return list.map(normalizePayslip).filter((slip) => String(slip.staffId) === String(staffId))
+  return list.map(normalizePayslip)
     .sort((a, b) => b.payrollYear - a.payrollYear || b.payrollMonth - a.payrollMonth);
 }
 export async function getDriverPayslip(slip, signal) {

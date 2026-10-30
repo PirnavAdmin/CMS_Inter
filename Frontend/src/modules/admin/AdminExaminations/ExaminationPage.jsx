@@ -104,6 +104,8 @@ import {
 // Canonical Record-Aware Examination Strategy Classification
 const isCombinedExamination = (examOrForm) => {
   if (!examOrForm) return false;
+  const earlyCat = String(examOrForm.examCategory || examOrForm.category || "").trim().toLowerCase();
+  if (earlyCat === "regular") return false;
   const mode = normalizeStatus(examOrForm.scheduleMode);
   if (mode === "PATTERN_WISE" || mode === "COMBINED_OBJECTIVE") return true;
 
@@ -126,8 +128,12 @@ const isCombinedExamination = (examOrForm) => {
   }
 
   // Check pattern indicator (Mains pattern, JEE Main, NEET, etc.)
+  const isRegularPat = (p) => {
+    const s = String(p || "").trim().toLowerCase();
+    return !s || ["regular", "regular pattern", "regular academic", "regular academic pattern", "regular_academic", "none", "standard", "default"].includes(s);
+  };
   const pat = String(examOrForm.examPattern || examOrForm.pattern || examOrForm.patternName || "").trim().toLowerCase();
-  if (pat && pat !== "regular" && pat !== "regular pattern" && pat !== "regular academic pattern" && pat !== "none") {
+  if (pat && !isRegularPat(pat)) {
     return true;
   }
 
@@ -136,7 +142,7 @@ const isCombinedExamination = (examOrForm) => {
     const grpPats = Object.values(examOrForm.selectedGroupPatterns)
       .flat()
       .map((p) => String(p).trim().toLowerCase());
-    if (grpPats.some((p) => p && p !== "regular" && p !== "regular academic pattern" && p !== "none")) {
+    if (grpPats.some((p) => p && !isRegularPat(p))) {
       return true;
     }
   }
@@ -146,10 +152,10 @@ const isCombinedExamination = (examOrForm) => {
   if (name.includes("objective") || name.includes("combined")) return true;
 
   // Check schedules if any schedule has PATTERN_WISE, patternName, examMode === Objective, or includedSubjectIds
-  if (Array.isArray(examOrForm.schedules) && examOrForm.schedules.length > 0) {
+  if (earlyCat !== "regular" && Array.isArray(examOrForm.schedules) && examOrForm.schedules.length > 0) {
     if (examOrForm.schedules.some((s) =>
-      s.scheduleMode === "PATTERN_WISE" ||
-      Boolean(s.patternName) ||
+
+
       normalizeStatus(s.examMode) === "OBJECTIVE" ||
       normalizeStatus(s.mode) === "OBJECTIVE" ||
       (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0)
@@ -2288,7 +2294,14 @@ const normalizeScheduleRecord = (
   const totalCandidatesAlloc = hallAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0);
   const finalCandidateCount = totalCandidatesAlloc > 0 ? totalCandidatesAlloc : (fallbackStrength > 0 ? fallbackStrength : 0);
 
-  const combined = ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) || normalizeStatus(s?.examMode) === "OBJECTIVE" || normalizeStatus(s?.mode) === "OBJECTIVE" || (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 0) || isCombinedExamination(examContext);
+  const isRegular = isRegularExamination(examContext) || String(examContext?.examCategory || "").toLowerCase() === "regular";
+  const combined = !isRegular && (
+    ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) ||
+    normalizeStatus(s?.examMode) === "OBJECTIVE" ||
+    normalizeStatus(s?.mode) === "OBJECTIVE" ||
+    (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 1) ||
+    isCombinedExamination(examContext)
+  );
   const configuredPattern = ensureArray(examContext?.selectedGroupPatterns?.[resolvedGroupId])[0] || examContext?.examPattern || "";
   const patternName = s?.patternName || (combined ? configuredPattern : "");
 
@@ -2336,9 +2349,9 @@ const normalizeScheduleRecord = (
     patternName,
     includedSubjectIds,
     combinedConfigurationVerified: isVerified,
-    subjectName: combined ? combinedSessionName : (s?.subjectName || "Subject"),
-    subjectCode: combined ? combinedSessionCodes : (s?.subjectCode || ""),
-    combinedSubjectsDisplay: combinedSessionSubjects,
+    subjectName: combined ? combinedSessionName : (s?.subjectName && s.subjectName !== "Regular" && s.subjectName !== "Subject" ? s.subjectName : (nameOf(subjectsSource, s?.subjectId, "") || s?.subjectName || "Subject")),
+    subjectCode: combined ? combinedSessionCodes : (s?.subjectCode && s.subjectCode !== "—" ? s.subjectCode : (codeOf(subjectsSource, s?.subjectId, "") || s?.subjectCode || "")),
+    combinedSubjectsDisplay: combined ? combinedSessionSubjects : "",
     date: formattedDate,
     startTime: s?.startTime ? String(s.startTime).substring(0, 5) : "09:00",
     endTime: s?.endTime ? String(s.endTime).substring(0, 5) : "12:00",
@@ -2452,7 +2465,16 @@ const validateSchedulePayload = (dto, isObj = false) => {
 
 // Format schedule entry to strict backend API DTO matching CreateExamScheduleRequest contract
 const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = [], targetCampusId = null, examContext = null, masterPatterns = []) => {
-  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName) || normalizeStatus(s.examMode) === "OBJECTIVE" || normalizeStatus(s.mode) === "OBJECTIVE" || (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0) || isCombinedExamination(examContext);
+  const isRegularExamContext = examContext && (
+    String(examContext.examCategory || examContext.category || "").trim().toLowerCase() === "regular" ||
+    examContext.scheduleMode === "SUBJECT_WISE"
+  );
+  const isObj = !isRegularExamContext && (
+    isCombinedExamination(examContext) ||
+    s.scheduleMode === "PATTERN_WISE" ||
+    normalizeStatus(s.examMode) === "OBJECTIVE" ||
+    normalizeStatus(s.mode) === "OBJECTIVE"
+  );
 
   // 1. Examination ID (Number > 0)
   const examNumericId = Number(targetExamId || s.examId || s.examinationId || examContext?.id);
@@ -2898,10 +2920,19 @@ const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], r
 
   for (const s of schedulesList) {
     const effectiveCampusNum = Number(targetCampusId || s.campusId) || 1;
-    const isCombinedSchedule =
-      s.scheduleMode === "PATTERN_WISE" ||
-      Boolean(s.patternName) ||
-      (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 1);
+    const isRegularContext = examContext && (
+      String(examContext.examCategory || examContext.category || "").trim().toLowerCase() === "regular" ||
+      examContext.scheduleMode === "SUBJECT_WISE"
+    );
+    const isCombinedSchedule = !isRegularContext && (
+
+      isCombinedExamination(examContext) ||
+      (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 1)
+    );
+
+
+
+
 
     if (isCombinedSchedule && Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0) {
       const validSubIds = s.includedSubjectIds
@@ -3141,22 +3172,26 @@ const deleteScheduleFromBackend = async (examId, scheduleId) => {
 
 const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList = [], studentsList = []) => {
   const id = normalizeId(e?.examinationId ?? e?.id);
-  const rawLevels =
-    e?.academicLevelIds ??
-    e?.levelIds ??
-    e?.academicLevelId ??
-    e?.levelId ??
-    (Array.isArray(e?.academicLevels) ? e.academicLevels.map((l) => l.id || l.academicLevelId) : null) ??
-    (e?.academicLevel?.id ? [e.academicLevel.id] : null);
-  const levelIds = ensureArray(rawLevels).map(normalizeId).filter(Boolean);
-  const rawGroups =
-    e?.groupIds ??
-    e?.groupId ??
-    e?.courseGroupId ??
-    e?.courseGroupIds ??
-    (Array.isArray(e?.groups) ? e.groups.map((g) => g.id || g.groupId) : null) ??
-    (Array.isArray(e?.groupProgramSelections) ? e.groupProgramSelections.map((g) => g.groupId) : (e?.groupProgramSelections && typeof e.groupProgramSelections === "object" ? Object.keys(e.groupProgramSelections) : null));
-  const groupIds = ensureArray(rawGroups).map(normalizeId).filter(Boolean);
+  const rawLevelList = (Array.isArray(e?.academicLevelIds) && e.academicLevelIds.length > 0)
+    ? e.academicLevelIds
+    : (Array.isArray(e?.levelIds) && e.levelIds.length > 0)
+      ? e.levelIds
+      : (Array.isArray(e?.academicLevels) && e.academicLevels.length > 0)
+        ? e.academicLevels.map((l) => l.id || l.academicLevelId)
+        : (e?.academicLevelId ? [e.academicLevelId] : (e?.levelId ? [e.levelId] : []));
+  const levelIds = ensureArray(rawLevelList).map(normalizeId).filter(Boolean);
+  const primaryLevelId = levelIds[0] || normalizeId(e?.academicLevelId ?? e?.levelId ?? "");
+  const rawGroupList = (Array.isArray(e?.groupIds) && e.groupIds.length > 0)
+    ? e.groupIds
+    : (Array.isArray(e?.courseGroupIds) && e.courseGroupIds.length > 0)
+      ? e.courseGroupIds
+      : (Array.isArray(e?.groups) && e.groups.length > 0)
+        ? e.groups.map((g) => g.id || g.groupId)
+        : (Array.isArray(e?.groupProgramSelections) && e.groupProgramSelections.length > 0)
+          ? e.groupProgramSelections.map((g) => g.groupId)
+          : (e?.groupId ? [e.groupId] : (e?.courseGroupId ? [e.courseGroupId] : []));
+  const groupIds = ensureArray(rawGroupList).map(normalizeId).filter(Boolean);
+  const primaryGroupId = groupIds[0] || normalizeId(e?.groupId ?? e?.courseGroupId ?? "");
   const isAllPrograms = !e?.programId || String(e?.programName || "").trim().toLowerCase() === "all programs";
   const rawPrograms = isAllPrograms ? [] : (e?.programIds ?? (e?.programId ? [e.programId] : []));
   const programIds = ensureArray(rawPrograms).map(normalizeId).filter(Boolean);
@@ -3183,7 +3218,9 @@ const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList =
 
   let resolvedExamCategory = "Regular";
   const catCandidate = rawCat ? String(rawCat).trim() : "";
-  if (
+  if (catCandidate.toLowerCase() === "regular") {
+    resolvedExamCategory = "Regular";
+  } else if (
     isCombinedExamination(e) ||
     catCandidate.toLowerCase() === "objective" ||
     catCandidate.toLowerCase().includes("objective") ||
@@ -3230,11 +3267,12 @@ const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList =
     academicYearId: normalizeId(e?.academicYearId ?? e?.yearId ?? e?.AcademicYearId ?? e?.YearId),
     academicYear: e?.academicYear ?? e?.academicYearName ?? e?.yearName ?? e?.AcademicYear ?? e?.AcademicYearName ?? "",
     academicYearName: e?.academicYearName ?? e?.academicYear ?? e?.yearName ?? e?.AcademicYearName ?? e?.AcademicYear ?? "",
-    academicLevelIds: levelIds,
-    levelIds,
-    levelId: levelIds[0] || "",
-    groupIds,
-    groupId: groupIds[0] || "",
+    academicLevelIds: levelIds.length > 0 ? levelIds : (primaryLevelId ? [primaryLevelId] : []),
+    levelIds: levelIds.length > 0 ? levelIds : (primaryLevelId ? [primaryLevelId] : []),
+    academicLevelId: primaryLevelId,
+    levelId: primaryLevelId,
+    groupIds: groupIds.length > 0 ? groupIds : (primaryGroupId ? [primaryGroupId] : []),
+    groupId: primaryGroupId,
     programIds: isAllPrograms ? [] : programIds,
     programId: isAllPrograms ? "" : (programIds[0] || ""),
     groupName: e?.groupName || e?.group?.name || "",
@@ -4001,7 +4039,10 @@ export default function ExaminationPage() {
             apiClient.get("/api/v1/examinations/types", { signal }),
             apiClient.get("/api/v1/staff/dropdown", { signal, params: { staffType: "Teaching" } }).catch(() => apiClient.get("/api/v1/staff", { signal, params: { staffType: "Teaching", pageSize: 1000 } })),
             apiClient.get("/api/v1/academic-levels", { signal }),
-            apiClient.get("/api/v1/groups", { signal }),
+            apiClient.get("/api/v1/groups", { signal }).catch((err) => {
+              if (signal?.aborted) throw err;
+              return apiClient.get("/api/v1/groups/dropdown", { signal }).catch(() => null);
+            }),
             apiClient.get("/api/v1/subjects", { signal }).catch(() => null),
             apiClient.get("/api/v1/programs", { signal }),
             apiClient.get("/api/v1/campuses", { signal, params: { isActive: true } }).catch(() => null),
@@ -4100,8 +4141,8 @@ export default function ExaminationPage() {
           );
         }
 
-        if (groupsRes.status === "fulfilled") {
-          const rawGroups = unwrap(groupsRes.value);
+        if (groupsRes.status === "fulfilled" && groupsRes.value) {
+          const rawGroups = ensureArray(unwrap(groupsRes.value));
           const mappedGroups = rawGroups.map((g) => {
             const gid = normalizeId(g.groupId ?? g.id);
             const progs = ensureArray(g.programs).map((p) => ({
@@ -5958,130 +5999,41 @@ export default function ExaminationPage() {
                 )
               );
 
-              // 2. Reschedule existing examination sessions to match the updated examination period
+              // 2. Automatically reschedule examination across the new updated period
               const isComb = isCombinedExamination(editingExam);
               const userStart = formatTimeOnly("09:00");
               const userEnd = formatTimeOnly("12:00", userStart);
 
-              let existingSchedules = [];
-              try {
-                const schedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`, {
-                  params: { campusId: effectiveCampusId, _t: Date.now() },
-                });
-                existingSchedules = unwrap(schedRes);
-              } catch (e) {
-                existingSchedules = schedules.filter((s) => normalizeId(s.examId) === normalizeId(examId));
-              }
+              const targetGids = ensureArray(
+                (editingExam.groupIds && editingExam.groupIds.length > 0)
+                  ? editingExam.groupIds
+                  : (editingExam.groupId ? [editingExam.groupId] : [])
+              ).map((id) => Number(id) || id).filter(Boolean);
 
-              // Deduplicate any redundant/duplicate schedules for the same subject/pattern
-              const seenMap = new Map();
-              const primarySchedules = [];
-              const duplicateSchedules = [];
+              const effectiveGids = targetGids.length > 0 ? targetGids : [Number(editingExam.groupId || 1)];
 
-              for (const s of ensureArray(existingSchedules)) {
-                const key = `${s.groupId || "_"}_${s.subjectId || s.patternName || s.sessionId || s.id}`;
-                if (!seenMap.has(key)) {
-                  seenMap.set(key, s);
-                  primarySchedules.push(s);
-                } else {
-                  duplicateSchedules.push(s);
-                }
-              }
-
-              // Clean up duplicate schedule records from backend if any exist
-              for (const dup of duplicateSchedules) {
-                const dupId = dup.examScheduleId || dup.scheduleId || dup.id;
-                if (dupId) {
-                  try {
-                    await deleteScheduleFromBackend(examId, dupId);
-                  } catch (delErr) {
-                    console.warn("Could not remove duplicate schedule", dupId, delErr);
-                  }
-                }
-              }
-
-              if (primarySchedules.length > 0) {
-                // Change dates of all existing schedules sequentially within the new examination period
-                const schedulesByGroup = {};
-                for (const s of primarySchedules) {
-                  const gid = String(s.groupId || s.courseGroupId || "default");
-                  if (!schedulesByGroup[gid]) schedulesByGroup[gid] = [];
-                  schedulesByGroup[gid].push(s);
-                }
-
-                for (const gid of Object.keys(schedulesByGroup)) {
-                  const groupList = schedulesByGroup[gid];
-                  groupList.sort((a, b) => {
-                    const da = canonicalDate(a.examDate || a.date || a.scheduleDate) || "";
-                    const db = canonicalDate(b.examDate || b.date || b.scheduleDate) || "";
-                    if (da !== db) return da.localeCompare(db);
-                    return (Number(a.subjectId) || 0) - (Number(b.subjectId) || 0);
+              let isFirstGroup = true;
+              for (const gid of effectiveGids) {
+                const selectedProgramIds = getSelectedProgramsForGroup(editingExam, gid);
+                try {
+                  await apiClient.post(`/api/v1/examinations/${examId}/auto-schedule`, {
+                    groupId: Number(gid),
+                    academicLevelId: Number(editingExam.academicLevelId || editingExam.academicLevelIds?.[0] || editingExam.levelIds?.[0] || 0),
+                    academicLevelIds: ensureArray(editingExam.academicLevelIds || editingExam.levelIds || (editingExam.academicLevelId ? [editingExam.academicLevelId] : [])).map((id) => Number(id) || id),
+                    programId: selectedProgramIds.length === 1 ? (Number(selectedProgramIds[0]) || selectedProgramIds[0]) : undefined,
+                    programIds: selectedProgramIds.map((id) => Number(id) || id),
+                    totalMarks: Number(editingExam.totalMarks || 100),
+                    passingMarks: Number(editingExam.passingMarks || 35),
+                    scheduleMode: isComb ? "PATTERN_WISE" : "SUBJECT_WISE",
+                    defaultStartTime: userStart,
+                    defaultEndTime: userEnd,
+                    skipSundays: true,
+                    campusId: Number(effectiveCampusId || editingExam.campusId || 1),
+                    replaceExisting: isFirstGroup,
                   });
-
-                  const sequentialDates = generateSequentialExamDates(period.startDate, groupList.length);
-
-                  for (let i = 0; i < groupList.length; i++) {
-                    const s = groupList[i];
-                    const sId = s.examScheduleId || s.scheduleId || s.id;
-                    if (!sId) continue;
-                    const targetDate = isComb ? period.startDate : (sequentialDates[i] || period.startDate);
-
-                    const updatePayload = sanitizeUpdateScheduleDto({
-                      campusId: Number(effectiveCampusId || editingExam.campusId || s.campusId) || 1,
-                      subjectId: s.subjectId ? Number(s.subjectId) : undefined,
-                      examDate: targetDate,
-                      startTime: s.startTime || userStart,
-                      endTime: s.endTime || userEnd,
-                      sessionId: s.sessionId,
-                      scheduleMode: s.scheduleMode || (isComb ? "PATTERN_WISE" : "SUBJECT_WISE"),
-                      roomId: s.roomId ? Number(s.roomId) : undefined,
-                      hall: s.hall || s.roomNumber || "",
-                      invigilatorId: s.invigilatorId ? Number(s.invigilatorId) : undefined,
-                      invigilator: s.invigilator || s.invigilatorName || "",
-                      examMode: s.examMode || (isComb ? "Objective" : "Written"),
-                      maxMarks: s.maxMarks || s.totalMarks || 100,
-                      passingMarks: s.passingMarks || 35,
-                      hallAssignments: s.hallAssignments || [],
-                    });
-
-                    try {
-                      await apiClient.put(`/api/v1/examinations/${examId}/schedules/${sId}`, updatePayload);
-                    } catch (updateErr) {
-                      console.warn(`Could not update schedule ${sId} to date ${targetDate}:`, updateErr);
-                    }
-                  }
-                }
-              } else {
-                // If the examination had no existing schedules, auto-schedule across the new period
-                const targetGids = ensureArray(
-                  (editingExam.groupIds && editingExam.groupIds.length > 0)
-                    ? editingExam.groupIds
-                    : editingExam.groupId ? [editingExam.groupId] : []
-                ).map((id) => Number(id) || id).filter(Boolean);
-
-                const effectiveGids = targetGids;
-
-                for (const gid of effectiveGids) {
-                  const selectedProgramIds = getSelectedProgramsForGroup(editingExam, gid);
-                  try {
-                    await apiClient.post(`/api/v1/examinations/${examId}/auto-schedule`, {
-                      groupId: Number(gid),
-                      academicLevelId: Number(editingExam.academicLevelId || editingExam.academicLevelIds?.[0] || editingExam.levelIds?.[0] || 0),
-                      academicLevelIds: ensureArray(editingExam.academicLevelIds || editingExam.levelIds || (editingExam.academicLevelId ? [editingExam.academicLevelId] : [])).map((id) => Number(id) || id),
-                      programId: selectedProgramIds.length === 1 ? (Number(selectedProgramIds[0]) || selectedProgramIds[0]) : undefined,
-                      programIds: selectedProgramIds.map((id) => Number(id) || id),
-                      totalMarks: Number(editingExam.totalMarks || sch?.totalMarks || 100),
-                      passingMarks: Number(editingExam.passingMarks || sch?.passingMarks || 35),
-                      scheduleMode: isComb ? "PATTERN_WISE" : "SUBJECT_WISE",
-                      defaultStartTime: userStart,
-                      defaultEndTime: userEnd,
-                      skipSundays: true,
-                      campusId: Number(effectiveCampusId || editingExam.campusId || 1),
-                      replaceExisting: true,
-                    });
-                  } catch (autoErr) {
-                    console.warn(`Could not auto-schedule group ${gid}:`, autoErr);
-                  }
+                  isFirstGroup = false;
+                } catch (autoErr) {
+                  console.warn(`Could not auto-schedule group ${gid} after period edit:`, autoErr);
                 }
               }
 
@@ -6097,7 +6049,44 @@ export default function ExaminationPage() {
               }));
 
               // 4. Reload fresh normalized schedules from backend
-              await fetchSchedulesForExam(examId);
+              const freshSchedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`, {
+                params: { campusId: effectiveCampusId, _t: Date.now() },
+              });
+              const freshSchedRaw = unwrap(freshSchedRes);
+              const updatedExamObj = {
+                ...editingExam,
+                startDate: period.startDate,
+                endDate: isComb ? period.startDate : period.endDate,
+              };
+              const normalizedFresh = freshSchedRaw.map((entry) => ({
+                ...normalizeScheduleRecord(
+                  entry,
+                  effectiveGids[0] || editingExam.groupId,
+                  updatedExamObj,
+                  groups,
+                  eligibleSubjects,
+                  rooms,
+                  faculty,
+                  programs,
+                  students
+                ),
+                examId,
+              }));
+
+              // Update global schedules state
+              setSchedules((prev) => [
+                ...prev.filter((s) => normalizeId(s.examId) !== normalizeId(examId)),
+                ...normalizedFresh,
+              ]);
+
+              // Update detail modal state if currently open
+              setDetail((prev) => {
+                if (!prev || normalizeId(prev.exam?.id) !== normalizeId(examId)) return prev;
+                return {
+                  exam: updatedExamObj,
+                  schedules: normalizedFresh,
+                };
+              });
 
               // 5. Reload examinations list
               await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
@@ -8653,19 +8642,46 @@ function ScheduleSection({
   }, [examId, exam, schedulableExams, setExamId]);
 
   // Exam Group Scope Tabs in Schedule View
-  const examGroupIds = useMemo(() => (exam?.groupIds || [exam?.groupId]).filter(Boolean).map(normalizeId), [exam]);
+  const examGroupIds = useMemo(() => {
+    const raw = (exam?.groupIds && exam.groupIds.length > 0) ? exam.groupIds : (exam?.groupId ? [exam.groupId] : []);
+    return ensureArray(raw).filter(Boolean).map(normalizeId);
+  }, [exam]);
   const examGroups = useMemo(
-    () => groups.filter((g) => examGroupIds.includes(normalizeId(g.id))),
-    [groups, examGroupIds],
+    () => {
+      const matched = groups.filter((g) => examGroupIds.includes(normalizeId(g.id || g.groupId)));
+      if (matched.length > 0) return matched;
+      const fallbackIds = (exam?.groupIds && exam?.groupIds.length > 0) ? exam.groupIds : (exam?.groupId ? [exam.groupId] : []);
+      if (fallbackIds.length > 0) {
+        return fallbackIds.filter(Boolean).map((gid) => {
+          const isExamGid = normalizeId(gid) === normalizeId(exam?.groupId);
+          const gName = (isExamGid && exam?.groupName) ? exam.groupName : (nameOf(groups, gid, "") || `Group ${gid}`);
+          return {
+            id: normalizeId(gid),
+            groupId: normalizeId(gid),
+            name: gName,
+            groupName: gName,
+            code: (isExamGid && exam?.groupName) ? exam.groupName : (codeOf(groups, gid, "") || `GRP-${gid}`),
+            programs: [],
+            isActive: true,
+          };
+        });
+      }
+      return [];
+    },
+    [groups, examGroupIds, exam],
   );
 
-  const [selectedGroupId, setSelectedGroupId] = useState(() => examGroups[0]?.id || "");
+  const [selectedGroupId, setSelectedGroupId] = useState(() => examGroups[0]?.id || exam?.groupId || "");
 
   useEffect(() => {
-    if (examGroups.length > 0 && !examGroups.some((g) => normalizeId(g.id) === normalizeId(selectedGroupId))) {
-      setSelectedGroupId(examGroups[0].id);
+    if (examGroups.length > 0) {
+      if (!examGroups.some((g) => normalizeId(g.id) === normalizeId(selectedGroupId))) {
+        setSelectedGroupId(examGroups[0].id);
+      }
+    } else if (exam?.groupId && !selectedGroupId) {
+      setSelectedGroupId(exam.groupId);
     }
-  }, [examGroups, selectedGroupId]);
+  }, [examGroups, selectedGroupId, exam]);
 
   useEffect(() => {
     if (editing && sch.groupId && normalizeId(sch.groupId) !== normalizeId(selectedGroupId)) {
@@ -8796,8 +8812,19 @@ function ScheduleSection({
 
   // Filter entries strictly for the active individual group tab!
   const groupEntries = useMemo(
-    () => entries.filter((s) => normalizeId(s.groupId) === normalizeId(selectedGroupId) || matchesScheduleGroup(s, selectedGroupId, exam, effectiveGroupSubjects)),
-    [entries, selectedGroupId, exam, effectiveGroupSubjects],
+    () => {
+      const effGid = selectedGroupId || exam?.groupId || examGroups[0]?.id;
+      return entries.filter((s) => {
+        if (effGid && (normalizeId(s.groupId) === normalizeId(effGid) || matchesScheduleGroup(s, effGid, exam, effectiveGroupSubjects))) {
+          return true;
+        }
+        if (!effGid || examGroups.length <= 1) {
+          return true;
+        }
+        return false;
+      });
+    },
+    [entries, selectedGroupId, exam, effectiveGroupSubjects, examGroups],
   );
 
   const availableSubjectsToSchedule = useMemo(() => {
@@ -8998,7 +9025,7 @@ function ScheduleSection({
       showToast?.("This Group already has saved schedules. Edit or remove those entries before automatic scheduling.", "error");
       return;
     }
-    const currentGroupCode = codeOf(groups, selectedGroupId, "GROUP");
+    const currentGroupCode = codeOf(examGroups.length ? examGroups : groups, selectedGroupId, "GROUP");
     const selectedProgramIds = getSelectedProgramsForGroup(exam, selectedGroupId);
     setProcessing(true);
     try {
@@ -9182,7 +9209,7 @@ function ScheduleSection({
         }
       }
 
-      const currentGroupCode = codeOf(groups, selectedGroupId, "GROUP");
+      const currentGroupCode = codeOf(examGroups.length ? examGroups : groups, selectedGroupId, "GROUP");
       const resolvedStartStr = formatTimeOnly(
         isCombined && anyCombinedSessionForExam && !editing ? (anyCombinedSessionForExam.startTime || sch.startTime) : sch.startTime
       );
@@ -9340,7 +9367,10 @@ function ScheduleSection({
             invigilatorId: validFirstInv,
             invigilator: firstInvName || invigilatorNames,
             invigilatorName: invigilatorNames,
-            mode: sch.mode || "Written",
+            mode: sch.mode && sch.mode !== "Objective" ? sch.mode : "Written",
+            examMode: sch.mode && sch.mode !== "Objective" ? sch.mode : "Written",
+            patternName: null,
+            includedSubjectIds: validSubId ? [validSubId] : [],
             scheduleMode: "SUBJECT_WISE",
             allScheduleIds: sch.allScheduleIds || (editing ? [editing] : []),
           },
@@ -9555,7 +9585,7 @@ function ScheduleSection({
                   <h3 style={{ margin: 0, fontSize: "14px", color: "var(--cms-text)" }}>
                     {editing ? "Edit / Postpone Schedule Entry for " : "Schedule Entry for "}
                     <strong>
-                      {nameOf(groups, selectedGroupId)} ({codeOf(groups, selectedGroupId)})
+                      {nameOf(examGroups.length ? examGroups : groups, selectedGroupId)} ({codeOf(examGroups.length ? examGroups : groups, selectedGroupId)})
                     </strong>
                   </h3>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -9568,7 +9598,7 @@ function ScheduleSection({
                           onClick={autoGenerateSchedule}
                           style={{ whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px" }}
                         >
-                          <Wand2 size={14} /> {processing ? "Auto-Scheduling..." : `Auto-Schedule ${codeOf(groups, selectedGroupId)}`}
+                          <Wand2 size={14} /> {processing ? "Auto-Scheduling..." : `Auto-Schedule ${codeOf(examGroups.length ? examGroups : groups, selectedGroupId)}`}
                         </button>
                       )}
                   </div>
@@ -10210,10 +10240,12 @@ function ScheduleTable({
     const result = [];
 
     entries.forEach((item) => {
-      const isPatternWise =
+      const isItemRegular = isRegularExamination(exam) || String(exam?.examCategory || "").toLowerCase() === "regular" || String(item?.examCategory || "").toLowerCase() === "regular";
+      const isPatternWise = !isItemRegular && (
         item.scheduleMode === "PATTERN_WISE" ||
-        Boolean(item.patternName) ||
-        (Array.isArray(item.includedSubjectIds) && item.includedSubjectIds.length > 1);
+        Boolean(item.patternName && !["regular", "regular pattern", "none"].includes(String(item.patternName).trim().toLowerCase())) ||
+        (Array.isArray(item.includedSubjectIds) && item.includedSubjectIds.length > 1)
+      );
 
       const slotDate = canonicalDate(item.date || item.examDate);
       const slotStart = formatTimeOnly(item.startTime);
@@ -10335,6 +10367,11 @@ function ScheduleTable({
     });
 
     return result.map((item) => {
+      const isItemPattern = !isRegularExamination(exam) && (
+        item.scheduleMode === "PATTERN_WISE" ||
+        Boolean(item.patternName && !["regular", "regular pattern", "none"].includes(String(item.patternName).trim().toLowerCase())) ||
+        (Array.isArray(item.includedSubjectIds) && item.includedSubjectIds.length > 1)
+      );
       const mergedAssignments = (item.allHallAssignments && item.allHallAssignments.length > 0)
         ? item.allHallAssignments
         : (item.hallAssignments && item.hallAssignments.length > 0 ? item.hallAssignments : []);
@@ -10391,15 +10428,17 @@ function ScheduleTable({
 
       return {
         ...item,
-        subjectCode: combinedCodes || item.subjectCode,
-        subjectName: item.patternName || item.subjectName,
-        combinedSubjectsDisplay: combinedNames || item.combinedSubjectsDisplay,
+        subjectCode: isItemPattern && combinedCodes ? combinedCodes : item.subjectCode,
+        subjectName: isItemPattern
+          ? (item.patternName || item.subjectName)
+          : (item.subjectName && item.subjectName !== "Regular" ? item.subjectName : (item.subjectName || item.patternName)),
+        combinedSubjectsDisplay: isItemPattern && combinedNames ? combinedNames : (isItemPattern ? item.combinedSubjectsDisplay : ""),
         hallAssignments: mergedAssignments.length > 0 ? mergedAssignments : item.hallAssignments,
         roomName: hallDisplay || item.roomName,
         invigilatorName: invDisplay || item.invigilatorName,
       };
     });
-  }, [entries, rooms, faculty]);
+  }, [entries, rooms, faculty, exam]);
 
   const [page, setPage] = useState(1);
   const pageSize = 6;

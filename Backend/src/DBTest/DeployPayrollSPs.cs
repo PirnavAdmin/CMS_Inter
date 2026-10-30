@@ -1,136 +1,205 @@
 using System;
 using System.Data;
-using System.Threading.Tasks;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using Dapper;
 using MySqlConnector;
 
-namespace DBTest
+public static class DeployPayrollSPs
 {
-    public static class DeployPayrollSPs
+    public static void Run(string connStr)
     {
-        private const string ConnectionString = "Server=srv1061.hstgr.io;Port=3306;Database=u819242402_CLM_System;User=u819242402_CLM;Password=Clm@2026;SslMode=None;Allow User Variables=true;ConnectionTimeout=60;KeepAlive=5;ConvertZeroDateTime=True;Pooling=true;MinimumPoolSize=2;MaximumPoolSize=100;ConnectionLifeTime=300;ConnectionIdleTimeout=120;";
+        Console.WriteLine("\n================================================================================");
+        Console.WriteLine("   PAYROLL MODULE - SP DEPLOYMENT & VERIFICATION RUNNER");
+        Console.WriteLine("================================================================================");
 
-        public static async Task RunAsync()
+        using var conn = new MySqlConnection(connStr);
+        try
         {
-            Console.WriteLine("=========================================================");
-            Console.WriteLine("  DEPLOYING PAYROLL SALARY ASSIGNMENT STORED PROCEDURES  ");
-            Console.WriteLine("=========================================================");
+            conn.Open();
+            Console.WriteLine("[SUCCESS] Connected to database: " + conn.Database);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[ERROR] Failed to connect: " + ex.Message);
+            return;
+        }
 
-            using var conn = new MySqlConnection(ConnectionString);
-            await conn.OpenAsync();
-            Console.WriteLine("Connected to MySQL database successfully.");
+        // 1. Locate SQL file
+        string scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", 
+            "CollegeManagement.API", "Database", "Scripts", "StoredProcedures", "PayrollModule", "01_Unified_Payroll_Stored_Procedures.sql");
+        if (!File.Exists(scriptPath))
+        {
+            scriptPath = Path.GetFullPath("Backend/src/CollegeManagement.API/Database/Scripts/StoredProcedures/PayrollModule/01_Unified_Payroll_Stored_Procedures.sql");
+        }
 
-            // 1. sp_PayrollStaffSalary_GetAll
-            Console.WriteLine("Deploying sp_PayrollStaffSalary_GetAll...");
-            using (var dropCmd = new MySqlCommand("DROP PROCEDURE IF EXISTS `sp_PayrollStaffSalary_GetAll`;", conn))
+        if (!File.Exists(scriptPath))
+        {
+            Console.WriteLine("[ERROR] Could not find 01_Unified_Payroll_Stored_Procedures.sql at: " + scriptPath);
+            return;
+        }
+
+        Console.WriteLine("\n[1/3] Deploying Stored Procedures from: " + scriptPath);
+        string sqlContent = File.ReadAllText(scriptPath);
+
+        // Regex to parse DROP PROCEDURE and CREATE PROCEDURE blocks
+        var dropRegex = new Regex(@"DROP\s+PROCEDURE\s+IF\s+EXISTS\s+`?([a-zA-Z0-9_]+)`?;?", RegexOptions.IgnoreCase);
+        var createRegex = new Regex(@"(CREATE\s+PROCEDURE\s+`?([a-zA-Z0-9_]+)`?[\s\S]*?\bEND)\s*//", RegexOptions.IgnoreCase);
+
+        var dropMatches = dropRegex.Matches(sqlContent);
+        foreach (Match match in dropMatches)
+        {
+            string spName = match.Groups[1].Value;
+            try
             {
-                await dropCmd.ExecuteNonQueryAsync();
+                conn.Execute($"DROP PROCEDURE IF EXISTS `{spName}`;");
             }
-
-            string createGetAllSql = @"
-CREATE PROCEDURE `sp_PayrollStaffSalary_GetAll`
-(
-    IN p_StaffId INT,
-    IN p_Status VARCHAR(50)
-)
-BEGIN
-    SELECT 
-        psa.`Id`,
-        psa.`StaffId`,
-        s.`EmployeeId`,
-        CONCAT(s.`FirstName`, ' ', s.`LastName`) AS `StaffName`,
-        s.`StaffType`,
-        s.`DepartmentId`,
-        d.`DepartmentName`,
-        s.`DesignationId`,
-        s.`Designation`,
-        psa.`SalaryStructureId`,
-        pss.`StructureName`,
-        pss.`BasicPay`,
-        (pss.`BasicPay` + pss.`HRA` + pss.`DA` + pss.`ConveyanceAllowance` + pss.`MedicalAllowance` + pss.`OtherAllowance`) AS `GrossSalary`,
-        (pss.`PF` + pss.`ProfessionalTax` + pss.`TDS` + pss.`ESI` + pss.`InsuranceOtherDeduction`) AS `TotalDeductions`,
-        ((pss.`BasicPay` + pss.`HRA` + pss.`DA` + pss.`ConveyanceAllowance` + pss.`MedicalAllowance` + pss.`OtherAllowance`) - (pss.`PF` + pss.`ProfessionalTax` + pss.`TDS` + pss.`ESI` + pss.`InsuranceOtherDeduction`)) AS `NetSalary`,
-        psa.`EffectiveFrom`,
-        psa.`EffectiveTo`,
-        psa.`Status`,
-        psa.`CreatedAt`,
-        psa.`UpdatedAt`
-    FROM `payroll_staff_salaries` psa
-    INNER JOIN `Staffs` s ON s.`Id` = psa.`StaffId`
-    LEFT JOIN `Departments` d ON d.`DepartmentId` = s.`DepartmentId`
-    LEFT JOIN `payroll_salary_structures` pss ON pss.`Id` = psa.`SalaryStructureId`
-    WHERE (s.`IsDeleted` = 0 OR s.`IsDeleted` IS NULL)
-      AND (p_StaffId IS NULL OR p_StaffId = 0 OR psa.`StaffId` = p_StaffId)
-      AND (p_Status IS NULL OR p_Status = '' OR psa.`Status` = p_Status)
-    ORDER BY psa.`Id` DESC;
-END;";
-            using (var createCmd = new MySqlCommand(createGetAllSql, conn))
+            catch (Exception ex)
             {
-                await createCmd.ExecuteNonQueryAsync();
-                Console.WriteLine("[OK] Deployed sp_PayrollStaffSalary_GetAll");
-            }
-
-            // 2. sp_PayrollStaffSalary_GetById
-            Console.WriteLine("Deploying sp_PayrollStaffSalary_GetById...");
-            using (var dropCmd = new MySqlCommand("DROP PROCEDURE IF EXISTS `sp_PayrollStaffSalary_GetById`;", conn))
-            {
-                await dropCmd.ExecuteNonQueryAsync();
-            }
-
-            string createGetByIdSql = @"
-CREATE PROCEDURE `sp_PayrollStaffSalary_GetById`
-(
-    IN p_Id INT
-)
-BEGIN
-    SELECT 
-        psa.`Id`,
-        psa.`StaffId`,
-        s.`EmployeeId`,
-        CONCAT(s.`FirstName`, ' ', s.`LastName`) AS `StaffName`,
-        s.`StaffType`,
-        s.`DepartmentId`,
-        d.`DepartmentName`,
-        s.`DesignationId`,
-        s.`Designation`,
-        psa.`SalaryStructureId`,
-        pss.`StructureName`,
-        pss.`BasicPay`,
-        (pss.`BasicPay` + pss.`HRA` + pss.`DA` + pss.`ConveyanceAllowance` + pss.`MedicalAllowance` + pss.`OtherAllowance`) AS `GrossSalary`,
-        (pss.`PF` + pss.`ProfessionalTax` + pss.`TDS` + pss.`ESI` + pss.`InsuranceOtherDeduction`) AS `TotalDeductions`,
-        ((pss.`BasicPay` + pss.`HRA` + pss.`DA` + pss.`ConveyanceAllowance` + pss.`MedicalAllowance` + pss.`OtherAllowance`) - (pss.`PF` + pss.`ProfessionalTax` + pss.`TDS` + pss.`ESI` + pss.`InsuranceOtherDeduction`)) AS `NetSalary`,
-        psa.`EffectiveFrom`,
-        psa.`EffectiveTo`,
-        psa.`Status`,
-        psa.`CreatedAt`,
-        psa.`UpdatedAt`
-    FROM `payroll_staff_salaries` psa
-    INNER JOIN `Staffs` s ON s.`Id` = psa.`StaffId`
-    LEFT JOIN `Departments` d ON d.`DepartmentId` = s.`DepartmentId`
-    LEFT JOIN `payroll_salary_structures` pss ON pss.`Id` = psa.`SalaryStructureId`
-    WHERE psa.`Id` = p_Id;
-END;";
-            using (var createCmd = new MySqlCommand(createGetByIdSql, conn))
-            {
-                await createCmd.ExecuteNonQueryAsync();
-                Console.WriteLine("[OK] Deployed sp_PayrollStaffSalary_GetById");
-            }
-
-            // Test execution of sp_PayrollStaffSalary_GetAll
-            Console.WriteLine("\nTesting sp_PayrollStaffSalary_GetAll execution...");
-            using (var testCmd = new MySqlCommand("sp_PayrollStaffSalary_GetAll", conn) { CommandType = CommandType.StoredProcedure })
-            {
-                testCmd.Parameters.AddWithValue("p_StaffId", DBNull.Value);
-                testCmd.Parameters.AddWithValue("p_Status", DBNull.Value);
-
-                using var reader = await testCmd.ExecuteReaderAsync();
-                int count = 0;
-                while (await reader.ReadAsync())
-                {
-                    count++;
-                    Console.WriteLine($"Row {count}: Id={reader["Id"]}, StaffId={reader["StaffId"]}, EmployeeId={reader["EmployeeId"]}, StaffName={reader["StaffName"]}, Dept={reader["DepartmentName"]}, Desig={reader["Designation"]}, Structure={reader["StructureName"]}, Gross={reader["GrossSalary"]}, Net={reader["NetSalary"]}");
-                }
-                Console.WriteLine($"\nSuccessfully fetched {count} records with full employee and structure details!");
+                Console.WriteLine($"  [WARN] Failed to drop {spName}: {ex.Message}");
             }
         }
+
+        var createMatches = createRegex.Matches(sqlContent);
+        Console.WriteLine($"Found {createMatches.Count} stored procedures in unified script.");
+
+        int deployedCount = 0;
+        foreach (Match match in createMatches)
+        {
+            string spBody = match.Groups[1].Value;
+            string spName = match.Groups[2].Value;
+
+            try
+            {
+                conn.Execute(spBody);
+                deployedCount++;
+                Console.WriteLine($"  [DEPLOYED] Stored Procedure: `{spName}`");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  [FAIL] Failed to deploy `{spName}`: {ex.Message}");
+            }
+        }
+        Console.WriteLine($"[Summary] Deployed {deployedCount} of {createMatches.Count} procedures successfully.\n");
+
+        // 2. Automated Integration Verification
+        Console.WriteLine("[2/3] Running Automated Integration Tests...");
+        int passed = 0;
+        int failed = 0;
+
+        // Test 1: sp_PayrollSalaryStructure_GetAll
+        try
+        {
+            var structures = conn.Query("sp_PayrollSalaryStructure_GetAll", new {
+                p_StaffType = (string?)null,
+                p_Search = (string?)null
+            }, commandType: CommandType.StoredProcedure);
+
+            Console.WriteLine($"  [PASS] sp_PayrollSalaryStructure_GetAll executed. Count: {structures.Count()}");
+            passed++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  [FAIL] sp_PayrollSalaryStructure_GetAll error: {ex.Message}");
+            failed++;
+        }
+
+        // Test 2: sp_PayrollEmployee_GetAll
+        try
+        {
+            var employees = conn.Query("sp_PayrollEmployee_GetAll", new {
+                p_StaffType = (string?)null,
+                p_Search = (string?)null,
+                p_CampusId = 1
+            }, commandType: CommandType.StoredProcedure);
+
+            Console.WriteLine($"  [PASS] sp_PayrollEmployee_GetAll (Campus 1) executed. Count: {employees.Count()}");
+            passed++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  [FAIL] sp_PayrollEmployee_GetAll error: {ex.Message}");
+            failed++;
+        }
+
+        // Test 3: sp_PayrollStaffSalary_GetAll
+        try
+        {
+            var staffSalaries = conn.Query("sp_PayrollStaffSalary_GetAll", new {
+                p_StaffId = 0,
+                p_Status = (string?)null,
+                p_CampusId = 1
+            }, commandType: CommandType.StoredProcedure);
+
+            Console.WriteLine($"  [PASS] sp_PayrollStaffSalary_GetAll executed. Count: {staffSalaries.Count()}");
+            passed++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  [FAIL] sp_PayrollStaffSalary_GetAll error: {ex.Message}");
+            failed++;
+        }
+
+        // Test 4: sp_PayrollPayslip_GetHistory
+        try
+        {
+            var payslips = conn.Query("sp_PayrollPayslip_GetHistory", new {
+                p_PayrollMonth = 0,
+                p_PayrollYear = 0,
+                p_StaffType = (string?)null,
+                p_Search = (string?)null,
+                p_CampusId = 1
+            }, commandType: CommandType.StoredProcedure);
+
+            Console.WriteLine($"  [PASS] sp_PayrollPayslip_GetHistory executed. Count: {payslips.Count()}");
+            passed++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  [FAIL] sp_PayrollPayslip_GetHistory error: {ex.Message}");
+            failed++;
+        }
+
+        // Test 5: sp_PayrollPayslip_ResolveId (New architectural compliance SP)
+        try
+        {
+            var resolved = conn.QueryFirstOrDefault<int?>("sp_PayrollPayslip_ResolveId", new {
+                p_DirectId = 1,
+                p_StaffId = 0,
+                p_StaffCode = (string?)null,
+                p_Year = 2026,
+                p_Month = 9
+            }, commandType: CommandType.StoredProcedure);
+
+            Console.WriteLine($"  [PASS] sp_PayrollPayslip_ResolveId executed successfully! Returned: {resolved}");
+            passed++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  [FAIL] sp_PayrollPayslip_ResolveId error: {ex.Message}");
+            failed++;
+        }
+
+        // Test 6: sp_Payroll_GetMonthlySummary
+        try
+        {
+            var summary = conn.QueryFirstOrDefault("sp_Payroll_GetMonthlySummary", new {
+                p_PayrollMonth = 10,
+                p_PayrollYear = 2026,
+                p_CampusId = 1
+            }, commandType: CommandType.StoredProcedure);
+
+            Console.WriteLine($"  [PASS] sp_Payroll_GetMonthlySummary executed successfully!");
+            passed++;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  [FAIL] sp_Payroll_GetMonthlySummary error: {ex.Message}");
+            failed++;
+        }
+
+        Console.WriteLine($"\n[3/3] PAYROLL VERIFICATION RESULTS: Passed: {passed} | Failed: {failed}");
+        Console.WriteLine("================================================================================\n");
     }
 }

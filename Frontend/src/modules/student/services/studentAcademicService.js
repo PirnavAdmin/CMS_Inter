@@ -270,12 +270,13 @@ export const getStudentExaminations = async (student, { allPages = false } = {})
   const results = await Promise.all(visible.map(async (exam) => {
     const examinationId = exam.examinationId ?? exam.examId ?? exam.id;
     if (!examinationId) return { ...exam, schedules: [] };
-    const [detailResponse, scheduleResponse] = await Promise.all([
-      apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}`),
-      apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}/schedules`),
-    ]);
+    const detailResponse = await apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}`);
     const detail = getPayload(detailResponse.data) || {};
-    const schedules = getPayload(scheduleResponse.data);
+    let schedules = detail.schedules;
+    if (!Array.isArray(schedules) || !schedules.length) {
+      const scheduleResponse = await apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}/schedules`);
+      schedules = getPayload(scheduleResponse.data);
+    }
     const applicableSchedules = rows(schedules).filter(inStudentScope);
     if (allPages && rows(schedules).length && !applicableSchedules.length) return null;
     return { ...exam, ...detail, schedules: applicableSchedules };

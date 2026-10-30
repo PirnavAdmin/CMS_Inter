@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
@@ -61,7 +61,7 @@ public class CampusAuthorizationService : ICampusAuthorizationService
             };
         }
 
-        // 2. Principal Role - Resolve and Enforce Assigned Campus
+        // 2. Principal Role - Resolve and Enforce Assigned Campus via Dapper & Stored Procedure
         bool isPrincipal = user.IsInRole("Principal")
                         || string.Equals(_jwtTokenHelper.GetRole(user), "Principal", StringComparison.OrdinalIgnoreCase);
 
@@ -76,56 +76,35 @@ public class CampusAuthorizationService : ICampusAuthorizationService
         }
 
         int? staffId = _jwtTokenHelper.GetStaffId(user);
-        if (!staffId.HasValue || staffId.Value <= 0)
+
+        // Execute unified Stored Procedure via Dapper
+        var conn = _db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
         {
-            staffId = await _db.Users.AsNoTracking()
-                .Where(u => u.UserId == userId.Value)
-                .Select(u => u.StaffId)
-                .FirstOrDefaultAsync(ct);
+            await conn.OpenAsync(ct);
         }
 
-        if (!staffId.HasValue || staffId.Value <= 0)
+        using var multi = await Dapper.SqlMapper.QueryMultipleAsync(
+            conn,
+            "sp_Staff_GetAssignedCampuses",
+            new { p_UserId = userId.Value, p_StaffId = staffId ?? 0 },
+            commandType: System.Data.CommandType.StoredProcedure);
+
+        var meta = await multi.ReadFirstOrDefaultAsync<dynamic>();
+        var assignedList = (await multi.ReadAsync<int>()).ToList();
+
+        int resolvedStaffId = (int)(meta?.StaffId ?? 0);
+        int primaryCampusId = (int)(meta?.PrimaryCampusId ?? 0);
+
+        var authorizedCampuses = new HashSet<int>(assignedList.Where(id => id > 0));
+        if (primaryCampusId > 0)
         {
-            var email = user.FindFirst(ClaimTypes.Email)?.Value;
-            if (!string.IsNullOrWhiteSpace(email))
-            {
-                staffId = await _db.Staffs.AsNoTracking()
-                    .Where(s => s.Email == email && !s.IsDeleted)
-                    .Select(s => (int?)s.Id)
-                    .FirstOrDefaultAsync(ct);
-            }
-        }
-
-        if (!staffId.HasValue || staffId.Value <= 0)
-        {
-            _logger.LogWarning("Access Denied: User {UserId} in role Principal has no associated Staff record.", userId);
-            return new CampusResolutionResult
-            {
-                IsAuthorized = false,
-                ErrorMessage = "User has no associated staff profile or campus assignment."
-            };
-        }
-
-        // Retrieve assigned campuses from Staffs and StaffCampusAssignments
-        var primaryCampusId = await _db.Staffs.AsNoTracking()
-            .Where(s => s.Id == staffId.Value)
-            .Select(s => s.CampusId)
-            .FirstOrDefaultAsync(ct);
-
-        var assignedCampusIds = await _db.StaffCampusAssignments.AsNoTracking()
-            .Where(a => a.StaffId == staffId.Value)
-            .Select(a => a.CampusId)
-            .ToListAsync(ct);
-
-        var authorizedCampuses = new HashSet<int>(assignedCampusIds.Where(id => id > 0));
-        if (primaryCampusId.HasValue && primaryCampusId.Value > 0)
-        {
-            authorizedCampuses.Add(primaryCampusId.Value);
+            authorizedCampuses.Add(primaryCampusId);
         }
 
         if (authorizedCampuses.Count == 0)
         {
-            _logger.LogWarning("Access Denied: Staff {StaffId} (User {UserId}) has no campus assigned in the database.", staffId, userId);
+            _logger.LogWarning("Access Denied: Staff {StaffId} (User {UserId}) has no campus assigned in the database.", resolvedStaffId, userId);
             return new CampusResolutionResult
             {
                 IsAuthorized = false,
@@ -160,8 +139,8 @@ public class CampusAuthorizationService : ICampusAuthorizationService
         }
 
         // When not specified, default to primary campus or first assigned campus
-        int defaultCampusId = (primaryCampusId.HasValue && primaryCampusId.Value > 0)
-            ? primaryCampusId.Value
+        int defaultCampusId = (primaryCampusId > 0)
+            ? primaryCampusId
             : authorizedList[0];
 
         return new CampusResolutionResult
@@ -174,11 +153,15 @@ public class CampusAuthorizationService : ICampusAuthorizationService
 
     public async Task<int> GetDefaultCampusIdAsync(CancellationToken ct = default)
     {
-        var campusId = await _db.Campuses.AsNoTracking()
-            .Where(c => c.IsActive)
-            .OrderBy(c => c.CampusId)
-            .Select(c => c.CampusId)
-            .FirstOrDefaultAsync(ct);
+        var conn = _db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+        {
+            await conn.OpenAsync(ct);
+        }
+
+        var campusId = await Dapper.SqlMapper.QueryFirstOrDefaultAsync<int>(
+            conn,
+            "SELECT CampusId FROM Campuses WHERE IsActive = 1 ORDER BY CampusId LIMIT 1;");
 
         return campusId > 0 ? campusId : 1;
     }

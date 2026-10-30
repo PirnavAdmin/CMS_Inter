@@ -44,6 +44,13 @@ namespace CollegeManagement.API.Models.Faculty
         [StringLength(15)]
         public string Mobile { get; set; } = string.Empty;
 
+        [NotMapped]
+        public string Phone
+        {
+            get => Mobile;
+            set => Mobile = value;
+        }
+
         [Required]
         [EmailAddress]
         [StringLength(150)]

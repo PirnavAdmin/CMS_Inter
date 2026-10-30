@@ -103,6 +103,20 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             return result == 1;
         }
 
+        public async Task<bool> VacateAsync(int allocationId, string? reason = null)
+        {
+            var result = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_VacateHostelStudentAllocation",
+                new
+                {
+                    p_AllocationId = allocationId,
+                    p_Reason = reason
+                },
+                commandType: CommandType.StoredProcedure);
+
+            return result == 1;
+        }
+
         public async Task<bool> DeleteAsync(int allocationId)
         {
             var result = await _dbConnection.ExecuteScalarAsync<int>(

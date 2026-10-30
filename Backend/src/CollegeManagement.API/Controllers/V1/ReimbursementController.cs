@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Reimbursement;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces.Reimbursement;
 using Microsoft.AspNetCore.Authorization;
@@ -19,6 +20,7 @@ namespace CollegeManagement.API.Controllers.V1
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("reimbursement")]
     public class ReimbursementController : ControllerBase
     {
         private readonly IReimbursementService _service;
@@ -30,6 +32,19 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
+        }
+
+        private (int UserId, int? StaffId, bool IsPrivileged) GetCallerIdentity()
+        {
+            var userId = _jwtTokenHelper.GetUserId(User) ?? 0;
+            var staffId = ResolveStaffId();
+            bool isPrivileged = User.IsInRole("Admin") ||
+                               User.IsInRole("Super Admin") ||
+                               User.IsInRole("Accountant") ||
+                               User.IsInRole("Principal") ||
+                               User.IsInRole("Finance") ||
+                               User.IsInRole("Transport Manager");
+            return (userId, staffId, isPrivileged);
         }
 
         private int ResolveUserId()
@@ -95,7 +110,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 1. Submit a new Reimbursement Claim
         /// </summary>
         [HttpPost]
-        [Authorize]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> CreateClaim([FromBody] CreateReimbursementClaimRequest request)
@@ -127,7 +142,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 2. Get All Claims (Finance & Admin Review table)
         /// </summary>
         [HttpGet]
-        [Authorize]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllClaims(
             [FromQuery] int? campusId,
@@ -144,7 +159,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 3. Get My Claims (Self-service claims for faculty/staff)
         /// </summary>
         [HttpGet("my-claims")]
-        [Authorize]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetMyClaims([FromQuery] int? campusId)
         {
@@ -163,7 +178,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 4. Get Reimbursement Summary KPIs
         /// </summary>
         [HttpGet("summary")]
-        [Authorize]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetSummary([FromQuery] int? campusId)
         {
@@ -176,7 +191,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 5. Get Account Ledger Entries (For Account Ledger Modal)
         /// </summary>
         [HttpGet("account-entries")]
-        [Authorize]
+        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAccountEntries([FromQuery] int? campusId)
         {
@@ -193,11 +208,18 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetClaimById(int id)
         {
+            var (userId, staffId, isPrivileged) = GetCallerIdentity();
             var result = await _service.GetClaimByIdAsync(id);
             if (result == null)
             {
                 return NotFound(new { Status = false, Message = "Reimbursement claim not found." });
             }
+
+            if (!isPrivileged && staffId.HasValue && result.StaffId != staffId.Value)
+            {
+                return Forbid();
+            }
+
             return Ok(new { Status = true, Message = "Reimbursement claim details retrieved.", Data = result });
         }
 
@@ -281,14 +303,28 @@ namespace CollegeManagement.API.Controllers.V1
         /// 11. Upload Proof / Receipt Document
         /// </summary>
         [HttpPost("{id:int}/upload-proof")]
-        [Authorize]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> UploadProof(int id, IFormFile file)
         {
             if (file == null || file.Length == 0)
             {
                 return BadRequest(new { Status = false, Message = "A valid receipt or invoice file is required." });
+            }
+
+            var (userId, staffId, isPrivileged) = GetCallerIdentity();
+            var existing = await _service.GetClaimByIdAsync(id);
+            if (existing == null)
+            {
+                return NotFound(new { Status = false, Message = "Reimbursement claim not found." });
+            }
+
+            if (!isPrivileged && staffId.HasValue && existing.StaffId != staffId.Value)
+            {
+                return Forbid();
             }
 
             var filePath = await _service.UploadProofAsync(id, file);

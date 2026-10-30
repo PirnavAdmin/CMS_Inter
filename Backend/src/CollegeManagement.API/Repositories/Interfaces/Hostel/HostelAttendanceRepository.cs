@@ -1,4 +1,5 @@
-﻿using CollegeManagement.API.Models.Hostel;
+using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.Models.Hostel;
 
 namespace CollegeManagement.API.Repositories.Interfaces.Hostel
 {
@@ -23,6 +24,8 @@ namespace CollegeManagement.API.Repositories.Interfaces.Hostel
         Task<int> CreateAsync(HostelAttendance attendance);
 
         Task<bool> UpdateAsync(HostelAttendance attendance);
+
+        Task<int> BulkSaveAsync(BulkHostelAttendanceDto dto);
 
         Task<bool> DeleteAsync(int attendanceId);
 

@@ -17,6 +17,8 @@ using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using CollegeManagement.API.Repositories.Interfaces;
+using Dapper;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -31,11 +33,13 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IStaffService _staffService;
         private readonly AppDbContext _db;
+        private readonly INonTeachingRepository? _nonTeachingRepo;
 
-        public StaffController(IStaffService staffService, AppDbContext db)
+        public StaffController(IStaffService staffService, AppDbContext db, INonTeachingRepository? nonTeachingRepo = null)
         {
             _staffService = staffService;
             _db = db;
+            _nonTeachingRepo = nonTeachingRepo;
         }
 
         /// <summary>
@@ -241,7 +245,21 @@ namespace CollegeManagement.API.Controllers.V1
             if (!string.IsNullOrWhiteSpace(dto.Address))
                 staff.CurrentAddress = dto.Address.Trim();
 
-            await _db.SaveChangesAsync();
+            if (_nonTeachingRepo != null)
+            {
+                await _nonTeachingRepo.UpdateStaffContactAsync(staff.Id, dto.Mobile, dto.EmergencyContact, dto.Address);
+            }
+            else
+            {
+                var conn = _db.Database.GetDbConnection();
+                await conn.ExecuteAsync("sp_UpdateStaffContact", new
+                {
+                    p_StaffId = staff.Id,
+                    p_Mobile = dto.Mobile?.Trim(),
+                    p_EmergencyContact = dto.EmergencyContact?.Trim(),
+                    p_Address = dto.Address?.Trim()
+                }, commandType: System.Data.CommandType.StoredProcedure);
+            }
             return Ok(new { success = true, message = "Contact information updated successfully." });
         }
 

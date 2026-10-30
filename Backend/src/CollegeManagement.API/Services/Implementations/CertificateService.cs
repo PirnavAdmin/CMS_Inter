@@ -7,27 +7,23 @@ using CollegeManagement.API.Hubs;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Services;
 
 public class CertificateService : ICertificateService
 {
     private readonly ICertificateRepository _repository;
-    private readonly CollegeManagement.API.Data.AppDbContext _context;
     private readonly INumberSeriesService _numberSeriesService;
     private readonly ITemplateService _templateService;
     private readonly IHubContext<NotificationHub>? _hubContext;
 
     public CertificateService(
         ICertificateRepository repository, 
-        CollegeManagement.API.Data.AppDbContext context, 
         INumberSeriesService numberSeriesService,
         ITemplateService templateService,
         IHubContext<NotificationHub>? hubContext = null)
     {
         _repository = repository;
-        _context = context;
         _numberSeriesService = numberSeriesService;
         _templateService = templateService;
         _hubContext = hubContext;
@@ -128,8 +124,7 @@ public class CertificateService : ICertificateService
         if (string.IsNullOrWhiteSpace(request.Purpose))
             throw new ArgumentException("Purpose is required.");
 
-        var student = await _context.Students
-            .FirstOrDefaultAsync(s => s.AdmissionNo == request.AdmissionNo, ct);
+        var student = await _repository.GetStudentForGenerationAsync(request.AdmissionNo.Trim(), ct);
 
         if (student != null && string.IsNullOrWhiteSpace(request.CertificateNo))
         {
@@ -151,7 +146,7 @@ public class CertificateService : ICertificateService
         }
 
         var generatedCert = await _repository.GenerateAsync(request, ct);
-        if (generatedCert != null)
+        if (generatedCert != null && _hubContext != null)
         {
             try
             {
@@ -227,7 +222,7 @@ public class CertificateService : ICertificateService
             return false;
 
         var moveResult = await _repository.MoveStatusAsync(id, status, issuedBy, ct);
-        if (moveResult)
+        if (moveResult && _hubContext != null)
         {
             try
             {
@@ -301,7 +296,7 @@ public class CertificateService : ICertificateService
     {
         ArgumentNullException.ThrowIfNull(request);
         var list = await _repository.BulkGenerateAsync(request, ct);
-        if (list.Count > 0)
+        if (list.Count > 0 && _hubContext != null)
         {
             try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "NEW_CERTIFICATE_REQUEST" }, ct); } catch { }
         }

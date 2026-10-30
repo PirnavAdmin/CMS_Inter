@@ -42,7 +42,7 @@ namespace CollegeManagement.API.Tests
             var numService = new NumberSeriesService(numRepo);
 
             var templateRepo = new TemplateRepository(dbContext);
-            var templateService = new TemplateService(templateRepo, dbContext);
+            var templateService = new TemplateService(templateRepo);
 
             // -------------------------------------------------------------------------
             // 1. Database Connection & Schema Verification

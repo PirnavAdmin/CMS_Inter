@@ -6,25 +6,20 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Settings;
-using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Settings;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Services.Implementations
 {
     public class TemplateService : ITemplateService
     {
         private readonly ITemplateRepository _repository;
-        private readonly AppDbContext _context;
 
-        public TemplateService(ITemplateRepository repository, AppDbContext context)
+        public TemplateService(ITemplateRepository repository)
         {
             _repository = repository;
-            _context = context;
         }
 
         private static List<string> ExtractPlaceholders(string contentBody, List<string>? providedList)
@@ -103,46 +98,47 @@ namespace CollegeManagement.API.Services.Implementations
             int? campusId = null,
             CancellationToken ct = default)
         {
-            return await _repository.GetAllAsync(pageNumber, pageSize, search, category, isActive, campusId, ct);
-        }
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 100) pageSize = 100;
 
-        public async Task<IReadOnlyList<TemplateResponseDto>> GetActiveTemplatesByCategoryAsync(
-            string? category,
-            int? campusId = null,
-            CancellationToken ct = default)
-        {
-            var templates = await _repository.GetActiveByCategoryAsync(category, campusId, ct);
-            return templates.Select(MapToDto).ToList();
+            // Ensure baseline certificate seeds exist if table empty
+            await _repository.EnsureSeedsAsync(ct);
+
+            return await _repository.GetAllAsync(pageNumber, pageSize, search, category, isActive, campusId, ct);
         }
 
         public async Task<TemplateResponseDto?> GetTemplateByIdAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
-            var template = await _repository.GetByIdAsync(id, campusId, ct);
-            return template != null ? MapToDto(template) : null;
+            if (id <= 0) return null;
+            var t = await _repository.GetByIdAsync(id, campusId, ct);
+            return t == null ? null : MapToDto(t);
         }
 
         public async Task<TemplateResponseDto?> GetTemplateByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default)
         {
-            var template = await _repository.GetByCodeAsync(templateCode, campusId, ct);
-            return template != null ? MapToDto(template) : null;
+            if (string.IsNullOrWhiteSpace(templateCode)) return null;
+            var t = await _repository.GetByCodeAsync(templateCode.Trim(), campusId, ct);
+            return t == null ? null : MapToDto(t);
+        }
+
+        public async Task<IReadOnlyList<TemplateResponseDto>> GetActiveTemplatesByCategoryAsync(string? category, int? campusId = null, CancellationToken ct = default)
+        {
+            var cat = string.IsNullOrWhiteSpace(category) ? "Certificate" : category.Trim();
+            var list = await _repository.GetActiveByCategoryAsync(cat, campusId, ct);
+            return list.Select(MapToDto).ToList();
         }
 
         public async Task<TemplateResponseDto> CreateTemplateAsync(CreateTemplateDto dto, int? campusId = null, CancellationToken ct = default)
         {
-            if (string.IsNullOrWhiteSpace(dto.TemplateCode))
-                throw new ValidationException("Template code is required.");
+            if (dto == null)
+                throw new ValidationException("Request body cannot be null.");
 
-            if (string.IsNullOrWhiteSpace(dto.Title))
-                throw new ValidationException("Template title is required.");
-
-            if (string.IsNullOrWhiteSpace(dto.ContentBody))
-                throw new ValidationException("Template content body is required.");
-
-            var cleanCode = dto.TemplateCode.Trim().ToUpperInvariant().Replace(" ", "_");
-
-            var exists = await _repository.ExistsByCodeAsync(cleanCode, null, campusId, ct);
-            if (exists)
-                throw new ValidationException($"Template with code '{cleanCode}' already exists.");
+            var cleanCode = dto.TemplateCode.Trim().ToUpperInvariant();
+            if (await _repository.ExistsByCodeAsync(cleanCode, null, campusId, ct))
+            {
+                throw new ValidationException($"A template with code '{cleanCode}' already exists.");
+            }
 
             var placeholders = ExtractPlaceholders(dto.ContentBody, dto.Placeholders);
 
@@ -154,10 +150,9 @@ namespace CollegeManagement.API.Services.Implementations
                 ContentBody = dto.ContentBody,
                 PlaceholdersJson = JsonSerializer.Serialize(placeholders),
                 IsActive = dto.IsActive,
-                Version = "1",
+                Version = "v1",
                 CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                CampusId = campusId
+                UpdatedAt = DateTime.UtcNow
             };
 
             var created = await _repository.CreateAsync(template, ct);
@@ -169,30 +164,39 @@ namespace CollegeManagement.API.Services.Implementations
             if (id <= 0)
                 throw new ValidationException("Invalid template ID.");
 
-            if (string.IsNullOrWhiteSpace(dto.Title))
-                throw new ValidationException("Template title is required.");
-
-            if (string.IsNullOrWhiteSpace(dto.ContentBody))
-                throw new ValidationException("Template content body is required.");
+            if (dto == null)
+                throw new ValidationException("Request body cannot be null.");
 
             var existing = await _repository.GetByIdAsync(id, campusId, ct);
-            if (existing == null) return null;
+            if (existing == null)
+                return null;
 
-            var placeholders = ExtractPlaceholders(dto.ContentBody, dto.Placeholders);
+            if (!string.IsNullOrWhiteSpace(dto.Title))
+                existing.Title = dto.Title.Trim();
 
-            var toUpdate = new Template
+            if (!string.IsNullOrWhiteSpace(dto.Category))
+                existing.Category = dto.Category.Trim();
+
+            if (!string.IsNullOrWhiteSpace(dto.ContentBody))
+                existing.ContentBody = dto.ContentBody;
+
+            existing.IsActive = dto.IsActive;
+
+            var placeholders = ExtractPlaceholders(existing.ContentBody, dto.Placeholders);
+            existing.PlaceholdersJson = JsonSerializer.Serialize(placeholders);
+
+            // Increment version
+            int currentVer = 1;
+            if (!string.IsNullOrWhiteSpace(existing.Version))
             {
-                Id = id,
-                Title = dto.Title.Trim(),
-                Category = string.IsNullOrWhiteSpace(dto.Category) ? existing.Category : dto.Category.Trim(),
-                ContentBody = dto.ContentBody,
-                PlaceholdersJson = JsonSerializer.Serialize(placeholders),
-                IsActive = dto.IsActive,
-                CampusId = campusId
-            };
+                int.TryParse(existing.Version.Trim().TrimStart('v', 'V'), out currentVer);
+                if (currentVer < 1) currentVer = 1;
+            }
+            existing.Version = $"v{currentVer + 1}";
+            existing.UpdatedAt = DateTime.UtcNow;
 
-            var updated = await _repository.UpdateAsync(id, toUpdate, campusId, ct);
-            return updated != null ? MapToDto(updated) : null;
+            var updated = await _repository.UpdateAsync(id, existing, campusId, ct);
+            return updated == null ? null : MapToDto(updated);
         }
 
         public async Task<bool> DeleteTemplateAsync(int id, int? campusId = null, CancellationToken ct = default)
@@ -262,7 +266,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException("No valid template found to render.");
             }
 
-            // 1. Resolve Student Data if studentId or admissionNo provided
+            // 1. Resolve Student Data via Stored Procedure if studentId or admissionNo provided
             string studentName = "Sample Student";
             string fatherName = "Sample Father";
             string motherName = "Sample Mother";
@@ -277,52 +281,30 @@ namespace CollegeManagement.API.Services.Implementations
             string bloodGroup = "O+";
             string mobile = "9876543210";
 
-            Student? s = null;
-            if (request.StudentId.HasValue && request.StudentId.Value > 0)
-            {
-                s = await _context.Students
-                    .AsNoTracking()
-                    .Include(st => st.GroupNavigation)
-                    .Include(st => st.AcademicLevelNavigation)
-                    .Include(st => st.AcademicYear)
-                    .Include(st => st.BoardNavigation)
-                    .Include(st => st.SectionNavigation)
-                    .FirstOrDefaultAsync(st => st.StudentId == request.StudentId.Value, ct);
-            }
-            else if (!string.IsNullOrWhiteSpace(request.AdmissionNo))
-            {
-                s = await _context.Students
-                    .AsNoTracking()
-                    .Include(st => st.GroupNavigation)
-                    .Include(st => st.AcademicLevelNavigation)
-                    .Include(st => st.AcademicYear)
-                    .Include(st => st.BoardNavigation)
-                    .Include(st => st.SectionNavigation)
-                    .FirstOrDefaultAsync(st => st.AdmissionNo == request.AdmissionNo.Trim(), ct);
-            }
+            var studentDto = await _repository.GetStudentPreviewDetailsAsync(request.StudentId, request.AdmissionNo, ct);
 
-            if (s != null)
+            if (studentDto != null)
             {
-                studentName = s.StudentName;
-                fatherName = s.FatherName ?? "—";
-                motherName = s.MotherName ?? "—";
-                admissionNo = s.AdmissionNo ?? admissionNo;
-                rollNo = s.RollNo ?? s.AdmissionNo ?? rollNo;
-                academicLevel = s.AcademicLevelNavigation?.LevelName ?? academicLevel;
-                groupName = s.GroupNavigation?.GroupName ?? groupName;
-                sectionName = s.SectionNavigation?.SectionName ?? sectionName;
-                academicYear = s.AcademicYear?.AcademicYearName ?? academicYear;
-                boardName = s.BoardNavigation?.BoardName ?? boardName;
-                dob = s.DateOfBirth != default ? s.DateOfBirth.ToString("dd/MM/yyyy") : dob;
-                bloodGroup = s.BloodGroup ?? bloodGroup;
-                mobile = s.MobileNumber ?? mobile;
+                studentName = studentDto.StudentName ?? studentName;
+                fatherName = studentDto.FatherName ?? "—";
+                motherName = studentDto.MotherName ?? "—";
+                admissionNo = studentDto.AdmissionNo ?? admissionNo;
+                rollNo = studentDto.RollNo ?? studentDto.AdmissionNo ?? rollNo;
+                academicLevel = studentDto.AcademicLevel ?? academicLevel;
+                groupName = studentDto.GroupName ?? groupName;
+                sectionName = studentDto.SectionName ?? sectionName;
+                academicYear = studentDto.AcademicYearName ?? academicYear;
+                boardName = studentDto.BoardName ?? boardName;
+                dob = studentDto.DateOfBirth.HasValue ? studentDto.DateOfBirth.Value.ToString("dd/MM/yyyy") : dob;
+                bloodGroup = studentDto.BloodGroup ?? bloodGroup;
+                mobile = studentDto.MobileNumber ?? mobile;
             }
 
             var issueDateStr = (request.IssueDate ?? DateTime.UtcNow).ToString("dd/MM/yyyy");
             var certNo = !string.IsNullOrWhiteSpace(request.CertificateNo)
                 ? request.CertificateNo
                 : $"CERT-{DateTime.UtcNow.Year}-" + new Random().Next(1000, 9999);
-            var studentIdStr = s != null ? s.StudentId.ToString() : (request.StudentId?.ToString() ?? "518");
+            var studentIdStr = studentDto != null ? studentDto.StudentId.ToString() : (request.StudentId?.ToString() ?? "518");
 
             var placeholderValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -399,4 +381,3 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
-

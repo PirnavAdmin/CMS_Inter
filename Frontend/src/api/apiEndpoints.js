@@ -12,6 +12,7 @@ export const apiEndpoints = {
   dashboard: {
     summary: "/api/v1/dashboard/summary",
     principal: "/api/v1/dashboard/principal",
+    notices: "/api/v1/dashboard/notices",
     studentAttendance: "/api/v1/dashboard/students-attendance-today",
     staffAttendance: "/api/v1/dashboard/staff-attendance-today",
     upcomingExaminations: "/api/v1/dashboard/upcoming-examinations",
@@ -259,7 +260,7 @@ export const apiEndpoints = {
     exportExcel: "/api/v1/results/export-excel",
     downloadPdf: "/api/v1/results/download-pdf",
     studentMemo: "/api/v1/results/students/memo",
-    memo: (studentId) => `/api/v1/results/memo/${studentId}`,
+    memo: (studentId) => `/api/v1/results/student/${studentId}/memo`,
     revaluation: "/api/v1/results/revaluation",
     revaluationById: (revaluationId) => `/api/v1/results/revaluation/${revaluationId}`,
   },
@@ -526,6 +527,7 @@ export const apiEndpoints = {
     availableHalls: "/api/v1/examinations/available-halls",
     settings: "/api/v1/examinations/settings",
     duties: "/api/v1/examinations/duties",
+    reassignDuty: (id) => `/api/v1/examinations/duties/${id}/reassign`,
   },
   timetable: {
     getAll: "/api/v1/timetable",
@@ -772,6 +774,7 @@ export const apiEndpoints = {
 
     // Payslips
     payslips: "/api/v1/Payroll/payslips",
+    myPayslips: "/api/v1/Payroll/my-payslips",
     payslipById: (id) => `/api/v1/Payroll/payslips/${id}`,
     generatePayslip: "/api/v1/Payroll/payslips/generate",
     generatePayslipsBulk: "/api/v1/Payroll/payslips/generate-bulk",

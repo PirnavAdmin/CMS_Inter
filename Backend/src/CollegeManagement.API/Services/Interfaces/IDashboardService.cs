@@ -23,4 +23,7 @@ public interface IDashboardService
     Task<IReadOnlyList<FacultyWorkloadItemDto>> GetFacultyWorkloadAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default);
     Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(int? academicYearId, int? boardId, int limit = 20, int? campusId = null, CancellationToken ct = default);
     Task<PrincipalDashboardResponseDto> GetPrincipalDashboardAsync(int? academicYearId, int? boardId, DateTime? date, int campusId, CancellationToken ct = default);
+    Task<int> CreateNoticeAsync(CreateCampusNoticeRequest request, string publisherRole = "Principal", CancellationToken ct = default);
+    Task<IReadOnlyList<PrincipalNoticeDto>> GetNoticesAsync(int campusId, string? targetAudience = null, int limit = 10, CancellationToken ct = default);
+    Task InvalidateDashboardCacheAsync(int? campusId = null, CancellationToken ct = default);
 }

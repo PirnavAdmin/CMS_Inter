@@ -22,7 +22,7 @@ public class CertificateRepository : ICertificateRepository
     }
 
     // =========================================================
-    // GET ALL
+    // GET ALL (100% Stored Procedure with Multi-Tenancy & Filters)
     // =========================================================
     public async Task<IReadOnlyList<CertificateResponseDto>> GetAllAsync(
         string? search = null,
@@ -39,8 +39,9 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_Search", search?.Trim(), DbType.String);
         parameters.Add("p_Status", status?.Trim(), DbType.String);
         parameters.Add("p_CertificateType", certificateType?.Trim(), DbType.String);
-        // Note: The stored procedure on the DB currently only expects 3 parameters.
-        // Campus filtering is done in-memory below.
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
+        parameters.Add("p_BoardId", boardId, DbType.Int32);
+        parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
 
         try
         {
@@ -50,36 +51,7 @@ public class CertificateRepository : ICertificateRepository
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
-            var results = rawRows.Select(MapDynamicToDto).ToList();
-            if (campusId.HasValue)
-            {
-                var cParams = new DynamicParameters();
-                cParams.Add("CampusId", campusId.Value);
-                string campusStudentQuery = @"
-                    SELECT DISTINCT AdmissionNo FROM (
-                        SELECT AdmissionNo FROM StudentAdmissions WHERE CampusId = @CampusId
-                        UNION
-                        SELECT AdmissionNo FROM Students WHERE CampusId = @CampusId
-                    ) AS c_students WHERE AdmissionNo IS NOT NULL AND AdmissionNo != ''";
-                var campusAdmissionNos = (await connection.QueryAsync<string>(campusStudentQuery, cParams)).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                results = results.Where(r => 
-                    (r.CampusId.HasValue && r.CampusId.Value == campusId.Value) ||
-                    (!string.IsNullOrEmpty(r.AdmissionNo) && campusAdmissionNos.Contains(r.AdmissionNo))
-                ).ToList();
-            }
-            
-            if (boardId.HasValue || academicYearId.HasValue)
-            {
-                var sParams = new DynamicParameters();
-                string sQuery = "SELECT StudentId FROM Students WHERE IsActive = 1";
-                if (boardId.HasValue) { sQuery += " AND BoardId = @BoardId"; sParams.Add("BoardId", boardId.Value); }
-                if (academicYearId.HasValue) { sQuery += " AND AcademicYearId = @AYId"; sParams.Add("AYId", academicYearId.Value); }
-                
-                var validStudentIds = (await connection.QueryAsync<int>(sQuery, sParams)).ToHashSet();
-                results = results.Where(r => validStudentIds.Contains(r.StudentId)).ToList();
-            }
-            return results;
+            return rawRows.Select(MapDynamicToDto).ToList();
         }
         catch (OperationCanceledException)
         {
@@ -344,7 +316,6 @@ public class CertificateRepository : ICertificateRepository
             string badgeBgColor = defaultBadgeBg;
             string badgeTextColor = "#ffffff";
             string orientation = defaultOrientation;
-            string signatureType = "Principal";
 
             if (dbTemplate != null)
             {
@@ -414,7 +385,6 @@ public class CertificateRepository : ICertificateRepository
             string studentIdStr = studentId > 0 ? studentId.ToString() : (admissionNo.Length > 0 ? Regex.Replace(admissionNo, @"\D", "") : "1");
             if (string.IsNullOrWhiteSpace(studentIdStr)) studentIdStr = "1";
 
-            // Comprehensive placeholder token dictionary supporting all naming conventions
             var payload = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["student_name"] = studentName,
@@ -448,17 +418,14 @@ public class CertificateRepository : ICertificateRepository
                 ["admissionNumber"] = admissionNo,
                 ["AdmissionNumber"] = admissionNo,
                 ["Admission No"] = admissionNo,
-                ["Admission Number"] = admissionNo,
 
+                ["student_id"] = studentIdStr,
+                ["studentId"] = studentIdStr,
+                ["StudentId"] = studentIdStr,
                 ["roll_no"] = rollNo,
                 ["rollNo"] = rollNo,
                 ["RollNo"] = rollNo,
-                ["roll_number"] = rollNo,
-                ["rollNumber"] = rollNo,
-                ["RollNumber"] = rollNo,
-                ["Roll No"] = rollNo,
-                ["hall_ticket_no"] = rollNo,
-                ["HallTicketNo"] = rollNo,
+                ["Roll Number"] = rollNo,
 
                 ["group_name"] = groupName,
                 ["groupName"] = groupName,
@@ -466,37 +433,27 @@ public class CertificateRepository : ICertificateRepository
                 ["group"] = groupName,
                 ["Group"] = groupName,
                 ["stream"] = groupName,
-                ["Stream"] = groupName,
-                ["Group Name"] = groupName,
+                ["branch"] = groupName,
 
                 ["academic_level"] = academicLevel,
                 ["academicLevel"] = academicLevel,
                 ["AcademicLevel"] = academicLevel,
-                ["level"] = academicLevel,
-                ["Level"] = academicLevel,
                 ["year"] = academicLevel,
                 ["Year"] = academicLevel,
                 ["class"] = academicLevel,
                 ["Class"] = academicLevel,
-                ["Academic Level"] = academicLevel,
-
-                ["section"] = sectionName,
-                ["section_name"] = sectionName,
-                ["sectionName"] = sectionName,
-                ["SectionName"] = sectionName,
-                ["Section"] = sectionName,
 
                 ["academic_year"] = academicYear,
                 ["academicYear"] = academicYear,
                 ["AcademicYear"] = academicYear,
-                ["year_name"] = academicYear,
-                ["Academic Year"] = academicYear,
+                ["batch"] = academicYear,
+                ["Batch"] = academicYear,
 
+                ["section"] = sectionName,
+                ["Section"] = sectionName,
                 ["board_name"] = boardName,
                 ["boardName"] = boardName,
                 ["BoardName"] = boardName,
-                ["board"] = boardName,
-                ["Board"] = boardName,
                 ["Board Name"] = boardName,
 
                 ["course_name"] = $"Intermediate ({groupName})",
@@ -648,43 +605,35 @@ public class CertificateRepository : ICertificateRepository
         <div class=""cert-header-right"">
           <small>Affiliated to</small>
           <strong>Board of Intermediate Education</strong>
-          <small>Andhra Pradesh (BIEAP)</small>
-          <small>College Code: 12345</small>
         </div>
       </div>
-      <div class=""cert-ref-row"">
-        <span>Ref No: <strong>{certNo}</strong></span>
-        <span>Date: <strong>{issDate:dd/MM/yyyy}</strong></span>
+      <div class=""cert-title-badge-wrapper"">
+        <span class=""cert-title-badge"" style=""background-color: {badgeBgColor}; color: {badgeTextColor};"">{templateTitle}</span>
       </div>
     </header>
-    <div class=""cert-title-badge"">
-      <h2 style=""background-color: {badgeBgColor}; color: {badgeTextColor};"">{templateTitle.ToUpperInvariant()}</h2>
+
+    <div class=""cert-meta-row"">
+      <div><strong>Ref No:</strong> {certNo}</div>
+      <div><strong>Date:</strong> {issDate:dd/MM/yyyy}</div>
     </div>
-    <div class=""cert-body-area"">
-      <p class=""cert-content-text"">{hydratedParagraphOne}</p>
-      {(string.IsNullOrWhiteSpace(hydratedParagraphTwo) ? "" : $"<p class=\"cert-purpose-text\">{hydratedParagraphTwo}</p>")}
-      {(string.IsNullOrWhiteSpace(remarks) ? "" : $"<p class=\"cert-remarks\" style=\"margin-top: 10px; font-size: 13px;\"><strong>Remarks:</strong> {remarks}</p>")}
+
+    <div class=""cert-body"">
+      <p class=""cert-para"">{hydratedParagraphOne}</p>
+      {(!string.IsNullOrWhiteSpace(hydratedParagraphTwo) ? $"<p class=\"cert-para cert-purpose-para\">{hydratedParagraphTwo}</p>" : "")}
     </div>
-    <footer class=""cert-footer-area"">
-      <div class=""cert-footer-col left"">
-        <p>Place: <strong>Vijayawada</strong></p>
-        <p>Date: <strong>{issDate:dd/MM/yyyy}</strong></p>
-        <div class=""cert-qr-placeholder"">
-          <div class=""qr-box"">QR</div>
-          <span>Scan to verify</span>
-        </div>
+
+    <footer class=""cert-footer"">
+      <div class=""cert-footer-left"">
+        <p><strong>Date:</strong> {issDate:dd/MM/yyyy}</p>
+        <p><strong>Place:</strong> Vijayawada</p>
       </div>
-      <div class=""cert-footer-col center"">
-        <div class=""cert-seal-stamp"" style=""border-color: {borderColor}; color: {borderColor};"">
-          <span>PIRNAV COLLEGE<br/>VIJAYAWADA</span>
-        </div>
+      <div class=""cert-footer-center"">
+        <div class=""cert-seal-box"">(College Seal)</div>
       </div>
-      <div class=""cert-footer-col right"">
-        <div class=""cert-sig-line"">
-          <span class=""sig-handwritten style-cursive-hand"">{signatureType} Signature</span>
-          <strong class=""sig-title"">{signatureType}</strong>
-          <small>Pirnav College</small>
-        </div>
+      <div class=""cert-footer-right"">
+        <div class=""cert-signature-line""></div>
+        <p><strong>PRINCIPAL</strong></p>
+        <p class=""cert-principal-name"">{issuedBy}</p>
       </div>
     </footer>
   </div>
@@ -695,22 +644,19 @@ public class CertificateRepository : ICertificateRepository
                 CertificateId = certId,
                 CertificateNumber = certNo,
                 CertificateType = certType,
-                Status = status,
-                RequestDate = reqDate,
-                IssueDate = issDate,
-                IssuedBy = issuedBy,
-                Purpose = purpose,
-                Remarks = remarks,
                 TemplateCode = templateCode,
                 TemplateTitle = templateTitle,
+                Heading = templateTitle,
                 Orientation = orientation,
                 BorderColor = borderColor,
                 BadgeBgColor = badgeBgColor,
                 BadgeTextColor = badgeTextColor,
-                SignatureType = signatureType,
-                SealText = "PIRNAV COLLEGE\nVIJAYAWADA",
-                QrEnabled = true,
-                Heading = templateTitle,
+                Purpose = purpose,
+                Remarks = remarks,
+                Status = status,
+                IssuedBy = issuedBy,
+                IssueDate = issDate,
+                RequestDate = reqDate,
                 ParagraphOne = hydratedParagraphOne,
                 ParagraphTwo = hydratedParagraphTwo,
                 HtmlContent = htmlContent,
@@ -729,7 +675,7 @@ public class CertificateRepository : ICertificateRepository
     }
 
     // =========================================================
-    // GET WORKFLOW STATS
+    // WORKFLOW STATS (100% Stored Procedure with Multi-Tenancy)
     // =========================================================
     public async Task<CertificateWorkflowStatsDto> GetWorkflowStatsAsync(
         int? campusId = null,
@@ -742,25 +688,10 @@ public class CertificateRepository : ICertificateRepository
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId, DbType.Int32);
 
-            string sql = @"
-                SELECT
-                    COUNT(*) AS TotalCount,
-                    COALESCE(SUM(CASE WHEN c.Status = 'Requested' THEN 1 ELSE 0 END), 0) AS RequestedCount,
-                    COALESCE(SUM(CASE WHEN (c.Status = 'Generated' OR c.Status = 'Active') AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS GeneratedCount,
-                    COALESCE(SUM(CASE WHEN c.Status = 'Reviewed' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS ReviewedCount,
-                    COALESCE(SUM(CASE WHEN c.Status = 'Approved' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS ApprovedCount,
-                    COALESCE(SUM(CASE WHEN c.Status = 'Issued' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS IssuedCount,
-                    COALESCE(SUM(CASE WHEN c.Status = 'Cancelled' OR c.Status = 'Deleted' OR c.IsActive = 0 THEN 1 ELSE 0 END), 0) AS CancelledCount
-                FROM `certificates` c
-                LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
-                LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
-                WHERE (@p_CampusId IS NULL OR @p_CampusId = 0 OR COALESCE(sa.CampusId, s.CampusId) = @p_CampusId);
-            ";
-
             var stats = await connection.QueryFirstOrDefaultAsync<CertificateWorkflowStatsDto>(new CommandDefinition(
-                sql,
+                "sp_GetCertificateWorkflowStats",
                 parameters,
-                commandType: CommandType.Text,
+                commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
             return stats ?? new CertificateWorkflowStatsDto();
@@ -773,7 +704,7 @@ public class CertificateRepository : ICertificateRepository
     }
 
     // =========================================================
-    // GET STUDENTS DROPDOWN
+    // GET STUDENTS DROPDOWN (100% Stored Procedure)
     // =========================================================
     public async Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
         int? campusId = null,
@@ -790,32 +721,10 @@ public class CertificateRepository : ICertificateRepository
             parameters.Add("p_BoardId", boardId, DbType.Int32);
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
 
-            string sql = @"
-                SELECT 
-                    sa.AdmissionId AS StudentId,
-                    COALESCE(NULLIF(sa.AdmissionNo, ''), CONCAT('ADM-', sa.AdmissionId)) AS AdmissionNo,
-                    '' AS RollNo,
-                    TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))) AS StudentName,
-                    COALESCE(g.GroupName, '') AS GroupName,
-                    COALESCE(ay.AcademicYearName, '') AS AcademicYear,
-                    COALESCE(al.LevelName, '1st Year') AS AcademicLevel,
-                    '' AS Section
-                FROM StudentAdmissions sa
-                LEFT JOIN Groups g ON g.GroupId = sa.GroupId
-                LEFT JOIN AcademicYears ay ON ay.AcademicYearId = sa.AcademicYearId
-                LEFT JOIN AcademicLevels al ON al.AcademicLevelId = sa.AcademicLevelId
-                WHERE sa.IsActive = 1
-                  AND sa.Status IN ('Approved', 'Request Approved', 'Admitted', 'Active', '')
-                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR sa.CampusId = @p_CampusId)
-                  AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR sa.BoardId = @p_BoardId)
-                  AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR sa.AcademicYearId = @p_AcademicYearId)
-                ORDER BY CAST(REGEXP_REPLACE(COALESCE(NULLIF(sa.AdmissionNo, ''), '0'), '[^0-9]', '') AS UNSIGNED) ASC, sa.AdmissionNo ASC
-            ";
-
             var list = await connection.QueryAsync<StudentCertificateDropdownDto>(new CommandDefinition(
-                sql,
+                "sp_GetStudentsForCertificateDropdown",
                 parameters,
-                commandType: CommandType.Text,
+                commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
             return list.ToList();
@@ -828,7 +737,7 @@ public class CertificateRepository : ICertificateRepository
     }
 
     // =========================================================
-    // GENERATE CERTIFICATE
+    // GENERATE CERTIFICATE (100% Stored Procedure)
     // =========================================================
     public async Task<CertificateResponseDto?> GenerateAsync(
         GenerateCertificateRequestDto request,
@@ -879,6 +788,9 @@ public class CertificateRepository : ICertificateRepository
         }, ct);
     }
 
+    // =========================================================
+    // GET HISTORY (100% Stored Procedure)
+    // =========================================================
     public async Task<IReadOnlyList<CertificateResponseDto>> GetHistoryAsync(
         string? admissionNo,
         CancellationToken ct = default)
@@ -905,6 +817,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // VERIFY CERTIFICATE (100% Stored Procedure)
+    // =========================================================
     public async Task<CertificateResponseDto?> VerifyAsync(
         string certificateNo,
         CancellationToken ct = default)
@@ -934,6 +849,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // REISSUE CERTIFICATE
+    // =========================================================
     public async Task<CertificateResponseDto?> ReissueAsync(
         ReissueCertificateDto request,
         CancellationToken ct = default)
@@ -948,6 +866,9 @@ public class CertificateRepository : ICertificateRepository
         }, ct);
     }
 
+    // =========================================================
+    // UPDATE BY ADMISSION NUMBER (100% Stored Procedure)
+    // =========================================================
     public async Task<CertificateResponseDto?> UpdateByAdmissionNoAsync(
         UpdateCertificateDto request,
         CancellationToken ct = default)
@@ -979,6 +900,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // MOVE STATUS (100% Stored Procedure)
+    // =========================================================
     public async Task<bool> MoveStatusAsync(
         int id,
         string status,
@@ -1012,6 +936,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // BULK REVIEW (100% Stored Procedure with Multi-Tenancy)
+    // =========================================================
     public async Task<int> BulkReviewAsync(
         string reviewedBy,
         int? campusId = null,
@@ -1024,17 +951,11 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            string sql = @"
-                UPDATE `certificates` c
-                LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
-                LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
-                SET c.`Status` = 'Reviewed',
-                    c.`ReviewedAt` = NOW(),
-                    c.`UpdatedAt` = NOW()
-                WHERE c.`Status` IN ('Generated', 'Requested', 'Pending', 'Active')
-                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR COALESCE(sa.CampusId, s.CampusId) = @p_CampusId);
-            ";
-            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_BulkReviewCertificates",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
             return affected;
         }
         catch (Exception ex)
@@ -1044,6 +965,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // BULK APPROVE (100% Stored Procedure with Multi-Tenancy)
+    // =========================================================
     public async Task<int> BulkApproveAsync(
         string approvedBy,
         int? campusId = null,
@@ -1056,17 +980,11 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            string sql = @"
-                UPDATE `certificates` c
-                LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
-                LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
-                SET c.`Status` = 'Approved',
-                    c.`ApprovedAt` = NOW(),
-                    c.`UpdatedAt` = NOW()
-                WHERE c.`Status` = 'Reviewed'
-                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR COALESCE(sa.CampusId, s.CampusId) = @p_CampusId);
-            ";
-            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_BulkApproveCertificates",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
             return affected;
         }
         catch (Exception ex)
@@ -1076,6 +994,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // BULK ISSUE (100% Stored Procedure with Multi-Tenancy)
+    // =========================================================
     public async Task<int> BulkIssueAsync(
         string issuedBy,
         int? campusId = null,
@@ -1088,19 +1009,11 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            string sql = @"
-                UPDATE `certificates` c
-                LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
-                LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
-                SET c.`Status` = 'Issued',
-                    c.`IssuedAt` = NOW(),
-                    c.`IssueDate` = COALESCE(c.`IssueDate`, NOW()),
-                    c.`IssuedBy` = COALESCE(NULLIF(TRIM(@p_IssuedBy), ''), 'Admin'),
-                    c.`UpdatedAt` = NOW()
-                WHERE c.`Status` = 'Approved'
-                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR COALESCE(sa.CampusId, s.CampusId) = @p_CampusId);
-            ";
-            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_BulkIssueCertificates",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
             return affected;
         }
         catch (Exception ex)
@@ -1110,6 +1023,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // UPDATE FEE CLEARANCE (100% Stored Procedure)
+    // =========================================================
     public async Task<bool> UpdateFeeClearanceAsync(
         int id,
         CertificateFeeClearanceRequestDto request,
@@ -1119,17 +1035,19 @@ public class CertificateRepository : ICertificateRepository
         using var connection = _database.CreateConnection();
         try
         {
-            var note = request?.ExemptionReason ?? "Cleared";
             var clearedBy = request?.ClearedBy ?? "Accounts Desk";
             var status = request?.Status ?? "Cleared";
             var remarksAddition = $" [Fee Clearance: {status} by {clearedBy} on {DateTime.UtcNow:dd/MM/yyyy}]";
-            string sql = @"
-                UPDATE `certificates`
-                SET `Remarks` = CONCAT(COALESCE(`Remarks`, ''), @RemarksAddition),
-                    `UpdatedAt` = NOW()
-                WHERE `Id` = @Id;
-            ";
-            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, new { Id = id, RemarksAddition = remarksAddition }, cancellationToken: ct));
+
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CertificateId", id, DbType.Int32);
+            parameters.Add("p_FeeClearanceRemarks", remarksAddition, DbType.String);
+
+            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_UpdateCertificateFeeClearance",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
             return affected > 0;
         }
         catch (Exception ex)
@@ -1139,6 +1057,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // GRANT FEE EXEMPTION (100% Stored Procedure)
+    // =========================================================
     public async Task<bool> GrantFeeExemptionAsync(
         int id,
         CertificateFeeClearanceRequestDto request,
@@ -1152,13 +1073,16 @@ public class CertificateRepository : ICertificateRepository
             var authorizedBy = request?.ClearedBy ?? "Principal";
             var dueAmt = request?.DueAmount ?? 0;
             var remarksAddition = $" [Principal Permission Granted: {reason} (Due: Rs.{dueAmt}) by {authorizedBy} on {DateTime.UtcNow:dd/MM/yyyy}]";
-            string sql = @"
-                UPDATE `certificates`
-                SET `Remarks` = CONCAT(COALESCE(`Remarks`, ''), @RemarksAddition),
-                    `UpdatedAt` = NOW()
-                WHERE `Id` = @Id;
-            ";
-            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, new { Id = id, RemarksAddition = remarksAddition }, cancellationToken: ct));
+
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CertificateId", id, DbType.Int32);
+            parameters.Add("p_FeeClearanceRemarks", remarksAddition, DbType.String);
+
+            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_UpdateCertificateFeeClearance",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
             return affected > 0;
         }
         catch (Exception ex)
@@ -1168,6 +1092,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // CANCEL CERTIFICATE (100% Stored Procedure)
+    // =========================================================
     public async Task<bool> CancelAsync(
         int id,
         CancellationToken ct = default)
@@ -1196,6 +1123,9 @@ public class CertificateRepository : ICertificateRepository
         }
     }
 
+    // =========================================================
+    // DELETE CERTIFICATE (100% Stored Procedure)
+    // =========================================================
     public async Task<bool> DeleteAsync(
         int id,
         CancellationToken ct = default)
@@ -1268,7 +1198,7 @@ public class CertificateRepository : ICertificateRepository
     }
 
     // =========================================================
-    // GET BULK ELIGIBLE STUDENTS (GRID SELECTION)
+    // GET BULK ELIGIBLE STUDENTS (100% Stored Procedure)
     // =========================================================
     public async Task<IReadOnlyList<BulkEligibleStudentDto>> GetBulkEligibleStudentsAsync(
         int? academicYearId,
@@ -1303,6 +1233,35 @@ public class CertificateRepository : ICertificateRepository
         {
             Console.WriteLine($"[CertificateRepository.GetBulkEligibleStudentsAsync] Error: {ex.Message}");
             return new List<BulkEligibleStudentDto>();
+        }
+    }
+
+    // =========================================================
+    // GET STUDENT FOR GENERATION (100% Stored Procedure)
+    // =========================================================
+    public async Task<StudentGenerationLookupDto?> GetStudentForGenerationAsync(
+        string admissionNo,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(admissionNo)) return null;
+
+        using var connection = _database.CreateConnection();
+
+        var parameters = new DynamicParameters();
+        parameters.Add("p_AdmissionNo", admissionNo.Trim(), DbType.String);
+
+        try
+        {
+            return await connection.QueryFirstOrDefaultAsync<StudentGenerationLookupDto>(new CommandDefinition(
+                "sp_GetStudentForCertificateGeneration",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateRepository.GetStudentForGenerationAsync] Error: {ex.Message}");
+            return null;
         }
     }
 

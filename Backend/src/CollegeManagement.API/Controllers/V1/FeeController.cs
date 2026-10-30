@@ -3,6 +3,11 @@ using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers.V1;
 
@@ -15,6 +20,22 @@ public class FeeController : ControllerBase
 {
     private readonly IFeeService _service;
     public FeeController(IFeeService service) => _service = service;
+
+    private bool IsPrivilegedStaff()
+    {
+        return User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("SuperAdmin") ||
+               User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance") ||
+               User.IsInRole("Teacher") || User.IsInRole("Staff");
+    }
+
+    private int? GetCallerStudentId()
+    {
+        var claim = User.FindFirst("StudentId")?.Value 
+            ?? User.FindFirst("studentId")?.Value 
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        return int.TryParse(claim, out int id) ? id : null;
+    }
 
     // ---------------- Fee Types ----------------
     /// <summary>Create a reusable fee type such as Admission Fee or Course Fee.</summary>
@@ -116,16 +137,12 @@ public class FeeController : ControllerBase
         return result == null ? NotFound(new { message = "Student fee record not found." }) : Ok(result);
     }
 
+    /// <summary>Batch fetch student fee details to eliminate N+1 roundtrips.</summary>
     [HttpPost("students/bulk-fee-details")]
     public async Task<IActionResult> GetBulkStudentFeeDetails([FromBody] List<int> studentIds)
     {
         if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
-        var result = new Dictionary<int, StudentFeeDetailsResponse?>();
-        foreach (var id in studentIds.Distinct())
-        {
-            result[id] = await _service.GetStudentFeeDetailsByStudentAsync(id);
-        }
-        return Ok(result);
+        return Ok(await _service.GetBulkStudentFeeDetailsAsync(studentIds));
     }
 
     /// <summary>Student Fee Ledger with search and screen filters.</summary>
@@ -142,15 +159,6 @@ public class FeeController : ControllerBase
     [HttpPost("concession")]
     public async Task<IActionResult> ApplyConcession(ApplyFeeConcessionRequest request) => Ok(await _service.ApplyFeeConcessionAsync(request));
 
-    // ---------------- Payment Plan / Schedules ----------------
-    // Create a Full Payment or Fee Schedule Payment plan for a student fee.
-    // [HttpPost("payment-plans")]
-    // public async Task<IActionResult> CreatePaymentPlan(CreatePaymentPlanRequest request) => Ok(await _service.CreatePaymentPlanAsync(request));
-
-    // Add one fee schedule installment and due date.
-    // [HttpPost("payment-plans/{id:int}/installments")]
-    // public async Task<IActionResult> AddInstallment(int id, CreateInstallmentRequest request) => Ok(await _service.AddPaymentPlanInstallmentAsync(id, request));
-
     // ---------------- Collection ----------------
     /// <summary>List student accounts with payable, paid, balance, next due and status.</summary>
     [HttpGet("collection")]
@@ -161,11 +169,22 @@ public class FeeController : ControllerBase
     public async Task<IActionResult> Collect(CreateFeePaymentRequest request) => Ok(await _service.CreateFeePaymentAsync(request));
 
     // ---------------- Payment History / Receipt ----------------
-    /// <summary>View payment history for one student.</summary>
+    /// <summary>View payment history for one student. Enforces caller ID check to prevent IDOR.</summary>
     [HttpGet("history/{studentId:int}")]
-    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
-    public async Task<IActionResult> GetHistory(int studentId) => Ok(await _service.GetFeePaymentsAsync(studentId));
+    public async Task<IActionResult> GetHistory(int studentId)
+    {
+        if (!IsPrivilegedStaff())
+        {
+            var callerId = GetCallerStudentId();
+            if (callerId.HasValue && callerId.Value != studentId)
+            {
+                return Forbid();
+            }
+        }
+        return Ok(await _service.GetFeePaymentsAsync(studentId));
+    }
 
     [HttpPost("bulk-history")]
     public async Task<IActionResult> GetBulkHistory([FromBody] List<int> studentIds)
@@ -183,14 +202,24 @@ public class FeeController : ControllerBase
     [HttpGet("payments/{id:int}")]
     public async Task<IActionResult> GetPayment(int id) => Ok(await _service.GetFeePaymentByIdAsync(id));
 
-    /// <summary>Fetch one payment receipt by receipt number.</summary>
+    /// <summary>Fetch one payment receipt by receipt number. Enforces caller ID check to prevent IDOR.</summary>
     [HttpGet("receipt/{receiptNumber}")]
-    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
     public async Task<IActionResult> GetReceipt(string receiptNumber)
     {
         var result = await _service.GetReceiptAsync(receiptNumber);
-        return result == null ? NotFound(new { message = "Receipt not found." }) : Ok(result);
+        if (result == null) return NotFound(new { message = "Receipt not found." });
+
+        if (!IsPrivilegedStaff())
+        {
+            var callerId = GetCallerStudentId();
+            if (callerId.HasValue && callerId.Value != result.StudentId)
+            {
+                return Forbid();
+            }
+        }
+        return Ok(result);
     }
 
     // ---------------- Due / Dashboard / Reports ----------------

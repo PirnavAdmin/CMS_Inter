@@ -14,6 +14,7 @@ import {
 import "../styles/FacultyPayslips.css";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { getMyPayslips } from "@/api/payrollApi.js";
 import { getAuthUser, getAuthToken } from "@/modules/auth/authStorage.js";
 
 const getMonthLabel = (slip) => {
@@ -94,38 +95,14 @@ export default function FacultyPayslips() {
     return profileData?.campusId || a?.campusId || null;
   }, [profileData?.campusId]);
 
-  // Fetch payslips directly from backend API
+  // Fetch staff self-service payslips directly from backend API
   const fetchPayslips = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = {};
-      if (effectiveEmployeeId) {
-        params.search = effectiveEmployeeId;
-      }
-      if (effectiveCampusId) {
-        params.campusId = effectiveCampusId;
-      }
-
-      const res = await apiClient.get("/api/v1/Payroll/payslips", { params });
-      let raw = res?.data;
-      let list = Array.isArray(raw) ? raw : raw?.data || raw?.items || raw?.$values || [];
+      const res = await getMyPayslips();
+      let list = Array.isArray(res) ? res : res?.items || res?.$values || [];
       if (!Array.isArray(list)) list = [];
-
-      // Filter to current staff member if identifiers are present
-      if (effectiveStaffId || effectiveEmployeeId) {
-        const filtered = list.filter((slip) => {
-          if (effectiveStaffId && String(slip.staffId) === String(effectiveStaffId)) return true;
-          if (
-            effectiveEmployeeId &&
-            String(slip.employeeId || "").toLowerCase() === effectiveEmployeeId.toLowerCase()
-          ) {
-            return true;
-          }
-          return false;
-        });
-        list = filtered;
-      }
 
       // Sort descending: by year, then by month
       list.sort((a, b) => {
@@ -146,7 +123,7 @@ export default function FacultyPayslips() {
     } finally {
       setLoading(false);
     }
-  }, [effectiveStaffId, effectiveEmployeeId, effectiveCampusId]);
+  }, []);
 
   useEffect(() => {
     fetchPayslips();

@@ -210,14 +210,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("profile/photo")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> UploadProfilePhoto(
-            [FromForm] IFormFile? file,
-            [FromForm] IFormFile? photo,
+            IFormFile? file,
             CancellationToken ct = default)
         {
-            var targetFile = file ?? photo;
+            var targetFile = file;
             if (targetFile == null && Request.HasFormContentType && Request.Form.Files.Count > 0)
             {
-                targetFile = Request.Form.Files[0];
+                targetFile = Request.Form.Files["file"] ?? Request.Form.Files["photo"] ?? Request.Form.Files[0];
             }
 
             if (targetFile == null || targetFile.Length == 0)

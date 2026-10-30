@@ -1,3 +1,4 @@
+import React, { lazy, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/modules/landing/LandingPage.jsx";
 import ExamCellPortalRoutes from "@/modules/exam-cell/ExamCellPortalRoutes.jsx";
@@ -33,20 +34,30 @@ import ReportsAnalyticsPage from "@/modules/admin/AdminReports/ReportsAnalyticsP
 import InventoryManagementPage from "@/modules/admin/AdminInventory/InventoryManagementPage.jsx";
 import StudentProfilePage from "@/modules/admin/AdminStudents/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/modules/admin/AdminStudents/StudentEnrollmentPage.jsx";
-import SettingsPage from "@/modules/admin/AdminSettings/SettingsPage.jsx";
-import LOPConfigurationPage from "@/modules/admin/AdminLOPConfiguration/LOPConfigurationPage.jsx";
-import CampusImagesConfigurationPage from "@/modules/admin/AdminSettings/CampusImagesConfigurationPage.jsx";
-import RolesPermissionsPage from "@/modules/admin/AdminRolesPermissions/RolesPermissionsPage.jsx";
-import LeaveTypesPage from "@/modules/admin/AdminLeave/LeaveTypesPage.jsx";
-import AttendanceTimingConfigPage from "@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.jsx";
-import NumberSeriesPage from "@/modules/admin/AdminNumberSeries/NumberSeriesPage.jsx";
-import TemplatesPage from "@/modules/admin/AdminTemplates/TemplatesPage.jsx";
-import CredentialsGeneratorPage from "@/modules/admin/AdminCredentialsGenerator/CredentialsGeneratorPage.jsx";
+// Code-split Settings & Admin configurations for bundle optimization
+const SettingsPage = lazy(() => import("@/modules/admin/AdminSettings/SettingsPage.jsx"));
+const LOPConfigurationPage = lazy(() => import("@/modules/admin/AdminLOPConfiguration/LOPConfigurationPage.jsx"));
+const CampusImagesConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusImagesConfigurationPage.jsx"));
+const RolesPermissionsPage = lazy(() => import("@/modules/admin/AdminRolesPermissions/RolesPermissionsPage.jsx"));
+const LeaveTypesPage = lazy(() => import("@/modules/admin/AdminLeave/LeaveTypesPage.jsx"));
+const AttendanceTimingConfigPage = lazy(() => import("@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.jsx"));
+const NumberSeriesPage = lazy(() => import("@/modules/admin/AdminNumberSeries/NumberSeriesPage.jsx"));
+const TemplatesPage = lazy(() => import("@/modules/admin/AdminTemplates/TemplatesPage.jsx"));
+const CredentialsGeneratorPage = lazy(() => import("@/modules/admin/AdminCredentialsGenerator/CredentialsGeneratorPage.jsx"));
 import PayrollPage from "@/modules/admin/AdminPayroll/PayrollPage.jsx";
 import ReimbursementPage from "@/modules/admin/AdminReimbursements/ReimbursementPage.jsx";
 import AdminProfilePage from "@/modules/admin/AdminProfile/AdminProfilePage.jsx";
-import CampusConfigurationPage from "@/modules/admin/AdminSettings/CampusConfigurationPage.jsx";
-import AuditLogsPage from "@/modules/admin/AdminAuditLogs/AuditLogsPage.jsx";
+const CampusConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusConfigurationPage.jsx"));
+const AuditLogsPage = lazy(() => import("@/modules/admin/AdminAuditLogs/AuditLogsPage.jsx"));
+
+const SettingsFallback = () => (
+  <div className="p-8 text-sm text-slate-500 flex items-center justify-center min-h-[300px]">
+    <div className="flex flex-col items-center gap-2">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <span>Loading settings module...</span>
+    </div>
+  </div>
+);
 import Login from "@/modules/auth/pages/Login.jsx";
 import Register from "@/modules/auth/pages/Register.jsx";
 import ForgotPassword from "@/modules/auth/pages/ForgotPassword.jsx";
@@ -328,7 +339,7 @@ export default function AppRoutes() {
           <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
         </Route>
         {/* Settings General & Admin Profile */}
-        <Route path="/dashboard/settings" element={<SettingsPage />} />
+        <Route path="/dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
         <Route path="/dashboard/settings/my-profile" element={<AdminProfilePage />} />
         <Route path="/dashboard/settings/profile" element={<AdminProfilePage />} />
@@ -336,62 +347,62 @@ export default function AppRoutes() {
 
         {/* Settings Sub-Modules */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="lop-configuration" />}>
-          <Route path="/dashboard/settings/lop-configuration" element={<LOPConfigurationPage />} />
+          <Route path="/dashboard/settings/lop-configuration" element={<Suspense fallback={<SettingsFallback />}><LOPConfigurationPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="campus-images" />}>
-          <Route path="/dashboard/settings/campus-images" element={<CampusImagesConfigurationPage />} />
-          <Route path="/dashboard/settings/landing-page" element={<CampusImagesConfigurationPage page="landing" />} />
-          <Route path="/dashboard/settings/login-page" element={<CampusImagesConfigurationPage page="login" />} />
+          <Route path="/dashboard/settings/campus-images" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage /></Suspense>} />
+          <Route path="/dashboard/settings/landing-page" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage page="landing" /></Suspense>} />
+          <Route path="/dashboard/settings/login-page" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage page="login" /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="campus-configuration" />}>
-          <Route path="/dashboard/settings/campus-configuration" element={<CampusConfigurationPage />} />
+          <Route path="/dashboard/settings/campus-configuration" element={<Suspense fallback={<SettingsFallback />}><CampusConfigurationPage /></Suspense>} />
           <Route path="/dashboard/settings/campus" element={<CampusConfigurationPage />} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="audit-logs" />}>
-          <Route path="/dashboard/settings/audit-logs" element={<AuditLogsPage />} />
+          <Route path="/dashboard/settings/audit-logs" element={<Suspense fallback={<SettingsFallback />}><AuditLogsPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="roles-permissions" requiredScreen="role-management" />}>
-          <Route path="/dashboard/settings/roles-permissions" element={<RolesPermissionsPage />} />
+          <Route path="/dashboard/settings/roles-permissions" element={<Suspense fallback={<SettingsFallback />}><RolesPermissionsPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="leave-types" />}>
-          <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
+          <Route path="/dashboard/settings/leave-types" element={<Suspense fallback={<SettingsFallback />}><LeaveTypesPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="attendance-timing" />}>
-          <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
+          <Route path="/dashboard/settings/attendance-timing" element={<Suspense fallback={<SettingsFallback />}><AttendanceTimingConfigPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="number-series" />}>
-          <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
-          <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<NumberSeriesPage mode="edit" />} />
-          <Route path="/dashboard/settings/number-series/:seriesId" element={<NumberSeriesPage mode="detail" />} />
+          <Route path="/dashboard/settings/number-series" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="dashboard" /></Suspense>} />
+          <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="edit" /></Suspense>} />
+          <Route path="/dashboard/settings/number-series/:seriesId" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="detail" /></Suspense>} />
         </Route>
 
         {/* Templates Management Module Routes */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="templates" />}>
-          <Route path="/dashboard/settings/templates" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/certificates/:id/edit" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/reports/:id/edit" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/letters/:id/edit" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/upload" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/add" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/:id/preview" element={<TemplatesPage />} />
+          <Route path="/dashboard/settings/templates" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/certificates/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/reports/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/letters/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/upload" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/add" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/:id/preview" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
         </Route>
 
         {/* Credentials Generator Module Routes */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="credentials" />}>
-          <Route path="/dashboard/settings/credentials" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/faculty" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/students" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/history" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/settings" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/faculty/generate" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/students/generate" element={<CredentialsGeneratorPage />} />
+          <Route path="/dashboard/settings/credentials" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/faculty" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/students" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/history" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/settings" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/faculty/generate" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/students/generate" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
         </Route>
 
         {/* Payroll (Finance) Canonical Routes */}

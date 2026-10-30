@@ -521,7 +521,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("student/{studentId}/yearly-overview")]
         [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         public async Task<IActionResult> GetStudentYearlyOverview([FromRoute] int studentId, [FromQuery] int academicYearId)
         {
@@ -629,7 +629,7 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(result);
         }
         [HttpGet("student/{studentId}/subjects")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
         [ParentStudentAuthorization]
         [ProducesResponseType(typeof(IEnumerable<SubjectWiseAttendanceResponse>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStudentSubjectAttendance([FromRoute] int studentId)
@@ -659,7 +659,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("student/{studentId}/daily-logs")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
         [ParentStudentAuthorization]
         [ProducesResponseType(typeof(IEnumerable<DailyPunchLogResponse>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStudentDailyPunchLogs([FromRoute] int studentId, [FromQuery] int month, [FromQuery] int year)

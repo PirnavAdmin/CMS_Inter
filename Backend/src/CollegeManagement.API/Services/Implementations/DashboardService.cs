@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -127,5 +127,28 @@ public class DashboardService : IDashboardService
         if (_cache == null) return await _repository.GetPrincipalDashboardAsync(boardId, academicYearId, targetDate, campusId, ct);
         string key = $"dashboard:principal:{academicYearId}:{boardId}:{campusId}:{targetDate:yyyyMMdd}";
         return await _cache.GetOrCreateAsync(key, () => _repository.GetPrincipalDashboardAsync(boardId, academicYearId, targetDate, campusId, ct), TimeSpan.FromSeconds(30));
+    }
+
+    public async Task<int> CreateNoticeAsync(CreateCampusNoticeRequest request, string publisherRole = "Principal", CancellationToken ct = default)
+    {
+        if (_cache != null)
+        {
+            _cache.RemoveByPrefix("dashboard:principal:");
+        }
+        return await _repository.CreateNoticeAsync(request, publisherRole, ct);
+    }
+
+    public async Task<IReadOnlyList<PrincipalNoticeDto>> GetNoticesAsync(int campusId, string? targetAudience = null, int limit = 10, CancellationToken ct = default)
+    {
+        return await _repository.GetNoticesAsync(campusId, targetAudience, limit, ct);
+    }
+
+    public Task InvalidateDashboardCacheAsync(int? campusId = null, CancellationToken ct = default)
+    {
+        if (_cache != null)
+        {
+            _cache.RemoveByPrefix("dashboard:");
+        }
+        return Task.CompletedTask;
     }
 }

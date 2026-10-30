@@ -15,6 +15,7 @@ import {
 import "@/modules/faculty/styles/FacultyPayslips.css";
 import { useTransportManagerSafe } from "../TransportManagerContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { getMyPayslips } from "@/api/payrollApi.js";
 import { getAuthUser, getAuthToken } from "@/modules/auth/authStorage.js";
 
 const getMonthLabel = (slip) => {
@@ -73,10 +74,9 @@ export default function TransportManagerPayslips() {
       profileData?.staffId ||
       a?.staffId ||
       profileData?.id ||
-      a?.id ||
-      1125
+      a?.id
     );
-    return id > 0 ? id : 1125;
+    return id > 0 ? id : null;
   }, [profileData]);
 
   const effectiveEmployeeId = useMemo(() => {
@@ -86,7 +86,7 @@ export default function TransportManagerPayslips() {
       a?.employeeId ||
       profileData?.empId ||
       a?.empId ||
-      "MNT0044"
+      ""
     ).trim();
   }, [profileData?.employeeId, profileData?.empId]);
 
@@ -94,44 +94,28 @@ export default function TransportManagerPayslips() {
     setLoading(true);
     setError(null);
     try {
-      let loaded = [];
-      try {
-        const params = {};
-        if (effectiveEmployeeId) params.search = effectiveEmployeeId;
-        if (profileData?.campusId) params.campusId = profileData.campusId;
+      const res = await getMyPayslips();
+      let list = Array.isArray(res) ? res : res?.items || res?.$values || [];
+      if (!Array.isArray(list)) list = [];
 
-        const res = await apiClient.get("/api/v1/Payroll/payslips", { params });
-        let raw = res?.data;
-        let list = Array.isArray(raw) ? raw : raw?.data || raw?.items || raw?.$values || [];
-        if (!Array.isArray(list)) list = [];
+      list.sort((a, b) => {
+        const yA = Number(a.payrollYear || 0);
+        const yB = Number(b.payrollYear || 0);
+        if (yA !== yB) return yB - yA;
+        const mA = Number(a.payrollMonth || 0);
+        const mB = Number(b.payrollMonth || 0);
+        return mB - mA;
+      });
 
-        if (effectiveStaffId || effectiveEmployeeId) {
-          list = list.filter((slip) => {
-            if (effectiveStaffId && String(slip.staffId) === String(effectiveStaffId)) return true;
-            if (
-              effectiveEmployeeId &&
-              String(slip.employeeId || "").trim().toLowerCase() === effectiveEmployeeId.toLowerCase()
-            ) {
-              return true;
-            }
-            return false;
-          });
-        }
-
-        loaded = list;
-      } catch (err) {
-        console.warn("Could not load backend payslips:", err);
-      }
-
-      setPayslipList(loaded);
+      setPayslipList(list);
     } catch (err) {
-      console.warn("Failed to load payslips:", err);
+      console.warn("Failed to load personal payslips:", err);
       setError("Failed to load personal payslips.");
       setPayslipList([]);
     } finally {
       setLoading(false);
     }
-  }, [effectiveEmployeeId, effectiveStaffId, profileData.campusId]);
+  }, []);
 
   useEffect(() => {
     fetchPayslips();

@@ -10,7 +10,8 @@ namespace DBTest
 {
     public static class TestAutoSchedule
     {
-        private const string ConnectionString = "Server=srv1061.hstgr.io;Port=3306;Database=u819242402_CLM_System;User=u819242402_CLM;Password=Clm@2026;SslMode=None;ConnectionTimeout=60;KeepAlive=5;ConvertZeroDateTime=True;Pooling=true;MinimumPoolSize=2;MaximumPoolSize=100;ConnectionLifeTime=300;ConnectionIdleTimeout=120;";
+        private static string ConnectionString => Environment.GetEnvironmentVariable("CMS_DB_CONNECTION") 
+            ?? "Server=localhost;Port=3306;Database=CollegeManagement;User=root;Password=;SslMode=None;";
 
         public static async Task RunAsync()
         {

@@ -4,11 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using AutoMapper;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Marks;
 using CollegeManagement.API.Exceptions;
-using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models;
+using CollegeManagement.API.Models.Enums;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -20,14 +19,12 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IMarksRepository _marksRepository;
         private readonly IMapper _mapper;
         private readonly ILogger<MarksService> _logger;
-        private readonly AppDbContext _context;
 
-        public MarksService(IMarksRepository marksRepository, IMapper mapper, ILogger<MarksService> logger, AppDbContext context)
+        public MarksService(IMarksRepository marksRepository, IMapper mapper, ILogger<MarksService> logger)
         {
-            _marksRepository = marksRepository;
-            _mapper = mapper;
-            _logger = logger;
-            _context = context;
+            _marksRepository = marksRepository ?? throw new ArgumentNullException(nameof(marksRepository));
+            _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public async Task<List<MarkResponseDto>> GetAllMarksAsync()
@@ -45,63 +42,32 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<MarkResponseDto> SaveMarkAsync(SaveMarkDto dto)
         {
-            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, dto.ExaminationId, dto.SubjectId);
-            var (maxMarks, defaultPass) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, dto.ExaminationId, dto.SubjectId);
-
             if (dto.PassingMarks <= 0)
             {
-                dto.PassingMarks = (int)defaultPass;
+                dto.PassingMarks = 35;
             }
 
             int finalScore;
-            if (isObjective)
+            if (dto.IsAbsent)
             {
-                // Objective examination: accept single objective score, ignore internal and practical marks
-                finalScore = dto.ObtainedMarks.HasValue
-                    ? dto.ObtainedMarks.Value
-                    : (dto.TotalMarks.HasValue ? dto.TotalMarks.Value : dto.TheoryMarks);
-
-                if (!dto.IsAbsent && maxMarks > 0 && finalScore > (int)maxMarks)
-                {
-                    throw new ValidationException($"Obtained marks ({finalScore}) cannot exceed configured maximum marks ({maxMarks}) for this objective examination subject.");
-                }
-
-                if (dto.IsAbsent)
-                {
-                    finalScore = 0;
-                }
-
-                dto.InternalMarks = 0;
-                dto.PracticalMarks = 0;
-                dto.TheoryMarks = finalScore;
-                dto.TotalMarks = finalScore;
-                dto.ObtainedMarks = finalScore;
+                finalScore = 0;
             }
             else
             {
-                // Regular examination: preserve internal, practical and theory marks
-                if (dto.IsAbsent)
-                {
-                    finalScore = 0;
-                }
-                else
-                {
-                    finalScore = dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks;
-                    if (maxMarks > 0 && finalScore > (int)maxMarks)
-                    {
-                        throw new ValidationException($"Total marks ({finalScore}) cannot exceed configured maximum marks ({maxMarks}).");
-                    }
-                }
-                dto.TotalMarks = finalScore;
-                dto.ObtainedMarks = finalScore;
+                finalScore = dto.ObtainedMarks.HasValue
+                    ? dto.ObtainedMarks.Value
+                    : (dto.TotalMarks.HasValue ? dto.TotalMarks.Value : (dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks));
             }
+
+            dto.TotalMarks = finalScore;
+            dto.ObtainedMarks = finalScore;
 
             var existing = await _marksRepository.GetByExamSubjectStudentAsync(dto.ExaminationId, dto.SubjectId, dto.StudentId);
             if (existing != null)
             {
-                existing.InternalMarks = dto.InternalMarks;
-                existing.PracticalMarks = dto.PracticalMarks;
-                existing.TheoryMarks = dto.TheoryMarks;
+                existing.InternalMarks = dto.IsAbsent ? 0 : dto.InternalMarks;
+                existing.PracticalMarks = dto.IsAbsent ? 0 : dto.PracticalMarks;
+                existing.TheoryMarks = dto.IsAbsent ? 0 : dto.TheoryMarks;
                 existing.TotalMarks = finalScore;
                 if (dto.PassingMarks > 0)
                 {
@@ -149,15 +115,16 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     existing.StudentName = dto.StudentName;
                 }
-                existing.IsActive = true;
                 existing.UpdatedAt = DateTime.UtcNow;
 
                 var updated = await _marksRepository.UpdateAsync(existing);
-                return _mapper.Map<MarkResponseDto>(updated ?? existing);
+                return _mapper.Map<MarkResponseDto>(updated);
             }
             else
             {
                 var markEntity = _mapper.Map<Mark>(dto);
+                markEntity.CreatedAt = DateTime.UtcNow;
+                markEntity.UpdatedAt = DateTime.UtcNow;
                 var created = await _marksRepository.CreateAsync(markEntity);
                 if (created == null) throw new ValidationException("Failed to save mark entry.");
                 return _mapper.Map<MarkResponseDto>(created);
@@ -172,69 +139,55 @@ namespace CollegeManagement.API.Services.Implementations
                 return result;
             }
 
-            foreach (var item in dto.Marks)
+            var itemsToUpsert = dto.Marks.Select(item =>
             {
-                var saved = await SaveMarkAsync(item);
-                result.Add(saved);
-            }
-            return result;
+                int finalScore = item.IsAbsent ? 0 : (item.TotalMarks ?? (item.InternalMarks + item.PracticalMarks + item.TheoryMarks));
+                return new
+                {
+                    campusId = item.CampusId ?? 1,
+                    board = item.Board ?? string.Empty,
+                    boardId = item.BoardId,
+                    academicYearId = item.AcademicYearId,
+                    academicLevel = item.AcademicLevel ?? string.Empty,
+                    academicLevelId = item.AcademicLevelId,
+                    groupId = item.GroupId,
+                    sectionId = item.SectionId,
+                    examinationId = item.ExaminationId,
+                    subjectId = item.SubjectId,
+                    studentId = item.StudentId,
+                    rollNo = item.RollNo ?? string.Empty,
+                    studentName = item.StudentName ?? string.Empty,
+                    facultyId = item.FacultyId,
+                    internalMarks = item.IsAbsent ? 0 : item.InternalMarks,
+                    practicalMarks = item.IsAbsent ? 0 : item.PracticalMarks,
+                    theoryMarks = item.IsAbsent ? 0 : item.TheoryMarks,
+                    totalMarks = finalScore,
+                    passingMarks = item.PassingMarks > 0 ? item.PassingMarks : 35,
+                    isAbsent = item.IsAbsent ? 1 : 0,
+                    remarks = item.Remarks ?? string.Empty,
+                    status = (int)EvaluationStatus.SUBMITTED
+                };
+            }).ToList();
+
+            var json = System.Text.Json.JsonSerializer.Serialize(itemsToUpsert);
+            await _marksRepository.BulkUpsertMarksAsync(json, 0, null);
+
+            return _mapper.Map<List<MarkResponseDto>>(dto.Marks);
         }
 
         public async Task<MarkResponseDto> UpdateMarkAsync(int id, UpdateMarkDto dto)
         {
             var existing = await _marksRepository.GetByIdAsync(id);
             if (existing == null) throw new NotFoundException($"Mark record with ID {id} not found.");
-            if (existing.IsLocked || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED) throw new ConflictException("Cannot edit approved or locked marks.");
+            if (existing.IsLocked || existing.Status == EvaluationStatus.APPROVED) throw new ConflictException("Cannot edit approved or locked marks.");
 
-            var isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, existing.ExaminationId, existing.SubjectId);
-            var (maxMarks, _) = await ExaminationFormatHelper.ResolveSubjectMarksLimitsAsync(_context, existing.ExaminationId, existing.SubjectId);
-
-            int finalScore;
-            if (isObjective)
-            {
-                finalScore = dto.ObtainedMarks.HasValue
-                    ? dto.ObtainedMarks.Value
-                    : (dto.TotalMarks.HasValue ? dto.TotalMarks.Value : dto.TheoryMarks);
-
-                if (!dto.IsAbsent && maxMarks > 0 && finalScore > (int)maxMarks)
-                {
-                    throw new ValidationException($"Obtained marks ({finalScore}) cannot exceed configured maximum marks ({maxMarks}) for this objective examination subject.");
-                }
-
-                if (dto.IsAbsent)
-                {
-                    finalScore = 0;
-                }
-
-                dto.InternalMarks = 0;
-                dto.PracticalMarks = 0;
-                dto.TheoryMarks = finalScore;
-                dto.TotalMarks = finalScore;
-                dto.ObtainedMarks = finalScore;
-            }
-            else
-            {
-                if (dto.IsAbsent)
-                {
-                    finalScore = 0;
-                }
-                else
-                {
-                    finalScore = dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks;
-                    if (maxMarks > 0 && finalScore > (int)maxMarks)
-                    {
-                        throw new ValidationException($"Total marks ({finalScore}) cannot exceed configured maximum marks ({maxMarks}).");
-                    }
-                }
-                dto.TotalMarks = finalScore;
-                dto.ObtainedMarks = finalScore;
-            }
+            int finalScore = dto.IsAbsent ? 0 : (dto.TotalMarks ?? (dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks));
 
             _mapper.Map(dto, existing);
             existing.TotalMarks = finalScore;
-            existing.InternalMarks = dto.InternalMarks;
-            existing.PracticalMarks = dto.PracticalMarks;
-            existing.TheoryMarks = dto.TheoryMarks;
+            existing.InternalMarks = dto.IsAbsent ? 0 : dto.InternalMarks;
+            existing.PracticalMarks = dto.IsAbsent ? 0 : dto.PracticalMarks;
+            existing.TheoryMarks = dto.IsAbsent ? 0 : dto.TheoryMarks;
             existing.IsAbsent = dto.IsAbsent;
             existing.UpdatedAt = DateTime.UtcNow;
 
@@ -246,7 +199,7 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var existing = await _marksRepository.GetByIdAsync(id);
             if (existing == null) throw new NotFoundException($"Mark record with ID {id} not found.");
-            if (existing.IsLocked || existing.Status == CollegeManagement.API.Models.Enums.EvaluationStatus.APPROVED) throw new ConflictException("Cannot delete approved or locked marks.");
+            if (existing.IsLocked || existing.Status == EvaluationStatus.APPROVED) throw new ConflictException("Cannot delete approved or locked marks.");
             return await _marksRepository.DeleteAsync(id);
         }
 
@@ -293,7 +246,6 @@ namespace CollegeManagement.API.Services.Implementations
             var pending = total - verified;
             var passed = marksList.Count(m => m.TotalMarks >= m.PassingMarks);
 
-            // Clean LINQ Aggregations without Delegate Type Inference Ambiguity
             double avgMarks = marksList.Average(m => (double)m.TotalMarks);
 
             return new MarksSummaryDto

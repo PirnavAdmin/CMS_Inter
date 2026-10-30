@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -88,6 +88,63 @@ public class DashboardController : ControllerBase
         int effectiveCampusId = campusCheck.EffectiveCampusId ?? (_campusAuthService != null ? await _campusAuthService.GetDefaultCampusIdAsync(ct) : 1);
         var result = await _dashboardService.GetPrincipalDashboardAsync(academicYearId, boardId, date, effectiveCampusId, ct);
         return Ok(result);
+    }
+
+    // =========================================================================
+    // 0.1. CAMPUS NOTICES & CIRCULARS
+    // =========================================================================
+    /// <summary>
+    /// POST /api/v1/dashboard/notices
+    /// Creates a persistent campus notice/circular published by the Principal or Admin.
+    /// </summary>
+    [HttpPost("notices")]
+    [Authorize(Roles = "Principal,Super Admin,Admin")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> CreateNotice(
+        [FromBody] CreateCampusNoticeRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Content))
+        {
+            return BadRequest(new { success = false, message = "Notice title and content are required." });
+        }
+
+        var campusCheck = await ValidateAndResolveCampusAsync(request.CampusId, ct);
+        if (!campusCheck.Success) return campusCheck.ErrorResult!;
+
+        request.CampusId = campusCheck.EffectiveCampusId ?? (_campusAuthService != null ? await _campusAuthService.GetDefaultCampusIdAsync(ct) : 1);
+        string publisherRole = User.IsInRole("Principal") ? "Principal" : "Admin";
+
+        int noticeId = await _dashboardService.CreateNoticeAsync(request, publisherRole, ct);
+        return StatusCode(StatusCodes.Status201Created, new
+        {
+            success = true,
+            noticeId,
+            message = "Notice successfully published and saved."
+        });
+    }
+
+    /// <summary>
+    /// GET /api/v1/dashboard/notices
+    /// Retrieves active campus notices/circulars.
+    /// </summary>
+    [HttpGet("notices")]
+    [Authorize]
+    [ProducesResponseType(typeof(IReadOnlyList<PrincipalNoticeDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetNotices(
+        [FromQuery] int? campusId = null,
+        [FromQuery] string? targetAudience = null,
+        [FromQuery] int limit = 10,
+        CancellationToken ct = default)
+    {
+        var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
+        if (!campusCheck.Success) return campusCheck.ErrorResult!;
+
+        int effectiveCampusId = campusCheck.EffectiveCampusId ?? (_campusAuthService != null ? await _campusAuthService.GetDefaultCampusIdAsync(ct) : 1);
+        var notices = await _dashboardService.GetNoticesAsync(effectiveCampusId, targetAudience, limit, ct);
+        return Ok(notices);
     }
 
     // =========================================================================
@@ -417,6 +474,16 @@ public class DashboardController : ControllerBase
         return Ok(result);
     }
 
+    [Authorize(Roles = "SuperAdmin,Admin")]
+    [HttpPost("cache/invalidate")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> InvalidateCache([FromQuery] int? campusId = null, CancellationToken ct = default)
+    {
+        await _dashboardService.InvalidateDashboardCacheAsync(campusId, ct);
+        return Ok(new { Message = "Dashboard cache successfully invalidated." });
+    }
+
+    [Authorize(Roles = "SuperAdmin,Admin")]
     [HttpGet("test-verify-all")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

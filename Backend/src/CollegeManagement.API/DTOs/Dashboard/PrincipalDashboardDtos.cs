@@ -66,6 +66,50 @@ public class PrincipalDashboardResponseDto
 
     /// <summary>Campus circulars, holiday notices, and exam announcements.</summary>
     public List<PrincipalNoticeDto> Notices { get; set; } = new();
+
+    /// <summary>Summary fee collection and outstanding metrics for this campus.</summary>
+    public PrincipalFeeSummaryDto Fees { get; set; } = new();
+
+    /// <summary>Upcoming examination list for the campus.</summary>
+    public List<DashboardUpcomingExaminationDto> UpcomingExaminations { get; set; } = new();
+}
+
+/// <summary>
+/// Summary fee metrics and daily trend chart for the principal dashboard.
+/// </summary>
+public class PrincipalFeeSummaryDto
+{
+    public decimal Collected { get; set; }
+    public decimal TotalCollected => Collected;
+    public decimal Pending { get; set; }
+    public decimal TotalOutstanding => Pending;
+    public decimal CollectionRate { get; set; }
+    public decimal CollectionPercentage => CollectionRate;
+    public List<PrincipalDailyFeeCollectionDto> Chart { get; set; } = new();
+}
+
+/// <summary>
+/// Single day fee collection item for bar chart visualization.
+/// </summary>
+public class PrincipalDailyFeeCollectionDto
+{
+    public string Date { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public decimal Value { get; set; }
+}
+
+/// <summary>
+/// Request payload to create a new campus notice/circular from the principal office.
+/// </summary>
+public class CreateCampusNoticeRequest
+{
+    public string Title { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public string Category { get; set; } = "Administrative";
+    public string Priority { get; set; } = "Normal";
+    public string TargetAudience { get; set; } = "General / Campus-wide";
+    public string? Publisher { get; set; } = "Principal Office";
+    public int? CampusId { get; set; }
 }
 
 /// <summary>
@@ -91,4 +135,18 @@ public class PrincipalNoticeDto
     public string Date { get; set; } = string.Empty;
     public string Type { get; set; } = "Notice";
     public string Priority { get; set; } = "Normal";
+}
+/// <summary>
+/// Upcoming examination item for the Principal Dashboard.
+/// </summary>
+public class DashboardUpcomingExaminationDto
+{
+    public int Id { get; set; }
+    public string ExamName { get; set; } = string.Empty;
+    public string SubjectName { get; set; } = string.Empty;
+    public string Date { get; set; } = string.Empty;
+    public string FormattedDate { get; set; } = string.Empty;
+    public string GroupName { get; set; } = string.Empty;
+    public string Hall { get; set; } = "Main Hall";
+    public int StudentCount { get; set; }
 }

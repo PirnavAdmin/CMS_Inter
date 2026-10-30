@@ -172,13 +172,13 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             // If frontend passes { status: "Under Review", notes: "..." }, route to clarification request!
             if (string.Equals(request.Status, "Under Review", StringComparison.OrdinalIgnoreCase))
             {
-                var noteText = request.Notes ?? request.ReviewNotes;
+                var noteText = request.Notes ?? request.ReviewNotes ?? request.Remarks;
                 var clarSuccess = await _repository.RequestClarificationAsync(id, noteText, reviewedBy);
                 return (clarSuccess, null);
             }
 
             decimal approvedAmount = request.ApprovedAmount ?? existing.Amount;
-            var reviewNotes = request.ReviewNotes ?? request.Notes;
+            var reviewNotes = request.ReviewNotes ?? request.Remarks ?? request.AdminNotes ?? request.Notes;
             var verifyResult = await _repository.VerifyClaimAsync(id, approvedAmount, reviewNotes, reviewedBy);
             if (verifyResult.Success)
             {

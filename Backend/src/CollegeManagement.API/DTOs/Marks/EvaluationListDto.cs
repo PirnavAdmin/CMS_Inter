@@ -7,6 +7,8 @@ namespace CollegeManagement.API.DTOs.Evaluations
     {
         public string EvaluationId { get; set; } = string.Empty;
         public int EvaluationKey { get; set; }
+        public int ExaminationId { get; set; }
+        public int SectionId { get; set; }
         public int SubjectId { get; set; }
         public string BoardName { get; set; } = string.Empty;
         public string AcademicYear { get; set; } = string.Empty;

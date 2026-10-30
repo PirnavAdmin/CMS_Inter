@@ -1,17 +1,20 @@
+using System;
+using System.Data;
+using System.Security.Claims;
+using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Transport;
-using CollegeManagement.API.Models.Transport;
 using CollegeManagement.API.Services.Interfaces;
+using Dapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/transport/driver/settings")]
-    [Authorize(Roles = "Driver, Bus Driver")]
+    [Authorize(Roles = "Driver, Bus Driver, Super Admin, Admin")]
     public class TransportDriverSettingsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -43,34 +46,39 @@ namespace CollegeManagement.API.Controllers.V1
             var staffId = GetStaffId();
             if (staffId == null) return Unauthorized(new { success = false, message = "Staff ID not found in token." });
 
-            var staff = await _context.Staffs
-                .Include(s => s.DepartmentRef)
-                .Include(s => s.DesignationRef)
-                .FirstOrDefaultAsync(s => s.Id == staffId.Value);
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
 
-            if (staff == null) return NotFound(new { success = false, message = "Staff record not found." });
+            var driverData = await conn.QueryFirstOrDefaultAsync<dynamic>(
+                "sp_GetDriverSettings",
+                new { p_StaffId = staffId.Value },
+                commandType: CommandType.StoredProcedure);
 
-            var preferences = await _context.DriverPreferences
-                .FirstOrDefaultAsync(p => p.StaffId == staffId.Value);
+            if (driverData == null) return NotFound(new { success = false, message = "Staff record not found." });
+
+            string firstName = (string?)driverData.FirstName ?? string.Empty;
+            string lastName = (string?)driverData.LastName ?? string.Empty;
+            var fullName = $"{firstName} {lastName}".Trim();
+            if (string.IsNullOrWhiteSpace(fullName)) fullName = firstName;
 
             var response = new DriverSettingsResponseDto
             {
                 Profile = new DriverProfileSettingsDto
                 {
-                    FullName = staff.FirstName + (string.IsNullOrWhiteSpace(staff.LastName) ? "" : " " + staff.LastName),
-                    EmployeeId = staff.EmployeeId,
-                    Department = staff.DepartmentRef?.DepartmentName ?? "Not available",
-                    Designation = staff.DesignationRef?.DesignationName ?? staff.Designation,
-                    Mobile = staff.Mobile,
-                    PersonalEmail = staff.Email ?? "",
-                    Address = staff.CurrentAddress ?? ""
+                    FullName = fullName,
+                    EmployeeId = (string?)driverData.EmployeeId,
+                    Department = (string?)driverData.Department ?? "Not available",
+                    Designation = (string?)driverData.Designation ?? "Driver",
+                    Mobile = (string?)driverData.Mobile ?? string.Empty,
+                    PersonalEmail = (string?)driverData.Email ?? string.Empty,
+                    Address = (string?)driverData.CurrentAddress ?? string.Empty
                 },
                 Preferences = new DriverPreferencesDto
                 {
-                    EmailAttendanceAlerts = preferences?.EmailAttendanceAlerts ?? true,
-                    SmsUrgentAlerts = preferences?.SmsUrgentAlerts ?? false,
-                    TripReminders = preferences?.TripReminders ?? true,
-                    AutoLogoutMinutes = preferences?.AutoLogoutMinutes ?? 30
+                    EmailAttendanceAlerts = driverData.EmailAttendanceAlerts == null || Convert.ToBoolean(driverData.EmailAttendanceAlerts),
+                    SmsUrgentAlerts = driverData.SmsUrgentAlerts != null && Convert.ToBoolean(driverData.SmsUrgentAlerts),
+                    TripReminders = driverData.TripReminders == null || Convert.ToBoolean(driverData.TripReminders),
+                    AutoLogoutMinutes = driverData.AutoLogoutMinutes != null ? Convert.ToInt32(driverData.AutoLogoutMinutes) : 30
                 }
             };
 
@@ -85,19 +93,26 @@ namespace CollegeManagement.API.Controllers.V1
             var staffId = GetStaffId();
             if (staffId == null) return Unauthorized(new { success = false, message = "Staff ID not found in token." });
 
-            var staff = await _context.Staffs.FirstOrDefaultAsync(s => s.Id == staffId.Value);
-            if (staff == null) return NotFound(new { success = false, message = "Staff record not found." });
+            var trimmedName = request.FullName.Trim();
+            var nameParts = trimmedName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            var firstName = nameParts.Length > 0 ? nameParts[0] : trimmedName;
+            var lastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
 
-            // Since FullName is provided as a single string, we split it for FirstName and LastName
-            var nameParts = request.FullName.Split(' ', 2);
-            staff.FirstName = nameParts[0];
-            staff.LastName = nameParts.Length > 1 ? nameParts[1] : "";
-            staff.Mobile = request.Mobile;
-            staff.Email = request.PersonalEmail;
-            staff.CurrentAddress = request.Address;
-            staff.UpdatedAt = DateTime.UtcNow;
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
 
-            await _context.SaveChangesAsync();
+            await conn.ExecuteAsync(
+                "sp_UpdateDriverSettingsProfile",
+                new
+                {
+                    p_StaffId = staffId.Value,
+                    p_FirstName = firstName,
+                    p_LastName = lastName,
+                    p_Mobile = request.Mobile.Trim(),
+                    p_PersonalEmail = request.PersonalEmail.Trim(),
+                    p_Address = request.Address?.Trim()
+                },
+                commandType: CommandType.StoredProcedure);
 
             return Ok(new { success = true, message = "Profile updated successfully." });
         }
@@ -107,40 +122,23 @@ namespace CollegeManagement.API.Controllers.V1
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            if (request.AutoLogoutMinutes != 15 && request.AutoLogoutMinutes != 30 && request.AutoLogoutMinutes != 60)
-            {
-                return BadRequest(new { success = false, message = "AutoLogoutMinutes must be 15, 30, or 60." });
-            }
-
             var staffId = GetStaffId();
             if (staffId == null) return Unauthorized(new { success = false, message = "Staff ID not found in token." });
 
-            var preference = await _context.DriverPreferences.FirstOrDefaultAsync(p => p.StaffId == staffId.Value);
-            
-            if (preference == null)
-            {
-                preference = new DriverPreference
-                {
-                    StaffId = staffId.Value,
-                    EmailAttendanceAlerts = request.EmailAttendanceAlerts,
-                    SmsUrgentAlerts = request.SmsUrgentAlerts,
-                    TripReminders = request.TripReminders,
-                    AutoLogoutMinutes = request.AutoLogoutMinutes,
-                    CreatedAtUtc = DateTime.UtcNow,
-                    UpdatedAtUtc = DateTime.UtcNow
-                };
-                _context.DriverPreferences.Add(preference);
-            }
-            else
-            {
-                preference.EmailAttendanceAlerts = request.EmailAttendanceAlerts;
-                preference.SmsUrgentAlerts = request.SmsUrgentAlerts;
-                preference.TripReminders = request.TripReminders;
-                preference.AutoLogoutMinutes = request.AutoLogoutMinutes;
-                preference.UpdatedAtUtc = DateTime.UtcNow;
-            }
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
 
-            await _context.SaveChangesAsync();
+            await conn.ExecuteAsync(
+                "sp_UpdateDriverSettingsPreferences",
+                new
+                {
+                    p_StaffId = staffId.Value,
+                    p_EmailAttendanceAlerts = request.EmailAttendanceAlerts ? (byte)1 : (byte)0,
+                    p_SmsUrgentAlerts = request.SmsUrgentAlerts ? (byte)1 : (byte)0,
+                    p_TripReminders = request.TripReminders ? (byte)1 : (byte)0,
+                    p_AutoLogoutMinutes = request.AutoLogoutMinutes
+                },
+                commandType: CommandType.StoredProcedure);
 
             return Ok(new { success = true, message = "Preferences updated successfully." });
         }
@@ -153,14 +151,14 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = GetUserId();
             if (userId == null) return Unauthorized(new { success = false, message = "User ID not found in token." });
 
-            var result = await _authService.ChangePasswordAsync(userId.Value, request.CurrentPassword, request.NewPassword, request.ConfirmPassword);
-            
-            if (result.Success)
+            var (success, message) = await _authService.ChangePasswordAsync(userId.Value, request.CurrentPassword, request.NewPassword, request.ConfirmPassword);
+
+            if (!success)
             {
-                return Ok(new { success = true, message = "Password changed successfully. Please log in again if required." });
+                return BadRequest(new { success = false, message });
             }
-            
-            return BadRequest(new { success = false, message = result.Message });
+
+            return Ok(new { success = true, message });
         }
     }
 }
