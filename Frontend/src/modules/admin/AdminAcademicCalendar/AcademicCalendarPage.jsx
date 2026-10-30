@@ -336,7 +336,7 @@ function AcademicCalendarEventForm({ event, defaults, onClose, onSave, eventType
       {select('type', 'Event Type *', [...Object.entries(eventTypes).map(([id, type]) => ({ id, name: type.label })), { id: 'other', name: 'Other' }], false, 'Select event type')}
       {select('status', 'Status', CALENDAR_STATUSES.map((id) => ({ id, name: id })), false, 'Select status')}
       {values.type === 'other' && <label className="cms-field is-wide custom-event-type-field"><span>Enter Event Type *</span><input name="customType" value={values.customType || ''} placeholder="e.g., Sports Activities, Workshop, Seminar" required aria-invalid={Boolean(errors.customType)} aria-describedby={errors.customType ? 'event-error-customType' : undefined} onChange={(e) => change('customType', e.target.value)} /><small className="cms-error" id="event-error-customType">{errors.customType}</small></label>}
-      <label className="cms-field is-wide"><span>Description</span><textarea value={values.description} onChange={(e) => change('description', e.target.value)} rows={3} /></label>
+      <label className="cms-field is-wide"><span>Description</span><textarea value={values.description ?? ""} onChange={(e) => change('description', e.target.value)} rows={3} /></label>
       {field('start', 'Start Date', 'date', true)}{field('end', 'End Date', 'date', true)}
       <label className="academic-calendar-checkbox is-wide"><input type="checkbox" checked={values.allDay} onChange={(e) => change('allDay', e.target.checked)} />All day</label>
       {!values.allDay && <>{field('startTime', 'Start Time', 'time', true)}{field('endTime', 'End Time', 'time', true)}</>}
