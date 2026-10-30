@@ -112,8 +112,16 @@ export function useCampusImages() {
       const current = ++requestId;
       try {
         const images = await readCampusImages(selectedCampusId);
-        if (active && current === requestId) setSaved({ campusId: selectedCampusId, images });
-      } catch { if (active && current === requestId) setSaved({ campusId: selectedCampusId, images: {} }); }
+        if (active && current === requestId) setSaved((previous) => {
+          const keys = Object.keys(images);
+          if (previous.campusId === selectedCampusId && keys.length === Object.keys(previous.images).length
+            && keys.every((key) => Object.hasOwn(previous.images, key) && Object.is(previous.images[key], images[key]))) return previous;
+          return { campusId: selectedCampusId, images };
+        });
+      } catch {
+        // A failed refresh must not temporarily replace saved branding with defaults.
+        if (active && current === requestId) setSaved((previous) => previous.campusId === selectedCampusId ? previous : { campusId: selectedCampusId, images: {} });
+      }
     };
     const onStorage = (event) => { if (event.key === "cms-campus-images-revision") load(); };
     load();
