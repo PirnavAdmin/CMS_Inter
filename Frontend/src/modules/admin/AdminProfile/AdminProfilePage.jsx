@@ -78,10 +78,25 @@ export default function AdminProfilePage() {
     const initialCampus = savedProfile?.campus || "Main Campus";
     const initialRole = savedProfile?.role || authUser?.role || "Admin";
     const rawInitialPhoto = savedProfile?.photo || authUser?.photoUrl || authUser?.photoPath || authUser?.photo || null;
-    let initialPhoto = rawInitialPhoto;
-    if (rawInitialPhoto && typeof rawInitialPhoto === "string" && !rawInitialPhoto.startsWith("http") && !rawInitialPhoto.startsWith("data:") && !rawInitialPhoto.startsWith("blob:")) {
-      const apiBase = (env?.apiBaseUrl || "http://localhost:5167").replace(/\/$/, "");
-      initialPhoto = `${apiBase}${rawInitialPhoto.startsWith("/") ? "" : "/"}${rawInitialPhoto}`;
+    let initialPhoto = null;
+    const isTestPhoto = (url) => {
+      if (!url || typeof url !== "string") return true;
+      const lower = url.toLowerCase().trim();
+      return (
+        lower.includes("admin_photo_1_test") ||
+        lower.includes("photo_1_test") ||
+        lower.endsWith("_test.png") ||
+        lower.endsWith("_test.jpg") ||
+        lower.includes("/test.png")
+      );
+    };
+    if (rawInitialPhoto && !isTestPhoto(rawInitialPhoto)) {
+      if (rawInitialPhoto.startsWith("http") || rawInitialPhoto.startsWith("data:") || rawInitialPhoto.startsWith("blob:")) {
+        initialPhoto = rawInitialPhoto;
+      } else {
+        const apiBase = (env?.apiBaseUrl || "http://localhost:5167").replace(/\/$/, "");
+        initialPhoto = `${apiBase}${rawInitialPhoto.startsWith("/") ? "" : "/"}${rawInitialPhoto}`;
+      }
     }
 
     setFullName(initialName);
@@ -320,7 +335,7 @@ export default function AdminProfilePage() {
                 <div className="admin-photo-content">
                   <div className="admin-avatar-wrapper">
                     {profilePhoto ? (
-                      <img src={profilePhoto} alt="Admin Profile" className="admin-avatar-img" />
+                      <img src={profilePhoto} alt="Admin Profile" className="admin-avatar-img" onError={() => setProfilePhoto(null)} />
                     ) : (
                       <div className="admin-avatar-placeholder">
                         <User size={34} />

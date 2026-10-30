@@ -1,3 +1,4 @@
+import { Skeleton } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -391,7 +392,24 @@ const periodsWithConfiguredBreaks = (periods, structurePayload) => {
   });
   return periods.flatMap((period, index) => [period, ...(breaksByPosition.get(index + 1) ?? [])]);
 };
-function Page({ title, subtitle, action, pageClassName = "", children }) {
+function TimetableWorkspaceNav({ context, onOpenGenerated, opening }) {
+  const location = useLocation();
+  return (
+    <nav className="ttm-workspace-nav" aria-label="Timetable workspace">
+      {[
+        ["/dashboard/timetable", "Overview"],
+        ["/dashboard/timetable/setup", "Period Structures"],
+        ["/dashboard/timetable/generate", "Generate Timetable"],
+        ["/dashboard/timetable/draft", "Generated Timetable"],
+      ].map(([path, label]) => onOpenGenerated && path.endsWith("/draft") ? (
+        <button key={path} type="button" disabled={opening || !context?.sectionId} onClick={onOpenGenerated}>{opening ? "Opening…" : label}</button>
+      ) : (
+        <Link key={path} to={timetableContextUrl(path, context, location.search)} state={{ timetableContext: context }} aria-current={location.pathname === path ? "page" : undefined}>{label}</Link>
+      ))}
+    </nav>
+  );
+}
+function Page({ title, subtitle, action, pageClassName = "", context, onOpenGenerated, opening, children }) {
   return (
     <DashboardLayout
       title={title}
@@ -399,7 +417,10 @@ function Page({ title, subtitle, action, pageClassName = "", children }) {
       breadcrumb={["Operations", "TimeTable"]}
       actions={action}
     >
-      <main className={`ttm-page${pageClassName ? ` ${pageClassName}` : ""}`}>{children}</main>
+      <main className={`ttm-page${pageClassName ? ` ${pageClassName}` : ""}`}>
+        <TimetableWorkspaceNav context={context} onOpenGenerated={onOpenGenerated} opening={opening} />
+        {children}
+      </main>
     </DashboardLayout>
   );
 }
@@ -408,32 +429,6 @@ function Btn({ children, className = "cms-btn cms-btn-primary", ...props }) {
     <button type="button" className={className} {...props}>
       {children}
     </button>
-  );
-}
-function TimetableViewTabs({ context, opening = false, onOpenGenerated }) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const generatedActive = location.pathname === "/dashboard/timetable/draft";
-  const completeContext = [context?.campusId, context?.boardId, context?.academicYearId, context?.academicLevelId, context?.groupId, context?.programId, context?.sectionId].every(Boolean);
-  return (
-    <div className="ttm-view-tabs" role="group" aria-label="Timetable view actions">
-      <Btn
-        className={`ttm-view-tab${generatedActive ? "" : " is-active"}`}
-        aria-pressed={!generatedActive}
-        disabled={!completeContext || generatedActive}
-        onClick={() => navigate(timetableContextUrl("/dashboard/timetable/setup", context, location.search), { state: { timetableContext: context } })}
-      >
-        Create Timetable
-      </Btn>
-      <Btn
-        className={`ttm-view-tab${generatedActive ? " is-active" : ""}`}
-        aria-pressed={generatedActive}
-        disabled={!completeContext || opening || generatedActive}
-        onClick={onOpenGenerated}
-      >
-        {opening && !generatedActive ? "Opening…" : "Generated Timetable"}
-      </Btn>
-    </div>
   );
 }
 function Field({ label, children }) {
@@ -1385,6 +1380,7 @@ function Structures({ notify, initial }) {
   return (
     <Page
   title="Period Structures"
+  context={initial}
   subtitle="Manage reusable schedules for groups."
 >
   <div className="ttm-period-structure-toolbar">
@@ -1482,7 +1478,7 @@ function Structures({ notify, initial }) {
         </div>,
         document.body,
       ) : null}
-      {modal && !item && (modal !== "form" || selectedStructureId) && <Modal title={modal === "form" ? "Edit Period Structure" : modal === "preview" ? "Period Structure Preview" : modal === "assign" ? "Assign Period Structure" : "Delete Period Structure"} onClose={() => setModal(null)}><div className="ttm-modal-body"><p role={loading ? "status" : "alert"}>{loading ? "Loading period structure..." : "This period structure is unavailable."}</p></div></Modal>}
+      {modal && !item && (modal !== "form" || selectedStructureId) && <Modal title={modal === "form" ? "Edit Period Structure" : modal === "preview" ? "Period Structure Preview" : modal === "assign" ? "Assign Period Structure" : "Delete Period Structure"} onClose={() => setModal(null)}><div className="ttm-modal-body"><p role={loading ? "status" : "alert"}>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "This period structure is unavailable."}</p></div></Modal>}
       {modal === "form" && (!selectedStructureId || item) && (
         <StructureForm
           item={item}
@@ -1741,6 +1737,7 @@ function Generate({ goDraft, notify, initial }) {
   return (
     <Page
       title="Generate Timetable"
+      context={value}
       subtitle="Generate a conflict-free theory timetable in DRAFT state."
       action={<div className="ttm-page-actions"><Link className="cms-btn cms-btn-ghost" to={timetableContextUrl("/dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Create Period Structure</Link></div>}
     >
@@ -2490,6 +2487,7 @@ function Draft({ initial, notify }) {
   return (
     <Page
       title="Generated Draft Grid"
+      context={value}
       subtitle="Review, validate, approve and publish the section timetable."
       pageClassName="ttm-draft-page"
     >
@@ -2749,8 +2747,8 @@ function Draft({ initial, notify }) {
           </div>
         </Modal>
       )}
-      {draftDialog === "slot" && !editing && <Modal title="Timetable Slot" onClose={() => setEditing(null)}><div className="ttm-modal-body"><p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot..."}</p></div></Modal>}
-      {draftDialog === "slot-details" && !pinnedSlot && <Modal title="Timetable Slot Details" onClose={() => navigateDraftDialog(null)}><div className="ttm-modal-body"><p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot details..."}</p></div></Modal>}
+      {draftDialog === "slot" && !editing && <Modal title="Timetable Slot" onClose={() => setEditing(null)}><div className="ttm-modal-body">{slotLoadError ? <p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot..."}</p> : <SkeletonPage variant="form" rows={4} />}</div></Modal>}
+      {draftDialog === "slot-details" && !pinnedSlot && <Modal title="Timetable Slot Details" onClose={() => navigateDraftDialog(null)}><div className="ttm-modal-body">{slotLoadError ? <p role={slotLoadError ? "alert" : "status"}>{slotLoadError || "Loading timetable slot details..."}</p> : <SkeletonPage variant="form" rows={4} />}</div></Modal>}
       {editing && (
         <SlotEditor
           context={value}
@@ -2862,12 +2860,41 @@ function MainTimetable({ notify }) {
     }
   };
   return (
-    <Page title="Timetable" subtitle="Choose a timetable context to create or view a generated timetable.">
+    <Page title="Timetable Management" subtitle="Create, organize, and manage academic schedules." context={value} onOpenGenerated={openGenerated} opening={opening}>
       <section className="ttm-card">
         <div className="ttm-main-row">
           <Context state={state} hideGlobalContext />
-          <TimetableViewTabs context={value} opening={opening} onOpenGenerated={openGenerated} />
         </div>
+      </section>
+      <div className="ttm-overview-cards">
+        <article className="ttm-overview-card">
+          <CalendarDays size={24} aria-hidden="true" />
+          <h2>Period Structures</h2>
+          <p>Organize teaching periods, timings and breaks in reusable day structures.</p>
+          <Link to={timetableContextUrl("/dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Manage structures →</Link>
+        </article>
+        <article className="ttm-overview-card">
+          <UsersRound size={24} aria-hidden="true" />
+          <h2>Timetable Setup</h2>
+          <dl>{[["Academic level", "academicLevelId", state.data.levels], ["Group", "groupId", state.data.groups], ["Programme", "programId", state.data.programs], ["Section", "sectionId", state.data.sections]].map(([label, key, rows]) => <div key={key}><dt>{label}</dt><dd>{rows.find((row) => String(row.id) === String(value[key]))?.name || "Not selected"}</dd></div>)}</dl>
+          <Link to={timetableContextUrl("/dashboard/timetable/generate", value, location.search)} state={{ timetableContext: value }}>Configure timetable →</Link>
+        </article>
+        <article className="ttm-overview-card">
+          <Eye size={24} aria-hidden="true" />
+          <h2>Generated Timetable</h2>
+          <p>Open the latest saved timetable for your selected academic context.</p>
+          <button type="button" disabled={!completeContext || opening} onClick={openGenerated}>{opening ? "Opening…" : "View timetable →"}</button>
+        </article>
+        <article className="ttm-overview-card">
+          <FileText size={24} aria-hidden="true" />
+          <h2>Workflow Status</h2>
+          <p>Open a generated timetable to review its saved validation, approval and publication state.</p>
+          <small>Status is available in the timetable workspace.</small>
+        </article>
+      </div>
+      <section className="ttm-workflow-guide" aria-label="Timetable workflow guide">
+        <header><h2>Your scheduling workflow</h2><p>From daily structure to a published academic schedule.</p></header>
+        <ol>{["Period Structure", "Generate Timetable", "Validate", "Approve", "Publish"].map((step, index) => <li key={step}><span>{index + 1}</span>{step}</li>)}</ol>
       </section>
     </Page>
   );

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   ListTodo,
   Plus,
@@ -12,11 +13,18 @@ import {
 import { nonTeachingService } from "../services/nonTeachingService.js";
 
 export default function NonTeachingTasks() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const statusParam = searchParams.get("status") || "all";
+  const priorityParam = searchParams.get("priority") || "all";
+  const searchParam = searchParams.get("search") || "";
+  const cardParam = searchParams.get("card");
+
   const [tasks, setTasks] = useState(() => nonTeachingService.getTasks());
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [statusFilter, setStatusFilter] = useState(statusParam);
+  const [priorityFilter, setPriorityFilter] = useState(priorityParam);
+  const [searchQuery, setSearchQuery] = useState(searchParam);
+  const [showAddModal, setShowAddModal] = useState(() => cardParam === "add-task" || cardParam === "add");
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -25,6 +33,69 @@ export default function NonTeachingTasks() {
     dueDate: new Date(Date.now() + 86400000 * 2).toISOString().split("T")[0],
   });
   const [toastMessage, setToastMessage] = useState(null);
+
+  useEffect(() => {
+    const st = searchParams.get("status") || "all";
+    if (st !== statusFilter) setStatusFilter(st);
+
+    const pr = searchParams.get("priority") || "all";
+    if (pr !== priorityFilter) setPriorityFilter(pr);
+
+    const q = searchParams.get("search") || "";
+    if (q !== searchQuery) setSearchQuery(q);
+
+    const card = searchParams.get("card");
+    const shouldOpen = card === "add-task" || card === "add";
+    if (shouldOpen !== showAddModal) setShowAddModal(shouldOpen);
+  }, [searchParams]);
+
+  const handleStatusFilterChange = (st) => {
+    setStatusFilter(st);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (st && st !== "all") next.set("status", st);
+      else next.delete("status");
+      return next;
+    });
+  };
+
+  const handlePriorityFilterChange = (pr) => {
+    setPriorityFilter(pr);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (pr && pr !== "all") next.set("priority", pr);
+      else next.delete("priority");
+      return next;
+    });
+  };
+
+  const handleSearchChange = (val) => {
+    setSearchQuery(val);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (val) next.set("search", val);
+      else next.delete("search");
+      return next;
+    });
+  };
+
+  const handleOpenAddModal = () => {
+    setShowAddModal(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("card", "add-task");
+      return next;
+    });
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddModal(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("card");
+      return next;
+    });
+  };
 
   const showToast = (text) => {
     setToastMessage(text);
@@ -76,7 +147,7 @@ export default function NonTeachingTasks() {
     }
     await nonTeachingService.addTask(newTask);
     setTasks(nonTeachingService.getTasks());
-    setShowAddModal(false);
+    handleCloseAddModal();
     setNewTask({
       title: "",
       description: "",
@@ -159,7 +230,7 @@ export default function NonTeachingTasks() {
                 key={st}
                 type="button"
                 className={`nts-tab-btn ${statusFilter === st ? "active" : ""}`}
-                onClick={() => setStatusFilter(st)}
+                onClick={() => handleStatusFilterChange(st)}
               >
                 {st === "all" ? "All" : st === "in-progress" ? "In Progress" : st.charAt(0).toUpperCase() + st.slice(1)}
               </button>
@@ -172,7 +243,7 @@ export default function NonTeachingTasks() {
               type="text"
               placeholder="Search tasks by title, category..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
 
@@ -187,7 +258,7 @@ export default function NonTeachingTasks() {
               fontSize: 12.5,
             }}
             value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
+            onChange={(e) => handlePriorityFilterChange(e.target.value)}
           >
             <option value="all">All Priorities</option>
             <option value="urgent">Urgent</option>
@@ -200,7 +271,7 @@ export default function NonTeachingTasks() {
         <button
           type="button"
           className="nts-refresh-btn"
-          onClick={() => setShowAddModal(true)}
+          onClick={handleOpenAddModal}
         >
           <Plus size={15} /> Add Task / Reminder
         </button>
@@ -268,7 +339,7 @@ export default function NonTeachingTasks() {
               <button
                 type="button"
                 className="nts-modal-close"
-                onClick={() => setShowAddModal(false)}
+                onClick={handleCloseAddModal}
               >
                 <X size={16} />
               </button>
@@ -345,7 +416,7 @@ export default function NonTeachingTasks() {
                 <button
                   type="button"
                   className="nts-action-btn"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={handleCloseAddModal}
                 >
                   Cancel
                 </button>

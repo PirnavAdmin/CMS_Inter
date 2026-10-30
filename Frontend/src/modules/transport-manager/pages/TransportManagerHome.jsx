@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import { useTransportNavigation, useTransportRecord } from "../TransportManagerContext.jsx";
+import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bus,
@@ -47,6 +48,7 @@ function TripStatusBadge({ status }) {
 }
 
 export default function TransportManagerHome() {
+  const navigation = useTransportNavigation();
   const navigate = useNavigate();
   const {
     vehicles,
@@ -63,7 +65,10 @@ export default function TransportManagerHome() {
     refreshAll,
   } = useTransportManager();
 
-  const [selectedTrip, setSelectedTrip] = useState(null);
+  const [selectedTrip, setSelectedTrip] = useTransportRecord(navigation, "tripId", trips.map(trip => {
+    const assignment = assignments.find(a => a.id === trip.assignmentId || a.vehicleNumber === trip.vehicleNumber || a.vehicleId === trip.vehicleId);
+    return { ...trip, vehicleNumber: trip.vehicleNumber || assignment?.vehicleNumber || "Vehicle", routeName: trip.routeName || assignment?.routeName || "Route", tripType: trip.tripType || (trip.startTime ? "Morning" : "Evening"), driverName: trip.driverName || assignment?.driverName || "-", attendantName: trip.attendantName || assignment?.attendantName || "-" };
+  }), trip => trip.id, !loading);
 
   // Date calculation helper
   const daysUntil = (dateString) => {

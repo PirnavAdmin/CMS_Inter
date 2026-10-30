@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import React, { useState, useEffect } from "react";
 import {
   Bus,
@@ -23,6 +24,7 @@ import { SkeletonPage } from "../../../shared/components/Ui.jsx";
 export default function DriverTripsPage({
   onNavigateTab,
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [morningTrip, setMorningTrip] = useState(null);
   const [eveningTrip, setEveningTrip] = useState(null);
   const [driverProfile, setDriverProfile] = useState(null);
@@ -218,6 +220,7 @@ export default function DriverTripsPage({
         </div>
       </div>
 
+      {searchParams.get("view") === "checklist" && ![morningTrip, eveningTrip].some((trip) => trip && String(trip.id) === searchParams.get("tripId") && ["Pending", "Not Started"].includes(trip.status)) && <div className="dp-card" role="alert"><p>This trip is unavailable or has already started.</p><button type="button" className="dp-btn dp-btn-outline" onClick={() => setSearchParams((previous) => { const next = new URLSearchParams(previous); next.delete("view"); next.delete("tripId"); return next; })}>Close</button></div>}
       {/* Trip Cards Grid */}
       <div className="dp-trips-deck-grid">
         {/* Morning Trip Card */}

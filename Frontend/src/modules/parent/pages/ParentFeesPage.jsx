@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Wallet, CreditCard, CheckCircle2, Download, Printer, Users, Eye, AlertCircle, Clock } from "lucide-react";
@@ -90,13 +91,7 @@ export default function ParentFeesPage() {
         breadcrumb={["Parent Portal", "Fees & Payments"]}
       >
         <div className="parent-dashboard-wrapper">
-          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
-            <Wallet size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Fee Account Details...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to campus finance ledger to retrieve pending fees and breakdown.
-            </p>
-          </div>
+          <SkeletonPage variant="dashboard" columns={4} />
         </div>
       </DashboardLayout>
     );

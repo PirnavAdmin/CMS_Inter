@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Eye, History, Pencil, Plus, Printer, RefreshCw, Trash2, WalletCards } from "lucide-react";
 import { ConfirmDialog, Modal } from "@/shared/components/Ui.jsx";
@@ -15,7 +16,7 @@ import { feeReceiptAccess, feeReceiptUnavailableReason, loadSavedFeePayment, loa
 import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../utils/feeViewData.js";
 import AccountantFeeOverview from "../components/AccountantFeeOverview.jsx";
 import AccountantFeeSetupModal from "../components/AccountantFeeSetupModal.jsx";
-import { FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "../components/AccountantUI.jsx";
+import { useAccountantViewParams, FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "../components/AccountantUI.jsx";
 import "@/modules/admin/AdminFees/FeeManagementPage.css";
 import "./AccountantFeeManagement.css";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
@@ -465,16 +466,25 @@ export function SavedPaymentReceipt({ payment, autoPrint = false, onClose }) {
     <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>{autoPrint && state.loading ? "Cancel" : "Close"}</button>
     {state.error ? <button type="button" className="cms-btn cms-btn-ghost" onClick={state.reload}>Retry</button> : null}
   </>;
-  const progress = permissions.loading ? <p role="status">Verifying receipt permission...</p> : state.error ? <FeeNotice error>{state.error}</FeeNotice> : <p role="status">{autoPrint ? "Preparing saved receipt for printing..." : "Loading saved receipt..."}</p>;
+  const progress = permissions.loading ? <SkeletonPage variant="form" rows={3} /> : state.error ? <FeeNotice error>{state.error}</FeeNotice> : <p role="status">{autoPrint ? "Preparing saved receipt for printing..." : "Loading saved receipt..."}</p>;
   if (autoPrint) return <div className="cms-alert accountant-receipt-print-status">{progress}{controls}</div>;
   return <Modal title="Payment Receipt" className="accountant-payment-receipt-modal" onClose={onClose} footer={controls}>{progress}</Modal>;
 }
 
 function FeeDetails({ row, onClose, collection = false, authorize = () => false, onCollected }) {
-  const [collecting, setCollecting] = useState(false);
-  const [receipt, setReceipt] = useState(null);
+  const { params: viewParams, setParam } = useAccountantViewParams();
+  const collecting = collection && viewParams.get("action") === "collect";
+  const setCollecting = (open) => setParam("action", open ? "collect" : null);
+  const [savedReceipt, setSavedReceipt] = useState(null);
+  const receiptId = viewParams.get("receiptId");
+  const receipt = savedReceipt && (!readFee(savedReceipt.payment, "feePaymentId") || String(readFee(savedReceipt.payment, "feePaymentId")) === receiptId) ? savedReceipt : null;
+  const setReceipt = (value) => { setSavedReceipt(value); setParam("receiptId", value ? readFee(value.payment, "feePaymentId") : null); };
   const [notice, setNotice] = useState("");
-  const [historicalReceipt, setHistoricalReceipt] = useState(null);
+  const [printSelection, setPrintSelection] = useState(null);
+  const setHistoricalReceipt = (selection) => {
+    setPrintSelection(selection?.autoPrint ? { ...selection, viewKey: viewParams.toString() } : null);
+    if (!selection?.autoPrint) setParam("receiptId", selection ? readFee(selection.payment, "feePaymentId") : null);
+  };
   const receiptPermissions = useEffectivePermissions();
   const canReadReceipt = feeReceiptAccess(receiptPermissions);
   const load = useCallback((signal) => collection ? loadCollectionDetails(row, signal) : loadLedgerDetails(row, signal), [row, collection]);
@@ -483,6 +493,8 @@ function FeeDetails({ row, onClose, collection = false, authorize = () => false,
   const loadHistory = useCallback(signal => state.loading || state.error || !state.data ? null
     : loadFeeAccountPayments(state.data, signal, () => canLoadHistory), [state.loading, state.error, state.data, canLoadHistory]);
   const historyState = useFinancePage(loadHistory);
+  const historicalPayment = receiptId == null ? null : (historyState.data || []).find((payment) => String(readFee(payment, "feePaymentId")) === receiptId);
+  const historicalReceipt = (printSelection?.viewKey === viewParams.toString() ? printSelection : null) || (!receipt && historicalPayment ? { payment: historicalPayment, autoPrint: false } : null);
   return <section className="cms-card cms-fee-account-screen accountant-student-fee-details">
     <header className="cms-card-head cms-fee-account-head">
       <div><h3>{!state.loading && !state.error && state.data ? feeText(state.data, "studentName") : "Student Fee Details"}</h3>
@@ -515,6 +527,7 @@ function FeeDetails({ row, onClose, collection = false, authorize = () => false,
       </> : null}
     </div>
     {collecting && state.data ? <CollectPayment account={state.data} authorize={authorize} onClose={needsRefresh => { setCollecting(false); if (needsRefresh) { state.reload(); onCollected?.(); } }} onSaved={saved => { setReceipt({ payment: saved, account: state.data }); setCollecting(false); setNotice(`Payment recorded. Receipt: ${readFee(saved, "receiptNumber") || "number unavailable"}.`); state.reload(); onCollected?.(); window.dispatchEvent(new Event("accountant-fees-updated")); }} /> : null}
+    {receiptId != null && !receipt && !historicalReceipt ? <Modal title="Payment Receipt" onClose={() => setHistoricalReceipt(null)}><p role="status">{state.loading || historyState.loading ? "Loading saved receipt..." : state.error || historyState.error || "This payment is unavailable for the selected fee account."}</p></Modal> : null}
     {receipt ? <PaymentReceipt {...receipt} onClose={() => setReceipt(null)} /> : null}
     {historicalReceipt && Number(readFee(historicalReceipt.payment, "studentId")) === Number(readFee(state.data, "studentId")) && Number(readFee(historicalReceipt.payment, "studentFeeId")) === Number(readFee(state.data, "studentFeeId")) ? <SavedPaymentReceipt key={`${readFee(historicalReceipt.payment, "feePaymentId")}-${historicalReceipt.autoPrint}`} {...historicalReceipt} onClose={() => setHistoricalReceipt(null)} /> : null}
   </section>;
@@ -598,12 +611,25 @@ function FeeLedger({ params, collection = false, authorize }) {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ groupName: "", sectionName: "", paymentPlan: "", status: "" });
   const [pageNumber, setPageNumber] = useState(1);
-  const [detailRow, setDetailRow] = useState(null);
+  const { params: viewParams, updateParams } = useAccountantViewParams();
+  const selectedStudentId = viewParams.get("studentId");
+  const selectedFeeId = viewParams.get("studentFeeId");
+  const detailRequested = selectedStudentId != null || selectedFeeId != null;
+  const setDetailRow = (row) => updateParams((next) => {
+    for (const key of ["studentId", "studentFeeId"]) {
+      const id = row ? readFee(row, key) : null;
+      if (id == null || id === "") next.delete(key); else next.set(key, String(id));
+    }
+    ["action", "receiptId"].forEach((key) => next.delete(key));
+  });
   const load = useCallback((signal) => collection ? loadCollectionTable(params, signal) : loadScopedLedger(params, signal), [params, collection]);
   const state = useFinancePage(load);
   const all = state.data || [];
+  const validSelection = [selectedStudentId, selectedFeeId].every((id) => id == null || /^[1-9]\d*$/.test(id));
+  const detailRow = detailRequested && validSelection ? all.find((row) => (selectedStudentId == null || String(readFee(row, "studentId")) === selectedStudentId) && (selectedFeeId == null || String(readFee(row, "studentFeeId")) === selectedFeeId)) : null;
   const page = ledgerPage(all, pageNumber, search, filters);
   const changeFilter = (key, value) => { setFilters((previous) => ({ ...previous, [key]: value, ...(key === "groupName" ? { sectionName: "" } : {}) })); setPageNumber(1); };
+  if (detailRequested && !detailRow) return <FeeCard title="Student Fee Details" action={<button type="button" className="cms-btn cms-btn-ghost" onClick={() => setDetailRow(null)}>Back to {collection ? "collection" : "ledger"}</button>}><FeeLoadState state={state} />{!state.loading && !state.error ? <FeeNotice>This fee account is unavailable in the current scope.</FeeNotice> : null}</FeeCard>;
   if (detailRow) return <FeeDetails key={ledgerDetailEndpoint(detailRow)} row={detailRow} collection={collection} authorize={authorize} onCollected={state.reload} onClose={() => setDetailRow(null)} />;
   const columns = [field("Admission No", "admissionNumber", "name"), field("Student Name", "studentName"), field("Group", "groupName"), field("Section", "sectionName"), field("Payment Plan", "paymentPlan"), field("Total Payable", "totalPayable", "money"), field("Total Paid", "totalPaid", "money"), field("Balance", "balance", "money"), field("Next Due Date", "nextDueDate", "date"),
   { label: "Fee Status", value: (row) => <FeeBadge status={readFee(row, "status")} /> },
@@ -645,8 +671,17 @@ function YearConfiguration({ structures, selectedId, onSelect, settings, onChang
 
 function SetupRecords({ kind, config, params, access }) {
   const [search, setSearch] = useState("");
-  const [pageNumber, setPageNumber] = useState(1);
-  const [modal, setModal] = useState(null);
+  const { params: viewParams, updateParams, setParam } = useAccountantViewParams();
+  const setupPage = Number(viewParams.get("setupPage"));
+  const pageNumber = Number.isSafeInteger(setupPage) && setupPage > 0 ? setupPage : 1;
+  const setPageNumber = useCallback((page) => setParam("setupPage", page), [setParam]);
+  const setupAction = viewParams.get("setupAction");
+  const setupRecordId = viewParams.get("recordId");
+  const setModal = (modal) => updateParams((next) => {
+    if (!modal) { next.delete("setupAction"); next.delete("recordId"); return; }
+    next.set("setupAction", modal.row ? modal.viewOnly ? "view" : "edit" : "add");
+    if (modal.row) next.set("recordId", String(setupId(kind, modal.row))); else next.delete("recordId");
+  });
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -664,13 +699,18 @@ function SetupRecords({ kind, config, params, access }) {
   const serverPage = transport ? pageNumber : 1;
   const load = useCallback((signal) => loadSetupRecords(kind, config.endpoint, params, signal, { page: serverPage, search: serverSearch }), [kind, config, params, serverPage, serverSearch]);
   const state = useFinancePage(load);
-  const all = state.data?.rows || [];
+  const all = useMemo(() => state.data?.rows || [], [state.data]);
+  const selectedRecord = useMemo(() => setupRecordId == null ? null : all.find((row) => String(setupId(kind, row)) === setupRecordId)
+    // A transport search can place a record on a different page after refresh.
+    // Its existing detail API restores it by ID and validates the campus below.
+    || (transport && !state.loading && !state.error && /^[1-9]\d*$/.test(setupRecordId) && Number.isSafeInteger(Number(setupRecordId)) && Number(setupRecordId) <= 2147483647 ? { pickupPointId: Number(setupRecordId) } : null), [all, kind, setupRecordId, transport, state.loading, state.error]);
+  const modal = setupAction === "add" ? { row: null, viewOnly: false } : ["view", "edit"].includes(setupAction) && selectedRecord ? { row: selectedRecord, viewOnly: setupAction === "view" } : null;
   const total = state.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / 5));
-  useEffect(() => { if (transport && !state.loading && !state.error && pageNumber > totalPages) setPageNumber(totalPages); }, [transport, state.loading, state.error, pageNumber, totalPages]);
+  useEffect(() => { if (transport && !state.loading && !state.error && pageNumber > totalPages) setPageNumber(totalPages); }, [transport, state.loading, state.error, pageNumber, totalPages, setPageNumber]);
   const page = transport ? { rows: all, total, current: pageNumber, pages: totalPages, start: total && all.length ? (pageNumber - 1) * 5 + 1 : 0, end: Math.min((pageNumber - 1) * 5 + all.length, total) } : pageOf(all, pageNumber, search, "", 5);
   const currentPage = page.current;
-  useEffect(() => { if (!transport && !state.loading && !state.error && currentPage !== pageNumber) setPageNumber(currentPage); }, [transport, state.loading, state.error, currentPage, pageNumber]);
+  useEffect(() => { if (!transport && !state.loading && !state.error && currentPage !== pageNumber) setPageNumber(currentPage); }, [transport, state.loading, state.error, currentPage, pageNumber, setPageNumber]);
   const closeModal = () => { setModal(null); setDraftTotal(0); };
   const open = (row, viewOnly = false) => {
     setActionError(""); setNotice("");
@@ -710,7 +750,8 @@ function SetupRecords({ kind, config, params, access }) {
       <FeeTable rows={page.rows} columns={columns} className={config.table} loading={state.loading} error={state.error} empty={config.empty} />
       {!state.loading && !state.error ? <FeePagination page={page} onPage={setPageNumber} numbered /> : null}
     </FeeCard>
-    {modal && (modal.viewOnly || (modal.row ? access.edit : access.create)) ? <AccountantFeeSetupModal kind={kind} row={modal.row} viewOnly={modal.viewOnly} rows={all} params={params} authorize={authorize} yearSettings={yearSettings} onDraftTotalChange={kind === "structures" && !modal.row ? setDraftTotal : undefined} onClose={closeModal} onSaved={(message) => { closeModal(); setNotice(message); setPageNumber(1); state.reload(); }} /> : null}
+    {setupAction && !modal ? <Modal title={config.title} onClose={closeModal}><FeeLoadState state={state} />{!state.loading && !state.error ? <FeeNotice>This saved record or setup view is unavailable in the current scope.</FeeNotice> : null}</Modal> : null}
+    {modal && (modal.viewOnly || (modal.row ? access.edit : access.create)) ? <AccountantFeeSetupModal kind={kind} row={modal.row} restoreScope={Boolean(modal.row && transport && !all.includes(modal.row))} viewOnly={modal.viewOnly} rows={all} params={params} authorize={authorize} yearSettings={yearSettings} onDraftTotalChange={kind === "structures" && !modal.row ? setDraftTotal : undefined} onClose={closeModal} onSaved={(message) => { closeModal(); setNotice(message); setPageNumber(1); state.reload(); }} /> : null}
     {deleting && access.delete ? <ConfirmDialog title={`Delete ${setupNames[kind]}`} message={`Delete this ${setupNames[kind].toLowerCase()}? This will use the existing backend deletion or deactivation behavior.`} danger loading={deleteBusy} confirmLabel="Delete" onCancel={() => { if (!deleteBusy) setDeleting(null); }} onConfirm={remove} /> : null}
   </div>;
 }
@@ -727,7 +768,7 @@ export default function AccountantFeeManagement() {
   const tab = ["overview", "setup", "ledger", "collection"].includes(query.get("tab")) ? query.get("tab") : "overview";
   const setup = Object.hasOwn(setupViews, query.get("setup")) ? query.get("setup") : "types";
   const config = setupViews[setup];
-  const change = (key, value) => setQuery((previous) => { const next = new URLSearchParams(previous); next.set(key, value); return next; });
+  const change = (key, value) => setQuery((previous) => { const next = new URLSearchParams(previous); next.set(key, value); ["studentId", "studentFeeId", "action", "receiptId", "setupAction", "recordId", "setupPage"].forEach((field) => next.delete(field)); return next; });
   const canView = (screen) => !permissions.error && (permissions.canView("fee-management", screen) || permissions.canView("fee-management") || permissions.isAccountant || permissions.isSuperOrAdmin);
   const setupAccess = feeSetupAccess(permissions, setup);
   const allowed = tab === "ledger" ? canView("student-fees") : tab === "setup" ? setupAccess.view : canView("fee-collection");

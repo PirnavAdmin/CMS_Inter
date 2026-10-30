@@ -1,3 +1,4 @@
+import { useTransportNavigation, useTransportRouteValue } from "../TransportManagerContext.jsx";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Check,
@@ -254,6 +255,7 @@ function SearchSelectInput({
 }
 
 export default function TransportManagerProfile() {
+  const navigation = useTransportNavigation();
   const { profile = {}, updateProfile = () => { }, showToast = () => { }, authorizedBoards = [], selectedBoardId } = useTransportManager();
   const { boards = [], selectedAcademicYear } = useAcademicContext?.() || {};
   const { selectedCampus } = useCampusContext?.() || {};
@@ -566,16 +568,16 @@ export default function TransportManagerProfile() {
     } catch { }
   };
 
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [profileStep, setProfileStep] = useState(1);
+  const [isEditingProfile, setIsEditingProfile] = useTransportRouteValue(navigation, "edit", false);
+  const [profileStep, setProfileStep] = useTransportRouteValue(navigation, "step", 1, value => Number.isInteger(value) && value >= 1 && value <= 6);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isFetchingPin, setIsFetchingPin] = useState(false);
 
   // Profile Photo Action Modal, Camera & Cropper state (matching Screenshot 3)
-  const [isPhotoActionModalOpen, setIsPhotoActionModalOpen] = useState(false);
-  const [isViewPhotoOpen, setIsViewPhotoOpen] = useState(false);
-  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [isPhotoActionModalOpen, setIsPhotoActionModalOpen] = useTransportRouteValue(navigation, "photoMenu", false);
+  const [isViewPhotoOpen, setIsViewPhotoOpen] = useTransportRouteValue(navigation, "viewPhoto", false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useTransportRouteValue(navigation, "camera", false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
   // Experience and Documents Form States

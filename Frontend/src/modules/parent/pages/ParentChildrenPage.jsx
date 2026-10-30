@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Users, GraduationCap, Calendar, CheckCircle2, ChevronRight, Award, BookOpen, Clock, ArrowLeft, Eye } from "lucide-react";
@@ -46,13 +47,7 @@ export default function ParentChildrenPage() {
         breadcrumb={["Parent Portal", "My Children"]}
       >
         <div className="parent-dashboard-wrapper">
-          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
-            <Users size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Enrolled Children...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to student database to retrieve children profile details.
-            </p>
-          </div>
+          <SkeletonPage variant="dashboard" columns={4} />
         </div>
       </DashboardLayout>
     );

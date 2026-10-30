@@ -1,3 +1,4 @@
+import { SkeletonRow, Skeleton } from "@/shared/components/Skeleton.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Clock,
@@ -992,7 +993,7 @@ export default function CheckInOut() {
                   <th>Remarks</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody>{isLoading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : <>
                 {visibleHistoryRows.length > 0 ? (
                   pagedHistoryRows.map((r) => {
                     const statusClass =
@@ -1044,11 +1045,11 @@ export default function CheckInOut() {
                 ) : (
                   <tr>
                     <td colSpan="7" style={{ textAlign: "center", padding: "32px 16px", color: "var(--cms-muted)" }}>
-                      {isLoading ? "Loading attendance records..." : "No attendance records found for the selected filter."}
+                      {isLoading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No attendance records found for the selected filter."}
                     </td>
                   </tr>
                 )}
-              </tbody>
+              </>}</tbody>
             </table>
           </div>
 

@@ -1,3 +1,4 @@
+import { useAccountantViewParams } from "../components/AccountantUI.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, Search } from "lucide-react";
 import { SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
@@ -80,7 +81,10 @@ export default function AccountantHolidays() {
   const [type, setType] = useState("All");
   const [status, setStatus] = useState("All");
   const [page, setPage] = useState(1);
-  const [viewHoliday, setViewHoliday] = useState(null);
+  const { params: viewParams, setParam } = useAccountantViewParams();
+  const holidayId = viewParams.get("holidayId");
+  const viewHoliday = holidayId == null || loading ? null : holidays.find((holiday) => String(holiday.id) === holidayId);
+  const setViewHoliday = (holiday) => setParam("holidayId", holiday?.id ?? null);
   const [toast, setToast] = useState({ message: "", type: "success" });
 
   const months = useMemo(
@@ -98,7 +102,6 @@ export default function AccountantHolidays() {
     setLoading(true);
     setError(null);
     setHolidays([]);
-    setViewHoliday(null);
     setPage(1);
     try {
       const scope = {
@@ -451,6 +454,7 @@ export default function AccountantHolidays() {
         </div>
       </section>
 
+      {holidayId != null && !viewHoliday && <Modal title="Holiday Details" onClose={() => setViewHoliday(null)} size="sm"><p role="status">{loading ? "Loading holiday details..." : error || "This holiday is unavailable in the current scope."}</p></Modal>}
       {/* View Details Modal */}
       {viewHoliday ? (
         <Modal

@@ -1,3 +1,4 @@
+import { Skeleton } from "@/shared/components/Skeleton.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -89,7 +90,7 @@ function KpiCard({ label, value, icon, tone, loading, error, subtext = "View det
         <div className="dashboard-kpi-title-wrap">
           <span className="dashboard-kpi-label">{label}</span>
           <div className="dashboard-kpi-value-row">
-            <strong className="dashboard-kpi-value">{loading ? "…" : isError ? "—" : formatNumber(value)}</strong>
+            <strong className="dashboard-kpi-value">{loading ? <Skeleton style={{ width: 72, height: 28 }} /> : isError ? "—" : formatNumber(value)}</strong>
             <span className="dashboard-kpi-trend">{displayTrend}</span>
           </div>
           <span className="dashboard-kpi-subtext">{displaySubtext}</span>
@@ -510,7 +511,7 @@ export default function Dashboard() {
               ) : exams.length === 0 ? (
                 <div className="dashboard-card-empty">
                   <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? "Loading examinations..." : "No upcoming examinations scheduled."}</span>
+                  <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No upcoming examinations scheduled."}</span>
                 </div>
               ) : (
                 <div className="cms-table-wrap">
@@ -573,7 +574,7 @@ export default function Dashboard() {
               ) : evaluations.length === 0 ? (
                 <div className="dashboard-card-empty">
                   <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? "Loading marks progress..." : "No marks evaluations pending."}</span>
+                  <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No marks evaluations pending."}</span>
                 </div>
               ) : (
                 <div className="cms-table-wrap">
@@ -633,7 +634,7 @@ export default function Dashboard() {
               ) : readyExams.length === 0 ? (
                 <div className="dashboard-card-empty">
                   <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? "Checking results readiness..." : "No examination results ready for publishing."}</span>
+                  <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No examination results ready for publishing."}</span>
                 </div>
               ) : (
                 <div className="cms-table-wrap">
@@ -689,7 +690,7 @@ export default function Dashboard() {
               ) : certificates.length === 0 ? (
                 <div className="dashboard-card-empty">
                   <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? "Loading certificate requests..." : "No pending certificate requests."}</span>
+                  <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No pending certificate requests."}</span>
                 </div>
               ) : (
                 <div className="cms-table-wrap">

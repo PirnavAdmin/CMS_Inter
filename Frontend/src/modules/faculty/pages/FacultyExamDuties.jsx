@@ -1,3 +1,5 @@
+import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
+import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Download,
@@ -56,17 +58,22 @@ export default function FacultyExamDuties() {
   const [facultyMembers, setFacultyMembers] = useState([]);
 
   // View Mode: "table" | "cards"
-  const [viewMode, setViewMode] = useState("table");
+  const { params, setParam } = useFacultyViewParams();
+  const viewMode = params.get("view") === "cards" ? "cards" : "table";
+  const setViewMode = (view) => setParam("view", view);
 
   // Filter States
-  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'upcoming' | 'today' | 'completed' | 'cancelled'
+  const activeTab = ["all", "upcoming", "today", "completed", "cancelled"].includes(params.get("tab")) ? params.get("tab") : "all";
+  const setActiveTab = (tab) => setParam("tab", tab); // 'all' | 'upcoming' | 'today' | 'completed' | 'cancelled'
   const [searchQuery, setSearchQuery] = useState("");
   const [examTypeFilter, setExamTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   // Modals State
-  const [selectedDuty, setSelectedDuty] = useState(null);
+  const dutyId = params.get("dutyId");
+  const selectedDuty = dutyId == null ? null : dutiesList.find((duty) => String(duty.id) === dutyId);
+  const setSelectedDuty = (duty) => setParam("dutyId", duty?.id ?? null);
   const [reassignDuty, setReassignDuty] = useState(null);
   const [reassignTarget, setReassignTarget] = useState("");
   const [reassignReason, setReassignReason] = useState("");
@@ -511,12 +518,7 @@ export default function FacultyExamDuties() {
 
       {/* 4. Examination Duties View (Table or Cards) */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <Loader2 size={32} className="spin" style={{ marginInline: "auto", color: "var(--cms-primary, #6F8400)" }} />
-          <p style={{ marginTop: 12, fontSize: 13.5, color: "var(--cms-muted)" }}>
-            Loading live examination duties and hall allotments...
-          </p>
-        </div>
+        <SkeletonTable columns={6} rows={5} />
       ) : paginatedDuties.length === 0 ? (
         <div className="fed-empty-state">
           <div className="fed-empty-icon">
@@ -773,6 +775,7 @@ export default function FacultyExamDuties() {
         </nav>
       )}
 
+      {dutyId != null && !selectedDuty && <div className="sp-modal-overlay"><div className="sp-modal-card" role="dialog" aria-label="Exam Duty Details"><p role="status">{loading ? "Loading exam duty details..." : "This exam duty is unavailable."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setSelectedDuty(null)}>Close</button></div></div>}
       {/* MODAL 1: Duty Details & SOPs Modal */}
       {selectedDuty && (
         <div className="sp-modal-overlay" onClick={() => setSelectedDuty(null)}>

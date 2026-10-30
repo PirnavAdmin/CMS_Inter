@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -633,7 +634,7 @@ function RoleMembersDialog({ role, members, loading, error, onRetry, onSelectMem
           label={`Search ${role.name} members`}
         />
         <div className="rbac-member-list">
-          {loading ? <Loader label="Loading role members..." /> : null}
+          {loading ? <SkeletonPage variant="form" rows={5} /> : null}
           {!loading && !error && filteredMembers.length ? filteredMembers.map((member) => {
             const memberId = member.userCode || member.employeeId || member.studentId || member.userId;
             const contact = member.email || member.phoneNumber || member.mobile;
@@ -1124,7 +1125,7 @@ function UserRoleDetailsPanel({ user, permissions, roles, modules, loading, erro
         </div>
       </div>
 
-      {loading ? <div className="rbac-loading-card"><Loader label="Loading user details..." /></div> : null}
+      {loading ? <div className="rbac-loading-card"><SkeletonPage variant="form" rows={5} /></div> : null}
       {error && !loading ? (
         <EmptyState
           title="Unable to load user details"
@@ -1471,7 +1472,7 @@ function RoleDetails({
       ) : null}
 
       {loading ? (
-        <div className="rbac-loading-card"><Loader label="Loading role permissions..." /></div>
+        <div className="rbac-loading-card"><SkeletonPage variant="form" rows={5} /></div>
       ) : (
         <>
           <PermissionMatrix
@@ -1854,7 +1855,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
         <span className="rbac-api-note">Pagination-ready user role assignments</span>
       </div>
 
-      {loading ? <div className="rbac-loading-card"><Loader label="Loading user assignments..." /></div> : null}
+      {loading ? <div className="rbac-loading-card"><SkeletonPage variant="form" rows={5} /></div> : null}
       {error && !loading ? (
         <EmptyState
           title="Unable to load assignments"
@@ -2363,7 +2364,7 @@ export default function RolesPermissionsPage() {
           {routeNote ? <span className="rbac-route-note"><Check size={14} /> {routeNote}</span> : null}
         </div>
 
-        {loading ? <div className="rbac-loading-card"><Loader label="Loading roles and permissions..." /></div> : null}
+        {loading ? <div className="rbac-loading-card"><SkeletonPage variant="form" rows={5} /></div> : null}
         {error && !loading ? (
           <EmptyState
             title="Unable to load Roles & Permissions"

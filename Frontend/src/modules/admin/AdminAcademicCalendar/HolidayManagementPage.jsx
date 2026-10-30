@@ -1,3 +1,4 @@
+import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2, FileUp } from "lucide-react";
@@ -97,7 +98,11 @@ function HolidayStatus({ holiday }) {
 }
 
 function HolidayForm({ holiday, onClose, onSave, saving }) {
-  const [values, setValues] = useState(holiday || EMPTY_HOLIDAY);
+  const [values, setValues] = useState(() => ({
+    ...EMPTY_HOLIDAY,
+    ...(holiday || {}),
+    description: holiday?.description ?? "",
+  }));
   const [errors, setErrors] = useState({});
   const setValue = (name, value) => {
     setValues((current) => ({ ...current, [name]: value, ...(name === "dateType" && value === "Single Day" ? { endDate: "" } : {}) }));
@@ -184,7 +189,7 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
         ) : null}
         <div className={`${fieldClass("description")} full`}>
           <label htmlFor="holiday-description">Description</label>
-          <textarea id="holiday-description" value={values.description} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
+          <textarea id="holiday-description" value={values.description ?? ""} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
         </div>
       </div>
     </Modal>
@@ -609,7 +614,7 @@ export default function HolidayManagementPage() {
 
       {["edit", "details", "delete"].includes(holidayView) && !selectedHoliday ? (
         <Modal title={holidayView === "edit" ? "Edit Holiday" : holidayView === "delete" ? "Delete holiday" : "Holiday Details"} onClose={() => navigateHoliday(null)}>
-          <p role={holidayLoadError ? "alert" : "status"}>{holidayLoadError || "Loading holiday..."}</p>
+          {holidayLoadError ? <p role={holidayLoadError ? "alert" : "status"}>{holidayLoadError || "Loading holiday..."}</p> : <SkeletonPage variant="form" rows={4} />}
         </Modal>
       ) : null}
 

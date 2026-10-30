@@ -328,7 +328,8 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("defaulters")]
-        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher")]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<AttendanceDefaulterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -636,7 +637,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         private bool IsCurrentUserAdmin()
         {
-            return User.IsInRole("Super Admin") || User.IsInRole("Admin") || User.IsInRole("Principal");
+            return User.IsInRole("Super Admin") || User.IsInRole("Admin") || User.IsInRole("Principal") || User.IsInRole("Examination Cell") || User.IsInRole("Exam Cell");
         }
 
         private int GetCurrentUserId()
