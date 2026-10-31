@@ -146,11 +146,13 @@ namespace CollegeManagement.API.Services
 
         public Task<bool> GroupCodeExistsAsync(
             string groupCode,
+            int? boardId = null,
             int? excludeGroupId = null,
             CancellationToken cancellationToken = default)
         {
             return _groupRepository.GroupCodeExistsAsync(
                 groupCode,
+                boardId,
                 excludeGroupId,
                 cancellationToken);
         }
@@ -223,6 +225,16 @@ namespace CollegeManagement.API.Services
             return _groupRepository.GetProgramsAsync(
                 groupId,
                 cancellationToken);
+        }
+
+        public async Task<bool> UpdateProgramsAsync(
+            int groupId,
+            List<int> programIds,
+            CancellationToken cancellationToken = default)
+        {
+            var res = await _groupRepository.UpdateProgramsAsync(groupId, programIds, cancellationToken);
+            if (res) _cache.RemoveByPrefix("lookup:groups");
+            return res;
         }
     }
 }

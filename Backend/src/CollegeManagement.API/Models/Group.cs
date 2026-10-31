@@ -22,11 +22,9 @@ namespace CollegeManagement.API.Models
         [Required]
         public int BoardId { get; set; }
 
-        [Required]
-        public int AcademicYearId { get; set; }
+        public int? AcademicYearId { get; set; }
 
-        [Required]
-        public int AcademicLevelId { get; set; }
+        public int? AcademicLevelId { get; set; }
 
         [Required]
         [MaxLength(100)]
@@ -44,11 +42,6 @@ namespace CollegeManagement.API.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? UpdatedAt { get; set; }
-
-        public int? MasterGroupId { get; set; }
-
-        [ForeignKey(nameof(MasterGroupId))]
-        public virtual MasterGroup? MasterGroupNavigation { get; set; }
 
         [ForeignKey(nameof(BoardId))]
         public Board? BoardNavigation { get; set; }

@@ -46,7 +46,7 @@ BEGIN
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%', 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
         s.DepartmentId,
-        COALESCE(d.DepartmentName, NULLIF(s.Department, ''), 'General') AS DepartmentName,
+        COALESCE(d.DepartmentName, 'General') AS DepartmentName,
         COALESCE(des.Name, NULLIF(s.Designation, ''), 'Staff') AS DesignationName,
         CASE 
             WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 
@@ -54,12 +54,12 @@ BEGIN
         END AS StaffType,
         CASE 
             WHEN sa.StaffAttendanceId IS NOT NULL THEN sa.Status
-            WHEN lr.LeaveRequestId IS NOT NULL THEN 6  -- Leave
+            WHEN lr.StaffLeaveRequestId IS NOT NULL THEN 6  -- Leave
             WHEN v_IsHoliday > 0 THEN 5              -- Holiday
             ELSE NULL
         END AS Status,
         CASE 
-            WHEN sa.StaffAttendanceId IS NOT NULL OR lr.LeaveRequestId IS NOT NULL OR v_IsHoliday > 0 THEN 1 
+            WHEN sa.StaffAttendanceId IS NOT NULL OR lr.StaffLeaveRequestId IS NOT NULL OR v_IsHoliday > 0 THEN 1 
             ELSE 0 
         END AS IsAttendanceMarked,
         sa.InTime,
@@ -67,7 +67,7 @@ BEGIN
         COALESCE(sa.VerificationMethod, 1) AS VerificationMethod,
         CASE 
             WHEN sa.Remarks IS NOT NULL AND sa.Remarks != '' THEN sa.Remarks
-            WHEN lr.LeaveRequestId IS NOT NULL THEN CONCAT('Approved Leave: ', COALESCE(lr.Reason, ''))
+            WHEN lr.StaffLeaveRequestId IS NOT NULL THEN CONCAT('Approved Leave: ', COALESCE(lr.Reason, ''))
             WHEN v_IsHoliday > 0 THEN 'Official Holiday'
             ELSE NULL
         END AS Remarks,
@@ -108,10 +108,10 @@ BEGIN
            OR (p_StaffType = 2 AND s.StaffType IS NOT NULL AND LOWER(s.StaffType) != 'teaching'))
       AND (p_Status IS NULL OR p_Status <= 0 
            OR (p_Status = 1 AND sa.Status = 1)
-           OR (p_Status = 2 AND (sa.Status = 2 OR (sa.StaffAttendanceId IS NULL AND lr.LeaveRequestId IS NULL AND v_IsHoliday = 0)))
+           OR (p_Status = 2 AND (sa.Status = 2 OR (sa.StaffAttendanceId IS NULL AND lr.StaffLeaveRequestId IS NULL AND v_IsHoliday = 0)))
            OR (p_Status = 3 AND sa.Status = 3)
            OR (p_Status = 5 AND (sa.Status = 5 OR v_IsHoliday > 0))
-           OR (p_Status = 6 AND (sa.Status = 6 OR lr.LeaveRequestId IS NOT NULL)))
+           OR (p_Status = 6 AND (sa.Status = 6 OR lr.StaffLeaveRequestId IS NOT NULL)))
     ORDER BY s.FirstName ASC, s.LastName ASC;
 END$$
 
@@ -336,7 +336,7 @@ BEGIN
         s.Id AS FacultyId,
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT('STF', LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
-        COALESCE(d.DepartmentName, s.Department, 'General') AS DepartmentName,
+        COALESCE(d.DepartmentName, 'General') AS DepartmentName,
         COALESCE(des.Name, s.Designation, 'Staff') AS DesignationName,
         sa.InTime,
         sa.OutTime,
@@ -394,7 +394,7 @@ BEGIN
         s.Id AS FacultyId,
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%', 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
-        COALESCE(d.DepartmentName, NULLIF(s.Department, ''), 'General') AS DepartmentName
+        COALESCE(d.DepartmentName, 'General') AS DepartmentName
     FROM `Staffs` s
     LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
     WHERE s.IsDeleted = 0

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useId } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Palette, Pipette, Check, X, Lock, Globe } from "lucide-react";
 import { useTheme, VALID_PALETTES } from "@/hooks/useTheme.js";
+import "./ThemePalettePicker.css";
 
 export const THEME_OPTIONS = [
   { id: "olive", name: "Current Olive", swatches: ["#617800", "#b8cb79", "#e4ecce"] },
@@ -88,6 +89,7 @@ export default function ThemePalettePicker({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [currentHex, setCurrentHex] = useState(customColor || "#00b4d8");
   const [sliderHue, setSliderHue] = useState(() => hexToHue(customColor || "#00b4d8"));
+  const nativeColorInputRef = useRef(null);
 
   // Keep internal custom color state in sync with hook
   useEffect(() => {
@@ -122,6 +124,26 @@ export default function ThemePalettePicker({
     setCurrentHex(val);
     setSliderHue(hexToHue(val));
     setCustomColor(val);
+  };
+
+  const handleEyeDropper = async () => {
+    if (isThemeLocked) return;
+    if (typeof window !== "undefined" && "EyeDropper" in window) {
+      try {
+        const eyeDropper = new window.EyeDropper();
+        const result = await eyeDropper.open();
+        if (result?.sRGBHex) {
+          const hex = result.sRGBHex.toLowerCase();
+          setCurrentHex(hex);
+          setSliderHue(hexToHue(hex));
+          setCustomColor(hex);
+        }
+      } catch {
+        // User dismissed the eyedropper
+      }
+    } else if (nativeColorInputRef.current) {
+      nativeColorInputRef.current.click();
+    }
   };
 
   const shouldRenderTrigger = !hideTrigger && showTrigger && !isThemeLocked;
@@ -325,16 +347,21 @@ export default function ThemePalettePicker({
 
                 {/* Controls Row */}
                 <div className="cms-colour-picker-controls">
-                  <div className="cms-colour-preview-box" style={{ backgroundColor: currentHex }}>
+                  <label className="cms-colour-preview-wrap" title="Click to pick colour">
+                    <span
+                      className="cms-colour-preview-badge"
+                      style={{ backgroundColor: currentHex }}
+                      aria-hidden="true"
+                    />
                     <input
                       type="color"
                       value={currentHex}
                       onChange={handleNativeColorPick}
-                      className="cms-native-color-input"
-                      title="Open native color picker"
+                      className="cms-colour-native-input"
+                      disabled={isThemeLocked}
                       aria-label="Pick custom colour"
                     />
-                  </div>
+                  </label>
 
                   <div className="cms-hex-input-wrap">
                     <span className="cms-hex-prefix">#</span>
@@ -349,6 +376,32 @@ export default function ThemePalettePicker({
                       spellCheck="false"
                     />
                   </div>
+
+                  <label className="cms-colour-native-wrap" title="Open Color Picker & Eye Dropper">
+                    <input
+                      type="color"
+                      value={currentHex}
+                      onChange={handleNativeColorPick}
+                      className="cms-colour-native-input"
+                      disabled={isThemeLocked}
+                      aria-label="Open Color Picker and Eye Dropper"
+                    />
+                    <span className="cms-colour-native-btn">
+                      <Pipette size={14} />
+                      <span>Eye Dropper</span>
+                    </span>
+                  </label>
+
+                  <button
+                    type="button"
+                    className="cms-colour-apply-btn"
+                    onClick={() => {
+                      setCustomColor(currentHex);
+                      setShowColorPicker(false);
+                    }}
+                  >
+                    Apply
+                  </button>
                 </div>
               </div>
             )}

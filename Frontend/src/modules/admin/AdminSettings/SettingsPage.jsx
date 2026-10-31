@@ -185,44 +185,32 @@ export default function SettingsPage() {
                   </div>
                   <p>{card.description}</p>
                   {card.isThemeCard && (
-                    <div className="settings-theme-policy-control" onClick={(e) => e.stopPropagation()}>
-                      <div className="settings-theme-policy-label-row">
-                        <span className="settings-theme-policy-label">Theme Control Policy</span>
-                        <span className={`settings-theme-policy-status-pill ${themePolicy?.themeMode === "admin" ? "is-admin" : "is-user"}`}>
-                          {themePolicy?.themeMode === "admin" ? "Admin Enforced" : "User Choice"}
-                        </span>
-                      </div>
-                      <div className="settings-theme-policy-toggle-group" role="radiogroup" aria-label="Theme Control Policy">
+                    <div className="settings-theme-policy-bar" onClick={(e) => e.stopPropagation()}>
+                      <span className="settings-theme-policy-caption">Policy:</span>
+                      <div className="settings-theme-segmented-pill" role="radiogroup" aria-label="Theme Control Policy">
                         <button
                           type="button"
                           role="radio"
                           aria-checked={themePolicy?.themeMode !== "admin"}
-                          className={`settings-theme-policy-btn ${themePolicy?.themeMode !== "admin" ? "is-active" : ""}`}
+                          className={`settings-theme-seg-tab ${themePolicy?.themeMode !== "admin" ? "is-active" : ""}`}
                           onClick={() => handlePolicyModeChange("independent")}
                           disabled={policyUpdating}
-                          title="Users can choose their own theme independently."
+                          title="Independent: Users choose their own theme"
                         >
-                          <span className="settings-theme-policy-btn-indicator" />
-                          <span>Independent</span>
+                          User Choice
                         </button>
                         <button
                           type="button"
                           role="radio"
                           aria-checked={themePolicy?.themeMode === "admin"}
-                          className={`settings-theme-policy-btn ${themePolicy?.themeMode === "admin" ? "is-active" : ""}`}
+                          className={`settings-theme-seg-tab ${themePolicy?.themeMode === "admin" ? "is-active" : ""}`}
                           onClick={() => handlePolicyModeChange("admin")}
                           disabled={policyUpdating}
-                          title="Admin decides the theme for the entire application."
+                          title="Admin Enforced: Admin sets global theme for all users"
                         >
-                          <span className="settings-theme-policy-btn-indicator" />
-                          <span>Admin Enforced</span>
+                          Admin Enforced
                         </button>
                       </div>
-                      <span className="settings-theme-policy-note">
-                        {themePolicy?.themeMode === "admin"
-                          ? "🔒 The whole project uses the admin theme below. Users cannot change it."
-                          : "🔓 Users across all portals can customize their own theme freely."}
-                      </span>
                     </div>
                   )}
                 </div>
@@ -238,7 +226,7 @@ export default function SettingsPage() {
                       }
                     }}
                   >
-                    {card.isThemeCard && themePolicy?.themeMode === "admin" ? "Configure Global Theme" : card.buttonText} <ArrowRight size={14} />
+                    {card.isThemeCard ? (themePolicy?.themeMode === "admin" ? "Global Theme" : "Change Theme") : card.buttonText} <ArrowRight size={14} />
                   </button>
                   {card.isThemeCard ? (
                     <span

@@ -81,17 +81,19 @@ const normalizeLevels = (levels) => {
     .join(", ");
 };
 const normalizeGroup = (item) => {
-  // Master identity must never fall back to a contextual GroupId.
-  if (!validId(item?.masterGroupId))
-    throw new Error("The API returned a record without a valid MasterGroupId.");
+  const id = item?.groupId ?? item?.masterGroupId ?? item?.id;
+  if (!validId(id))
+    throw new Error("The API returned a record without a valid GroupId.");
   return {
-    id: item.masterGroupId,
+    id: id,
+    groupId: id,
     boardId: String(item.boardId),
     board: item.boardName || "-",
     name: item.groupName || "-",
     code: item.groupCode || "-",
     description: item.description ?? "",
-    availableLevels: normalizeLevels(item.eligibleAcademicLevels),
+    availableLevels: normalizeLevels(item.eligibleAcademicLevels ?? item.eligibleLevels ?? []),
+    levels: item.eligibleAcademicLevels ?? item.eligibleLevels ?? [],
     status: item.isActive ? "Active" : "Inactive",
   };
 };
@@ -138,7 +140,7 @@ const groupApi = {
     );
     const group = normalizeGroup(item);
     if (Number(group.id) !== Number(id))
-      throw new Error("The API returned a different master group.");
+      throw new Error("The API returned a different group.");
     if (!Array.isArray(item.programs))
       throw new Error("The API did not return the saved default programs.");
     return { group, programs: item.programs.map(normalizeProgram) };
@@ -340,7 +342,7 @@ function ProgramsPanel({
 }
 
 function CourseGroupFormPage() {
-  // The existing route's :id now identifies a master group on this screen only.
+  // The existing route's :id now identifies a group on this screen only.
   const { id } = useParams();
   const navigate = useNavigate();
   const { selectedBoard, selectedBoardId } = useAcademicContext();
@@ -467,7 +469,7 @@ function CourseGroupFormPage() {
     try {
       await groupApi.saveRow(values, id, selectedProgramIds);
       navigate(listPath, {
-        state: { groupMessage: `Master group ${id ? "updated" : "created"} successfully.` },
+        state: { groupMessage: `Group ${id ? "updated" : "created"} successfully.` },
       });
     } catch (error) {
       showProgramError(getApiErrorMessage(error));
@@ -478,7 +480,7 @@ function CourseGroupFormPage() {
   return (
     <DashboardLayout
       title={`${mode} Group`}
-      subtitle="Configure a reusable master group and its default programs."
+      subtitle="Configure a reusable group and its default programs."
       breadcrumb={["Group Management"]}
     >
       <div className="cms-form-page course-group-form-page">
@@ -644,7 +646,7 @@ function CourseGroupListPage() {
     try {
       await groupApi.deactivateRow(deleteTarget.id);
       setToastType("success");
-      setToast("Master group deactivated successfully.");
+      setToast("Group deactivated successfully.");
       closeDeleteModal();
       await loadRows(search);
     } catch (err) {
@@ -676,7 +678,7 @@ function CourseGroupListPage() {
     >
       <div className="group-management">
         {!validId(selectedBoardId) ? (
-          <p>Select a Board in the top navbar to view master groups.</p>
+          <p>Select a Board in the top navbar to view groups.</p>
         ) : null}
         {error ? (
           <div className="cms-card" style={{ marginBottom: 16 }}>
@@ -704,7 +706,7 @@ function CourseGroupListPage() {
       </div>
       {deleteTarget ? (
         <Modal
-          title="Delete Master Group"
+          title="Delete Group"
           size="sm"
           onClose={deletingId ? () => {} : closeDeleteModal}
           footer={
@@ -760,7 +762,7 @@ function CourseGroupListPage() {
             </div>
           ) : (
             <p>
-              Are you sure you want to delete this master group? Referenced groups may require
+              Are you sure you want to delete this group? Referenced groups may require
               deactivation instead.
             </p>
           )}

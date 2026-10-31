@@ -46,6 +46,7 @@ namespace CollegeManagement.API.Services
 
         Task<bool> GroupCodeExistsAsync(
             string groupCode,
+            int? boardId = null,
             int? excludeGroupId = null,
             CancellationToken cancellationToken = default);
 
@@ -74,5 +75,10 @@ namespace CollegeManagement.API.Services
             GetProgramsAsync(
                 int groupId,
                 CancellationToken cancellationToken = default);
+
+        Task<bool> UpdateProgramsAsync(
+            int groupId,
+            List<int> programIds,
+            CancellationToken cancellationToken = default);
     }
 }
