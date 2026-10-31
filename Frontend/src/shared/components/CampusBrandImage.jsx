@@ -7,48 +7,71 @@ import pirnavCollegesLogo from "../../assets/pirnav-colleges-logo.png";
 
 export function fitHeaderLineSizes(brand, width, height, measure) {
   const lines = [
-    [brand.dashboardTitle, Number(brand.dashboardTitleSize), brand.dashboardTitleWeight, 0.04, 0.45],
-    [brand.dashboardSubtitle, Number(brand.dashboardSubtitleSize), brand.dashboardSubtitleWeight, 0.18, 0.35],
-    [brand.dashboardTagline, Number(brand.dashboardTaglineSize), brand.dashboardTaglineWeight, 0, 0.2],
+    [brand.dashboardTitle, Number(brand.dashboardTitleSize), brand.dashboardTitleWeight, 0.45],
+    [brand.dashboardSubtitle, Number(brand.dashboardSubtitleSize), brand.dashboardSubtitleWeight, 0.35],
+    [brand.dashboardTagline, Number(brand.dashboardTaglineSize), brand.dashboardTaglineWeight, 0.2],
   ];
   // Stable height budgets keep one line's size changes from resizing the others.
-  const totalBudget = lines.reduce((total, [text, , , , budget]) => total + (text ? budget : 0), 0) || 1;
+  const totalBudget = lines.reduce((total, [text, , , budget]) => total + (text ? budget : 0), 0) || 1;
   const availableHeight = Math.max(0, height - 12);
-  return lines.map(([text, size, weight, spacing, budget], index) => {
+  return lines.map(([text, size, weight, budget], index) => {
     if (!text) return 0;
-    const naturalWidth = Math.max(1, measure(text, size, weight, index) + text.length * size * spacing);
-    const widthFit = size * Math.min(1, Math.max(0.4, width / naturalWidth));
     const heightFit = availableHeight * budget / totalBudget / 1.15;
-    return Math.max(0, Math.min(size, widthFit, heightFit));
+    let low = 0;
+    let high = Math.max(0, Math.min(size, heightFit));
+    // The measurer includes letter spacing. Leave a pixel for glyph overhang/rounding.
+    const fits = (candidate) => measure(text, candidate, weight, index) <= Math.max(0, width - 1);
+    if (fits(high)) return high;
+    for (let step = 0; step < 18; step += 1) {
+      const middle = (low + high) / 2;
+      if (fits(middle)) low = middle;
+      else high = middle;
+    }
+    return low;
   });
 }
 
-export function HeaderBrand({ configuration, alt = "College logo", ...props }) {
+export function HeaderBrand({ configuration, alt = "College logo", onFitChange, ...props }) {
   const brand = useMemo(() => getHeaderBrand(configuration), [configuration]);
   const textBox = useRef(null);
+  const lineElements = useRef([]);
   const [sizes, setSizes] = useState(() => [Number(brand.dashboardTitleSize), Number(brand.dashboardSubtitleSize), Number(brand.dashboardTaglineSize)]);
   useLayoutEffect(() => {
     const box = textBox.current;
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!box || !context) return undefined;
+    let active = true;
     const fit = () => {
+      if (!active) return;
+      const styles = lineElements.current.map((element) => element ? getComputedStyle(element) : null);
       const next = fitHeaderLineSizes(brand, box.clientWidth, box.clientHeight, (text, fontSize, weight, index) => {
-        context.font = `${index === 2 ? "italic " : ""}${weight} ${fontSize}px Georgia, serif`;
-        return context.measureText(text).width;
+        const style = styles[index];
+        context.font = `${style.fontStyle} ${style.fontWeight} ${fontSize}px ${style.fontFamily}`;
+        const spacingRatio = parseFloat(style.fontSize) > 0
+          ? (parseFloat(style.letterSpacing) || 0) / parseFloat(style.fontSize)
+          : parseFloat(lineElements.current[index].style.letterSpacing) || 0;
+        const metrics = context.measureText(text);
+        const glyphWidth = Math.max(metrics.width, (metrics.actualBoundingBoxLeft || 0) + (metrics.actualBoundingBoxRight || 0));
+        return glyphWidth + Array.from(text).length * fontSize * spacingRatio;
       });
-      setSizes((previous) => previous.every((value, index) => Math.abs(value - next[index]) < 0.001) ? previous : next);
+      setSizes((previous) => previous.every((value, index) => value === next[index]) ? previous : next);
+      onFitChange?.(next.some((size, index) => Boolean([brand.dashboardTitle, brand.dashboardSubtitle, brand.dashboardTagline][index]) && size < 8));
     };
     fit();
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", fit);
-      return () => window.removeEventListener("resize", fit);
-    }
-    const observer = new ResizeObserver(fit);
-    observer.observe(box);
-    return () => observer.disconnect();
-  }, [brand]);
-  const line = { display: "block", margin: 0, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.15 };
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(fit) : null;
+    observer?.observe(box);
+    window.addEventListener("resize", fit);
+    document.fonts?.ready.then(fit);
+    document.fonts?.addEventListener("loadingdone", fit);
+    return () => {
+      active = false;
+      observer?.disconnect();
+      window.removeEventListener("resize", fit);
+      document.fonts?.removeEventListener("loadingdone", fit);
+    };
+  }, [brand, onFitChange]);
+  const line = { display: "block", margin: 0, minWidth: 0, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.15 };
   const ornament = { display: "flex", alignItems: "center", margin: 0, gap: 4, color: brand.dashboardSubtitleColor, height: 5, flex: "0 0 5px", fontSize: 8, lineHeight: 1, overflow: "hidden" };
   const rule = { height: 1, margin: 0, flex: 1, minWidth: 0, background: "currentColor", opacity: 0.6 };
   return <span {...props} style={{ ...props.style, display: "flex", alignItems: "center", gap: 8, width: "100%", height: "100%", minWidth: 0, maxWidth: "100%", overflow: "hidden", transform: "none", filter: "none" }}>
@@ -57,10 +80,10 @@ export function HeaderBrand({ configuration, alt = "College logo", ...props }) {
     }} />
     <span ref={textBox} style={{ display: "flex", flexDirection: "column", justifyContent: "center", margin: 0, flex: "1 1 0", height: "100%", minWidth: 0, overflow: "hidden", fontFamily: "Georgia, 'Times New Roman', serif", textAlign: brand.dashboardTitleAlign }}>
       <span aria-hidden="true" style={ornament}><span style={rule} />{"\u2723"}<span style={rule} /></span>
-      <span title={brand.dashboardTitle} style={{ ...line, color: brand.dashboardTitleColor, fontSize: sizes[0], fontWeight: Number(brand.dashboardTitleWeight), textAlign: brand.dashboardTitleAlign, letterSpacing: "0.04em" }}>{brand.dashboardTitle}</span>
-      {brand.dashboardSubtitle && <span title={brand.dashboardSubtitle} style={{ ...line, color: brand.dashboardSubtitleColor, fontSize: sizes[1], fontWeight: Number(brand.dashboardSubtitleWeight), textAlign: brand.dashboardSubtitleAlign, letterSpacing: "0.18em" }}>{brand.dashboardSubtitle}</span>}
+      <span ref={(element) => { lineElements.current[0] = element; }} title={brand.dashboardTitle} style={{ ...line, color: brand.dashboardTitleColor, fontSize: sizes[0], fontWeight: Number(brand.dashboardTitleWeight), textAlign: brand.dashboardTitleAlign, letterSpacing: "0.04em" }}>{brand.dashboardTitle}</span>
+      {brand.dashboardSubtitle && <span ref={(element) => { lineElements.current[1] = element; }} title={brand.dashboardSubtitle} style={{ ...line, color: brand.dashboardSubtitleColor, fontSize: sizes[1], fontWeight: Number(brand.dashboardSubtitleWeight), textAlign: brand.dashboardSubtitleAlign, letterSpacing: "0.18em" }}>{brand.dashboardSubtitle}</span>}
       <span aria-hidden="true" style={ornament}><span style={rule} />{"\u2723"}<span style={rule} /></span>
-      {brand.dashboardTagline && <span title={brand.dashboardTagline} style={{ ...line, color: brand.dashboardTaglineColor, fontSize: sizes[2], fontWeight: Number(brand.dashboardTaglineWeight), textAlign: brand.dashboardTaglineAlign, fontStyle: "italic" }}>{brand.dashboardTagline}</span>}
+      {brand.dashboardTagline && <span ref={(element) => { lineElements.current[2] = element; }} title={brand.dashboardTagline} style={{ ...line, color: brand.dashboardTaglineColor, fontSize: sizes[2], fontWeight: Number(brand.dashboardTaglineWeight), textAlign: brand.dashboardTaglineAlign, fontStyle: "italic" }}>{brand.dashboardTagline}</span>}
     </span>
   </span>;
 }

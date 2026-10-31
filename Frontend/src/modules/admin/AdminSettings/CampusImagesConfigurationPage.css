@@ -48,10 +48,10 @@
 }
 .campus-header-title-card > h2,
 .campus-header-title-card > p { flex-shrink: 0; }
-.campus-header-summary { grid-column: 1 / -1; max-width: 700px; width: 100%; box-sizing: border-box; }
-.campus-header-summary-row { display: flex; align-items: center; gap: 20px; min-width: 0; }
-.campus-header-summary-preview { flex: 1; min-width: 0; height: 92px; max-width: 440px; padding: 8px; border: 1px solid var(--cms-border); border-radius: 8px; overflow: hidden; }
-.campus-header-summary-row > button { flex-shrink: 0; }
+.campus-header-summary { grid-column: 1; width: 100%; box-sizing: border-box; }
+.campus-header-summary-row { display: flex; flex-direction: column; align-items: stretch; gap: 12px; min-width: 0; }
+.campus-header-summary-preview { flex: none; min-width: 0; width: 100%; height: 92px; box-sizing: border-box; padding: 8px; border: 1px solid var(--cms-border); border-radius: 8px; overflow: hidden; }
+.campus-header-summary-row > button { flex-shrink: 0; align-self: flex-start; }
 .cms-modal.campus-header-dialog { width: min(1200px, calc(100vw - 32px)); max-width: 1200px; max-height: 90vh; max-height: 90dvh; display: flex; flex-direction: column; }
 .campus-header-dialog .cms-modal-head,
 .campus-header-dialog .cms-modal-foot { flex-shrink: 0; }
@@ -69,6 +69,8 @@
 .campus-header-title-card .campus-brand-alignment { min-width: 0; gap: 3px; }
 .campus-header-title-card .campus-brand-alignment legend { font-size: 12px; margin-bottom: 4px; }
 .campus-header-title-card .campus-brand-alignment button { flex: 1; min-width: 0; padding: 5px 2px; }
+.campus-brand-line-fields > .campus-header-reset { grid-column: 1 / -1; justify-self: end; }
+.campus-header-dialog .campus-header-reset:not(:disabled) { cursor: pointer; }
 .campus-brand-line-fields > legend { padding: 0 6px; font-size: 13px; font-weight: 700; }
 .campus-brand-line-card { text-align: left; cursor: pointer; font: inherit; color: var(--cms-text); }
 .campus-brand-line-card:focus-visible { outline: 2px solid var(--cms-primary, #1e3a8a); outline-offset: 2px; }
